@@ -199,6 +199,7 @@ function SelectField({
 	placeholder,
 	disabled,
 	error,
+	className,
 }: {
 	label: string;
 	required?: boolean;
@@ -208,9 +209,10 @@ function SelectField({
 	placeholder?: string;
 	disabled?: boolean;
 	error?: string;
+	className?: string;
 }) {
 	return (
-		<div className='space-y-1'>
+		<div className={cn("space-y-1", className)}>
 			<Label className='text-xs font-medium'>
 				{label}
 				{required && <span className='text-red-500 ml-0.5'>*</span>}
@@ -373,6 +375,8 @@ export function ProductForm({
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
 
+	const formGrid = "grid grid-cols-2 md:grid-cols-4 gap-3";
+
 	const decimalInput = (key: keyof ProductFormValues, value: string) =>
 		set(
 			key,
@@ -421,8 +425,8 @@ export function ProductForm({
 			{/* Basic & classification */}
 			<div>
 				<SectionHead label='Product Information' />
-				<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
-					<div className='space-y-1'>
+				<div className={formGrid}>
+					<div className='space-y-1 md:col-span-1'>
 						<Label className='text-xs font-medium'>
 							Product Code <span className='text-red-500'>*</span>
 						</Label>
@@ -449,9 +453,10 @@ export function ProductForm({
 						placeholder='Select supplier…'
 						disabled={readOnly}
 						error={errors.supplier}
+						className='md:col-span-2'
 					/>
 
-					<div className='space-y-1'>
+					<div className='space-y-1 md:col-span-1'>
 						<Label className='text-xs font-medium'>Supplier Code</Label>
 						<Input
 							value={form.supplierCode}
@@ -464,7 +469,7 @@ export function ProductForm({
 						/>
 					</div>
 
-					<div className='space-y-1'>
+					<div className='space-y-1 md:col-span-2'>
 						<Label className='text-xs font-medium'>
 							Product Name <span className='text-red-500'>*</span>
 						</Label>
@@ -478,7 +483,7 @@ export function ProductForm({
 						<FieldError msg={errors.productName} />
 					</div>
 
-					<div className='space-y-1'>
+					<div className='space-y-1 md:col-span-1'>
 						<Label className='text-xs font-medium'>Scientific Name</Label>
 						<Input
 							value={form.scientificName}
@@ -487,6 +492,20 @@ export function ProductForm({
 							className={inputCls("scientificName")}
 							disabled={readOnly}
 						/>
+					</div>
+
+					<div className='space-y-1 md:col-span-1'>
+						<Label className='text-xs font-medium'>
+							SKU <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.sku}
+							onChange={(e) => set("sku", e.target.value.toUpperCase())}
+							placeholder='e.g. FERT-WSF-019'
+							className={cn("font-mono", inputCls("sku"))}
+							disabled={readOnly}
+						/>
+						<FieldError msg={errors.sku} />
 					</div>
 
 					<SelectField
@@ -542,27 +561,13 @@ export function ProductForm({
 						placeholder='Select authority…'
 						disabled={readOnly}
 					/>
-
-					<div className='space-y-1'>
-						<Label className='text-xs font-medium'>
-							SKU <span className='text-red-500'>*</span>
-						</Label>
-						<Input
-							value={form.sku}
-							onChange={(e) => set("sku", e.target.value.toUpperCase())}
-							placeholder='e.g. FERT-WSF-019'
-							className={cn("font-mono", inputCls("sku"))}
-							disabled={readOnly}
-						/>
-						<FieldError msg={errors.sku} />
-					</div>
 				</div>
 			</div>
 
 			{/* Tax */}
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead label='Tax & Compliance' />
-				<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
+				<div className={formGrid}>
 					<SelectField
 						label='HSN Code'
 						required
@@ -593,7 +598,7 @@ export function ProductForm({
 			{/* Packaging */}
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead label='Packaging & Weight' />
-				<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
+				<div className={formGrid}>
 					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>
 							Pack Size <span className='text-red-500'>*</span>
@@ -633,8 +638,7 @@ export function ProductForm({
 
 					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>
-							Unit Per Packaging Unit{" "}
-							<span className='text-red-500'>*</span>
+							Unit per Case <span className='text-red-500'>*</span>
 						</Label>
 						<Input
 							value={form.unitPerCase}
@@ -653,7 +657,7 @@ export function ProductForm({
 							value={netWeightDisplay}
 							readOnly
 							disabled
-							placeholder='Pack Size × Unit Per Packaging Unit'
+							placeholder='Pack Size × Unit per Case'
 							className='h-8 text-xs bg-muted/30 cursor-not-allowed'
 						/>
 						<p className='text-[10px] text-muted-foreground'>
@@ -987,7 +991,7 @@ export function validateProductForm(
 	if (!form.baseUnit) errors.baseUnit = "Unit is required";
 	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
 	if (!form.unitPerCase) {
-		errors.unitPerCase = "Unit per packaging unit is required";
+		errors.unitPerCase = "Unit per case is required";
 	} else if (isNaN(Number(form.unitPerCase)) || Number(form.unitPerCase) <= 0) {
 		errors.unitPerCase = "Must be a positive number";
 	}

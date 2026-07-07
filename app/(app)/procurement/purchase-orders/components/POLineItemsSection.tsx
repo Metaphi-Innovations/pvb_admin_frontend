@@ -8,7 +8,14 @@ import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/procurement/utils";
+import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
+import {
+  applyGstMasterToTaxRates,
+  findGstMasterIdByTotalPct,
+  getActiveGstMasterOptions,
+  getDefaultGstMasterId,
+  totalGstPctFromRates,
+} from "@/lib/procurement/gst-master-utils";
 import {
   calcPackingToBaseQty,
   enrichProductForProcurement,
@@ -21,6 +28,15 @@ import type { POFormValues } from "./PurchaseOrderForm";
 import { emptyPOLine } from "./PurchaseOrderForm";
 
 const inputCls = "h-8 rounded-lg text-xs";
+
+function TaxPctAmountCell({ pct, amount }: { pct: number; amount: number }) {
+  return (
+    <div className="space-y-0.5 text-right">
+      <p className="text-xs tabular-nums text-foreground">{pct}%</p>
+      <p className="text-[10px] tabular-nums font-medium text-muted-foreground">{formatCurrency(amount)}</p>
+    </div>
+  );
+}
 
 function SectionHead({ label, sub }: { label: string; sub?: string }) {
   return (
@@ -43,7 +59,7 @@ interface InlineEditDraft {
   discountType: "percentage" | "flat";
   discountPct: string;
   discountFlatAmount: string;
-  gstPct: string;
+  gstMasterId: string;
   remarks: string;
 }
 
@@ -55,15 +71,26 @@ function packagingUnitToOrderUom(packagingUnit: string): POLineItem["orderUom"] 
   return "Unit";
 }
 
+function asLocalSupplierId(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) {
+    const n = Number(value);
+    return n > 0 ? n : undefined;
+  }
+  return undefined;
+}
+
 function lineFromProduct(
   productId: number,
   packingQty: number,
   supplierId?: number,
+  taxSupplyType: TaxSupplyType = "intra",
 ): POLineItem | null {
   const info = enrichProductForProcurement(productId);
   if (!info) return null;
   const cp = resolvePurchaseCostPrice(productId, supplierId);
   const gst = parseFloat(findProductRefGst(productId).replace(/%/g, "")) || 0;
+  const taxRates = applyTaxSupplyToRates(gst, taxSupplyType);
   const orderUom = packagingUnitToOrderUom(info.packagingUnit);
   const orderedQtyPack = packingQty;
   const orderedQty = calcPackingToBaseQty(orderedQtyPack, info.conversionQty);
@@ -85,9 +112,7 @@ function lineFromProduct(
     orderedQty,
     unitPrice: cp.amount,
     cpSource: cp.source,
-    cgstPct: gst / 2,
-    sgstPct: gst / 2,
-    igstPct: 0,
+    ...taxRates,
   };
 }
 
@@ -103,6 +128,7 @@ interface POLineItemsSectionProps {
   poType: "pr" | "direct";
   previewLines: POLineItem[];
   linkedPr: PurchaseRequest | null;
+  taxSupplyType?: TaxSupplyType;
 }
 
 export function POLineItemsSection({
@@ -112,6 +138,7 @@ export function POLineItemsSection({
   poType,
   previewLines,
   linkedPr,
+  taxSupplyType = "intra",
 }: POLineItemsSectionProps) {
   const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
   const [quickQty, setQuickQty] = useState("1");
@@ -127,12 +154,13 @@ export function POLineItemsSection({
     () => loadProducts().filter((p) => p.status === "active"),
     [],
   );
+  const gstOptions = useMemo(() => getActiveGstMasterOptions(), []);
   const productOptions = masterProducts.map((p) => ({
     value: String(p.id),
     label: `${p.productName} (${p.sku || p.productId})`,
   }));
 
-  const filledLines = form.lines.filter((l) => l.productId > 0);
+  const filledLines = form.lines.filter((l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0");
   const totalPackingQty = filledLines.reduce((sum, l) => sum + (l.orderedQtyPack || 0), 0);
   const totalSkuQty = filledLines.reduce((sum, l) => sum + (l.orderedQty || 0), 0);
   const totalAmount = previewLines.reduce((sum, l) => sum + (l.netAmount || 0), 0);
@@ -181,7 +209,7 @@ export function POLineItemsSection({
     let nextLines = [...form.lines];
     for (const idStr of Array.from(new Set(quickProductIds))) {
       const productId = Number(idStr);
-      const line = lineFromProduct(productId, packingQty, form.supplierId || undefined);
+      const line = lineFromProduct(productId, packingQty, asLocalSupplierId(form.supplierId), taxSupplyType);
       if (!line) continue;
       const idx = nextLines.findIndex((l) => l.productId === productId);
       if (idx >= 0) {
@@ -212,7 +240,8 @@ export function POLineItemsSection({
   };
 
   const startInlineEdit = (line: POLineItem) => {
-    const gstPct = line.cgstPct + line.sgstPct + line.igstPct;
+    const gstPct = totalGstPctFromRates(line.cgstPct, line.sgstPct, line.igstPct);
+    const gstMasterId = findGstMasterIdByTotalPct(gstPct) ?? getDefaultGstMasterId();
     setInlineEditUid(line.uid);
     setInlineEditDraft({
       productId: String(line.productId),
@@ -221,7 +250,7 @@ export function POLineItemsSection({
       discountType: line.discountType ?? "percentage",
       discountPct: String(line.discountPct ?? 0),
       discountFlatAmount: String(line.discountFlatAmount ?? 0),
-      gstPct: String(gstPct),
+      gstMasterId: String(gstMasterId),
       remarks: line.remarks ?? "",
     });
     setInlineEditError(null);
@@ -239,9 +268,9 @@ export function POLineItemsSection({
       setInlineEditError("Product is required");
       return;
     }
-    const base = lineFromProduct(productId, packingQty, form.supplierId || undefined);
+    const base = lineFromProduct(productId, packingQty, asLocalSupplierId(form.supplierId), taxSupplyType);
     if (!base) return;
-    const gst = Number(inlineEditDraft.gstPct) || 0;
+    const taxRates = applyGstMasterToTaxRates(Number(inlineEditDraft.gstMasterId), taxSupplyType);
     const existing = form.lines.find((l) => l.uid === inlineEditUid);
     const keepProduct = poType === "pr" && existing?.prLineUid;
     updateLine(inlineEditUid, {
@@ -267,9 +296,7 @@ export function POLineItemsSection({
       discountPct: Number(inlineEditDraft.discountPct) || 0,
       discountFlatAmount: Number(inlineEditDraft.discountFlatAmount) || 0,
       remarks: inlineEditDraft.remarks,
-      cgstPct: gst / 2,
-      sgstPct: gst / 2,
-      igstPct: 0,
+      ...taxRates,
     });
     cancelInlineEdit();
   };
@@ -430,8 +457,15 @@ export function POLineItemsSection({
                 <th className="w-24 px-3 py-2.5 text-left text-xs font-semibold text-foreground">Disc. Type</th>
                 <th className="w-20 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Disc. %</th>
                 <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Disc. Amt</th>
-                <th className="w-20 px-3 py-2.5 text-right text-xs font-semibold text-foreground">GST %</th>
-                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">GST Amt</th>
+                <th className="w-16 px-3 py-2.5 text-right text-xs font-semibold text-foreground">GST %</th>
+                {taxSupplyType === "intra" ? (
+                  <>
+                    <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">CGST</th>
+                    <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">SGST</th>
+                  </>
+                ) : (
+                  <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">IGST</th>
+                )}
                 <th className="w-28 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Total</th>
                 <th className="min-w-[100px] px-3 py-2.5 text-left text-xs font-semibold text-foreground">Remarks</th>
                 {!readOnly && (
@@ -459,12 +493,42 @@ export function POLineItemsSection({
                 const displayDiscPct = isEditing && draft ? Number(draft.discountPct) || 0 : line.discountPct;
                 const displayDiscFlat =
                   isEditing && draft ? Number(draft.discountFlatAmount) || 0 : line.discountFlatAmount ?? 0;
-                const displayGstPct =
+                const draftTaxRates =
                   isEditing && draft
-                    ? Number(draft.gstPct) || 0
-                    : line.cgstPct + line.sgstPct + line.igstPct;
+                    ? applyGstMasterToTaxRates(Number(draft.gstMasterId), taxSupplyType)
+                    : null;
+                const displayGstPct = draftTaxRates
+                  ? totalGstPctFromRates(
+                      draftTaxRates.cgstPct,
+                      draftTaxRates.sgstPct,
+                      draftTaxRates.igstPct,
+                    )
+                  : totalGstPctFromRates(line.cgstPct, line.sgstPct, line.igstPct);
                 const discAmt = calcLine?.discountAmount ?? line.discountAmount ?? 0;
-                const gstAmt = calcLine?.taxAmount ?? line.taxAmount ?? 0;
+                const lineTax = calcLine
+                  ? calcLineAmounts({
+                      orderedQty: line.orderedQty,
+                      unitPrice: isEditing && draft ? Number(draft.unitPrice) || 0 : line.unitPrice,
+                      discountType: displayDiscType,
+                      discountPct: displayDiscPct,
+                      discountFlatAmount: displayDiscFlat,
+                      cgstPct: draftTaxRates?.cgstPct ?? line.cgstPct,
+                      sgstPct: draftTaxRates?.sgstPct ?? line.sgstPct,
+                      igstPct: draftTaxRates?.igstPct ?? line.igstPct,
+                    })
+                  : calcLineAmounts({
+                      orderedQty: line.orderedQty,
+                      unitPrice: line.unitPrice,
+                      discountType: line.discountType,
+                      discountPct: line.discountPct,
+                      discountFlatAmount: line.discountFlatAmount,
+                      cgstPct: line.cgstPct,
+                      sgstPct: line.sgstPct,
+                      igstPct: line.igstPct,
+                    });
+                const displayCgstPct = draftTaxRates?.cgstPct ?? line.cgstPct;
+                const displaySgstPct = draftTaxRates?.sgstPct ?? line.sgstPct;
+                const displayIgstPct = draftTaxRates?.igstPct ?? line.igstPct;
                 const netAmt = calcLine?.netAmount ?? line.netAmount ?? 0;
                 const canEditRow = !readOnly;
                 const canChangeProduct = poType === "direct";
@@ -483,8 +547,18 @@ export function POLineItemsSection({
                           options={productOptions}
                           value={draft.productId}
                           onChange={(val) => {
+                            const productId = Number(val);
+                            const gst = parseFloat(findProductRefGst(productId).replace(/%/g, "")) || 0;
+                            const gstMasterId =
+                              findGstMasterIdByTotalPct(gst) ?? getDefaultGstMasterId();
                             setInlineEditDraft((prev) =>
-                              prev ? { ...prev, productId: String(val) } : prev,
+                              prev
+                                ? {
+                                    ...prev,
+                                    productId: String(val),
+                                    gstMasterId: String(gstMasterId),
+                                  }
+                                : prev,
                             );
                             setInlineEditError(null);
                           }}
@@ -598,22 +672,35 @@ export function POLineItemsSection({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {isEditing && draft ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          value={draft.gstPct}
-                          onChange={(e) =>
+                        <AutocompleteSelect
+                          options={gstOptions}
+                          value={draft.gstMasterId}
+                          onChange={(val) =>
                             setInlineEditDraft((prev) =>
-                              prev ? { ...prev, gstPct: e.target.value } : prev,
+                              prev ? { ...prev, gstMasterId: String(val) } : prev,
                             )
                           }
-                          className={cn(inputCls, "w-14 ml-auto text-right")}
+                          placeholder="Select GST…"
+                          className={cn(inputCls, "ml-auto min-w-[88px]")}
                         />
                       ) : (
                         <span className="text-xs tabular-nums">{displayGstPct}%</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums">{formatCurrency(gstAmt)}</td>
+                    {taxSupplyType === "intra" ? (
+                      <>
+                        <td className="px-3 py-2 align-top">
+                          <TaxPctAmountCell pct={displayCgstPct} amount={lineTax.cgstAmount} />
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <TaxPctAmountCell pct={displaySgstPct} amount={lineTax.sgstAmount} />
+                        </td>
+                      </>
+                    ) : (
+                      <td className="px-3 py-2 align-top">
+                        <TaxPctAmountCell pct={displayIgstPct} amount={lineTax.igstAmount} />
+                      </td>
+                    )}
                     <td className="px-4 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
                       {formatCurrency(netAmt)}
                     </td>

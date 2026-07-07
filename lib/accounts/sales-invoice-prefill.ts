@@ -109,6 +109,7 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
   const { lines, errors } = linesFromOrder(order);
 
   return {
+    invoiceType: "sales",
     salesOrderId: order.id,
     salesOrderNo: order.soNumber,
     sourceDispatchId: "",

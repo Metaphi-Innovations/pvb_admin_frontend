@@ -64,14 +64,16 @@ export interface DispatchRecord {
   packingNumbers: string[];
   nearExpirySchemes?: DispatchNearExpirySchemeEntry[];
   deliveryDetails?: DeliveryDetails;
-  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceWarehouse?: string;
   targetWarehouse?: string;
+  poNumber?: string;
+  supplierCode?: string;
 
   // Backend-Ready Fields
   dispatch_id?: string;
   dispatch_no?: string;
-  source_type?: "sales_order" | "sample_order" | "stock_transfer";
+  source_type?: "sales_order" | "sample_order" | "stock_transfer" | "purchase_return";
   source_document_id?: string;
   source_document_no?: string;
   dispatch_date?: string;

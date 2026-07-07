@@ -10,7 +10,7 @@
  *   - No layout flash between pages
  */
 
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { FYProvider } from "@/lib/fy-store";
 import { QueryProvider } from "@/lib/query/query-provider";
 import { NavRoutePrefetch } from "@/components/navigation/NavRoutePrefetch";
@@ -23,6 +23,38 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
+  // Dev: after `dev:clean` or server restart, the browser may still reference old chunk URLs.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+
+    const isChunkError = (reason: unknown) => {
+      const msg = reason instanceof Error ? reason.message : String(reason ?? "");
+      const name = reason instanceof Error ? reason.name : "";
+      return name === "ChunkLoadError" || msg.includes("ChunkLoadError") || msg.includes("Loading chunk");
+    };
+
+    const reloadOnce = () => {
+      const key = "ds_chunk_reload";
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+      window.location.reload();
+    };
+
+    const onRejection = (event: PromiseRejectionEvent) => {
+      if (isChunkError(event.reason)) reloadOnce();
+    };
+    const onError = (event: ErrorEvent) => {
+      if (isChunkError(event.error ?? event.message)) reloadOnce();
+    };
+
+    window.addEventListener("unhandledrejection", onRejection);
+    window.addEventListener("error", onError);
+    return () => {
+      window.removeEventListener("unhandledrejection", onRejection);
+      window.removeEventListener("error", onError);
+    };
+  }, []);
+
   return (
     <QueryProvider>
       <FYProvider>

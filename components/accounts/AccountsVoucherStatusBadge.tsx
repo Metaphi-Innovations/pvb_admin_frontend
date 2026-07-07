@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { ACCOUNTS_STATUS_BADGE_CLASS } from "@/lib/accounts/accounts-typography";
 import {
   WORKFLOW_STATUS_LABELS,
   type AccountsVoucherWorkflowStatus,
@@ -36,7 +37,7 @@ export function AccountsVoucherStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
+        ACCOUNTS_STATUS_BADGE_CLASS,
         cfg.bg,
         cfg.text,
         className,

@@ -3,7 +3,7 @@ import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { POShortCloseInfo } from "./po-qty";
 import type { PackagingUom, ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
-import { calcPackingToBaseQty, sumAdditionalCharges, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
+import { calcPackingToBaseQty, sumAdditionalCharges, sumAdditionalChargeTaxes, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
 import { findProductRef } from "@/lib/pricing/resolve-pricing";
 import type { PODiscountType } from "@/lib/procurement/utils";
 import type { PriceSource } from "@/lib/pricing/resolve-pricing";
@@ -16,6 +16,8 @@ export type POStatus =
   | "pending_approval"
   | "approved"
   | "rejected"
+  | "partially_received"
+  | "received"
   | "invoice_uploaded"
   | "short_closed"
   | "closed"
@@ -46,7 +48,10 @@ function normalizePO(po: PurchaseOrder): PurchaseOrder {
 
 export interface POLineItem {
   uid: string;
-  productId: number;
+  /** Backend purchase_order_product_id (UUID) — required for short-close API. */
+  purchaseOrderProductId?: string;
+  /** Local master id (number) or backend product UUID (string). */
+  productId: number | string;
   productCode: string;
   productName: string;
   description: string;
@@ -112,10 +117,12 @@ export interface POSummary {
 }
 
 export interface PurchaseOrder {
-  id: number;
+  /** Backend purchase_order_id (UUID) or legacy localStorage numeric id as string. */
+  id: string;
   poNumber: string;
   poDate: string;
-  supplierId: number;
+  /** Local master id (number) or backend supplier UUID (string). */
+  supplierId: number | string;
   supplierName: string;
   supplierType: string;
   supplierContactPerson?: string;
@@ -125,17 +132,20 @@ export interface PurchaseOrder {
   supplierGstin?: string;
   referenceNumber: string;
   currency: string;
-  paymentTerms: string;
+  /** Backend `payment_type`: Immediate | Credit | Advance */
+  paymentType: string;
   creditDays: number;
   deliveryTerms: string;
   expectedDeliveryDate: string;
   state: string;
-  warehouseId: number | null;
+  warehouseId: number | string | null;
   warehouseName: string;
   deliveryAddress: string;
   notes: string;
-  sourcePrId: number | null;
+  sourcePrId: number | string | null;
   sourcePrNumber: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
   billing: typeof COMPANY_BILLING;
   shipping: {
     shipToLocation: string;
@@ -176,13 +186,25 @@ function gstSplitFromProduct(productId: number): { cgstPct: number; sgstPct: num
   return { cgstPct: gst / 2, sgstPct: gst / 2, igstPct: 0 };
 }
 
+function asLocalProductId(productId: unknown): number | null {
+  if (typeof productId === "number" && Number.isFinite(productId) && productId > 0) {
+    return productId;
+  }
+  if (typeof productId === "string" && /^\d+$/.test(productId)) {
+    const n = Number(productId);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
 function migratePOLine(line: Partial<POLineItem>): POLineItem {
-  const enriched = line.productId ? enrichProductForProcurement(line.productId) : null;
+  const localProductId = asLocalProductId(line.productId);
+  const enriched = localProductId ? enrichProductForProcurement(localProductId) : null;
   const orderUom = (line.orderUom ?? (line.uom as PackagingUom) ?? "Unit") as PackagingUom;
   const orderedQtyPack = line.orderedQtyPack ?? line.orderedQty ?? 1;
   const conversionQty = enriched?.conversionQty ?? line.conversionQty ?? 1;
   const orderedQty = calcPackingToBaseQty(orderedQtyPack, conversionQty);
-  const productGst = line.productId ? gstSplitFromProduct(line.productId) : null;
+  const productGst = localProductId ? gstSplitFromProduct(localProductId) : null;
   const discountType = (line.discountType ?? "percentage") as PODiscountType;
   const discountPct = line.discountPct ?? 0;
   const discountFlatAmount = line.discountFlatAmount ?? 0;
@@ -201,6 +223,7 @@ function migratePOLine(line: Partial<POLineItem>): POLineItem {
   });
   return {
     uid: line.uid ?? `pl-${Date.now()}`,
+    purchaseOrderProductId: line.purchaseOrderProductId,
     productId: line.productId ?? 0,
     productCode: line.productCode ?? enriched?.productCode ?? "",
     productName: line.productName ?? enriched?.productName ?? "",
@@ -246,9 +269,23 @@ function migratePO(po: PurchaseOrder): PurchaseOrder {
     (po.otherCharges
       ? [{ uid: "legacy-freight", chargeName: "Other Charges", amount: po.otherCharges, remarks: "" }]
       : []);
+  const legacy = po as PurchaseOrder & { paymentTerms?: string };
+  const paymentType =
+    po.paymentType ||
+    (legacy.paymentTerms
+      ? legacy.paymentTerms.toLowerCase().includes("advance")
+        ? "Advance"
+        : legacy.paymentTerms.toLowerCase().includes("immediate")
+          ? "Immediate"
+          : "Credit"
+      : "Credit");
+
   const normalized: PurchaseOrder = {
     ...po,
+    id: String(po.id),
     status: normalizePOStatus(po.status),
+    paymentType,
+    creditDays: po.creditDays ?? 0,
     state: po.state ?? po.shipping?.branch ? "" : "",
     warehouseId: po.warehouseId ?? null,
     warehouseName: po.warehouseName ?? po.shipping?.shipToLocation ?? "",
@@ -293,10 +330,11 @@ function buildSummary(
   totalDiscount = round2(totalDiscount);
   const productTotal = round2(taxableValue);
   const additionalChargesTotal = round2(sumAdditionalCharges(additionalCharges));
+  const chargeTaxes = sumAdditionalChargeTaxes(additionalCharges);
   taxableValue = round2(productTotal + additionalChargesTotal);
-  totalCgst = round2(totalCgst);
-  totalSgst = round2(totalSgst);
-  totalIgst = round2(totalIgst);
+  totalCgst = round2(totalCgst + chargeTaxes.totalCgst);
+  totalSgst = round2(totalSgst + chargeTaxes.totalSgst);
+  totalIgst = round2(totalIgst + chargeTaxes.totalIgst);
   const grandTotal = round2(taxableValue + totalCgst + totalSgst + totalIgst);
 
   return {
@@ -356,7 +394,7 @@ const RAW_SEED = [
     supplierGstin: "27AABCA1234F1Z2",
     referenceNumber: "REF/AC/25",
     currency: "INR",
-    paymentTerms: "net-30",
+    paymentType: "Credit",
     creditDays: 30,
     deliveryTerms: "door-delivery",
     expectedDeliveryDate: "2024-02-10",
@@ -396,7 +434,7 @@ const RAW_SEED = [
     ] as POLineItem[],
     terms: [],
     attachments: [],
-    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
+    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "", gstMasterId: 4, cgstPct: 9, sgstPct: 9, igstPct: 0 }],
     otherCharges: 500,
     summary: buildSummary(
       [
@@ -447,7 +485,7 @@ const RAW_SEED = [
     supplierGstin: "29AABCS5678G1Z9",
     referenceNumber: "",
     currency: "INR",
-    paymentTerms: "net-15",
+    paymentType: "Credit",
     creditDays: 15,
     deliveryTerms: "ex-works",
     expectedDeliveryDate: "2024-03-01",
@@ -552,8 +590,9 @@ export function savePurchaseOrders(list: PurchaseOrder[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
-export function getPOById(id: number): PurchaseOrder | undefined {
-  return loadPurchaseOrders().find((p) => p.id === id);
+export function getPOById(id: string | number): PurchaseOrder | undefined {
+  const key = String(id);
+  return loadPurchaseOrders().find((p) => String(p.id) === key);
 }
 
 export function generatePONumber(list: PurchaseOrder[]): string {
@@ -640,6 +679,8 @@ export const PO_STATUS_CFG: Record<POStatus, { bg: string; text: string; dot: st
   pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400", label: "Pending Approval" },
   approved: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500", label: "Approved" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400", label: "Rejected" },
+  partially_received: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500", label: "Partially Received" },
+  received: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Received" },
   invoice_uploaded: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Invoice Uploaded" },
   short_closed: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500", label: "Short Closed" },
   closed: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500", label: "Closed" },

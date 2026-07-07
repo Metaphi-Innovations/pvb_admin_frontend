@@ -2,16 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { Building2, IndianRupee, TrendingDown, TrendingUp } from "lucide-react";
+import { AccountsReportShell } from "@/components/accounts/AccountsReportShell";
 import {
-  AccountsReportShell,
-  ReportFilterBar,
-} from "@/components/accounts/AccountsReportShell";
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  ReportBranchFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
 import { BRANCH_REPORT_SEED } from "@/lib/accounts/accounts-mock-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 
 export default function BranchWiseReportPage() {
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [branch, setBranch] = useState("");
 
   const rows = useMemo(() => {
@@ -49,14 +51,17 @@ export default function BranchWiseReportPage() {
         { label: "Net", value: formatMoney(totals.revenue - totals.expenses), icon: IndianRupee },
       ]}
       filters={
-        <ReportFilterBar
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          branch={branch}
-          onDateFrom={setDateFrom}
-          onDateTo={setDateTo}
-          onBranch={setBranch}
-        />
+        <ReportFilterRow>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportBranchFilter value={branch || "all"} onChange={setBranch} />
+        </ReportFilterRow>
       }
       columns={[
         { key: "branch", label: "Branch" },

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -16,56 +17,106 @@ import {
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
 import {
   createBankAccountWithLedger,
+  getBankAccountById,
   isDuplicateAccountNumber,
   loadBankAccounts,
+  updateBankAccount,
   type BankAccountType,
 } from "@/lib/accounts/bank-accounts-data";
-import { formatBankAccountLabel } from "@/lib/accounts/bank-account-display";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
-import { getBankGroups } from "@/lib/accounts/bank-coa-utils";
 
 const ACCOUNT_TYPES: BankAccountType[] = ["Current", "Savings", "OD", "CC"];
 
-export default function BankAccountFormClient() {
+interface FormState {
+  bankName: string;
+  accountHolderName: string;
+  accountNumber: string;
+  ifsc: string;
+  branchName: string;
+  accountType: BankAccountType;
+  openingBalance: string;
+  openingBalanceType: "Debit" | "Credit";
+  reconciliationEnabled: boolean;
+  defaultForReceipts: boolean;
+  defaultForPayments: boolean;
+  status: "active" | "inactive";
+}
+
+const EMPTY_FORM: FormState = {
+  bankName: "",
+  accountHolderName: "",
+  accountNumber: "",
+  ifsc: "",
+  branchName: "",
+  accountType: "Current",
+  openingBalance: "0",
+  openingBalanceType: "Debit",
+  reconciliationEnabled: true,
+  defaultForReceipts: false,
+  defaultForPayments: false,
+  status: "active",
+};
+
+export default function BankAccountFormClient({ accountId }: { accountId?: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const presetGroupId = searchParams.get("bankGroupId");
+  const isEdit = accountId != null;
 
-  const [form, setForm] = useState({
-    bankName: "",
-    bankGroupCoaId: presetGroupId ?? "",
-    accountNickname: "",
-    accountNumber: "",
-    ifsc: "",
-    branchName: "",
-    accountType: "Current" as BankAccountType,
-    openingBalance: "0",
-    openingBalanceDate: new Date().toISOString().slice(0, 10),
-    reconciliationEnabled: true,
-    defaultForReceipts: false,
-    defaultForPayments: false,
-    status: "active" as "active" | "inactive",
-  });
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
-  const bankGroups = useMemo(() => getBankGroups(loadChartOfAccounts()), []);
-
   useEffect(() => {
-    if (presetGroupId) {
-      const g = bankGroups.find((b) => String(b.id) === presetGroupId);
-      if (g) setForm((f) => ({ ...f, bankName: g.accountName, bankGroupCoaId: presetGroupId }));
+    loadBankAccounts();
+    if (!isEdit || accountId == null) return;
+    const account = getBankAccountById(accountId);
+    if (!account) {
+      router.replace("/accounts/banking/bank-accounts");
+      return;
     }
-  }, [presetGroupId, bankGroups]);
+    setForm({
+      bankName: account.bankName,
+      accountHolderName: account.accountNickname,
+      accountNumber: account.accountNumber,
+      ifsc: account.ifsc,
+      branchName: account.branchName,
+      accountType: account.accountType,
+      openingBalance: String(account.openingBalance),
+      openingBalanceType: account.balanceType,
+      reconciliationEnabled: account.reconciliationEnabled,
+      defaultForReceipts: account.defaultForReceipts,
+      defaultForPayments: account.defaultForPayments,
+      status: account.status,
+    });
+  }, [isEdit, accountId, router]);
 
-  const coaLedgerPreview = useMemo(() => {
-    if (!form.accountNickname.trim()) return "—";
-    return formatBankAccountLabel(form.accountNickname.trim(), form.accountNumber.trim());
-  }, [form.accountNickname, form.accountNumber]);
+  const pageTitle = isEdit ? "Edit Bank Account" : "Add Bank Account";
+
+  const savePayload = useMemo(
+    () => ({
+      bankName: form.bankName.trim(),
+      accountNickname: form.accountHolderName.trim(),
+      accountNumber: form.accountNumber.trim(),
+      ifsc: form.ifsc.trim(),
+      branchName: form.branchName.trim(),
+      accountType: form.accountType,
+      openingBalance: Number(form.openingBalance) || 0,
+      balanceType: form.openingBalanceType,
+      reconciliationEnabled: form.reconciliationEnabled,
+      defaultForReceipts: form.defaultForReceipts,
+      defaultForPayments: form.defaultForPayments,
+      status: form.status,
+    }),
+    [form],
+  );
 
   const save = () => {
     setError(null);
-    if (!form.accountNickname.trim()) {
-      setError("Account name is required.");
+    if (!form.bankName.trim()) {
+      setError("Bank name is required.");
+      return;
+    }
+    if (!form.accountHolderName.trim()) {
+      setError("Account holder name is required.");
       return;
     }
     if (!form.accountNumber.trim()) {
@@ -76,31 +127,21 @@ export default function BankAccountFormClient() {
       setError("IFSC code is required.");
       return;
     }
-    if (isDuplicateAccountNumber(form.accountNumber.trim())) {
+    if (isDuplicateAccountNumber(form.accountNumber.trim(), isEdit ? accountId : undefined)) {
       setError("An account with this account number already exists.");
-      return;
-    }
-    if (!form.bankName.trim() && !form.bankGroupCoaId) {
-      setError("Bank name or linked COA group is required.");
       return;
     }
     try {
       loadBankAccounts();
-      createBankAccountWithLedger({
-        bankName: form.bankName.trim(),
-        bankGroupCoaId: form.bankGroupCoaId ? Number(form.bankGroupCoaId) : null,
-        accountNickname: form.accountNickname.trim(),
-        accountNumber: form.accountNumber.trim(),
-        ifsc: form.ifsc.trim(),
-        branchName: form.branchName.trim(),
-        accountType: form.accountType,
-        openingBalance: Number(form.openingBalance) || 0,
-        openingBalanceDate: form.openingBalanceDate,
-        reconciliationEnabled: form.reconciliationEnabled,
-        defaultForReceipts: form.defaultForReceipts,
-        defaultForPayments: form.defaultForPayments,
-        status: form.status,
-      });
+      if (isEdit && accountId != null) {
+        updateBankAccount(accountId, savePayload);
+      } else {
+        createBankAccountWithLedger({
+          ...savePayload,
+          bankGroupCoaId: presetGroupId ? Number(presetGroupId) : null,
+          openingBalanceDate: new Date().toISOString().slice(0, 10),
+        });
+      }
       router.push("/accounts/banking/bank-accounts");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save bank account.");
@@ -109,19 +150,19 @@ export default function BankAccountFormClient() {
 
   return (
     <AccountsFormLayout
-      title="Add Bank Account"
+      title={pageTitle}
       breadcrumb={[
         { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
         { label: "Banking", href: "/accounts/banking/bank-accounts" },
         { label: "Bank Accounts", href: "/accounts/banking/bank-accounts" },
-        { label: "Add", href: "/accounts/banking/bank-accounts/new" },
+        { label: isEdit ? "Edit" : "Add", href: isEdit ? `/accounts/banking/bank-accounts/${accountId}/edit` : "/accounts/banking/bank-accounts/new" },
       ]}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 text-white" onClick={save}>
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={save}>
             Save Bank Account
           </Button>
         </div>
@@ -131,87 +172,57 @@ export default function BankAccountFormClient() {
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1 sm:col-span-2">
-            <Label className="text-[11px]">Linked COA Bank Group</Label>
-            <Select
-              value={form.bankGroupCoaId || "new"}
-              onValueChange={(v) => {
-                if (v === "new") {
-                  setForm((f) => ({ ...f, bankGroupCoaId: "", bankName: f.bankName }));
-                } else {
-                  const g = bankGroups.find((b) => String(b.id) === v);
-                  setForm((f) => ({
-                    ...f,
-                    bankGroupCoaId: v,
-                    bankName: g?.accountName ?? f.bankName,
-                  }));
-                }
-              }}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select bank group" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">+ New bank group (enter name below)</SelectItem>
-                {bankGroups.map((g) => (
-                  <SelectItem key={g.id} value={String(g.id)}>
-                    {g.accountName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">Bank Name</Label>
+            <Label className="text-xs font-medium">Bank Name *</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-sm rounded-lg"
               value={form.bankName}
-              disabled={!!form.bankGroupCoaId}
               onChange={(e) => setForm({ ...form, bankName: e.target.value })}
               placeholder="e.g. HDFC Bank"
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">Account Name</Label>
+          <div className="space-y-1 sm:col-span-2">
+            <Label className="text-xs font-medium">Account Holder Name *</Label>
             <Input
-              className="h-8 text-xs"
-              value={form.accountNickname}
-              onChange={(e) => setForm({ ...form, accountNickname: e.target.value })}
-              placeholder="e.g. HDFC Current Account"
+              className="h-9 text-sm rounded-lg"
+              value={form.accountHolderName}
+              onChange={(e) => setForm({ ...form, accountHolderName: e.target.value })}
+              placeholder="e.g. Dharitri Sutra Agri Pvt Ltd"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Account Number *</Label>
+            <Label className="text-xs font-medium">Account Number *</Label>
             <Input
-              className="h-8 text-xs font-mono"
+              className="h-9 text-sm rounded-lg font-mono"
               value={form.accountNumber}
               onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
-              placeholder="e.g. XXXX7890"
+              placeholder="e.g. 50100123456789"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">IFSC Code *</Label>
+            <Label className="text-xs font-medium">IFSC Code *</Label>
             <Input
-              className="h-8 text-xs font-mono"
+              className="h-9 text-sm rounded-lg font-mono"
               value={form.ifsc}
               onChange={(e) => setForm({ ...form, ifsc: e.target.value.toUpperCase() })}
               placeholder="e.g. HDFC0001234"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Branch Name</Label>
+            <Label className="text-xs font-medium">Branch</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-sm rounded-lg"
               value={form.branchName}
               onChange={(e) => setForm({ ...form, branchName: e.target.value })}
+              placeholder="e.g. FC Road, Pune"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Account Type</Label>
+            <Label className="text-xs font-medium">Account Type</Label>
             <Select
               value={form.accountType}
               onValueChange={(v) => setForm({ ...form, accountType: v as BankAccountType })}
             >
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className="h-9 text-sm rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -224,37 +235,35 @@ export default function BankAccountFormClient() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Opening Balance</Label>
-            <Input
-              className="h-8 text-xs"
-              type="number"
+            <Label className="text-xs font-medium">Opening Balance</Label>
+            <AccountsMoneyInput
+              className="h-9 text-sm rounded-lg"
               value={form.openingBalance}
-              onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
+              onChange={(v) => setForm({ ...form, openingBalance: String(v) })}
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Opening Balance Date</Label>
-            <Input
-              className="h-8 text-xs"
-              type="date"
-              value={form.openingBalanceDate}
-              onChange={(e) => setForm({ ...form, openingBalanceDate: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1 sm:col-span-2">
-            <Label className="text-[11px]">COA Ledger Mapping (Bank Account Ledger)</Label>
-            <Input className="h-8 text-xs bg-muted/30" readOnly value={coaLedgerPreview} />
-            <p className="text-[10px] text-muted-foreground">
-              A ledger will be auto-created under the selected bank group on save.
-            </p>
+            <Label className="text-xs font-medium">Opening Balance Type</Label>
+            <Select
+              value={form.openingBalanceType}
+              onValueChange={(v) => setForm({ ...form, openingBalanceType: v as "Debit" | "Credit" })}
+            >
+              <SelectTrigger className="h-9 text-sm rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Debit">Dr</SelectItem>
+                <SelectItem value="Credit">Cr</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Status</Label>
+            <Label className="text-xs font-medium">Status</Label>
             <Select
               value={form.status}
               onValueChange={(v) => setForm({ ...form, status: v as "active" | "inactive" })}
             >
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className="h-9 text-sm rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

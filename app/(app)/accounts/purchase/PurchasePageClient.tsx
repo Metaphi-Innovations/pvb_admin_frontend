@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -15,12 +15,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Eye, MoreVertical, Pencil, Plus } from "lucide-react";
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { Plus } from "lucide-react";
 import {
   filterPurchaseInvoices,
   loadPurchaseInvoices,
@@ -36,6 +36,7 @@ import {
   PURCHASE_LIST_PATH,
   PURCHASE_PAYMENT_STATUS_LABELS,
 } from "./purchase-utils";
+import { cn } from "@/lib/utils";
 
 export default function PurchasePageClient() {
   const [records, setRecords] = useState<PurchaseInvoiceRecord[]>([]);
@@ -68,9 +69,9 @@ export default function PurchasePageClient() {
           description="Supplier invoices from PO uploads and manual entries for accounts payable."
           breadcrumbs={PURCHASE_BREADCRUMB}
           actions={
-            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
               <Link href={`${PURCHASE_LIST_PATH}/new`}>
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 Manual Purchase Entry
               </Link>
             </Button>
@@ -81,7 +82,7 @@ export default function PurchasePageClient() {
           Most purchases are created when you upload a supplier invoice on a Purchase Order in Procurement.
         </p>
 
-        <ModuleFiltersBar
+        <AccountsFilterBar
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="Purchase no., supplier invoice no., supplier, PO…"
@@ -109,13 +110,17 @@ export default function PurchasePageClient() {
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" className="h-8 w-[130px] text-xs bg-white" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" className="h-8 w-[130px] text-xs bg-white" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </ModuleFiltersBar>
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-            <table className="accounts-table w-full text-table min-w-[1200px]">
+            <table className="accounts-table w-full min-w-[1200px]">
               <thead className="border-b">
                 <tr>
                   {[
@@ -142,7 +147,7 @@ export default function PurchasePageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={10} className="accounts-table-empty">
                       No purchase records. Upload a supplier invoice on a Purchase Order in Procurement, or add a manual entry.
                     </td>
                   </tr>
@@ -151,7 +156,7 @@ export default function PurchasePageClient() {
                     const match = getThreeWayMatchForPurchase(r);
                     const payStatus = getPurchasePaymentStatus(r.amountPaid, r.grandTotal);
                     return (
-                    <tr key={r.id} className="border-b hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.invoiceNo}</td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.vendorInvoiceNo || "—"}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.invoiceDate}</td>
@@ -167,28 +172,13 @@ export default function PurchasePageClient() {
                       </td>
                       <td className="px-2.5 py-2 text-xs">{PURCHASE_PAYMENT_STATUS_LABELS[payStatus]}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.grandTotal)}</td>
-                      <td className="px-2.5 py-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-36">
-                            <DropdownMenuItem asChild>
-                              <Link href={`${PURCHASE_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                <Eye className="w-3.5 h-3.5" /> View
-                              </Link>
-                            </DropdownMenuItem>
-                            {r.source === "manual_entry" && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`${PURCHASE_LIST_PATH}/${r.id}/edit`} className="text-xs gap-2">
-                                  <Pencil className="w-3.5 h-3.5" /> Edit
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <td className={cn("px-2.5 py-2", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          <AccountsViewAction href={`${PURCHASE_LIST_PATH}/${r.id}`} />
+                          {r.source === "manual_entry" && (
+                            <AccountsEditAction href={`${PURCHASE_LIST_PATH}/${r.id}/edit`} />
+                          )}
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                   );

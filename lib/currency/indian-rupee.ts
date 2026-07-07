@@ -42,7 +42,7 @@ export function formatIndianRupeeDisplay(value: number): string {
 /** Format raw typed string for live input display */
 export function formatIndianRupeeWhileTyping(raw: string): string {
   const sanitized = sanitizeRupeeRawInput(raw.replace(/[₹,\s]/g, ""));
-  if (!sanitized) return "₹ 0";
+  if (!sanitized) return "";
   if (sanitized.endsWith(".")) {
     const intPart = sanitized.slice(0, -1);
     const intNum = intPart ? parseInt(intPart, 10) : 0;

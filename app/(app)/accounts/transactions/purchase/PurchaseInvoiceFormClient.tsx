@@ -1,32 +1,54 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Plus, Trash2 } from "lucide-react";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { cn } from "@/lib/utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
+import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
+import { TransactionProductSelect } from "@/components/accounts/master-fetch/TransactionProductSelect";
+import {
+  vendorMasterToTransactionFields,
+  getProductsForPurchaseTransaction,
+  type VendorTransactionFields,
+} from "@/lib/accounts/transaction-master-fetch";
+import {
+  InvoiceFormCard,
+  InvoiceFormField,
+  InvoiceFormInput,
+  InvoiceFormItemTable,
+  InvoiceFormItemTableHead,
+  InvoiceFormLayout,
+  InvoiceFormReadOnly,
+  InvoiceFormSection,
+  InvoiceFormTextarea,
+  INVOICE_FORM_GRID_CLASS,
+  INVOICE_FORM_INPUT_CLASS,
+  INVOICE_FORM_TABLE_TD_CLASS,
+} from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import {
   createManualPurchaseEntry,
   updateManualPurchaseEntry,
   getPurchaseInvoiceById,
   getVendorsForPurchaseDropdown,
-  loadPurchaseInvoices,
-  savePurchaseInvoices,
   type PurchaseInvoiceLine,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
 import { loadAccountItems } from "@/lib/accounts/account-items-data";
 
+const PURCHASE_LIST_PATH = "/accounts/transactions/purchase";
+
 interface LineItem {
   id: string;
+  productId: number | null;
   productName: string;
+  hsnCode: string;
   qty: number;
   rate: number;
   gstPct: number;
@@ -38,7 +60,9 @@ interface LineItem {
 function emptyLine(): LineItem {
   return {
     id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    productId: null,
     productName: "",
+    hsnCode: "",
     qty: 1,
     rate: 0,
     gstPct: 18,
@@ -54,15 +78,6 @@ function recalcLine(l: LineItem): LineItem {
   return { ...l, taxableAmt, gstAmt, total: taxableAmt + gstAmt };
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-lg border border-border/60 p-4 space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
 export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: number }) {
   const router = useRouter();
   const isEdit = invoiceId != null;
@@ -74,15 +89,28 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
   );
 
   const [vendorId, setVendorId] = useState(existing?.vendorId?.toString() ?? "");
+  const [vendorFields, setVendorFields] = useState<VendorTransactionFields | null>(() => {
+    if (!existing?.vendorId) return null;
+    const v = vendors.find((x) => x.id === existing.vendorId);
+    return v ? vendorMasterToTransactionFields(v) : null;
+  });
+  const [billToId, setBillToId] = useState("");
+  const [shipToId, setShipToId] = useState("");
+  const [billingAddress, setBillingAddress] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(existing?.invoiceDate ?? new Date().toISOString().slice(0, 10));
+  const [dueDate, setDueDate] = useState("");
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState(existing?.vendorInvoiceNo ?? "");
+  const [purchaseperson, setPurchaseperson] = useState("Admin");
   const [remarks, setRemarks] = useState(existing?.remarks ?? "");
   const [lines, setLines] = useState<LineItem[]>(() => {
     if (existing?.lineItems?.length) {
       return existing.lineItems.map((l) =>
         recalcLine({
           id: l.id,
+          productId: l.productId,
           productName: l.productName,
+          hsnCode: l.description?.replace(/^HSN:\s*/, "") ?? "",
           qty: l.invoiceQty,
           rate: l.unitPrice,
           gstPct: l.taxPct,
@@ -97,21 +125,46 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const vendor = vendors.find((v) => v.id === Number(vendorId));
+  useEffect(() => {
+    const d = new Date(invoiceDate);
+    d.setDate(d.getDate() + (vendorFields?.creditDays ?? 30));
+    setDueDate(d.toISOString().slice(0, 10));
+  }, [invoiceDate, vendorFields?.creditDays]);
+
+  const purchaseProducts = useMemo(
+    () => getProductsForPurchaseTransaction(vendorId ? Number(vendorId) : undefined),
+    [vendorId],
+  );
+
   const subtotal = lines.reduce((s, l) => s + l.taxableAmt, 0);
   const totalGst = lines.reduce((s, l) => s + l.gstAmt, 0);
   const grandTotal = subtotal + totalGst;
+  const gstSplit = splitInvoiceGst(totalGst, false);
 
   const impactLines = purchaseInvoiceImpactResolved({
-    vendorName: vendor?.vendorName ?? "Supplier",
+    vendorName: vendorFields?.vendorName ?? "Supplier",
     taxable: subtotal,
     taxAmount: totalGst,
     grandTotal,
   });
 
+  const onVendorSelect = (id: string, fields: VendorTransactionFields | null) => {
+    setVendorId(id);
+    if (!fields) {
+      setVendorFields(null);
+      return;
+    }
+    setVendorFields(fields);
+    setBillToId(fields.defaultBillToId);
+    setShipToId(fields.defaultShipToId);
+    setBillingAddress(fields.billingAddress);
+    setShippingAddress(fields.shippingAddress);
+  };
+
   const updateLine = (idx: number, patch: Partial<LineItem>) => {
     setLines((prev) => prev.map((l, i) => (i === idx ? recalcLine({ ...l, ...patch }) : l)));
   };
+
   const addLine = () => setLines((prev) => [...prev, recalcLine(emptyLine())]);
   const removeLine = (idx: number) => {
     if (lines.length <= 1) return;
@@ -121,9 +174,9 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
   const buildLineItems = (): PurchaseInvoiceLine[] =>
     lines.map((l) => ({
       id: l.id,
-      productId: products.find((p) => p.itemName === l.productName)?.id ?? 0,
+      productId: l.productId ?? products.find((p) => p.itemName === l.productName)?.id ?? 0,
       productName: l.productName,
-      description: "",
+      description: l.hsnCode ? `HSN: ${l.hsnCode}` : "",
       invoiceQty: l.qty,
       unit: "PCS",
       unitPrice: l.rate,
@@ -169,7 +222,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         });
         if (post) maybePostPurchaseInvoice(created);
       }
-      router.push("/accounts/transactions/purchase");
+      router.push(PURCHASE_LIST_PATH);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
     } finally {
@@ -177,146 +230,274 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
     }
   };
 
+  const itemColumns = [
+    { key: "product", label: "Product", align: "left" as const },
+    { key: "hsn", label: "HSN", align: "left" as const },
+    { key: "qty", label: "Qty", align: "right" as const },
+    { key: "rate", label: "Rate", align: "right" as const },
+    { key: "taxable", label: "Taxable", align: "right" as const },
+    { key: "cgst", label: "Input CGST", align: "right" as const },
+    { key: "sgst", label: "Input SGST", align: "right" as const },
+    { key: "igst", label: "Input IGST", align: "right" as const },
+    { key: "total", label: "Total", align: "right" as const },
+    { key: "action", label: "", align: "right" as const },
+  ];
+
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Transactions", isEdit ? "Edit Purchase Invoice" : "New Purchase Invoice")}
-      title={isEdit ? `Edit ${existing?.invoiceNo ?? ""}` : "New Purchase Invoice"}
-      description="Create a purchase bill with vendor details, line items, GST and ledger impact preview."
+    <InvoiceFormLayout
+      title={isEdit ? `Edit ${existing?.invoiceNo ?? "Purchase Invoice"}` : "New Purchase Invoice"}
+      subtitle="Create a purchase bill with vendor details, line items, GST and ledger impact preview."
+      breadcrumb={accountsBreadcrumb(
+        "Transactions",
+        isEdit ? "Edit Purchase Invoice" : "New Purchase Invoice",
+        PURCHASE_LIST_PATH,
+      )}
+      backHref={PURCHASE_LIST_PATH}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className={INVOICE_FORM_INPUT_CLASS}
+            onClick={() => router.push(PURCHASE_LIST_PATH)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className={INVOICE_FORM_INPUT_CLASS}
+            disabled={saving}
+            onClick={() => doSave(false)}
+          >
+            Save Draft
+          </Button>
+          <Button
+            size="sm"
+            className={cn(INVOICE_FORM_INPUT_CLASS, "bg-brand-600 hover:bg-brand-700 text-white border-0")}
+            disabled={saving}
+            onClick={() => doSave(true)}
+          >
+            Post Invoice
+          </Button>
+        </div>
+      }
     >
-      <div className="space-y-4 max-w-4xl">
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">{error}</div>
-        )}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
+          {error}
+        </div>
+      )}
 
-        <Section title="Supplier Info">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <Label className="text-xs">Supplier *</Label>
-              <select
-                className="mt-1 h-8 w-full rounded-md border border-border bg-white px-2.5 text-xs"
-                value={vendorId}
-                onChange={(e) => setVendorId(e.target.value)}
-              >
-                <option value="">Select supplier...</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>{v.vendorName}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label className="text-xs">GSTIN</Label>
-              <Input className="h-8 text-xs mt-1 bg-muted/25" readOnly value={vendor?.gstNumber ?? "—"} />
-            </div>
-            <div>
-              <Label className="text-xs">State</Label>
-              <Input className="h-8 text-xs mt-1 bg-muted/25" readOnly value={vendor?.billingAddress?.state ?? "—"} />
-            </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        <InvoiceFormCard title="Vendor Information">
+          <VendorMasterPanel
+            vendors={vendors}
+            vendorId={vendorId}
+            onVendorIdChange={onVendorSelect}
+            fields={vendorFields}
+            billToId={billToId}
+            shipToId={shipToId}
+            onBillToChange={(id, addr) => {
+              setBillToId(id);
+              setBillingAddress(addr);
+            }}
+            onShipToChange={(id, addr) => {
+              setShipToId(id);
+              setShippingAddress(addr);
+            }}
+            billingAddress={billingAddress}
+            shippingAddress={shippingAddress}
+            title="Vendor"
+          />
+        </InvoiceFormCard>
+
+        <InvoiceFormCard title="Invoice Information">
+          <div className={INVOICE_FORM_GRID_CLASS}>
+            <InvoiceFormField label="Purchase Invoice No.">
+              <InvoiceFormInput
+                disabled
+                className="bg-slate-50 text-slate-700"
+                value={isEdit ? existing?.invoiceNo ?? "" : "Auto-generated"}
+              />
+            </InvoiceFormField>
+            <InvoiceFormField label="Vendor Invoice No." required>
+              <InvoiceFormInput
+                value={vendorInvoiceNo}
+                onChange={(e) => setVendorInvoiceNo(e.target.value)}
+                placeholder="e.g. GF-4521"
+              />
+            </InvoiceFormField>
+            <InvoiceFormField label="Invoice Date" required>
+              <InvoiceFormInput
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+              />
+            </InvoiceFormField>
+            <InvoiceFormField label="Due Date">
+              <InvoiceFormInput type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </InvoiceFormField>
+            <InvoiceFormReadOnly label="GRN No." value={existing?.grnNo} mono />
+            <InvoiceFormReadOnly label="Branch" value="Head Office" />
+            <InvoiceFormReadOnly label="Warehouse" value="Central Warehouse" />
+            <InvoiceFormReadOnly
+              label="Place of Supply"
+              value={vendorFields?.billingAddress?.split("\n").pop()?.trim() ?? "—"}
+            />
+            <InvoiceFormReadOnly
+              label="GST Treatment"
+              value={vendorFields?.vendorGst ? "Registered — CGST + SGST" : "Unregistered"}
+            />
+            <InvoiceFormField label="Purchaseperson / Created By" className="sm:col-span-2 lg:col-span-3">
+              <InvoiceFormInput
+                value={purchaseperson}
+                onChange={(e) => setPurchaseperson(e.target.value)}
+                placeholder="Name"
+              />
+            </InvoiceFormField>
           </div>
-        </Section>
+        </InvoiceFormCard>
+      </div>
 
-        <Section title="Invoice Info">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <Label className="text-xs">Invoice Date *</Label>
-              <Input type="date" className="h-8 text-xs mt-1" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-            </div>
-            <div>
-              <Label className="text-xs">Supplier Invoice No *</Label>
-              <Input className="h-8 text-xs mt-1" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} placeholder="e.g. GF-4521" />
-            </div>
-          </div>
-        </Section>
-
-        <Section title="Line Items">
-          <table className="accounts-table w-full text-xs">
-            <thead>
-              <tr className="border-b border-border/60">
-                <th className="text-left py-2 text-[10px] font-semibold uppercase text-muted-foreground">Product</th>
-                <th className="text-right py-2 text-[10px] font-semibold uppercase text-muted-foreground w-20">Qty</th>
-                <th className="text-right py-2 text-[10px] font-semibold uppercase text-muted-foreground w-24">Rate</th>
-                <th className="text-right py-2 text-[10px] font-semibold uppercase text-muted-foreground w-20">GST %</th>
-                <th className="text-right py-2 text-[10px] font-semibold uppercase text-muted-foreground w-24">Taxable</th>
-                <th className="text-right py-2 text-[10px] font-semibold uppercase text-muted-foreground w-20">GST</th>
-                <th className="text-right py-2 text-[10px] font-semibold uppercase text-muted-foreground w-24">Total</th>
-                <th className="w-10" />
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line, idx) => (
-                <tr key={line.id} className="border-b border-border/30">
-                  <td className="py-1.5 pr-2">
-                    <select
-                      className="h-8 w-full rounded-md border border-border bg-white px-2 text-xs"
-                      value={line.productName}
-                      onChange={(e) => {
-                        const prod = products.find((p) => p.itemName === e.target.value);
-                        updateLine(idx, {
-                          productName: e.target.value,
-                          rate: prod?.openingRate ?? line.rate,
-                          gstPct: prod ? parseFloat(prod.gstRate) || 18 : line.gstPct,
-                        });
+      <InvoiceFormSection
+        title="Product / Item Details"
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(INVOICE_FORM_INPUT_CLASS, "gap-1.5")}
+            onClick={addLine}
+          >
+            <Plus className="w-4 h-4" /> Add Line
+          </Button>
+        }
+      >
+        <InvoiceFormItemTable minWidth={960}>
+          <InvoiceFormItemTableHead columns={itemColumns} />
+          <tbody>
+            {lines.map((line, idx) => {
+              const lineGst = splitInvoiceGst(line.gstAmt, false);
+              return (
+                <tr key={line.id} className="border-b border-slate-100 last:border-b-0">
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "min-w-[200px]")}>
+                    <TransactionProductSelect
+                      products={purchaseProducts}
+                      value={line.productId}
+                      onSelect={(p) => {
+                        setLines((prev) =>
+                          prev.map((l, i) =>
+                            i === idx
+                              ? recalcLine({
+                                  ...l,
+                                  productId: p.id,
+                                  productName: p.name,
+                                  hsnCode: p.hsn,
+                                  rate: p.unitPrice > 0 ? p.unitPrice : l.rate,
+                                  gstPct: p.taxPct,
+                                })
+                              : l,
+                          ),
+                        );
                       }}
-                    >
-                      <option value="">Select...</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.itemName}>{p.itemName}</option>
-                      ))}
-                    </select>
+                      disabled={!vendorId}
+                      placeholder={vendorId ? "Select product…" : "Select vendor first"}
+                    />
                   </td>
-                  <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.qty} onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })} /></td>
-                  <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.rate} onChange={(e) => updateLine(idx, { rate: Number(e.target.value) || 0 })} /></td>
-                  <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.gstPct} onChange={(e) => updateLine(idx, { gstPct: Number(e.target.value) || 0 })} /></td>
-                  <td className="py-1.5 text-right tabular-nums">{formatMoney(line.taxableAmt)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatMoney(line.gstAmt)}</td>
-                  <td className="py-1.5 text-right tabular-nums font-semibold">{formatMoney(line.total)}</td>
-                  <td className="py-1.5">
+                  <td className={INVOICE_FORM_TABLE_TD_CLASS}>
+                    <InvoiceFormInput
+                      readOnly
+                      className="bg-slate-50 font-mono text-sm"
+                      value={line.hsnCode}
+                      placeholder="HSN"
+                    />
+                  </td>
+                  <td className={INVOICE_FORM_TABLE_TD_CLASS}>
+                    <InvoiceFormInput
+                      type="number"
+                      className="text-right tabular-nums"
+                      value={line.qty}
+                      onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })}
+                    />
+                  </td>
+                  <td className={INVOICE_FORM_TABLE_TD_CLASS}>
+                    <AccountsMoneyInput
+                      className={cn(INVOICE_FORM_INPUT_CLASS, "text-right tabular-nums")}
+                      value={line.rate}
+                      onChange={(v) => updateLine(idx, { rate: v })}
+                    />
+                  </td>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums")}>
+                    {formatMoney(line.taxableAmt)}
+                  </td>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums text-slate-600")}>
+                    {formatMoney(lineGst.cgst)}
+                  </td>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums text-slate-600")}>
+                    {formatMoney(lineGst.sgst)}
+                  </td>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums text-slate-600")}>
+                    {formatMoney(lineGst.igst)}
+                  </td>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums font-medium")}>
+                    {formatMoney(line.total)}
+                  </td>
+                  <td className={INVOICE_FORM_TABLE_TD_CLASS}>
                     {lines.length > 1 && (
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => removeLine(idx)}>
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-slate-500 hover:text-red-600"
+                        onClick={() => removeLine(idx)}
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 mt-2" onClick={addLine}>
-            <Plus className="w-3.5 h-3.5" /> Add Line
-          </Button>
-        </Section>
+              );
+            })}
+          </tbody>
+        </InvoiceFormItemTable>
+      </InvoiceFormSection>
 
-        <Section title="Totals">
-          <div className="grid grid-cols-3 gap-4 text-xs">
-            <div>
-              <p className="text-muted-foreground">Taxable Amount</p>
-              <p className="text-sm font-semibold tabular-nums mt-0.5">{formatMoney(subtotal)}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+        <InvoiceFormSection title="Remarks">
+          <InvoiceFormTextarea
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Optional remarks…"
+          />
+        </InvoiceFormSection>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+          <h2 className="text-[15px] font-semibold text-slate-900">Invoice Summary</h2>
+          <div className="space-y-1.5 text-sm text-slate-700">
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-500">Taxable Amount</span>
+              <span className="tabular-nums font-medium">{formatMoney(subtotal)}</span>
             </div>
-            <div>
-              <p className="text-muted-foreground">GST Amount</p>
-              <p className="text-sm font-semibold tabular-nums mt-0.5">{formatMoney(totalGst)}</p>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-500">Input CGST</span>
+              <span className="tabular-nums">{formatMoney(gstSplit.cgst)}</span>
             </div>
-            <div>
-              <p className="text-muted-foreground">Grand Total</p>
-              <p className="text-lg font-bold tabular-nums text-brand-700 mt-0.5">{formatMoney(grandTotal)}</p>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-500">Input SGST</span>
+              <span className="tabular-nums">{formatMoney(gstSplit.sgst)}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 mt-2">
+              <span className="font-semibold text-slate-900">Grand Total</span>
+              <span className="tabular-nums font-bold text-brand-700">{formatMoney(grandTotal)}</span>
             </div>
           </div>
-        </Section>
-
-        <Section title="Remarks">
-          <Textarea className="text-xs min-h-[60px]" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional remarks..." />
-        </Section>
-
-        <LedgerImpactPreview title="Ledger Impact Preview" lines={impactLines} className="border border-border/60 rounded-lg" />
-
-        <div className="flex items-center gap-3 pt-2 pb-6">
-          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => router.push("/accounts/transactions/purchase")}>
-            Cancel
-          </Button>
-          <Button size="sm" className="h-9 text-xs bg-brand-600 text-white" disabled={saving} onClick={() => doSave(true)}>
-            Post Invoice
-          </Button>
         </div>
       </div>
-    </AccountsPageShell>
+
+      <LedgerImpactPreview
+        title="Ledger Impact Preview"
+        lines={impactLines}
+        className="border border-slate-200 rounded-lg"
+      />
+    </InvoiceFormLayout>
   );
 }

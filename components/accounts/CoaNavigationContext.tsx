@@ -9,17 +9,19 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { SYSTEM_COA_NODES } from "@/app/(app)/accounts/masters/coa-seed-nodes";
+import { mergeBundledCoaDemoLedgers } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-demo-bundle";
 import {
   getAllExpandableIds,
+  getSearchMatchingNodes,
   getSearchVisibleIds,
   hasChildLedgers,
   loadChartOfAccounts,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
+import { GENERAL_LEDGER_HREF, buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
 import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import {
@@ -30,7 +32,7 @@ import { ensureTdsSectionLedgers } from "@/lib/accounts/tds-section-ledgers";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
 
-const FULL_COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
+const FULL_COA_SEED: ChartOfAccount[] = mergeBundledCoaDemoLedgers([...SYSTEM_COA_NODES]);
 
 function defaultExpandedIds(records: ChartOfAccount[]): Set<number> {
   return new Set(
@@ -45,20 +47,29 @@ function readCoaRecords(): ChartOfAccount[] {
   return loadChartOfAccounts();
 }
 
+/** Client-only URL params — avoids useSearchParams() Suspense/hydration mismatches in layout providers. */
+function readClientSearchParam(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(key);
+}
+
 interface CoaNavigationContextValue {
   records: ChartOfAccount[];
   setRecords: React.Dispatch<React.SetStateAction<ChartOfAccount[]>>;
   selectedId: number | null;
   selectedNode: ChartOfAccount | null;
   expandedIds: Set<number>;
-  search: string;
-  setSearch: (value: string) => void;
+  treeSearchTerm: string;
+  setTreeSearchTerm: (value: string) => void;
   selectNode: (node: ChartOfAccount) => void;
   toggleExpand: (id: number) => void;
   expandAll: () => void;
   collapseAll: () => void;
   refreshRecords: () => void;
   isCoaRoute: boolean;
+  highlightedLedgerId: number | null;
+  setHighlightedLedgerId: React.Dispatch<React.SetStateAction<number | null>>;
+  ensureExpanded: (ids: number | number[]) => void;
 }
 
 const CoaNavigationContext = createContext<CoaNavigationContextValue | null>(null);
@@ -66,13 +77,13 @@ const CoaNavigationContext = createContext<CoaNavigationContextValue | null>(nul
 export function CoaNavigationProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const mountedRef = useRef(false);
 
   const [records, setRecords] = useState<ChartOfAccount[]>(FULL_COA_SEED);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => defaultExpandedIds(FULL_COA_SEED));
-  const [search, setSearch] = useState("");
+  const [treeSearchTerm, setTreeSearchTerm] = useState("");
+  const [highlightedLedgerId, setHighlightedLedgerId] = useState<number | null>(null);
 
   const isCoaRoute = pathname.startsWith(CHART_OF_ACCOUNTS_HREF);
 
@@ -101,12 +112,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
 
   const selectNode = useCallback(
     (node: ChartOfAccount) => {
-      if (isTdsCoaNode(node, records)) {
+      if (isTdsCoaNode(node, records) && !pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.push(buildTdsPartyWiseReportHref(node, records));
-        return;
-      }
-      if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
-        router.push(buildGeneralLedgerHref(node.id));
         return;
       }
       setSelectedId(node.id);
@@ -116,6 +123,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       const href = `${CHART_OF_ACCOUNTS_HREF}?node=${node.id}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
+      } else if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
+        router.push(buildGeneralLedgerHref(node.id));
       } else {
         router.push(href);
       }
@@ -124,26 +133,51 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   );
 
   useEffect(() => {
-    const nodeParam = searchParams.get("node") ?? searchParams.get("ledger");
-    if (nodeParam) {
-      const id = Number(nodeParam);
-      if (!Number.isNaN(id)) setSelectedId(id);
-      return;
-    }
-    if (isCoaRoute && records.length > 0) {
-      const firstHead = records
-        .filter((r) => r.nodeLevel === "primary_head")
-        .sort((a, b) => a.accountCode.localeCompare(b.accountCode))[0];
-      if (firstHead) {
-        router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${firstHead.id}`, { scroll: false });
+    const syncFromUrl = () => {
+      if (isCoaRoute) {
+        const nodeParam = readClientSearchParam("node");
+        if (nodeParam) {
+          const id = Number(nodeParam);
+          if (!Number.isNaN(id)) setSelectedId(id);
+          return;
+        }
+        if (records.length > 0) {
+          const firstHead = records
+            .filter((r) => r.nodeLevel === "primary_head")
+            .sort((a, b) => a.accountCode.localeCompare(b.accountCode))[0];
+          if (firstHead) {
+            router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${firstHead.id}`, { scroll: false });
+          }
+        }
+        return;
       }
-    }
-  }, [searchParams, isCoaRoute, records, router]);
 
+      if (pathname.startsWith(GENERAL_LEDGER_HREF)) {
+        const ledgerParam = readClientSearchParam("ledger");
+        if (ledgerParam) {
+          const id = Number(ledgerParam);
+          if (!Number.isNaN(id)) setSelectedId(id);
+        }
+        return;
+      }
+
+      setSelectedId(null);
+    };
+
+    syncFromUrl();
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, [isCoaRoute, pathname, records, router]);
+
+  /** Tree search: expand ancestors of matches only — never change selection or URL. */
   useEffect(() => {
-    if (!search.trim()) return;
-    const visible = getSearchVisibleIds(records, search);
-    if (visible.size === 0) return;
+    if (!treeSearchTerm.trim()) return;
+
+    const matching = getSearchMatchingNodes(records, treeSearchTerm);
+    if (matching.length === 0) return;
+
+    const visible = getSearchVisibleIds(records, treeSearchTerm);
+
     setExpandedIds((prev) => {
       const next = new Set(prev);
       let changed = false;
@@ -155,7 +189,7 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       });
       return changed ? next : prev;
     });
-  }, [search, records]);
+  }, [treeSearchTerm, records]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedIds((prev) => {
@@ -163,6 +197,21 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
+    });
+  }, []);
+
+  const ensureExpanded = useCallback((ids: number | number[]) => {
+    const list = Array.isArray(ids) ? ids : [ids];
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of list) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
   }, []);
 
@@ -183,27 +232,32 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       selectedId,
       selectedNode,
       expandedIds,
-      search,
-      setSearch,
+      treeSearchTerm,
+      setTreeSearchTerm,
       selectNode,
       toggleExpand,
       expandAll,
       collapseAll,
       refreshRecords,
       isCoaRoute,
+      highlightedLedgerId,
+      setHighlightedLedgerId,
+      ensureExpanded,
     }),
     [
       records,
       selectedId,
       selectedNode,
       expandedIds,
-      search,
+      treeSearchTerm,
       selectNode,
       toggleExpand,
       expandAll,
       collapseAll,
       refreshRecords,
       isCoaRoute,
+      highlightedLedgerId,
+      ensureExpanded,
     ],
   );
 

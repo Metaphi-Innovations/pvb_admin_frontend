@@ -1,201 +1,206 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   computeVendorAgeingRows,
-  getVendorBillAgeing,
   getPayablesFilterOptions,
+  type VendorAgeingRow,
 } from "@/lib/accounts/payables-data";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import {
+  exportSupplierAgeingToExcel,
+  exportSupplierAgeingToPdf,
+} from "@/lib/accounts/payables-export";
+import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
-import { Button } from "@/components/ui/button";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
+  ReportFinancialYearFilter,
   ReportVendorFilter,
-  ReportBranchFilter,
+  ReportSearchFilter,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsRichTable,
+  AccountsTableScroll,
+  type AccountsRichColumnDef,
+} from "@/components/accounts/AccountsTable";
+import {
+  AccountsTablePagination,
+} from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { cn } from "@/lib/utils";
 
 export default function VendorAgeingClient() {
+  const router = useRouter();
+  const [refreshKey, setRefreshKey] = useState(0);
   const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
-  const [vendorId, setVendorId] = useState<string>("all");
-  const [branch, setBranch] = useState<string>("all");
-  const [expandedVendorId, setExpandedVendorId] = useState<number | null>(null);
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [vendorId, setVendorId] = useState("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
 
-  const filterOptions = useMemo(() => getPayablesFilterOptions(), []);
+  useEffect(() => {
+    ensurePayablesDemoOnPageLoad();
+    setRefreshKey((k) => k + 1);
+  }, []);
 
-  const filters = useMemo(
-    () => ({
+  useEffect(() => {
+    const activeFyId = getActiveFinancialYearId();
+    const years = loadFinancialYears();
+    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
+    if (activeFy) setFinancialYearId(String(activeFy.id));
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [asOnDate, financialYearId, vendorId, search, pageSize, refreshKey]);
+
+  const filterOptions = useMemo(() => getPayablesFilterOptions(), [refreshKey]);
+
+  const rows = useMemo(() => {
+    let data = computeVendorAgeingRows(asOnDate, {
       vendorId: vendorId === "all" ? undefined : Number(vendorId),
-      branch: branch === "all" ? undefined : branch,
-    }),
-    [vendorId, branch],
-  );
+    });
+    const q = search.trim().toLowerCase();
+    if (q) {
+      data = data.filter(
+        (r) =>
+          r.vendorName.toLowerCase().includes(q) || r.vendorCode.toLowerCase().includes(q),
+      );
+    }
+    return data;
+  }, [asOnDate, vendorId, search, refreshKey]);
 
-  const rows = useMemo(
-    () => computeVendorAgeingRows(asOnDate, filters),
-    [asOnDate, filters],
-  );
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, page, pageSize]);
 
-  const expandedBills = useMemo(() => {
-    if (!expandedVendorId) return [];
-    return getVendorBillAgeing(expandedVendorId, asOnDate);
-  }, [expandedVendorId, asOnDate]);
+  const exportMeta = useMemo(() => {
+    const fy =
+      financialYearId === "all"
+        ? "All years"
+        : (loadFinancialYears().find((y) => String(y.id) === financialYearId)?.name ?? "All years");
+    const vendor =
+      vendorId === "all"
+        ? "All suppliers"
+        : (filterOptions.vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "All suppliers");
+    return {
+      reportName: "Supplier Ageing",
+      financialYear: fy,
+      asOnDate,
+      supplier: vendor,
+      paymentStatus: "—",
+      search,
+    };
+  }, [financialYearId, vendorId, search, asOnDate, filterOptions.vendors]);
+
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    try {
+      await exportSupplierAgeingToExcel(rows, exportMeta);
+    } finally {
+      setExporting(false);
+    }
+  }, [rows, exportMeta]);
+
+  const handleExportPdf = useCallback(() => {
+    exportSupplierAgeingToPdf(rows, exportMeta);
+  }, [rows, exportMeta]);
+
+  const amountCol = (
+    key: keyof Pick<
+      VendorAgeingRow,
+      "totalOutstanding" | "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
+    >,
+    label: string,
+    bold?: boolean,
+  ): AccountsRichColumnDef<VendorAgeingRow> => ({
+    key,
+    label,
+    align: "right",
+    render: (r) => (
+      <span className={cn(MONEY_CELL_CLASS, bold && "font-semibold text-foreground")}>
+        {formatMoney(r[key])}
+      </span>
+    ),
+  });
+
+  const columns = useMemo((): AccountsRichColumnDef<VendorAgeingRow>[] => [
+    {
+      key: "vendorName",
+      label: "Supplier",
+      render: (r) => (
+        <Link
+          href={`/accounts/payables/outstanding/${r.vendorId}`}
+          className="text-xs font-medium text-brand-700 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {r.vendorName}
+        </Link>
+      ),
+    },
+    amountCol("totalOutstanding", "Total Outstanding", true),
+    amountCol("bucket0_30", "0-30 Days"),
+    amountCol("bucket31_60", "31-60 Days"),
+    amountCol("bucket61_90", "61-90 Days"),
+    amountCol("bucket91_120", "91-120 Days"),
+    amountCol("bucketAbove120", "Above 120 Days"),
+  ], []);
 
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Payables", "Supplier Ageing")}
       title="Supplier Ageing"
-      description="Age-wise analysis of supplier payables by purchase bill due date."
+      description="Supplier outstanding grouped by ageing buckets as on the selected date."
       filters={
-        <ReportFilterRow>
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || rows.length === 0}
+            />
+          }
+        >
+          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
           <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
           <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
-          <ReportBranchFilter value={branch} onChange={setBranch} options={filterOptions.branches} />
+          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search supplier…" />
         </ReportFilterRow>
       }
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-1 overflow-auto min-h-0">
-        <table className="accounts-table w-full text-table min-w-[1200px]">
-          <thead className="border-b">
-            <tr>
-              {[
-                "Supplier Name",
-                "Current",
-                "0–30 Days",
-                "31–60 Days",
-                "61–90 Days",
-                "90+ Days",
-                "Total Outstanding",
-                "Oldest Bill Date",
-                "",
-              ].map((h) => (
-                <th
-                  key={h || "act"}
-                  className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <Fragment key={r.vendorId}>
-                <tr className="border-b border-border/40 hover:bg-muted/20">
-                  <td className="px-3 py-2.5 text-xs font-medium">
-                    <Link
-                      href={`/accounts/payables/outstanding/${r.vendorId}`}
-                      className="text-brand-600 hover:underline"
-                    >
-                      {r.vendorName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                    {formatMoney(r.currentNotDue)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                    {formatMoney(r.bucket0_30)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                    {formatMoney(r.bucket31_60)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                    {formatMoney(r.bucket61_90)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                    {formatMoney(r.bucket90Plus)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums font-semibold">
-                    {formatMoney(r.totalOutstanding)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">{r.oldestBillDate}</td>
-                  <td className="px-3 py-2.5 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] gap-1"
-                      onClick={() =>
-                        setExpandedVendorId(
-                          expandedVendorId === r.vendorId ? null : r.vendorId,
-                        )
-                      }
-                    >
-                      Bill ageing
-                      <ChevronRight
-                        className={`w-3.5 h-3.5 transition-transform ${expandedVendorId === r.vendorId ? "rotate-90" : ""}`}
-                      />
-                    </Button>
-                  </td>
-                </tr>
-                {expandedVendorId === r.vendorId && (
-                  <tr className="bg-muted/10">
-                    <td colSpan={9} className="px-4 py-3">
-                      <table className="accounts-table w-full text-table border border-border/60 rounded-lg overflow-hidden bg-white">
-                        <thead>
-                          <tr>
-                            {[
-                              "Bill No",
-                              "Bill Date",
-                              "Due Date",
-                              "Bill Amount",
-                              "Paid",
-                              "Outstanding",
-                              "Days Overdue",
-                              "Ageing Bucket",
-                            ].map((h) => (
-                              <th
-                                key={h}
-                                className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground"
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {expandedBills.map((bill) => (
-                            <tr key={bill.billId} className="border-t border-border/40">
-                              <td className="px-3 py-2 text-xs font-mono">
-                                <Link
-                                  href={`/accounts/purchase-invoices/${bill.billId}`}
-                                  className="text-brand-600 hover:underline"
-                                >
-                                  {bill.billNo}
-                                </Link>
-                              </td>
-                              <td className="px-3 py-2 text-xs">{bill.billDate}</td>
-                              <td className="px-3 py-2 text-xs">{bill.dueDate}</td>
-                              <td className="px-3 py-2 text-xs text-right tabular-nums">
-                                {formatMoney(bill.billAmount)}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-right tabular-nums">
-                                {formatMoney(bill.paidAmount)}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-right tabular-nums font-semibold">
-                                {formatMoney(bill.outstanding)}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-center tabular-nums">
-                                {bill.daysOverdue}
-                              </td>
-                              <td className="px-3 py-2 text-xs">{bill.ageingBucket}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-col flex-1 min-h-0">
+        <AccountsTableScroll>
+          <AccountsRichTable
+            columns={columns}
+            rows={pagedRows}
+            minWidth={1100}
+            getRowKey={(r) => r.vendorId}
+            emptyMessage="No records found."
+            onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
+          />
+        </AccountsTableScroll>
+        {rows.length > 0 && (
+          <AccountsTablePagination
+            page={page}
+            pageSize={pageSize}
+            totalRecords={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </AccountsPageShell>
   );

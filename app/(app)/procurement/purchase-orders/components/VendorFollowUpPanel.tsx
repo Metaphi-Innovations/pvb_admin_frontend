@@ -6,37 +6,44 @@ import { RecordSectionCard } from "@/components/record-detail";
 import { ProcBadge } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
 import {
-  addPOFollowUp,
   canAddPOFollowUp,
   formatFollowUpDateTime,
-  getPOFollowUpSummary,
-  loadFollowUpsForPO,
+  type AddFollowUpInput,
+  type POFollowUpEntry,
 } from "../po-followup-data";
 import { AddFollowUpModal } from "./AddFollowUpModal";
 import { FollowUpActivityFeed } from "./FollowUpActivityFeed";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export function VendorFollowUpPanel({
   po,
-  onPOUpdated,
+  followups = [],
+  onSubmitFollowUp,
+  submitting = false,
   onToast,
 }: {
   po: PurchaseOrder;
-  onPOUpdated: (updated: PurchaseOrder) => void;
+  followups?: POFollowUpEntry[];
+  onSubmitFollowUp: (input: AddFollowUpInput) => void;
+  submitting?: boolean;
   onToast?: (msg: string) => void;
 }) {
-  const [entries, setEntries] = useState(() => loadFollowUpsForPO(po.id));
   const [modalOpen, setModalOpen] = useState(false);
-
-  const refresh = useCallback(() => {
-    setEntries(loadFollowUpsForPO(po.id));
-  }, [po.id]);
+  const [entries, setEntries] = useState(followups);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    setEntries(followups);
+  }, [followups]);
 
-  const summary = getPOFollowUpSummary(po.id);
+  const summary = useMemo(() => {
+    const latest = entries[0];
+    return {
+      totalFollowUps: entries.length,
+      lastFollowUpAt: latest?.followUpAt ?? null,
+      lastSpokeWith: latest?.spokeWith ?? null,
+      availability: entries.length > 0 ? "followup_available" : "no_followup",
+    } as const;
+  }, [entries]);
 
   return (
     <>
@@ -64,6 +71,7 @@ export function VendorFollowUpPanel({
               size="sm"
               className="mt-3 h-8 w-full text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
               onClick={() => setModalOpen(true)}
+              disabled={submitting}
             >
               <Plus className="w-3.5 h-3.5" /> Follow-up &amp; Activities
             </Button>
@@ -97,11 +105,11 @@ export function VendorFollowUpPanel({
         open={modalOpen}
         onOpenChange={setModalOpen}
         po={po}
+        entries={entries}
         readOnly={!canAddPOFollowUp(po)}
+        submitting={submitting}
         onSubmit={(input) => {
-          const { updatedPo } = addPOFollowUp(po, input);
-          onPOUpdated(updatedPo);
-          refresh();
+          onSubmitFollowUp(input);
           onToast?.("Follow-up saved.");
         }}
       />
@@ -110,29 +118,24 @@ export function VendorFollowUpPanel({
 }
 
 export function FollowUpListingCell({
-  poId,
+  followUpCount = 0,
   onViewHistory,
 }: {
-  poId: number;
+  followUpCount?: number;
   onViewHistory: () => void;
 }) {
-  const summary = getPOFollowUpSummary(poId);
+  const availability = followUpCount > 0 ? "followup_available" : "no_followup";
   return (
     <div className="py-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
-      <ProcBadge status={summary.availability} />
-      {summary.lastFollowUpAt && (
-        <>
-          <p className="text-[10px] text-muted-foreground tabular-nums leading-tight">
-            {formatFollowUpDateTime(summary.lastFollowUpAt).split(" ").slice(0, 2).join(" ")}
-          </p>
-          <button
-            type="button"
-            className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
-            onClick={onViewHistory}
-          >
-            View
-          </button>
-        </>
+      <ProcBadge status={availability} />
+      {followUpCount > 0 && (
+        <button
+          type="button"
+          className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
+          onClick={onViewHistory}
+        >
+          View
+        </button>
       )}
     </div>
   );

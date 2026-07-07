@@ -1,50 +1,27 @@
 "use client";
 
-
-
-import { ZohoVoucherEntryForm } from "@/components/accounts/ZohoVoucherEntryForm";
-
-
+import { VoucherEntryClient } from "./VoucherEntryClient";
 
 interface ReceiptVoucherFormProps {
-
   onDone?: () => void;
-
   voucherId?: number;
-
+  readOnly?: boolean;
+  onEdit?: () => void;
 }
 
-
-
-export function ReceiptVoucherForm({ onDone, voucherId }: ReceiptVoucherFormProps) {
-
-  const cancelHref = voucherId
-
-    ? `/accounts/vouchers/view/${voucherId}`
-
-    : "/accounts/vouchers?tab=receipt";
-
-
-
+export function ReceiptVoucherForm({
+  onDone,
+  voucherId,
+  readOnly = false,
+  onEdit,
+}: ReceiptVoucherFormProps) {
   return (
-
-    <ZohoVoucherEntryForm
-
+    <VoucherEntryClient
       voucherType="receipt"
-
-      cancelHref={cancelHref}
-
       voucherId={voucherId}
-
+      readOnly={readOnly}
+      onEdit={onEdit}
       onDone={() => onDone?.()}
-
-      breadcrumbSection="Transactions"
-
-      showFinancialYear={false}
-
     />
-
   );
-
 }
-

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -579,12 +580,12 @@ export function CategorizeEntryPanel({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Amount</Label>
-              <Input
-                type="number"
+              <AccountsMoneyInput
+                compact={false}
                 className="h-9 text-xs tabular-nums"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                readOnly={!batchMode}
+                onChange={(v) => setAmount(String(v))}
+                disabled={!batchMode}
               />
             </div>
           </div>
@@ -619,10 +620,10 @@ export function CategorizeEntryPanel({
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs w-full"
+              className="h-9 text-[13px] font-medium w-full"
               onClick={() => setCreateLedgerOpen(true)}
             >
-              <Plus className="w-3.5 h-3.5 mr-1" />
+              <Plus className="w-4 h-4 mr-1" />
               Create Expense Ledger
             </Button>
           )}
@@ -640,7 +641,7 @@ export function CategorizeEntryPanel({
             <Button
               variant="secondary"
               size="sm"
-              className="h-8 text-xs flex-1"
+              className="h-9 text-[13px] font-medium flex-1"
               disabled={!canReconcile || entry.matchStatus === "reconciled"}
               onClick={() => {
                 if (!validation.canReconcile) {
@@ -656,7 +657,7 @@ export function CategorizeEntryPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs flex-1"
+              className="h-9 text-[13px] font-medium flex-1"
               onClick={() => {
                 entries.forEach((e) => ignoreBankEntry(e.id));
                 onUpdated();
@@ -668,7 +669,7 @@ export function CategorizeEntryPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs flex-1"
+                className="h-9 text-[13px] font-medium flex-1"
                 onClick={() => {
                   entries.forEach((e) => resetEntryMatch(e.id));
                   onUpdated();

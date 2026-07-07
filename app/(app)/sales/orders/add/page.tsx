@@ -16,7 +16,6 @@ import { syncSchemeUtilizationFromOrder } from "@/app/(app)/masters/scheme/schem
 import {
 	type ProductCatalogItem,
 	buildOrderFromForm,
-	createEmptyLineItem,
 	generateOrderNumber,
 	loadOrders,
 	saveOrders,

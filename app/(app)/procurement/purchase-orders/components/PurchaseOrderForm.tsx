@@ -1,24 +1,42 @@
 "use client";
 
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
 	Info,
 	Upload,
 	Trash2,
 } from "lucide-react";
-import { COMPANY_BILLING, PAYMENT_TERMS_OPTIONS } from "@/lib/procurement/config";
+import { COMPANY_BILLING, PAYMENT_TYPE_OPTIONS } from "@/lib/procurement/config";
 import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
 } from "@/lib/procurement/procurement-line-utils";
 import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
+import {
+	applyTaxSupplyToRates,
+	lineNeedsTaxSupplyUpdate,
+	resolveTaxSupplyType,
+	type TaxSupplyType,
+} from "@/lib/procurement/utils";
+import {
+	applyGstMasterToTaxRates,
+	findGstMasterIdByTotalPct,
+	getDefaultGstMasterId,
+} from "@/lib/procurement/gst-master-utils";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
-import { AdditionalChargesEditor } from "@/components/procurement/AdditionalChargesEditor";
+import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
+import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
 import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
 import { enrichPOLineItem, recalcPO } from "../po-data";
+import {
+	findPOAddressById,
+	getDefaultPOBillShipIds,
+	getPOBillToAddresses,
+	getPOShipToAddresses,
+} from "../po-address-utils";
 import { POLineItemsSection } from "./POLineItemsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,11 +94,6 @@ export function emptyPOLine(): POLineItem {
 	};
 }
 
-function paymentTermDays(term: string): number {
-	const m = term.match(/(\d+)/);
-	return m ? Number(m[1]) : 0;
-}
-
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
 	const supplier = getActiveSuppliers()[0];
@@ -116,8 +129,14 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 			};
 		}) ?? [];
 
-	const paymentTerms = "net-30";
 	const wh = pr?.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
+	const billToAddresses = getPOBillToAddresses();
+	const shipToAddresses = getPOShipToAddresses();
+	const addressDefaults = getDefaultPOBillShipIds(
+		billToAddresses,
+		shipToAddresses,
+		pr?.warehouseId,
+	);
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
 		supplierId: supplier?.id ?? 0,
@@ -130,8 +149,8 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		supplierGstin: supplier?.gstNumber ?? "",
 		referenceNumber: "",
 		currency: "INR",
-		paymentTerms,
-		creditDays: paymentTermDays(paymentTerms),
+		paymentType: "Credit",
+		creditDays: 30,
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
 		state: pr?.state ?? "",
@@ -141,6 +160,8 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		notes: pr?.remarks ?? "",
 		sourcePrId: pr?.id ?? null,
 		sourcePrNumber: pr?.prNumber ?? "",
+		billToAddressId: addressDefaults.billToAddressId,
+		shipToAddressId: addressDefaults.shipToAddressId,
 		billing: { ...COMPANY_BILLING },
 		shipping: {
 			shipToLocation: "Pune Warehouse",
@@ -212,10 +233,6 @@ function formatDisplayDate(iso: string): string {
 	return `${d}-${m}-${y}`;
 }
 
-function paymentTermLabel(value: string): string {
-	return PAYMENT_TERMS_OPTIONS.find((o) => o.value === value)?.label ?? (value || "—");
-}
-
 export function PurchaseOrderForm({
 	form,
 	onChange,
@@ -243,7 +260,7 @@ export function PurchaseOrderForm({
 	const preview = useMemo(
 		() =>
 			recalcPO({
-				id: 0,
+				id: "preview",
 				poNumber: "",
 				...form,
 				summary: {
@@ -289,7 +306,9 @@ export function PurchaseOrderForm({
 		const wh = pr.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 		const lines = pr.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, form.supplierId || undefined);
+			const localSupplierId =
+				typeof form.supplierId === "number" ? form.supplierId : Number(form.supplierId) || undefined;
+			const cp = resolvePurchaseCostPrice(l.productId, localSupplierId);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
 			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
@@ -331,7 +350,12 @@ export function PurchaseOrderForm({
 
 	const previewLines = preview.lines;
 
-	const linkedPr = form.sourcePrId ? getPRById(form.sourcePrId) ?? null : null;
+	const linkedPr =
+		form.sourcePrId && typeof form.sourcePrId === "number"
+			? getPRById(form.sourcePrId) ?? null
+			: form.sourcePrId && /^\d+$/.test(String(form.sourcePrId))
+				? getPRById(Number(form.sourcePrId)) ?? null
+				: null;
 	const displayPoNo = poNumber || "Auto-generated";
 	const totalGst =
 		preview.summary.totalCgst +
@@ -344,16 +368,95 @@ export function PurchaseOrderForm({
 		[form.state],
 	);
 
+	const billToAddresses = useMemo(() => getPOBillToAddresses(), []);
+	const shipToAddresses = useMemo(() => getPOShipToAddresses(), []);
+
+	const billToAddress = useMemo(
+		() => findPOAddressById(billToAddresses, form.billToAddressId ?? ""),
+		[billToAddresses, form.billToAddressId],
+	);
+
+	const selectedWarehouse = useMemo(
+		() => (form.warehouseId ? loadWarehouses().find((w) => w.id === form.warehouseId) ?? null : null),
+		[form.warehouseId],
+	);
+
+	const taxSupplyType = useMemo((): TaxSupplyType => {
+		const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
+		const billToState = billToAddress?.state ?? "";
+		return resolveTaxSupplyType(warehouseState, billToState);
+	}, [selectedWarehouse, billToAddress, form.state]);
+
+	useEffect(() => {
+		if (!form.supplierId) return;
+		const billValid = billToAddresses.some((a) => a.id === form.billToAddressId);
+		const shipValid = shipToAddresses.some((a) => a.id === form.shipToAddressId);
+		if (billValid && shipValid) return;
+		const localWarehouseId =
+			typeof form.warehouseId === "number"
+				? form.warehouseId
+				: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+					? Number(form.warehouseId)
+					: null;
+		const defaults = getDefaultPOBillShipIds(
+			billToAddresses,
+			shipToAddresses,
+			localWarehouseId,
+		);
+		onChange({
+			...form,
+			billToAddressId: billValid ? form.billToAddressId : defaults.billToAddressId,
+			shipToAddressId: shipValid ? form.shipToAddressId : defaults.shipToAddressId,
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when supplier addresses load
+	}, [form.supplierId, billToAddresses.length, shipToAddresses.length]);
+
+	useEffect(() => {
+		if (!form.supplierId || form.lines.length === 0) return;
+		const needsUpdate = form.lines.some((l) =>
+			lineNeedsTaxSupplyUpdate(l.cgstPct, l.sgstPct, l.igstPct, taxSupplyType),
+		);
+		if (!needsUpdate) return;
+		onChange({
+			...form,
+			lines: form.lines.map((l) => {
+				const totalGst = l.cgstPct + l.sgstPct + l.igstPct;
+				return { ...l, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
+			}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
+	}, [taxSupplyType, form.supplierId]);
+
+	useEffect(() => {
+		if (!form.additionalCharges?.length) return;
+		const needsUpdate = form.additionalCharges.some((c) =>
+			lineNeedsTaxSupplyUpdate(c.cgstPct ?? 0, c.sgstPct ?? 0, c.igstPct ?? 0, taxSupplyType),
+		);
+		if (!needsUpdate) return;
+		patch({
+			additionalCharges: form.additionalCharges.map((c) => {
+				const totalGst = (c.cgstPct ?? 0) + (c.sgstPct ?? 0) + (c.igstPct ?? 0);
+				const gstMasterId =
+					c.gstMasterId ?? findGstMasterIdByTotalPct(totalGst) ?? getDefaultGstMasterId();
+				return { ...c, ...applyGstMasterToTaxRates(gstMasterId, taxSupplyType) };
+			}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
+	}, [taxSupplyType]);
+
 	const onStateChange = (state: string) => {
 		patch({ state, warehouseId: null, warehouseName: "", deliveryAddress: "" });
 	};
 
 	const onWarehouseChange = (val: string) => {
 		const wh = loadWarehouses().find((w) => String(w.id) === val);
+		const shipId = wh ? `ship-wh-${wh.id}` : form.shipToAddressId;
+		const shipValid = shipToAddresses.some((a) => a.id === shipId);
 		patch({
 			warehouseId: wh?.id ?? null,
 			warehouseName: wh?.warehouseName ?? "",
 			deliveryAddress: wh?.address ?? form.deliveryAddress,
+			shipToAddressId: shipValid ? shipId : form.shipToAddressId,
 			shipping: {
 				...form.shipping,
 				shipToLocation: wh?.warehouseName ?? form.shipping.shipToLocation,
@@ -366,11 +469,27 @@ export function PurchaseOrderForm({
 
 	const selectSupplier = (idStr: string) => {
 		if (!idStr) {
-			patch({ supplierId: 0, supplierName: "" });
+			patch({
+				supplierId: 0,
+				supplierName: "",
+				billToAddressId: "",
+				shipToAddressId: "",
+			});
 			return;
 		}
 		const s = suppliers.find((x) => x.id === Number(idStr));
 		if (!s) return;
+		const localWarehouseId =
+			typeof form.warehouseId === "number"
+				? form.warehouseId
+				: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+					? Number(form.warehouseId)
+					: null;
+		const defaults = getDefaultPOBillShipIds(
+			billToAddresses,
+			shipToAddresses,
+			localWarehouseId,
+		);
 		patch({
 			supplierId: s.id,
 			supplierName: s.supplierName,
@@ -379,6 +498,8 @@ export function PurchaseOrderForm({
 			supplierMobile: s.mobile || s.phone || "",
 			supplierEmail: s.email || "",
 			supplierGstin: s.gstNumber || "",
+			billToAddressId: form.billToAddressId || defaults.billToAddressId,
+			shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
 		});
 	};
 
@@ -462,7 +583,7 @@ export function PurchaseOrderForm({
 								className={cn(inputCls, "bg-muted/30 font-mono text-muted-foreground")}
 							/>
 						</div>
-						<div className="space-y-1">
+						{/* <div className="space-y-1">
 							<Label className="text-xs font-medium">PR Reference</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.sourcePrNumber} />
@@ -477,7 +598,7 @@ export function PurchaseOrderForm({
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
-						</div>
+						</div> */}
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Supplier</Label>
 							{readOnly ? (
@@ -492,6 +613,10 @@ export function PurchaseOrderForm({
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">Supplier Type</Label>
+							<ReadOnlyField value={form.supplierType} />
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">PO Date</Label>
@@ -519,25 +644,46 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div>
+						
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">Supplier Type</Label>
-							<ReadOnlyField value={form.supplierType} />
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Payment Terms</Label>
+							<Label className="text-xs font-medium">
+								Payment Type <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
-								<ReadOnlyField value={paymentTermLabel(form.paymentTerms)} />
+								<ReadOnlyField value={form.paymentType} />
 							) : (
 								<AutocompleteSelect
-									options={PAYMENT_TERMS_OPTIONS}
-									value={form.paymentTerms}
+									options={PAYMENT_TYPE_OPTIONS}
+									value={form.paymentType}
 									onChange={(v) =>
 										patch({
-											paymentTerms: String(v),
-											creditDays: paymentTermDays(String(v)),
+											paymentType: String(v),
+											creditDays:
+												String(v) === "Credit" ? form.creditDays || 30 : 0,
 										})
 									}
 									className={inputCls}
+								/>
+							)}
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">
+								Credit Days <span className="text-red-500">*</span>
+							</Label>
+							{readOnly ? (
+								<ReadOnlyField value={String(form.creditDays ?? "")} />
+							) : (
+								<Input
+									type="number"
+									min={0}
+									value={form.creditDays}
+									onChange={(e) =>
+										patch({
+											creditDays: Number(e.target.value),
+										})
+									}
+									className={inputCls}
+									placeholder="Enter Credit Days"
 								/>
 							)}
 						</div>
@@ -571,20 +717,62 @@ export function PurchaseOrderForm({
 							)}
 						</div>
 					</div>
-					<div className="mt-3 space-y-1">
-						<Label className="text-xs font-medium">Delivery Address</Label>
-						<Textarea
-							readOnly={readOnly}
-							value={form.deliveryAddress}
-							onChange={(e) => patch({ deliveryAddress: e.target.value })}
-							rows={2}
-							className={cn(
-								"min-h-[60px] rounded-lg text-xs",
-								readOnly && "bg-muted/30 resize-none",
-							)}
+				</div>
+
+				{Boolean(form.supplierId) && form.supplierId !== 0 && form.supplierId !== "0" && (
+					<div className="border-t border-border/60 pt-4">
+						<SectionHead label="Bill To / Ship To" required />
+						<BillToShipToSection
+							billOptions={billToAddresses}
+							shipOptions={shipToAddresses}
+							billToAddressId={form.billToAddressId ?? ""}
+							shipToAddressId={form.shipToAddressId ?? ""}
+							onBillToChange={(id) => {
+								const addr = findPOAddressById(billToAddresses, id);
+								patch({
+									billToAddressId: id,
+									billing: addr
+										? {
+												companyName: addr.companyName,
+												billingAddress: [addr.addressLine1, addr.addressLine2, addr.city, addr.state, addr.pincode]
+													.filter(Boolean)
+													.join(", "),
+												gstNumber: addr.gstin,
+												state: addr.state,
+												city: addr.city,
+												pincode: addr.pincode,
+											}
+										: form.billing,
+								});
+							}}
+							onShipToChange={(id) => {
+								const addr = findPOAddressById(shipToAddresses, id);
+								const whId = id.startsWith("ship-wh-") ? Number(id.replace("ship-wh-", "")) : null;
+								const wh = whId ? loadWarehouses().find((w) => w.id === whId) : null;
+								patch({
+									shipToAddressId: id,
+									...(wh
+										? {
+												warehouseId: wh.id,
+												warehouseName: wh.warehouseName,
+												state: wh.state,
+												deliveryAddress: wh.address,
+											}
+										: {}),
+									shipping: addr
+										? {
+												...form.shipping,
+												shipToLocation: wh?.warehouseName ?? addr.label,
+												address: [addr.addressLine1, addr.addressLine2].filter(Boolean).join(", "),
+												contactPerson: form.shipping.contactPerson,
+												contactNumber: addr.phone !== "—" ? addr.phone : form.shipping.contactNumber,
+											}
+										: form.shipping,
+								});
+							}}
 						/>
 					</div>
-				</div>
+				)}
 
 				<POLineItemsSection
 					form={form}
@@ -593,6 +781,7 @@ export function PurchaseOrderForm({
 					poType={poType}
 					previewLines={previewLines}
 					linkedPr={linkedPr}
+					taxSupplyType={taxSupplyType}
 				/>
 
 				<div className="border-t border-border/60 pt-4">
@@ -600,83 +789,96 @@ export function PurchaseOrderForm({
 						charges={form.additionalCharges ?? []}
 						onChange={(charges) => patch({ additionalCharges: charges })}
 						readOnly={readOnly}
-						productTotal={productTotal}
-						taxTotal={totalGst}
+						taxSupplyType={taxSupplyType}
 					/>
 				</div>
 
 				<div className="border-t border-border/60 pt-4">
-					<SectionHead
-						label="Remarks & Attachments"
-						sub={readOnly ? undefined : "Additional notes and supporting documents."}
-					/>
-					<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-						<div>
-							{!readOnly && (
-								<p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
-							)}
-							<Textarea
-								readOnly={readOnly}
-								value={form.notes}
-								onChange={(e) => patch({ notes: e.target.value })}
-								placeholder="Purpose or internal notes..."
-								className={cn(
-									"min-h-[90px] rounded-lg text-xs",
-									readOnly ? "bg-muted/30 resize-none" : "min-h-[140px] resize-none",
-								)}
+					<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] lg:items-start">
+						<div className="min-w-0 space-y-4">
+							<SectionHead
+								label="Remarks & Attachments"
+								sub={readOnly ? undefined : "Additional notes and supporting documents."}
 							/>
+							<div>
+								{!readOnly && (
+									<p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
+								)}
+								<Textarea
+									readOnly={readOnly}
+									value={form.notes}
+									onChange={(e) => patch({ notes: e.target.value })}
+									placeholder="Purpose or internal notes..."
+									className={cn(
+										"min-h-[90px] rounded-lg text-xs",
+										readOnly ? "bg-muted/30 resize-none" : "min-h-[140px] resize-none",
+									)}
+								/>
+							</div>
+
+							<div className="rounded-xl border border-border bg-muted/10 p-3.5">
+								{!readOnly && (
+									<div className="mb-2.5 flex items-center justify-between gap-2">
+										<p className="text-xs font-medium text-foreground">Attachments</p>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
+											onClick={() => fileRef.current?.click()}
+										>
+											<Upload className="h-3.5 w-3.5" /> Add File
+										</Button>
+									</div>
+								)}
+								{readOnly && (
+									<p className="mb-2 text-xs font-medium text-foreground">Attachments</p>
+								)}
+								{!readOnly && (
+									<input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />
+								)}
+								{form.attachments.length === 0 ? (
+									<p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+										No attachments
+									</p>
+								) : (
+									<ul className="space-y-2">
+										{form.attachments.map((a) => (
+											<li
+												key={a.uid}
+												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
+											>
+												<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												{!readOnly && (
+													<button
+														type="button"
+														onClick={() =>
+															patch({
+																attachments: form.attachments.filter((x) => x.uid !== a.uid),
+															})
+														}
+														className="text-red-600"
+													>
+														<Trash2 className="h-3.5 w-3.5" />
+													</button>
+												)}
+											</li>
+										))}
+									</ul>
+								)}
+							</div>
 						</div>
 
-						<div className="rounded-xl border border-border bg-muted/10 p-3.5">
-							{!readOnly && (
-								<div className="mb-2.5 flex items-center justify-between gap-2">
-									<p className="text-xs font-medium text-foreground">Attachments</p>
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
-										onClick={() => fileRef.current?.click()}
-									>
-										<Upload className="h-3.5 w-3.5" /> Add File
-									</Button>
-								</div>
-							)}
-							{readOnly && (
-								<p className="mb-2 text-xs font-medium text-foreground">Attachments</p>
-							)}
-							{!readOnly && (
-								<input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />
-							)}
-							{form.attachments.length === 0 ? (
-								<p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-									No attachments
-								</p>
-							) : (
-								<ul className="space-y-2">
-									{form.attachments.map((a) => (
-										<li
-											key={a.uid}
-											className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
-										>
-											<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
-											{!readOnly && (
-												<button
-													type="button"
-													onClick={() =>
-														patch({
-															attachments: form.attachments.filter((x) => x.uid !== a.uid),
-														})
-													}
-													className="text-red-600"
-												>
-													<Trash2 className="h-3.5 w-3.5" />
-												</button>
-											)}
-										</li>
-									))}
-								</ul>
-							)}
+						<div className="flex justify-end lg:justify-start">
+							<ProcurementTotalSummary
+								productTotal={productTotal}
+								additionalCharges={form.additionalCharges ?? []}
+								taxTotal={totalGst}
+								taxSupplyType={taxSupplyType}
+								totalCgst={preview.summary.totalCgst}
+								totalSgst={preview.summary.totalSgst}
+								totalIgst={preview.summary.totalIgst}
+							/>
 						</div>
 					</div>
 				</div>

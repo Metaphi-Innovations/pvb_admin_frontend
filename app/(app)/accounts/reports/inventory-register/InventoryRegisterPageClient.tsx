@@ -1,131 +1,456 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { FileText, ArrowDownLeft, ArrowUpRight, Package } from "lucide-react";
-import { AccountsReportShell, ReportFilterBar } from "@/components/accounts/AccountsReportShell";
-import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Label } from "@/components/ui/label";
 import {
-  computeInventoryRegister,
-  WAREHOUSE_FILTER_OPTIONS,
-  type InventoryRegisterRow,
-} from "@/lib/accounts/inventory-accounting-data";
-import { loadProducts } from "@/app/(app)/masters/products/product-data";
-import { formatMoney } from "@/lib/accounts/money-format";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableFoot,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+} from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableListing,
+  AccountsTablePagination,
+} from "@/components/accounts/AccountsTableListing";
+import {
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  ReportSearchFilter,
+  useReportDateRange,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+} from "@/components/accounts/ReportFilters";
+import { EmptySearch } from "@/components/ui/EmptyState";
+import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { useClientMounted } from "@/lib/use-client-mounted";
+import { cn } from "@/lib/utils";
+import {
+  buildInventoryRegisterRows,
+  computeInventoryRegisterTotals,
+  filterInventoryRegisterRows,
+  formatInventoryRegisterDate,
+  formatQty,
+  INVENTORY_REGISTER_BATCH_OPTIONS,
+  INVENTORY_REGISTER_CATEGORY_OPTIONS,
+  INVENTORY_REGISTER_PRODUCT_OPTIONS,
+  INVENTORY_REGISTER_WAREHOUSE_OPTIONS,
+  INVENTORY_TRANSACTION_TYPE_LABELS,
+  INVENTORY_TRANSACTION_TYPE_OPTIONS,
+  sortInventoryRegisterRows,
+  type InventoryRegisterSortKey,
+} from "./inventory-register-data";
+import {
+  exportInventoryRegisterToExcel,
+  exportInventoryRegisterToPdf,
+} from "./inventory-register-export";
 
 export default function InventoryRegisterPageClient() {
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
+  const mounted = useClientMounted();
+
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [warehouse, setWarehouse] = useState("all");
-  const [sku, setSku] = useState("all");
-  const { openTransaction, drawer: transactionDrawer } = useTransactionDetailsDrawer();
+  const [productId, setProductId] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [batchNo, setBatchNo] = useState("all");
+  const [transactionType, setTransactionType] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<InventoryRegisterSortKey>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
 
-  const products = useMemo(() => loadProducts().filter((p) => p.status === "active"), []);
 
-  const source = useMemo(
-    () =>
-      computeInventoryRegister({
-        dateFrom,
-        dateTo,
-        warehouse: warehouse === "all" ? undefined : warehouse,
-        sku: sku === "all" ? undefined : sku,
-      }),
-    [dateFrom, dateTo, warehouse, sku],
+  const sourceRows = useMemo(() => (mounted ? buildInventoryRegisterRows() : []), [mounted]);
+
+  const filterParams = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      financialYearId: "all",
+      warehouse,
+      productId,
+      category,
+      batchNo,
+      transactionType,
+      search,
+    }),
+    [
+      dateFrom,
+      dateTo,
+      warehouse,
+      productId,
+      category,
+      batchNo,
+      transactionType,
+      search,
+    ],
   );
 
-  const movementByKey = useMemo(() => {
-    const map = new Map<string, InventoryRegisterRow>();
-    for (const row of source) {
-      map.set(`${row.voucherNo}-${row.date}-${row.sku}`, row);
+  const filteredRows = useMemo(
+    () => filterInventoryRegisterRows(sourceRows, filterParams),
+    [sourceRows, filterParams],
+  );
+
+  const sortedRows = useMemo(
+    () => sortInventoryRegisterRows(filteredRows, sortKey, sortDir),
+    [filteredRows, sortKey, sortDir],
+  );
+
+  const totals = useMemo(() => computeInventoryRegisterTotals(filteredRows), [filteredRows]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    dateFrom,
+    dateTo,
+    warehouse,
+    productId,
+    category,
+    batchNo,
+    transactionType,
+    search,
+    sortKey,
+    sortDir,
+    pageSize,
+  ]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, page, pageSize]);
+
+  const hasFilters =
+    search.trim() !== "" ||
+    warehouse !== "all" ||
+    productId !== "all" ||
+    category !== "all" ||
+    batchNo !== "all" ||
+    transactionType !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setWarehouse("all");
+    setProductId("all");
+    setCategory("all");
+    setBatchNo("all");
+    setTransactionType("all");
+  };
+
+  const handleSort = useCallback((key: string) => {
+    const k = key as InventoryRegisterSortKey;
+    setSortKey((prev) => {
+      if (prev === k) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("asc");
+      return k;
+    });
+  }, []);
+
+  const exportMeta = useMemo(() => {
+    const product =
+      productId === "all"
+        ? "All"
+        : (INVENTORY_REGISTER_PRODUCT_OPTIONS.find((p) => p.id === productId)?.name ?? productId);
+    const txnLabel =
+      INVENTORY_TRANSACTION_TYPE_OPTIONS.find((o) => o.value === transactionType)?.label ??
+      transactionType;
+
+    return {
+      dateFrom,
+      dateTo,
+      financialYear: "",
+      warehouse: warehouse === "all" ? "All" : warehouse,
+      product,
+      category: category === "all" ? "All" : category,
+      batchNo: batchNo === "all" ? "All" : batchNo,
+      transactionType: txnLabel,
+      search,
+    };
+  }, [
+    dateFrom,
+    dateTo,
+    warehouse,
+    productId,
+    category,
+    batchNo,
+    transactionType,
+    search,
+  ]);
+
+  const handleExportExcel = useCallback(async () => {
+    if (filteredRows.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      await exportInventoryRegisterToExcel(filteredRows, exportMeta, totals);
+    } finally {
+      setExporting(false);
     }
-    return map;
-  }, [source]);
+  }, [filteredRows, exportMeta, totals, exporting]);
 
-  const totalIn = source.reduce((s, r) => s + r.inQty, 0);
-  const totalOut = source.reduce((s, r) => s + r.outQty, 0);
-
-  const rows = source.map((r) => ({
-    date: r.date,
-    voucherType: r.voucherType,
-    voucherNo: r.voucherNo,
-    product: r.product,
-    sku: r.sku,
-    warehouse: r.warehouse,
-    batchNo: r.batchNo,
-    inQty: r.inQty || "—",
-    outQty: r.outQty || "—",
-    balanceQty: r.balanceQty,
-    rate: formatMoney(r.rate),
-    stockValue: formatMoney(r.stockValue),
-    source: r.source,
-    _rowKey: `${r.voucherNo}-${r.date}-${r.sku}`,
-  }));
-
-  const handleRowClick = useCallback(
-    (row: Record<string, string | number>) => {
-      const movement = movementByKey.get(String(row._rowKey));
-      if (movement) openTransaction({ type: "inventory", movement });
-    },
-    [movementByKey, openTransaction],
-  );
+  const handleExportPdf = useCallback(() => {
+    if (filteredRows.length === 0 || exporting) return;
+    exportInventoryRegisterToPdf(filteredRows, exportMeta, totals);
+  }, [filteredRows, exportMeta, totals, exporting]);
 
   return (
-    <>
-      <AccountsReportShell
-        section="Reports"
-        title="Inventory Register"
-        description="Product-wise and warehouse-wise stock movements from GRN, dispatch, opening, returns, and reconciliation."
-        kpis={[
-          { label: "Movements", value: String(source.length), icon: FileText, accent: true },
-          { label: "Total In Qty", value: String(totalIn), icon: ArrowDownLeft },
-          { label: "Total Out Qty", value: String(totalOut), icon: ArrowUpRight },
-          { label: "Products", value: String(new Set(source.map((r) => r.sku)).size), icon: Package },
-        ]}
-        filters={
-          <div className="flex flex-wrap items-end gap-2">
-            <ReportFilterBar
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              branch=""
-              onDateFrom={setDateFrom}
-              onDateTo={setDateTo}
-              onBranch={() => {}}
+    <AccountsPageShell
+      breadcrumbs={accountsBreadcrumb("Reports", "Inventory Register")}
+      title="Inventory Register"
+      description="Read-only stock movement register with running balance by product, batch, and warehouse."
+      filters={
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || filteredRows.length === 0}
             />
-            <select className="h-8 text-xs border rounded-lg px-2 bg-white" value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
-              <option value="all">All Warehouses</option>
-              {WAREHOUSE_FILTER_OPTIONS.map((w) => (
-                <option key={w} value={w}>{w}</option>
-              ))}
-            </select>
-            <select className="h-8 text-xs border rounded-lg px-2 bg-white" value={sku} onChange={(e) => setSku(e.target.value)}>
-              <option value="all">All SKUs</option>
-              {products.map((p) => (
-                <option key={p.sku} value={p.sku}>{p.sku} — {p.productName}</option>
-              ))}
-            </select>
+          }
+        >
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <div className="space-y-1 min-w-[150px]">
+            <Label className={filterLabelClass}>Warehouse</Label>
+            <Select value={warehouse} onValueChange={setWarehouse}>
+              <SelectTrigger className={cn(filterControlClass, "w-[150px]")}>
+                <SelectValue placeholder="All warehouses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All warehouses</SelectItem>
+                {INVENTORY_REGISTER_WAREHOUSE_OPTIONS.map((w) => (
+                  <SelectItem key={w} value={w}>
+                    {w}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <div className="space-y-1 min-w-[160px]">
+            <Label className={filterLabelClass}>Product</Label>
+            <Select value={productId} onValueChange={setProductId}>
+              <SelectTrigger className={cn(filterControlClass, "w-[160px]")}>
+                <SelectValue placeholder="All products" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All products</SelectItem>
+                {INVENTORY_REGISTER_PRODUCT_OPTIONS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 min-w-[130px]">
+            <Label className={filterLabelClass}>Category</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className={cn(filterControlClass, "w-[130px]")}>
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {INVENTORY_REGISTER_CATEGORY_OPTIONS.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 min-w-[130px]">
+            <Label className={filterLabelClass}>Batch No.</Label>
+            <Select value={batchNo} onValueChange={setBatchNo}>
+              <SelectTrigger className={cn(filterControlClass, "w-[130px]")}>
+                <SelectValue placeholder="All batches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All batches</SelectItem>
+                {INVENTORY_REGISTER_BATCH_OPTIONS.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {b}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 min-w-[150px]">
+            <Label className={filterLabelClass}>Transaction Type</Label>
+            <Select value={transactionType} onValueChange={setTransactionType}>
+              <SelectTrigger className={cn(filterControlClass, "w-[150px]")}>
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                {INVENTORY_TRANSACTION_TYPE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ReportSearchFilter
+            value={search}
+            onChange={setSearch}
+            placeholder="Product, SKU, batch, warehouse…"
+          />
+        </ReportFilterRow>
+      }
+      layout="split"
+      className="h-full min-h-0"
+    >
+      <AccountsTableListing
+        footer={
+          filteredRows.length > 0 ? (
+            <AccountsTablePagination
+              page={page}
+              pageSize={pageSize}
+              totalRecords={filteredRows.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              recordLabel="movements"
+            />
+          ) : undefined
         }
-        columns={[
-          { key: "date", label: "Date" },
-          { key: "voucherType", label: "Voucher Type" },
-          { key: "voucherNo", label: "Voucher No", mono: true },
-          { key: "product", label: "Product" },
-          { key: "sku", label: "SKU", mono: true },
-          { key: "warehouse", label: "Warehouse" },
-          { key: "batchNo", label: "Batch No", mono: true },
-          { key: "inQty", label: "In Qty", align: "right" },
-          { key: "outQty", label: "Out Qty", align: "right" },
-          { key: "balanceQty", label: "Balance Qty", align: "right" },
-          { key: "rate", label: "Rate / CP", align: "right", money: true },
-          { key: "stockValue", label: "Stock Value", align: "right", money: true },
-          { key: "source", label: "Source" },
-        ]}
-        rows={rows}
-        emptyMessage="No inventory movements for selected period."
-        onRowClick={handleRowClick}
-        getRowKey={(row) => String(row._rowKey)}
-        clickableColumnKeys={["voucherNo"]}
-      />
-      {transactionDrawer}
-    </>
+      >
+        {filteredRows.length === 0 ? (
+          <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
+        ) : (
+          <AccountsTable minWidth={1280}>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                <SortTh
+                  label="Date"
+                  colKey="date"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortTh
+                  label="Transaction Type"
+                  colKey="transactionType"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <AccountsTableHeadCell>Document No.</AccountsTableHeadCell>
+                <SortTh
+                  label="Product"
+                  colKey="productName"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <AccountsTableHeadCell>SKU</AccountsTableHeadCell>
+                <AccountsTableHeadCell>Batch No.</AccountsTableHeadCell>
+                <SortTh
+                  label="Warehouse"
+                  colKey="warehouse"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortTh
+                  label="In Qty"
+                  colKey="inQty"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  align="right"
+                />
+                <SortTh
+                  label="Out Qty"
+                  colKey="outQty"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  align="right"
+                />
+                <AccountsTableHeadCell align="right">Balance Qty</AccountsTableHeadCell>
+                <AccountsTableHeadCell>UOM</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right">Cost Price</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right">Stock Value</AccountsTableHeadCell>
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
+              {paginatedRows.map((row) => (
+                <AccountsTableRow key={row.id}>
+                  <AccountsTableCell className="text-xs whitespace-nowrap">
+                    {formatInventoryRegisterDate(row.date)}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs">
+                    {INVENTORY_TRANSACTION_TYPE_LABELS[row.transactionType]}
+                  </AccountsTableCell>
+                  <AccountsTableCell mono className="text-brand-700 font-semibold text-xs">
+                    {row.documentNo}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs font-medium">{row.productName}</AccountsTableCell>
+                  <AccountsTableCell mono className="text-xs">
+                    {row.sku}
+                  </AccountsTableCell>
+                  <AccountsTableCell mono className="text-xs">
+                    {row.batchNo}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs">{row.warehouse}</AccountsTableCell>
+                  <AccountsTableCell align="right" className="tabular-nums text-xs">
+                    {formatQty(row.inQty)}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className="tabular-nums text-xs">
+                    {formatQty(row.outQty)}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className="tabular-nums text-xs font-medium">
+                    {formatQty(row.balanceQty)}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs">{row.uom}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+                    {formatMoney(row.costPrice)}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+                    {formatMoney(row.stockValue)}
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))}
+            </AccountsTableBody>
+            <AccountsTableFoot>
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={7} className="font-semibold text-[11px] text-foreground">
+                  Totals
+                </AccountsTableCell>
+                <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
+                  {formatQty(totals.totalInQty, true)}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
+                  {formatQty(totals.totalOutQty, true)}
+                </AccountsTableCell>
+                <AccountsTableCell colSpan={4} />
+              </AccountsTableRow>
+            </AccountsTableFoot>
+          </AccountsTable>
+        )}
+      </AccountsTableListing>
+    </AccountsPageShell>
   );
 }

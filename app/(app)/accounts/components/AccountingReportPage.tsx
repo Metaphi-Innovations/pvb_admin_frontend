@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   AccountsColumnarTable,
@@ -55,28 +55,32 @@ export function AccountingReportPage({
       breadcrumbs={accountsBreadcrumb("Reports", title)}
       title={title}
       description={description}
-      actions={
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCsv}>
-          <Download className="w-3.5 h-3.5" /> Export
-        </Button>
+      filters={
+        <div className="flex flex-wrap items-end gap-2 w-full">
+          {filters}
+          <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">
+            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={rows.length === 0} />
+          </div>
+        </div>
       }
-      filters={filters}
       layout="split"
       className="h-full min-h-0"
     >
-      <AccountsTableScroll>
-        <AccountsColumnarTable
-          columns={columns.map((c) => ({
-            key: c.key,
-            label: c.label,
-            align: c.align,
-            money: c.money ?? c.mono,
-          }))}
-          rows={rows}
-          emptyMessage="No transactions for this period."
-          footer={footer}
-        />
-      </AccountsTableScroll>
+      <AccountsListingTableCard className="flex-1 min-h-0">
+        <AccountsTableScroll>
+          <AccountsColumnarTable
+            columns={columns.map((c) => ({
+              key: c.key,
+              label: c.label,
+              align: c.align,
+              money: c.money ?? c.mono,
+            }))}
+            rows={rows}
+            emptyMessage="No records found."
+            footer={footer}
+          />
+        </AccountsTableScroll>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

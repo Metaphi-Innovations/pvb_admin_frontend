@@ -60,7 +60,7 @@ export function VoucherEditClient({ voucherId, onDone }: VoucherEditClientProps)
         <p className="text-sm text-muted-foreground mb-3">
           Cancelled vouchers cannot be edited.
         </p>
-        <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+        <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" asChild>
           <Link href={viewHref}>View Voucher</Link>
         </Button>
       </AccountsPageShell>

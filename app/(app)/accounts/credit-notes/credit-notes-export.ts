@@ -1,16 +1,35 @@
-import { normalizeCreditNote, type CreditNoteRecord } from "./credit-notes-data";
+import {
+  CREDIT_NOTE_SOURCE_LABELS,
+  normalizeCreditNote,
+  type CreditNoteRecord,
+} from "./credit-notes-data";
 
-/** Listing export — columns match the credit note listing table. */
+/** Listing export — filtered records with source and tax columns. */
 export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Promise<void> {
   const XLSX = await import("xlsx");
   const rows = records.map((r) => {
     const rec = normalizeCreditNote(r);
+    const refDoc =
+      rec.source === "sales_return"
+        ? rec.sourceReturnNo ?? ""
+        : rec.source === "payment_discount_scheme"
+          ? rec.schemeName ?? rec.schemeCode ?? ""
+          : rec.reason;
     return {
-      Date: rec.creditNoteDate,
       "Credit Note No.": rec.creditNoteNo,
-      "Reference Number": rec.sourceInvoiceNo || "",
-      "Customer Name": rec.customerName,
-      Amount: rec.currentCreditAmount,
+      Source: CREDIT_NOTE_SOURCE_LABELS[rec.source],
+      "Reference Document": refDoc,
+      "Against Invoice": rec.sourceInvoiceNo || "",
+      "Sales Return No.": rec.sourceReturnNo || "",
+      "Scheme Name": rec.schemeName || "",
+      Customer: rec.customerName,
+      Date: rec.creditNoteDate,
+      "Taxable Value": rec.taxableValue,
+      CGST: rec.cgstAmount,
+      SGST: rec.sgstAmount,
+      IGST: rec.igstAmount,
+      Total: rec.currentCreditAmount,
+      Status: rec.status.replaceAll("_", " "),
     };
   });
   const sheet = XLSX.utils.json_to_sheet(rows);

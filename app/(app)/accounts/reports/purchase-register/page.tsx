@@ -1,7 +1,5 @@
-"use client";
-
-import { RegisterReportClient } from "@/components/accounts/RegisterReportClient";
+import PurchaseRegisterPageClient from "./PurchaseRegisterPageClient";
 
 export default function PurchaseRegisterPage() {
-  return <RegisterReportClient mode="purchase" />;
+  return <PurchaseRegisterPageClient />;
 }

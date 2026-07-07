@@ -1,15 +1,14 @@
 "use client";
 
 import React from "react";
-import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { MiniKPICard } from "@/components/ui/KPICard";
+import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
+import { AccountsColumnarTable } from "@/components/accounts/AccountsTable";
 import {
-  AccountsColumnarTable,
-  AccountsTableScroll,
-} from "@/components/accounts/AccountsTable";
+  AccountsTableListing,
+  AccountsListingToolbar,
+} from "@/components/accounts/AccountsTableListing";
 import type { LucideIcon } from "lucide-react";
 
 export interface ReportColumn {
@@ -25,6 +24,7 @@ export interface ReportKpi {
   value: string;
   icon: LucideIcon;
   accent?: boolean;
+  warn?: boolean;
 }
 
 export interface AccountsReportShellProps {
@@ -50,7 +50,7 @@ export function AccountsReportShell({
   columns,
   rows,
   filters,
-  emptyMessage = "No data for selected filters.",
+  emptyMessage = "No records found.",
   onRowClick,
   getRowKey,
   clickableColumnKeys,
@@ -75,44 +75,48 @@ export function AccountsReportShell({
       breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
-      actions={
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCsv}>
-          <Download className="w-3.5 h-3.5" /> Export
-        </Button>
-      }
-      filters={filters}
+      hideDescription
       layout="split"
       className="h-full min-h-0"
     >
-      {kpis && kpis.length > 0 && (
-        <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
-          {kpis.map((k) => (
-            <MiniKPICard key={k.label} label={k.label} value={k.value} icon={k.icon} accent={k.accent} />
-          ))}
-        </div>
-      )}
-      <AccountsTableScroll>
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
-          </div>
-        ) : (
-          <AccountsColumnarTable
-            columns={columns.map((c) => ({
-              key: c.key,
-              label: c.label,
-              align: c.align,
-              money: c.money,
-              mono: c.mono,
-            }))}
-            rows={rows}
-            onRowClick={onRowClick}
-            getRowKey={getRowKey}
-            clickableColumnKeys={clickableColumnKeys}
-          />
-        )}
-      </AccountsTableScroll>
-      {rowActionFooter}
+      <AccountsTableListing
+        toolbar={
+          <AccountsListingToolbar
+            onExcel={exportCsv}
+            onPdf={exportCsv}
+            exportDisabled={rows.length === 0}
+          >
+            {filters}
+          </AccountsListingToolbar>
+        }
+        summary={
+          kpis && kpis.length > 0 ? (
+            <AccountsSummaryBar
+              items={kpis.map((k) => ({
+                label: k.label,
+                value: k.value,
+                warn: k.warn,
+              }))}
+            />
+          ) : undefined
+        }
+        footer={rowActionFooter}
+      >
+        <AccountsColumnarTable
+          columns={columns.map((c) => ({
+            key: c.key,
+            label: c.label,
+            align: c.align,
+            money: c.money,
+            mono: c.mono,
+          }))}
+          rows={rows}
+          emptyMessage={emptyMessage}
+          onRowClick={onRowClick}
+          getRowKey={getRowKey}
+          clickableColumnKeys={clickableColumnKeys}
+        />
+      </AccountsTableListing>
     </AccountsPageShell>
   );
 }

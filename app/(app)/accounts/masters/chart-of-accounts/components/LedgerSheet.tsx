@@ -3,6 +3,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
@@ -31,6 +32,7 @@ import {
 } from "../chart-of-accounts-data";
 import { inferAccountTypeFromPath } from "@/lib/accounts/coa-accounting-view";
 import { CoaParentGroupSelector } from "./CoaParentGroupSelector";
+import { CoaAddLedgerParentSelect } from "./CoaAddLedgerParentSelect";
 
 type SheetMode = "add" | "edit" | "view";
 
@@ -46,6 +48,8 @@ interface LedgerSheetProps {
   onSave: () => void;
   onFormChange: (form: LedgerFormValues) => void;
   canEdit: boolean;
+  /** Compact add form for Chart of Accounts — only essential fields */
+  compactAdd?: boolean;
 }
 
 export function LedgerSheet({
@@ -60,8 +64,14 @@ export function LedgerSheet({
   onSave,
   onFormChange,
   canEdit,
+  compactAdd = false,
 }: LedgerSheetProps) {
   const readOnly = mode === "view" || !canEdit;
+  const isCompactAdd = compactAdd && mode === "add";
+  const parentLedgerError =
+    isCompactAdd && !form.parentGroupId && formError === "Please select a Parent Ledger."
+      ? formError
+      : null;
 
   const setForm = (patch: Partial<LedgerFormValues>) =>
     onFormChange({ ...form, ...patch });
@@ -100,15 +110,19 @@ export function LedgerSheet({
           </div>
         </SheetHeader>
 
-        <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {formError && (
+        <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {formError && !(isCompactAdd && parentLedgerError) && (
             <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
               {formError}
             </p>
           )}
 
           {mode === "add" && (
-            <p className="text-[10px] text-muted-foreground font-mono">Code: {previewCode} (auto)</p>
+            <div className="space-y-1">
+              <Label className="text-[11px]">Ledger Code</Label>
+              <Input className="h-9 text-[13px] font-medium bg-muted/30 font-mono" disabled readOnly value={previewCode} />
+              <p className="text-[10px] text-muted-foreground">Auto-generated on save</p>
+            </div>
           )}
 
           <div className="space-y-1">
@@ -116,7 +130,7 @@ export function LedgerSheet({
               Ledger Name <span className="text-red-500">*</span>
             </Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={readOnly}
               value={form.ledgerName}
               onChange={(e) => setForm({ ledgerName: e.target.value })}
@@ -125,9 +139,77 @@ export function LedgerSheet({
           </div>
 
           <div className="space-y-1">
+            <Label className="text-[11px]">
+              Parent Ledger <span className="text-red-500">*</span>
+            </Label>
+            {isCompactAdd ? (
+              <CoaAddLedgerParentSelect
+                records={records}
+                value={form.parentGroupId}
+                placeholder="Select parent ledger…"
+                error={parentLedgerError}
+                onChange={(id) => {
+                  setForm({
+                    parentGroupId: id,
+                    balanceType: defaultBalanceTypeForParent(records, id),
+                  });
+                }}
+              />
+            ) : (
+              <>
+                <CoaParentGroupSelector
+                  records={records}
+                  value={form.parentGroupId}
+                  disabled={readOnly || mode === "edit"}
+                  onChange={(id) => {
+                    setForm({
+                      parentGroupId: id,
+                      balanceType: defaultBalanceTypeForParent(records, id),
+                    });
+                  }}
+                />
+              </>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-[11px]">Opening Balance</Label>
+              <AccountsMoneyInput
+                className="h-9 text-[13px] font-medium"
+                disabled={readOnly}
+                value={form.openingBalance}
+                onChange={(v) => setForm({ openingBalance: String(v) })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">Balance Type</Label>
+              <Select
+                value={form.balanceType}
+                disabled={readOnly}
+                onValueChange={(v) => setForm({ balanceType: v as "Debit" | "Credit" })}
+              >
+                <SelectTrigger className="h-9 text-[13px] font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Debit" className="text-xs">
+                    Debit
+                  </SelectItem>
+                  <SelectItem value="Credit" className="text-xs">
+                    Credit
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {!isCompactAdd && (
+            <>
+          <div className="space-y-1">
             <Label className="text-[11px]">Alias / Short Name</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={readOnly}
               value={form.alias}
               onChange={(e) => setForm({ alias: e.target.value })}
@@ -136,59 +218,8 @@ export function LedgerSheet({
           </div>
 
           <div className="space-y-1">
-            <Label className="text-[11px]">
-              Parent Group / Ledger <span className="text-red-500">*</span>
-            </Label>
-            <CoaParentGroupSelector
-              records={records}
-              value={form.parentGroupId}
-              disabled={readOnly || mode === "edit"}
-              onChange={(id) => {
-                setForm({
-                  parentGroupId: id,
-                  balanceType: defaultBalanceTypeForParent(records, id),
-                });
-              }}
-            />
-          </div>
-
-          <div className="space-y-1">
             <Label className="text-[11px]">Ledger Type</Label>
-            <Input className="h-8 text-xs bg-muted/30" disabled readOnly value={ledgerType} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-[11px]">Opening Balance</Label>
-              <Input
-                className="h-8 text-xs"
-                type="number"
-                min={0}
-                disabled={readOnly}
-                value={form.openingBalance}
-                onChange={(e) => setForm({ openingBalance: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px]">Dr / Cr</Label>
-              <Select
-                value={form.balanceType}
-                disabled={readOnly}
-                onValueChange={(v) => setForm({ balanceType: v as "Debit" | "Credit" })}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Debit" className="text-xs">
-                    Dr (Debit)
-                  </SelectItem>
-                  <SelectItem value="Credit" className="text-xs">
-                    Cr (Credit)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Input className="h-9 text-[13px] font-medium bg-muted/30" disabled readOnly value={ledgerType} />
           </div>
 
           {showGst && (
@@ -217,7 +248,7 @@ export function LedgerSheet({
           <div className="space-y-1">
             <Label className="text-[11px]">Description</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={readOnly}
               value={form.description}
               onChange={(e) => setForm({ description: e.target.value })}
@@ -250,19 +281,21 @@ export function LedgerSheet({
               </p>
             </div>
           )}
+            </>
+          )}
         </SheetBody>
 
         <SheetFooter className="px-5 py-3 border-t border-border/60 bg-muted/20 gap-2 sm:gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
             {readOnly ? "Close" : "Cancel"}
           </Button>
           {!readOnly && (
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
               onClick={onSave}
             >
-              Save Ledger
+              Save
             </Button>
           )}
         </SheetFooter>

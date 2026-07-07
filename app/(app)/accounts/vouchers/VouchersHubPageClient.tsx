@@ -79,10 +79,10 @@ export default function VouchersHubPageClient() {
       actions={
         <Button
           size="sm"
-          className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
           onClick={openNew}
         >
-          <Plus className="w-3.5 h-3.5" /> New {label}
+          <Plus className="w-4 h-4" /> New {label}
         </Button>
       }
       layout="split"

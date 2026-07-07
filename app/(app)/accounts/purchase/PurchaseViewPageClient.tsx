@@ -161,7 +161,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
         {record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Products (from PO)</h2>
-            <table className="accounts-table w-full text-xs min-w-[640px]">
+            <table className="accounts-table w-full min-w-[640px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Qty", "UOM", "Rate", "GST %", "Line Amt"].map((h) => (
@@ -196,10 +196,10 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
               {record.attachment.dataUrl && (
                 <>
                   <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(record.attachment!.dataUrl, "_blank")}>
-                    <Eye className="w-3.5 h-3.5" />
+                    <Eye className="w-4 h-4" />
                   </button>
                   <a href={record.attachment.dataUrl} download={record.attachment.fileName} className="p-1 hover:bg-muted rounded">
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-4 h-4" />
                   </a>
                 </>
               )}

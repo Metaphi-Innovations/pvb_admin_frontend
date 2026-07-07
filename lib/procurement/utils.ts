@@ -133,3 +133,40 @@ export function amountInWords(amount: number): string {
 export function nextId<T extends { id: number }>(list: T[]): number {
   return list.length ? Math.max(...list.map((x) => x.id)) + 1 : 1;
 }
+
+export type TaxSupplyType = "intra" | "inter";
+
+export function resolveTaxSupplyType(
+  sourceState: string,
+  destinationState: string,
+): TaxSupplyType {
+  if (!sourceState.trim() || !destinationState.trim()) return "intra";
+  return sourceState.trim().toLowerCase() === destinationState.trim().toLowerCase()
+    ? "intra"
+    : "inter";
+}
+
+/** Split combined GST % into CGST+SGST (intra) or IGST (inter). */
+export function applyTaxSupplyToRates(
+  totalGstPct: number,
+  supplyType: TaxSupplyType,
+): { cgstPct: number; sgstPct: number; igstPct: number } {
+  if (supplyType === "intra") {
+    const half = totalGstPct / 2;
+    return { cgstPct: half, sgstPct: half, igstPct: 0 };
+  }
+  return { cgstPct: 0, sgstPct: 0, igstPct: totalGstPct };
+}
+
+export function lineNeedsTaxSupplyUpdate(
+  cgstPct: number,
+  sgstPct: number,
+  igstPct: number,
+  supplyType: TaxSupplyType,
+): boolean {
+  const total = cgstPct + sgstPct + igstPct;
+  if (supplyType === "intra") {
+    return igstPct > 0 || (total > 0 && Math.abs(cgstPct - sgstPct) > 0.001);
+  }
+  return cgstPct > 0 || sgstPct > 0;
+}

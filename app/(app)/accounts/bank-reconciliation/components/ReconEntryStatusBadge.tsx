@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { ACCOUNTS_STATUS_BADGE_CLASS } from "@/lib/accounts/accounts-typography";
 import type { BookReconStatus } from "@/lib/accounts/manual-bank-reconciliation-data";
 
 const STATUS_CFG: Record<BookReconStatus, { bg: string; text: string; dot: string; label: string }> = {
@@ -16,33 +17,32 @@ const STATUS_CFG: Record<BookReconStatus, { bg: string; text: string; dot: strin
     dot: "bg-emerald-500",
     label: "Reconciled",
   },
+  unmatched: {
+    bg: "bg-slate-100",
+    text: "text-slate-600",
+    dot: "bg-slate-400",
+    label: "Unmatched",
+  },
+  difference: {
+    bg: "bg-red-50",
+    text: "text-red-700",
+    dot: "bg-red-400",
+    label: "Difference",
+  },
 };
 
-export function ReconEntryStatusBadge({
-  status,
-  suggested,
-}: {
-  status: BookReconStatus;
-  suggested?: boolean;
-}) {
-  const cfg = STATUS_CFG[status];
+export function ReconEntryStatusBadge({ status }: { status: BookReconStatus }) {
+  const cfg = STATUS_CFG[status] ?? STATUS_CFG.unmatched;
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium",
-          cfg.bg,
-          cfg.text,
-        )}
-      >
-        <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-        {cfg.label}
-      </span>
-      {suggested && status === "pending" && (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-navy-50 text-navy-700 text-[10px] font-semibold border border-navy-100">
-          Suggested
-        </span>
+    <span
+      className={cn(
+        ACCOUNTS_STATUS_BADGE_CLASS,
+        cfg.bg,
+        cfg.text,
       )}
+    >
+      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+      {cfg.label}
     </span>
   );
 }

@@ -2,9 +2,28 @@
 
 import React, { useState, useMemo } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FILTER_LABEL_CLASS,
+  ReportDateRangeFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+} from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableEmpty,
+  AccountsTableListing,
+  AccountsListingCountFooter,
+  AccountsListingToolbar,
+} from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   Select,
   SelectContent,
@@ -12,8 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Calendar, User, CheckCircle2, Download } from "lucide-react";
+import { User, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getReconciliationHistory,
@@ -40,19 +60,18 @@ function CategoryBadge({ category }: { category: string }) {
 }
 
 export function ReconciliationHistoryClient() {
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [bankAccountId, setBankAccountId] = useState<number | undefined>();
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
 
   const bankAccounts = useMemo(() => listBankAccountSelectOptions(), []);
 
   const history = useMemo(() => {
     return getReconciliationHistory({
       bankAccountId,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
+      startDate: dateFrom || undefined,
+      endDate: dateTo || undefined,
     });
-  }, [bankAccountId, startDate, endDate]);
+  }, [bankAccountId, dateFrom, dateTo]);
 
   const exportToExcel = () => {
     // Simple CSV export
@@ -95,27 +114,18 @@ export function ReconciliationHistoryClient() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Filters */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-border/40 bg-white">
-        <div className="flex items-end justify-between gap-4 mb-4">
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Reconciliation History</h1>
-            <p className="text-xs text-muted-foreground mt-1">Audit trail of all categorized and reconciled transactions</p>
-          </div>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={exportToExcel}>
-            <Download className="w-3.5 h-3.5" />
-            Export
-          </Button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Bank Account</Label>
+    <AccountsTableListing
+      toolbar={
+        <AccountsListingToolbar
+          actions={<AccountsExportMenu onExcel={exportToExcel} onCsv={exportToExcel} disabled={history.length === 0} />}
+        >
+          <div className="space-y-1 min-w-[140px]">
+            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Bank Account</Label>
             <Select
               value={bankAccountId?.toString() || "all"}
               onValueChange={(v) => setBankAccountId(v === "all" ? undefined : parseInt(v))}
             >
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[140px]")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -128,122 +138,84 @@ export function ReconciliationHistoryClient() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Start Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">End Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* History Table */}
-      <div className="flex-1 overflow-auto">
-        {history.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <FileText className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium text-muted-foreground">No reconciliation history</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Categorized and reconciled transactions will appear here
-              </p>
-            </div>
-          </div>
-        ) : (
-          <table className="accounts-table w-full text-sm">
-            <thead className="border-b border-border/40">
-              <tr>
-                {[
-                  "Date",
-                  "Bank Account",
-                  "Narration",
-                  "Amount",
-                  "Category",
-                  "Ledger",
-                  "Journal Entry",
-                  "Categorized By",
-                  "Reconciled By",
-                ].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((entry) => (
-                <tr key={entry.transactionId} className="border-b border-border/30 hover:bg-slate-50/30">
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3 h-3" />
-                      {entry.transactionDate}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    <p className="font-medium">{entry.bankAccountName}</p>
-                  </td>
-                  <td className="px-4 py-3 text-xs max-w-[250px]">
-                    <p className="truncate">{entry.narration}</p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-right tabular-nums font-medium">
-                    {formatMoney(entry.amount)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <CategoryBadge category={entry.category} />
-                  </td>
-                  <td className="px-4 py-3 text-xs font-medium">{entry.ledgerName}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{entry.journalEntryNumber}</td>
-                  <td className="px-4 py-3 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <User className="w-3 h-3 text-muted-foreground" />
-                      <span>{entry.categorizedBy}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {new Date(entry.categorizedAt).toLocaleString()}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {entry.reconciledBy ? (
-                      <>
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3 h-3 text-green-600" />
-                          <span>{entry.reconciledBy}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(entry.reconciledAt).toLocaleString()}
-                        </p>
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Footer Summary */}
-      <div className="flex-shrink-0 px-6 py-3 border-t border-border/40 bg-slate-50/50">
-        <p className="text-xs text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{history.length}</span> record(s)
-        </p>
-      </div>
-    </div>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+        </AccountsListingToolbar>
+      }
+      footer={
+        history.length > 0 ? (
+          <AccountsListingCountFooter>
+            Showing <span className="font-medium text-foreground">{history.length}</span> record(s)
+          </AccountsListingCountFooter>
+        ) : undefined
+      }
+    >
+      <AccountsTable minWidth={1100}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Bank Account</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase className="accounts-col-wide">Narration</AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" uppercase>Amount</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Category</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Ledger</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Journal Entry</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Categorized By</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Reconciled By</AccountsTableHeadCell>
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {history.length === 0 ? (
+            <AccountsTableEmpty colSpan={9} message="No reconciliation history. Categorized transactions will appear here." />
+          ) : (
+            history.map((entry) => (
+              <AccountsTableRow key={entry.transactionId}>
+                <AccountsTableCell>{entry.transactionDate}</AccountsTableCell>
+                <AccountsTableCell className="font-medium">{entry.bankAccountName}</AccountsTableCell>
+                <AccountsTableCell wrap>
+                  <span className="line-clamp-1">{entry.narration}</span>
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money>{formatMoney(entry.amount)}</AccountsTableCell>
+                <AccountsTableCell>
+                  <CategoryBadge category={entry.category} />
+                </AccountsTableCell>
+                <AccountsTableCell>{entry.ledgerName}</AccountsTableCell>
+                <AccountsTableCell mono>{entry.journalEntryNumber}</AccountsTableCell>
+                <AccountsTableCell wrap>
+                  <div className="flex items-center gap-1">
+                    <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <span>{entry.categorizedBy}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(entry.categorizedAt).toLocaleString()}
+                  </span>
+                </AccountsTableCell>
+                <AccountsTableCell wrap>
+                  {entry.reconciledBy ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                        <span>{entry.reconciledBy}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(entry.reconciledAt).toLocaleString()}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
+    </AccountsTableListing>
   );
 }

@@ -31,7 +31,7 @@ export function HrFormLayout({
   return (
     <AppLayout noPadding>
       <div className="min-h-[calc(100vh-104px)] bg-background flex flex-col">
-        <header className="bg-white/95 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex-shrink-0 sticky top-0 z-20 shadow-xs">
+        <header className="bg-white border-b border-border px-6 py-3 flex-shrink-0 sticky top-0 z-20 shadow-sm">
           <div className="max-w-[1280px] mx-auto w-full flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <button

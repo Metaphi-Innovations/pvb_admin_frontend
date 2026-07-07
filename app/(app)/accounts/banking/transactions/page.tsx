@@ -8,8 +8,9 @@ export default function BankTransactionsPage() {
       breadcrumbs={accountsBreadcrumb("Banking", "Transactions")}
       title="Bank Transactions"
       description="Categorize and reconcile bank transactions"
-      layout="standard"
-      className="h-full"
+      hideDescription
+      layout="split"
+      className="h-full min-h-0"
     >
       <BankTransactionsClient />
     </AccountsPageShell>

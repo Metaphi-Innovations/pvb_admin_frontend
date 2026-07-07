@@ -342,7 +342,7 @@ function DetailTable({
       <p className="text-sm font-medium text-foreground px-4 py-2.5 border-b border-border/40 bg-muted/10">
         {title}
       </p>
-      <table className="accounts-table w-full text-xs">
+      <table className="accounts-table w-full">
         <thead>
           <tr className="border-b border-border/40 bg-muted/5">
             {columns.map((c) => (

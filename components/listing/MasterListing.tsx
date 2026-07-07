@@ -212,6 +212,7 @@ export function MasterListing<T = any>({
                                 header={col.header}
                                 value={filters[col.key] as any}
                                 onChange={(val) => handleFilterItemChange(col.key, val)}
+                                userOptions={col.auditUserOptions}
                               />
                             ) : (
                               <FilterPopover

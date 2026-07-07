@@ -21,7 +21,7 @@ export function followUpTypeLabel(type?: string): string {
 
 export interface POFollowUpEntry {
   id: string;
-  poId: number;
+  poId: string | number;
   followUpAt: string;
   followUpType?: POFollowUpType;
   nextFollowUpAt?: string;
@@ -104,7 +104,7 @@ const SEED: POFollowUpEntry[] = [
 
 interface LegacyFollowUp {
   id: string;
-  poId: number;
+  poId: string | number;
   followUpDate?: string;
   contactPerson?: string;
   discussionNotes?: string;
@@ -160,13 +160,14 @@ export function saveAllFollowUps(entries: POFollowUpEntry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
-export function loadFollowUpsForPO(poId: number): POFollowUpEntry[] {
+export function loadFollowUpsForPO(poId: string | number): POFollowUpEntry[] {
+  const key = String(poId);
   return loadAllFollowUps()
-    .filter((e) => e.poId === poId)
+    .filter((e) => String(e.poId) === key)
     .sort((a, b) => b.followUpAt.localeCompare(a.followUpAt));
 }
 
-export function getPOFollowUpSummary(poId: number): POFollowUpSummary {
+export function getPOFollowUpSummary(poId: string | number): POFollowUpSummary {
   const entries = loadFollowUpsForPO(poId);
   const latest = entries[0];
   return {
@@ -177,7 +178,7 @@ export function getPOFollowUpSummary(poId: number): POFollowUpSummary {
   };
 }
 
-export function getPOFollowUpExportFields(poId: number): POFollowUpExportFields {
+export function getPOFollowUpExportFields(poId: string | number): POFollowUpExportFields {
   const summary = getPOFollowUpSummary(poId);
   return {
     totalFollowUps: summary.totalFollowUps,

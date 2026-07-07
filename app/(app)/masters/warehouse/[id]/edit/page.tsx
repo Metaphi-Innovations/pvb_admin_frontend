@@ -94,6 +94,7 @@ export default function EditWarehousePage() {
     <FormContainer
       title="Edit Warehouse"
       description={`Masters → Warehouse Master → ${record.warehouseName}`}
+      compact
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">

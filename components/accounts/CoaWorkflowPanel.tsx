@@ -40,7 +40,7 @@ export function CoaWorkflowPanel({
           />
           <SummaryField label="Transaction Count" value={context.transactionCount} />
           <div className="flex items-end">
-            <Button asChild size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white">
               <Link href="/accounts/reports/sales-register">View Sales Register</Link>
             </Button>
           </div>
@@ -63,8 +63,8 @@ export function CoaWorkflowPanel({
           <SummaryField label="Invoices" value={context.invoiceCount} />
           <SummaryField label="Payments" value={context.paymentCount} />
           <div className="flex items-end">
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs w-full">
-              <Link href="/accounts/receivables/ageing">Ageing</Link>
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium w-full">
+              <Link href="/accounts/receivables/outstanding?tab=ageing">Ageing</Link>
             </Button>
           </div>
           <div className="flex items-end">
@@ -72,7 +72,7 @@ export function CoaWorkflowPanel({
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs w-full"
+              className="h-9 text-[13px] font-medium w-full"
               onClick={onViewLedgerStatement}
             >
               Ledger Statement
@@ -96,8 +96,8 @@ export function CoaWorkflowPanel({
         <SummaryField label="Bills" value={context.billCount} />
         <SummaryField label="Payments" value={context.paymentCount} />
         <div className="flex items-end">
-          <Button asChild variant="outline" size="sm" className="h-8 text-xs w-full">
-            <Link href="/accounts/payables/ageing">Ageing</Link>
+          <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium w-full">
+            <Link href="/accounts/payables/outstanding?tab=ageing">Ageing</Link>
           </Button>
         </div>
         <div className="flex items-end">
@@ -105,7 +105,7 @@ export function CoaWorkflowPanel({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 text-xs w-full"
+            className="h-9 text-[13px] font-medium w-full"
             onClick={onViewLedgerStatement}
           >
             Ledger Statement

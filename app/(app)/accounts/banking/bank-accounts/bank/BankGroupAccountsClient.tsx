@@ -59,18 +59,18 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
       actions={
         <Button
           size="sm"
-          className="h-8 text-xs bg-brand-600 text-white gap-1"
+          className="h-9 text-[13px] font-medium bg-brand-600 text-white gap-1"
           onClick={() =>
             router.push(`/accounts/banking/bank-accounts/new?bankGroupId=${bankGroupId}`)
           }
         >
-          <Plus className="w-3.5 h-3.5" /> Add Bank Account
+          <Plus className="w-4 h-4" /> Add Bank Account
         </Button>
       }
       layout="split"
     >
       <div className="flex-1 overflow-auto">
-        <table className="accounts-table w-full text-xs">
+        <table className="accounts-table w-full">
           <thead className="border-b">
             <tr>
               {["Account", "Account No.", "IFSC", "Branch", "Balance", "Recon", "Status"].map((h) => (
@@ -85,7 +85,7 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
               return (
                 <tr
                   key={a.id}
-                  className="border-b border-border/30 hover:bg-brand-50/20 cursor-pointer"
+                  className="accounts-table-row group cursor-pointer"
                   onClick={() => router.push(`/accounts/banking/bank-accounts/${a.id}`)}
                 >
                   <td className="px-4 py-2.5 font-medium">{formatBankAccountMaster(a)}</td>

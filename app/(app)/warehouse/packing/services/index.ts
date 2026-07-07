@@ -14,6 +14,12 @@ import {
   updateStockTransferAfterWarehousePacking,
 } from "@/app/(app)/sales/stock-transfer/packing-sync";
 import {
+  getPurchaseReturnsForPacking,
+  mapPurchaseReturnToPackingOrder,
+  removePurchaseReturnFromPackingQueue,
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-packing-sync";
+import { getPurchaseReturnById } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+import {
   getSampleOrdersForPacking,
   mapSampleOrderToPackingRecord,
   getSampleOrderBySmId,
@@ -46,13 +52,26 @@ export function getSalesOrders(warehouse: string = "All"): SalesOrderRecord[] {
 
   const sampleOrders = getSampleOrdersForPacking().map(mapSampleOrderToPackingRecord);
 
-  const all = [...orders, ...transfers, ...sampleOrders];
+  const purchaseReturns = getPurchaseReturnsForPacking();
+
+  const all = [...orders, ...transfers, ...sampleOrders, ...purchaseReturns];
   if (warehouse === "All") return all;
   return all.filter(o => o.warehouse === warehouse || o.sourceWarehouse === warehouse);
 }
 
 export function getPackingRecordsList(warehouse: string = "All"): PackingRecord[] {
   const packings = getPackingRecords().map((p) => {
+    if (p.sourceDocumentType === "Purchase Return" || p.id.startsWith("pret-pkg-")) {
+      return {
+        ...p,
+        sourceDocumentType: "Purchase Return" as const,
+        sourceDocumentNo: p.sourceDocumentNo ?? p.salesOrderNo,
+        sourceWarehouse: p.sourceWarehouse ?? p.warehouse,
+        targetWarehouse: p.targetWarehouse ?? p.customer,
+        createdDate: p.packingDate,
+        packingListNo: p.packingNo,
+      };
+    }
     const isSample =
       p.sourceDocumentType === "Sample Order" ||
       p.salesOrderNo.startsWith("SM-") ||
@@ -95,6 +114,13 @@ export function getSalesOrderById(id: string): SalesOrderRecord | undefined {
     const transfer = loadTransfers().find(t => t.id === stId);
     return transfer ? mapStockTransferToSalesOrder(transfer) : undefined;
   }
+  if (id.startsWith("pret-")) {
+    const fromQueue = getPurchaseReturnsForPacking().find((o) => o.id === id);
+    if (fromQueue) return fromQueue;
+    const returnId = Number(id.replace("pret-", ""));
+    const record = getPurchaseReturnById(returnId);
+    return record ? mapPurchaseReturnToPackingOrder(record) : undefined;
+  }
   const order = getSalesOrderRecords().find(o => o.id === id);
   if (order) {
     return {
@@ -129,8 +155,32 @@ export function getPackingRecordById(id: string): PackingRecord | undefined {
     const transfer = loadTransfers().find(t => t.id === stId);
     return transfer ? mapStockTransferToPacking(transfer) : undefined;
   }
+  if (id.startsWith("pret-pkg-")) {
+    const packing = getPackingRecords().find((p) => p.id === id);
+    if (!packing) return undefined;
+    return {
+      ...packing,
+      sourceDocumentType: "Purchase Return",
+      sourceDocumentNo: packing.sourceDocumentNo ?? packing.salesOrderNo,
+      sourceWarehouse: packing.sourceWarehouse ?? packing.warehouse,
+      targetWarehouse: packing.targetWarehouse ?? packing.customer,
+      createdDate: packing.packingDate,
+      packingListNo: packing.packingNo,
+    };
+  }
   const packing = getPackingRecords().find(p => p.id === id);
   if (packing) {
+    if (packing.sourceDocumentType === "Purchase Return" || packing.id.startsWith("pret-pkg-")) {
+      return {
+        ...packing,
+        sourceDocumentType: "Purchase Return",
+        sourceDocumentNo: packing.sourceDocumentNo ?? packing.salesOrderNo,
+        sourceWarehouse: packing.sourceWarehouse ?? packing.warehouse,
+        targetWarehouse: packing.targetWarehouse ?? packing.customer,
+        createdDate: packing.packingDate,
+        packingListNo: packing.packingNo,
+      };
+    }
     const isSample =
       packing.sourceDocumentType === "Sample Order" ||
       packing.salesOrderNo.startsWith("SM-") ||
@@ -165,6 +215,17 @@ export function getPackingUnionById(id: string): PackingRecordUnion | undefined 
       }
       return { type: "order", data: mapStockTransferToSalesOrder(transfer) };
     }
+    return undefined;
+  }
+  if (id.startsWith("pret-")) {
+    const returnId = Number(id.replace("pret-pkg-", "").replace("pret-", ""));
+    const packed = getPackingRecords().find((p) => p.id === `pret-pkg-${returnId}`);
+    if (packed && packed.status === "Packed") {
+      const packing = getPackingRecordById(packed.id);
+      if (packing) return { type: "packing", data: packing };
+    }
+    const order = getSalesOrderById(`pret-${returnId}`);
+    if (order) return { type: "order", data: order };
     return undefined;
   }
   const order = getSalesOrderById(id);
@@ -307,6 +368,66 @@ export function createPackingRecord(
       savePackingRecords(packings);
     }
 
+    return newPacking;
+  }
+
+  if (salesOrderId.startsWith("pret-")) {
+    const returnId = Number(salesOrderId.replace("pret-", ""));
+    const order = getSalesOrderById(salesOrderId);
+    if (!order) return null;
+
+    const packingProducts = order.products
+      .map((p) => {
+        const sessionQty = packingQtyMap[p.sku] || 0;
+        const batchAllocations = batchAllocationMap[p.sku] ?? [];
+        return {
+          product: p.product,
+          sku: p.sku,
+          orderedQty: p.orderedQty,
+          packedQty: sessionQty,
+          batchAllocations: batchAllocations.length ? batchAllocations : undefined,
+        };
+      })
+      .filter((p) => p.packedQty > 0);
+
+    const nextNo = `PKG-PRET-${String(returnId).padStart(4, "0")}`;
+    const packings = getPackingRecords();
+
+    if (!isDraft) {
+      removePurchaseReturnFromPackingQueue(returnId);
+    }
+
+    const newPacking: PackingRecord = {
+      id: `pret-pkg-${returnId}`,
+      packingNo: nextNo,
+      salesOrderNo: order.salesOrderNo,
+      customer: order.customer,
+      totalItems: packingProducts.length,
+      packedQuantity: packingProducts.reduce((sum, p) => sum + p.packedQty, 0),
+      packingDate: new Date().toISOString().split("T")[0],
+      packedBy,
+      status: isDraft ? "Cancelled" : "Packed",
+      warehouse: order.sourceWarehouse ?? order.warehouse,
+      products: packingProducts,
+      sourceDocumentType: "Purchase Return",
+      sourceDocumentNo: order.sourceDocumentNo ?? order.salesOrderNo,
+      sourceWarehouse: order.sourceWarehouse ?? order.warehouse,
+      targetWarehouse: order.targetWarehouse ?? order.customer,
+      poNumber: order.poNumber,
+      supplierCode: order.supplierCode,
+      initiatedBy: order.initiatedBy,
+      returnRemarks: order.returnRemarks,
+      orderAmount: order.orderAmount,
+      nearExpirySchemes: nearExpirySchemes.length ? nearExpirySchemes : undefined,
+    };
+
+    const existingIdx = packings.findIndex((p) => p.id === newPacking.id);
+    if (existingIdx === -1) {
+      packings.push(newPacking);
+    } else {
+      packings[existingIdx] = newPacking;
+    }
+    savePackingRecords(packings);
     return newPacking;
   }
 

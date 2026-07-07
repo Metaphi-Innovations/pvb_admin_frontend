@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -81,7 +82,7 @@ export function ExpensePaymentModal({
               <Label className="text-xs">Payment Date</Label>
               <Input
                 type="date"
-                className="h-8 text-xs"
+                className="h-9 text-[13px] font-medium"
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
               />
@@ -89,7 +90,7 @@ export function ExpensePaymentModal({
             <div className="space-y-1">
               <Label className="text-xs">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-9 text-[13px] font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -105,7 +106,7 @@ export function ExpensePaymentModal({
           <div className="space-y-1">
             <Label className="text-xs">Payment Reference No.</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               value={paymentReferenceNo}
               onChange={(e) => setPaymentReferenceNo(e.target.value)}
               placeholder="UTR / Cheque no. / Ref"
@@ -113,12 +114,10 @@ export function ExpensePaymentModal({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Amount to Pay</Label>
-            <Input
-              type="number"
-              min={0}
-              className="h-8 text-xs"
+            <AccountsMoneyInput
+              className="h-9 text-[13px] font-medium"
               value={paidAmount}
-              onChange={(e) => setPaidAmount(e.target.value)}
+              onChange={(v) => setPaidAmount(String(v))}
             />
           </div>
           <div className="space-y-1">
@@ -132,12 +131,12 @@ export function ExpensePaymentModal({
           </div>
         </div>
         <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             disabled={!valid}
             onClick={() => {
               onConfirm({

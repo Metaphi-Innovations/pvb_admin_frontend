@@ -790,6 +790,7 @@ export default function SalesOrderForm({
 				<AdditionalExpensesEditor
 					expenses={form.additionalExpenses ?? []}
 					onChange={(additionalExpenses) => set("additionalExpenses", additionalExpenses)}
+					taxSupplyType={taxSupplyType}
 				/>
 
 				<SectionDivider title='Total Summary' />

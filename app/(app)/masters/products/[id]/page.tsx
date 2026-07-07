@@ -47,12 +47,14 @@ const STATUS_LABEL: Record<ProductStatus | "draft", string> = {
 	active: "Active",
 	inactive: "Inactive",
 	draft: "Draft",
+	archived: "Archived",
 };
 
 const STATUS_VARIANT: Record<ProductStatus | "draft", "active" | "inactive" | "draft"> = {
 	active: "active",
 	inactive: "inactive",
 	draft: "draft",
+	archived: "inactive",
 };
 
 function MediaSection({ product }: { product: Product }) {
@@ -269,7 +271,7 @@ export default function ProductDetailPage() {
 							<RecordKvRow label='Unit' value={product.baseUnit} />
 							<RecordKvRow label='Packaging Unit' value={product.packagingUnit} />
 							<RecordKvRow
-								label='Unit Per Packaging Unit'
+								label='Unit per Case'
 								value={
 									product.unitPerCase !== undefined
 										? String(product.unitPerCase)

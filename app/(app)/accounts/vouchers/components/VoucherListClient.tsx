@@ -1,15 +1,38 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Input } from "@/components/ui/input";
-import { Eye, Pencil, Search } from "lucide-react";
+import {
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
-import { canEditVoucher, getVouchersByType, type VoucherTypeCode } from "../voucher-data";
-
+import { canEditVoucher, type VoucherTypeCode } from "../voucher-data";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+} from "@/components/accounts/AccountsTable";
+import {
+  ACCOUNTS_DEFAULT_PAGE_SIZE,
+  AccountsTableListing,
+  AccountsTablePagination,
+  AccountsTableToolbar,
+} from "@/components/accounts/AccountsTableListing";
+import {
+  ReportDateRangeFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
+import { accountsDataService } from "@/lib/accounts/accounts-data-service";
 interface VoucherListClientProps {
   voucherType: VoucherTypeCode;
   embedded?: boolean;
@@ -21,11 +44,14 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   const listRefreshKey = searchParams.get("t");
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
 
   const records = useMemo(
-    () => (mounted ? getVouchersByType(voucherType) : []),
+    () => (mounted ? accountsDataService.getVouchersByType(voucherType) : []),
     [voucherType, mounted, listRefreshKey],
   );
 
@@ -40,6 +66,8 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
           v.referenceNo.toLowerCase().includes(q),
       );
     }
+    if (dateFrom) r = r.filter((v) => v.date >= dateFrom);
+    if (dateTo) r = r.filter((v) => v.date <= dateTo);
     r.sort((a, b) => {
       const av = (a as unknown as Record<string, unknown>)[sortKey];
       const bv = (b as unknown as Record<string, unknown>)[sortKey];
@@ -47,7 +75,16 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
       return sortDir === "asc" ? cmp : -cmp;
     });
     return r;
-  }, [records, search, sortKey, sortDir]);
+  }, [records, search, dateFrom, dateTo, sortKey, sortDir]);
+
+  const paged = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, pageSize, voucherType]);
 
   const handleSort = (k: string) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -58,95 +95,107 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 border-b border-border/60 bg-muted/5">
-        <div className="relative max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-8 pl-8 text-xs"
-            placeholder="Search voucher no., narration…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+    <div className={embedded ? "flex flex-col flex-1 min-h-0" : "flex flex-col h-full overflow-hidden"}>
+      <AccountsTableListing
+        toolbar={
+          <AccountsTableToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search voucher no., narration…",
+            }}
+            filters={
+              <ReportDateRangeFilter
+                preset={preset}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onPresetChange={setPreset}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+              />
+            }
           />
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto p-4">
-        <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
-          <table className="accounts-table w-full text-table min-w-[900px]">
-            <thead className="border-b border-border/60">
-              <tr>
-                <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <SortTh label="Voucher No." colKey="voucherNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Reference</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Narration</th>
-                <SortTh label="Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
-                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground min-w-[120px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!mounted ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
-                    Loading vouchers…
-                  </td>
-                </tr>
-              ) : visible.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
-                    No vouchers yet. Create your first entry.
-                  </td>
-                </tr>
-              ) : (
-                visible.map((v) => (
-                  <tr key={v.id} className="border-b border-border/40 hover:bg-brand-50/30">
-                    <td className="px-3 py-2 text-xs">{v.date}</td>
-                    <td className="px-3 py-2 text-xs font-medium">
-                      <Link
-                        href={`/accounts/vouchers/view/${v.id}`}
-                        className="text-brand-700 hover:underline font-mono"
-                      >
-                        {v.voucherNumber}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{v.referenceNo || "—"}</td>
-                    <td className="px-3 py-2 text-xs max-w-[200px] truncate">{v.narration || "—"}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <MoneyAmount amount={v.totalDebit} />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <StatusBadge status={v.status} />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <button
-                          type="button"
-                          title="View"
-                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                          onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
-                        >
-                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                        {canEditVoucher(v) && (
-                          <button
-                            type="button"
-                            title="Edit"
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                            onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        }
+        footer={
+          mounted && visible.length > 0 ? (
+            <AccountsTablePagination
+              page={page}
+              pageSize={pageSize}
+              totalRecords={visible.length}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+            />
+          ) : undefined
+        }
+      >
+        <AccountsTable minWidth={900}>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Voucher No." colKey="voucherNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <AccountsTableHeadCell uppercase>Reference</AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase className="accounts-col-narration">Narration</AccountsTableHeadCell>
+              <SortTh label="Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+              <AccountsTableHeadCell align="center" uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>Actions</AccountsTableHeadCell>
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {!mounted ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                  Loading…
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : visible.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                  No records found.
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : (
+              paged.map((v) => (
+                <AccountsTableRow key={v.id}>
+                  <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
+                  <AccountsTableCell mono>
+                    <Link
+                      href={`/accounts/vouchers/view/${v.id}`}
+                      className="text-brand-700 hover:underline font-mono text-xs font-semibold"
+                    >
+                      {v.voucherNumber}
+                    </Link>
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-muted-foreground">{v.referenceNo || "—"}</AccountsTableCell>
+                  <AccountsTableCell className="accounts-col-narration max-w-[200px] truncate">{v.narration || "—"}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>
+                    <MoneyAmount amount={v.totalDebit} />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="center">
+                    <StatusBadge status={v.status} />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                    <AccountsTableActionCell>
+                      <AccountsViewAction
+                        title="View"
+                        onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
+                      />
+                      {canEditVoucher(v) && (
+                        <AccountsEditAction
+                          title="Edit"
+                          onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
+                        />
+                      )}
+                    </AccountsTableActionCell>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))
+            )}
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableListing>
     </div>
   );
 }

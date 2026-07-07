@@ -285,9 +285,9 @@ export function EnterpriseTable<T extends object>({
         <div className={`overflow-x-auto ${stickyHeader ? "max-h-[calc(100vh-280px)] overflow-y-auto" : ""}`}>
           <table className="w-full text-sm min-w-[900px]">
             <thead className={stickyHeader ? "sticky top-0 z-10" : undefined}>
-              <tr className="bg-muted/40 border-b border-border">
+              <tr className="bg-white border-b border-border">
                 {showSelection && (
-                  <th className="w-10 px-4 py-2.5 bg-muted/40">
+                  <th className="w-10 px-4 py-2.5 bg-white">
                     <input
                       type="checkbox"
                       className="w-4 h-4 rounded accent-brand-600"
@@ -296,12 +296,12 @@ export function EnterpriseTable<T extends object>({
                     />
                   </th>
                 )}
-                {expandable && <th className="w-8 px-2 py-3 bg-muted/40" />}
+                {expandable && <th className="w-8 px-2 py-3 bg-white" />}
                 {columns.map((col) => (
                   <th
                     key={col.key}
                     onClick={() => col.sortable !== false && toggleSort(col.key)}
-                    className={`px-4 py-3 text-xs font-semibold text-foreground whitespace-nowrap group cursor-pointer select-none bg-muted/40 ${alignClass(col.align)}`}
+                    className={`px-4 py-3 text-xs font-semibold text-foreground whitespace-nowrap group cursor-pointer select-none bg-white ${alignClass(col.align)}`}
                   >
                     <div className={`flex items-center gap-1.5 ${col.align === "right" ? "justify-end" : ""}`}>
                       {col.label}
@@ -316,7 +316,7 @@ export function EnterpriseTable<T extends object>({
                     </div>
                   </th>
                 ))}
-                {showRowActions && <th className="w-12 px-4 py-2.5 bg-muted/40" />}
+                {showRowActions && <th className="w-12 px-4 py-2.5 bg-white" />}
               </tr>
             </thead>
             <tbody>

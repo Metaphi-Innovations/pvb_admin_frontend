@@ -1,8 +1,10 @@
+import { demoDateAt } from "@/lib/accounts/demo-date-utils";
 import {
   COA_SYSTEM_REVISION,
   EXPECTED_SYSTEM_NODE_COUNT,
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
+import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
 export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
@@ -195,6 +197,19 @@ function normalizeStructuralNode(
   };
 }
 
+function isManualSubGroupLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
+  if (record.nodeLevel !== "ledger") return false;
+  if (record.isSystemGenerated || record.erpSourceModule) return false;
+  return allNodes.some(
+    (c) => c.parentAccountId === record.id && c.nodeLevel === "ledger",
+  );
+}
+
+function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
+  if (record.isSystemGenerated || record.erpSourceModule) return true;
+  return !isManualSubGroupLedger(record, allNodes);
+}
+
 function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   const mergedSystem = SYSTEM_COA_NODES.map((sys) => ({
     ...sys,
@@ -212,7 +227,11 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   }));
 
   const rawUserLedgers = migratedStored.filter(
-    (r) => r.nodeLevel === "ledger" && !r.isSystem && !isRemovedSeedLedger(r),
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      !r.isSystem &&
+      !isRemovedSeedLedger(r) &&
+      shouldKeepUserLedger(r, migratedStored),
   );
 
   const userLedgers: ChartOfAccount[] = [];
@@ -261,7 +280,7 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     remaining = next;
   }
 
-  return [...mergedSystem, ...userLedgers];
+  return mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]);
 }
 
 function readCoaMeta(): { revision: number } | null {
@@ -303,9 +322,9 @@ const LEDGER_SEED: Ledger[] = [
 ];
 
 const TXN_SEED: AccountTxn[] = [
-  { id: 1, txnType: "purchase", number: "PUR-0001", date: "2026-06-01", party: "Agro Chem Distributors", referenceNo: "PO-2026-0001", referenceModule: "Procurement", amount: 100000, taxAmount: 18000, totalAmount: 118000, remarks: "", status: "approved", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 2, txnType: "sales", number: "SAL-0001", date: "2026-06-01", party: "Green Farm Retail", referenceNo: "INV-2026-0042", referenceModule: "Sales", amount: 150000, taxAmount: 27000, totalAmount: 177000, remarks: "", status: "approved", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 3, txnType: "journal", number: "JRN-0001", date: "2026-06-02", party: "Payroll Provision", referenceNo: "PAY-2026-05", referenceModule: "Payroll", amount: 80000, taxAmount: 0, totalAmount: 80000, remarks: "Month-end payroll accrual", status: "approved", createdBy: "Admin", updatedBy: "Admin" },
+  { id: 1, txnType: "purchase", number: "PUR-0001", date: demoDateAt(0), party: "Agro Chem Distributors", referenceNo: "PO-2026-0001", referenceModule: "Procurement", amount: 100000, taxAmount: 18000, totalAmount: 118000, remarks: "", status: "approved", createdBy: "Admin", updatedBy: "Admin" },
+  { id: 2, txnType: "sales", number: "SAL-0001", date: demoDateAt(1), party: "Green Farm Retail", referenceNo: "INV-2026-0042", referenceModule: "Sales", amount: 150000, taxAmount: 27000, totalAmount: 177000, remarks: "", status: "approved", createdBy: "Admin", updatedBy: "Admin" },
+  { id: 3, txnType: "journal", number: "JRN-0001", date: demoDateAt(2), party: "Payroll Provision", referenceNo: "PAY-2026-05", referenceModule: "Payroll", amount: 80000, taxAmount: 0, totalAmount: 80000, remarks: "Month-end payroll accrual", status: "approved", createdBy: "Admin", updatedBy: "Admin" },
 ];
 
 function getOrSeed<T>(key: string, seed: T[]): T[] {
@@ -333,10 +352,11 @@ export const loadChartOfAccounts = (): ChartOfAccount[] => {
   }
 
   const raw = getOrSeed(COA_KEY, COA_SEED);
-  const source = coaStorageNeedsReset(raw) ? [] : raw;
+  const needsReset = coaStorageNeedsReset(raw);
+  const source = needsReset ? [] : raw;
   const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && (needsReset || merged.length !== raw.length)) {
     save(COA_KEY, merged);
     writeCoaMeta();
   }

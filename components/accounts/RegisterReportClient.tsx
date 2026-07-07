@@ -1,23 +1,19 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Download, Eye, FileDown, FileSpreadsheet, Receipt, Scale, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsRichTable,
-  AccountsTableScroll,
   type AccountsRichColumnDef,
 } from "@/components/accounts/AccountsTable";
+import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { EmptySearch } from "@/components/ui/EmptyState";
-import { MiniKPICard } from "@/components/ui/KPICard";
+import { AccountsViewAction, accountsActionColClass } from "@/components/accounts/AccountsTableActions";
+import { Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -356,19 +352,15 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           key: "action",
           label: "",
           align: "center",
-          className: "w-10",
+          className: accountsActionColClass("single"),
           render: (row) => (
-            <button
-              type="button"
+            <AccountsViewAction
+              title={`View ${row.docNo}`}
               onClick={(e) => {
                 e.stopPropagation();
                 openInvoiceDetail(row);
               }}
-              className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100"
-              aria-label={`View ${row.docNo}`}
-            >
-              <Eye className="w-4 h-4 text-muted-foreground" />
-            </button>
+            />
           ),
         },
       ],
@@ -423,10 +415,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+              className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
               onClick={() => handlePartyDrill(row.groupKey)}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-4 h-4" />
               {actionLabel}
             </Button>
           ),
@@ -489,10 +481,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+              className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
               onClick={() => drillToInvoiceView({ monthKey: row.groupKey })}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-4 h-4" />
               {actionLabel}
             </Button>
           ),
@@ -556,10 +548,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+            className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
             onClick={() => handleCommodityDrill(row.groupKey)}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-4 h-4" />
             {actionLabel}
           </Button>
         ),
@@ -617,23 +609,7 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
       breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
-      actions={
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-              <Download className="w-3.5 h-3.5" /> Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem className="text-xs gap-2" onClick={exportCsv}>
-              <FileSpreadsheet className="w-3.5 h-3.5" /> Export CSV
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs gap-2" onClick={exportCsv}>
-              <FileDown className="w-3.5 h-3.5" /> Export Excel
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      }
+      actions={<AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} />}
       filters={
         <ReportFilterRow>
           <ReportViewByFilter
@@ -667,22 +643,21 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
-          <MiniKPICard label={docLabel} value={String(summary.count)} icon={Receipt} accent />
-          <MiniKPICard label="Taxable Amount" value={formatMoney(summary.taxable)} icon={Scale} />
-          <MiniKPICard
-            label={totalAmountLabel}
-            value={formatMoney(summary.total)}
-            icon={Users}
-            accent
+      <AccountsTableListing
+        summary={
+          <AccountsSummaryBar
+            items={[
+              { label: docLabel, value: String(summary.count) },
+              { label: "Taxable Amount", value: formatMoney(summary.taxable) },
+              { label: totalAmountLabel, value: formatMoney(summary.total) },
+              { label: balanceLabel, value: formatMoney(summary.balance) },
+            ]}
           />
-          <MiniKPICard label={balanceLabel} value={formatMoney(summary.balance)} icon={Receipt} />
-        </div>
-
-        <AccountsTableScroll>
+        }
+      >
           {tableEmpty ? (
             <EmptySearch
+              compact
               onClear={
                 hasFilters
                   ? clearFilters
@@ -721,8 +696,7 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
               minWidth={1100}
             />
           )}
-        </AccountsTableScroll>
-      </div>
+      </AccountsTableListing>
       {transactionDrawer}
     </AccountsPageShell>
   );

@@ -6,8 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  ACCOUNTS_NAV_GROUPS,
-  CHART_OF_ACCOUNTS_HREF,
+  ACCOUNTS_SIDEBAR_GROUPS,
   isAccountsNavActive,
   resolveAccountsNavGroupId,
   type AccountsNavGroup,
@@ -15,6 +14,7 @@ import {
 import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
 import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
 import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { ACCOUNTS_SIDEBAR_GROUP_CLASS, ACCOUNTS_SIDEBAR_ITEM_CLASS } from "@/lib/accounts/accounts-typography";
 import { CoaSidebarNav } from "./CoaSidebarNav";
 
 interface AccountsModuleShellProps {
@@ -35,7 +35,7 @@ function NavGroup({
   const hasActiveChild = group.items.some((item) => isAccountsNavActive(pathname, item.href));
 
   useEffect(() => {
-    if (defaultOpen) setOpen(true);
+    setOpen(defaultOpen);
   }, [defaultOpen]);
 
   return (
@@ -45,10 +45,11 @@ function NavGroup({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150",
+          "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-150",
+          ACCOUNTS_SIDEBAR_GROUP_CLASS,
           hasActiveChild
             ? "text-brand-800 bg-brand-50/60"
-            : "text-foreground/80 hover:bg-brand-50/50 hover:text-brand-800",
+            : "text-[#6B7280] hover:bg-brand-50/50 hover:text-brand-800",
         )}
       >
         <span
@@ -70,46 +71,37 @@ function NavGroup({
         />
       </button>
 
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-in-out",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="overflow-hidden min-h-0">
-          <div className="mt-1 ml-1 space-y-0.5 border-l border-border/50 pl-2">
-            {group.items.map((item) => {
-              const active = isAccountsNavActive(pathname, item.href);
-              const ItemIcon = item.icon;
-              const isCoaItem = item.href === CHART_OF_ACCOUNTS_HREF;
+      {open && (
+        <div className="mt-1 ml-1 space-y-0.5 border-l border-border/50 pl-2">
+          {group.items.map((item) => {
+            const active = isAccountsNavActive(pathname, item.href);
+            const ItemIcon = item.icon;
 
-              return (
-                <React.Fragment key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "group flex items-center gap-2.5 pl-2.5 pr-2.5 py-2 rounded-r-lg text-[13px] leading-snug",
-                      "border-l-2 -ml-[1px] transition-all duration-150",
-                      active
-                        ? "border-brand-600 bg-brand-50 text-brand-800 font-semibold"
-                        : "border-transparent text-foreground/75 hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
-                    )}
-                  >
-                    <ItemIcon
-                      className={cn(
-                        "w-4 h-4 flex-shrink-0 transition-colors",
-                        active ? "text-brand-600" : "text-muted-foreground group-hover:text-brand-600",
-                      )}
-                    />
-                    <span>{item.label}</span>
-                  </Link>
-                  {isCoaItem && group.id === "masters" && <CoaSidebarNav />}
-                </React.Fragment>
-              );
-            })}
-          </div>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-r-lg leading-snug",
+                  ACCOUNTS_SIDEBAR_ITEM_CLASS,
+                  "border-l-2 -ml-[1px] transition-all duration-150",
+                  active
+                    ? "border-brand-600 bg-[#FFF3E6] text-brand-800 font-medium"
+                    : "border-transparent text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
+                )}
+              >
+                <ItemIcon
+                  className={cn(
+                    "w-4 h-4 flex-shrink-0 transition-colors",
+                    active ? "text-brand-600" : "text-muted-foreground group-hover:text-brand-600",
+                  )}
+                />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -120,22 +112,32 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
   const activeGroupId = useMemo(() => resolveAccountsNavGroupId(pathname), [pathname]);
 
   useEffect(() => {
-    seedAccountsDemoData();
-    ensureGstAccountingLedgers();
+    const run = () => {
+      seedAccountsDemoData();
+      ensureGstAccountingLedgers();
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(run, { timeout: 2500 });
+      return () => window.cancelIdleCallback(id);
+    }
+
+    const t = window.setTimeout(run, 250);
+    return () => window.clearTimeout(t);
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden">
-      {/* Left: accounting navigation + COA tree — independent scroll */}
-      <aside className="w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
+    <div className="accounts-module-shell flex h-full min-h-0 w-full overflow-hidden">
+      <aside className="accounts-module-sidebar w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
         <div className="flex-shrink-0 px-3 py-3 border-b border-border/60">
-          <p className="text-xs font-semibold text-brand-800">Accounting</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            Masters · Transactions · Receivables · Payables · Banking · Reports
+          <p className={cn(ACCOUNTS_SIDEBAR_GROUP_CLASS, "text-brand-800")}>Accounting</p>
+          <p className="text-[13px] text-slate-500 mt-0.5">
+            Chart of Accounts · Transactions · Receivables · Payables · Banking · Reports
           </p>
         </div>
         <nav className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-2.5 py-3")}>
-          {ACCOUNTS_NAV_GROUPS.map((group) => (
+          <CoaSidebarNav />
+          {ACCOUNTS_SIDEBAR_GROUPS.map((group) => (
             <NavGroup
               key={group.id}
               group={group}
@@ -146,8 +148,7 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
         </nav>
       </aside>
 
-      {/* Right: page content — independent scroll */}
-      <main className="flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
+      <main className="accounts-module-main flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
         <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-4 py-3")}>{children}</div>
       </main>
     </div>

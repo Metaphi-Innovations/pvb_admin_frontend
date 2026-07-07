@@ -178,7 +178,7 @@ export function SplitMergeResultCard({
               ) : (
                 <div className="overflow-x-auto max-h-[180px] overflow-y-auto">
                   <table className="w-full text-[11px] min-w-[640px]">
-                    <thead className="sticky top-0 bg-muted/90">
+                    <thead className="sticky top-0 bg-white z-10 border-b border-border shadow-[0_1px_0_0_hsl(var(--border))]">
                       <tr className="border-b">
                         {["Customer Code", "Customer Name", "Type", "Pincode", "Current Geography", "New Geography"].map(
                           (h) => (

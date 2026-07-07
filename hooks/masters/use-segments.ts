@@ -5,6 +5,7 @@ import {
   SegmentListService,
   type SegmentCreatePayload,
   type SegmentExportParams,
+  type SegmentFilterField,
   type SegmentListParams,
   type SegmentUpdatePayload,
 } from "@/services/segment-list.service";
@@ -81,5 +82,13 @@ export function useToggleSegmentStatus() {
 export function useExportSegments() {
   return useMutation({
     mutationFn: (params: SegmentExportParams) => SegmentListService.export(params),
+  });
+}
+
+export function useSegmentFilterDropdown(fieldName: SegmentFilterField) {
+  return useQuery({
+    queryKey: masterKeys.segments.filterDropdown(fieldName),
+    queryFn: ({ signal }) => SegmentListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }

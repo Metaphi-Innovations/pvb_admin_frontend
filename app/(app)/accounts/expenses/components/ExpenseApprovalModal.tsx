@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2 } from "lucide-react";
@@ -112,17 +113,13 @@ export function ExpenseApprovalModal({
 
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Approved Amount (editable)</Label>
-            <Input
-              type="number"
-              min={0}
-              max={claimed}
-              step="0.01"
+            <AccountsMoneyInput
+              className="h-9 text-[13px] font-medium font-semibold"
               value={approvedInput}
-              onChange={(e) => {
-                setApprovedInput(e.target.value);
+              onChange={(v) => {
+                setApprovedInput(String(v));
                 setError(null);
               }}
-              className="h-8 text-xs font-semibold"
             />
             <p className="text-[10px] text-muted-foreground">
               Claimed: {formatINR(claimed)}
@@ -152,7 +149,7 @@ export function ExpenseApprovalModal({
           <div className="flex flex-wrap gap-2 w-full">
             <Button
               size="sm"
-              className="h-8 text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-9 text-[13px] font-medium flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={handleFull}
             >
               Approve Full Amount
@@ -160,7 +157,7 @@ export function ExpenseApprovalModal({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs flex-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+              className="h-9 text-[13px] font-medium flex-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
               onClick={handlePartial}
               disabled={parsedApproved <= 0 || parsedApproved > claimed}
             >
@@ -171,12 +168,12 @@ export function ExpenseApprovalModal({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs flex-1 text-red-600 border-red-200 hover:bg-red-50"
+              className="h-9 text-[13px] font-medium flex-1 text-red-600 border-red-200 hover:bg-red-50"
               onClick={handleReject}
             >
               Reject
             </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs flex-1" onClick={onClose}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium flex-1" onClick={onClose}>
               Cancel
             </Button>
           </div>

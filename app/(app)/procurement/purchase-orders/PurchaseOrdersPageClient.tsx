@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import Link from "next/link";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -15,100 +14,89 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus,
   MoreVertical,
   Eye,
   Edit2,
-  Send,
-  CheckCircle2,
-  XCircle,
   Upload,
   ShoppingCart,
   Scissors,
   MessageSquare,
-  RotateCcw,
-  Clock,
-  Search,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { Toast } from "../components/ProcurementUI";
-import { ProcurementApprovalModal } from "../components/ProcurementApprovalModal";
+// Listing-only phase: approval / action modals stay for future integration.
+// import { ProcurementApprovalModal } from "../components/ProcurementApprovalModal";
 import { ProcAvatar, HighlightText } from "../design/proc-design";
-import { useFlashToast } from "../hooks/useFlashToast";
-import { applySearch, sortRows, type SortDir } from "../hooks/useListingFilters";
-import { formatListingDate } from "../components/listing/ListingCells";
-import {
-  type PurchaseOrder,
-  loadPurchaseOrders,
-  savePurchaseOrders,
-  submitPO,
-  approvePO,
-  rejectPO,
-  closePO,
-  cancelPO,
-} from "./po-data";
-import { canShortClosePO } from "./po-qty";
-import {
-  getPOListingInvoiceStatus,
-  getPOListingThreeWayMatchStatus,
-  getPOTotalItems,
-  getVendorSecondaryLine,
-} from "./po-listing-utils";
-import { ThreeWayMatchListingCell } from "./components/ThreeWayMatchSection";
-import { getPOFollowUpSummary } from "./po-followup-data";
-import { ShortClosePOModal } from "./components/ShortClosePOModal";
-import { AddFollowUpModal } from "./components/AddFollowUpModal";
-import { POActionConfirmModal, type POActionConfirmType } from "./components/POActionConfirmModal";
 import { FollowUpListingCell } from "./components/VendorFollowUpPanel";
 import { InvoiceListingCell } from "./components/POVendorInvoiceSection";
-import { UploadVendorInvoiceDialog } from "./components/UploadVendorInvoiceDialog";
-import { addPOFollowUp, canAddPOFollowUp } from "./po-followup-data";
-import { canUploadPOInvoice } from "./po-invoice-utils";
-import { exportPOListingCsv } from "./po-export-utils";
-import { computePOListingKpis } from "@/lib/procurement/listing-kpis";
+import { useFlashToast } from "../hooks/useFlashToast";
+import { formatListingDate } from "../components/listing/ListingCells";
+import {
+  getPOStatusLabel,
+  PO_LIST_STATUS_FILTER_OPTIONS,
+  type POListStatus,
+} from "@/lib/procurement/po-status";
+import type { PurchaseOrderListItem } from "@/services/purchase-order-list.service";
+import {
+  buildPurchaseOrderApiFilters,
+  buildPurchaseOrderOrdering,
+} from "@/services/purchase-order-list.service";
+import {
+  useCancelPurchaseOrder,
+  useClosePurchaseOrder,
+  useCreatePOFollowup,
+  useExportPurchaseOrders,
+  usePurchaseOrder,
+  usePurchaseOrderFilterDropdown,
+  usePurchaseOrderList,
+  usePurchaseOrderSummary,
+  useUploadPOInvoice,
+} from "@/hooks/procurement";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { PurchaseOrderListKeyParams } from "@/lib/procurement/purchase-order-query-keys";
+import type { POListingKpis } from "@/lib/procurement/listing-kpis";
 import { POListingKpiRow } from "../components/listing/ListingKpiRows";
-import { ProcCompactKpi, ProcCompactKpiGrid } from "../components/analytics/ProcCompactKpi";
+import { loadPurchaseReturns } from "../purchase-returns/purchase-return-data";
+import { PurchaseReturnListing } from "./components/PurchaseReturnListing";
+import { UploadVendorInvoiceDialog } from "./components/UploadVendorInvoiceDialog";
+import { AddFollowUpModal } from "./components/AddFollowUpModal";
+import {
+  POActionConfirmModal,
+  type POActionConfirmType,
+} from "./components/POActionConfirmModal";
+import {
+  mapFollowupsFromDetail,
+  mapInvoicesFromDetail,
+  PurchaseOrderService,
+} from "@/services/purchase-order.service";
+import type { POFollowUpEntry } from "./po-followup-data";
+import type { PurchaseOrder } from "./po-data";
+import type { POVendorInvoiceView } from "@/services/purchase-order.service";
+import { COMPANY_BILLING } from "@/lib/procurement/config";
 
-type TabId = "all" | "draft" | "pending_approval" | "rejected" | "po_return";
+type TabId = "all" | "draft" | "po_return";
+// Approval / Rejected tabs — temporarily hidden
+// | "pending_approval" | "rejected"
 
 const TABS: { value: TabId; label: string }[] = [
   { value: "all", label: "PO" },
   { value: "draft", label: "Draft" },
-  { value: "pending_approval", label: "Approval" },
-  { value: "rejected", label: "Rejected" },
-  { value: "po_return", label: "PO Return" },
+  // { value: "pending_approval", label: "Approval" },
+  // { value: "rejected", label: "Rejected" },
+  { value: "po_return", label: "Purchase Return" },
 ];
-
-interface ReturnRecord {
-  id: number;
-  returnNumber: string;
-  poNumber: string;
-  vendor: string;
-  returnDate: string;
-  reason: string;
-  items: number;
-  amount: number;
-  status: "pending" | "approved" | "processed";
-}
-
-const RETURNS_SEED: ReturnRecord[] = [
-  { id: 1, returnNumber: "PR-2024-001", poNumber: "PO-2024-001", vendor: "Agro Chem Distributors",  returnDate: "2024-01-22", reason: "Damaged packaging",    items: 2, amount: 42500, status: "processed" },
-  { id: 2, returnNumber: "PR-2024-002", poNumber: "PO-2024-003", vendor: "Fertilizer World",        returnDate: "2024-02-10", reason: "Quality mismatch",     items: 1, amount: 28000, status: "approved" },
-  { id: 3, returnNumber: "PR-2024-003", poNumber: "PO-2024-002", vendor: "Seed Corp India Pvt Ltd", returnDate: "2024-02-18", reason: "Short expiry",         items: 3, amount: 15600, status: "pending" },
-];
-
-const RETURN_STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  pending:   { bg: "bg-amber-50",   text: "text-amber-700",   dot: "bg-amber-400" },
-  approved:  { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500" },
-  processed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-};
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: "Draft" },
   pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Pending Approval" },
   approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Approved" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", label: "Rejected" },
+  partially_received: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500", label: "Partially Received" },
+  received: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Received" },
   invoice_uploaded: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Invoice Uploaded" },
   short_closed: { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500", label: "Short Closed" },
   closed: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: "Closed" },
@@ -116,7 +104,12 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label:
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] ?? { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: status };
+  const cfg = STATUS_CFG[status] ?? {
+    bg: "bg-slate-100",
+    text: "text-slate-700",
+    dot: "bg-slate-400",
+    label: getPOStatusLabel(status),
+  };
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium border whitespace-nowrap",
@@ -131,147 +124,290 @@ function StatusPill({ status }: { status: string }) {
 export default function PurchaseOrdersPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [records, setRecords] = useState<PurchaseOrder[]>(() => loadPurchaseOrders());
   const [tab, setTab] = useState<TabId>("all");
 
   React.useEffect(() => {
     const t = searchParams.get("tab");
-    if (t && ["all", "draft", "pending_approval", "rejected", "po_return"].includes(t)) {
+    if (t && ["all", "draft", "po_return"].includes(t)) {
       setTab(t as TabId);
     }
   }, [searchParams]);
 
-  const [returnSearch, setReturnSearch] = useState("");
-
-  const visibleReturns = useMemo(() => {
-    return returnSearch.trim()
-      ? RETURNS_SEED.filter(
-          (r) =>
-            r.returnNumber.toLowerCase().includes(returnSearch.toLowerCase()) ||
-            r.vendor.toLowerCase().includes(returnSearch.toLowerCase())
-        )
-      : RETURNS_SEED;
-  }, [returnSearch]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [approvalTarget, setApprovalTarget] = useState<PurchaseOrder | null>(null);
-  const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
-  const [approvalOpen, setApprovalOpen] = useState(false);
-  const [shortCloseOpen, setShortCloseOpen] = useState(false);
-  const [shortCloseTarget, setShortCloseTarget] = useState<PurchaseOrder | null>(null);
-  const [followUpOpen, setFollowUpOpen] = useState(false);
-  const [followUpTarget, setFollowUpTarget] = useState<PurchaseOrder | null>(null);
-  const [followUpRev, setFollowUpRev] = useState(0);
+  const [modalPoId, setModalPoId] = useState<string | null>(null);
+  const [modalListItem, setModalListItem] = useState<PurchaseOrderListItem | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadTarget, setUploadTarget] = useState<PurchaseOrder | null>(null);
-  const [uploadReplace, setUploadReplace] = useState(false);
-  const [invoiceRev, setInvoiceRev] = useState(0);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
-  const [actionConfirmTarget, setActionConfirmTarget] = useState<PurchaseOrder | null>(null);
+  const [modalFollowups, setModalFollowups] = useState<POFollowUpEntry[]>([]);
+  const [modalInvoices, setModalInvoices] = useState<POVendorInvoiceView[]>([]);
 
-  // MasterListing States
   const [filters, setFilters] = useState<FilterState>({});
+  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "poDate", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   useFlashToast(setToast);
 
-  const refresh = () => setRecords(loadPurchaseOrders());
-
-  const suppliers = useMemo(
-    () => Array.from(new Set(records.map((r) => r.supplierName))).filter(Boolean).sort(),
-    [records],
-  );
-  const prRefs = useMemo(
-    () => Array.from(new Set(records.map((r) => r.sourcePrNumber).filter(Boolean))).sort(),
-    [records],
+  const apiFilters = useMemo(
+    () => buildPurchaseOrderApiFilters(debouncedFilters, tab),
+    [debouncedFilters, tab],
   );
 
-  const tabCounts = useMemo(() => {
-    const c: Partial<Record<TabId, number>> = { all: records.length };
-    (["draft", "pending_approval", "rejected"] as TabId[]).forEach((s) => {
-      if (s !== "all") c[s] = records.filter((r) => r.status === s).length;
-    });
-    c["po_return"] = RETURNS_SEED.length;
-    return c;
-  }, [records]);
+  const ordering = useMemo(
+    () => buildPurchaseOrderOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
 
-  const filtered = useMemo(() => {
-    let r = [...records];
-    if (tab !== "all") r = r.filter((x) => x.status === tab);
+  const listParams = useMemo<PurchaseOrderListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: debouncedSearch,
+      ordering,
+      apiFilters,
+    }),
+    [page, pageSize, debouncedSearch, ordering, apiFilters],
+  );
 
-    // MasterListing Filters
-    Object.keys(filters).forEach((key) => {
-      const val = filters[key];
-      if (!val) return;
-      if (key === "search") {
-        r = applySearch(r, val as string, (x) => [x.poNumber, x.sourcePrNumber, x.supplierName]);
-      } else if (key === "supplierName") {
-        const selected = val as string[];
-        if (selected.length) r = r.filter((x) => selected.includes(x.supplierName));
-      } else if (key === "sourcePrNumber") {
-        const selected = val as string[];
-        if (selected.length) r = r.filter((x) => selected.includes(x.sourcePrNumber));
-      } else if (key === "status") {
-        const selected = val as string[];
-        if (selected.length) r = r.filter((x) => selected.includes(x.status));
-      } else if (key === "poDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) r = r.filter((x) => x.poDate >= range.fromDate);
-        if (range.toDate) r = r.filter((x) => x.poDate <= range.toDate);
-      }
-    });
+  const isPoTab = tab !== "po_return";
+  const listQuery = usePurchaseOrderList(listParams, isPoTab);
+  const summaryQuery = usePurchaseOrderSummary();
+  const supplierOptionsQuery = usePurchaseOrderFilterDropdown("supplier__supplier_name");
+  const prOptionsQuery = usePurchaseOrderFilterDropdown("purchase_requisition__pr_number");
+  const exportMutation = useExportPurchaseOrders();
+  const modalPoQuery = usePurchaseOrder(modalPoId);
+  const uploadMutation = useUploadPOInvoice();
+  const followupMutation = useCreatePOFollowup();
+  const closeMutation = useClosePurchaseOrder();
+  const cancelMutation = useCancelPurchaseOrder();
+  const actionSubmitting = closeMutation.isPending || cancelMutation.isPending;
 
-    // Sorting
-    if (sort.key && sort.direction !== "none") {
-      r = sortRows(r, sort.key, sort.direction as SortDir, {
-        poNumber: (x) => x.poNumber,
-        supplierName: (x) => x.supplierName,
-        sourcePrNumber: (x) => x.sourcePrNumber,
-        totalItems: (x) => getPOTotalItems(x),
-        grandTotal: (x) => x.summary.grandTotal,
-        invoiceStatus: (x) => getPOListingInvoiceStatus(x),
-        threeWayMatch: (x) => getPOListingThreeWayMatchStatus(x),
-        status: (x) => x.status,
-        followUp: (x) => getPOFollowUpSummary(x.id).availability,
-      });
-    }
+  /** Prefer full detail; fall back to list-row stub so the popup opens immediately. */
+  const modalPo = useMemo(() => {
+    if (modalPoQuery.data) return modalPoQuery.data;
+    if (!modalListItem) return null;
+    return {
+      id: modalListItem.id,
+      poNumber: modalListItem.poNumber,
+      poDate: modalListItem.poDate,
+      supplierId: modalListItem.supplierId,
+      supplierName: modalListItem.supplierName,
+      supplierType: "",
+      supplierGstin: modalListItem.supplierGstin,
+      referenceNumber: "",
+      currency: "INR",
+      paymentType: modalListItem.paymentType,
+      creditDays: 0,
+      deliveryTerms: "",
+      expectedDeliveryDate: "",
+      state: "",
+      warehouseId: null,
+      warehouseName: modalListItem.warehouseName,
+      deliveryAddress: "",
+      notes: "",
+      sourcePrId: modalListItem.sourcePrId || null,
+      sourcePrNumber: modalListItem.sourcePrNumber,
+      billing: { ...COMPANY_BILLING },
+      shipping: {
+        shipToLocation: "",
+        branch: "",
+        address: "",
+        contactPerson: "",
+        contactNumber: "",
+        sameAsBilling: false,
+      },
+      lines: [],
+      terms: [],
+      attachments: [],
+      additionalCharges: [],
+      otherCharges: 0,
+      summary: {
+        grossAmount: modalListItem.grandTotal,
+        totalDiscount: 0,
+        productTotal: modalListItem.grandTotal,
+        additionalChargesTotal: 0,
+        taxableValue: modalListItem.grandTotal,
+        totalCgst: 0,
+        totalSgst: 0,
+        totalIgst: 0,
+        otherCharges: 0,
+        grandTotal: modalListItem.grandTotal,
+        amountInWords: "",
+      },
+      status: modalListItem.status,
+      createdBy: modalListItem.createdBy,
+      createdDate: modalListItem.createdAt,
+      updatedBy: modalListItem.updatedBy,
+      updatedDate: modalListItem.updatedAt,
+      approvedBy: "",
+      approvedDate: "",
+      activity: [],
+    } satisfies PurchaseOrder;
+  }, [modalPoQuery.data, modalListItem]);
 
-    return r;
-  }, [records, tab, filters, sort, followUpRev, invoiceRev]);
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  const updateOne = (updated: PurchaseOrder) => {
-    savePurchaseOrders(loadPurchaseOrders().map((p) => (p.id === updated.id ? updated : p)));
-    refresh();
+  const closeModals = () => {
+    setUploadOpen(false);
+    setFollowUpOpen(false);
+    setActionConfirmOpen(false);
+    setModalPoId(null);
+    setModalListItem(null);
+    setModalFollowups([]);
+    setModalInvoices([]);
   };
 
-  const poListingKpis = useMemo(() => computePOListingKpis(records), [records, followUpRev, invoiceRev]);
-
-  const openUpload = (po: PurchaseOrder, replace = false) => {
-    setUploadTarget(po);
-    setUploadReplace(replace);
+  const openUploadModal = (row: PurchaseOrderListItem) => {
+    setModalPoId(row.id);
+    setModalListItem(row);
+    setFollowUpOpen(false);
+    setActionConfirmOpen(false);
     setUploadOpen(true);
   };
 
-  const handleInvoiceSaved = () => {
-    refresh();
-    setInvoiceRev((r) => r + 1);
-    setUploadTarget(null);
-    setToast({ msg: "Supplier invoice saved.", type: "success" });
+  const openFollowUpModal = (row: PurchaseOrderListItem) => {
+    setModalPoId(row.id);
+    setModalListItem(row);
+    setUploadOpen(false);
+    setActionConfirmOpen(false);
+    setFollowUpOpen(true);
   };
 
-  const columns: ColumnConfig<PurchaseOrder>[] = [
+  const openActionConfirm = (row: PurchaseOrderListItem, action: POActionConfirmType) => {
+    setModalPoId(row.id);
+    setModalListItem(row);
+    setUploadOpen(false);
+    setFollowUpOpen(false);
+    setActionConfirmType(action);
+    setActionConfirmOpen(true);
+  };
+
+  const handleActionConfirm = () => {
+    if (!modalPoId) return;
+    const mutation = actionConfirmType === "close" ? closeMutation : cancelMutation;
+    mutation.mutate(modalPoId, {
+      onSuccess: () => {
+        closeModals();
+        setToast({
+          msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
+          type: "success",
+        });
+        void listQuery.refetch();
+        void summaryQuery.refetch();
+      },
+      onError: (error) => {
+        setToast({
+          msg: getErrorMessage(
+            error,
+            actionConfirmType === "close"
+              ? "Failed to close purchase order."
+              : "Failed to cancel purchase order.",
+          ),
+          type: "error",
+        });
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (!modalPoId || (!uploadOpen && !followUpOpen)) return;
+    let cancelled = false;
+    PurchaseOrderService.getRawById(modalPoId)
+      .then((raw) => {
+        if (cancelled) return;
+        setModalFollowups(mapFollowupsFromDetail(raw));
+        setModalInvoices(mapInvoicesFromDetail(raw));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setModalFollowups([]);
+        setModalInvoices([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modalPoId, uploadOpen, followUpOpen, modalPoQuery.dataUpdatedAt]);
+
+  const records = listQuery.data?.items ?? [];
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching || isDebouncing;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, { resource: "purchase orders" })
+    : null;
+
+  const suppliers = useMemo(
+    () => supplierOptionsQuery.data ?? [],
+    [supplierOptionsQuery.data],
+  );
+  const prRefs = useMemo(
+    () => prOptionsQuery.data ?? [],
+    [prOptionsQuery.data],
+  );
+
+  const summary = summaryQuery.data;
+
+  const tabCounts = useMemo(() => {
+    const c: Partial<Record<TabId, number>> = {};
+    if (summary) {
+      c.all = summary.total;
+      c.draft = summary.draftPo;
+    }
+    c.po_return = loadPurchaseReturns().length;
+    return c;
+  }, [summary]);
+
+  /** Only map KPI fields that exist on the backend summary response. */
+  const poListingKpis = useMemo<POListingKpis>(() => ({
+    total: summary?.total ?? 0,
+    openPo: 0,
+    partialReceived: 0,
+    fullyReceived: 0,
+    closedPo: summary?.closedPo ?? 0,
+    totalPoValue: 0,
+  }), [summary]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, apiFilters, pageSize, tab]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [sort.key, sort.direction]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
+        search: debouncedSearch,
+        apiFilters,
+        ordering,
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Purchase orders exported successfully.", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export purchase orders."),
+            type: "error",
+          });
+        },
+      },
+    );
+  };
+
+  const columns: ColumnConfig<PurchaseOrderListItem>[] = [
     {
       key: "poNumber",
       header: "PO No.",
       sortable: true,
-      render: (val, row) => (
+      render: (_val, row) => (
         <div>
           <button
             type="button"
@@ -292,37 +428,43 @@ export default function PurchaseOrdersPageClient() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: suppliers.map(s => ({ label: s, value: s })),
-      render: (val, row) => (
+      filterOptions: suppliers,
+      render: (_val, row) => (
         <div className="py-1">
           <span className="inline-flex items-center gap-2 text-xs text-foreground font-medium">
             <ProcAvatar name={row.supplierName} />
             <HighlightText text={row.supplierName} query={(filters.search as string) || ""} />
           </span>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{getVendorSecondaryLine(row)}</p>
+          {row.supplierSecondaryLine ? (
+            <p className="text-[11px] text-muted-foreground mt-0.5">{row.supplierSecondaryLine}</p>
+          ) : null}
         </div>
       ),
     },
-    {
-      key: "sourcePrNumber",
-      header: "PR No.",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: prRefs.map(p => ({ label: p, value: p })),
-      render: (val, row) => (
-        <span className="text-xs text-muted-foreground py-1">
-          {row.sourcePrNumber ? <HighlightText text={row.sourcePrNumber} query={(filters.search as string) || ""} /> : "—"}
-        </span>
-      ),
-    },
+    // {
+    //   key: "sourcePrNumber",
+    //   header: "PR No.",
+    //   sortable: true,
+    //   filterable: true,
+    //   filterType: "dropdown",
+    //   filterOptions: prRefs,
+    //   render: (_val, row) => (
+    //     <span className="text-xs text-muted-foreground py-1">
+    //       {row.sourcePrNumber ? (
+    //         <HighlightText text={row.sourcePrNumber} query={(filters.search as string) || ""} />
+    //       ) : (
+    //         "—"
+    //       )}
+    //     </span>
+    //   ),
+    // },
     {
       key: "totalItems",
       header: "Items",
       sortable: true,
-      render: (val, row) => (
+      render: (_val, row) => (
         <span className="text-xs tabular-nums text-foreground py-1">
-          {getPOTotalItems(row)}
+          {row.totalItems}
         </span>
       ),
     },
@@ -330,61 +472,57 @@ export default function PurchaseOrdersPageClient() {
       key: "grandTotal",
       header: "PO Amount",
       sortable: true,
-      render: (val, row) => (
+      render: (_val, row) => (
         <span className="text-xs font-semibold tabular-nums text-foreground py-1">
-          {formatCurrency(row.summary.grandTotal)}
+          {formatCurrency(row.grandTotal)}
         </span>
       ),
     },
     {
       key: "invoiceStatus",
       header: "Invoice",
-      sortable: true,
-      render: (val, row) => (
+      sortable: false,
+      render: (_val, row) => (
         <InvoiceListingCell
-          po={row}
+          hasInvoice={row.status === "invoice_uploaded"}
+          canUpload={["approved", "partially_received", "received"].includes(row.status)}
           onView={() => router.push(`/procurement/purchase-orders/${row.id}#vendor-invoice`)}
-          onUpload={() => openUpload(row)}
+          onUpload={() => openUploadModal(row)}
         />
       ),
     },
-    {
-      key: "threeWayMatch",
-      header: "3-Way Match",
-      sortable: true,
-      render: (val, row) => (
-        <ThreeWayMatchListingCell
-          po={row}
-          onView={() => router.push(`/procurement/purchase-orders/${row.id}#three-way-match`)}
-        />
-      ),
-    },
+    // 3-Way Match module is not implemented yet — temporarily hidden.
+    // {
+    //   key: "threeWayMatch",
+    //   header: "3-Way Match",
+    //   sortable: true,
+    //   render: (val, row) => (
+    //     <ThreeWayMatchListingCell
+    //       po={row}
+    //       onView={() => router.push(`/procurement/purchase-orders/${row.id}#three-way-match`)}
+    //     />
+    //   ),
+    // },
     {
       key: "status",
       header: "PO Status",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Draft", value: "draft" },
-        { label: "Pending Approval", value: "pending_approval" },
-        { label: "Approved", value: "approved" },
-        { label: "Rejected", value: "rejected" },
-        { label: "Invoice Uploaded", value: "invoice_uploaded" },
-        { label: "Short Closed", value: "short_closed" },
-        { label: "Closed", value: "closed" },
-        { label: "Cancelled", value: "cancelled" },
-      ],
-      render: (val, row) => <StatusPill status={row.status} />,
+      filterOptions: PO_LIST_STATUS_FILTER_OPTIONS.map((o) => ({
+        label: o.label,
+        value: o.value,
+      })),
+      render: (_val, row) => <StatusPill status={row.status} />,
     },
     {
       key: "followUp",
       header: "Follow-up",
-      sortable: true,
-      render: (val, row) => (
+      // sortable: true,
+      render: (_val, row) => (
         <FollowUpListingCell
-          poId={row.id}
-          onViewHistory={() => router.push(`/procurement/purchase-orders/${row.id}#follow-up-history`)}
+          followUpCount={row.followUpCount}
+          onViewHistory={() => openFollowUpModal(row)}
         />
       ),
     },
@@ -393,7 +531,7 @@ export default function PurchaseOrdersPageClient() {
       header: "",
       align: "right",
       sticky: true,
-      render: (val, row) => (
+      render: (_val, row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
@@ -412,7 +550,7 @@ export default function PurchaseOrdersPageClient() {
             >
               <Eye className="w-3.5 h-3.5" /> View
             </button>
-            {["draft", "rejected"].includes(row.status) && (
+            {(["draft", "rejected"] as POListStatus[]).includes(row.status) && (
               <button
                 type="button"
                 onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)}
@@ -421,68 +559,40 @@ export default function PurchaseOrdersPageClient() {
                 <Edit2 className="w-3.5 h-3.5" /> Edit
               </button>
             )}
-            {row.status === "draft" && (
+            {/* Approve / Reject — temporarily hidden from listing actions
+            {row.status === "pending_approval" && ( ... )}
+            */}
+            {(["approved", "invoice_uploaded", "partially_received", "received"] as POListStatus[]).includes(row.status) && (
               <button
                 type="button"
-                onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }}
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-              >
-                <Send className="w-3.5 h-3.5" /> Submit
-              </button>
-            )}
-            {row.status === "pending_approval" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-                >
-                  <XCircle className="w-3.5 h-3.5" /> Reject
-                </button>
-              </>
-            )}
-            {canUploadPOInvoice(row) && (
-              <button
-                type="button"
-                onClick={() => openUpload(row, row.status === "invoice_uploaded")}
+                onClick={() => openUploadModal(row)}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
               >
                 <Upload className="w-3.5 h-3.5" /> Upload Invoice
               </button>
             )}
-            {canAddPOFollowUp(row) && (
+            {!["draft", "cancelled"].includes(row.status) && (
               <button
                 type="button"
-                onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }}
+                onClick={() => openFollowUpModal(row)}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
               >
                 <MessageSquare className="w-3.5 h-3.5" /> Add Follow-up
               </button>
             )}
-            {canShortClosePO(row) && (
+            {(["approved", "invoice_uploaded", "partially_received", "received"] as POListStatus[]).includes(row.status) && (
               <button
                 type="button"
-                onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }}
+                onClick={() => router.push(`/procurement/purchase-orders/${row.id}?shortClose=1`)}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
               >
                 <Scissors className="w-3.5 h-3.5" /> Short Close PO
               </button>
             )}
-            {["approved", "invoice_uploaded"].includes(row.status) && (
+            {(["approved", "invoice_uploaded", "partially_received", "received"] as POListStatus[]).includes(row.status) && (
               <button
                 type="button"
-                onClick={() => {
-                  setActionConfirmTarget(row);
-                  setActionConfirmType("close");
-                  setActionConfirmOpen(true);
-                }}
+                onClick={() => openActionConfirm(row, "close")}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
               >
                 Close PO
@@ -493,11 +603,7 @@ export default function PurchaseOrdersPageClient() {
                 <DropdownMenuSeparator />
                 <button
                   type="button"
-                  onClick={() => {
-                    setActionConfirmTarget(row);
-                    setActionConfirmType("cancel");
-                    setActionConfirmOpen(true);
-                  }}
+                  onClick={() => openActionConfirm(row, "cancel")}
                   className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 transition-colors rounded-sm"
                 >
                   Cancel PO
@@ -523,88 +629,20 @@ export default function PurchaseOrdersPageClient() {
         setTab(id as TabId);
         router.replace(`/procurement/purchase-orders?tab=${id}`);
       }}
-      metrics={<POListingKpiRow kpis={poListingKpis} />}
+      metrics={tab === "po_return" ? undefined : <POListingKpiRow kpis={poListingKpis} />}
     >
       {tab === "po_return" ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-              <Input
-                value={returnSearch}
-                onChange={(e) => setReturnSearch(e.target.value)}
-                placeholder="Search returns…"
-                className="pl-8 h-8 text-xs bg-white"
-              />
-            </div>
-          </div>
-
-          <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  {["Return No.","PO Reference","Vendor","Return Date","Reason","Items","Amount","Status",""].map((h, i) => (
-                    <th key={i} className={cn("px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap", i === 8 && "w-10")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleReturns.map(rec => (
-                  <tr key={rec.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                    <td className="px-4 py-2"><span className="font-mono text-xs font-semibold text-brand-700">{rec.returnNumber}</span></td>
-                    <td className="px-4 py-2"><span className="font-mono text-xs text-muted-foreground">{rec.poNumber}</span></td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.vendor}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.returnDate}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.reason}</td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.items}</td>
-                    <td className="px-4 py-2 text-xs font-semibold">₹{rec.amount.toLocaleString("en-IN")}</td>
-                    <td className="px-4 py-2">
-                      {(() => {
-                        const cfg = RETURN_STATUS_CFG[rec.status] ?? RETURN_STATUS_CFG.pending;
-                        return (
-                          <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-                            {rec.status.charAt(0).toUpperCase() + rec.status.slice(1)}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
-                            <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 z-[200]">
-                          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                            Actions
-                          </DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <button
-                            type="button"
-                            className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> View
-                          </button>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-4 py-3 border-t border-border bg-muted/20">
-              <p className="text-[11px] text-muted-foreground">Showing <span className="font-medium text-foreground">{visibleReturns.length}</span> of <span className="font-medium text-foreground">{RETURNS_SEED.length}</span> returns</p>
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+          <PurchaseReturnListing />
+        </Suspense>
       ) : (
-        <div>
-          <MasterListing<PurchaseOrder>
+        <>
+          {listError ? <p className="text-xs text-red-600 mb-2">{listError}</p> : null}
+          <MasterListing<PurchaseOrderListItem>
             columns={columns}
-            data={paginated}
-            totalRecords={filtered.length}
+            data={records}
+            loading={loading}
+            totalRecords={totalRecords}
             page={page}
             pageSize={pageSize}
             onPageChange={setPage}
@@ -615,90 +653,104 @@ export default function PurchaseOrdersPageClient() {
             addLabel="Create PO"
             emptyMessage="purchase orders"
             searchPlaceholder="Search PO no., PR no., supplier…"
-            onExport={() => exportPOListingCsv(filtered)}
+            onExport={handleExport}
             currentFilters={filters}
             currentSort={sort}
           />
-        </div>
+        </>
       )}
 
-      {uploadTarget && (
+      {uploadOpen && modalPo && (
         <UploadVendorInvoiceDialog
           open={uploadOpen}
-          onClose={() => {
-            setUploadOpen(false);
-            setUploadTarget(null);
-          }}
-          po={uploadTarget}
-          replaceMode={uploadReplace}
-          onSaved={() => {
-            setUploadOpen(false);
-            handleInvoiceSaved();
+          onClose={closeModals}
+          po={modalPo}
+          replaceMode={modalInvoices.length > 0 || modalPo.status === "invoice_uploaded"}
+          existingInvoice={modalInvoices[0] ?? null}
+          submitting={uploadMutation.isPending || modalPoQuery.isFetching}
+          onSaved={(input) => {
+            uploadMutation.mutate(
+              {
+                purchaseOrderId: modalPo.id,
+                supplierInvoiceNo: input.supplierInvoiceNo,
+                supplierInvoiceDate: input.supplierInvoiceDate,
+                invoiceAmount: input.invoiceAmount,
+                gstAmount: input.gstAmount,
+                totalInvoiceAmount: input.totalInvoiceAmount,
+                remarks: input.remarks,
+                file: input.file,
+              },
+              {
+                onSuccess: () => {
+                  closeModals();
+                  setToast({ msg: "Vendor invoice saved.", type: "success" });
+                  void listQuery.refetch();
+                  void summaryQuery.refetch();
+                },
+                onError: (error) => {
+                  setToast({
+                    msg: getErrorMessage(error, "Failed to upload invoice."),
+                    type: "error",
+                  });
+                },
+              },
+            );
           }}
         />
       )}
 
-      <AddFollowUpModal
-        open={followUpOpen}
-        onOpenChange={setFollowUpOpen}
-        po={followUpTarget}
-        onSubmit={(input) => {
-          if (!followUpTarget) return;
-          const { updatedPo } = addPOFollowUp(followUpTarget, input);
-          updateOne(updatedPo);
-          setFollowUpTarget(updatedPo);
-          setFollowUpRev((r) => r + 1);
-          setToast({ msg: "Follow-up saved.", type: "success" });
-        }}
-      />
+      {followUpOpen && modalPo && (
+        <AddFollowUpModal
+          open={followUpOpen}
+          onOpenChange={(open) => {
+            if (followupMutation.isPending) return;
+            if (!open) closeModals();
+          }}
+          po={modalPo}
+          entries={modalFollowups}
+          submitting={followupMutation.isPending}
+          onSubmit={(input) => {
+            if (!modalPoId) return;
+            followupMutation.mutate(
+              {
+                purchaseOrderId: modalPoId,
+                followupDate: input.followUpAt,
+                followupType: input.followUpType,
+                nextFollowupDate: input.nextFollowUpAt,
+                spokeWith: input.spokeWith,
+                remarks: input.remarks,
+              },
+              {
+                onSuccess: () => {
+                  closeModals();
+                  setToast({ msg: "Follow-up saved.", type: "success" });
+                  void listQuery.refetch();
+                  void summaryQuery.refetch();
+                },
+                onError: (error) => {
+                  setToast({
+                    msg: getErrorMessage(error, "Failed to save follow-up."),
+                    type: "error",
+                  });
+                },
+              },
+            );
+          }}
+        />
+      )}
 
-      <ShortClosePOModal
-        open={shortCloseOpen}
-        onOpenChange={setShortCloseOpen}
-        po={shortCloseTarget}
-        onConfirm={(updated) => {
-          updateOne(updated);
-          setShortCloseTarget(null);
-          setToast({ msg: "PO short closed successfully.", type: "success" });
-        }}
-      />
-
-      <ProcurementApprovalModal
-        open={approvalOpen}
-        onOpenChange={setApprovalOpen}
-        documentNo={approvalTarget?.poNumber ?? ""}
-        documentLabel="Purchase Order"
-        action={approvalAction}
-        onConfirm={(remarks) => {
-          if (!approvalTarget) return;
-          updateOne(approvalAction === "approve" ? approvePO(approvalTarget) : rejectPO(approvalTarget, remarks));
-          setApprovalOpen(false);
-          setToast({ msg: approvalAction === "approve" ? "PO approved." : "PO rejected.", type: "success" });
-        }}
-      />
-
-      <POActionConfirmModal
-        open={actionConfirmOpen}
-        onOpenChange={(open) => {
-          setActionConfirmOpen(open);
-          if (!open) setActionConfirmTarget(null);
-        }}
-        po={actionConfirmTarget}
-        action={actionConfirmType}
-        onConfirm={() => {
-          if (!actionConfirmTarget) return;
-          const updated =
-            actionConfirmType === "close"
-              ? closePO(actionConfirmTarget)
-              : cancelPO(actionConfirmTarget);
-          updateOne(updated);
-          setActionConfirmTarget(null);
-          setToast({
-            msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
-            type: "success",
-          });
-        }}
-      />
+      {actionConfirmOpen && modalPo && (
+        <POActionConfirmModal
+          open={actionConfirmOpen}
+          onOpenChange={(open) => {
+            if (!open) closeModals();
+          }}
+          po={modalPo}
+          action={actionConfirmType}
+          submitting={actionSubmitting}
+          onConfirm={handleActionConfirm}
+        />
+      )}
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </ListingContainer>

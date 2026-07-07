@@ -10,6 +10,11 @@ export interface SalesOrderProduct {
   orderedQty: number;
   packedQty: number;
   pendingQty: number;
+  batchNumber?: string;
+  grnNo?: string;
+  mfgDate?: string;
+  expDate?: string;
+  lineId?: string;
 }
 
 export interface SalesOrderRecord {
@@ -25,12 +30,16 @@ export interface SalesOrderRecord {
   status: "Ready For Packing" | "Partially Packed" | "Packing In Progress";
   warehouse: string;
   products: SalesOrderProduct[];
-  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceDocumentNo?: string;
   sourceWarehouse?: string;
   targetWarehouse?: string;
   createdDate?: string;
   packingListNo?: string;
+  poNumber?: string;
+  supplierCode?: string;
+  initiatedBy?: string;
+  returnRemarks?: string;
 }
 
 export interface PackedProduct {
@@ -40,6 +49,7 @@ export interface PackedProduct {
   packedQty: number;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
+  lineId?: string;
 }
 
 export interface PackingNearExpirySchemeEntry {
@@ -81,12 +91,17 @@ export interface PackingRecord {
   warehouse: string;
   products: PackedProduct[];
   nearExpirySchemes?: PackingNearExpirySchemeEntry[];
-  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceDocumentNo?: string;
   sourceWarehouse?: string;
   targetWarehouse?: string;
   createdDate?: string;
   packingListNo?: string;
+  poNumber?: string;
+  supplierCode?: string;
+  initiatedBy?: string;
+  returnRemarks?: string;
+  orderAmount?: number;
 }
 
 export type PackingRecordUnion =

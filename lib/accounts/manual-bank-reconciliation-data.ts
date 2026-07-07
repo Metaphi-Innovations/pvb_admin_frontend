@@ -8,15 +8,38 @@ import {
   type BankStatementEntry,
 } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
 
-export type BookReconStatus = "pending" | "reconciled";
+export type BookReconStatus = "pending" | "reconciled" | "unmatched" | "difference";
 
-export interface SuggestedBankMatch {
-  statementEntryId: number;
-  bankProcessingDate: string;
-  narration: string;
-  referenceNo: string;
-  amount: number;
-  direction: "receipt" | "payment";
+export type ManualReconVoucherType =
+  | "Payment"
+  | "Receipt"
+  | "Contra"
+  | "Journal"
+  | "Fund Transfer";
+
+export type DifferenceReason =
+  | ""
+  | "date_difference"
+  | "bank_charges"
+  | "tds_difference"
+  | "gst_difference"
+  | "amount_difference"
+  | "direct_bank_entry"
+  | "other";
+
+export const DIFFERENCE_REASON_OPTIONS: { value: DifferenceReason; label: string }[] = [
+  { value: "", label: "Select reason" },
+  { value: "date_difference", label: "Date Difference" },
+  { value: "bank_charges", label: "Bank Charges" },
+  { value: "tds_difference", label: "TDS Difference" },
+  { value: "gst_difference", label: "GST Difference" },
+  { value: "amount_difference", label: "Amount Difference" },
+  { value: "direct_bank_entry", label: "Direct Bank Entry" },
+  { value: "other", label: "Other" },
+];
+
+export function differenceReasonLabel(reason: DifferenceReason): string {
+  return DIFFERENCE_REASON_OPTIONS.find((o) => o.value === reason)?.label ?? "";
 }
 
 export interface BookReconRecord {
@@ -27,7 +50,7 @@ export interface BookReconRecord {
   voucherNo: string;
   entryDate: string;
   partyName: string;
-  voucherTypeLabel: "Payment" | "Receipt";
+  voucherTypeLabel: ManualReconVoucherType;
   debitAmount: number;
   creditAmount: number;
   narration: string;
@@ -36,15 +59,67 @@ export interface BookReconRecord {
   reconciledBy: string;
   reconciledOn: string;
   remarks: string;
-  suggestedMatch: SuggestedBankMatch | null;
+  differenceReason: DifferenceReason;
   matchedStatementEntryId: number | null;
+  matchedStatementRef: string;
+  differenceAmount: number;
+  bankName: string;
 }
+
+export interface ManualReconGridRow extends BookReconRecord {
+  suggestedStatementMatch: SuggestedMatch | null;
+  /** Book voucher row vs unmatched bank-statement line shown in the same grid */
+  rowSource?: "book" | "statement";
+}
+
+export interface SuggestedMatch {
+  statementEntryId: number;
+  statementDate: string;
+  statementRef: string;
+  statementNarration: string;
+  statementAmount: number;
+  matchScore: number;
+  matchType: "exact" | "amount" | "reference" | "date_near";
+}
+
+export interface ManualReconSummary {
+  balanceAsPerBooks: number;
+  balanceAsPerBank: number;
+  difference: number;
+  pendingCount: number;
+  reconciledCount: number;
+  unmatchedCount: number;
+  differenceCount: number;
+  totalCount: number;
+}
+
+export interface ManualReconFilters {
+  coaLedgerId: number;
+  dateFrom?: string;
+  dateTo?: string;
+  status?: "all" | BookReconStatus;
+  search?: string;
+}
+
+export interface StatementPreviewRow {
+  id: number;
+  statementDate: string;
+  description: string;
+  referenceNo: string;
+  debitAmount: number;
+  creditAmount: number;
+  balance: number;
+}
+
+const RECORDS_KEY = "ds_manual_bank_recon_records_v1";
+const AUDIT_KEY = "ds_manual_bank_recon_audit_v1";
+const BANK_BALANCE_KEY = "ds_manual_bank_recon_balance_v1";
 
 export interface BookReconAuditEntry {
   id: number;
   rowKey: string;
   voucherNo: string;
-  action: "reconciled" | "bank_date_updated";
+  action: "reconciled" | "pending" | "bank_date_updated";
   entryDate: string;
   bankProcessingDate: string;
   reconciledBy: string;
@@ -56,29 +131,15 @@ export interface BookReconAuditEntry {
   };
 }
 
-export interface ManualReconGridRow extends BookReconRecord {
-  isSuggested: boolean;
+interface BankBalanceOverride {
+  bankMasterId: number;
+  balance: number;
+  updatedAt: string;
 }
 
-export interface ManualReconSummary {
-  balanceAsPerBooks: number;
-  balanceAsPerBank: number;
-  difference: number;
-  pendingCount: number;
-  reconciledCount: number;
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
-
-export interface ManualReconFilters {
-  coaLedgerId: number;
-  dateFrom?: string;
-  dateTo?: string;
-  status?: "all" | BookReconStatus;
-  partyName?: string;
-  voucherNo?: string;
-}
-
-const RECORDS_KEY = "ds_manual_bank_recon_records_v1";
-const AUDIT_KEY = "ds_manual_bank_recon_audit_v1";
 
 function getOrSeed<T>(key: string, seed: T[]): T[] {
   if (typeof window === "undefined") return seed;
@@ -99,6 +160,30 @@ function saveList<T>(key: string, list: T[]) {
   localStorage.setItem(key, JSON.stringify(list));
 }
 
+export function formatAccountsDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
+
+export function isoFromInputDate(value: string): string {
+  return value;
+}
+
+export function deriveReconStatus(
+  bankProcessingDate: string,
+  differenceAmount?: number,
+  matchedStatementEntryId?: number | null,
+): BookReconStatus {
+  if (bankProcessingDate?.trim()) {
+    if (differenceAmount && Math.abs(differenceAmount) > 0.01) return "difference";
+    return "reconciled";
+  }
+  if (matchedStatementEntryId) return "pending";
+  return "unmatched";
+}
+
 export function loadBookReconRecords(): BookReconRecord[] {
   return getOrSeed<BookReconRecord>(RECORDS_KEY, []);
 }
@@ -112,55 +197,40 @@ export function resolveBankMasterId(coaLedgerId: number): number | null {
   return match?.id ?? null;
 }
 
-export function resolveCoaLedgerId(bankMasterId: number): number | null {
-  const match = loadBankAccountsForReconciliation().find((a) => a.id === bankMasterId);
-  return match?.coaLedgerId ?? null;
-}
-
-export function voucherTypeForBookEntry(entry: BookEntryRow): "Payment" | "Receipt" {
-  if (entry.voucherType === "payment") return "Payment";
-  if (entry.voucherType === "receipt") return "Receipt";
-  return entry.receipt > 0 ? "Receipt" : "Payment";
-}
-
-function normalizeText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function tokenOverlapScore(a: string, b: string): number {
-  const tokensA = new Set(normalizeText(a).split(" ").filter((t) => t.length > 2));
-  const tokensB = new Set(normalizeText(b).split(" ").filter((t) => t.length > 2));
-  if (tokensA.size === 0 || tokensB.size === 0) return 0;
-  let overlap = 0;
-  for (const t of tokensA) {
-    if (tokensB.has(t)) overlap += 1;
+export function manualReconVoucherType(entry: BookEntryRow): ManualReconVoucherType {
+  if (entry.voucherTypeLabel === "Fund Transfer") return "Fund Transfer";
+  if (entry.voucherType === "contra") return "Contra";
+  if (
+    entry.voucherTypeLabel === "Journal Voucher" ||
+    entry.voucherTypeLabel === "Bank Charges" ||
+    entry.voucherTypeLabel === "Interest Credit" ||
+    entry.voucherType === "journal"
+  ) {
+    return "Journal";
   }
-  return overlap / Math.max(tokensA.size, tokensB.size);
+  if (entry.receipt > 0 || entry.voucherType === "receipt") return "Receipt";
+  return "Payment";
 }
 
-function isSimilarNarration(bookNarration: string, stmtNarration: string, referenceNo: string): boolean {
-  const book = normalizeText(bookNarration);
-  const stmt = normalizeText(`${stmtNarration} ${referenceNo}`);
-  if (!book || !stmt) return false;
-  if (book.includes(stmt) || stmt.includes(book)) return true;
-  if (referenceNo && book.includes(normalizeText(referenceNo))) return true;
-  return tokenOverlapScore(bookNarration, `${stmtNarration} ${referenceNo}`) >= 0.35;
+export function validateBankProcessingDate(
+  entryDate: string,
+  bankProcessingDate: string,
+): string | null {
+  if (!bankProcessingDate?.trim()) return null;
+  if (bankProcessingDate < entryDate) {
+    return "Bank processing date cannot be earlier than entry date.";
+  }
+  if (bankProcessingDate > todayIso()) {
+    return "Bank processing date cannot be a future date.";
+  }
+  return null;
 }
 
-function bookEntryDirection(entry: BookEntryRow): "receipt" | "payment" {
-  return entry.receipt > 0 ? "receipt" : "payment";
-}
-
-function statementEntryDirection(entry: BankStatementEntry): "receipt" | "payment" {
-  return entry.credit > 0 ? "receipt" : "payment";
-}
-
-function statementEntryAmount(entry: BankStatementEntry): number {
-  return entry.credit > 0 ? entry.credit : entry.debit;
-}
-
-function bookEntryAmount(entry: BookEntryRow): number {
-  return entry.receipt > 0 ? entry.receipt : entry.payment;
+export function validateBookAmounts(debitAmount: number, creditAmount: number): string | null {
+  if (debitAmount > 0 && creditAmount > 0) {
+    return "Debit and credit cannot both have values in the same row.";
+  }
+  return null;
 }
 
 export function getStatementEntriesForBank(bankMasterId: number): BankStatementEntry[] {
@@ -174,6 +244,18 @@ export function getStatementEntriesForBank(bankMasterId: number): BankStatementE
     .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
 }
 
+export function buildStatementPreviewRows(bankMasterId: number): StatementPreviewRow[] {
+  return getStatementEntriesForBank(bankMasterId).map((entry) => ({
+    id: entry.id,
+    statementDate: entry.transactionDate,
+    description: entry.narration,
+    referenceNo: entry.referenceNo,
+    debitAmount: entry.debit,
+    creditAmount: entry.credit,
+    balance: entry.balance,
+  }));
+}
+
 export function computeBankStatementClosingBalance(bankMasterId: number): number {
   const entries = getStatementEntriesForBank(bankMasterId);
   if (entries.length === 0) return 0;
@@ -183,58 +265,154 @@ export function computeBankStatementClosingBalance(bankMasterId: number): number
   return Math.max(0, net);
 }
 
-function getUsedStatementEntryIds(records: BookReconRecord[]): Set<number> {
-  return new Set(
-    records
-      .filter((r) => r.status === "reconciled" && r.matchedStatementEntryId != null)
-      .map((r) => r.matchedStatementEntryId as number),
-  );
+function loadBankBalanceOverrides(): BankBalanceOverride[] {
+  return getOrSeed<BankBalanceOverride>(BANK_BALANCE_KEY, []);
+}
+
+export function getBankStatementBalance(bankMasterId: number): number {
+  const override = loadBankBalanceOverrides().find((o) => o.bankMasterId === bankMasterId);
+  if (override) return override.balance;
+  return computeBankStatementClosingBalance(bankMasterId);
+}
+
+export function saveBankStatementBalance(bankMasterId: number, balance: number): void {
+  const list = loadBankBalanceOverrides().filter((o) => o.bankMasterId !== bankMasterId);
+  list.push({
+    bankMasterId,
+    balance,
+    updatedAt: new Date().toISOString(),
+  });
+  saveList(BANK_BALANCE_KEY, list);
+}
+
+function dateDiffDays(a: string, b: string): number {
+  const da = new Date(`${a}T12:00:00`);
+  const db = new Date(`${b}T12:00:00`);
+  return Math.abs(Math.round((da.getTime() - db.getTime()) / 86400000));
+}
+
+function normalizeRef(ref: string): string {
+  return ref.replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
 export function findSuggestedMatch(
-  bookEntry: BookEntryRow,
+  bookRow: { entryDate: string; debitAmount: number; creditAmount: number; voucherNo: string; partyName: string },
   statementEntries: BankStatementEntry[],
-  usedStatementIds: Set<number>,
-): SuggestedBankMatch | null {
-  const amount = bookEntryAmount(bookEntry);
-  if (amount <= 0) return null;
-  const direction = bookEntryDirection(bookEntry);
+  alreadyMatchedIds: Set<number>,
+): SuggestedMatch | null {
+  const bookAmount = bookRow.debitAmount || bookRow.creditAmount;
+  if (!bookAmount) return null;
+  const bookIsDebit = bookRow.debitAmount > 0;
+  const bookRef = normalizeRef(bookRow.voucherNo);
+  const bookParty = bookRow.partyName.toLowerCase();
 
-  for (const stmt of statementEntries) {
-    if (usedStatementIds.has(stmt.id)) continue;
-    const stmtAmount = statementEntryAmount(stmt);
-    if (Math.abs(stmtAmount - amount) > 0.01) continue;
-    if (statementEntryDirection(stmt) !== direction) continue;
-    if (!isSimilarNarration(bookEntry.particulars, stmt.narration, stmt.referenceNo)) continue;
+  let bestMatch: SuggestedMatch | null = null;
+  let bestScore = 0;
 
-    return {
-      statementEntryId: stmt.id,
-      bankProcessingDate: stmt.transactionDate,
-      narration: stmt.narration,
-      referenceNo: stmt.referenceNo,
-      amount: stmtAmount,
-      direction,
-    };
+  for (const entry of statementEntries) {
+    if (alreadyMatchedIds.has(entry.id)) continue;
+    const stmtAmount = bookIsDebit ? entry.credit : entry.debit;
+    if (!stmtAmount) continue;
+
+    let score = 0;
+    let matchType: SuggestedMatch["matchType"] = "date_near";
+
+    if (Math.abs(stmtAmount - bookAmount) < 0.01) {
+      score += 50;
+      matchType = "amount";
+    } else {
+      continue;
+    }
+
+    const stmtRef = normalizeRef(entry.referenceNo);
+    if (bookRef && stmtRef && (stmtRef.includes(bookRef) || bookRef.includes(stmtRef))) {
+      score += 30;
+      matchType = "reference";
+    }
+
+    const stmtNarration = entry.narration.toLowerCase();
+    if (bookParty && stmtNarration.includes(bookParty.split(" ")[0])) {
+      score += 10;
+    }
+
+    const daysDiff = dateDiffDays(bookRow.entryDate, entry.transactionDate);
+    if (daysDiff <= 7) {
+      score += Math.max(0, 20 - daysDiff * 2);
+      if (daysDiff === 0 && score >= 50) matchType = "exact";
+    } else {
+      score -= 10;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = {
+        statementEntryId: entry.id,
+        statementDate: entry.transactionDate,
+        statementRef: entry.referenceNo,
+        statementNarration: entry.narration,
+        statementAmount: stmtAmount,
+        matchScore: score,
+        matchType: score >= 80 ? "exact" : matchType,
+      };
+    }
   }
-  return null;
+
+  return bestScore >= 40 ? bestMatch : null;
+}
+
+function buildRecordFromStatementEntry(
+  entry: BankStatementEntry,
+  bankMasterId: number,
+  coaLedgerId: number,
+  bankName: string,
+  existing: BookReconRecord | undefined,
+): BookReconRecord {
+  const debitAmount = entry.debit || 0;
+  const creditAmount = entry.credit || 0;
+  const bankProcessingDate = existing?.bankProcessingDate ?? "";
+  const differenceAmount = existing?.differenceAmount ?? 0;
+  const matchedStatementEntryId = entry.id;
+  const status =
+    existing?.status ??
+    deriveReconStatus(bankProcessingDate, differenceAmount, matchedStatementEntryId);
+
+  return {
+    rowKey: `stmt-${entry.id}`,
+    ledgerId: coaLedgerId,
+    bankMasterId,
+    voucherId: 0,
+    voucherNo: entry.referenceNo || `STMT-${entry.id}`,
+    entryDate: entry.transactionDate,
+    partyName: entry.narration.slice(0, 80),
+    voucherTypeLabel: creditAmount > 0 ? "Receipt" : "Payment",
+    debitAmount,
+    creditAmount,
+    narration: entry.narration,
+    bankProcessingDate,
+    status,
+    reconciledBy: existing?.reconciledBy ?? "",
+    reconciledOn: existing?.reconciledOn ?? "",
+    remarks: existing?.remarks ?? "",
+    differenceReason: existing?.differenceReason ?? "",
+    matchedStatementEntryId,
+    matchedStatementRef: entry.referenceNo,
+    differenceAmount,
+    bankName,
+  };
 }
 
 function buildRecordFromBookEntry(
   entry: BookEntryRow,
   bankMasterId: number,
+  bankName: string,
   existing: BookReconRecord | undefined,
-  statementEntries: BankStatementEntry[],
-  usedStatementIds: Set<number>,
 ): BookReconRecord {
-  const suggested =
-    existing?.status === "reconciled"
-      ? null
-      : findSuggestedMatch(entry, statementEntries, usedStatementIds);
-
-  const bankProcessingDate =
-    existing?.status === "reconciled"
-      ? existing.bankProcessingDate
-      : existing?.bankProcessingDate || suggested?.bankProcessingDate || "";
+  const debitAmount = entry.receipt;
+  const creditAmount = entry.payment;
+  const bankProcessingDate = existing?.bankProcessingDate ?? "";
+  const differenceAmount = existing?.differenceAmount ?? 0;
+  const matchedStatementEntryId = existing?.matchedStatementEntryId ?? null;
+  const status = existing?.status ?? deriveReconStatus(bankProcessingDate, differenceAmount, matchedStatementEntryId);
 
   return {
     rowKey: entry.rowKey,
@@ -244,17 +422,20 @@ function buildRecordFromBookEntry(
     voucherNo: entry.voucherNo,
     entryDate: entry.date,
     partyName: entry.particulars,
-    voucherTypeLabel: voucherTypeForBookEntry(entry),
-    debitAmount: entry.receipt,
-    creditAmount: entry.payment,
+    voucherTypeLabel: manualReconVoucherType(entry),
+    debitAmount,
+    creditAmount,
     narration: entry.particulars,
     bankProcessingDate,
-    status: existing?.status ?? "pending",
+    status,
     reconciledBy: existing?.reconciledBy ?? "",
     reconciledOn: existing?.reconciledOn ?? "",
     remarks: existing?.remarks ?? "",
-    suggestedMatch: suggested,
-    matchedStatementEntryId: existing?.matchedStatementEntryId ?? null,
+    differenceReason: existing?.differenceReason ?? "",
+    matchedStatementEntryId,
+    matchedStatementRef: existing?.matchedStatementRef ?? "",
+    differenceAmount,
+    bankName,
   };
 }
 
@@ -262,47 +443,89 @@ export function buildManualReconGrid(
   bookEntries: BookEntryRow[],
   coaLedgerId: number,
   closingBookBalance: number,
+  bankMasterIdInput: number | null,
+  bankName: string,
 ): { rows: ManualReconGridRow[]; summary: ManualReconSummary } {
-  const bankMasterId = resolveBankMasterId(coaLedgerId);
+  const bankMasterId = bankMasterIdInput ?? resolveBankMasterId(coaLedgerId);
   const records = loadBookReconRecords();
   const statementEntries = bankMasterId ? getStatementEntriesForBank(bankMasterId) : [];
-  const usedStatementIds = getUsedStatementEntryIds(records);
 
   const scopedRecords = records.filter((r) => r.ledgerId === coaLedgerId);
   const recordMap = new Map(scopedRecords.map((r) => [r.rowKey, r]));
 
+  const alreadyMatchedIds = new Set<number>();
+  for (const rec of scopedRecords) {
+    if (rec.matchedStatementEntryId) alreadyMatchedIds.add(rec.matchedStatementEntryId);
+  }
+
   const syncedRecords = [...records.filter((r) => r.ledgerId !== coaLedgerId)];
   const rows: ManualReconGridRow[] = bookEntries.map((entry) => {
     const existing = recordMap.get(entry.rowKey);
-    const record = buildRecordFromBookEntry(
-      entry,
-      bankMasterId ?? 0,
-      existing,
-      statementEntries,
-      usedStatementIds,
-    );
+    const record = buildRecordFromBookEntry(entry, bankMasterId ?? 0, bankName, existing);
+    const amountError = validateBookAmounts(record.debitAmount, record.creditAmount);
+    if (amountError) {
+      record.remarks = amountError;
+    }
     const existingIdx = syncedRecords.findIndex((r) => r.rowKey === record.rowKey);
     if (existingIdx >= 0) syncedRecords[existingIdx] = record;
     else syncedRecords.push(record);
-    return {
-      ...record,
-      isSuggested: record.status === "pending" && !!record.suggestedMatch,
-    };
+
+    const suggestedStatementMatch =
+      record.status === "unmatched" && statementEntries.length > 0
+        ? findSuggestedMatch(record, statementEntries, alreadyMatchedIds)
+        : null;
+
+    if (suggestedStatementMatch) {
+      alreadyMatchedIds.add(suggestedStatementMatch.statementEntryId);
+    }
+
+    return { ...record, suggestedStatementMatch, rowSource: "book" as const };
   });
+
+  const bookMatchedStmtIds = new Set<number>();
+  for (const row of rows) {
+    if (row.matchedStatementEntryId) bookMatchedStmtIds.add(row.matchedStatementEntryId);
+  }
+  for (const rec of scopedRecords) {
+    if (rec.matchedStatementEntryId && !rec.rowKey.startsWith("stmt-")) {
+      bookMatchedStmtIds.add(rec.matchedStatementEntryId);
+    }
+  }
+
+  const statementRows: ManualReconGridRow[] = [];
+  for (const entry of statementEntries) {
+    if (bookMatchedStmtIds.has(entry.id)) continue;
+    const rowKey = `stmt-${entry.id}`;
+    const existing = recordMap.get(rowKey) ?? records.find((r) => r.rowKey === rowKey);
+    const record = buildRecordFromStatementEntry(entry, bankMasterId ?? 0, coaLedgerId, bankName, existing);
+    const existingIdx = syncedRecords.findIndex((r) => r.rowKey === record.rowKey);
+    if (existingIdx >= 0) syncedRecords[existingIdx] = record;
+    else syncedRecords.push(record);
+    statementRows.push({ ...record, suggestedStatementMatch: null, rowSource: "statement" });
+  }
   saveList(RECORDS_KEY, syncedRecords);
 
-  const pendingCount = rows.filter((r) => r.status === "pending").length;
-  const reconciledCount = rows.filter((r) => r.status === "reconciled").length;
-  const balanceAsPerBank = bankMasterId ? computeBankStatementClosingBalance(bankMasterId) : 0;
+  const allRows = [...rows, ...statementRows].sort((a, b) =>
+    a.entryDate.localeCompare(b.entryDate) || a.rowKey.localeCompare(b.rowKey),
+  );
+
+  const pendingCount = allRows.filter((r) => r.status === "pending").length;
+  const reconciledCount = allRows.filter((r) => r.status === "reconciled").length;
+  const unmatchedCount = allRows.filter((r) => r.status === "unmatched").length;
+  const differenceCount = allRows.filter((r) => r.status === "difference").length;
+  const balanceAsPerBank = bankMasterId ? getBankStatementBalance(bankMasterId) : 0;
 
   return {
-    rows,
+    rows: allRows,
     summary: {
       balanceAsPerBooks: closingBookBalance,
       balanceAsPerBank,
       difference: closingBookBalance - balanceAsPerBank,
       pendingCount,
       reconciledCount,
+      unmatchedCount,
+      differenceCount,
+      totalCount: allRows.length,
     },
   };
 }
@@ -315,101 +538,14 @@ export function filterManualReconRows(
     if (filters.dateFrom && row.entryDate < filters.dateFrom) return false;
     if (filters.dateTo && row.entryDate > filters.dateTo) return false;
     if (filters.status && filters.status !== "all" && row.status !== filters.status) return false;
-    if (filters.partyName?.trim()) {
-      const q = filters.partyName.trim().toLowerCase();
-      if (!row.partyName.toLowerCase().includes(q)) return false;
-    }
-    if (filters.voucherNo?.trim()) {
-      const q = filters.voucherNo.trim().toLowerCase();
-      if (!row.voucherNo.toLowerCase().includes(q)) return false;
+    if (filters.search?.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      const amountStr = `${row.debitAmount} ${row.creditAmount}`;
+      const hay = `${row.partyName} ${row.voucherNo} ${row.voucherTypeLabel} ${row.narration} ${row.matchedStatementRef} ${amountStr}`.toLowerCase();
+      if (!hay.includes(q)) return false;
     }
     return true;
   });
-}
-
-export function updatePendingBankProcessingDate(
-  rowKey: string,
-  bankProcessingDate: string,
-): { ok: true; record: BookReconRecord } | { ok: false; error: string } {
-  const records = loadBookReconRecords();
-  const idx = records.findIndex((r) => r.rowKey === rowKey);
-  if (idx < 0) return { ok: false, error: "Record not found." };
-
-  const record = records[idx];
-  if (record.status === "reconciled") {
-    return { ok: false, error: "Bank processing date cannot be edited after reconciliation." };
-  }
-  if (!bankProcessingDate) {
-    return { ok: false, error: "Bank processing date is required." };
-  }
-  if (bankProcessingDate < record.entryDate) {
-    return { ok: false, error: "Bank processing date cannot be earlier than entry date." };
-  }
-
-  const previousValues = { bankProcessingDate: record.bankProcessingDate };
-  records[idx] = { ...record, bankProcessingDate };
-  saveList(RECORDS_KEY, records);
-
-  appendAudit({
-    rowKey,
-    voucherNo: record.voucherNo,
-    action: "bank_date_updated",
-    entryDate: record.entryDate,
-    bankProcessingDate,
-    remarks: record.remarks,
-    previousValues,
-  });
-
-  return { ok: true, record: records[idx] };
-}
-
-export function markBookEntryReconciled(input: {
-  rowKey: string;
-  bankProcessingDate: string;
-  remarks?: string;
-  matchedStatementEntryId?: number | null;
-}): { ok: true; record: BookReconRecord } | { ok: false; error: string } {
-  const records = loadBookReconRecords();
-  const idx = records.findIndex((r) => r.rowKey === input.rowKey);
-  if (idx < 0) return { ok: false, error: "Record not found." };
-
-  const record = records[idx];
-  if (record.status === "reconciled") {
-    return { ok: false, error: "This book entry is already reconciled." };
-  }
-  if (!input.bankProcessingDate?.trim()) {
-    return { ok: false, error: "Bank processing date is required." };
-  }
-  if (input.bankProcessingDate < record.entryDate) {
-    return { ok: false, error: "Bank processing date cannot be earlier than entry date." };
-  }
-
-  const now = new Date().toISOString();
-  const updated: BookReconRecord = {
-    ...record,
-    bankProcessingDate: input.bankProcessingDate,
-    status: "reconciled",
-    reconciledBy: ACCOUNTS_CURRENT_USER,
-    reconciledOn: now,
-    remarks: input.remarks?.trim() ?? record.remarks,
-    matchedStatementEntryId:
-      input.matchedStatementEntryId ?? record.suggestedMatch?.statementEntryId ?? null,
-    suggestedMatch: null,
-  };
-
-  records[idx] = updated;
-  saveList(RECORDS_KEY, records);
-
-  appendAudit({
-    rowKey: record.rowKey,
-    voucherNo: record.voucherNo,
-    action: "reconciled",
-    entryDate: record.entryDate,
-    bankProcessingDate: input.bankProcessingDate,
-    remarks: updated.remarks,
-  });
-
-  return { ok: true, record: updated };
 }
 
 function appendAudit(entry: Omit<BookReconAuditEntry, "id" | "reconciledBy" | "reconciledOn">) {
@@ -423,29 +559,164 @@ function appendAudit(entry: Omit<BookReconAuditEntry, "id" | "reconciledBy" | "r
   saveList(AUDIT_KEY, audit);
 }
 
-export function ensureBookReconRecord(
-  entry: BookEntryRow,
-  coaLedgerId: number,
-): BookReconRecord {
+export function saveManualReconciliation(input: {
+  coaLedgerId: number;
+  closingBookBalance: number;
+  rowUpdates: {
+    rowKey: string;
+    bankProcessingDate: string;
+    matchedStatementEntryId?: number | null;
+    matchedStatementRef?: string;
+    differenceReason?: DifferenceReason;
+    differenceAmount?: number;
+    remarks?: string;
+  }[];
+  bankStatementBalance?: number;
+}): { ok: true; summary: ManualReconSummary } | { ok: false; error: string } {
   const records = loadBookReconRecords();
-  const existing = records.find((r) => r.rowKey === entry.rowKey);
-  if (existing) return existing;
+  const bankMasterId = resolveBankMasterId(input.coaLedgerId);
+  if (!bankMasterId) {
+    return { ok: false, error: "Bank account is required." };
+  }
 
-  const bankMasterId = resolveBankMasterId(coaLedgerId) ?? 0;
-  const statementEntries = bankMasterId ? getStatementEntriesForBank(bankMasterId) : [];
-  const usedStatementIds = getUsedStatementEntryIds(records);
-  const record = buildRecordFromBookEntry(
-    entry,
-    bankMasterId,
-    undefined,
-    statementEntries,
-    usedStatementIds,
-  );
-  records.push(record);
-  saveList(RECORDS_KEY, records);
-  return record;
+  const updateMap = new Map(input.rowUpdates.map((r) => [r.rowKey, r]));
+
+  for (const upd of input.rowUpdates) {
+    const record = records.find((r) => r.rowKey === upd.rowKey);
+    if (!record) continue;
+    if (upd.bankProcessingDate) {
+      const error = validateBankProcessingDate(record.entryDate, upd.bankProcessingDate);
+      if (error) return { ok: false, error: `${record.voucherNo}: ${error}` };
+    }
+  }
+
+  const now = new Date().toISOString();
+  const updated = records.map((record) => {
+    if (record.ledgerId !== input.coaLedgerId) return record;
+    const upd = updateMap.get(record.rowKey);
+    if (!upd) return record;
+
+    const bankProcessingDate = upd.bankProcessingDate ?? record.bankProcessingDate;
+    const differenceAmount = upd.differenceAmount ?? record.differenceAmount ?? 0;
+    const matchedStatementEntryId = upd.matchedStatementEntryId ?? record.matchedStatementEntryId;
+    const status = deriveReconStatus(bankProcessingDate, differenceAmount, matchedStatementEntryId);
+    const wasReconciled = record.status === "reconciled";
+    const isReconciled = status === "reconciled";
+
+    if (bankProcessingDate !== record.bankProcessingDate) {
+      appendAudit({
+        rowKey: record.rowKey,
+        voucherNo: record.voucherNo,
+        action: isReconciled ? "reconciled" : "pending",
+        entryDate: record.entryDate,
+        bankProcessingDate,
+        remarks: upd.remarks ?? record.remarks,
+      });
+    } else if (!wasReconciled && isReconciled) {
+      appendAudit({
+        rowKey: record.rowKey,
+        voucherNo: record.voucherNo,
+        action: "reconciled",
+        entryDate: record.entryDate,
+        bankProcessingDate,
+        remarks: upd.remarks ?? record.remarks,
+      });
+    }
+
+    return {
+      ...record,
+      bankProcessingDate,
+      status,
+      reconciledBy: isReconciled ? ACCOUNTS_CURRENT_USER : "",
+      reconciledOn: isReconciled ? now : "",
+      matchedStatementEntryId: upd.matchedStatementEntryId ?? record.matchedStatementEntryId,
+      matchedStatementRef: upd.matchedStatementRef ?? record.matchedStatementRef,
+      differenceReason: upd.differenceReason ?? record.differenceReason,
+      differenceAmount,
+      remarks: upd.remarks ?? record.remarks,
+    };
+  });
+
+  saveList(RECORDS_KEY, updated);
+
+  if (input.bankStatementBalance != null && !Number.isNaN(input.bankStatementBalance)) {
+    saveBankStatementBalance(bankMasterId, input.bankStatementBalance);
+  }
+
+  const scoped = updated.filter((r) => r.ledgerId === input.coaLedgerId);
+  const balanceAsPerBank = getBankStatementBalance(bankMasterId);
+
+  return {
+    ok: true,
+    summary: {
+      balanceAsPerBooks: input.closingBookBalance,
+      balanceAsPerBank,
+      difference: input.closingBookBalance - balanceAsPerBank,
+      pendingCount: scoped.filter((r) => r.status === "pending").length,
+      reconciledCount: scoped.filter((r) => r.status === "reconciled").length,
+      unmatchedCount: scoped.filter((r) => r.status === "unmatched").length,
+      differenceCount: scoped.filter((r) => r.status === "difference").length,
+      totalCount: scoped.length,
+    },
+  };
 }
 
 export function getAuditForRow(rowKey: string): BookReconAuditEntry[] {
   return loadBookReconAudit().filter((a) => a.rowKey === rowKey);
+}
+
+export function reconcileSingleRow(input: {
+  rowKey: string;
+  bankProcessingDate: string;
+  matchedStatementEntryId?: number | null;
+  matchedStatementRef?: string;
+  differenceReason?: DifferenceReason;
+  differenceAmount?: number;
+  remarks?: string;
+}): { ok: true; record: BookReconRecord } | { ok: false; error: string } {
+  const records = loadBookReconRecords();
+  const record = records.find((r) => r.rowKey === input.rowKey);
+  if (!record) return { ok: false, error: "Record not found." };
+
+  const error = validateBankProcessingDate(record.entryDate, input.bankProcessingDate);
+  if (error) return { ok: false, error };
+
+  const differenceAmount = input.differenceAmount ?? 0;
+  const status = deriveReconStatus(input.bankProcessingDate, differenceAmount, input.matchedStatementEntryId);
+  const now = new Date().toISOString();
+
+  appendAudit({
+    rowKey: record.rowKey,
+    voucherNo: record.voucherNo,
+    action: status === "reconciled" ? "reconciled" : "bank_date_updated",
+    entryDate: record.entryDate,
+    bankProcessingDate: input.bankProcessingDate,
+    remarks: input.remarks ?? "",
+  });
+
+  const idx = records.findIndex((r) => r.rowKey === input.rowKey);
+  records[idx] = {
+    ...record,
+    bankProcessingDate: input.bankProcessingDate,
+    status,
+    reconciledBy: status === "reconciled" ? ACCOUNTS_CURRENT_USER : "",
+    reconciledOn: status === "reconciled" ? now : "",
+    matchedStatementEntryId: input.matchedStatementEntryId ?? record.matchedStatementEntryId,
+    matchedStatementRef: input.matchedStatementRef ?? record.matchedStatementRef,
+    differenceReason: input.differenceReason ?? record.differenceReason,
+    differenceAmount,
+    remarks: input.remarks ?? record.remarks,
+  };
+
+  saveList(RECORDS_KEY, records);
+  return { ok: true, record: records[idx] };
+}
+
+/** Legacy compat alias */
+export function markBookEntryReconciled(input: {
+  rowKey: string;
+  bankProcessingDate: string;
+  remarks?: string;
+}): { ok: true; record: BookReconRecord } | { ok: false; error: string } {
+  return reconcileSingleRow(input);
 }

@@ -11,6 +11,12 @@ import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
 import type { SezSupplyType } from "@/lib/masters/gst-compliance";
 import type { PaymentMode } from "../expenses/expense-data";
 import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
+import {
+	calcAdditionalExpensesTotals,
+	deriveLegacyChargeFields,
+	resolveInvoiceAdditionalExpenses,
+	type InvoiceAdditionalExpense,
+} from "./invoice-additional-expenses";
 import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
@@ -21,6 +27,13 @@ import {
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
 import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
+import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
+import { nextInvoiceDocumentNo } from "@/lib/accounts/invoice-type";
+import {
+  mergeSalesInvoiceSeed,
+  buildSalesInvoiceSeed,
+  SALES_INVOICE_SEED_VERSION,
+} from "@/lib/accounts/sales-invoice-seed";
 
 export const SCHEME_SETTLEMENT_SETTLED_LABEL = "Settled";
 
@@ -79,6 +92,7 @@ export interface InvoiceLineItem {
 	id: string;
 	productId: number | null;
 	productName: string;
+	productCode?: string;
 	description: string;
 	hsn?: string;
 	qty: number;
@@ -89,6 +103,15 @@ export interface InvoiceLineItem {
 	amount: number;
 	creditedQty?: number;
 	creditedAmount?: number;
+	/** Product Discount Scheme — carried from sales order / dispatch */
+	schemeApplied?: "Yes" | "No";
+	schemeCode?: string;
+	schemeName?: string;
+	schemeDiscountPercent?: number;
+	schemeDiscountAmount?: number;
+	schemeDiscountType?: "Percentage" | "Rupees";
+	dealerPrice?: number;
+	finalRate?: number;
 }
 
 export interface InvoiceAttachment {
@@ -120,6 +143,7 @@ export interface InvoiceActivityEntry {
 export interface InvoiceRecord {
 	id: number;
 	invoiceNo: string;
+	invoiceType?: InvoiceDocumentType;
 	invoiceDate: string;
 	dueDate: string;
 	referenceNo: string;
@@ -176,6 +200,7 @@ export interface InvoiceRecord {
 	internalRemarks?: string;
 	shippingCharges?: number;
 	otherCharges?: number;
+	additionalExpenses?: InvoiceAdditionalExpense[];
 	roundOff?: number;
 	adjustment?: number;
 	tdsTcs?: number;
@@ -187,7 +212,8 @@ export interface InvoiceRecord {
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 }
 
-const STORAGE_KEY = "ds_accounts_invoices_v1";
+const STORAGE_KEY = "ds_accounts_invoices_v2";
+const SEED_VERSION_KEY = "ds_accounts_invoices_seed_version";
 
 /** Column labels — GST-inclusive totals must be explicit across Accounts UI. */
 export const INVOICE_AMOUNT_LABELS = {
@@ -289,14 +315,30 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 			creditedAmount: l.creditedAmount ?? 0,
 		}),
 	);
-	const totals = calculateInvoiceTotals(lines);
+	const lineTotals = calculateInvoiceTotals(lines);
+	const additionalExpenses = resolveInvoiceAdditionalExpenses(
+		rec.additionalExpenses,
+		rec.shippingCharges,
+		rec.otherCharges,
+	);
+	const expenseTotals = calcAdditionalExpensesTotals(additionalExpenses);
+	const legacyCharges = deriveLegacyChargeFields(additionalExpenses);
+
+	const subtotal = Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
+	const discountTotal = lineTotals.discountTotal;
+	const taxAmount =
+		Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
 	const chargeDelta =
-		(rec.shippingCharges ?? 0) +
-		(rec.otherCharges ?? 0) +
-		(rec.roundOff ?? 0) -
-		(rec.adjustment ?? 0) +
-		(rec.tdsTcs ?? 0);
-	const grandTotal = Math.round((totals.grandTotal + chargeDelta) * 100) / 100;
+		(rec.roundOff ?? 0) - (rec.adjustment ?? 0) + (rec.tdsTcs ?? 0);
+	const grandTotal = Math.round(
+		(lineTotals.subtotal -
+			lineTotals.discountTotal +
+			lineTotals.taxAmount +
+			expenseTotals.taxableAmount +
+			expenseTotals.gstAmount +
+			chargeDelta) *
+			100,
+	) / 100;
 	const amountReceived = rec.collections.reduce((s, c) => s + c.amount, 0);
 	const balanceAmount = Math.max(
 		0,
@@ -319,7 +361,12 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 	return {
 		...rec,
 		lineItems: lines,
-		...totals,
+		additionalExpenses,
+		shippingCharges: legacyCharges.shippingCharges,
+		otherCharges: legacyCharges.otherCharges,
+		subtotal,
+		discountTotal,
+		taxAmount,
 		grandTotal,
 		amountReceived: Math.round(amountReceived * 100) / 100,
 		balanceAmount,
@@ -411,12 +458,12 @@ export function customerToInvoiceFields(c: Customer) {
 	};
 }
 
-function nextInvoiceNo(records: InvoiceRecord[]): string {
-	const max = records.reduce((m, r) => {
-		const n = parseInt(r.invoiceNo.replace(/\D/g, ""), 10);
-		return Number.isFinite(n) ? Math.max(m, n) : m;
-	}, 0);
-	return `INV-${String(max + 1).padStart(4, "0")}`;
+function nextInvoiceNo(
+	records: InvoiceRecord[],
+	type: InvoiceDocumentType,
+	invoiceDate: string,
+): string {
+	return nextInvoiceDocumentNo(records, type, invoiceDate);
 }
 
 function nextCollectionId(records: InvoiceRecord[]): number {
@@ -439,133 +486,27 @@ function pushActivity(
 	];
 }
 
-const SEED: InvoiceRecord[] = [
-	{
-		id: 1,
-		invoiceNo: "INV-0001",
-		invoiceDate: "2026-05-28",
-		dueDate: "2026-06-27",
-		referenceNo: "PO-4421",
-		remarks: "Q1 supply invoice",
-		customerId: 1,
-		customerName: "Agro Solutions Pvt Ltd",
-		customerMobile: "+91 9876543210",
-		customerEmail: "billing@agrosolutions.in",
-		customerGst: "27AABCU9603R1ZM",
-		billingAddress: "Pune, Maharashtra",
-		lineItems: [
-			recalculateLineItem({
-				id: "l1",
-				productId: 1,
-				productName: "NPK Blend",
-				description: "19:19:19 grade",
-				qty: 100,
-				unit: "KG",
-				unitPrice: 850,
-				discountPct: 5,
-				taxPct: 5,
-				amount: 0,
-			}),
-		],
-		subtotal: 0,
-		discountTotal: 0,
-		taxAmount: 0,
-		grandTotal: 0,
-		amountReceived: 0,
-		balanceAmount: 0,
-		invoiceStatus: "sent",
-		paymentStatus: "partially_paid",
-		collections: [
-			{
-				id: 1,
-				paymentDate: "2026-06-01",
-				amount: 40000,
-				paymentMode: "UPI",
-				referenceNo: "UPI-8821",
-				remarks: "Advance collection",
-				createdBy: "Admin",
-				createdAt: "2026-06-01T10:00:00.000Z",
-			},
-		],
-		attachments: [],
-		activity: [
-			{
-				at: "2026-05-28T09:00:00.000Z",
-				action: "created",
-				by: "Admin",
-				detail: "Invoice created as sent",
-			},
-		],
-		createdBy: "Admin",
-		updatedBy: "Admin",
-		createdAt: "2026-05-28T09:00:00.000Z",
-		updatedAt: "2026-06-01T10:00:00.000Z",
-	},
-	{
-		id: 2,
-		invoiceNo: "INV-0002",
-		invoiceDate: "2026-06-02",
-		dueDate: "2026-07-02",
-		referenceNo: "",
-		remarks: "",
-		customerId: 2,
-		customerName: "Kisan FPO Cooperative",
-		customerMobile: "+91 9123456780",
-		customerEmail: "accounts@kisanfpo.org",
-		customerGst: "",
-		billingAddress: "Nagpur, Maharashtra",
-		lineItems: [
-			recalculateLineItem({
-				id: "l2",
-				productId: null,
-				productName: "Consulting Services",
-				description: "Field advisory — June",
-				qty: 1,
-				unit: "Job",
-				unitPrice: 25000,
-				discountPct: 0,
-				taxPct: 18,
-				amount: 0,
-			}),
-		],
-		subtotal: 0,
-		discountTotal: 0,
-		taxAmount: 0,
-		grandTotal: 0,
-		amountReceived: 0,
-		balanceAmount: 0,
-		invoiceStatus: "draft",
-		paymentStatus: "unpaid",
-		collections: [],
-		attachments: [],
-		activity: [
-			{
-				at: "2026-06-02T08:00:00.000Z",
-				action: "created",
-				by: "Admin",
-				detail: "Saved as draft",
-			},
-		],
-		createdBy: "Admin",
-		updatedBy: "Admin",
-		createdAt: "2026-06-02T08:00:00.000Z",
-		updatedAt: "2026-06-02T08:00:00.000Z",
-	},
-];
+const SEED: InvoiceRecord[] = buildSalesInvoiceSeed();
 
 export function loadInvoices(): InvoiceRecord[] {
 	if (typeof window === "undefined") return SEED.map(normalizeInvoice);
 	try {
+		const version = localStorage.getItem(SEED_VERSION_KEY);
 		const raw = localStorage.getItem(STORAGE_KEY);
-		const list: InvoiceRecord[] = raw ? JSON.parse(raw) : SEED;
+		let list: InvoiceRecord[] =
+			version === String(SALES_INVOICE_SEED_VERSION) && raw
+				? JSON.parse(raw)
+				: mergeSalesInvoiceSeed(SEED);
 		const normalized = mergeNearExpiryDemoSalesInvoice(list.map(normalizeInvoice));
-		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
-		if (changed || !raw) {
+		const merged = mergeSalesInvoiceSeed(normalized);
+		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(merged);
+		if (changed || version !== String(SALES_INVOICE_SEED_VERSION) || !raw) {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
+			localStorage.setItem(SEED_VERSION_KEY, String(SALES_INVOICE_SEED_VERSION));
 		}
 		return linked;
 	} catch {
-		return SEED.map(normalizeInvoice);
+		return mergeSalesInvoiceSeed(SEED).map(normalizeInvoice);
 	}
 }
 
@@ -717,12 +658,14 @@ export type InvoiceFormInput = {
 	internalRemarks?: string;
 	shippingCharges?: number;
 	otherCharges?: number;
+	additionalExpenses?: InvoiceAdditionalExpense[];
 	roundOff?: number;
 	adjustment?: number;
 	tdsTcs?: number;
 	lineItems: InvoiceLineItem[];
 	attachments: InvoiceAttachment[];
 	invoiceStatus: InvoiceStatus;
+	invoiceType?: InvoiceDocumentType;
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 };
 
@@ -737,7 +680,8 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	}
 	const all = loadInvoices();
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
-	const invoiceNo = nextInvoiceNo(all);
+	const invoiceType = input.invoiceType ?? "sales";
+	const invoiceNo = nextInvoiceNo(all, invoiceType, input.invoiceDate);
 	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
 		? input.nearExpirySchemeSettlements.map((entry) => ({
 				...entry,
@@ -749,6 +693,7 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	const base: InvoiceRecord = {
 		id,
 		invoiceNo,
+		invoiceType,
 		...input,
 		nearExpirySchemeSettlements,
 		subtotal: 0,

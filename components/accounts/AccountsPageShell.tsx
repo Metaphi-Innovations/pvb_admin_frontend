@@ -5,18 +5,32 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BreadcrumbItem } from "@/lib/accounts/accounts-nav";
+import {
+  ACCOUNTS_BREADCRUMB_CLASS,
+  ACCOUNTS_BREADCRUMB_CURRENT_CLASS,
+  ACCOUNTS_PAGE_SUBTITLE_CLASS,
+  ACCOUNTS_PAGE_TITLE_CLASS,
+} from "@/lib/accounts/accounts-typography";
+import {
+  AccountsListingFilterCard,
+  AccountsListingTableCard,
+} from "@/components/accounts/AccountsListingHeader";
 
 export interface AccountsPageShellProps {
   breadcrumbs: BreadcrumbItem[];
   title: string;
   description: string;
   actions?: React.ReactNode;
+  /** Search / filter / export toolbar — aligned top-right in title row */
+  toolbar?: React.ReactNode;
   filters?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
   /** split = full-height table/workbench; standard = form or detail card */
   layout?: "standard" | "split";
   className?: string;
+  /** Hide description line in compact split layout */
+  hideDescription?: boolean;
 }
 
 export function AccountsPageShell({
@@ -24,33 +38,45 @@ export function AccountsPageShell({
   title,
   description,
   actions,
+  toolbar,
   filters,
   footer,
   children,
   layout = "standard",
   className,
+  hideDescription,
 }: AccountsPageShellProps) {
-  const isConstrainedHeight = layout === "split" || className?.includes("h-full");
+  const isSplit = layout === "split";
+  const isConstrainedHeight = isSplit || className?.includes("h-full");
+  const showDescription = !hideDescription && !(isSplit && description.length > 80);
 
   return (
     <div
       className={cn(
-        "flex flex-col w-full gap-3",
-        isConstrainedHeight && "h-full min-h-0 overflow-hidden",
+        "flex flex-col w-full",
+        isSplit ? "h-full min-h-0 overflow-hidden gap-3" : "gap-3",
+        isConstrainedHeight && !isSplit && "h-full min-h-0 overflow-hidden",
         className,
       )}
     >
-      <nav aria-label="Breadcrumb" className="flex-shrink-0">
-        <ol className="flex items-center flex-wrap gap-1 text-xs text-muted-foreground">
+      <nav aria-label="Breadcrumb" className="flex-shrink-0 leading-none">
+        <ol className={cn(ACCOUNTS_BREADCRUMB_CLASS, isSplit && "gap-0.5")}>
           {breadcrumbs.map((crumb, i) => (
-            <li key={`${crumb.label}-${i}`} className="flex items-center gap-1">
-              {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
+            <li key={`${crumb.label}-${i}`} className="flex items-center gap-0.5">
+              {i > 0 && (
+                <ChevronRight
+                  className={cn(
+                    "text-slate-400",
+                    isSplit ? "w-2.5 h-2.5" : "w-3 h-3",
+                  )}
+                />
+              )}
               {crumb.href && i < breadcrumbs.length - 1 ? (
                 <Link href={crumb.href} className="hover:text-brand-700 transition-colors">
                   {crumb.label}
                 </Link>
               ) : (
-                <span className={i === breadcrumbs.length - 1 ? "text-foreground font-medium" : ""}>
+                <span className={i === breadcrumbs.length - 1 ? ACCOUNTS_BREADCRUMB_CURRENT_CLASS : ""}>
                   {crumb.label}
                 </span>
               )}
@@ -59,35 +85,57 @@ export function AccountsPageShell({
         </ol>
       </nav>
 
-      <div className="flex-shrink-0 flex items-start justify-between gap-4">
+      <div
+        className={cn(
+          "flex-shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 min-h-0",
+          !isSplit && "items-start",
+        )}
+      >
         <div className="min-w-0 flex-1">
-          <h1 className="text-page-title">{title}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+          <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, isSplit && "leading-tight")}>
+            {title}
+          </h1>
+          {showDescription && (
+            <p
+              className={cn(
+                ACCOUNTS_PAGE_SUBTITLE_CLASS,
+                isSplit && "leading-snug line-clamp-1",
+              )}
+            >
+              {description}
+            </p>
+          )}
         </div>
-        {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
+        {(toolbar || actions) && (
+          <div
+            className={cn(
+              "flex items-center flex-shrink-0 flex-wrap justify-end",
+              isSplit ? "gap-1.5" : "gap-2",
+            )}
+          >
+            {toolbar}
+            {actions}
+          </div>
+        )}
       </div>
 
-      {filters && (
-        <div className="flex-shrink-0 rounded-lg border border-border/60 bg-white px-4 py-2.5 shadow-sm">
-          {filters}
-        </div>
-      )}
+      {filters && <AccountsListingFilterCard>{filters}</AccountsListingFilterCard>}
 
       <div
         className={cn(
-          "flex flex-col w-full bg-white shadow-sm border border-border/60 rounded-lg",
-          isConstrainedHeight && "flex-1 min-h-0 overflow-hidden",
+          "flex flex-col w-full flex-1 min-h-0",
+          isConstrainedHeight && "overflow-hidden",
         )}
       >
-        {footer ? (
-          <>
-            <div className={cn("flex flex-col", isConstrainedHeight && "flex-1 min-h-0 overflow-hidden")}>
-              {children}
-            </div>
-            <div className="flex-shrink-0 border-t border-border/60">{footer}</div>
-          </>
-        ) : (
+        {isSplit ? (
           children
+        ) : (
+          <AccountsListingTableCard>
+            {children}
+            {footer ? (
+              <div className="flex-shrink-0 border-t border-border/60">{footer}</div>
+            ) : null}
+          </AccountsListingTableCard>
         )}
       </div>
     </div>

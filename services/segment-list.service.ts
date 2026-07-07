@@ -46,6 +46,21 @@ export interface SegmentExportParams {
   apiFilters?: Record<string, unknown>;
 }
 
+export interface SegmentFilterOption {
+  label: string;
+  value: string;
+}
+
+export type SegmentFilterField =
+  | "segment_name"
+  | "description"
+  | "segment_code"
+  | "is_active"
+  | "created_by_user__username"
+  | "created_by_user__first_name"
+  | "updated_by_user__username"
+  | "updated_by_user__first_name";
+
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
   segmentName: "segmentName",
   segmentCode: "segmentCode",
@@ -118,6 +133,36 @@ function mapDetail(raw: Record<string, unknown>): SegmentListRecord {
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
   };
+}
+
+function mapFilterOptions(
+  data: unknown[],
+  fieldName: SegmentFilterField,
+): SegmentFilterOption[] {
+  const options: SegmentFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -216,6 +261,24 @@ export const SegmentListService = {
     if (!body.success) {
       throw new Error(asString(body.message) || "Failed to update segment status.");
     }
+  },
+
+  async getFilterDropdown(
+    fieldName: SegmentFilterField,
+    signal?: AbortSignal,
+  ): Promise<SegmentFilterOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.FILTER_DROPDOWN, {
+      params: { field_name: fieldName },
+      signal,
+    });
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async export(params: SegmentExportParams): Promise<void> {

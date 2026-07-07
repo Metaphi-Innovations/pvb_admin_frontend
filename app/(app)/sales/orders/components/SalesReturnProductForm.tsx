@@ -5,6 +5,7 @@ import { AlertCircle, Boxes, ChevronDown, Layers3, Package } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { DispatchProduct, DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
@@ -13,6 +14,7 @@ import { formatCaseLooseQuantity, formatReturnAmount, PIECES_PER_CASE } from "..
 import { calcReturnLineAmount } from "../sales-return-utils";
 
 export interface BatchReturnInput {
+  quantityType?: "Case" | "Piece";
   returnCaseQty: string;
   returnLooseQty: string;
 }
@@ -65,6 +67,7 @@ interface SalesReturnProductFormProps {
   returnEntries: Record<string, BatchReturnInput>;
   returnRemarks: string;
   summary: SalesReturnSummary;
+  onQuantityTypeChange: (batchKey: string, type: "Case" | "Piece") => void;
   onCaseQtyChange: (batchKey: string, value: string) => void;
   onLooseQtyChange: (batchKey: string, value: string) => void;
   onRemarksChange: (value: string) => void;
@@ -180,9 +183,10 @@ function resolveDispatchProductMeta(dispatch: DispatchRecord) {
 
     if (matchedCandidate) usedCandidates.add(matchedCandidate.candidateKey);
 
+    const safePackingNumbers = dispatch.packingNumbers || [];
     return {
       dispatchProduct,
-      packingNumber: matchedCandidate?.packingNumber ?? dispatch.packingNumbers[Math.min(index, Math.max(dispatch.packingNumbers.length - 1, 0))] ?? "",
+      packingNumber: matchedCandidate?.packingNumber ?? (safePackingNumbers.length > 0 ? safePackingNumbers[Math.min(index, Math.max(safePackingNumbers.length - 1, 0))] : dispatch.dispatchNumber),
       packingDate: matchedCandidate?.packingDate,
       packingProduct: matchedCandidate?.product,
     };
@@ -232,11 +236,11 @@ function buildBatchRows(dispatchProduct: DispatchProduct, packingNumber: string,
 }
 
 export function buildSalesReturnPackingGroups(dispatch: DispatchRecord): SalesReturnPackingGroup[] {
-  if (!dispatch.packingNumbers?.length) return [];
   const packingGroups = new Map<string, SalesReturnPackingGroup>();
+  const fallbackPackingNumber = (dispatch.packingNumbers && dispatch.packingNumbers.length > 0) ? dispatch.packingNumbers[0] : dispatch.dispatchNumber;
 
   resolveDispatchProductMeta(dispatch).forEach(({ dispatchProduct, packingNumber, packingDate, packingProduct }, rowIndex) => {
-    const resolvedPackingNumber = packingNumber || dispatch.packingNumbers[0];
+    const resolvedPackingNumber = packingNumber || fallbackPackingNumber;
     if (!resolvedPackingNumber) return;
     const packingKey = resolvedPackingNumber;
     const productKey = `${packingKey}::${dispatchProduct.sku}`;
@@ -363,6 +367,7 @@ export function SalesReturnProductForm({
   returnEntries,
   returnRemarks,
   summary,
+  onQuantityTypeChange,
   onCaseQtyChange,
   onLooseQtyChange,
   onRemarksChange,
@@ -539,9 +544,10 @@ export function SalesReturnProductForm({
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Batch No.</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Expiry</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Dispatched Qty</th>
-                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Return Case Qty</th>
-                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Return Loose Qty</th>
-                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Total Return Pieces</th>
+                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Type</th>
+                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cases</th>
+                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pieces</th>
+                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Total Unit Qty</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Amount</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</th>
                                         </tr>
@@ -550,6 +556,18 @@ export function SalesReturnProductForm({
                                         {product.batches.map((batch) => {
                                           const computation = getBatchComputation(batch, returnEntries[batch.key]);
                                           const statusTone = computation.errors.length > 0 ? "text-red-600" : computation.totalPieces > 0 ? "text-emerald-700" : "text-muted-foreground";
+
+                                          const entry = returnEntries[batch.key] || {};
+                                          const qtyType = entry.quantityType || "Piece";
+                                          const isCaseType = qtyType === "Case";
+
+                                          const dispatchedQty = batch.dispatchedQtyCases;
+                                          const dispatchedCases = Math.floor(dispatchedQty);
+                                          const dispatchedPieces = Math.round((dispatchedQty - dispatchedCases) * PIECES_PER_CASE);
+
+                                          const dispatchDisplay = dispatchedPieces > 0
+                                            ? `${dispatchedCases} Case${dispatchedCases !== 1 ? "s" : ""} ${dispatchedPieces} Piece${dispatchedPieces !== 1 ? "s" : ""}`
+                                            : `${dispatchedCases} Case${dispatchedCases !== 1 ? "s" : ""}`;
 
                                           return (
                                             <tr key={batch.key} className="border-b border-border/70 align-top">
@@ -560,14 +578,30 @@ export function SalesReturnProductForm({
                                                 </div>
                                               </td>
                                               <td className="px-3 py-3 text-xs text-muted-foreground">{formatExpiryLabel(batch.expiry)}</td>
-                                              <td className="px-3 py-3 text-center text-xs font-semibold text-foreground">{batch.dispatchedQtyCases} Cases</td>
-                                              <td className="px-3 py-3">
-                                                <Input value={returnEntries[batch.key]?.returnCaseQty ?? ""} onChange={(event) => onCaseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs" placeholder="0" />
+                                              <td className="px-3 py-3 text-center text-xs font-semibold text-foreground">{dispatchDisplay}</td>
+                                              <td className="px-2 py-2 w-[90px]">
+                                                <Select
+                                                  value={qtyType}
+                                                  onValueChange={(val) => onQuantityTypeChange(batch.key, val as "Case" | "Piece")}
+                                                >
+                                                  <SelectTrigger className="h-8 text-xs rounded border-border bg-white w-full px-2">
+                                                    <SelectValue placeholder="Type" />
+                                                  </SelectTrigger>
+                                                  <SelectContent className="min-w-[100px]">
+                                                    <SelectItem value="Case">Case</SelectItem>
+                                                    <SelectItem value="Piece">Piece</SelectItem>
+                                                  </SelectContent>
+                                                </Select>
                                               </td>
-                                              <td className="px-3 py-3">
-                                                <Input value={returnEntries[batch.key]?.returnLooseQty ?? ""} onChange={(event) => onLooseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs" placeholder="0" />
+                                              <td className="px-2 py-2 w-20">
+                                                <Input value={entry.returnCaseQty || ""} onChange={(event) => onCaseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full" placeholder="0" />
                                               </td>
-                                              <td className="px-3 py-3 text-center text-xs font-semibold text-foreground">{computation.totalPieces}</td>
+                                              <td className="px-2 py-2 w-20">
+                                                <Input disabled={isCaseType} value={isCaseType ? "" : (entry.returnLooseQty || "")} onChange={(event) => onLooseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />
+                                              </td>
+                                              <td className="px-3 py-3 w-24">
+                                                <Input disabled value={computation.totalPieces || ""} className="h-8 text-xs w-full font-semibold bg-muted text-muted-foreground text-center" placeholder="0" />
+                                              </td>
                                               <td className="px-3 py-3 text-right text-xs font-semibold text-foreground">{formatReturnAmount(computation.amount)}</td>
                                               <td className="px-3 py-3">
                                                 <div className={cn("space-y-1 text-[11px] font-medium", statusTone)}>

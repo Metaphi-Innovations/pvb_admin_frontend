@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
 import {
@@ -147,13 +148,11 @@ export function VoucherQuickAddLedgerSheet({
 
           <div className="space-y-1.5">
             <Label className="text-xs">Opening Balance</Label>
-            <Input
+            <AccountsMoneyInput
+              compact={false}
               className="h-9 text-sm rounded-lg"
-              type="number"
-              min={0}
-              step="0.01"
               value={form.openingBalance}
-              onChange={(e) => setField({ openingBalance: e.target.value })}
+              onChange={(v) => setField({ openingBalance: String(v) })}
               placeholder="0.00"
             />
           </div>
@@ -171,7 +170,7 @@ export function VoucherQuickAddLedgerSheet({
                     name="quick-add-balance-type"
                     checked={form.balanceType === bt}
                     onChange={() => setField({ balanceType: bt })}
-                    className="w-3.5 h-3.5 accent-brand-600"
+                    className="w-4 h-4 accent-brand-600"
                   />
                   <span className={cn(form.balanceType === bt && "font-medium text-foreground")}>
                     {bt}
@@ -199,14 +198,14 @@ export function VoucherQuickAddLedgerSheet({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
+            className="h-9 text-[13px] font-medium"
             onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={!form.ledgerName.trim() || !form.parentGroupId}
           >

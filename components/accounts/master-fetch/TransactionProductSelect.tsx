@@ -52,7 +52,7 @@ export function TransactionProductSelect({
                 placeholder="Search SKU, name, HSN…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-7 text-xs pl-7"
+                className="h-9 text-[13px] font-medium pl-7"
               />
             </div>
           </div>

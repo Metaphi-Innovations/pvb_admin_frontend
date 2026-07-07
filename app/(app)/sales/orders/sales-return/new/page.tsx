@@ -27,6 +27,7 @@ import {
   getSalesOrderNo,
 } from "../../sales-return-utils";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+import { processSalesReturnOnSave } from "@/lib/accounts/sales-return-credit-bridge";
 
 function sanitizeNumericInput(value: string): string {
   return value.replace(/\D/g, "");
@@ -117,6 +118,10 @@ export default function NewSalesReturnPage() {
     }));
   };
 
+  const handleQuantityTypeChange = (batchKey: string, type: "Case" | "Piece") => {
+    updateEntry(batchKey, { quantityType: type, returnLooseQty: type === "Case" ? "" : (returnEntries[batchKey]?.returnLooseQty || "") });
+  };
+
   const handleCaseQtyChange = (batchKey: string, value: string) => {
     updateEntry(batchKey, { returnCaseQty: sanitizeNumericInput(value) });
   };
@@ -136,6 +141,7 @@ export default function NewSalesReturnPage() {
         return {
           ...current,
           [batchKey]: {
+            ...existing,
             returnCaseQty: String(Math.floor(totalPieces / PIECES_PER_CASE)),
             returnLooseQty: String(totalPieces % PIECES_PER_CASE),
           },
@@ -181,7 +187,7 @@ export default function NewSalesReturnPage() {
       remarks: returnRemarks,
     };
 
-    saveSalesReturnRecords([...existingReturns, newReturn]);
+    const cnResult = processSalesReturnOnSave({ ...newReturn, status: "pending_approval" });
 
     const allDispatches = getDispatchRecords();
     const dispatchIndex = allDispatches.findIndex((item) => item.id === dispatch.id);
@@ -190,7 +196,12 @@ export default function NewSalesReturnPage() {
       saveDispatchRecords(allDispatches);
     }
 
-    setToast({ msg: `Sales return ${returnNumber} saved successfully.`, type: "success" });
+    setToast({
+      msg: cnResult.creditNoteNo
+        ? `${cnResult.message}`
+        : `Sales return ${returnNumber} saved successfully.`,
+      type: "success",
+    });
     setTimeout(() => router.push(listHref), 800);
   };
 
@@ -256,6 +267,7 @@ export default function NewSalesReturnPage() {
               returnEntries={returnEntries}
               returnRemarks={returnRemarks}
               summary={summary}
+              onQuantityTypeChange={handleQuantityTypeChange}
               onCaseQtyChange={handleCaseQtyChange}
               onLooseQtyChange={handleLooseQtyChange}
               onRemarksChange={setReturnRemarks}
