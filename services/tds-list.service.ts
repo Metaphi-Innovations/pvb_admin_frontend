@@ -1,7 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 
-export interface SegmentListParams {
+export interface TdsListParams {
   page: number;
   pageSize: number;
   search: string;
@@ -11,11 +11,13 @@ export interface SegmentListParams {
   signal?: AbortSignal;
 }
 
-export interface SegmentListRecord {
+export interface TdsListRecord {
   id: number;
-  segmentUuid: string;
-  segmentName: string;
-  segmentCode: string;
+  tdsUuid: string;
+  sectionCode: string;
+  sectionName: string;
+  tdsRate: string;
+  applicableTo: string;
   description: string;
   status: "active" | "inactive";
   createdAt: string;
@@ -24,43 +26,48 @@ export interface SegmentListRecord {
   updatedBy: string;
 }
 
-export interface SegmentListResult {
-  items: SegmentListRecord[];
+export interface TdsListResult {
+  items: TdsListRecord[];
   total: number;
 }
 
-export interface SegmentDropdownItem {
-  id: string;
-  segmentName: string;
-  segmentCode: string;
-}
-
-export interface SegmentCreatePayload {
-  segment_name: string;
+export interface TdsCreatePayload {
+  tds_rate: number;
+  tds_section_name?: string | null;
+  applicable_to?: string | null;
   description?: string | null;
 }
 
-export interface SegmentUpdatePayload {
-  segment_name?: string;
+export interface TdsUpdatePayload {
+  tds_rate?: number;
+  tds_section_name?: string | null;
+  applicable_to?: string | null;
   description?: string | null;
 }
 
-export interface SegmentExportParams {
+export interface TdsExportParams {
   search: string;
   status: "all" | "active" | "inactive";
   ordering?: string;
   apiFilters?: Record<string, unknown>;
 }
 
-export interface SegmentFilterOption {
+export interface TdsFilterOption {
   label: string;
   value: string;
 }
 
-export type SegmentFilterField =
-  | "segment_name"
+export interface TdsDropdownItem {
+  tdsUuid: string;
+  sectionCode: string;
+}
+
+export type TdsFilterField =
+  | "tds_code"
+  | "tds_rate"
+  | "tds_section_name"
+  | "applicable_to"
   | "description"
-  | "segment_code"
   | "is_active"
   | "created_by_user__username"
   | "created_by_user__first_name"
@@ -68,8 +75,11 @@ export type SegmentFilterField =
   | "updated_by_user__first_name";
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
-  segmentName: "segmentName",
-  segmentCode: "segmentCode",
+  sectionCode: "tdsCode",
+  sectionName: "tdsSectionName",
+  tdsRate: "tdsRate",
+  applicableTo: "applicableTo",
+  description: "description",
   status: "isActive",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
@@ -93,10 +103,12 @@ function toStatus(value: unknown): "active" | "inactive" {
   return value === true ? "active" : "inactive";
 }
 
-function toDisplayName(user: unknown): string {
+function toDisplayName(user: unknown, fallbackName?: unknown): string {
+  if (typeof fallbackName === "string" && fallbackName.trim()) {
+    return fallbackName.trim();
+  }
   if (!user || typeof user !== "object") return "";
   const record = user as Record<string, unknown>;
-  // Prefer username so list display matches API audit filters (exact username match).
   const username = asString(record.username).trim();
   if (username) return username;
   const first = asString(record.first_name).trim();
@@ -109,13 +121,23 @@ function formatDate(value: unknown): string {
   return raw ? raw.slice(0, 10) : "";
 }
 
-function mapItem(raw: Record<string, unknown>, fallbackIndex: number): SegmentListRecord {
+function formatRate(value: unknown): string {
+  const raw = asString(value).trim();
+  if (!raw) return "";
+  const num = Number(raw);
+  if (Number.isFinite(num)) return String(num);
+  return raw;
+}
+
+function mapItem(raw: Record<string, unknown>, fallbackIndex: number): TdsListRecord {
   const srNo = Number(raw.sr_no);
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
-    segmentUuid: asString(raw.segment_id),
-    segmentName: asString(raw.segment_name),
-    segmentCode: asString(raw.segment_code),
+    tdsUuid: asString(raw.tds_id),
+    sectionCode: asString(raw.tds_code),
+    sectionName: asString(raw.tds_section_name),
+    tdsRate: formatRate(raw.tds_rate),
+    applicableTo: asString(raw.applicable_to),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
     createdAt: formatDate(raw.created_at),
@@ -125,27 +147,29 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): SegmentLi
   };
 }
 
-function mapDetail(raw: Record<string, unknown>): SegmentListRecord {
+function mapDetail(raw: Record<string, unknown>): TdsListRecord {
   const srNo = Number(raw.sr_no);
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
-    segmentUuid: asString(raw.segment_id),
-    segmentName: asString(raw.segment_name),
-    segmentCode: asString(raw.segment_code),
+    tdsUuid: asString(raw.tds_id),
+    sectionCode: asString(raw.tds_code),
+    sectionName: asString(raw.tds_section_name),
+    tdsRate: formatRate(raw.tds_rate),
+    applicableTo: asString(raw.applicable_to),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
     createdAt: formatDate(raw.created_at),
     updatedAt: formatDate(raw.updated_at),
-    createdBy: toDisplayName(raw.created_by_user),
-    updatedBy: toDisplayName(raw.updated_by_user),
+    createdBy: toDisplayName(raw.created_by_user, raw.createdByName),
+    updatedBy: toDisplayName(raw.updated_by_user, raw.updatedByName),
   };
 }
 
 function mapFilterOptions(
   data: unknown[],
-  fieldName: SegmentFilterField,
-): SegmentFilterOption[] {
-  const options: SegmentFilterOption[] = [];
+  fieldName: TdsFilterField,
+): TdsFilterOption[] {
+  const options: TdsFilterOption[] = [];
   const seen = new Set<string>();
 
   for (const row of data) {
@@ -162,6 +186,13 @@ function mapFilterOptions(
         label: active ? "Active" : "Inactive",
         value: active ? "active" : "inactive",
       });
+      continue;
+    }
+
+    if (fieldName === "tds_rate") {
+      const num = Number(value);
+      const label = Number.isFinite(num) ? `${num}%` : value;
+      options.push({ label, value });
       continue;
     }
 
@@ -184,12 +215,12 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   );
 }
 
-export const SegmentListService = {
-  async list(params: SegmentListParams): Promise<SegmentListResult> {
+export const TdsListService = {
+  async list(params: TdsListParams): Promise<TdsListResult> {
     const ordering = encodeURIComponent(params.ordering ?? "");
 
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.SEGMENT.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+      `${API_ENDPOINTS.MASTER.TDS.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
       { filters: params.apiFilters ?? {} },
       { signal: params.signal },
     );
@@ -211,8 +242,8 @@ export const SegmentListService = {
     return { items, total };
   },
 
-  async view(id: string): Promise<SegmentListRecord> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.VIEW(id));
+  async view(id: string): Promise<TdsListRecord> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.TDS.VIEW(id));
     const payload = response.data as Record<string, unknown>;
     const data = payload.data;
 
@@ -223,57 +254,40 @@ export const SegmentListService = {
     return mapDetail(data as Record<string, unknown>);
   },
 
-  async previewNumber(): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.PREVIEW_NUMBER);
-    const payload = response.data as Record<string, unknown>;
-    const data = payload.data as Record<string, unknown> | undefined;
-    return asString(data?.segment_code);
-  },
-
-  async create(payload: SegmentCreatePayload): Promise<void> {
-    const response = await axiosInstance.post(API_ENDPOINTS.MASTER.SEGMENT.CREATE, {
-      segment_name: payload.segment_name.trim(),
-      description: payload.description?.trim() || null,
-    });
+  async create(payload: TdsCreatePayload): Promise<void> {
+    const response = await axiosInstance.post(API_ENDPOINTS.MASTER.TDS.CREATE, payload);
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
-      throw new Error(asString(body.message) || "Failed to create segment.");
+      throw new Error(asString(body.message) || "Failed to create TDS record.");
     }
   },
 
-  async update(id: string, payload: SegmentUpdatePayload): Promise<void> {
-    const response = await axiosInstance.put(API_ENDPOINTS.MASTER.SEGMENT.UPDATE(id), {
-      ...(payload.segment_name !== undefined
-        ? { segment_name: payload.segment_name.trim() }
-        : {}),
-      ...(payload.description !== undefined
-        ? { description: payload.description?.trim() || null }
-        : {}),
-    });
+  async update(id: string, payload: TdsUpdatePayload): Promise<void> {
+    const response = await axiosInstance.put(API_ENDPOINTS.MASTER.TDS.UPDATE(id), payload);
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
-      throw new Error(asString(body.message) || "Failed to update segment.");
+      throw new Error(asString(body.message) || "Failed to update TDS record.");
     }
   },
 
   async updateStatus(id: string, isActive: boolean): Promise<void> {
-    const response = await axiosInstance.patch(API_ENDPOINTS.MASTER.SEGMENT.STATUS_UPDATE(id), {
+    const response = await axiosInstance.patch(API_ENDPOINTS.MASTER.TDS.STATUS_UPDATE(id), {
       is_active: isActive,
     });
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
-      throw new Error(asString(body.message) || "Failed to update segment status.");
+      throw new Error(asString(body.message) || "Failed to update TDS status.");
     }
   },
 
   async getFilterDropdown(
-    fieldName: SegmentFilterField,
+    fieldName: TdsFilterField,
     signal?: AbortSignal,
-  ): Promise<SegmentFilterOption[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.FILTER_DROPDOWN, {
+  ): Promise<TdsFilterOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.TDS.FILTER_DROPDOWN, {
       params: { field_name: fieldName },
       signal,
     });
@@ -287,28 +301,8 @@ export const SegmentListService = {
     return mapFilterOptions(data, fieldName);
   },
 
-  async export(params: SegmentExportParams): Promise<void> {
-    const ordering = encodeURIComponent(params.ordering ?? "");
-
-    const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.SEGMENT.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
-      { filters: params.apiFilters ?? {} },
-      { responseType: "blob" },
-    );
-
-    const blob = response.data as Blob;
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `segments_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  },
-
-  async dropdown(): Promise<SegmentDropdownItem[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.DROPDOWN);
+  async dropdown(signal?: AbortSignal): Promise<TdsDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.TDS.DROPDOWN, { signal });
     const payload = response.data as Record<string, unknown>;
     const data = payload.data;
 
@@ -317,13 +311,45 @@ export const SegmentListService = {
     }
 
     return data.map((row) => {
-      const item = (row ?? {}) as Record<string, unknown>;
+      const record = (row ?? {}) as Record<string, unknown>;
       return {
-        id: asString(item.id ?? item.segment_id),
-        segmentName: asString(item.segment_name ?? item.segmentName),
-        segmentCode: asString(item.segment_code),
+        tdsUuid: asString(record.tds_id),
+        sectionCode: asString(record.tds_code),
       };
     });
+  },
+
+  async export(params: TdsExportParams): Promise<void> {
+    const ordering = encodeURIComponent(params.ordering ?? "");
+
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.MASTER.TDS.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+      { filters: params.apiFilters ?? {} },
+      { responseType: "blob" },
+    );
+
+    const contentType = String(response.headers["content-type"] ?? "");
+    if (contentType.includes("application/json")) {
+      const text = await (response.data as Blob).text();
+      let message = "No records found to export.";
+      try {
+        const json = JSON.parse(text) as Record<string, unknown>;
+        message = String(json.message ?? message);
+      } catch {
+        // keep default message
+      }
+      throw new Error(message);
+    }
+
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `tds_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 
   extractErrorMessage,

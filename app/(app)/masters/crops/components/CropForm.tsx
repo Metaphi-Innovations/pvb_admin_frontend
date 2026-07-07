@@ -1,12 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { type CropStatus, FIELD_TYPES, SEASONS, getCategoryOptions } from "../crop-data";
+import { useCategoryDropdown } from "@/hooks/masters/use-categories";
+import { toCategoryNameSelectOptions } from "@/services/category-list.service";
+import { type CropStatus, FIELD_TYPES, SEASONS } from "../crop-data";
 
 export interface CropFormValues {
   cropName: string;
@@ -37,6 +39,8 @@ export function CropForm({
   onClearError: (key: string) => void;
   readOnly?: boolean;
 }) {
+  const categoryQuery = useCategoryDropdown();
+
   const set = <K extends keyof CropFormValues>(key: K, value: CropFormValues[K]) => {
     onChange({ ...form, [key]: value });
     onClearError(key);
@@ -44,13 +48,10 @@ export function CropForm({
 
   const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
 
-  const categoryOptions = React.useMemo(() => {
-    const base = getCategoryOptions();
-    if (form.categoryName && !base.some((o) => o.value === form.categoryName)) {
-      return [{ label: form.categoryName, value: form.categoryName }, ...base];
-    }
-    return base;
-  }, [form.categoryName]);
+  const categoryOptions = useMemo(
+    () => toCategoryNameSelectOptions(categoryQuery.data ?? [], form.categoryName),
+    [categoryQuery.data, form.categoryName],
+  );
   const fieldTypeOptions = FIELD_TYPES.map((ft) => ({ label: ft, value: ft }));
   const seasonOptions = SEASONS.map((s) => ({ label: s, value: s }));
 
@@ -100,8 +101,8 @@ export function CropForm({
             options={categoryOptions}
             value={form.categoryName}
             onChange={(v) => set("categoryName", v)}
-            placeholder="Select Category"
-            disabled={readOnly}
+            placeholder={categoryQuery.isFetching ? "Loading categories..." : "Select Category"}
+            disabled={readOnly || categoryQuery.isFetching}
             error={!!errors.categoryName}
             className="h-8 text-xs rounded-lg"
           />

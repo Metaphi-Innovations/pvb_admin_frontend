@@ -1,7 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 
-export interface SegmentListParams {
+export interface FormulationListParams {
   page: number;
   pageSize: number;
   search: string;
@@ -11,11 +11,11 @@ export interface SegmentListParams {
   signal?: AbortSignal;
 }
 
-export interface SegmentListRecord {
+export interface FormulationListRecord {
   id: number;
-  segmentUuid: string;
-  segmentName: string;
-  segmentCode: string;
+  formulationUuid: string;
+  formulationName: string;
+  formulationCode: string;
   description: string;
   status: "active" | "inactive";
   createdAt: string;
@@ -24,43 +24,37 @@ export interface SegmentListRecord {
   updatedBy: string;
 }
 
-export interface SegmentListResult {
-  items: SegmentListRecord[];
+export interface FormulationListResult {
+  items: FormulationListRecord[];
   total: number;
 }
 
-export interface SegmentDropdownItem {
-  id: string;
-  segmentName: string;
-  segmentCode: string;
-}
-
-export interface SegmentCreatePayload {
-  segment_name: string;
+export interface FormulationCreatePayload {
+  formulation_name: string;
   description?: string | null;
 }
 
-export interface SegmentUpdatePayload {
-  segment_name?: string;
+export interface FormulationUpdatePayload {
+  formulation_name?: string;
   description?: string | null;
 }
 
-export interface SegmentExportParams {
+export interface FormulationExportParams {
   search: string;
   status: "all" | "active" | "inactive";
   ordering?: string;
   apiFilters?: Record<string, unknown>;
 }
 
-export interface SegmentFilterOption {
+export interface FormulationFilterOption {
   label: string;
   value: string;
 }
 
-export type SegmentFilterField =
-  | "segment_name"
+export type FormulationFilterField =
+  | "formulation_code"
+  | "formulation_name"
   | "description"
-  | "segment_code"
   | "is_active"
   | "created_by_user__username"
   | "created_by_user__first_name"
@@ -68,8 +62,9 @@ export type SegmentFilterField =
   | "updated_by_user__first_name";
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
-  segmentName: "segmentName",
-  segmentCode: "segmentCode",
+  formulationName: "formulationName",
+  formulationCode: "formulationCode",
+  description: "description",
   status: "isActive",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
@@ -96,7 +91,6 @@ function toStatus(value: unknown): "active" | "inactive" {
 function toDisplayName(user: unknown): string {
   if (!user || typeof user !== "object") return "";
   const record = user as Record<string, unknown>;
-  // Prefer username so list display matches API audit filters (exact username match).
   const username = asString(record.username).trim();
   if (username) return username;
   const first = asString(record.first_name).trim();
@@ -109,13 +103,13 @@ function formatDate(value: unknown): string {
   return raw ? raw.slice(0, 10) : "";
 }
 
-function mapItem(raw: Record<string, unknown>, fallbackIndex: number): SegmentListRecord {
+function mapItem(raw: Record<string, unknown>, fallbackIndex: number): FormulationListRecord {
   const srNo = Number(raw.sr_no);
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
-    segmentUuid: asString(raw.segment_id),
-    segmentName: asString(raw.segment_name),
-    segmentCode: asString(raw.segment_code),
+    formulationUuid: asString(raw.formulation_id),
+    formulationName: asString(raw.formulation_name),
+    formulationCode: asString(raw.formulation_code),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
     createdAt: formatDate(raw.created_at),
@@ -125,13 +119,13 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): SegmentLi
   };
 }
 
-function mapDetail(raw: Record<string, unknown>): SegmentListRecord {
+function mapDetail(raw: Record<string, unknown>): FormulationListRecord {
   const srNo = Number(raw.sr_no);
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
-    segmentUuid: asString(raw.segment_id),
-    segmentName: asString(raw.segment_name),
-    segmentCode: asString(raw.segment_code),
+    formulationUuid: asString(raw.formulation_id),
+    formulationName: asString(raw.formulation_name),
+    formulationCode: asString(raw.formulation_code),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
     createdAt: formatDate(raw.created_at),
@@ -143,9 +137,9 @@ function mapDetail(raw: Record<string, unknown>): SegmentListRecord {
 
 function mapFilterOptions(
   data: unknown[],
-  fieldName: SegmentFilterField,
-): SegmentFilterOption[] {
-  const options: SegmentFilterOption[] = [];
+  fieldName: FormulationFilterField,
+): FormulationFilterOption[] {
+  const options: FormulationFilterOption[] = [];
   const seen = new Set<string>();
 
   for (const row of data) {
@@ -171,25 +165,12 @@ function mapFilterOptions(
   return options.sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function extractErrorMessage(error: unknown, fallback: string): string {
-  const err = error as {
-    response?: { data?: { message?: string; error?: string } };
-    message?: string;
-  };
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.error ||
-    err?.message ||
-    fallback
-  );
-}
-
-export const SegmentListService = {
-  async list(params: SegmentListParams): Promise<SegmentListResult> {
+export const FormulationListService = {
+  async list(params: FormulationListParams): Promise<FormulationListResult> {
     const ordering = encodeURIComponent(params.ordering ?? "");
 
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.SEGMENT.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+      `${API_ENDPOINTS.MASTER.FORMULATION.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
       { filters: params.apiFilters ?? {} },
       { signal: params.signal },
     );
@@ -211,8 +192,8 @@ export const SegmentListService = {
     return { items, total };
   },
 
-  async view(id: string): Promise<SegmentListRecord> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.VIEW(id));
+  async view(id: string): Promise<FormulationListRecord> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.FORMULATION.VIEW(id));
     const payload = response.data as Record<string, unknown>;
     const data = payload.data;
 
@@ -223,29 +204,22 @@ export const SegmentListService = {
     return mapDetail(data as Record<string, unknown>);
   },
 
-  async previewNumber(): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.PREVIEW_NUMBER);
-    const payload = response.data as Record<string, unknown>;
-    const data = payload.data as Record<string, unknown> | undefined;
-    return asString(data?.segment_code);
-  },
-
-  async create(payload: SegmentCreatePayload): Promise<void> {
-    const response = await axiosInstance.post(API_ENDPOINTS.MASTER.SEGMENT.CREATE, {
-      segment_name: payload.segment_name.trim(),
+  async create(payload: FormulationCreatePayload): Promise<void> {
+    const response = await axiosInstance.post(API_ENDPOINTS.MASTER.FORMULATION.CREATE, {
+      formulation_name: payload.formulation_name.trim(),
       description: payload.description?.trim() || null,
     });
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
-      throw new Error(asString(body.message) || "Failed to create segment.");
+      throw new Error(asString(body.message) || "Failed to create formulation.");
     }
   },
 
-  async update(id: string, payload: SegmentUpdatePayload): Promise<void> {
-    const response = await axiosInstance.put(API_ENDPOINTS.MASTER.SEGMENT.UPDATE(id), {
-      ...(payload.segment_name !== undefined
-        ? { segment_name: payload.segment_name.trim() }
+  async update(id: string, payload: FormulationUpdatePayload): Promise<void> {
+    const response = await axiosInstance.put(API_ENDPOINTS.MASTER.FORMULATION.UPDATE(id), {
+      ...(payload.formulation_name !== undefined
+        ? { formulation_name: payload.formulation_name.trim() }
         : {}),
       ...(payload.description !== undefined
         ? { description: payload.description?.trim() || null }
@@ -254,26 +228,27 @@ export const SegmentListService = {
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
-      throw new Error(asString(body.message) || "Failed to update segment.");
+      throw new Error(asString(body.message) || "Failed to update formulation.");
     }
   },
 
   async updateStatus(id: string, isActive: boolean): Promise<void> {
-    const response = await axiosInstance.patch(API_ENDPOINTS.MASTER.SEGMENT.STATUS_UPDATE(id), {
-      is_active: isActive,
-    });
+    const response = await axiosInstance.patch(
+      API_ENDPOINTS.MASTER.FORMULATION.STATUS_UPDATE(id),
+      { is_active: isActive },
+    );
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
-      throw new Error(asString(body.message) || "Failed to update segment status.");
+      throw new Error(asString(body.message) || "Failed to update formulation status.");
     }
   },
 
   async getFilterDropdown(
-    fieldName: SegmentFilterField,
+    fieldName: FormulationFilterField,
     signal?: AbortSignal,
-  ): Promise<SegmentFilterOption[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.FILTER_DROPDOWN, {
+  ): Promise<FormulationFilterOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.FORMULATION.FILTER_DROPDOWN, {
       params: { field_name: fieldName },
       signal,
     });
@@ -287,44 +262,36 @@ export const SegmentListService = {
     return mapFilterOptions(data, fieldName);
   },
 
-  async export(params: SegmentExportParams): Promise<void> {
+  async export(params: FormulationExportParams): Promise<void> {
     const ordering = encodeURIComponent(params.ordering ?? "");
 
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.SEGMENT.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+      `${API_ENDPOINTS.MASTER.FORMULATION.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
       { filters: params.apiFilters ?? {} },
       { responseType: "blob" },
     );
+
+    const contentType = String(response.headers["content-type"] ?? "");
+    if (contentType.includes("application/json")) {
+      const text = await (response.data as Blob).text();
+      let message = "No records found to export.";
+      try {
+        const json = JSON.parse(text) as Record<string, unknown>;
+        message = String(json.message ?? message);
+      } catch {
+        // keep default
+      }
+      throw new Error(message);
+    }
 
     const blob = response.data as Blob;
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `segments_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `formulations_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
   },
-
-  async dropdown(): Promise<SegmentDropdownItem[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.DROPDOWN);
-    const payload = response.data as Record<string, unknown>;
-    const data = payload.data;
-
-    if (!Array.isArray(data)) {
-      throw new Error("Unexpected response shape: 'data' must be an array.");
-    }
-
-    return data.map((row) => {
-      const item = (row ?? {}) as Record<string, unknown>;
-      return {
-        id: asString(item.id ?? item.segment_id),
-        segmentName: asString(item.segment_name ?? item.segmentName),
-        segmentCode: asString(item.segment_code),
-      };
-    });
-  },
-
-  extractErrorMessage,
 };

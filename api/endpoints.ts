@@ -17,7 +17,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/category/update-status/${id}`,
       EXPORT: "/master/category/export",
       VIEW: (id: string) => `/master/category/${id}`,
-      DROPDOWN: "/master/category/dropdown"
+      DROPDOWN: "/master/category/dropdown",
     },
     DOCUMENT_TYPE: {
       LIST: "/master/document-type/list",
@@ -62,6 +62,37 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/master/segment/details/${id}`,
       EXPORT: "/master/segment/export",
       PREVIEW_NUMBER: "/master/segment/preview-number",
+      FILTER_DROPDOWN: "/master/segment/filter-dropdown",
+    },
+    TDS: {
+      LIST: "/master/tds/list",
+      CREATE: "/master/tds/create",
+      UPDATE: (id: string) => `/master/tds/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/tds/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/tds/details/${id}`,
+      EXPORT: "/master/tds/export",
+      FILTER_DROPDOWN: "/master/tds/filter-dropdown",
+      DROPDOWN: "/master/tds/dropdown",
+    },
+    UNIT: {
+      LIST: "/master/unit/list",
+      CREATE: "/master/unit/create",
+      UPDATE: (id: string) => `/master/unit/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/unit/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/unit/details/${id}`,
+      EXPORT: "/master/unit/export",
+      FILTER_DROPDOWN: "/master/unit/filter-dropdown",
+      DROPDOWN: "/master/unit/dropdown",
+    },
+    FORMULATION: {
+      LIST: "/master/formulation/list",
+      CREATE: "/master/formulation/create",
+      UPDATE: (id: string) => `/master/formulation/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/formulation/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/formulation/details/${id}`,
+      EXPORT: "/master/formulation/export",
+      FILTER_DROPDOWN: "/master/formulation/filter-dropdown",
+      DROPDOWN: "/master/formulation/dropdown",
       DROPDOWN: "/master/segment/dropdown"
     },
     PRODUCT: {

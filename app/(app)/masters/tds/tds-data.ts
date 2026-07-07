@@ -6,6 +6,106 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
+/** API-backed TDS list/detail record (maps to backend snake_case fields). */
+export interface TdsApiRecord {
+  id: number;
+  tdsUuid: string;
+  sectionCode: string;
+  sectionName: string;
+  tdsRate: string;
+  applicableTo: string;
+  description: string;
+  status: MasterStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface TdsApiForm {
+  sectionName: string;
+  tdsRate: string;
+  applicableTo: string;
+  description: string;
+}
+
+export const DEFAULT_TDS_API_FORM: TdsApiForm = {
+  sectionName: "",
+  tdsRate: "",
+  applicableTo: "",
+  description: "",
+};
+
+export function tdsApiToForm(record: TdsApiRecord): TdsApiForm {
+  return {
+    sectionName: record.sectionName,
+    tdsRate: record.tdsRate,
+    applicableTo: record.applicableTo,
+    description: record.description,
+  };
+}
+
+export function validateTdsApiForm(form: TdsApiForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const rate = form.tdsRate.trim().replace(/%$/, "");
+  const num = Number(rate);
+
+  if (!rate) {
+    errors.tdsRate = "TDS rate is required.";
+  } else if (!Number.isFinite(num) || num <= 0) {
+    errors.tdsRate = "Enter a valid TDS rate greater than zero.";
+  } else if (rate.includes(".") && rate.split(".")[1]?.length > 2) {
+    errors.tdsRate = "TDS rate can have at most 2 decimal places.";
+  }
+
+  return errors;
+}
+
+export function formatApplicableToLabel(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "—";
+  return (
+    TDS_APPLICABLE_TO_OPTIONS.find((o) => o.value === trimmed)?.label ?? trimmed
+  );
+}
+
+export type ApplicableToSelectOption = { label: string; value: string };
+
+/** Category master + legacy predefined values + existing DB values for create/edit dropdowns. */
+export function mergeApplicableToSelectOptions(
+  categories: { categoryName: string }[],
+  currentValue?: string,
+  extraFromApi?: ApplicableToSelectOption[],
+): ApplicableToSelectOption[] {
+  const seen = new Set<string>();
+  const options: ApplicableToSelectOption[] = [];
+
+  const add = (value: string, label: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    options.push({ value: trimmed, label: label.trim() || trimmed });
+  };
+
+  for (const category of categories) {
+    add(category.categoryName, category.categoryName);
+  }
+
+  for (const option of TDS_APPLICABLE_TO_OPTIONS) {
+    add(option.value, option.label);
+  }
+
+  for (const option of extraFromApi ?? []) {
+    add(option.value, option.label);
+  }
+
+  if (currentValue) {
+    add(currentValue, formatApplicableToLabel(currentValue));
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export interface TDSMaster {
   id: number;
   sectionCode: string;

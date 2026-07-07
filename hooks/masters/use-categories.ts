@@ -36,6 +36,14 @@ export function useCategory(id: string | null | undefined) {
   });
 }
 
+export function useCategoryDropdown() {
+  return useQuery({
+    queryKey: masterKeys.categories.dropdown(),
+    queryFn: () => CategoryListService.dropdown(),
+    staleTime: 60_000,
+  });
+}
+
 export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -57,6 +65,7 @@ export function useUpdateCategory() {
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: masterKeys.categories.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.categories.dropdown() }),
         queryClient.invalidateQueries({
           queryKey: masterKeys.categories.detail(variables.id),
         }),
@@ -73,6 +82,7 @@ export function useToggleCategoryStatus() {
     onSuccess: async (_data, id) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: masterKeys.categories.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.categories.dropdown() }),
         queryClient.invalidateQueries({ queryKey: masterKeys.categories.detail(id) }),
         queryClient.invalidateQueries({ queryKey: masterKeys.categories.dropdown() }),
       ]);
