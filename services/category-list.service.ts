@@ -60,6 +60,8 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): CategoryL
     updatedAt: asString(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
+
+
   };
 }
 
