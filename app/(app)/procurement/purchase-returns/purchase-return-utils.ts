@@ -168,7 +168,7 @@ export function getPurchaseReturnEligibility(po: PurchaseOrder): {
 }
 
 export function supplierCodeFromPO(po: PurchaseOrder): string {
-  const supplier = getSupplierById(po.supplierId);
+  const supplier = getSupplierById(Number(po.supplierId));
   return supplier?.supplierCode ?? `SUP-${String(po.supplierId).padStart(3, "0")}`;
 }
 

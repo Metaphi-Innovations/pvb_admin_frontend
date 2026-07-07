@@ -106,7 +106,7 @@ export function getPOShipToAddresses(): SalesOrderCustomerAddress[] {
 export function getDefaultPOBillShipIds(
   billAddresses: SalesOrderCustomerAddress[],
   shipAddresses: SalesOrderCustomerAddress[],
-  warehouseId?: number | null,
+  warehouseId?: number | string | null,
 ): { billToAddressId: string; shipToAddressId: string } {
   const billTo =
     billAddresses.find((a) => a.id === "bill-hq-pune") ?? billAddresses[0];

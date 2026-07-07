@@ -61,6 +61,23 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/segment/export",
       PREVIEW_NUMBER: "/master/segment/preview-number",
     },
+    PRODUCT: {
+      LIST: "/master/product/list",
+      CREATE: "/master/product/create",
+      UPDATE: (id: string) => `/master/product/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/product/update-status/${id}`,
+      VIEW: (id: string) => `/master/product/details/${id}`,
+      EXPORT: "/master/product/export",
+      PREVIEW_NUMBER: "/master/product/preview-number",
+      DROPDOWN: "/master/product/dropdown",
+    },
+    SUPPLIER: {
+      DROPDOWN: "/master/supplier/dropdown",
+      DETAILS: (id: string) => `/master/supplier/details/${id}`,
+    },
+    WAREHOUSE: {
+      DROPDOWN: "/master/warehouse/dropdown",
+    },
   },
   PROCUREMENT: {
     PURCHASE_ORDER: {
