@@ -94,6 +94,7 @@ export function CoaNavigationProvider({
   const pathname = usePathname();
   const { activeAccountsSection } = useAccountsAccordion();
   const initRef = useRef(false);
+  const backfillRef = useRef(false);
   const recordsRef = useRef<ChartOfAccount[]>([]);
 
   const [records, setRecords] = useState<ChartOfAccount[]>([]);
@@ -110,8 +111,7 @@ export function CoaNavigationProvider({
   recordsRef.current = records;
 
   useEffect(() => {
-    if (!needsCoaData || initRef.current) return;
-    initRef.current = true;
+    if (!needsCoaData) return;
 
     const showTree = () => {
       const loaded = readCoaRecords();
@@ -120,9 +120,13 @@ export function CoaNavigationProvider({
       setCoaReady(true);
     };
 
-    window.setTimeout(showTree, 0);
+    if (!initRef.current) {
+      initRef.current = true;
+      window.setTimeout(showTree, 0);
+    }
 
-    if (initMode !== "full") return;
+    if (initMode !== "full" || backfillRef.current) return;
+    backfillRef.current = true;
 
     const runBackfill = () => {
       backfillErpPartyLedgers();

@@ -18,19 +18,11 @@ import {
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
-import { nextId } from "../../data";
 import type { ChartOfAccount } from "../../data";
 import {
-  DEFAULT_LEDGER_FORM,
   canAddLedgerUnder,
-  defaultBalanceTypeForParent,
-  formToLedger,
-  generateLedgerCode,
   getAncestorPath,
   isAccountingGroupNode,
-  saveChartOfAccounts,
-  validateLedgerForm,
-  type LedgerFormValues,
 } from "./chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_LIST_PATH } from "./chart-of-accounts-utils";
 import {
@@ -48,14 +40,15 @@ import {
   exportCoaListingToPdf,
 } from "./coa-export";
 import { filterLedgerStatementRows } from "./coa-ledger-utils";
-import { registerCoaAddLedgerHandler } from "./coa-add-ledger-bridge";
+import {
+  requestCoaAddLedger,
+  requestCoaGlobalAddLedger,
+} from "./coa-add-ledger-bridge";
 import { CoaListingTable } from "./components/CoaListingTable";
 import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
 import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
 import { CoaPathBreadcrumb } from "./components/CoaPathBreadcrumb";
-import { LedgerSheet } from "./components/LedgerSheet";
-
 const HIGHLIGHT_MS = 4000;
 
 /** Ledger detail view for posting ledgers (TDS and bank name containers excluded). */
@@ -71,10 +64,8 @@ export default function ChartOfAccountsPageClient() {
   const { selectedFY } = useFY();
   const {
     records,
-    setRecords,
     selectedNode,
     selectNode,
-    refreshRecords,
     highlightedLedgerId,
     setHighlightedLedgerId,
     ensureExpanded,
@@ -87,12 +78,6 @@ export default function ChartOfAccountsPageClient() {
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [exporting, setExporting] = useState(false);
-
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [previewCode, setPreviewCode] = useState("");
-  const [parentGroupLocked, setParentGroupLocked] = useState(false);
 
   const canCreate = useCanCoa("create");
 
@@ -247,80 +232,6 @@ export default function ChartOfAccountsPageClient() {
 
   const exportMeta = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
 
-  const openAddLedger = useCallback(
-    (parentGroupId: number) => {
-      const parent = records.find((r) => r.id === parentGroupId);
-      if (!parent || !canAddLedgerUnder(parent, records)) return;
-      setForm({
-        ...DEFAULT_LEDGER_FORM,
-        parentGroupId,
-        balanceType: defaultBalanceTypeForParent(records, parentGroupId),
-      });
-      setPreviewCode(generateLedgerCode(records));
-      setFormError(null);
-      setParentGroupLocked(true);
-      setSheetOpen(true);
-    },
-    [records],
-  );
-
-  const openGlobalAddLedger = useCallback(
-    (preferredParentId?: number | null) => {
-      const parentGroupId = preferredParentId ?? null;
-      setForm({
-        ...DEFAULT_LEDGER_FORM,
-        ...(parentGroupId != null
-          ? {
-              parentGroupId,
-              balanceType: defaultBalanceTypeForParent(records, parentGroupId),
-            }
-          : {}),
-      });
-      setPreviewCode(generateLedgerCode(records));
-      setFormError(null);
-      setParentGroupLocked(false);
-      setSheetOpen(true);
-    },
-    [records],
-  );
-
-  useEffect(() => {
-    registerCoaAddLedgerHandler(openAddLedger);
-    return () => registerCoaAddLedgerHandler(null);
-  }, [openAddLedger]);
-
-  const closeSheet = () => {
-    setSheetOpen(false);
-    setFormError(null);
-  };
-
-  const handleSave = () => {
-    const err = validateLedgerForm(form, records);
-    if (err) {
-      setFormError(err);
-      return;
-    }
-
-    const list = [...records];
-    const code = generateLedgerCode(list);
-    const row = formToLedger(form, nextId(list), code, list);
-    list.push(row);
-    saveChartOfAccounts(list);
-    setRecords(list);
-
-    if (row.parentAccountId) {
-      const parent = list.find((r) => r.id === row.parentAccountId);
-      if (parent) {
-        const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
-        ensureExpanded([...ancestorIds, parent.id]);
-        selectNode(parent);
-      }
-    }
-
-    setHighlightedLedgerId(row.id);
-    closeSheet();
-  };
-
   const handleDrillInto = useCallback(
     (node: ChartOfAccount) => {
       const ancestorIds = getAncestorPath(records, node.id).map((a) => a.id);
@@ -385,13 +296,6 @@ export default function ChartOfAccountsPageClient() {
   };
 
   const handleNewLedger = useCallback(() => {
-    if (
-      selectedNode &&
-      !showRoot &&
-      resolveCoaAddLedgerPolicy(selectedNode, records).blocked
-    ) {
-      return;
-    }
     const parentId =
       selectedNode &&
       !showRoot &&
@@ -400,8 +304,8 @@ export default function ChartOfAccountsPageClient() {
       !resolveCoaAddLedgerPolicy(selectedNode, records).blocked
         ? selectedNode.id
         : null;
-    openGlobalAddLedger(parentId);
-  }, [selectedNode, showRoot, records, openGlobalAddLedger]);
+    requestCoaGlobalAddLedger(parentId);
+  }, [selectedNode, showRoot, records]);
 
   const canShowNewLedger =
     canCreate &&
@@ -525,7 +429,7 @@ export default function ChartOfAccountsPageClient() {
                 highlightedLedgerId={highlightedLedgerId}
                 isSearchMode={Boolean(contentSearch.trim())}
                 onDrillInto={handleDrillInto}
-                onAddLedger={openAddLedger}
+                onAddLedger={requestCoaAddLedger}
                 emptyMessage={
                   contentSearch.trim()
                     ? "No accounts match your search."
@@ -595,25 +499,6 @@ export default function ChartOfAccountsPageClient() {
           </AccountsListingTableCard>
         </div>
       </AccountsPageShell>
-
-      <LedgerSheet
-        open={sheetOpen}
-        mode="add"
-        form={form}
-        formError={formError}
-        previewCode={previewCode}
-        records={records}
-        active={null}
-        onClose={closeSheet}
-        onSave={handleSave}
-        onFormChange={(next) => {
-          setForm(next);
-          if (next.parentGroupId) setFormError(null);
-        }}
-        canEdit={canCreate}
-        compactAdd
-        parentGroupLocked={parentGroupLocked}
-      />
     </>
   );
 }
