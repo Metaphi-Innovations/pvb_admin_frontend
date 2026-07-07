@@ -125,12 +125,12 @@ export function ExpenseCategoriesDialog({
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-sm font-semibold">Expense Categories</DialogTitle>
             {mode === "list" && (
-              <Button size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={openAdd}>
+              <Button size="sm" className="h-9 text-sm font-medium gap-1" onClick={openAdd}>
                 <Plus className="w-4 h-4" /> Add Category
               </Button>
             )}
             {mode !== "list" && (
-              <Button variant="ghost" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setMode("list")}>
+              <Button variant="ghost" size="sm" className="h-9 text-sm font-medium" onClick={() => setMode("list")}>
                 Back to list
               </Button>
             )}
@@ -141,7 +141,7 @@ export function ExpenseCategoriesDialog({
           <div className="overflow-auto flex-1 p-4">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-border text-[10px] uppercase text-muted-foreground">
+                <tr className="border-b border-border text-xs uppercase text-muted-foreground">
                   <th className="text-left py-2 px-2">Category</th>
                   <th className="text-left py-2 px-2">Description</th>
                   <th className="text-left py-2 px-2">Status</th>
@@ -164,7 +164,7 @@ export function ExpenseCategoriesDialog({
                         <button type="button" className="p-1.5 rounded hover:bg-muted" onClick={() => openEdit(c)}>
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <Button variant="outline" size="sm" className="h-7 text-[10px] px-2" onClick={() => toggleStatus(c)}>
+                        <Button variant="outline" size="sm" className="h-7 text-sm px-2" onClick={() => toggleStatus(c)}>
                           {c.status === "active" ? "Deactivate" : "Activate"}
                         </Button>
                       </div>
@@ -179,15 +179,15 @@ export function ExpenseCategoriesDialog({
         {mode === "view" && editing && (
           <div className="p-5 space-y-3 text-xs flex-1">
             <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Category Name</p>
+              <p className="text-xs uppercase text-muted-foreground">Category Name</p>
               <p className="font-medium mt-0.5">{editing.name}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Description</p>
+              <p className="text-xs uppercase text-muted-foreground">Description</p>
               <p className="mt-0.5">{editing.description || "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Status</p>
+              <p className="text-xs uppercase text-muted-foreground">Status</p>
               <div className="mt-1">
                 <StatusBadge status={editing.status === "active" ? "active" : "inactive"} size="sm" />
               </div>
@@ -199,7 +199,7 @@ export function ExpenseCategoriesDialog({
           <div className="p-5 space-y-3 flex-1">
             <div className="space-y-1">
               <Label className="text-xs">Category Name *</Label>
-              <Input className="h-9 text-[13px] font-medium" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input className="h-9 text-sm font-medium" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Description</Label>
@@ -212,7 +212,7 @@ export function ExpenseCategoriesDialog({
             <div className="space-y-1">
               <Label className="text-xs">Status</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as "active" | "inactive")}>
-                <SelectTrigger className="h-9 text-[13px] font-medium w-[140px]">
+                <SelectTrigger className="h-9 text-sm font-medium w-[140px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -222,10 +222,10 @@ export function ExpenseCategoriesDialog({
               </Select>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setMode("list")}>
+              <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => setMode("list")}>
                 Cancel
               </Button>
-              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={persist}>
+              <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={persist}>
                 {editing ? "Save Changes" : "Add Category"}
               </Button>
             </div>

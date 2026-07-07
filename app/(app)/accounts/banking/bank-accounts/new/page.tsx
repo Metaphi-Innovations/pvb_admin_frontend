@@ -1,10 +1,7 @@
-import { Suspense } from "react";
-import BankAccountFormClient from "../BankAccountFormClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const BankAccountFormClient = lazyAccountsPage(() => import("../BankAccountFormClient"));
 
 export default function NewBankAccountPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
-      <BankAccountFormClient />
-    </Suspense>
-  );
+  return <BankAccountFormClient />;
 }

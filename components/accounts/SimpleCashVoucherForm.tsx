@@ -34,6 +34,7 @@ import {
   canEditVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
+import { TdsSectionSelect } from "@/components/accounts/TdsSectionSelect";
 import {
   Select,
   SelectContent,
@@ -126,6 +127,7 @@ export function SimpleCashVoucherForm({
   const [bankCashLedger, setBankCashLedger] = useState<ChartOfAccount | null>(null);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Bank Transfer");
   const [tdsAmount, setTdsAmount] = useState("");
+  const [tdsSectionMasterId, setTdsSectionMasterId] = useState<number | null>(null);
   const [tdsLedger, setTdsLedger] = useState<ChartOfAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,7 +148,18 @@ export function SimpleCashVoucherForm({
     );
     setPaymentMode((existing?.paymentMode as PaymentMode) ?? "Bank Transfer");
     setTdsAmount(parsed?.tdsAmount ? String(parsed.tdsAmount) : "");
-    setTdsLedger(parsed?.tdsLedgerId ? findLedgerById(parsed.tdsLedgerId) ?? null : null);
+    if (parsed?.tdsLedgerId) {
+      const ledger = findLedgerById(parsed.tdsLedgerId) ?? null;
+      setTdsLedger(ledger);
+      const masterId =
+        ledger?.erpSourceModule === "tds_master" && ledger.erpSourceId != null
+          ? ledger.erpSourceId
+          : null;
+      setTdsSectionMasterId(masterId);
+    } else {
+      setTdsLedger(null);
+      setTdsSectionMasterId(null);
+    }
   }, [mounted, existing, parsed]);
 
   const voucherNumber = mounted
@@ -169,11 +182,12 @@ export function SimpleCashVoucherForm({
       bankCashLedgerName: bankCashLedger?.accountName ?? "",
       amount: numericAmount,
       tdsAmount: numericTds,
+      tdsSectionMasterId,
       tdsLedgerId: tdsLedger?.id ?? null,
       tdsLedgerName: tdsLedger?.accountName ?? "",
       referenceNo,
     }),
-    [partyLedger, expenseHeadLedger, bankCashLedger, numericAmount, numericTds, tdsLedger, referenceNo],
+    [partyLedger, expenseHeadLedger, bankCashLedger, numericAmount, numericTds, tdsSectionMasterId, tdsLedger, referenceNo],
   );
 
   const canPost = useMemo(() => {
@@ -261,13 +275,10 @@ export function SimpleCashVoucherForm({
     [],
   );
 
-  const tdsFilter = useMemo(
-    () => (ledger: ChartOfAccount) =>
-      ledger.nodeLevel === "ledger" &&
-      ledger.status === "active" &&
-      ledger.accountName.toLowerCase().includes("tds"),
-    [],
-  );
+  const handleTdsSectionChange = (masterId: number | null, ledger: ChartOfAccount | null) => {
+    setTdsSectionMasterId(masterId);
+    setTdsLedger(ledger);
+  };
 
   const buildLines = () => {
     const raw =
@@ -353,13 +364,13 @@ export function SimpleCashVoucherForm({
       actions={
         readOnly ? (
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onDone}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={onDone}>
               <X className="w-4 h-4" /> Back
             </Button>
             {existing && canEditVoucher(existing) && onEdit && (
               <Button
                 size="sm"
-                className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
                 onClick={onEdit}
               >
                 <Pencil className="w-4 h-4" /> Edit
@@ -368,20 +379,20 @@ export function SimpleCashVoucherForm({
           </>
         ) : (
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onDone}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={onDone}>
               <X className="w-4 h-4" /> Cancel
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium gap-1"
+              className="h-9 text-sm font-medium gap-1"
               onClick={handleSaveDraft}
             >
               <Save className="w-4 h-4" /> Save Draft
             </Button>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={handlePost}
               disabled={!flexibleEntry && !canPost}
             >
@@ -436,7 +447,7 @@ export function SimpleCashVoucherForm({
         </div>
 
         <div className="pb-2.5 border-b border-border">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Voucher Details
           </p>
         </div>
@@ -510,7 +521,7 @@ export function SimpleCashVoucherForm({
               disabled={readOnly}
             />
             {numericAmount > 0 && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {mode === "receipt" ? "Net received in bank" : "Net paid from bank"}: {formatMoney(numericAmount)}
               </p>
             )}
@@ -529,13 +540,12 @@ export function SimpleCashVoucherForm({
               />
             </div>
             {numericTds > 0 && (
-              <GroupedLedgerSelect
-                label="TDS Ledger"
+              <TdsSectionSelect
+                kind={mode === "receipt" ? "receivable" : "payable"}
+                label="TDS Section"
                 required={!readOnly}
-                value={tdsLedger?.id ?? null}
-                onChange={setTdsLedger}
-                placeholder="Select TDS ledger…"
-                ledgerFilter={tdsFilter}
+                value={tdsSectionMasterId}
+                onChange={handleTdsSectionChange}
                 disabled={readOnly}
               />
             )}
@@ -563,7 +573,7 @@ export function SimpleCashVoucherForm({
       )}
 
       {!readOnly && flexibleEntry && !canPost && (
-        <p className="text-[11px] text-muted-foreground mt-3">
+        <p className="text-xs text-muted-foreground mt-3">
           Post requires {mode === "payment" ? "paid to or expense head" : cfg.partyLabel.toLowerCase()},{" "}
           {cfg.bankLabel.toLowerCase()}, and an amount greater than zero. Save Draft is available with partial
           entry.
@@ -571,7 +581,7 @@ export function SimpleCashVoucherForm({
       )}
 
       {!readOnly && !flexibleEntry && !canPost && (partyLedger || bankCashLedger || numericAmount > 0) && (
-        <p className="text-[11px] text-muted-foreground mt-3">
+        <p className="text-xs text-muted-foreground mt-3">
           Post requires {cfg.partyLabel.toLowerCase()}, {cfg.bankLabel.toLowerCase()}, and amount
           greater than zero. You can save as draft with partial details.
         </p>

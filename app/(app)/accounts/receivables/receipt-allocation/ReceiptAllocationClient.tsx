@@ -12,7 +12,7 @@ import {
   loadReceiptAllocationRecords,
   type ReceiptAllocationStatus,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
@@ -75,9 +75,11 @@ export default function ReceiptAllocationClient() {
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     const fromUrl = searchParams.get("customer");
@@ -209,13 +211,13 @@ export default function ReceiptAllocationClient() {
             customers={customers}
           />
           <div className="space-y-1 min-w-[150px]">
-            <label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+            <label className="text-xs font-medium uppercase text-muted-foreground leading-none">
               Receipt Status
             </label>
             <select
               value={receiptStatus}
               onChange={(e) => setReceiptStatus(e.target.value as ReceiptAllocationStatus | "all")}
-              className="h-7 w-full text-xs rounded-md border border-border bg-white px-2"
+              className="h-7 w-full text-sm rounded-md border border-border bg-white px-2"
             >
               {RECEIPT_STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -248,7 +250,7 @@ export default function ReceiptAllocationClient() {
             </div>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
               disabled={!activeReceipt}
               onClick={saveAllocation}
             >
@@ -268,7 +270,7 @@ export default function ReceiptAllocationClient() {
               </p>
               {filteredReceipts.length > 0 && (
                 <div className="mt-4 text-left max-w-lg mx-auto">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                     Available Receipts
                   </p>
                   <AccountsTableScroll>
@@ -295,7 +297,7 @@ export default function ReceiptAllocationClient() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 text-[11px]"
+                                className="h-7 text-sm"
                                 onClick={() => setCustomerId(String(r.customerId))}
                               >
                                 Allocate
@@ -323,21 +325,21 @@ export default function ReceiptAllocationClient() {
                     ["Unallocated Balance", formatMoney(summary.unallocatedBalance)],
                   ].map(([label, value]) => (
                     <div key={label}>
-                      <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                      <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
                       <p className="font-medium mt-0.5">{value}</p>
                     </div>
                   ))}
                 </div>
                 {summary.unallocatedReceipts.length > 1 && (
                   <div className="mt-3 max-w-xs">
-                    <p className="text-[10px] uppercase text-muted-foreground font-semibold mb-1">
+                    <p className="text-xs uppercase text-muted-foreground font-semibold mb-1">
                       Receipt to Allocate
                     </p>
                     <Select
                       value={selectedReceiptId ? String(selectedReceiptId) : ""}
                       onValueChange={(v) => setSelectedReceiptId(Number(v))}
                     >
-                      <SelectTrigger className="h-9 text-[13px] font-medium">
+                      <SelectTrigger className="h-9 text-sm font-medium">
                         <SelectValue placeholder="Select receipt" />
                       </SelectTrigger>
                       <SelectContent>
@@ -417,7 +419,7 @@ export default function ReceiptAllocationClient() {
                         </AccountsTableCell>
                         <AccountsTableCell align="right">
                           <AccountsMoneyInput
-                            className="h-9 text-[13px] font-medium w-28 ml-auto"
+                            className="h-9 text-sm font-medium w-28 ml-auto"
                             disabled={!selected[inv.invoiceId] || !activeReceipt}
                             value={amounts[inv.invoiceId] ?? ""}
                             onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}

@@ -51,7 +51,7 @@ export default function AccountingSettingsPageClient() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground">{link.label}</p>
                     {link.description ? (
-                      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground truncate">
+                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground truncate">
                         {link.description}
                       </p>
                     ) : null}
@@ -90,10 +90,10 @@ export default function AccountingSettingsPageClient() {
           </h2>
           {(
             [
-              ["autoPostSales", "Sales Invoice → accounting entries"],
-              ["autoPostPurchase", "Purchase Invoice approval → accounting entries"],
-              ["autoPostHrClaims", "Approved employee claims → payable entries"],
-              ["autoPostStockAdj", "Stock adjustments → inventory accounting"],
+              ["autoPostSales", "Sales Invoice â†’ accounting entries"],
+              ["autoPostPurchase", "Purchase Invoice approval â†’ accounting entries"],
+              ["autoPostHrClaims", "Approved employee claims â†’ payable entries"],
+              ["autoPostStockAdj", "Stock adjustments â†’ inventory accounting"],
             ] as const
           ).map(([key, label]) => (
             <div key={key} className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3">
@@ -112,7 +112,7 @@ export default function AccountingSettingsPageClient() {
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3">
             <div>
               <p className="text-xs font-medium">Require approval before posting</p>
-              <p className="text-[11px] text-muted-foreground">Draft → Approved → Posted</p>
+              <p className="text-xs text-muted-foreground">Draft â†’ Approved â†’ Posted</p>
             </div>
             <Switch
               checked={settings.requireVoucherApproval}
@@ -121,15 +121,15 @@ export default function AccountingSettingsPageClient() {
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Ledger Mappings
             </h3>
             <table className="accounts-table w-full border border-border/60 rounded-lg overflow-hidden">
               <thead>
                 <tr>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Key</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Target Sub-Group</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Module</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Key</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Target Sub-Group</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Module</th>
                 </tr>
               </thead>
               <tbody>

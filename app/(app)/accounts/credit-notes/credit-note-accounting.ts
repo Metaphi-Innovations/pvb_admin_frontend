@@ -87,6 +87,8 @@ export function buildCreditNoteLedgerImpact(input: {
   taxAmount: number;
   grandTotal: number;
   isSchemeSettlement?: boolean;
+  isManualAdjustment?: boolean;
+  adjustmentLedgerName?: string;
   cgst?: number;
   sgst?: number;
   igst?: number;
@@ -101,7 +103,10 @@ export function buildCreditNoteLedgerImpact(input: {
         }
       : normalizeGstAmounts(input.taxAmount, input.interstate);
 
-  const discountLedger = resolveCreditNoteDiscountLedger(!!input.isSchemeSettlement);
+  const discountLedger =
+    input.isManualAdjustment && input.adjustmentLedgerName?.trim()
+      ? input.adjustmentLedgerName.trim()
+      : resolveCreditNoteDiscountLedger(!!input.isSchemeSettlement);
   const customerLedger = resolveCreditNoteCustomerLedger(
     input.customerLedgerName,
     input.customerName,
@@ -111,9 +116,11 @@ export function buildCreditNoteLedgerImpact(input: {
     {
       ledger: discountLedger,
       debit: input.taxable,
-      note: input.isSchemeSettlement
-        ? "Scheme discount Dr — reduces sales value"
-        : "Sales return Dr — reverses revenue",
+      note: input.isManualAdjustment
+        ? "Adjustment ledger Dr — discount / correction"
+        : input.isSchemeSettlement
+          ? "Scheme expense Dr — reduces sales value"
+          : "Sales return Dr — reverses revenue",
     },
   ];
   appendGstDebitLines(lines, gst);
@@ -129,6 +136,7 @@ export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult 
   if (note.status !== "approved") return null;
 
   const isScheme = Boolean(note.schemeSettlementKey) || note.source === "payment_discount_scheme";
+  const isManual = note.source === "manual";
   const customerName = note.receivableLedger?.trim() || note.customerName;
   const interstate = inferInterstateFromPlaceOfSupply(
     (note as { placeOfSupply?: string }).placeOfSupply,
@@ -149,13 +157,18 @@ export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult 
 
   const taxable = Math.max(0, note.currentCreditAmount - (note.taxCreditAmount ?? 0));
   const total = note.currentCreditAmount;
-  const discountLedgerName = resolveCreditNoteDiscountLedger(isScheme);
+  const discountLedgerName =
+    isManual && note.adjustmentLedgerName?.trim()
+      ? note.adjustmentLedgerName.trim()
+      : resolveCreditNoteDiscountLedger(isScheme);
   const discountLedgerId =
-    findLedgerIdByName(discountLedgerName) ??
-    getActivePostingLedgers().find((l) =>
-      l.accountName.toLowerCase().includes(isScheme ? "promotion" : "sales return"),
-    )?.id ??
-    null;
+    isManual && note.adjustmentLedgerId
+      ? note.adjustmentLedgerId
+      : findLedgerIdByName(discountLedgerName) ??
+        getActivePostingLedgers().find((l) =>
+          l.accountName.toLowerCase().includes(isScheme ? "promotion" : isManual ? "discount" : "sales return"),
+        )?.id ??
+        null;
 
   const customerLedgerName = resolveCreditNoteCustomerLedger(
     note.receivableLedger ?? "",
@@ -171,9 +184,11 @@ export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult 
           ledgerId: discountLedgerId,
           debit: taxable,
           credit: 0,
-          remarks: isScheme
-            ? `Scheme discount — ${note.schemeCode ?? note.creditNoteNo}`
-            : `Sales return — ${note.creditNoteNo}`,
+          remarks: isManual
+            ? `Adjustment — ${note.reason || note.creditNoteNo}`
+            : isScheme
+              ? `Scheme discount — ${note.schemeCode ?? note.creditNoteNo}`
+              : `Sales return — ${note.creditNoteNo}`,
         }
       : {
           mappingKey: "sales_revenue",

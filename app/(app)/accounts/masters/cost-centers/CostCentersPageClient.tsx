@@ -34,14 +34,14 @@ export default function CostCentersPageClient() {
         <div className="border-b border-border/60 bg-muted/10 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label className="text-[11px]">Code</Label>
-              <Input className="h-9 text-[13px] font-medium w-32 font-mono" value={code} onChange={(e) => setCode(e.target.value)} />
+              <Label className="text-xs">Code</Label>
+              <Input className="h-9 text-sm font-medium w-32 font-mono" value={code} onChange={(e) => setCode(e.target.value)} />
             </div>
             <div className="space-y-1 flex-1 min-w-[200px]">
-              <Label className="text-[11px]">Name</Label>
-              <Input className="h-9 text-[13px] font-medium" value={name} onChange={(e) => setName(e.target.value)} />
+              <Label className="text-xs">Name</Label>
+              <Input className="h-9 text-sm font-medium" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
-            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white gap-1" onClick={save}>
+            <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white gap-1" onClick={save}>
               <Plus className="w-4 h-4" /> Add
             </Button>
           </div>
@@ -49,9 +49,9 @@ export default function CostCentersPageClient() {
         <table className="accounts-table w-full">
           <thead className="border-b border-border/60">
             <tr>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Code</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Code</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
             </tr>
           </thead>
           <tbody>

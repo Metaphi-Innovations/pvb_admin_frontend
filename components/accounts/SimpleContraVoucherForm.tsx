@@ -201,13 +201,13 @@ export function SimpleContraVoucherForm({
       actions={
         readOnly ? (
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onDone}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={onDone}>
               <X className="w-4 h-4" /> Back
             </Button>
             {existing && canEditVoucher(existing) && onEdit && (
               <Button
                 size="sm"
-                className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
                 onClick={onEdit}
               >
                 <Pencil className="w-4 h-4" /> Edit
@@ -216,20 +216,20 @@ export function SimpleContraVoucherForm({
           </>
         ) : (
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onDone}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={onDone}>
               <X className="w-4 h-4" /> Cancel
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium gap-1"
+              className="h-9 text-sm font-medium gap-1"
               onClick={handleSaveDraft}
             >
               <Save className="w-4 h-4" /> Save Draft
             </Button>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={handlePost}
               disabled={!canPost}
             >
@@ -284,7 +284,7 @@ export function SimpleContraVoucherForm({
         </div>
 
         <div className="pb-2.5 border-b border-border">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Transfer Details
           </p>
         </div>
@@ -325,7 +325,7 @@ export function SimpleContraVoucherForm({
               disabled={readOnly}
             />
             {numericAmount > 0 && (
-              <p className="text-[11px] text-muted-foreground">{formatMoney(numericAmount)}</p>
+              <p className="text-xs text-muted-foreground">{formatMoney(numericAmount)}</p>
             )}
           </div>
         </div>

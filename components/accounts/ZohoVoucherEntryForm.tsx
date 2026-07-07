@@ -45,6 +45,7 @@ import {
   type VoucherEntryMode,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
+import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { useCoaRecords } from "@/lib/accounts/use-coa-records";
 import {
@@ -160,6 +161,13 @@ export function ZohoVoucherEntryForm({
   const financialYears = useMemo(() => (mounted ? loadFinancialYears() : []), [mounted]);
   const activeFy = useMemo(() => financialYears.find((fy) => fy.status === "active"), [financialYears]);
   const coaRecords = useCoaRecords();
+
+  const effectiveLedgerFilter = useMemo(() => {
+    return (ledger: ChartOfAccount) => {
+      if (isTdsCoaLedger(ledger)) return false;
+      return ledgerFilter ? ledgerFilter(ledger) : true;
+    };
+  }, [ledgerFilter]);
 
   const [date, setDate] = useState("");
   const [financialYearId, setFinancialYearId] = useState("");
@@ -411,13 +419,13 @@ export function ZohoVoucherEntryForm({
       actions={
         readOnly ? (
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={handleCancel}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={handleCancel}>
               Back
             </Button>
             {existingVoucher && canEditVoucher(existingVoucher) && onEdit && (
               <Button
                 size="sm"
-                className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+                className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
                 onClick={onEdit}
               >
                 <Pencil className="w-4 h-4" /> Edit
@@ -426,12 +434,12 @@ export function ZohoVoucherEntryForm({
           </>
         ) : (
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={handleCancel}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={handleCancel}>
               <X className="w-4 h-4" /> Cancel
             </Button>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={handlePost}
             >
               <Save className="w-4 h-4" /> Post Voucher
@@ -540,16 +548,16 @@ export function ZohoVoucherEntryForm({
                 <thead className="border-b border-border/60">
                   <tr>
                     <th className="w-8 px-2 py-2.5" />
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Account / Ledger
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       Remarks
                     </th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
+                    <th className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
                       Debit
                     </th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
+                    <th className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
                       Credit
                     </th>
                     <th className="w-10 px-2 py-2.5" />
@@ -569,7 +577,7 @@ export function ZohoVoucherEntryForm({
                             value={line.ledgerId}
                             onChange={(ledger) => selectLedger(idx, ledger.id)}
                             placeholder="Select an account"
-                            ledgerFilter={ledgerFilter}
+                            ledgerFilter={effectiveLedgerFilter}
                             quickAddScope={
                               quickAddScopeProp ??
                               resolveVoucherLineScope(voucherType, line)
@@ -590,7 +598,7 @@ export function ZohoVoucherEntryForm({
                       <td className="px-2 py-1.5">
                         <AccountsMoneyInput
                           compact={false}
-                          className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
+                          className={cn("h-9 text-sm", MONEY_INPUT_CLASS)}
                           value={line.debit || 0}
                           onChange={(v) => updateLine(idx, { debit: v, credit: 0 })}
                           disabled={readOnly}
@@ -599,7 +607,7 @@ export function ZohoVoucherEntryForm({
                       <td className="px-2 py-1.5">
                         <AccountsMoneyInput
                           compact={false}
-                          className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
+                          className={cn("h-9 text-sm", MONEY_INPUT_CLASS)}
                           value={line.credit || 0}
                           onChange={(v) => updateLine(idx, { credit: v, debit: 0 })}
                           disabled={readOnly}
@@ -628,7 +636,7 @@ export function ZohoVoucherEntryForm({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-9 text-[13px] font-medium gap-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                  className="h-9 text-sm font-medium gap-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50"
                   onClick={addLine}
                   type="button"
                 >
@@ -639,7 +647,7 @@ export function ZohoVoucherEntryForm({
 
             <div className="flex justify-end border-t border-border/60 bg-muted/10 px-4 py-3">
               <div className="w-full max-w-md space-y-1.5 text-xs">
-                <div className="grid grid-cols-3 gap-2 text-[10px] uppercase text-muted-foreground font-semibold border-b border-border/40 pb-1">
+                <div className="grid grid-cols-3 gap-2 text-xs uppercase text-muted-foreground font-semibold border-b border-border/40 pb-1">
                   <span />
                   <span className="text-right">Debit</span>
                   <span className="text-right">Credit</span>
@@ -655,10 +663,10 @@ export function ZohoVoucherEntryForm({
                   <span className="text-right tabular-nums">{formatMoney(totalCredit)}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 py-1 border-t border-border/40 pt-1">
-                  <span className="text-[11px] text-muted-foreground">Difference</span>
+                  <span className="text-xs text-muted-foreground">Difference</span>
                   <span
                     className={cn(
-                      "col-span-2 text-right tabular-nums text-[11px]",
+                      "col-span-2 text-right tabular-nums text-xs",
                       balanced ? "text-muted-foreground" : "text-amber-700",
                     )}
                   >

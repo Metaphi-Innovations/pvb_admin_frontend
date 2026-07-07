@@ -19,7 +19,7 @@ import {
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
 import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
-import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
+import { inferInterstateFromPlaceOfSupply, normalizeGstAmounts } from "@/lib/accounts/gst-accounting";
 import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
 import { buildDebitNotesSeed } from "./debit-notes-seed";
 import {
@@ -27,6 +27,10 @@ import {
   loadPurchaseReturns,
   type PurchaseReturn,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+import {
+  listPendingDebitNoteReturns,
+  type PendingDebitNoteRow,
+} from "./pending-debit-notes-data";
 
 export type DebitNoteCreationMode = "against_return" | "direct_adjustment";
 
@@ -37,16 +41,25 @@ export const DEBIT_NOTE_SOURCE_LABELS: Record<DebitNoteSource, string> = {
   manual: "Manual",
 };
 
-export const MANUAL_DEBIT_REASONS = [
-  "Manual Adjustment",
-  "Commercial Settlement",
+export const FRESH_DEBIT_REASONS = [
+  "Rate Difference",
+  "Excess Billing",
+  "Purchase Return Adjustment",
+  "GST Correction",
+  "Discount Recovery",
+  "Penalty",
+  "Freight Recovery",
   "Other",
 ] as const;
+
+/** @deprecated Use FRESH_DEBIT_REASONS */
+export const MANUAL_DEBIT_REASONS = FRESH_DEBIT_REASONS;
 
 export type DebitNoteAgainst = "purchase_invoice" | "purchase_order" | "standalone_adjustment";
 export type DebitReferenceType = DebitNoteAgainst;
 export type NoteWorkflowStatus =
   | "draft"
+  | "posted"
   | "pending_approval"
   | "sent_back"
   | "approved"
@@ -93,6 +106,9 @@ export interface DebitReferencePreview {
   sourcePoNo: string;
   sourceGrnNo: string;
   sourceQcNo: string;
+  sourcePackingNo?: string;
+  sourceDispatchNo?: string;
+  dispatchStatus?: string;
   vendorId: number | null;
   vendorName: string;
   vendorPhone: string;
@@ -148,6 +164,12 @@ export interface DebitNoteRecord {
   source: DebitNoteSource;
   sourceReturnId?: string;
   sourceReturnNo?: string;
+  sourcePackingNo?: string;
+  sourceDispatchNo?: string;
+  referenceNo?: string;
+  adjustmentLedgerId?: number | null;
+  adjustmentLedgerName?: string;
+  freshGstPct?: number;
   cgstAmount: number;
   sgstAmount: number;
   igstAmount: number;
@@ -242,18 +264,23 @@ export function validateDebitNoteLines(lines: DebitNoteLine[]): void {
 }
 
 export function listPurchaseReturnsForDebitNote(): PurchaseReturn[] {
-  return loadPurchaseReturns().filter(
-    (r) =>
-      r.status === "approved" ||
-      r.status === "returned" ||
-      r.status === "issued_for_packing" ||
-      r.status === "submitted",
-  );
+  const pendingIds = new Set(listPendingDebitNoteReturns().map((p) => p.returnId));
+  return loadPurchaseReturns().filter((r) => pendingIds.has(r.id));
+}
+
+export function getPendingDebitNoteRow(returnId: number): PendingDebitNoteRow | undefined {
+  return listPendingDebitNoteReturns().find((p) => p.returnId === returnId);
+}
+
+function firstGrnFromReturn(ret: PurchaseReturn): string {
+  const item = ret.items.find((it) => it.grnNo);
+  return item?.grnNo ?? "";
 }
 
 export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferencePreview | null {
   const ret = getPurchaseReturnById(returnId);
   if (!ret) return null;
+  const pending = getPendingDebitNoteRow(returnId);
   const pi = findPurchaseInvoiceForPO(ret.poId);
   const basePreview = pi ? buildReferenceFromPurchaseInvoice(pi.id) : null;
   const vendor = getActiveVendors().find(
@@ -305,8 +332,11 @@ export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferen
     sourceInvoiceNo: pi?.invoiceNo ?? "",
     sourcePoId: ret.poId,
     sourcePoNo: ret.poNumber,
-    sourceGrnNo: wh.sourceGrnNo,
+    sourceGrnNo: wh.sourceGrnNo || pending?.grnNo || firstGrnFromReturn(ret),
     sourceQcNo: wh.sourceQcNo,
+    sourcePackingNo: pending?.packingNo ?? "",
+    sourceDispatchNo: pending?.dispatchNo ?? "",
+    dispatchStatus: pending?.dispatchStatus ?? "",
     vendorId: ret.supplierId ?? vendor?.id ?? null,
     vendorName: ret.supplierName,
     vendorPhone: vendor ? `${vendor.mobileCountryCode} ${vendor.mobile}`.trim() : "",
@@ -439,11 +469,15 @@ export function normalizeDebitNote(rec: DebitNoteRecord): DebitNoteRecord {
   const lineItems = rec.lineItems.map((l) => normalizeDebitLine(l));
   const totals =
     rec.againstType === "standalone_adjustment"
-      ? {
-          taxableAmount: rec.standaloneDebitAmount,
-          gstAmount: 0,
-          total: rec.standaloneDebitAmount,
-        }
+      ? (() => {
+          const gst = rec.gstAmount ?? 0;
+          const taxable =
+            rec.taxableAmount > 0
+              ? rec.taxableAmount
+              : Math.max(0, rec.standaloneDebitAmount - gst);
+          const total = Math.round((taxable + gst) * 100) / 100;
+          return { taxableAmount: taxable, gstAmount: gst, total };
+        })()
       : computeDebitTotals(lineItems);
   const currentDebitAmount =
     rec.againstType === "standalone_adjustment" ? rec.standaloneDebitAmount : totals.total;
@@ -456,12 +490,15 @@ export function normalizeDebitNote(rec: DebitNoteRecord): DebitNoteRecord {
   );
   const taxBreakup =
     rec.againstType === "standalone_adjustment"
-      ? {
-          taxableValue: rec.standaloneDebitAmount,
-          cgstAmount: 0,
-          sgstAmount: 0,
-          igstAmount: 0,
-        }
+      ? (() => {
+          const gst = normalizeGstAmounts(rec.gstAmount ?? 0, interstate);
+          return {
+            taxableValue: rec.taxableAmount,
+            cgstAmount: gst.cgst,
+            sgstAmount: gst.sgst,
+            igstAmount: gst.igst,
+          };
+        })()
       : computeNoteTaxBreakup(lineItems, interstate);
   return {
     ...rec,
@@ -748,12 +785,13 @@ export function lookupPurchaseOrderForDebit(poId: number) {
 
 function validateBasic(input: DebitNoteFormInput): void {
   if (!input.vendorName.trim()) throw new Error("Supplier is required.");
-  if (!input.reason.trim()) throw new Error("Reason is required.");
-  if (!input.remarks.trim()) throw new Error("Remarks are required.");
+  if (!input.reason.trim()) throw new Error("Reason / adjustment type is required.");
   if (input.againstType === "standalone_adjustment") {
-    if (input.standaloneDebitAmount <= 0) throw new Error("Enter debit amount for standalone adjustment.");
+    if (!input.adjustmentLedgerId) throw new Error("Select an adjustment ledger.");
+    if (input.standaloneDebitAmount <= 0) throw new Error("Enter a valid debit amount.");
     return;
   }
+  if (!input.remarks.trim()) throw new Error("Narration is required.");
   const total = input.lineItems.reduce((s, l) => s + l.debitAmount, 0);
   if (total <= 0) throw new Error("Enter return qty or debit amount on at least one line.");
 }
@@ -769,12 +807,20 @@ export type DebitNoteFormInput = {
   sourcePoNo: string;
   sourceGrnNo: string;
   sourceQcNo: string;
+  sourcePackingNo?: string;
+  sourceDispatchNo?: string;
   originalAmount: number;
   alreadyAdjustedAmount: number;
   standaloneDebitAmount: number;
+  taxableAmount?: number;
+  gstAmount?: number;
+  freshGstPct?: number;
   lineItems: DebitNoteLine[];
   reason: string;
   remarks: string;
+  referenceNo?: string;
+  adjustmentLedgerId?: number | null;
+  adjustmentLedgerName?: string;
   attachments: DebitNoteAttachment[];
   status: NoteWorkflowStatus;
   source?: DebitNoteSource;
@@ -844,12 +890,18 @@ export function createDebitNote(input: DebitNoteFormInput): DebitNoteRecord {
     sourcePoNo: meta.sourcePoNo,
     sourceGrnNo: meta.sourceGrnNo,
     sourceQcNo: meta.sourceQcNo,
+    sourcePackingNo: input.sourcePackingNo,
+    sourceDispatchNo: input.sourceDispatchNo,
+    referenceNo: input.referenceNo,
+    adjustmentLedgerId: input.adjustmentLedgerId ?? null,
+    adjustmentLedgerName: input.adjustmentLedgerName,
+    freshGstPct: input.freshGstPct,
     vendorId: input.vendorId,
     vendorName: input.vendorName.trim(),
     originalAmount: meta.originalAmount,
     alreadyAdjustedAmount: meta.alreadyAdjustedAmount,
-    taxableAmount: 0,
-    gstAmount: 0,
+    taxableAmount: input.taxableAmount ?? 0,
+    gstAmount: input.gstAmount ?? 0,
     cgstAmount: 0,
     sgstAmount: 0,
     igstAmount: 0,
@@ -879,6 +931,9 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
   if (cur.status === "cancelled") {
     throw new Error("Cannot edit cancelled debit note.");
   }
+  if (cur.status === "posted" || cur.status === "approved" || cur.status === "processed") {
+    throw new Error("Cannot edit posted debit note.");
+  }
   validateBasic(input);
   const meta = metaFromInput(input);
   const updated = normalizeDebitNote({
@@ -898,6 +953,14 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
     sourceQcNo: meta.sourceQcNo,
     originalAmount: meta.originalAmount,
     alreadyAdjustedAmount: meta.alreadyAdjustedAmount,
+    sourcePackingNo: input.sourcePackingNo ?? cur.sourcePackingNo,
+    sourceDispatchNo: input.sourceDispatchNo ?? cur.sourceDispatchNo,
+    referenceNo: input.referenceNo ?? cur.referenceNo,
+    adjustmentLedgerId: input.adjustmentLedgerId ?? cur.adjustmentLedgerId ?? null,
+    adjustmentLedgerName: input.adjustmentLedgerName ?? cur.adjustmentLedgerName,
+    freshGstPct: input.freshGstPct ?? cur.freshGstPct,
+    taxableAmount: input.taxableAmount ?? cur.taxableAmount,
+    gstAmount: input.gstAmount ?? cur.gstAmount,
     standaloneDebitAmount: input.standaloneDebitAmount,
     lineItems: input.lineItems,
     reason: input.reason,
@@ -910,6 +973,41 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
   });
   all[idx] = updated;
   saveDebitNotes(all);
+  return updated;
+}
+
+export function postDebitNoteRecord(id: number): DebitNoteRecord {
+  const all = loadDebitNotes();
+  const idx = all.findIndex((r) => r.id === id);
+  if (idx < 0) throw new Error("Debit note not found");
+  const cur = normalizeDebitNote(all[idx]);
+  if (cur.status !== "draft") {
+    throw new Error("Only draft debit notes can be posted.");
+  }
+
+  if (cur.againstType === "purchase_invoice" && cur.sourceInvoiceId) {
+    reconcilePurchaseInvoiceDebits(
+      cur.sourceInvoiceId,
+      cur.lineItems.map((l) => ({
+        lineId: l.sourceLineId,
+        debitedQty: l.returnQty,
+        debitedAmount: l.debitAmount,
+      })),
+    );
+  }
+
+  const updated = normalizeDebitNote({
+    ...cur,
+    status: "posted",
+    approvedBy: ACCOUNTS_CURRENT_USER,
+    approvedAt: new Date().toISOString(),
+    activity: appendActivity(cur.activity, "posted", `Posted debit ${cur.currentDebitAmount}`),
+    updatedBy: ACCOUNTS_CURRENT_USER,
+    updatedAt: new Date().toISOString(),
+  });
+  all[idx] = updated;
+  saveDebitNotes(all);
+  maybePostDebitNote(updated);
   return updated;
 }
 
@@ -972,8 +1070,8 @@ export function cancelDebitNote(id: number, reason: string): DebitNoteRecord {
   const idx = all.findIndex((r) => r.id === id);
   if (idx < 0) throw new Error("Debit note not found");
   const cur = all[idx];
-  if (cur.status === "approved" || cur.status === "processed") {
-    throw new Error("Approved or processed debit notes cannot be cancelled.");
+  if (cur.status === "posted" || cur.status === "approved" || cur.status === "processed") {
+    throw new Error("Posted debit notes cannot be cancelled.");
   }
   const updated = normalizeDebitNote({
     ...cur,
@@ -988,17 +1086,18 @@ export function cancelDebitNote(id: number, reason: string): DebitNoteRecord {
 }
 
 export function canEditDebitNote(rec: DebitNoteRecord): boolean {
-  return rec.status !== "cancelled";
+  return rec.status === "draft";
 }
 
 export function getDebitNoteRowActions(
   rec: DebitNoteRecord,
-): ("view" | "edit" | "approve" | "process" | "cancel" | "pdf")[] {
-  const actions: ("view" | "edit" | "approve" | "process" | "cancel" | "pdf")[] = ["view", "pdf"];
+): ("view" | "edit" | "post" | "approve" | "process" | "cancel" | "pdf")[] {
+  const actions: ("view" | "edit" | "post" | "approve" | "process" | "cancel" | "pdf")[] = ["view", "pdf"];
   if (canEditDebitNote(rec)) actions.push("edit");
-  if (rec.status === "draft" || rec.status === "pending_approval") actions.push("approve");
+  if (rec.status === "draft") actions.push("post");
+  if (rec.status === "pending_approval") actions.push("approve");
   if (rec.status === "approved") actions.push("process");
-  if (rec.status !== "approved" && rec.status !== "processed" && rec.status !== "cancelled") {
+  if (rec.status !== "posted" && rec.status !== "approved" && rec.status !== "processed" && rec.status !== "cancelled") {
     actions.push("cancel");
   }
   return actions;
@@ -1018,8 +1117,12 @@ export type DebitNoteFilters = {
 export function filterDebitNotes(records: DebitNoteRecord[], filters: DebitNoteFilters): DebitNoteRecord[] {
   let r = records;
   if (filters.tab !== "all") {
-    const tabStatus = filters.tab === "pending" ? "pending_approval" : filters.tab;
-    r = r.filter((x) => x.status === tabStatus);
+    if (filters.tab === "posted") {
+      r = r.filter((x) => x.status === "posted" || x.status === "approved" || x.status === "processed");
+    } else {
+      const tabStatus = filters.tab === "pending" ? "pending_approval" : filters.tab;
+      r = r.filter((x) => x.status === tabStatus);
+    }
   }
   if (filters.status && filters.status !== "all") {
     r = r.filter((x) => x.status === filters.status);
@@ -1054,9 +1157,11 @@ export function filterDebitNotes(records: DebitNoteRecord[], filters: DebitNoteF
 }
 
 export function computeDebitNoteTabCounts(records: DebitNoteRecord[]): Record<string, number> {
+  const isPosted = (s: string) => s === "posted" || s === "approved" || s === "processed";
   return {
     all: records.length,
     draft: records.filter((r) => r.status === "draft").length,
+    posted: records.filter((r) => isPosted(r.status)).length,
     pending: records.filter((r) => r.status === "pending_approval").length,
     approved: records.filter((r) => r.status === "approved").length,
     processed: records.filter((r) => r.status === "processed").length,

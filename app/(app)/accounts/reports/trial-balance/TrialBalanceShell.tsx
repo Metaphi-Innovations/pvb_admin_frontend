@@ -5,7 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BreadcrumbItem } from "@/lib/accounts/accounts-nav";
 
-/** Accounts viewport minus main content padding (py-3 × 2) */
+/** Accounts viewport minus main content padding (py-3 Ã— 2) */
 const TRIAL_BALANCE_VIEWPORT_HEIGHT = "calc(100vh - 128px)";
 
 export function TrialBalanceShell({
@@ -32,7 +32,7 @@ export function TrialBalanceShell({
       style={{ height: TRIAL_BALANCE_VIEWPORT_HEIGHT, maxHeight: TRIAL_BALANCE_VIEWPORT_HEIGHT }}
     >
       <nav aria-label="Breadcrumb" className="flex-shrink-0 leading-none">
-        <ol className="flex items-center flex-wrap gap-0.5 text-[10px] text-muted-foreground">
+        <ol className="flex items-center flex-wrap gap-0.5 text-xs text-muted-foreground">
           {breadcrumbs.map((crumb, i) => (
             <li key={`${crumb.label}-${i}`} className="flex items-center gap-0.5">
               {i > 0 && <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/50" />}
@@ -51,7 +51,7 @@ export function TrialBalanceShell({
       </nav>
 
       <div className="flex-shrink-0 flex items-center justify-between gap-2 min-h-0">
-        <h1 className="text-base font-bold text-navy-700 leading-tight">{title}</h1>
+        <h1 className="text-xl font-bold text-navy-700 leading-tight">{title}</h1>
         {actions && <div className="flex items-center gap-1.5 flex-shrink-0">{actions}</div>}
       </div>
 

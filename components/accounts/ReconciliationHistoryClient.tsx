@@ -50,7 +50,7 @@ function CategoryBadge({ category }: { category: string }) {
   return (
     <Badge
       className={cn(
-        "text-[10px] px-2 py-0.5",
+        "text-xs px-2 py-0.5",
         isReceipt ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
       )}
     >
@@ -192,7 +192,7 @@ export function ReconciliationHistoryClient() {
                     <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                     <span>{entry.categorizedBy}</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {new Date(entry.categorizedAt).toLocaleString()}
                   </span>
                 </AccountsTableCell>
@@ -203,7 +203,7 @@ export function ReconciliationHistoryClient() {
                         <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
                         <span>{entry.reconciledBy}</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {new Date(entry.reconciledAt).toLocaleString()}
                       </span>
                     </>

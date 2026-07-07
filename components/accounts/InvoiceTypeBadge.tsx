@@ -9,7 +9,7 @@ export function InvoiceTypeBadge({ type }: { type: InvoiceDocumentType }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-semibold whitespace-nowrap",
+        "inline-flex h-5 items-center rounded-md border px-1.5 text-xs font-semibold whitespace-nowrap",
         isStockTransfer
           ? "border-navy-200 bg-navy-50 text-navy-700"
           : "border-brand-200 bg-brand-50 text-brand-700",

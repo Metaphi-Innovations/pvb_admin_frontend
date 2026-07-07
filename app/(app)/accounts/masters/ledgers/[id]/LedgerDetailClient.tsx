@@ -178,7 +178,7 @@ export default function LedgerDetailClient({
               },
             ].map((item) => (
               <div key={item.label} className="bg-white px-3 py-2.5">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {item.label}
                 </p>
                 <div
@@ -417,7 +417,7 @@ function CustomerLedgerDetail({
           { label: "Open Invoices", value: String(invoices.filter((i) => i.balanceAmount > 0).length) },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-border/60 p-3 bg-muted/5">
-            <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+            <p className="text-xs uppercase text-muted-foreground">{item.label}</p>
             <p className="text-sm font-semibold mt-1">{item.value}</p>
           </div>
         ))}
@@ -513,7 +513,7 @@ function VendorLedgerDetail({
           { label: "Open Bills", value: String(bills.filter((b) => b.grandTotal - b.amountPaid > 0).length) },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-border/60 p-3 bg-muted/5">
-            <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+            <p className="text-xs uppercase text-muted-foreground">{item.label}</p>
             <p className="text-sm font-semibold mt-1">{item.value}</p>
           </div>
         ))}
@@ -605,7 +605,7 @@ function BankLedgerDetail({
           },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-border/60 p-3 bg-muted/5">
-            <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+            <p className="text-xs uppercase text-muted-foreground">{item.label}</p>
             <p className="text-sm font-semibold mt-1">{item.value}</p>
           </div>
         ))}
@@ -648,7 +648,7 @@ function BankLedgerDetail({
       />
 
       <Link href="/accounts/banking/reconciliation" className="text-xs text-brand-600 hover:underline">
-        View Bank Reconciliation →
+        View Bank Reconciliation â†’
       </Link>
     </div>
   );
@@ -680,7 +680,7 @@ function InventoryLedgerDetail({ ledgerName }: { ledgerName: string }) {
         empty="No batch register entries match this inventory ledger. View stock valuation report for full register."
       />
       <Link href="/accounts/reports/stock-valuation" className="text-xs text-brand-600 hover:underline">
-        Open Stock Valuation Report →
+        Open Stock Valuation Report â†’
       </Link>
     </div>
   );

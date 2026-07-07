@@ -5,6 +5,7 @@ import {
   formatMoney,
   formatMoneyWithSide,
 } from "@/lib/accounts/money-format";
+import { resolveDrCrColumnSide } from "@/lib/accounts/running-balance";
 import type {
   GeneralLedgerDisplayRow,
   GeneralLedgerListingRow,
@@ -29,6 +30,13 @@ function generatedOnLabel(): string {
 
 function exportRowFields(r: GeneralLedgerDisplayRow) {
   const isOpening = r.kind === "opening";
+  const isBalanceRow = r.kind === "opening" || r.kind === "closing";
+  const drCrSide = resolveDrCrColumnSide({
+    debit: r.debit,
+    credit: r.credit,
+    runningBalanceType: r.runningBalanceType,
+    isBalanceRow,
+  });
   return {
     Date: r.date,
     "Voucher Type": isOpening ? "Opening" : r.voucherType,
@@ -38,7 +46,7 @@ function exportRowFields(r: GeneralLedgerDisplayRow) {
     "Debit (₹)": r.debit || "",
     "Credit (₹)": r.credit || "",
     "Running Balance (₹)": r.runningBalance ? formatMoney(r.runningBalance) : "",
-    "Dr/Cr": balanceSideLabel(r.runningBalanceType),
+    "Dr/Cr": balanceSideLabel(drCrSide),
   };
 }
 

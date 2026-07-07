@@ -2,11 +2,11 @@ export type BalanceSide = "Debit" | "Credit";
 
 /** Shared typography class for monetary values in Accounts module */
 export const MONEY_AMOUNT_CLASS =
-  "font-medium tabular-nums text-[13px] leading-snug text-slate-800 whitespace-nowrap";
+  "font-medium tabular-nums text-xs leading-snug text-slate-800 whitespace-nowrap";
 
 /** Table cell class for right-aligned monetary columns */
 export const MONEY_CELL_CLASS =
-  "text-right font-medium tabular-nums text-[13px] leading-snug text-slate-800 whitespace-nowrap";
+  "text-right font-medium tabular-nums text-xs leading-snug text-slate-800 whitespace-nowrap";
 
 /** Input fields for debit/credit entry */
 export const MONEY_INPUT_CLASS = "text-right font-medium tabular-nums";

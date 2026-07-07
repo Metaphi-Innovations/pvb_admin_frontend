@@ -20,7 +20,7 @@ function PathResult({ path }: { path: ChartOfAccount[] }) {
         <span
           key={seg.id}
           className={cn(
-            "text-[11px] leading-snug truncate",
+            "text-xs leading-snug truncate",
             i === 0 && "font-medium text-foreground",
             i > 0 && i < path.length - 1 && "text-muted-foreground",
             i === path.length - 1 && "font-medium text-foreground",
@@ -77,7 +77,7 @@ function ParentOptionList({
         </button>
       ))}
       {search.trim() && filtered.length >= 50 && (
-        <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-border/40">
+        <p className="px-3 py-1.5 text-xs text-muted-foreground border-t border-border/40">
           Showing first 50 matches. Refine your search for more.
         </p>
       )}
@@ -146,7 +146,7 @@ export function CoaParentGroupSelector({
   if (disabled) {
     return (
       <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
-        <p className="text-[10px] text-muted-foreground mb-0.5">Selected Parent</p>
+        <p className="text-xs text-muted-foreground mb-0.5">Selected Parent</p>
         <p className="text-xs text-foreground leading-snug">
           {value ? parentGroupLabel(records, value) : "—"}
         </p>
@@ -176,8 +176,8 @@ export function CoaParentGroupSelector({
         </div>
         {value != null && (
           <div className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
-            <p className="text-[10px] font-medium text-muted-foreground mb-0.5">Selected Parent</p>
-            <p className="text-[11px] text-foreground leading-snug">
+            <p className="text-xs font-medium text-muted-foreground mb-0.5">Selected Parent</p>
+            <p className="text-xs text-foreground leading-snug">
               {parentGroupLabel(records, value)}
             </p>
           </div>
@@ -281,8 +281,8 @@ export function CoaParentGroupSelector({
 
       {value != null && (
         <div className="rounded-md border border-border/50 bg-slate-50/60 px-2.5 py-2">
-          <p className="text-[10px] font-medium text-muted-foreground mb-0.5">Selected Parent</p>
-          <p className="text-[11px] text-foreground leading-snug">
+          <p className="text-xs font-medium text-muted-foreground mb-0.5">Selected Parent</p>
+          <p className="text-xs text-foreground leading-snug">
             {parentGroupLabel(records, value)}
           </p>
         </div>

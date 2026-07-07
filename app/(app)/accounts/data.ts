@@ -5,6 +5,7 @@ import {
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
 import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
+import { stripMisplacedGstLedgers } from "./masters/chart-of-accounts/coa-gst-duplicate-cleanup";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
 export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
@@ -95,6 +96,19 @@ const COA_KEY = "ds_accounts_coa_v10";
 const COA_META_KEY = "ds_accounts_coa_meta";
 const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
+
+let coaCache: ChartOfAccount[] | null = null;
+
+function clearCoaCache(): void {
+  coaCache = null;
+  try {
+    const { invalidateCoaPathCache } =
+      require("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data") as typeof import("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data");
+    invalidateCoaPathCache();
+  } catch {
+    // optional during module init
+  }
+}
 
 const LEGACY_COA_KEYS = [
   "ds_accounts_coa",
@@ -280,7 +294,9 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     remaining = next;
   }
 
-  return mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]);
+  return stripMisplacedGstLedgers(
+    mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]),
+  );
 }
 
 function readCoaMeta(): { revision: number } | null {
@@ -346,28 +362,51 @@ function save<T>(key: string, list: T[]) {
   localStorage.setItem(key, JSON.stringify(list));
 }
 
-export const loadChartOfAccounts = (): ChartOfAccount[] => {
+/** Load COA from storage without GST Master sync (used internally to avoid sync loops). */
+export function loadChartOfAccountsCore(): ChartOfAccount[] {
   if (typeof window !== "undefined") {
     purgeLegacyCoaStorage();
   }
 
   const raw = getOrSeed(COA_KEY, COA_SEED);
-  const needsReset = coaStorageNeedsReset(raw);
-  const source = needsReset ? [] : raw;
+  const stripped = stripMisplacedGstLedgers(raw);
+  const needsReset = coaStorageNeedsReset(stripped);
+  const source = needsReset ? [] : stripped;
   const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
 
-  if (typeof window !== "undefined" && (needsReset || merged.length !== raw.length)) {
+  if (
+    typeof window !== "undefined" &&
+    (needsReset || merged.length !== raw.length || stripped.length !== raw.length)
+  ) {
     save(COA_KEY, merged);
     writeCoaMeta();
   }
 
   return merged;
+}
+
+export const loadChartOfAccounts = (): ChartOfAccount[] => {
+  if (coaCache) return coaCache;
+
+  const core = loadChartOfAccountsCore();
+  if (typeof window === "undefined") return core;
+
+  const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
+  coaCache = applyGstCoaSyncOnLoad(core);
+  return coaCache;
 };
 
 export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
   const cleaned = ensureCoaSystemStructure(list);
   save(COA_KEY, cleaned);
   writeCoaMeta();
+  clearCoaCache();
+  try {
+    const { invalidateLedgerReportCaches } = require("@/lib/accounts/ledger-reports") as typeof import("@/lib/accounts/ledger-reports");
+    invalidateLedgerReportCaches();
+  } catch {
+    // optional — avoid circular init issues during module load
+  }
   dispatchCoaChanged();
 };
 export const getSystemCoaNodes = () => SYSTEM_COA_NODES;

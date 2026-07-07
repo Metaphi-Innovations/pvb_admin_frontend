@@ -10,7 +10,7 @@ import {
   getPayablesFilterOptions,
   type VendorAgeingRow,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import {
   exportSupplierAgeingToExcel,
   exportSupplierAgeingToPdf,
@@ -48,10 +48,11 @@ export default function VendorAgeingClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     const activeFyId = getActiveFinancialYearId();

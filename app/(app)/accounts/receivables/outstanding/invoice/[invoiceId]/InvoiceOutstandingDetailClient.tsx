@@ -7,7 +7,7 @@ import { ArrowLeft, FileText, Receipt } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getInvoiceOutstandingDetail } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
@@ -34,13 +34,11 @@ export default function InvoiceOutstandingDetailClient() {
   const invoiceId = Number(params.invoiceId);
   const fromAgeing = searchParams.get("from") === "ageing";
 
-  useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   const detail = useMemo(
     () => (Number.isFinite(invoiceId) ? getInvoiceOutstandingDetail(invoiceId) : null),
-    [invoiceId],
+    [invoiceId, sectionRefresh],
   );
 
   if (!detail) {
@@ -79,17 +77,17 @@ export default function InvoiceOutstandingDetailClient() {
       actions={
         <div className="flex items-center gap-2">
           <Link href={backHref}>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
           <Link href={`/accounts/transactions/invoices/${invoice.invoiceId}`}>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
               <FileText className="w-4 h-4" /> View Sales Invoice
             </Button>
           </Link>
           <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
-            <Button size="sm" className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
+            <Button size="sm" className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
               <Receipt className="w-4 h-4" /> Go to Receipt Allocation
             </Button>
           </Link>
@@ -100,7 +98,7 @@ export default function InvoiceOutstandingDetailClient() {
     >
       <div className="flex-shrink-0 border-b border-border/60 bg-white px-4 py-3 space-y-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
             Customer Information
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
@@ -113,7 +111,7 @@ export default function InvoiceOutstandingDetailClient() {
               ["Sales Executive", customer.salesManName || "Rajesh Sharma"],
             ].map(([label, value]) => (
               <div key={label}>
-                <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
                 <p className="font-medium mt-0.5">{value}</p>
               </div>
             ))}
@@ -121,7 +119,7 @@ export default function InvoiceOutstandingDetailClient() {
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
             Invoice Information
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
@@ -134,12 +132,12 @@ export default function InvoiceOutstandingDetailClient() {
               ["Outstanding", formatMoney(invoice.outstanding)],
             ].map(([label, value]) => (
               <div key={label}>
-                <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
                 <p className="font-medium mt-0.5">{value}</p>
               </div>
             ))}
             <div>
-              <p className="text-[10px] uppercase text-muted-foreground font-semibold">Status</p>
+              <p className="text-xs uppercase text-muted-foreground font-semibold">Status</p>
               <div className="mt-1">
                 <StatusBadge status={invoice.status} />
               </div>
@@ -149,15 +147,15 @@ export default function InvoiceOutstandingDetailClient() {
 
         <div className="grid grid-cols-3 gap-3 rounded-lg border border-border/60 bg-muted/10 p-3 text-xs">
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Invoice Amount</p>
+            <p className="text-xs uppercase text-muted-foreground font-semibold">Invoice Amount</p>
             <p className="text-sm font-bold mt-0.5 tabular-nums">{formatMoney(summary.invoiceAmount)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Total Received</p>
+            <p className="text-xs uppercase text-muted-foreground font-semibold">Total Received</p>
             <p className="text-sm font-bold mt-0.5 tabular-nums">{formatMoney(summary.receivedAmount)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Outstanding</p>
+            <p className="text-xs uppercase text-muted-foreground font-semibold">Outstanding</p>
             <p className="text-sm font-bold mt-0.5 tabular-nums text-brand-700">
               {formatMoney(summary.outstandingAmount)}
             </p>
@@ -167,7 +165,7 @@ export default function InvoiceOutstandingDetailClient() {
 
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex-shrink-0 px-4 py-2 border-b border-border/60 bg-white">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Receipt History
           </p>
         </div>
@@ -199,7 +197,7 @@ export default function InvoiceOutstandingDetailClient() {
                     </AccountsTableCell>
                     <AccountsTableCell>{r.paymentMode}</AccountsTableCell>
                     <AccountsTableCell>
-                      <span className="font-mono text-[11px]">{r.referenceNo}</span>
+                      <span className="font-mono text-xs">{r.referenceNo}</span>
                     </AccountsTableCell>
                   </AccountsTableRow>
                 ))

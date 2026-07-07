@@ -67,7 +67,7 @@ export function CustomerMasterPanel({
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {title} data is loaded from{" "}
         <Link href="/masters/customers" className="text-brand-700 hover:underline">
           Customer Master

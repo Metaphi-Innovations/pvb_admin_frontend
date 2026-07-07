@@ -1,7 +1,10 @@
 "use client";
 
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
+
+const LedgerDetailClient = createLazyClientPage(() => import("./LedgerDetailClient"));
+
 import { useParams } from "next/navigation";
-import LedgerDetailClient from "./LedgerDetailClient";
 
 export default function LedgerViewPage() {
   const { id } = useParams<{ id: string }>();

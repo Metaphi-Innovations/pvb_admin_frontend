@@ -1,4 +1,6 @@
-import PurchaseViewPageClient from "../../../purchase/PurchaseViewPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const PurchaseViewPageClient = lazyAccountsPage(() => import("../../../purchase/PurchaseViewPageClient"));
 
 type PageProps = { params: { id: string } };
 

@@ -18,7 +18,7 @@ function PostingRow({ row }: { row: SalesInvoiceLedgerPosting }) {
         <span className="font-medium capitalize">
           {row.role === "gst" ? row.ledgerName : row.role}
         </span>
-        <span className="block text-[10px] text-muted-foreground mt-0.5 truncate max-w-[220px]" title={row.coaPath}>
+        <span className="block text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]" title={row.coaPath}>
           {row.coaPath}
         </span>
       </td>
@@ -33,7 +33,7 @@ function PostingRow({ row }: { row: SalesInvoiceLedgerPosting }) {
       <td className="px-3 py-2 text-right font-mono tabular-nums text-red-700">
         {row.credit > 0 ? formatMoney(row.credit) : "—"}
       </td>
-      <td className="px-3 py-2 text-right text-[10px] text-muted-foreground whitespace-nowrap">
+      <td className="px-3 py-2 text-right text-xs text-muted-foreground whitespace-nowrap">
         {ledgerBalanceLabel(row.ledgerId)}
       </td>
     </tr>
@@ -57,18 +57,18 @@ export function SalesInvoiceAccountingPanel({
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Accounting Visibility
             </h2>
-            <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+            <p className="text-xs text-muted-foreground mt-1 max-w-xl">
               Sales invoice postings flow to customer ledger, sales revenue, and output GST — then into Trial
               Balance, P&amp;L (revenue only), and Balance Sheet.
             </p>
           </div>
           {state.isPosted ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
               <CheckCircle2 className="w-4 h-4" />
               Posted · {state.voucherNumber}
             </span>
           ) : state.isDraft ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
               <FileText className="w-4 h-4" />
               Draft — not posted
             </span>
@@ -77,19 +77,19 @@ export function SalesInvoiceAccountingPanel({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground">Invoice No</p>
+            <p className="text-xs uppercase text-muted-foreground">Invoice No</p>
             <p className="font-medium mt-0.5">{state.invoiceNo || "—"}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground">Customer</p>
+            <p className="text-xs uppercase text-muted-foreground">Customer</p>
             <p className="font-medium mt-0.5">{state.customerName}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground">Taxable Amount</p>
+            <p className="text-xs uppercase text-muted-foreground">Taxable Amount</p>
             <p className="font-medium mt-0.5 tabular-nums">{formatMoney(state.taxableAmount)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground">GST / Total</p>
+            <p className="text-xs uppercase text-muted-foreground">GST / Total</p>
             <p className="font-medium mt-0.5 tabular-nums">
               {formatMoney(state.gstAmount)} / {formatMoney(state.grandTotal)}
             </p>
@@ -99,16 +99,16 @@ export function SalesInvoiceAccountingPanel({
         {!state.isPosted ? (
           <>
             <LedgerImpactPreview title="Ledger Impact Preview" lines={state.previewLines} className="border-0 p-0 shadow-none" />
-            <ul className="text-[10px] text-muted-foreground space-y-1 list-disc pl-4">
+            <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
               <li>This will update Customer Outstanding</li>
-              <li>This will update COA → Income → Sales (taxable amount only)</li>
-              <li>This will update COA → Current Liabilities → Duties &amp; Taxes Payable (CGST / SGST / IGST Payable)</li>
+              <li>This will update COA â†’ Income â†’ Sales (taxable amount only)</li>
+              <li>This will update COA â†’ Current Liabilities â†’ Duties &amp; Taxes Payable (CGST / SGST / IGST Payable)</li>
               <li>This will update Trial Balance and Profit &amp; Loss (sales revenue only — GST excluded)</li>
             </ul>
           </>
         ) : (
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Posted Ledger Entries
             </p>
             <div className="overflow-x-auto rounded-md border border-border/50">
@@ -129,7 +129,7 @@ export function SalesInvoiceAccountingPanel({
                 </tbody>
               </table>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Ledger statements show voucher <strong>{state.voucherNumber}</strong> (invoice reference). GST
               does not appear in Profit &amp; Loss — only sales revenue is income.
             </p>
@@ -137,18 +137,18 @@ export function SalesInvoiceAccountingPanel({
         )}
 
         <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
-          <Button asChild variant="outline" size="sm" className="h-7 text-[11px] gap-1">
+          <Button asChild variant="outline" size="sm" className="h-7 text-sm gap-1">
             <Link href={state.reportLinks.chartOfAccounts}>
               <Link2 className="w-3 h-3" /> Chart of Accounts
             </Link>
           </Button>
-          <Button asChild variant="outline" size="sm" className="h-7 text-[11px]">
+          <Button asChild variant="outline" size="sm" className="h-7 text-sm">
             <Link href={state.reportLinks.trialBalance}>Trial Balance</Link>
           </Button>
-          <Button asChild variant="outline" size="sm" className="h-7 text-[11px]">
+          <Button asChild variant="outline" size="sm" className="h-7 text-sm">
             <Link href={state.reportLinks.profitAndLoss}>Profit &amp; Loss</Link>
           </Button>
-          <Button asChild variant="outline" size="sm" className="h-7 text-[11px]">
+          <Button asChild variant="outline" size="sm" className="h-7 text-sm">
             <Link href={state.reportLinks.balanceSheet}>Balance Sheet</Link>
           </Button>
         </div>

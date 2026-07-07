@@ -1,156 +1,181 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import React, { memo } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { PrefetchLink } from "@/components/navigation/PrefetchLink";
 import { cn } from "@/lib/utils";
 import {
-  ACCOUNTS_SIDEBAR_GROUPS,
+  ACCOUNTS_NAV_GROUPS,
+  CHART_OF_ACCOUNTS_HREF,
   isAccountsNavActive,
-  resolveAccountsNavGroupId,
   type AccountsNavGroup,
 } from "@/lib/accounts/accounts-nav";
-import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
-import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
-import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { ACCOUNTS_MAIN_PANEL_CLASS, ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
 import { ACCOUNTS_SIDEBAR_GROUP_CLASS, ACCOUNTS_SIDEBAR_ITEM_CLASS } from "@/lib/accounts/accounts-typography";
-import { CoaSidebarNav } from "./CoaSidebarNav";
+import { useAccountsAccordion } from "./AccountsAccordionContext";
+
+const CoaSidebarNavTree = dynamic(
+  () => import("./CoaSidebarNav").then((m) => ({ default: m.CoaSidebarNavTree })),
+  { ssr: false },
+);
 
 interface AccountsModuleShellProps {
   children: React.ReactNode;
 }
 
-function NavGroup({
+const AccountsSidebarNavLink = memo(function AccountsSidebarNavLink({
+  href,
+  label,
+  icon: ItemIcon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: AccountsNavGroup["items"][number]["icon"];
+  active: boolean;
+}) {
+  return (
+    <PrefetchLink
+      href={href}
+      aria-current={active ? "page" : undefined}
+      onClick={(e) => {
+        (e.currentTarget as HTMLAnchorElement).blur();
+      }}
+      className={cn(
+        "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-lg leading-snug outline-none",
+        ACCOUNTS_SIDEBAR_ITEM_CLASS,
+        active
+          ? "bg-[#FFF3E6] text-brand-800 font-medium"
+          : "text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30",
+      )}
+    >
+      <ItemIcon
+        className={cn(
+          "w-4 h-4 flex-shrink-0",
+          active ? "text-brand-600" : "text-muted-foreground group-hover:text-brand-600",
+        )}
+      />
+      <span>{label}</span>
+    </PrefetchLink>
+  );
+});
+
+const AccountsSidebarSection = memo(function AccountsSidebarSection({
   group,
-  defaultOpen,
+  isOpen,
+  onToggleSection,
   pathname,
 }: {
   group: AccountsNavGroup;
-  defaultOpen: boolean;
+  isOpen: boolean;
+  onToggleSection: (sectionId: AccountsNavGroup["id"]) => void;
   pathname: string;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   const GroupIcon = group.icon;
+  const isCoaSection = group.id === "coa";
+  const isCoaRoute = pathname.startsWith(CHART_OF_ACCOUNTS_HREF);
   const hasActiveChild = group.items.some((item) => isAccountsNavActive(pathname, item.href));
 
-  useEffect(() => {
-    setOpen(defaultOpen);
-  }, [defaultOpen]);
-
   return (
-    <div className="mb-2">
+    <div
+      className={cn(
+        "mb-2 rounded-lg border border-border/60 bg-white shadow-sm overflow-hidden",
+        isCoaSection && isCoaRoute && isOpen && "ring-1 ring-brand-200/60",
+      )}
+    >
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
+        onClick={() => onToggleSection(group.id)}
+        aria-expanded={isOpen}
         className={cn(
-          "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-150",
-          ACCOUNTS_SIDEBAR_GROUP_CLASS,
-          hasActiveChild
-            ? "text-brand-800 bg-brand-50/60"
-            : "text-[#6B7280] hover:bg-brand-50/50 hover:text-brand-800",
+          "w-full flex items-center gap-2 px-2.5 py-2",
+          isOpen ? "bg-brand-50/50 border-b border-border/50" : "hover:bg-brand-50/40",
+          hasActiveChild && !isOpen && "bg-brand-50/60",
         )}
       >
         <span
           className={cn(
-            "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
-            hasActiveChild
-              ? "bg-brand-100 text-brand-700"
-              : "bg-muted/60 text-muted-foreground group-hover:text-brand-600",
+            "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
+            hasActiveChild ? "bg-brand-100 text-brand-700" : "bg-muted/60 text-muted-foreground",
           )}
         >
           <GroupIcon className="w-4 h-4" />
         </span>
-        <span className="flex-1 text-left">{group.label}</span>
+        <span
+          className={cn(
+            "flex-1 text-left",
+            ACCOUNTS_SIDEBAR_GROUP_CLASS,
+            hasActiveChild ? "text-brand-800" : "text-[#6B7280]",
+          )}
+        >
+          {group.label}
+        </span>
         <ChevronDown
           className={cn(
-            "w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform duration-200",
-            open ? "rotate-0" : "-rotate-90",
+            "w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform duration-150 ease-out will-change-transform",
+            isOpen ? "rotate-0" : "-rotate-90",
           )}
         />
       </button>
 
-      {open && (
-        <div className="mt-1 ml-1 space-y-0.5 border-l border-border/50 pl-2">
-          {group.items.map((item) => {
-            const active = isAccountsNavActive(pathname, item.href);
-            const ItemIcon = item.icon;
+      {isOpen && isCoaSection ? <CoaSidebarNavTree /> : null}
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-r-lg leading-snug",
-                  ACCOUNTS_SIDEBAR_ITEM_CLASS,
-                  "border-l-2 -ml-[1px] transition-all duration-150",
-                  active
-                    ? "border-brand-600 bg-[#FFF3E6] text-brand-800 font-medium"
-                    : "border-transparent text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
-                )}
-              >
-                <ItemIcon
-                  className={cn(
-                    "w-4 h-4 flex-shrink-0 transition-colors",
-                    active ? "text-brand-600" : "text-muted-foreground group-hover:text-brand-600",
-                  )}
-                />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+      {isOpen && !isCoaSection ? (
+        <div className="px-2.5 pb-2 pt-1 space-y-0.5">
+          {group.items.map((item) => (
+            <AccountsSidebarNavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              active={isAccountsNavActive(pathname, item.href)}
+            />
+          ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
-}
+});
 
-export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
+export const AccountsModuleShell = memo(function AccountsModuleShell({
+  children,
+}: AccountsModuleShellProps) {
   const pathname = usePathname();
-
-  const activeGroupId = useMemo(() => resolveAccountsNavGroupId(pathname), [pathname]);
-
-  useEffect(() => {
-    const run = () => {
-      seedAccountsDemoData();
-      ensureGstAccountingLedgers();
-    };
-
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(run, { timeout: 2500 });
-      return () => window.cancelIdleCallback(id);
-    }
-
-    const t = window.setTimeout(run, 250);
-    return () => window.clearTimeout(t);
-  }, []);
+  const { activeAccountsSection, toggleAccountsSection } = useAccountsAccordion();
 
   return (
     <div className="accounts-module-shell flex h-full min-h-0 w-full overflow-hidden">
       <aside className="accounts-module-sidebar w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
         <div className="flex-shrink-0 px-3 py-3 border-b border-border/60">
           <p className={cn(ACCOUNTS_SIDEBAR_GROUP_CLASS, "text-brand-800")}>Accounting</p>
-          <p className="text-[13px] text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Chart of Accounts · Transactions · Receivables · Payables · Banking · Reports
           </p>
         </div>
-        <nav className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-2.5 py-3")}>
-          <CoaSidebarNav />
-          {ACCOUNTS_SIDEBAR_GROUPS.map((group) => (
-            <NavGroup
+        <nav
+          className={cn(
+            ACCOUNTS_SCROLL_PANEL_CLASS,
+            "h-0 flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 py-3",
+          )}
+        >
+          {ACCOUNTS_NAV_GROUPS.map((group) => (
+            <AccountsSidebarSection
               key={group.id}
               group={group}
               pathname={pathname}
-              defaultOpen={activeGroupId === group.id}
+              isOpen={activeAccountsSection === group.id}
+              onToggleSection={toggleAccountsSection}
             />
           ))}
         </nav>
       </aside>
 
       <main className="accounts-module-main flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
-        <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-4 py-3")}>{children}</div>
+        <div className={cn(ACCOUNTS_MAIN_PANEL_CLASS, "px-3 py-2")}>{children}</div>
       </main>
     </div>
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Paperclip, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadBankAccounts } from "@/lib/accounts/bank-accounts-data";
 import {
   createFundTransfer,
@@ -50,14 +50,11 @@ export default function FundTransferFormClient() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    ensureBankingDemoOnPageLoad();
-    loadBankAccounts();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   const accountOptions = useMemo(
     () => listTransferAccountOptions(form.transferMode),
-    [form.transferMode],
+    [form.transferMode, sectionRefresh],
   );
 
   const availableBalance = useMemo(() => {
@@ -142,12 +139,12 @@ export default function FundTransferFormClient() {
       code={transferNo}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.back()}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
             disabled={saving}
             onClick={save}
           >
@@ -183,7 +180,7 @@ export default function FundTransferFormClient() {
               value={transferNo}
               readOnly
             />
-            <p className="text-[11px] text-muted-foreground">Auto-generated on save</p>
+            <p className="text-xs text-muted-foreground">Auto-generated on save</p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">
@@ -234,7 +231,7 @@ export default function FundTransferFormClient() {
               </SelectContent>
             </Select>
             {availableBalance != null && form.fromAccountId && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Available balance:{" "}
                 <span className="font-medium text-foreground tabular-nums">
                   {formatMoney(availableBalance)}
@@ -296,7 +293,7 @@ export default function FundTransferFormClient() {
         <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-medium">Attachment</Label>
-            <span className="text-[11px] text-muted-foreground">Optional</span>
+            <span className="text-xs text-muted-foreground">Optional</span>
           </div>
           <input
             ref={fileRef}
@@ -324,7 +321,7 @@ export default function FundTransferFormClient() {
               type="button"
               onClick={() => fileRef.current?.click()}
               className={cn(
-                "w-full flex items-center justify-center gap-2 h-9 text-xs border border-dashed border-border",
+                "w-full flex items-center justify-center gap-2 h-9 text-sm border border-dashed border-border",
                 "rounded-lg hover:bg-muted/40 text-muted-foreground",
               )}
             >
@@ -334,7 +331,7 @@ export default function FundTransferFormClient() {
           )}
         </div>
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Saving posts a contra voucher — debiting the destination account and crediting the source
           account. Impacts Bank Book, Cash Book, General Ledger and Trial Balance.
         </p>

@@ -58,7 +58,7 @@ export function CreditNoteSchemeSelector({ value, onChange, disabled }: CreditNo
         disabled={disabled}
       />
       {selected && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Scheme:{" "}
           <span className="font-medium text-foreground">
             {selected.schemeCode} | {selected.schemeName} | {benefitLabel}

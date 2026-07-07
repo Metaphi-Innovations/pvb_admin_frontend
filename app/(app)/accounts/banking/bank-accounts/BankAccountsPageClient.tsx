@@ -36,7 +36,7 @@ import {
 } from "@/lib/accounts/bank-accounts-data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
-import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 
 type BankAccountRow = BankAccountMaster & {
   currentBalance: number;
@@ -84,11 +84,11 @@ export default function BankAccountsPageClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureBankingDemoOnPageLoad();
-    loadBankAccounts();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const rows = useMemo((): BankAccountRow[] => {
     void refreshKey;
@@ -141,7 +141,7 @@ export default function BankAccountsPageClient() {
       actions={
         <Button
           size="sm"
-          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+          className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
           onClick={() => router.push("/accounts/banking/bank-accounts/new")}
         >
           <Plus className="w-4 h-4" /> Add Bank Account
@@ -164,7 +164,7 @@ export default function BankAccountsPageClient() {
         }
         summary={
           filtered.length > 0 ? (
-            <div className="flex items-center justify-between px-5 py-2 border-b border-border/60 bg-muted/10 text-[11px] text-muted-foreground">
+            <div className="flex items-center justify-between px-5 py-2 border-b border-border/60 bg-muted/10 text-xs text-muted-foreground">
               <span>
                 <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
                 <span className="font-medium text-foreground">{rows.length}</span> accounts

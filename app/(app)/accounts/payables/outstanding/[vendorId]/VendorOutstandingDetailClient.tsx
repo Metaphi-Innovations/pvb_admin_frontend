@@ -11,7 +11,7 @@ import {
   getVendorPayablesMeta,
   getVendorPaymentHistory,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
@@ -29,7 +29,7 @@ function formatReportDate(value: string): string {
 function InfoBlock({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
       <p className="text-xs font-medium mt-0.5">{value}</p>
     </div>
   );
@@ -43,10 +43,11 @@ export default function VendorOutstandingDetailClient() {
   const [asOnDate] = useState(defaultAsOnDate());
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const detail = useMemo(
     () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, asOnDate) : null),
@@ -98,12 +99,12 @@ export default function VendorOutstandingDetailClient() {
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/payables/outstanding">
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
           <Link href={`/accounts/payables/payment-allocation?vendorId=${vendor.id}`}>
-            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white">
+            <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white">
               Go to Payment Allocation
             </Button>
           </Link>
@@ -114,7 +115,7 @@ export default function VendorOutstandingDetailClient() {
     >
       <div className="flex-1 overflow-auto min-h-0 space-y-4 p-4">
         <section className="rounded-xl border border-border bg-white shadow-sm p-4 space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Supplier Information
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -131,7 +132,7 @@ export default function VendorOutstandingDetailClient() {
 
         {highlightedBill && (
           <section className="rounded-xl border border-brand-200 bg-brand-50/40 shadow-sm p-4 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Invoice Information
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -148,7 +149,7 @@ export default function VendorOutstandingDetailClient() {
               />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" asChild>
+              <Button variant="outline" size="sm" className="h-9 text-sm font-medium" asChild>
                 <Link href={`/accounts/purchase-invoices/${highlightedBill.billId}`}>
                   View Purchase Invoice
                 </Link>
@@ -158,7 +159,7 @@ export default function VendorOutstandingDetailClient() {
         )}
 
         <section className="rounded-xl border border-border bg-white shadow-sm p-4 space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Outstanding Summary
           </p>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
@@ -176,7 +177,7 @@ export default function VendorOutstandingDetailClient() {
                   label === "Current Outstanding" && "border-brand-200 bg-brand-50/30",
                 )}
               >
-                <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
                 <p
                   className={cn(
                     "text-sm font-bold mt-1 tabular-nums",
@@ -192,7 +193,7 @@ export default function VendorOutstandingDetailClient() {
 
         <section className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border bg-muted/20">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Open Invoices
             </p>
           </div>
@@ -245,7 +246,7 @@ export default function VendorOutstandingDetailClient() {
                     <td className="px-3 py-2.5 text-right">
                       <Link
                         href={`/accounts/purchase-invoices/${bill.billId}`}
-                        className="text-[11px] text-brand-700 hover:underline"
+                        className="text-xs text-brand-700 hover:underline"
                       >
                         View
                       </Link>
@@ -259,7 +260,7 @@ export default function VendorOutstandingDetailClient() {
 
         <section className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border bg-muted/20">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Payment History
             </p>
           </div>

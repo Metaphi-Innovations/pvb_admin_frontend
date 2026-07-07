@@ -1,4 +1,8 @@
 import { findLedgerById, validatePostingLedgerId } from "@/lib/accounts/coa-hierarchy";
+import {
+  resolveTdsPayableLedger,
+  resolveTdsReceivableLedger,
+} from "@/lib/accounts/tds-accounting";
 import { validateVoucherContactLines } from "@/lib/accounts/voucher-ledger-groups";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import type { RecordStatus } from "../data";
@@ -59,6 +63,24 @@ const VOUCHER_KEY = "ds_accounts_vouchers_v1";
 
 const VOUCHER_SEED: AccountingVoucher[] = [];
 
+export type LedgerMovementTotals = { debit: number; credit: number };
+
+let voucherListCache: AccountingVoucher[] | null = null;
+let ledgerMovementIndex: Map<number, LedgerMovementTotals> | null = null;
+let ledgersWithPostings: Set<number> | null = null;
+let voucherCacheGeneration = 0;
+
+function clearVoucherCaches(): void {
+  voucherListCache = null;
+  ledgerMovementIndex = null;
+  ledgersWithPostings = null;
+  voucherCacheGeneration += 1;
+}
+
+export function getVoucherCacheGeneration(): number {
+  return voucherCacheGeneration;
+}
+
 function getOrSeed(): AccountingVoucher[] {
   if (typeof window === "undefined") return VOUCHER_SEED;
   try {
@@ -74,12 +96,54 @@ function getOrSeed(): AccountingVoucher[] {
 }
 
 export function loadVouchers(): AccountingVoucher[] {
-  return getOrSeed().map(normalizeVoucher);
+  if (voucherListCache) return voucherListCache;
+  voucherListCache = getOrSeed().map(normalizeVoucher);
+  return voucherListCache;
 }
 
 export function saveVouchers(list: AccountingVoucher[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(VOUCHER_KEY, JSON.stringify(list));
+  clearVoucherCaches();
+  try {
+    const { invalidateLedgerReportCaches } = require("@/lib/accounts/ledger-reports") as typeof import("@/lib/accounts/ledger-reports");
+    invalidateLedgerReportCaches();
+  } catch {
+    // optional
+  }
+}
+
+function ensureLedgerMovementIndex(): Map<number, LedgerMovementTotals> {
+  if (ledgerMovementIndex) return ledgerMovementIndex;
+  ledgerMovementIndex = new Map();
+  ledgersWithPostings = new Set();
+  for (const voucher of loadVouchers()) {
+    if (voucher.status !== "posted" && voucher.status !== "approved") continue;
+    for (const line of voucher.lines) {
+      if (!line.ledgerId) continue;
+      ledgersWithPostings.add(line.ledgerId);
+      const totals = ledgerMovementIndex.get(line.ledgerId) ?? { debit: 0, credit: 0 };
+      totals.debit += Number(line.debit) || 0;
+      totals.credit += Number(line.credit) || 0;
+      ledgerMovementIndex.set(line.ledgerId, totals);
+    }
+  }
+  return ledgerMovementIndex;
+}
+
+/** O(1) — whether any posted voucher line targets this ledger. */
+export function ledgerHasVoucherPostings(ledgerId: number): boolean {
+  ensureLedgerMovementIndex();
+  return ledgersWithPostings?.has(ledgerId) ?? false;
+}
+
+/** O(1) debit/credit totals per ledger — built once per voucher cache epoch. */
+export function getLedgerMovementTotals(ledgerId: number): LedgerMovementTotals {
+  return ensureLedgerMovementIndex().get(ledgerId) ?? { debit: 0, credit: 0 };
+}
+
+export function getPostedVouchers(): AccountingVoucher[] {
+  return loadVouchers().filter((v) => v.status === "posted" || v.status === "approved");
 }
 
 export function getVouchersByType(type: VoucherTypeCode): AccountingVoucher[] {
@@ -369,8 +433,27 @@ export interface SimpleCashVoucherInput {
   expenseHeadLedgerId?: number | null;
   expenseHeadLedgerName?: string;
   tdsAmount?: number;
+  /** TDS Master section id — auto-resolves payable/receivable ledger */
+  tdsSectionMasterId?: number | null;
   tdsLedgerId?: number | null;
   tdsLedgerName?: string;
+}
+
+function resolveTdsLedgerForInput(
+  input: SimpleCashVoucherInput,
+  kind: "payable" | "receivable",
+): { id: number | null; name: string } {
+  if (input.tdsLedgerId) {
+    return { id: input.tdsLedgerId, name: input.tdsLedgerName ?? "" };
+  }
+  if (input.tdsSectionMasterId != null) {
+    const ledger =
+      kind === "payable"
+        ? resolveTdsPayableLedger(input.tdsSectionMasterId)
+        : resolveTdsReceivableLedger(input.tdsSectionMasterId);
+    if (ledger) return { id: ledger.id, name: ledger.accountName };
+  }
+  return { id: null, name: "" };
 }
 
 function nextLineId(offset = 0): number {
@@ -395,11 +478,12 @@ export function buildReceiptVoucherLines(input: SimpleCashVoucherInput): Voucher
       remarks,
     });
   }
-  if (input.tdsLedgerId && tds > 0) {
+  const tdsLedger = resolveTdsLedgerForInput(input, "receivable");
+  if (tdsLedger.id && tds > 0) {
     lines.push({
       id: nextLineId(1),
-      ledgerId: input.tdsLedgerId,
-      ledgerName: input.tdsLedgerName ?? "",
+      ledgerId: tdsLedger.id,
+      ledgerName: tdsLedger.name,
       debit: tds,
       credit: 0,
       remarks: "TDS",
@@ -448,11 +532,12 @@ export function buildPaymentVoucherLines(input: SimpleCashVoucherInput): Voucher
       remarks,
     });
   }
-  if (input.tdsLedgerId && tds > 0) {
+  const tdsLedger = resolveTdsLedgerForInput(input, "payable");
+  if (tdsLedger.id && tds > 0) {
     lines.push({
       id: nextLineId(2),
-      ledgerId: input.tdsLedgerId,
-      ledgerName: input.tdsLedgerName ?? "",
+      ledgerId: tdsLedger.id,
+      ledgerName: tdsLedger.name,
       debit: 0,
       credit: tds,
       remarks: "TDS",
@@ -467,7 +552,10 @@ export function validatePaymentVoucherForPost(input: SimpleCashVoucherInput): st
   if (!input.bankCashLedgerId) return "Paid From / Bank or Cash Ledger is required.";
   if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
   const tds = roundMoney(input.tdsAmount ?? 0);
-  if (tds > 0 && !input.tdsLedgerId) return "TDS ledger is required when TDS amount is entered.";
+  if (tds > 0) {
+    const { id } = resolveTdsLedgerForInput(input, "payable");
+    if (!id) return "Select a TDS section when TDS amount is entered.";
+  }
   return null;
 }
 
@@ -476,7 +564,10 @@ export function validateReceiptVoucherForPost(input: SimpleCashVoucherInput): st
   if (!input.bankCashLedgerId) return "Deposit To / Bank or Cash Ledger is required.";
   if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
   const tds = roundMoney(input.tdsAmount ?? 0);
-  if (tds > 0 && !input.tdsLedgerId) return "TDS ledger is required when TDS amount is entered.";
+  if (tds > 0) {
+    const { id } = resolveTdsLedgerForInput(input, "receivable");
+    if (!id) return "Select a TDS section when TDS amount is entered.";
+  }
   return null;
 }
 

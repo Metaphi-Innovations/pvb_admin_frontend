@@ -40,7 +40,7 @@ function CompactCard({ rows }: { rows: { label: string; value: string }[] }) {
   const visible = rows.filter((r) => r.value);
   if (!visible.length) return null;
   return (
-    <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1 text-[11px]">
+    <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1 text-xs">
       {visible.map((r) => (
         <div key={r.label}>
           <span className="text-muted-foreground">{r.label}: </span>
@@ -199,10 +199,10 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
       code={paymentNo || undefined}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(PAYMENTS_LIST_PATH)}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(PAYMENTS_LIST_PATH)}>
             Cancel
           </Button>
-          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={submit}>
+          <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={submit}>
             {isEdit ? "Save" : "Record Payment"}
           </Button>
         </div>
@@ -214,16 +214,16 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Payment No.</Label>
-                <Input className="h-9 text-[13px] font-medium bg-muted/30" disabled value={isEdit ? paymentNo : "Auto-generated"} />
+                <Input className="h-9 text-sm font-medium bg-muted/30" disabled value={isEdit ? paymentNo : "Auto-generated"} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Payment Date *</Label>
-                <Input type="date" className="h-9 text-[13px] font-medium" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                <Input type="date" className="h-9 text-sm font-medium" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Source Type *</Label>
                 <Select value={sourceType} onValueChange={(v) => onSourceTypeChange(v as PaymentSourceType)}>
-                  <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-sm font-medium"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {SOURCE_TYPE_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
@@ -248,12 +248,12 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Payee *</Label>
-                  <Input className="h-9 text-[13px] font-medium" value={paidTo} onChange={(e) => { setPaidTo(e.target.value); setEmployeeOrVendor(e.target.value); }} />
+                  <Input className="h-9 text-sm font-medium" value={paidTo} onChange={(e) => { setPaidTo(e.target.value); setEmployeeOrVendor(e.target.value); }} />
                 </div>
                 {sourceType === "vendor_adjustment" && (
                   <div className="space-y-1">
                     <Label className="text-xs">Reference No. (optional)</Label>
-                    <Input className="h-9 text-[13px] font-medium" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} />
+                    <Input className="h-9 text-sm font-medium" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} />
                   </div>
                 )}
               </div>
@@ -273,7 +273,7 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
               }
             />
             {sourceType === "purchase" && (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Effective payable after debit notes will be applied in a future update. Currently using invoice total.
               </p>
             )}
@@ -284,12 +284,12 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Payment Amount *</Label>
-                  <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={payAmount} onChange={(v) => setPayAmount(String(v))} />
+                  <AccountsMoneyInput className="h-9 text-sm font-medium" value={payAmount} onChange={(v) => setPayAmount(String(v))} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Payment Mode *</Label>
                   <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                    <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-9 text-sm font-medium"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PAYMENT_MODES.map((m) => (
                         <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
@@ -299,11 +299,11 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Reference Number</Label>
-                  <Input className="h-9 text-[13px] font-medium" value={paymentReferenceNo} onChange={(e) => setPaymentReferenceNo(e.target.value)} />
+                  <Input className="h-9 text-sm font-medium" value={paymentReferenceNo} onChange={(e) => setPaymentReferenceNo(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Transaction Number</Label>
-                  <Input className="h-9 text-[13px] font-medium" value={transactionNo} onChange={(e) => setTransactionNo(e.target.value)} />
+                  <Input className="h-9 text-sm font-medium" value={transactionNo} onChange={(e) => setTransactionNo(e.target.value)} />
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label className="text-xs">Remarks</Label>

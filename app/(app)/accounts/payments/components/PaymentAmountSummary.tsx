@@ -38,7 +38,7 @@ export function PaymentAmountSummary({
       <div className={cn("grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs", className)}>
         {rows.map((row) => (
           <div key={row.label}>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{row.label}</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{row.label}</p>
             <p className={cn("font-semibold tabular-nums mt-0.5", row.className)}>{formatINR(row.value)}</p>
           </div>
         ))}

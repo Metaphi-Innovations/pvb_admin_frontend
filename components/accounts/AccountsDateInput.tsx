@@ -70,7 +70,7 @@ export function AccountsDateInput({
       </span>
       <span
         className={cn(
-          "accounts-date-display pl-7 pr-1.5 w-full cursor-pointer",
+          "accounts-date-display block min-w-0 pl-7 pr-1.5 w-full cursor-pointer truncate tabular-nums",
           display ? "text-[#1F2937]" : "text-[#6B7280]",
         )}
         onClick={openPicker}

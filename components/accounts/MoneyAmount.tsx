@@ -43,7 +43,7 @@ export function MoneyAmount({
         )}
       >
         <span className="tabular-nums">{formatMoney(amount)}</span>
-        <span className="text-[10px] font-semibold leading-none px-1 py-0.5 rounded bg-muted text-muted-foreground">
+        <span className="text-xs font-semibold leading-none px-1 py-0.5 rounded bg-muted text-muted-foreground">
           {balanceSideLabel(side)}
         </span>
       </span>

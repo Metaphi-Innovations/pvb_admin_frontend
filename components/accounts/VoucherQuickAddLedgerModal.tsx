@@ -112,7 +112,7 @@ export function VoucherQuickAddLedgerSheet({
             </p>
           )}
 
-          <p className="text-[10px] text-muted-foreground font-mono">Code: {previewCode} (auto)</p>
+          <p className="text-xs text-muted-foreground font-mono">Code: {previewCode} (auto)</p>
 
           <div className="space-y-1.5">
             <Label className="text-xs">
@@ -141,7 +141,7 @@ export function VoucherQuickAddLedgerSheet({
                 })
               }
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               e.g. Sundry Debtors, Bank Accounts, Direct Expenses, Duties &amp; Taxes
             </p>
           </div>
@@ -183,7 +183,7 @@ export function VoucherQuickAddLedgerSheet({
           <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
             <div>
               <Label className="text-xs">Status</Label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {form.status === "active" ? "Active" : "Inactive"}
               </p>
             </div>
@@ -198,14 +198,14 @@ export function VoucherQuickAddLedgerSheet({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-[13px] font-medium"
+            className="h-9 text-sm font-medium"
             onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={!form.ledgerName.trim() || !form.parentGroupId}
           >

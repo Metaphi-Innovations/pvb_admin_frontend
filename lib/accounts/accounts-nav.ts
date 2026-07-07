@@ -420,22 +420,19 @@ const ROUTE_GROUP_PREFIXES: { prefix: string; groupId: AccountsNavGroupId }[] = 
   { prefix: "/accounts/dashboard", groupId: "coa" },
 ];
 
-
+function matchesAccountsRoutePrefix(pathname: string, prefix: string): boolean {
+  const base = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
 
 export function resolveAccountsNavGroupId(pathname: string): AccountsNavGroupId {
-
   for (const { prefix, groupId } of ROUTE_GROUP_PREFIXES) {
-
-    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
-
+    if (matchesAccountsRoutePrefix(pathname, prefix)) {
       return groupId;
-
     }
-
   }
 
   return "coa";
-
 }
 
 
@@ -481,6 +478,10 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
 
   const hrefBase = href.split("#")[0].split("?")[0];
+
+  /** Exact route or direct child path only — never sibling prefixes (e.g. outstanding ≠ ageing). */
+  const matchesNavHref = (path: string, base: string): boolean =>
+    path === base || path.startsWith(`${base}/`);
 
 
 
@@ -540,37 +541,21 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
   if (href === CHART_OF_ACCOUNTS_HREF && pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) return true;
 
-  if (href.startsWith("/accounts/masters/") && pathname.startsWith(hrefBase)) return true;
+  if (href.startsWith("/accounts/masters/") && matchesNavHref(pathname, hrefBase)) return true;
 
   if (href.startsWith("/accounts/reports/") && pathname === hrefBase) return true;
 
-  if (
-    href === "/accounts/receivables/outstanding" &&
-    (pathname.startsWith("/accounts/receivables/outstanding") ||
-      pathname.startsWith("/accounts/receivables/ageing"))
-  ) {
-    return true;
-  }
+  if (href.startsWith("/accounts/receivables/") && matchesNavHref(pathname, hrefBase)) return true;
 
-  if (
-    href === "/accounts/payables/outstanding" &&
-    (pathname.startsWith("/accounts/payables/outstanding") ||
-      pathname.startsWith("/accounts/payables/ageing"))
-  ) {
-    return true;
-  }
+  if (href.startsWith("/accounts/payables/") && matchesNavHref(pathname, hrefBase)) return true;
 
-  if (href.startsWith("/accounts/receivables/") && pathname.startsWith(hrefBase)) return true;
+  if (href.startsWith("/accounts/sales/") && matchesNavHref(pathname, hrefBase)) return true;
 
-  if (href.startsWith("/accounts/payables/") && pathname.startsWith(hrefBase)) return true;
+  if (href.startsWith("/accounts/purchases/") && matchesNavHref(pathname, hrefBase)) return true;
 
-  if (href.startsWith("/accounts/sales/") && pathname.startsWith(hrefBase)) return true;
+  if (href.startsWith("/accounts/banking/") && matchesNavHref(pathname, hrefBase)) return true;
 
-  if (href.startsWith("/accounts/purchases/") && pathname.startsWith(hrefBase)) return true;
-
-  if (href.startsWith("/accounts/banking/") && pathname.startsWith(hrefBase)) return true;
-
-  if (href.startsWith("/accounts/transactions/") && pathname.startsWith(hrefBase)) return true;
+  if (href.startsWith("/accounts/transactions/") && matchesNavHref(pathname, hrefBase)) return true;
 
   if (href === ACCOUNTING_SETTINGS_HREF && pathname.startsWith(ACCOUNTING_SETTINGS_HREF)) return true;
 

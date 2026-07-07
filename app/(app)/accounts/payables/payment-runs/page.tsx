@@ -118,7 +118,7 @@ export default function PaymentRunsPage() {
       actions={
         <Button
           size="sm"
-          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5 px-2.5"
+          className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5 px-2.5"
           onClick={handleAdd}
         >
           <Plus className="w-4 h-4" /> New Payment Run

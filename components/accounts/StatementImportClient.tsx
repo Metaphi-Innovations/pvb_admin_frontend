@@ -222,7 +222,7 @@ export function StatementImportClient() {
               <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h2 className="text-lg font-semibold text-center text-foreground mb-2">
+              <h2 className="text-base font-semibold text-center text-foreground mb-2">
                 Import Successful!
               </h2>
               <p className="text-sm text-center text-muted-foreground mb-6">
@@ -256,7 +256,7 @@ export function StatementImportClient() {
               <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8" />
               </div>
-              <h2 className="text-lg font-semibold text-center text-foreground mb-2">
+              <h2 className="text-base font-semibold text-center text-foreground mb-2">
                 Import Failed
               </h2>
               <p className="text-sm text-center text-muted-foreground mb-6">{error}</p>

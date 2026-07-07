@@ -16,7 +16,7 @@ import {
   type CollectionFollowUp,
   type CollectionFollowUpStatus,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
@@ -99,9 +99,11 @@ export default function CollectionTrackingClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     setPage(1);
@@ -109,7 +111,7 @@ export default function CollectionTrackingClient() {
 
   const records = useMemo(() => loadCollectionFollowUps(), [refreshKey]);
   const customers = useMemo(() => loadCustomers(), []);
-  const invoices = useMemo(() => getPostedSalesInvoices(), []);
+  const invoices = useMemo(() => getPostedSalesInvoices(), [sectionRefresh]);
 
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
@@ -306,7 +308,7 @@ export default function CollectionTrackingClient() {
       title="Collection Tracking"
       description="Track collection follow-ups for overdue and pending customer invoices."
       actions={
-        <Button size="sm" className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white" onClick={openAdd}>
+        <Button size="sm" className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white" onClick={openAdd}>
           <Plus className="w-4 h-4" /> Add Follow-up
         </Button>
       }
@@ -316,13 +318,13 @@ export default function CollectionTrackingClient() {
         >
           <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
           <div className="space-y-1 min-w-[160px]">
-            <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
               Follow-up Status
             </Label>
             <select
               value={collectionStatus}
               onChange={(e) => setCollectionStatus(e.target.value)}
-              className="h-7 w-full text-xs rounded-md border border-border bg-white px-2"
+              className="h-7 w-full text-sm rounded-md border border-border bg-white px-2"
             >
               {COLLECTION_STATUS_FILTER.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -479,7 +481,7 @@ export default function CollectionTrackingClient() {
                 value={form.customerId}
                 onValueChange={(v) => setForm((f) => ({ ...f, customerId: v, invoiceId: "" }))}
               >
-                <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
+                <SelectTrigger className="h-9 text-sm font-medium mt-1">
                   <SelectValue placeholder="Select customer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -497,7 +499,7 @@ export default function CollectionTrackingClient() {
                 value={form.invoiceId || "none"}
                 onValueChange={(v) => setForm((f) => ({ ...f, invoiceId: v === "none" ? "" : v }))}
               >
-                <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
+                <SelectTrigger className="h-9 text-sm font-medium mt-1">
                   <SelectValue placeholder="All outstanding" />
                 </SelectTrigger>
                 <SelectContent>
@@ -515,7 +517,7 @@ export default function CollectionTrackingClient() {
                 <Label className="text-xs">Follow-up Date *</Label>
                 <Input
                   type="date"
-                  className="h-9 text-[13px] font-medium mt-1"
+                  className="h-9 text-sm font-medium mt-1"
                   value={form.followUpDate}
                   onChange={(e) => setForm((f) => ({ ...f, followUpDate: e.target.value }))}
                 />
@@ -523,7 +525,7 @@ export default function CollectionTrackingClient() {
               <div>
                 <Label className="text-xs">Assigned To *</Label>
                 <Select value={form.assignedTo} onValueChange={(v) => setForm((f) => ({ ...f, assignedTo: v }))}>
-                  <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
+                  <SelectTrigger className="h-9 text-sm font-medium mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -543,7 +545,7 @@ export default function CollectionTrackingClient() {
                   value={form.status}
                   onValueChange={(v) => setForm((f) => ({ ...f, status: v as CollectionFollowUpStatus }))}
                 >
-                  <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
+                  <SelectTrigger className="h-9 text-sm font-medium mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -559,7 +561,7 @@ export default function CollectionTrackingClient() {
                 <Label className="text-xs">Next Follow-up Date</Label>
                 <Input
                   type="date"
-                  className="h-9 text-[13px] font-medium mt-1"
+                  className="h-9 text-sm font-medium mt-1"
                   value={form.nextFollowUpDate}
                   onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))}
                 />
@@ -602,7 +604,7 @@ export default function CollectionTrackingClient() {
                     <span className="text-muted-foreground">{formatReportDate(h.date)}</span>
                   </div>
                   <p>{h.remarks}</p>
-                  <p className="text-[11px] text-muted-foreground">By {h.updatedBy}</p>
+                  <p className="text-xs text-muted-foreground">By {h.updatedBy}</p>
                 </div>
               ))
             )}

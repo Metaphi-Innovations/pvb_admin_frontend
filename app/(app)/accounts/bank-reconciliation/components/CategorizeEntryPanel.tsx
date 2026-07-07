@@ -274,7 +274,7 @@ export function CategorizeEntryPanel({
     const purchaseAlloc = buildAllocationSummary(vendorBills, allocations);
     const adjRemarks = adjustments
       .filter((a) => a.amount > 0)
-      .map((a) => `${a.adjustmentTypeId}:${a.amount}→${a.ledgerName}`)
+      .map((a) => `${a.adjustmentTypeId}:${a.amount}â†’${a.ledgerName}`)
       .join(", ");
     const combinedRemarks = [
       description,
@@ -383,7 +383,7 @@ export function CategorizeEntryPanel({
     <>
       <div className="flex flex-col h-full min-h-0">
         <div className="shrink-0 px-4 py-3 border-b border-border/60 bg-slate-50/80">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
             Categorize Manually
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -400,7 +400,7 @@ export function CategorizeEntryPanel({
               </span>
             </div>
             {entry.referenceNo && (
-              <p className="text-[10px] font-mono text-muted-foreground">Ref# {entry.referenceNo}</p>
+              <p className="text-xs font-mono text-muted-foreground">Ref# {entry.referenceNo}</p>
             )}
             <p className="whitespace-pre-wrap break-words text-muted-foreground">{entry.narration}</p>
             <MatchStatusBadge
@@ -427,7 +427,7 @@ export function CategorizeEntryPanel({
                 setValidationError(null);
               }}
             >
-              <SelectTrigger className="h-9 text-xs">
+              <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
@@ -568,7 +568,7 @@ export function CategorizeEntryPanel({
           )}
 
           {(validationError || validation.error) && (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               {validationError || validation.error}
             </div>
           )}
@@ -576,13 +576,13 @@ export function CategorizeEntryPanel({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Date</Label>
-              <Input type="date" className="h-9 text-xs" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} />
+              <Input type="date" className="h-9 text-sm" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Amount</Label>
               <AccountsMoneyInput
                 compact={false}
-                className="h-9 text-xs tabular-nums"
+                className="h-9 text-sm tabular-nums"
                 value={amount}
                 onChange={(v) => setAmount(String(v))}
                 disabled={!batchMode}
@@ -593,7 +593,7 @@ export function CategorizeEntryPanel({
           <div className="space-y-1.5">
             <Label className="text-xs">Reference No.</Label>
             <Input
-              className="h-9 text-xs font-mono"
+              className="h-9 text-sm font-mono"
               value={referenceNo}
               onChange={(e) => setReferenceNo(e.target.value)}
             />
@@ -602,7 +602,7 @@ export function CategorizeEntryPanel({
           {category === "expense" && (
             <div className="space-y-1.5">
               <Label className="text-xs">Invoice No.</Label>
-              <Input className="h-9 text-xs" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
+              <Input className="h-9 text-sm" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
             </div>
           )}
 
@@ -620,7 +620,7 @@ export function CategorizeEntryPanel({
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium w-full"
+              className="h-9 text-sm font-medium w-full"
               onClick={() => setCreateLedgerOpen(true)}
             >
               <Plus className="w-4 h-4 mr-1" />
@@ -631,7 +631,7 @@ export function CategorizeEntryPanel({
 
         <div className="shrink-0 border-t border-border/60 px-4 py-3 space-y-2 bg-white">
           <Button
-            className="w-full h-9 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="w-full h-9 text-sm bg-brand-600 hover:bg-brand-700 text-white"
             disabled={!validation.canSave || entry.matchStatus === "reconciled"}
             onClick={handleSave}
           >
@@ -641,7 +641,7 @@ export function CategorizeEntryPanel({
             <Button
               variant="secondary"
               size="sm"
-              className="h-9 text-[13px] font-medium flex-1"
+              className="h-9 text-sm font-medium flex-1"
               disabled={!canReconcile || entry.matchStatus === "reconciled"}
               onClick={() => {
                 if (!validation.canReconcile) {
@@ -657,7 +657,7 @@ export function CategorizeEntryPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 text-[13px] font-medium flex-1"
+              className="h-9 text-sm font-medium flex-1"
               onClick={() => {
                 entries.forEach((e) => ignoreBankEntry(e.id));
                 onUpdated();
@@ -669,7 +669,7 @@ export function CategorizeEntryPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium flex-1"
+                className="h-9 text-sm font-medium flex-1"
                 onClick={() => {
                   entries.forEach((e) => resetEntryMatch(e.id));
                   onUpdated();

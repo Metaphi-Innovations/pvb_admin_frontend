@@ -1,11 +1,18 @@
-import ReconciliationEntriesPageClient from "@/app/(app)/accounts/bank-reconciliation/ReconciliationEntriesPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const ReconciliationEntriesPageClient = lazyAccountsPage(() =>
+  import("@/app/(app)/accounts/bank-reconciliation/ReconciliationEntriesPageClient"),
+);
 
 interface PageProps {
   params: { statementId: string };
 }
 
 export default function BankReconciliationEntriesPage({ params }: PageProps) {
-  const { statementId } = params;
-  const id = Number(statementId);
-  return <ReconciliationEntriesPageClient statementId={id} embedded />;
+  return (
+    <ReconciliationEntriesPageClient
+      statementId={Number(params.statementId)}
+      embedded
+    />
+  );
 }

@@ -11,7 +11,6 @@ import {
   formToLedger,
   generateLedgerCode,
   getAncestorPath,
-  hasChildAccountGroups,
   type LedgerFormValues,
   type LedgerParentOption,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
@@ -56,9 +55,7 @@ export function canVoucherQuickAddLedgerUnder(
   if (isAddLedgerBlocked(node, records)) {
     const allowed = names.some((n) => VOUCHER_QUICK_ADD_OVERRIDE_BLOCKED.has(n));
     if (!allowed) return false;
-    if (node.nodeLevel === "account_group") return !hasChildAccountGroups(records, node.id);
-    if (node.nodeLevel === "ledger") return canAddLedgerUnder(node, records);
-    return false;
+    return canAddLedgerUnder(node, records);
   }
   return canAddLedgerUnder(node, records);
 }

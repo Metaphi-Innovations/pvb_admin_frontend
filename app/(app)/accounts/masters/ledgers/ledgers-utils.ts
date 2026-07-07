@@ -4,7 +4,7 @@ import {
   type LedgerTypeLabel,
 } from "@/lib/accounts/ledger-detail-utils";
 import type { ChartOfAccount } from "../../data";
-import { loadVouchers } from "../../vouchers/voucher-data";
+import { getLedgerMovementTotals } from "../../vouchers/voucher-data";
 import {
   getAncestorPath,
   getValidLedgerParents,
@@ -74,19 +74,7 @@ export function getGroupFilterOptions(records: ChartOfAccount[], primaryHeadFilt
 }
 
 export function getLedgerVoucherMovement(ledgerId: number): { debit: number; credit: number } {
-  let debit = 0;
-  let credit = 0;
-  loadVouchers()
-    .filter((v) => v.status === "posted" || v.status === "approved")
-    .forEach((v) => {
-      v.lines.forEach((line) => {
-        if (line.ledgerId === ledgerId) {
-          debit += Number(line.debit) || 0;
-          credit += Number(line.credit) || 0;
-        }
-      });
-    });
-  return { debit, credit };
+  return getLedgerMovementTotals(ledgerId);
 }
 
 export interface LedgerBalanceBreakdown {

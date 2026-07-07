@@ -1,11 +1,12 @@
 /**
- * Finance module hierarchy — simplified Chart of Accounts.
+ * Finance module hierarchy — Chart of Accounts.
  *
- * Primary Head (L1) → Standard Group (L2, nested) → Ledger (L3+, user-created)
+ * Primary Head (L1) → Fixed Group (L2) → Accounting Group (L3) → Ledger (L4, user-created)
  *
- * Posting rule: voucher entries target posting ledgers only (ledgers with no child ledgers).
- * Grouping ledgers (ledgers with children) cannot receive postings.
- * Primary heads and standard groups are system-defined and locked.
+ * Posting rule: voucher entries target posting ledgers only (leaf ledgers with no children).
+ * Legacy grouping ledgers (ledgers with children) cannot receive postings.
+ * Primary heads and fixed groups are system-defined and locked.
+ * New ledgers attach only to Level 3 Accounting Groups — never under another ledger.
  */
 
 import type { ChartOfAccount, CoaNodeLevel } from "@/app/(app)/accounts/data";

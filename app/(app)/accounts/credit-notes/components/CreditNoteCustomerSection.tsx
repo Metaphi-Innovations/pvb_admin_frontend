@@ -97,7 +97,7 @@ export function CreditNoteCustomerSection({
 
   return (
     <div className="space-y-4">
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Customer details are loaded from{" "}
         <Link href="/masters/customers" className="text-brand-700 hover:underline">
           Customer Master
@@ -124,7 +124,7 @@ export function CreditNoteCustomerSection({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Bill To */}
           <div className="rounded-xl border border-border/60 bg-muted/5 p-3 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Bill To
             </p>
             {fields.billToOptions.length > 0 && (
@@ -138,7 +138,7 @@ export function CreditNoteCustomerSection({
                     onBillToChange(id, opt?.formatted ?? "");
                   }}
                 >
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="Select billing branch…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -162,7 +162,7 @@ export function CreditNoteCustomerSection({
 
           {/* Ship To */}
           <div className="rounded-xl border border-border/60 bg-muted/5 p-3 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Ship To
             </p>
             {fields.shipToOptions.length > 0 && (
@@ -176,7 +176,7 @@ export function CreditNoteCustomerSection({
                     onShipToChange(id, opt?.formatted ?? "");
                   }}
                 >
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="Select shipping branch…" />
                   </SelectTrigger>
                   <SelectContent>

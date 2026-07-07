@@ -27,7 +27,7 @@ function InfoField({
 }) {
   return (
     <div className={className}>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">
+      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-0.5">
         {label}
       </p>
       <p className={cn("text-xs font-medium text-foreground break-words", mono && "font-mono")}>
@@ -72,7 +72,7 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
 
         <SheetBody className="space-y-4">
           <div className="pb-2.5 border-b border-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Activity Summary
             </p>
           </div>
@@ -85,7 +85,7 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
           </div>
 
           <div className="pb-2.5 border-b border-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
               <User className="w-3 h-3" />
               User Details
             </p>
@@ -100,7 +100,7 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
           </div>
 
           <div className="pb-2.5 border-b border-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Module & Reference
             </p>
           </div>
@@ -118,20 +118,20 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
           </div>
 
           <div className="pb-2.5 border-b border-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Value Changes
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-border bg-red-50/40 px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
                 Old Value
               </p>
               <p className="text-xs font-medium text-foreground break-words">{record.oldValue || "—"}</p>
             </div>
             <div className="rounded-lg border border-border bg-emerald-50/40 px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
                 New Value
               </p>
               <p className="text-xs font-medium text-foreground break-words">{record.newValue || "—"}</p>
@@ -141,7 +141,7 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
           {(record.remarks || record.details) && (
             <>
               <div className="pb-2.5 border-b border-border">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Remarks
                 </p>
               </div>
@@ -156,7 +156,7 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
           {record.approvalDetails && (
             <>
               <div className="pb-2.5 border-b border-border">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Approval Details
                 </p>
               </div>
@@ -176,7 +176,7 @@ export function AuditTrailDetailSheet({ record, open, onOpenChange }: AuditTrail
                 ) : null}
                 {record.approvalDetails.rejectionReason ? (
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-0.5">
                       Rejection Reason
                     </p>
                     <p className="text-xs font-medium text-red-700">{record.approvalDetails.rejectionReason}</p>

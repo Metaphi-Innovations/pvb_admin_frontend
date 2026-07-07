@@ -29,7 +29,7 @@ export function VoucherContactMasterHint({
     if (!c) return null;
     const f = customerMasterToTransactionFields(c);
     return (
-      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-[10px] text-emerald-900">
+      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-xs text-emerald-900">
         <div className="flex items-center gap-1 mb-0.5">
           <MasterFetchedBadge />
           <span className="font-medium">Customer Master</span>
@@ -48,7 +48,7 @@ export function VoucherContactMasterHint({
     if (!v) return null;
     const f = vendorMasterToTransactionFields(v);
     return (
-      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-[10px] text-emerald-900">
+      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-xs text-emerald-900">
         <div className="flex items-center gap-1 mb-0.5">
           <MasterFetchedBadge />
           <span className="font-medium">Supplier Master</span>
@@ -65,7 +65,7 @@ export function VoucherContactMasterHint({
   const emp = employees.find((x) => x.id === contactId);
   if (!emp) return null;
   return (
-    <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-[10px] text-emerald-900">
+    <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-xs text-emerald-900">
       <div className="flex items-center gap-1 mb-0.5">
         <MasterFetchedBadge />
         <span className="font-medium">Employee Master</span>

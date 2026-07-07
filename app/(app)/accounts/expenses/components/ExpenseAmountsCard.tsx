@@ -53,7 +53,7 @@ export function ExpenseAmountsCard({
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md px-2.5 py-1.5 col-span-full">
           <span className="font-medium">Deducted:</span> {formatINR(deducted)}{" "}
           <span className="text-muted-foreground">
-            (Claimed {formatINR(claimed)} − Approved {formatINR(approved)})
+            (Claimed {formatINR(claimed)} âˆ’ Approved {formatINR(approved)})
           </span>
         </p>
       )}
@@ -82,7 +82,7 @@ function AmountBlock({
         : "text-navy-800";
   return (
     <div className={compact ? "" : "flex items-center justify-between gap-2"}>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={cn("font-semibold tabular-nums", compact ? "text-sm mt-0.5" : "text-base", color, muted && value === 0 && "text-muted-foreground")}>
         {formatINR(value)}
       </p>

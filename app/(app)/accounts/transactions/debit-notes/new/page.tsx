@@ -1,5 +1,16 @@
-import DebitNoteFormPageClient from "../../../debit-notes/DebitNoteFormPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
-export default function NewDebitNotePage() {
-  return <DebitNoteFormPageClient />;
+const DebitNoteFormPageClient = lazyAccountsPage(() => import("../../../debit-notes/DebitNoteFormPageClient"));
+
+type PageProps = {
+  searchParams?: { returnId?: string; mode?: string };
+};
+
+export default function NewDebitNotePage({ searchParams }: PageProps) {
+  return (
+    <DebitNoteFormPageClient
+      returnId={searchParams?.returnId ? Number(searchParams.returnId) : undefined}
+      mode={searchParams?.mode === "fresh" ? "fresh" : searchParams?.returnId ? "return" : undefined}
+    />
+  );
 }

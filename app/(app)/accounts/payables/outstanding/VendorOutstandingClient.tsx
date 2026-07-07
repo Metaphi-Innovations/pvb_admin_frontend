@@ -10,7 +10,7 @@ import {
   type PayableStatus,
   type SupplierInvoiceOutstandingRow,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import {
   exportSupplierOutstandingToExcel,
   exportSupplierOutstandingToPdf,
@@ -69,12 +69,12 @@ export default function VendorOutstandingClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
-    setRefreshKey((k) => k + 1);
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
-  
+  useEffect(() => {
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
+
 
   useEffect(() => {
     setPage(1);
@@ -150,12 +150,12 @@ export default function VendorOutstandingClient() {
     {
       key: "vendorCode",
       label: "Supplier Code",
-      render: (r) => <span className="font-mono text-[11px] text-muted-foreground">{r.vendorCode}</span>,
+      render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.vendorCode}</span>,
     },
     {
       key: "gstin",
       label: "GSTIN",
-      render: (r) => <span className="font-mono text-[11px]">{r.gstin}</span>,
+      render: (r) => <span className="font-mono text-xs">{r.gstin}</span>,
     },
     {
       key: "invoiceNo",
@@ -241,14 +241,14 @@ export default function VendorOutstandingClient() {
           />
           <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
           <div className="space-y-1 min-w-[140px]">
-            <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
               Payment Status
             </Label>
             <Select
               value={paymentStatus}
               onValueChange={(v) => setPaymentStatus(v as PayableStatus | "all")}
             >
-              <SelectTrigger className="h-9 text-[13px] font-medium mt-0 w-[140px]">
+              <SelectTrigger className="h-9 text-sm font-medium mt-0 w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

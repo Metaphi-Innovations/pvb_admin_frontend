@@ -22,7 +22,7 @@ import { EXPENSE_LIST_PATH, formatINR } from "./expense-utils";
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-xs font-medium text-foreground mt-0.5">{value ?? "—"}</p>
     </div>
   );
@@ -98,7 +98,7 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
         actions.includes("mark_paid") ? (
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
             onClick={() => setPaymentOpen(true)}
           >
             <Banknote className="w-4 h-4" /> Mark as Paid
@@ -194,7 +194,7 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
 
         <div className="bg-white rounded-lg border border-border/60 p-4">
           <h2 className="text-sm font-semibold mb-3">Approval History</h2>
-          <p className="text-[10px] text-muted-foreground mb-2">Managed in HR → TA/DA Claims</p>
+          <p className="text-xs text-muted-foreground mb-2">Managed in HR â†’ TA/DA Claims</p>
           <div className="space-y-3">
             {record.approvalTrail.length === 0 ? (
               <p className="text-xs text-muted-foreground">No trail recorded.</p>
@@ -207,7 +207,7 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
                   <p className="text-muted-foreground">
                     {h.actorName} ({h.actorRole}) · {h.channel}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">{new Date(h.at).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(h.at).toLocaleString()}</p>
                   {h.claimedAmount != null && <p>Claimed: {formatINR(h.claimedAmount)}</p>}
                   {h.approvedAmount != null && <p className="text-emerald-700">Approved: {formatINR(h.approvedAmount)}</p>}
                   {h.remarks && <p className="mt-1">{h.remarks}</p>}

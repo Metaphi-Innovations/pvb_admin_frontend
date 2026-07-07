@@ -83,7 +83,7 @@ export function SalesInvoiceDocumentInfoSection({
             disabled
             className="bg-slate-50 text-slate-700"
           />
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Auto-calculated · Net {creditDays} days
           </p>
         </InvoiceFormField>

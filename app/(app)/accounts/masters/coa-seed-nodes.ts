@@ -38,7 +38,7 @@ interface CoaTreeBranch {
 interface CoaTreeGroup {
   name: string;
   code: string;
-  branches: CoaTreeLeaf[];
+  branches: CoaTreeBranch[];
 }
 
 const PRIMARY_HEADS: { id: number; code: string; name: string; type: AccountType }[] = [
@@ -75,6 +75,8 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
       { name: "Prepaid Expenses", code: "1216" },
       { name: "Accrued Income", code: "1217" },
       { name: "Other Current Assets", code: "1218" },
+      { name: "GST Input Credit", code: "1219" },
+      { name: "TDS Receivable", code: "1220" },
     ],
   },
   {
@@ -115,8 +117,11 @@ const LIABILITIES_GROUPS: CoaTreeGroup[] = [
     code: "2300",
     branches: [
       { name: "Trade Payables / Sundry Creditors", code: "2310" },
-      { name: "Duties & Taxes Payable", code: "2311" },
-      { name: "TDS Payable", code: "2312" },
+      {
+        name: "Duties & Taxes Payable",
+        code: "2311",
+        children: [{ name: "TDS Payable", code: "23111" }],
+      },
       { name: "GST Payable", code: "2313" },
       { name: "PF / ESIC Payable", code: "2314" },
       { name: "Salary Payable", code: "2315" },
@@ -324,7 +329,7 @@ function buildAccountGroups(
     nodes.push(
       systemNode(groupId, group.code, group.name, accountType, "account_group", primaryId, primaryName),
     );
-    buildFlatSubGroups(nodes, group.branches, groupId, group.name, accountType);
+    buildNestedBranches(nodes, group.branches, groupId, group.name, accountType);
   }
 }
 
@@ -359,6 +364,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 4;
+export const COA_SYSTEM_REVISION = 8;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

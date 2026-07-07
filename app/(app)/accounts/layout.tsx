@@ -1,18 +1,8 @@
-"use client";
+import AccountsLayoutClient from "./AccountsLayoutClient";
 
-import { AccountsModuleShell } from "@/components/accounts/AccountsModuleShell";
-import { CoaNavigationProvider } from "@/components/accounts/CoaNavigationContext";
-import { ACCOUNTS_VIEWPORT_HEIGHT } from "@/lib/accounts/accounts-layout-constants";
+/** Accounts module is client-heavy (localStorage, COA tree) — skip static prerender. */
+export const dynamic = "force-dynamic";
 
 export default function AccountsLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="flex w-full overflow-hidden"
-      style={{ height: ACCOUNTS_VIEWPORT_HEIGHT, maxHeight: ACCOUNTS_VIEWPORT_HEIGHT }}
-    >
-      <CoaNavigationProvider>
-        <AccountsModuleShell>{children}</AccountsModuleShell>
-      </CoaNavigationProvider>
-    </div>
-  );
+  return <AccountsLayoutClient>{children}</AccountsLayoutClient>;
 }

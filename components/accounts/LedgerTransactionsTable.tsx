@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { MoneyCell } from "@/components/accounts/MoneyAmount";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
 import type { StatementRow } from "@/lib/accounts/ledger-detail-utils";
 import {
   AccountsTable,
@@ -74,7 +74,7 @@ export function LedgerTransactionsTable({
                 <MoneyCell amount={row.debit} dashIfZero />
                 <MoneyCell amount={row.credit} dashIfZero />
                 <AccountsTableCell align="right" money className="font-medium whitespace-nowrap">
-                  {formatMoney(row.runningBalance)} {row.balanceType === "Debit" ? "Dr" : "Cr"}
+                  {formatMoney(row.runningBalance)} {balanceSideLabel(row.balanceType)}
                 </AccountsTableCell>
                 <AccountsTableCell className="whitespace-nowrap">
                   {row.sourceHref && !isOpening ? (

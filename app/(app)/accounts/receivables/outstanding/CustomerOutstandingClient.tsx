@@ -11,7 +11,7 @@ import {
   type InvoiceOutstandingRow,
   type ReceivableStatus,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
@@ -87,9 +87,7 @@ export default function CustomerOutstandingClient() {
   const [pageSize, setPageSize] = useState(25);
   const asOnDate = defaultAsOnDate();
 
-  useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
     setPage(1);
@@ -114,7 +112,7 @@ export default function CustomerOutstandingClient() {
       return String(av).localeCompare(String(bv)) * dir;
     });
     return sorted;
-  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, search, sortKey, sortDir]);
+  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, search, sortKey, sortDir, sectionRefresh]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -230,7 +228,7 @@ export default function CustomerOutstandingClient() {
         label: "Customer Code",
         header: sortHeader("customerCode", "Customer Code"),
         render: (r) => (
-          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+          <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
             {r.customerCode}
           </span>
         ),
@@ -238,7 +236,7 @@ export default function CustomerOutstandingClient() {
       {
         key: "gstin",
         label: "GSTIN",
-        render: (r) => <span className="text-[11px] font-mono whitespace-nowrap">{r.gstin}</span>,
+        render: (r) => <span className="text-xs font-mono whitespace-nowrap">{r.gstin}</span>,
       },
       {
         key: "invoiceNo",
@@ -336,13 +334,13 @@ export default function CustomerOutstandingClient() {
           />
           <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
           <div className="space-y-1 min-w-[150px]">
-            <label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+            <label className="text-xs font-medium uppercase text-muted-foreground leading-none">
               Payment Status
             </label>
             <select
               value={paymentStatus}
               onChange={(e) => setPaymentStatus(e.target.value as ReceivableStatus | "all")}
-              className="h-7 w-full text-xs mt-0 rounded-md border border-border bg-white px-2"
+              className="h-7 w-full text-sm mt-0 rounded-md border border-border bg-white px-2"
             >
               {PAYMENT_STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
