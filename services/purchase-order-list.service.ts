@@ -24,6 +24,7 @@ export interface PurchaseOrderListItem {
   paymentType: string;
   warehouseName: string;
   followUpCount: number;
+  invoiceCount: number;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -138,6 +139,7 @@ function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
     paymentType: asString(raw.payment_type),
     warehouseName: asString(raw.warehouse_name),
     followUpCount: asNumber(counts.followups),
+    invoiceCount: asNumber(counts.invoices),
     createdAt: asString(raw.created_at),
     updatedAt: asString(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),

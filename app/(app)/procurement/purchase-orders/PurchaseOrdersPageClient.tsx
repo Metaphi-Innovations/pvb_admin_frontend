@@ -70,12 +70,11 @@ import {
 } from "./components/POActionConfirmModal";
 import {
   mapFollowupsFromDetail,
-  mapInvoicesFromDetail,
   PurchaseOrderService,
 } from "@/services/purchase-order.service";
 import type { POFollowUpEntry } from "./po-followup-data";
 import type { PurchaseOrder } from "./po-data";
-import type { POVendorInvoiceView } from "@/services/purchase-order.service";
+import { canUploadPOInvoiceForStatus } from "./po-invoice-utils";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 
 type TabId = "all" | "draft" | "po_return";
@@ -141,7 +140,6 @@ export default function PurchaseOrdersPageClient() {
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
   const [modalFollowups, setModalFollowups] = useState<POFollowUpEntry[]>([]);
-  const [modalInvoices, setModalInvoices] = useState<POVendorInvoiceView[]>([]);
 
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
@@ -255,7 +253,6 @@ export default function PurchaseOrdersPageClient() {
     setModalPoId(null);
     setModalListItem(null);
     setModalFollowups([]);
-    setModalInvoices([]);
   };
 
   const openUploadModal = (row: PurchaseOrderListItem) => {
@@ -311,23 +308,21 @@ export default function PurchaseOrdersPageClient() {
   };
 
   useEffect(() => {
-    if (!modalPoId || (!uploadOpen && !followUpOpen)) return;
+    if (!modalPoId || !followUpOpen) return;
     let cancelled = false;
     PurchaseOrderService.getRawById(modalPoId)
       .then((raw) => {
         if (cancelled) return;
         setModalFollowups(mapFollowupsFromDetail(raw));
-        setModalInvoices(mapInvoicesFromDetail(raw));
       })
       .catch(() => {
         if (cancelled) return;
         setModalFollowups([]);
-        setModalInvoices([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [modalPoId, uploadOpen, followUpOpen, modalPoQuery.dataUpdatedAt]);
+  }, [modalPoId, followUpOpen, modalPoQuery.dataUpdatedAt]);
 
   const records = listQuery.data?.items ?? [];
   const totalRecords = listQuery.data?.total ?? 0;
@@ -484,8 +479,9 @@ export default function PurchaseOrdersPageClient() {
       sortable: false,
       render: (_val, row) => (
         <InvoiceListingCell
-          hasInvoice={row.status === "invoice_uploaded"}
-          canUpload={["approved", "partially_received", "received"].includes(row.status)}
+          hasInvoice={row.invoiceCount > 0 || row.status === "invoice_uploaded"}
+          invoiceCount={row.invoiceCount}
+          canUpload={canUploadPOInvoiceForStatus(row.status)}
           onView={() => router.push(`/procurement/purchase-orders/${row.id}#vendor-invoice`)}
           onUpload={() => openUploadModal(row)}
         />
@@ -665,8 +661,6 @@ export default function PurchaseOrdersPageClient() {
           open={uploadOpen}
           onClose={closeModals}
           po={modalPo}
-          replaceMode={modalInvoices.length > 0 || modalPo.status === "invoice_uploaded"}
-          existingInvoice={modalInvoices[0] ?? null}
           submitting={uploadMutation.isPending || modalPoQuery.isFetching}
           onSaved={(input) => {
             uploadMutation.mutate(

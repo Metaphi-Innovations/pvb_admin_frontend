@@ -78,9 +78,9 @@ export default function PODetailPage() {
   const cancelMutation = useCancelPurchaseOrder();
 
   const po = detailQuery.data;
+  console.log(po);
   const [activeTab, setActiveTab] = useState("overview");
   const [uploadOpen, setUploadOpen] = useState(searchParams.get("upload") === "1");
-  const [uploadReplace, setUploadReplace] = useState(false);
   const [shortCloseOpen, setShortCloseOpen] = useState(searchParams.get("shortClose") === "1");
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
@@ -166,10 +166,7 @@ export default function PODetailPage() {
         <Button
           size="sm"
           className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => {
-            setUploadReplace(invoices.length > 0);
-            setUploadOpen(true);
-          }}
+          onClick={() => setUploadOpen(true)}
         >
           <Upload className="w-3.5 h-3.5" /> Upload Invoice
         </Button>
@@ -277,14 +274,7 @@ export default function PODetailPage() {
               po={po}
               refreshKey={detailQuery.dataUpdatedAt}
               invoices={invoices}
-              onUpload={() => {
-                setUploadReplace(false);
-                setUploadOpen(true);
-              }}
-              onReplace={() => {
-                setUploadReplace(true);
-                setUploadOpen(true);
-              }}
+              onUpload={() => setUploadOpen(true)}
             />
           )
         )}
@@ -337,8 +327,6 @@ export default function PODetailPage() {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         po={po}
-        replaceMode={uploadReplace}
-        existingInvoice={invoices[0] ?? null}
         submitting={uploadMutation.isPending}
         onSaved={(input) => {
           uploadMutation.mutate(

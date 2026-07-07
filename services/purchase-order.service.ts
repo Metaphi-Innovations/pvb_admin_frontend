@@ -680,7 +680,7 @@ export const PurchaseOrderService = {
     formData.append("total_invoice_amount", String(input.totalInvoiceAmount));
     formData.append("remarks", input.remarks ?? "");
     if (input.file) {
-      formData.append("attachments", input.file);
+      formData.append("invoiceAttachments[0]", input.file);
     }
     const response = await axiosInstance.post(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.INVOICE_UPLOAD,
@@ -758,7 +758,7 @@ export function allocateShortCloseProducts(
       if (!productId) return null;
       const pending = Math.max(
         0,
-        (line.orderedQty || 0) - (line.receivedQty ?? 0) - (line.shortClosedQty ?? 0),
+        (line.orderedQtyPack || 0) - (line.receivedQty ?? 0) - (line.shortClosedQty ?? 0),
       );
       if (pending <= 0) {
         return {
