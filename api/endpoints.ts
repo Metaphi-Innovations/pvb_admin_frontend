@@ -63,6 +63,7 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/segment/export",
       PREVIEW_NUMBER: "/master/segment/preview-number",
       FILTER_DROPDOWN: "/master/segment/filter-dropdown",
+      DROPDOWN: "/master/segment/filter-dropdown",
     },
     TDS: {
       LIST: "/master/tds/list",
@@ -93,7 +94,6 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/formulation/export",
       FILTER_DROPDOWN: "/master/formulation/filter-dropdown",
       DROPDOWN: "/master/formulation/dropdown",
-      DROPDOWN: "/master/segment/dropdown"
     },
     PRODUCT: {
       LIST: "/master/product/list",
@@ -104,10 +104,6 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/product/export",
       PREVIEW_NUMBER: "/master/product/preview-number",
       DROPDOWN: "/master/product/dropdown",
-    },
-    SUPPLIER: {
-      DROPDOWN: "/master/supplier/dropdown",
-      DETAILS: (id: string) => `/master/supplier/details/${id}`,
     },
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",
@@ -120,7 +116,8 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/master/supplier/details/${id}`,
       EXPORT: "/master/supplier/export",
       PREVIEW_NUMBER: "/master/supplier/preview-number",
-      DROPDOWN: "/master/supplier/dropdown"
+      DROPDOWN: "/master/supplier/dropdown",
+      DETAILS: (id: string) => `/master/supplier/details/${id}`,
     }
   },
   PROCUREMENT: {
