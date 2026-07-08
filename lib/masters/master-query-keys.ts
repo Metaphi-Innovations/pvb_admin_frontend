@@ -143,4 +143,27 @@ export const masterKeys = {
     previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
     export: () => [...masterKeys.customers.all(), "export"] as const,
   },
+
+  warehouses: {
+    all: () => [...masterKeys.all, "warehouses"] as const,
+    lists: () => [...masterKeys.warehouses.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.warehouses.lists(), params] as const,
+    details: () => [...masterKeys.warehouses.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.warehouses.details(), id] as const,
+    dropdown: () => [...masterKeys.warehouses.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.warehouses.all(), "preview-number"] as const,
+    export: () => [...masterKeys.warehouses.all(), "export"] as const,
+  },
+
+  supplierTypes: {
+    all: () => [...masterKeys.all, "supplier-types"] as const,
+    lists: () => [...masterKeys.supplierTypes.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.supplierTypes.lists(), params] as const,
+    details: () => [...masterKeys.supplierTypes.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.supplierTypes.details(), id] as const,
+    dropdown: () => [...masterKeys.supplierTypes.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.supplierTypes.all(), "preview-number"] as const,
+    export: () => [...masterKeys.supplierTypes.all(), "export"] as const,
+  },
 } as const;
