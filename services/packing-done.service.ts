@@ -78,7 +78,7 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     salesOrderNo: raw.packing_list?.packing_number || "",
     customer: customer,
     totalItems: products.length,
-    packedQuantity: products.reduce((sum: number, p: any) => sum + Number(p.packed_qty || 0), 0),
+    packedQuantity: products.reduce((sum: number, p: any) => sum + Number(p.packed_cases || p.packed_qty || 0), 0),
     packingDate: raw.packing_date ? raw.packing_date.slice(0, 10) : "",
     packedBy: raw.packed_by_user ? `${raw.packed_by_user.first_name} ${raw.packed_by_user.last_name}`.trim() || raw.packed_by_user.username : "System",
     status: raw.status as any,
@@ -90,11 +90,11 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     products: products.map((p: any) => ({
       product: p.product_name,
       sku: p.product_code,
-      orderedQty: p.order_qty,
-      packedQty: p.packed_qty,
+      ordered_cases: p.order_cases || p.order_qty,
+      packedQty: p.packed_cases || p.packed_qty,
       batchAllocations: p.batch_code ? [{
         batchNumber: p.batch_code,
-        allocatedQty: p.packed_qty,
+        allocatedQty: p.packed_cases || p.packed_qty,
         expiryDate: "—",
       }] : undefined,
     })),
@@ -245,13 +245,22 @@ export const PackingDoneService = {
     remarks?: string;
     products: {
       packing_list_product_id: string;
-      packed_qty: number;
+      packed_cases: number;
       remarks?: string;
     }[];
   }): Promise<any> {
+    const transformedPayload = {
+      ...payload,
+      products: payload.products.map(p => ({
+        packing_list_product_id: p.packing_list_product_id,
+        packed_qty: p.packed_cases,
+        remarks: p.remarks,
+      }))
+    };
+
     const response = await axiosInstance.post(
       API_ENDPOINTS.WAREHOUSE.PACKING_DONE.CREATE,
-      payload
+      transformedPayload
     );
     return response.data;
   }

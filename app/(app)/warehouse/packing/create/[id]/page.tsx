@@ -4,30 +4,16 @@ import React, { useEffect, useState } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Building, Layers, Info, Check } from "lucide-react";
+import { Building, Layers, Info, Check, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getSalesOrderById, createPackingRecord } from "../../services";
-import { getSellableQcPassedStockList } from "../../../stockoverview/services";
-import { SalesOrderRecord } from "../../types";
-import { buildDispatchNearExpiryEntries } from "../../../dispatch/near-expiry-dispatch";
+import { getSalesOrderById } from "../../services";
+import { SalesOrderRecord, SalesOrderProduct } from "../../types";
 import { PackingAllocationSummaryDialog } from "../../components/PackingAllocationSummaryDialog";
 import { PackingProductLinesSection } from "../../components/PackingProductLinesSection";
 import { PackingListService } from "@/services/packing-list.service";
 import { PackingDoneService } from "@/services/packing-done.service";
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import {
-  buildBatchAllocationMap,
-  buildFefoRecommendedSelections,
-  buildPackingSummaryLines,
-  buildPurchaseReturnBatchSelections,
-  getPackingBatchInventoryRows,
-  getSelectedPackingQty,
-  isBatchAllocationComplete,
-  validateBatchSelectionsForPacking,
-  validateSelectedPackingLines,
-  type PackingSummaryLine,
-} from "../../lib/packing-batch-allocation";
 import {
   getPackingDocumentNo,
   getPackingDocumentNoLabel,
@@ -38,9 +24,13 @@ import {
   isPurchaseReturnDoc,
 } from "../../lib/packing-document-labels";
 
+function getLineKey(p: SalesOrderProduct): string {
+  return p.lineId || p.sku;
+}
+
 function buildInitialSelection(products: SalesOrderRecord["products"]): Record<string, boolean> {
   return products.reduce<Record<string, boolean>>((acc, p) => {
-    acc[p.sku] = p.pendingQty > 0;
+    acc[getLineKey(p)] = p.pending_cases > 0;
     return acc;
   }, {});
 }
@@ -52,43 +42,25 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
   const [packingNo, setPackingNo] = useState("");
   const [packingDate, setPackingDate] = useState("");
   const [packingQty, setPackingQty] = useState<Record<string, number>>({});
-  const [selectedSkus, setSelectedSkus] = useState<Record<string, boolean>>({});
-  const [batchSelections, setBatchSelections] = useState<Record<string, Record<string, number>>>({});
+  const [selectedLines, setSelectedLines] = useState<Record<string, boolean>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
-  const [availableStock, setAvailableStock] = useState<Record<string, number>>({});
 
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [summaryLines, setSummaryLines] = useState<PackingSummaryLine[]>([]);
+  const [summaryLines, setSummaryLines] = useState<any[]>([]);
   const [createdPackingNo, setCreatedPackingNo] = useState("");
+
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
+
+  const showToast = (message: string, type: "error" | "success" = "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const warehouseName = order
     ? order.sourceDocumentType === "Stock Transfer" || isPurchaseReturnDoc(order)
       ? order.sourceWarehouse ?? order.warehouse
       : order.warehouse
     : "";
-  const customerName = order ? getPackingPartyValue(order) : "";
-
-  const applyBatchPreselect = (sku: string, productName: string, qty: number, product?: SalesOrderRecord["products"][number]) => {
-    if (qty <= 0) {
-      setBatchSelections((prev) => {
-        const next = { ...prev };
-        delete next[sku];
-        return next;
-      });
-      return;
-    }
-    if (order && isPurchaseReturnDoc(order) && product?.batchNumber) {
-      setBatchSelections((prev) => ({
-        ...prev,
-        [sku]: buildPurchaseReturnBatchSelections(product, qty),
-      }));
-      return;
-    }
-    const rows = getPackingBatchInventoryRows(productName, warehouseName, undefined, sku);
-    const recommended = buildFefoRecommendedSelections(rows, qty);
-    setBatchSelections((prev) => ({ ...prev, [sku]: recommended }));
-  };
 
   useEffect(() => {
     let active = true;
@@ -110,47 +82,13 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         setPackingDate(new Date().toISOString().split("T")[0]);
 
         const initialQty: Record<string, number> = {};
-        const initialSelections: Record<string, Record<string, number>> = {};
         record.products.forEach((p) => {
-          initialQty[p.sku] = p.pendingQty;
-          if (p.pendingQty > 0) {
-            if (p.batchNumber) {
-              initialSelections[p.sku] = { [p.batchNumber]: p.pendingQty };
-            } else {
-              const wh =
-                record.sourceDocumentType === "Stock Transfer" || isPurchaseReturnDoc(record)
-                  ? record.sourceWarehouse ?? record.warehouse
-                  : record.warehouse;
-              const rows = getPackingBatchInventoryRows(p.product, wh, undefined, p.sku);
-              initialSelections[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
-            }
-          }
+          initialQty[getLineKey(p)] = p.pending_cases;
         });
-        setPackingQty(initialQty);
-        setSelectedSkus(buildInitialSelection(record.products));
-        setBatchSelections(initialSelections);
 
-        try {
-          const stocks = getSellableQcPassedStockList();
-          const stockMap: Record<string, number> = {};
-          record.products.forEach((p) => {
-            if (isPurchaseReturnDoc(record)) {
-              stockMap[p.sku] = p.pendingQty;
-              return;
-            }
-            const matched = stocks.filter(
-              (s) => s.product === p.product && s.warehouse === record.warehouse,
-            );
-            stockMap[p.sku] = matched.reduce((sum, row) => sum + row.availableQuantity, 0) || 350;
-          });
-          setAvailableStock(stockMap);
-        } catch {
-          const stockMap: Record<string, number> = {};
-          record.products.forEach((p) => {
-            stockMap[p.sku] = p.pendingQty + 50;
-          });
-          setAvailableStock(stockMap);
-        }
+        setPackingQty(initialQty);
+        setSelectedLines(buildInitialSelection(record.products));
+
       } catch (err) {
         console.error("API loading failed, falling back to static mock data:", err);
         const record = getSalesOrderById(params.id);
@@ -160,31 +98,11 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
           setPackingDate(new Date().toISOString().split("T")[0]);
 
           const initialQty: Record<string, number> = {};
-          const initialSelections: Record<string, Record<string, number>> = {};
           record.products.forEach((p) => {
-            initialQty[p.sku] = p.pendingQty;
-            if (p.pendingQty > 0) {
-              if (isPurchaseReturnDoc(record) && p.batchNumber) {
-                initialSelections[p.sku] = buildPurchaseReturnBatchSelections(p, p.pendingQty);
-              } else {
-                const wh =
-                  record.sourceDocumentType === "Stock Transfer" || isPurchaseReturnDoc(record)
-                    ? record.sourceWarehouse ?? record.warehouse
-                    : record.warehouse;
-                const rows = getPackingBatchInventoryRows(p.product, wh, undefined, p.sku);
-                initialSelections[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
-              }
-            }
+            initialQty[getLineKey(p)] = p.pending_cases;
           });
           setPackingQty(initialQty);
-          setSelectedSkus(buildInitialSelection(record.products));
-          setBatchSelections(initialSelections);
-
-          const stockMap: Record<string, number> = {};
-          record.products.forEach((p) => {
-            stockMap[p.sku] = p.pendingQty + 50;
-          });
-          setAvailableStock(stockMap);
+          setSelectedLines(buildInitialSelection(record.products));
         }
       } finally {
         if (active) {
@@ -202,124 +120,79 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
   const finalizePacking = async () => {
     if (!order) return;
 
-    // Build the packed products payload for the creation API
     const productsPayload = order.products
-      .filter((p) => selectedSkus[p.sku] && (packingQty[p.sku] ?? 0) > 0)
+      .filter((p) => selectedLines[getLineKey(p)] && (packingQty[getLineKey(p)] ?? 0) > 0)
       .map((p) => ({
         packing_list_product_id: p.lineId || "",
-        packed_qty: packingQty[p.sku] ?? 0,
+        packed_cases: packingQty[getLineKey(p)] ?? 0,
       }));
 
     if (productsPayload.length === 0) {
-      alert("At least one product must be specified for packing");
+      showToast("At least one product line must be specified for packing", "error");
       return;
     }
 
     try {
-      const response = await PackingDoneService.create({
+      await PackingDoneService.create({
         packing_list_id: order.id,
         packing_done_no: packingNo || undefined,
         packing_date: packingDate || undefined,
         products: productsPayload,
       });
 
-      const nextPackingNo = response.data?.packing_done_no || response.packing_done_no || packingNo;
-
-      const batchAllocationMap = buildBatchAllocationMap(
-        order.products,
-        selectedSkus,
-        batchSelections,
-        warehouseName,
-        order.sourceDocumentType,
-      );
-
-      const summary = buildPackingSummaryLines(
-        order.products,
-        selectedSkus,
-        packingQty,
-        batchAllocationMap,
-      );
-
-      setSummaryLines(summary);
-      setCreatedPackingNo(nextPackingNo);
-      setSummaryOpen(true);
+      showToast("Packing created successfully!", "success");
+      setTimeout(() => {
+        router.push("/warehouse/packing");
+      }, 1000);
     } catch (err: any) {
       console.error("Error creating packing done:", err);
-      // Fallback for offline usage
-      alert("Offline Fallback: Simulated packing creation successfully!");
-      const batchAllocationMap = buildBatchAllocationMap(
-        order.products,
-        selectedSkus,
-        batchSelections,
-        warehouseName,
-        order.sourceDocumentType,
-      );
-
-      createPackingRecord(order.id, packingQty, "System", false, batchAllocationMap);
-
-      setSummaryLines(
-        buildPackingSummaryLines(order.products, selectedSkus, packingQty, batchAllocationMap),
-      );
-      setCreatedPackingNo(packingNo);
-      setSummaryOpen(true);
+      showToast(err.response?.data?.message || err.message || "Failed to create packing", "error");
     }
   };
 
   const proceedWithPacking = () => {
     if (!order) return;
-    setBatchErrors({});
 
-    const validation = validateSelectedPackingLines(
-      order.products,
-      selectedSkus,
-      packingQty,
-      availableStock,
-    );
-    setValidationErrors(validation.errors);
-    if (!validation.valid) {
-      return;
-    }
+    let hasErrors = false;
+    const newErrors: Record<string, string> = {};
 
-    const batchValidation = validateBatchSelectionsForPacking(
-      order.products,
-      selectedSkus,
-      packingQty,
-      batchSelections,
-      warehouseName,
-      order.sourceDocumentType,
-    );
-    setBatchErrors(batchValidation.batchErrors);
-    if (!batchValidation.valid) {
+    order.products.forEach(p => {
+      const key = getLineKey(p);
+      if (selectedLines[key]) {
+        const qty = packingQty[key] ?? 0;
+        if (qty <= 0) {
+          newErrors[key] = "Quantity must be greater than zero";
+          hasErrors = true;
+        } else if (qty > p.pending_cases) {
+          newErrors[key] = `Cannot exceed pending quantity of ${p.pending_cases}`;
+          hasErrors = true;
+        }
+      }
+    });
+
+    setValidationErrors(newErrors);
+
+    if (hasErrors) {
+      showToast("Please fix the validation errors before proceeding.", "error");
       return;
     }
 
     finalizePacking();
   };
 
-  const handleToggleProduct = (sku: string, checked: boolean) => {
-    setSelectedSkus((prev) => ({ ...prev, [sku]: checked }));
+  const handleToggleProduct = (key: string, checked: boolean) => {
+    setSelectedLines((prev) => ({ ...prev, [key]: checked }));
     if (!checked) {
-      setPackingQty((prev) => ({ ...prev, [sku]: 0 }));
-      setBatchSelections((prev) => {
-        const next = { ...prev };
-        delete next[sku];
-        return next;
-      });
+      setPackingQty((prev) => ({ ...prev, [key]: 0 }));
       setValidationErrors((prev) => {
         const next = { ...prev };
-        delete next[sku];
-        return next;
-      });
-      setBatchErrors((prev) => {
-        const next = { ...prev };
-        delete next[sku];
+        delete next[key];
         return next;
       });
     } else {
-      const product = order?.products.find((p) => p.sku === sku);
+      const product = order?.products.find((p) => getLineKey(p) === key);
       if (product) {
-        setPackingQty((prev) => ({ ...prev, [sku]: product.pendingQty }));
-        applyBatchPreselect(sku, product.product, product.pendingQty, product);
+        setPackingQty((prev) => ({ ...prev, [key]: product.pending_cases }));
       }
     }
   };
@@ -328,72 +201,33 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     if (!order) return;
     const next: Record<string, boolean> = {};
     const nextQty = { ...packingQty };
-    const nextBatch: Record<string, Record<string, number>> = {};
 
     order.products.forEach((p) => {
-      next[p.sku] = checked;
-      nextQty[p.sku] = checked ? p.pendingQty : 0;
-      if (checked && p.pendingQty > 0) {
-        if (isPurchaseReturnDoc(order) && p.batchNumber) {
-          nextBatch[p.sku] = buildPurchaseReturnBatchSelections(p, p.pendingQty);
-        } else {
-          const rows = getPackingBatchInventoryRows(p.product, warehouseName, undefined, p.sku);
-          nextBatch[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
-        }
-      }
+      const key = getLineKey(p);
+      next[key] = checked;
+      nextQty[key] = checked ? p.pending_cases : 0;
     });
 
-    setSelectedSkus(next);
+    setSelectedLines(next);
     setPackingQty(nextQty);
-    setBatchSelections(checked ? nextBatch : {});
     if (checked) {
       setValidationErrors({});
-      setBatchErrors({});
     }
   };
 
-  const handleQtyChange = (sku: string, value: string, pendingQty: number, maxAvailable: number) => {
+  const handleQtyChange = (key: string, value: string, pending_cases: number) => {
     const val = parseInt(value, 10);
     const num = Number.isNaN(val) ? 0 : val;
 
-    setPackingQty((prev) => ({ ...prev, [sku]: num }));
+    setPackingQty((prev) => ({ ...prev, [key]: num }));
 
     let err = "";
-    if (!selectedSkus[sku]) err = "";
+    if (!selectedLines[key]) err = "";
     else if (num < 0) err = "Quantity cannot be negative";
-    else if (num > pendingQty) err = `Cannot exceed pending quantity of ${pendingQty}`;
-    else if (num > maxAvailable) err = `Cannot exceed available warehouse stock of ${maxAvailable}`;
+    else if (num > pending_cases) err = `Cannot exceed pending quantity of ${pending_cases}`;
 
-    setValidationErrors((prev) => ({ ...prev, [sku]: err }));
-
-    const product = order?.products.find((p) => p.sku === sku);
-    if (product && selectedSkus[sku]) {
-      applyBatchPreselect(sku, product.product, num, product);
-    }
-
-    if (batchErrors[sku]) {
-      setBatchErrors((prev) => {
-        const next = { ...prev };
-        delete next[sku];
-        return next;
-      });
-    }
+    setValidationErrors((prev) => ({ ...prev, [key]: err }));
   };
-
-  const hasErrors = Object.values(validationErrors).some((err) => err !== "");
-  const totalQtyToPack = order ? getSelectedPackingQty(order.products, selectedSkus, packingQty) : 0;
-
-  const allBatchAllocationsComplete = order
-    ? order.products.every((p) => {
-        if (!selectedSkus[p.sku]) return true;
-        const qty = packingQty[p.sku] ?? 0;
-        if (qty <= 0) return false;
-        return isBatchAllocationComplete(batchSelections[p.sku] ?? {}, qty);
-      })
-    : false;
-
-  const canStartPacking =
-    !hasErrors && totalQtyToPack > 0 && allBatchAllocationsComplete;
 
   if (loading) {
     return (
@@ -425,6 +259,17 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
   return (
     <>
+      {toast && (
+        <div className={`fixed top-4 right-4 z-[9999] p-4 rounded-lg shadow-lg flex items-center gap-3 border animate-in slide-in-from-top-2 fade-in duration-300 ${
+          toast.type === "error" ? "bg-red-50 border-red-200 text-red-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
+        }`}>
+          {toast.type === "error" ? <AlertCircle className="w-5 h-5 flex-shrink-0" /> : <CheckCircle2 className="w-5 h-5 flex-shrink-0" />}
+          <p className="text-sm font-semibold">{toast.message}</p>
+          <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <FormContainer
         title="Create Packing List"
         description={`Generate packing allocations for ${order.salesOrderNo}`}
@@ -435,7 +280,6 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
           <div className="flex gap-2">
             <Button
               size="sm"
-              disabled={!canStartPacking}
               onClick={proceedWithPacking}
               className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
             >
@@ -555,46 +399,12 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
           <PackingProductLinesSection
             order={order}
-            warehouseName={warehouseName}
-            selectedSkus={selectedSkus}
+            selectedLines={selectedLines}
             packingQty={packingQty}
-            batchSelections={batchSelections}
             validationErrors={validationErrors}
-            availableStock={availableStock}
             onToggleProduct={handleToggleProduct}
             onToggleAll={handleToggleAll}
             onQtyChange={handleQtyChange}
-            onBatchSelectionsChange={(sku, selections) => {
-              setBatchSelections((prev) => ({ ...prev, [sku]: selections }));
-
-              const totalAllocated = Object.values(selections).reduce((a, b) => a + b, 0);
-              setPackingQty((prev) => ({ ...prev, [sku]: totalAllocated }));
-
-              if (order && isPurchaseReturnDoc(order)) {
-                const product = order.products.find((p) => p.sku === sku);
-                const pendingQty = product?.pendingQty ?? 0;
-                let err = "";
-                if (totalAllocated > pendingQty) {
-                  err = `Cannot exceed return quantity of ${pendingQty}`;
-                }
-                setValidationErrors((prev) => ({ ...prev, [sku]: err }));
-              }
-              
-              if (batchErrors[sku]) {
-                setBatchErrors((prev) => {
-                  const next = { ...prev };
-                  delete next[sku];
-                  return next;
-                });
-              }
-              if (validationErrors[sku]) {
-                setValidationErrors((prev) => {
-                  const next = { ...prev };
-                  delete next[sku];
-                  return next;
-                });
-              }
-            }}
           />
         </div>
       </FormContainer>

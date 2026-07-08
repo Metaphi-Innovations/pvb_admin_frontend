@@ -169,12 +169,17 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
         filterOptions: packingNoOptions,
         width: "140px",
         render: (_: unknown, row: PackingListListItem) => (
-          <Link
-            href={`/warehouse/packing/create/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.packingNumber}
-          </Link>
+          <div className="flex flex-col">
+            <Link
+              href={`/warehouse/packing/create/${row.id}`}
+              className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+            >
+              {row.sourceDocumentNo || row.packingNumber}
+            </Link>
+            {row.sourceDocumentNo && (
+              <span className="text-[10px] text-muted-foreground font-mono">{row.packingNumber}</span>
+            )}
+          </div>
         ),
       },
       {
@@ -293,6 +298,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
       action: "create_packing",
       icon: PlusCircle,
       onClick: (row) => router.push(`/warehouse/packing/create/${row.id}`),
+      disabled: (row) => row.status === "Fully Packed",
     },
   ];
 

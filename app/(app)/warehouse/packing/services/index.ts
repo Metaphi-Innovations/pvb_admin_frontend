@@ -260,7 +260,7 @@ export function createPackingRecord(
         return {
           product: line.productName,
           sku: line.productCode,
-          orderedQty: line.quantity,
+          ordered_cases: line.quantity,
           packedQty: sessionQty,
           batchAllocations: batchAllocations.length ? batchAllocations : undefined,
         };
@@ -318,7 +318,7 @@ export function createPackingRecord(
         return {
           product: item.productName,
           sku: item.productCode,
-          orderedQty: item.quantity,
+          ordered_cases: item.quantity,
           packedQty: sessionQty,
           batchAllocations: batchAllocations.length ? batchAllocations : undefined,
         };
@@ -383,7 +383,7 @@ export function createPackingRecord(
         return {
           product: p.product,
           sku: p.sku,
-          orderedQty: p.orderedQty,
+          ordered_cases: p.ordered_cases,
           packedQty: sessionQty,
           batchAllocations: batchAllocations.length ? batchAllocations : undefined,
         };
@@ -453,7 +453,7 @@ export function createPackingRecord(
     return {
       product: p.product,
       sku: p.sku,
-      orderedQty: p.orderedQty,
+      ordered_cases: p.ordered_cases,
       packedQty: sessionQty,
       batchAllocations: batchAllocations.length ? batchAllocations : undefined,
       nearExpirySchemeEligible: nearExpirySchemeEligible || undefined,
@@ -465,14 +465,14 @@ export function createPackingRecord(
     order.products = order.products.map(p => {
       const sessionQty = packingQtyMap[p.sku] || 0;
       const newPacked = p.packedQty + sessionQty;
-      const newPending = Math.max(0, p.orderedQty - newPacked);
+      const newPending = Math.max(0, p.ordered_cases - newPacked);
       if (newPending > 0) {
         allCompleted = false;
       }
       return {
         ...p,
         packedQty: newPacked,
-        pendingQty: newPending
+        pending_cases: newPending
       };
     });
 

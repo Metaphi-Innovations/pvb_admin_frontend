@@ -16,8 +16,8 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
     warehouse: "Central Warehouse",
     sourceDocumentType: "Sales Order",
     products: [
-      { product: "Urea 50kg", sku: "SKU-UR-50", orderedQty: 150, packedQty: 0, pendingQty: 150 },
-      { product: "NPK 10:26:26", sku: "SKU-NPK-26", orderedQty: 100, packedQty: 0, pendingQty: 100 },
+      { product: "Urea 50kg", sku: "SKU-UR-50", ordered_cases: 150, packedQty: 0, pending_cases: 150 },
+      { product: "NPK 10:26:26", sku: "SKU-NPK-26", ordered_cases: 100, packedQty: 0, pending_cases: 100 },
     ],
   },
   {
@@ -34,8 +34,8 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
     warehouse: "South Zone Depot",
     sourceDocumentType: "Sales Order",
     products: [
-      { product: "Zinc Sulphate 21%", sku: "SKU-ZN-21", orderedQty: 200, packedQty: 0, pendingQty: 200 },
-      { product: "Chlorpyrifos 20 EC", sku: "PRD-004", orderedQty: 50, packedQty: 0, pendingQty: 50 },
+      { product: "Zinc Sulphate 21%", sku: "SKU-ZN-21", ordered_cases: 200, packedQty: 0, pending_cases: 200 },
+      { product: "Chlorpyrifos 20 EC", sku: "PRD-004", ordered_cases: 50, packedQty: 0, pending_cases: 50 },
     ],
   },
   // ── Sample Orders ──
@@ -53,8 +53,8 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
     warehouse: "Central Warehouse",
     sourceDocumentType: "Sample Order",
     products: [
-      { product: "DAP Fertilizer", sku: "SKU-DAP-NEW", orderedQty: 50, packedQty: 0, pendingQty: 50 },
-      { product: "Hybrid Tomato Seeds", sku: "SKU-TOM-01", orderedQty: 50, packedQty: 0, pendingQty: 50 },
+      { product: "DAP Fertilizer", sku: "SKU-DAP-NEW", ordered_cases: 50, packedQty: 0, pending_cases: 50 },
+      { product: "Hybrid Tomato Seeds", sku: "SKU-TOM-01", ordered_cases: 50, packedQty: 0, pending_cases: 50 },
     ],
   },
   {
@@ -71,8 +71,8 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
     warehouse: "North Zone Hub",
     sourceDocumentType: "Sample Order",
     products: [
-      { product: "Hybrid Maize Seed", sku: "SKU-MZ-12", orderedQty: 40, packedQty: 0, pendingQty: 40 },
-      { product: "Zinc Sulphate 21%", sku: "SKU-ZN-21", orderedQty: 40, packedQty: 0, pendingQty: 40 },
+      { product: "Hybrid Maize Seed", sku: "SKU-MZ-12", ordered_cases: 40, packedQty: 0, pending_cases: 40 },
+      { product: "Zinc Sulphate 21%", sku: "SKU-ZN-21", ordered_cases: 40, packedQty: 0, pending_cases: 40 },
     ],
   },
   // ── Stock Transfers ──
@@ -91,8 +91,8 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
     targetWarehouse: "Central Warehouse",
     sourceDocumentType: "Stock Transfer",
     products: [
-      { product: "DAP 50kg", sku: "SKU-DAP-50", orderedQty: 200, packedQty: 0, pendingQty: 200 },
-      { product: "Hybrid Maize Seed", sku: "SKU-MZ-12", orderedQty: 100, packedQty: 0, pendingQty: 100 },
+      { product: "DAP 50kg", sku: "SKU-DAP-50", ordered_cases: 200, packedQty: 0, pending_cases: 200 },
+      { product: "Hybrid Maize Seed", sku: "SKU-MZ-12", ordered_cases: 100, packedQty: 0, pending_cases: 100 },
     ],
   },
   {
@@ -110,8 +110,8 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
     targetWarehouse: "South Zone Depot",
     sourceDocumentType: "Stock Transfer",
     products: [
-      { product: "Bio Fertilizer A", sku: "BIO-000001", orderedQty: 50, packedQty: 0, pendingQty: 50 },
-      { product: "NPK 19:19:19", sku: "SKU-NPK-19", orderedQty: 100, packedQty: 0, pendingQty: 100 },
+      { product: "Bio Fertilizer A", sku: "BIO-000001", ordered_cases: 50, packedQty: 0, pending_cases: 50 },
+      { product: "NPK 19:19:19", sku: "SKU-NPK-19", ordered_cases: 100, packedQty: 0, pending_cases: 100 },
     ],
   },
 ];
@@ -129,8 +129,8 @@ export const SEED_PACKINGS: PackingRecord[] = [
     status: "Packed",
     warehouse: "Central Warehouse",
     products: [
-      { product: "Urea 50kg", sku: "SKU-UR-50", orderedQty: 300, packedQty: 300 },
-      { product: "NPK 10:26:26", sku: "SKU-NPK-26", orderedQty: 200, packedQty: 200 },
+      { product: "Urea 50kg", sku: "SKU-UR-50", ordered_cases: 300, packedQty: 300 },
+      { product: "NPK 10:26:26", sku: "SKU-NPK-26", ordered_cases: 200, packedQty: 200 },
     ],
   },
   {
@@ -145,7 +145,7 @@ export const SEED_PACKINGS: PackingRecord[] = [
     status: "Dispatched",
     warehouse: "Central Warehouse",
     products: [
-      { product: "DAP 50kg", sku: "SKU-DAP-50", orderedQty: 150, packedQty: 150 },
+      { product: "DAP 50kg", sku: "SKU-DAP-50", ordered_cases: 150, packedQty: 150 },
     ],
   },
   {
@@ -160,8 +160,8 @@ export const SEED_PACKINGS: PackingRecord[] = [
     status: "Cancelled",
     warehouse: "West Zone Hub",
     products: [
-      { product: "Zinc Sulphate 21%", sku: "SKU-ZN-21", orderedQty: 150, packedQty: 150 },
-      { product: "Urea 50kg", sku: "SKU-UR-50", orderedQty: 200, packedQty: 200 },
+      { product: "Zinc Sulphate 21%", sku: "SKU-ZN-21", ordered_cases: 150, packedQty: 150 },
+      { product: "Urea 50kg", sku: "SKU-UR-50", ordered_cases: 200, packedQty: 200 },
     ],
   },
   {
@@ -179,7 +179,7 @@ export const SEED_PACKINGS: PackingRecord[] = [
       {
         product: "Bio Fertilizer A",
         sku: "BIO-000001",
-        orderedQty: 40,
+        ordered_cases: 40,
         packedQty: 30,
         batchAllocations: [
           {
