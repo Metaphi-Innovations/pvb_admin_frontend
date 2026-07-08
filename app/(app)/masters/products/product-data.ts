@@ -38,6 +38,16 @@ export interface ProductAsset {
   previewUrl?: string;
 }
 
+export interface ApiProductAsset {
+  product_asset_id: string;
+  asset_type: "MEDIA" | "LINK";
+  file_name: string;
+  file_size: string;
+  file_url: string | null;
+  link_url: string | null;
+  status: string;
+}
+
 export type ProductMediaItem = ProductAsset;
 
 export interface ProductImage {
@@ -50,6 +60,7 @@ export interface ProductImage {
   mimeType?: string;
   uploaded?: boolean;
   createdAt?: string;
+  file?: File;
 }
 
 export interface ProductUrl {
@@ -233,6 +244,7 @@ export async function createProductImageFromFile(file: File): Promise<ProductIma
     mimeType: file.type,
     uploaded: true,
     createdAt: todayStr(),
+    file,
   };
 }
 

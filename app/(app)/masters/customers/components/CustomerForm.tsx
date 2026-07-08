@@ -111,9 +111,10 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload } from "@/services/customer-list.service";
+import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload, CustomerBranchDocument, buildFileKey } from "@/services/customer-list.service";
 import { useGstDropdown, useTdsDropdown } from "@/hooks/masters";
 import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
+import { CustomerTypeDocument } from "@/services/customer-type-list.service";
 
 export interface BranchAddress {
 	address: string;
@@ -124,6 +125,7 @@ export interface BranchAddress {
 	city: string;
 	state: string;
 	pincode: string;
+	pincodeId?: string;
 }
 
 export interface BranchDocument {
@@ -133,6 +135,7 @@ export interface BranchDocument {
 	fileName?: string;
 	fileUrl?: string;
 	file?: File;
+	fileKey?: string;
 }
 
 export interface CustomerBranch {
@@ -143,37 +146,24 @@ export interface CustomerBranch {
 	documents: BranchDocument[];
 }
 
-export function getDocumentsForCustomerType(
-	customerType: string,
-): BranchDocument[] {
-	const typeLower = (customerType || "").toLowerCase();
-
-	if (typeLower === "individual" || typeLower === "farmer") {
-		return [
-			{ documentName: "PAN Card", required: true },
-			{ documentName: "Aadhaar Card", required: true },
-			{ documentName: "Address Proof", required: true },
-		];
-	}
-
-	if (typeLower === "dealer") {
-		return [
-			{ documentName: "GST Certificate", required: true },
-			{ documentName: "PAN Card", required: true },
-			{ documentName: "Trade License", required: true },
-			{ documentName: "Address Proof", required: true },
-		];
-	}
-
-	// For Company, Distributor, Retailer, CBBO, FPO, C&F etc.
-	return [
-		{ documentName: "GST Certificate", required: true },
-		{ documentName: "PAN Card", required: true },
-		{ documentName: "Incorporation Certificate", required: true },
-		{ documentName: "Address Proof", required: true },
-	];
+export interface CustomerTypeWithDocs {
+	id: string;
+	customerType: string;
+	documents?: CustomerTypeDocument[];
 }
 
+export function getDocumentsForCustomerType(
+	customerTypeId: string,
+	customerTypes: CustomerTypeWithDocs[],
+): BranchDocument[] {
+	const ct = customerTypes.find((c) => c.id === customerTypeId);
+	if (!ct?.documents?.length) return [];
+	return ct.documents.map((d) => ({
+		documentTypeId: d.documentTypeId,
+		documentName: d.documentType?.title ?? "",
+		required: true,
+	}));
+}
 export interface CustomerFormValues {
 	customerName: string;
 	countryCode: string;
@@ -343,7 +333,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	],
 };
 
-export function customerToFormValues(c: Customer): CustomerFormValues {
+export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWithDocs[]): CustomerFormValues {
 	const gstCategory =
 		c.gstCategory || deriveGstCategory(c.gstApplicable, c.gstin);
 	const gstRegistered = deriveGstRegistered(
@@ -437,11 +427,9 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 						state: c.stateName || "",
 						pincode: c.pincode || "",
 					},
-					documents: getDocumentsForCustomerType(c.customerType).map((doc) => {
+					documents: getDocumentsForCustomerType(c.customerType, customerTypes).map((doc) => {
 						const existingDoc = c.documents?.requiredDocuments?.find(
-							(rd) =>
-								rd.documentName.toLowerCase() ===
-								doc.documentName.toLowerCase(),
+							(rd) => rd.documentTypeId === doc.documentTypeId,
 						);
 						return {
 							...doc,
@@ -519,19 +507,19 @@ const STATUS_OPTIONS = [
 	{ value: "blocked", label: "Blocked" },
 ];
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
-	return (
-		<div className='mb-2.5 mt-0.5'>
-			<div className='flex items-center gap-2'>
-				<span className='w-[3px] h-3.5 rounded-full bg-[#E57A1F] flex-shrink-0' />
-				<p className='text-[10px] font-bold uppercase tracking-widest text-[#0F172A]'>
-					{label}
-				</p>
-			</div>
-			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
-		</div>
-	);
-}
+// function SectionHead({ label, sub }: { label: string; sub?: string }) {
+// 	return (
+// 		<div className='mb-2.5 mt-0.5'>
+// 			<div className='flex items-center gap-2'>
+// 				<span className='w-[3px] h-3.5 rounded-full bg-[#E57A1F] flex-shrink-0' />
+// 				<p className='text-[10px] font-bold uppercase tracking-widest text-[#0F172A]'>
+// 					{label}
+// 				</p>
+// 			</div>
+// 			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
+// 		</div>
+// 	);
+// }
 
 function CountryCodePicker({
 	value,
@@ -596,79 +584,79 @@ interface ProductCatalogItem {
 	gstRate?: string;
 }
 
-function ProductSelect({
-	products,
-	value,
-	onSelect,
-	disabled,
-}: {
-	products: ProductCatalogItem[];
-	value: string;
-	onSelect: (product: ProductCatalogItem) => void;
-	disabled?: boolean;
-}) {
-	const options = products.map((p) => ({
-		value: p.productId,
-		label: `${p.sku} - ${p.productName}`,
-		sublabel: [
-			p.category ? `Category: ${p.category}` : "",
-			p.unit ? `Unit: ${p.unit}` : "",
-			p.packSize ? `Pack Size: ${p.packSize}` : "",
-			p.hsnCode ? `HSN: ${p.hsnCode}` : "",
-			p.gstRate ? `GST: ${p.gstRate}` : "",
-		]
-			.filter(Boolean)
-			.join(" | "),
-		trailing: (
-			<span className='text-[10px] text-muted-foreground'>
-				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
-			</span>
-		),
-	}));
+// function ProductSelect({
+// 	products,
+// 	value,
+// 	onSelect,
+// 	disabled,
+// }: {
+// 	products: ProductCatalogItem[];
+// 	value: string;
+// 	onSelect: (product: ProductCatalogItem) => void;
+// 	disabled?: boolean;
+// }) {
+// 	const options = products.map((p) => ({
+// 		value: p.productId,
+// 		label: `${p.sku} - ${p.productName}`,
+// 		sublabel: [
+// 			p.category ? `Category: ${p.category}` : "",
+// 			p.unit ? `Unit: ${p.unit}` : "",
+// 			p.packSize ? `Pack Size: ${p.packSize}` : "",
+// 			p.hsnCode ? `HSN: ${p.hsnCode}` : "",
+// 			p.gstRate ? `GST: ${p.gstRate}` : "",
+// 		]
+// 			.filter(Boolean)
+// 			.join(" | "),
+// 		trailing: (
+// 			<span className='text-[10px] text-muted-foreground'>
+// 				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
+// 			</span>
+// 		),
+// 	}));
 
-	return (
-		<AutocompleteSelect
-			options={options}
-			value={value}
-			onChange={(val) => {
-				const prod = products.find((p) => p.productId === val);
-				if (prod) onSelect(prod);
-			}}
-			placeholder='Select product by name, SKU, or code'
-			searchPlaceholder='Search product...'
-			disabled={disabled}
-			className='h-8 text-xs font-normal'
-			renderTriggerLabel={(selectedOpt) => {
-				const option = Array.isArray(selectedOpt)
-					? selectedOpt[0]
-					: selectedOpt;
-				if (!option) return "Select product by name, SKU, or code";
-				const prod = products.find((p) => p.productId === option.value);
-				const meta = prod
-					? [
-						prod.category ? `Category: ${prod.category}` : "",
-						prod.unit ? `Unit: ${prod.unit}` : "",
-						prod.packSize ? `Pack Size: ${prod.packSize}` : "",
-						prod.hsnCode ? `HSN: ${prod.hsnCode}` : "",
-						prod.gstRate ? `GST: ${prod.gstRate}` : "",
-					]
-						.filter(Boolean)
-						.join(" | ")
-					: "";
-				return (
-					<span className='flex items-center min-w-0 gap-2'>
-						<span className='truncate text-foreground'>{option.label}</span>
-						{meta && (
-							<span className='truncate text-[10px] text-muted-foreground'>
-								{meta}
-							</span>
-						)}
-					</span>
-				);
-			}}
-		/>
-	);
-}
+// 	return (
+// 		<AutocompleteSelect
+// 			options={options}
+// 			value={value}
+// 			onChange={(val) => {
+// 				const prod = products.find((p) => p.productId === val);
+// 				if (prod) onSelect(prod);
+// 			}}
+// 			placeholder='Select product by name, SKU, or code'
+// 			searchPlaceholder='Search product...'
+// 			disabled={disabled}
+// 			className='h-8 text-xs font-normal'
+// 			renderTriggerLabel={(selectedOpt) => {
+// 				const option = Array.isArray(selectedOpt)
+// 					? selectedOpt[0]
+// 					: selectedOpt;
+// 				if (!option) return "Select product by name, SKU, or code";
+// 				const prod = products.find((p) => p.productId === option.value);
+// 				const meta = prod
+// 					? [
+// 						prod.category ? `Category: ${prod.category}` : "",
+// 						prod.unit ? `Unit: ${prod.unit}` : "",
+// 						prod.packSize ? `Pack Size: ${prod.packSize}` : "",
+// 						prod.hsnCode ? `HSN: ${prod.hsnCode}` : "",
+// 						prod.gstRate ? `GST: ${prod.gstRate}` : "",
+// 					]
+// 						.filter(Boolean)
+// 						.join(" | ")
+// 					: "";
+// 				return (
+// 					<span className='flex items-center min-w-0 gap-2'>
+// 						<span className='truncate text-foreground'>{option.label}</span>
+// 						{meta && (
+// 							<span className='truncate text-[10px] text-muted-foreground'>
+// 								{meta}
+// 							</span>
+// 						)}
+// 					</span>
+// 				);
+// 			}}
+// 		/>
+// 	);
+// }
 
 interface CustomerFormProps {
 	form: CustomerFormValues;
@@ -683,46 +671,54 @@ interface CustomerFormProps {
 	customerTypes: {
 		id: string;
 		customerType: string;
+		documents: CustomerTypeDocument[];
 	}[];
 }
 
-function branchToPayload(b: CustomerBranch, bIdx: number): {
-	payload: CustomerBranchPayload;
-	fileEntries: { key: string; file: File }[];
-} {
-	const fileEntries: { key: string; file: File }[] = [];
+function branchDocumentsToPayload(
+	documents: BranchDocument[],
+	branchIndex: number,
+): CustomerBranchDocumentPayload[] {
+	return documents
+		.filter((d): d is BranchDocument & { documentTypeId: string; file: File } =>
+			!!d.documentTypeId && !!d.file,
+		)
+		.map((d) => ({
+			document_type_id: d.documentTypeId,
+			file_key: buildFileKey(branchIndex, d.documentTypeId),
+		}));
+}
 
-	const documents: CustomerBranchDocumentPayload[] = b.documents
-		.filter((d) => d.file && (d as any).documentTypeId)
-		.map((d) => {
-			const key = `branch_${bIdx}_doc_${(d as any).documentTypeId}`;
-			fileEntries.push({ key, file: d.file as File });
-			return { document_type_id: (d as any).documentTypeId, file_key: key };
-		});
-
+function branchToPayload(
+	branch: CustomerBranch,
+	idx: number,
+): { payload: CustomerBranchPayload } {
 	return {
 		payload: {
-			branch_name: b.branchName,
-			is_main_branch: !!b.isMain,
-			billing_country: b.billingAddress.country ?? "India",
-			billing_address_line_1: b.billingAddress.address,
-			billing_address_line_2: b.billingAddress.addressLine2 ?? "",
-			billing_state: b.billingAddress.state,
-			billing_city: b.billingAddress.city,
-			billing_town: b.billingAddress.town ?? "",
-			billing_pincode: b.billingAddress.pincode,
-			billing_pincode_id: (b.billingAddress as any).pincodeId ?? "",
-			shipping_country: b.shippingAddress.country ?? "India",
-			shipping_address_line_1: b.shippingAddress.address,
-			shipping_address_line_2: b.shippingAddress.addressLine2 ?? "",
-			shipping_state: b.shippingAddress.state,
-			shipping_city: b.shippingAddress.city,
-			shipping_town: b.shippingAddress.town ?? "",
-			shipping_pincode: b.shippingAddress.pincode,
-			shipping_pincode_id: (b.shippingAddress as any).pincodeId ?? "",
-			documents,
+			branch_name: branch.branchName || `Branch #${idx + 1}`,
+			is_main_branch: !!branch.isMain,
+
+			billing_country: branch.billingAddress.country || "India",
+			billing_address_line_1: branch.billingAddress.address,
+			billing_address_line_2: branch.billingAddress.addressLine2 || "",
+			billing_state: branch.billingAddress.state,
+			billing_city: branch.billingAddress.city,
+			billing_town: branch.billingAddress.town || "",
+			billing_pincode: branch.billingAddress.pincode,
+			billing_pincode_id: branch.billingAddress.pincodeId || "",
+
+			shipping_country: branch.shippingAddress.country || "India",
+			shipping_address_line_1: branch.shippingAddress.address,
+			shipping_address_line_2: branch.shippingAddress.addressLine2 || "",
+			shipping_state: branch.shippingAddress.state,
+			shipping_city: branch.shippingAddress.city,
+			shipping_town: branch.shippingAddress.town || "",
+			shipping_pincode: branch.shippingAddress.pincode,
+			shipping_pincode_id: branch.shippingAddress.pincodeId || "",
+
+			documents: branchDocumentsToPayload(branch.documents, idx),
+
 		},
-		fileEntries,
 	};
 }
 
@@ -865,32 +861,24 @@ export function CustomerForm({
 	const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file) return;
+		if (!activeBranchUpload) return;
 
+		const { branchIndex, docIndex } = activeBranchUpload;
 		const fileUrl = URL.createObjectURL(file);
 		const fileName = file.name;
 
-		if (activeBranchUpload) {
-			const { branchIndex, docIndex } = activeBranchUpload;
-			const updatedBranches = [...form.branches];
-			updatedBranches[branchIndex] = {
-				...updatedBranches[branchIndex],
-				documents: updatedBranches[branchIndex].documents.map((doc, idx) => {
-					if (idx === docIndex) {
-						return {
-							...doc,
-							fileName,
-							fileUrl,
-							file,
-						};
-					}
-					return doc;
-				}),
-			};
-			onChange({ ...form, branches: updatedBranches });
-			showToast("Document uploaded successfully.", "success");
-			setActiveBranchUpload(null);
-		}
+		const updatedBranches = [...form.branches];
+		updatedBranches[branchIndex] = {
+			...updatedBranches[branchIndex],
+			documents: updatedBranches[branchIndex].documents.map((doc, idx) =>
+				idx === docIndex ? { ...doc, fileName, fileUrl, file } : doc,
+			),
+		};
+		onChange({ ...form, branches: updatedBranches });
+		showToast("Document selected.", "success");
+		setActiveBranchUpload(null);
 	};
+	// console.log('customerTypes[0]:', customerTypes[0]); // ⬅ add here
 
 	const customerTypeOptions = useMemo(() => {
 		return customerTypes.map((ct) => ({
@@ -1280,23 +1268,14 @@ export function CustomerForm({
 										<SearchableSelect
 											value={form.customerType}
 											onChange={(value) => {
-												const ct = customerTypes.find((c) => c.id === value);
-												// const docs = ct
-												// 	? ct.documentTypes.map((d) => ({
-												// 		documentTypeId: d.id,
-												// 		documentName: d.documentName,
-												// 		required: true as const,
-												// 	}))
-												// 	: [];
+												const branchDocs = getDocumentsForCustomerType(value, customerTypes);
 
-												const branchDocs = getDocumentsForCustomerType(value);
 												const updatedBranches = form.branches.map((b) => ({
 													...b,
 													documents: branchDocs.map((d) => {
+														// match by documentTypeId, not name — stable across renames
 														const existing = b.documents.find(
-															(bd) =>
-																bd.documentName.toLowerCase() ===
-																d.documentName.toLowerCase(),
+															(bd) => bd.documentTypeId === d.documentTypeId,
 														);
 														return {
 															...d,
@@ -1310,6 +1289,7 @@ export function CustomerForm({
 												onChange({
 													...form,
 													customerType: value,
+													branches: updatedBranches, // ⬅ this was missing
 												});
 												onClearError('customerType');
 											}}
@@ -1729,7 +1709,7 @@ export function CustomerForm({
 														pincode: "",
 													},
 													documents: getDocumentsForCustomerType(
-														form.customerType,
+														form.customerType, customerTypes
 													),
 												},
 											],
@@ -2085,7 +2065,7 @@ export function CustomerForm({
 																									</div>
 																								)}
 																							</td>
-																							<td className='px-3 py-2'>
+																							{/* <td className='px-3 py-2'>
 																								{!readOnly && (
 																									<Button
 																										type='button'
@@ -2146,7 +2126,7 @@ export function CustomerForm({
 																										<Trash2 className='w-3.5 h-3.5' />
 																									</Button>
 																								)}
-																							</td>
+																							</td> */}
 																						</tr>
 																					);
 																				},
@@ -2164,7 +2144,7 @@ export function CustomerForm({
 																	</div>
 																)}
 
-																{!readOnly && (
+																{/* {!readOnly && (
 																	<Button
 																		type='button'
 																		variant='outline'
@@ -2187,7 +2167,7 @@ export function CustomerForm({
 																		<Plus className='w-3.5 h-3.5 mr-1' /> Add
 																		Document Row
 																	</Button>
-																)}
+																)} */}
 															</>
 														)}
 													</div>
@@ -2696,7 +2676,7 @@ export function formValuesToCustomer(
 
 		documents: {
 			requiredDocuments: (cleanMainBranch?.documents || []).map((d) => ({
-				documentTypeId: d.documentName,
+				documentTypeId: d.documentTypeId,
 				documentName: d.documentName,
 				required: d.required,
 				fileName: d.fileName,

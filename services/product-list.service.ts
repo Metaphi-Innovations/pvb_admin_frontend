@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { ApiProductAsset } from "@/app/(app)/masters/products/product-data";
 
 // ---------------------------------------------------------------------------
 // Parameter / payload types
@@ -37,6 +38,18 @@ export interface ProductUpdatePayload {
 // ---------------------------------------------------------------------------
 // Response shape (list / detail record)
 // ---------------------------------------------------------------------------
+export interface ProductAsset {
+  id?: string;
+  assetType: "LINK" | "IMAGE" | string;
+  linkUrl?: string;
+  imageUrl?: string;
+}
+
+export interface ProductImageAsset {
+  id?: string;
+  imageUrl: string;
+}
+
 
 export interface ProductListRecord {
   id: number;
@@ -81,6 +94,8 @@ export interface ProductListRecord {
   hsnId?: number | null;
   gstId?: number | null;
   gstUuid?: string;
+  assets?: ApiProductAsset[];
+  productImages?: ProductImageAsset[];
 }
 
 export interface ProductListResult {
@@ -137,6 +152,22 @@ export function sortStateToOrdering(
   return direction === "desc" ? `-${field}` : field;
 }
 
+export function mapAssets(raw: unknown): ApiProductAsset[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const a = (item ?? {}) as Record<string, unknown>;
+    return {
+      product_asset_id: asString(a.id),
+      asset_type: asString(a.asset_type) as "MEDIA" | "LINK",
+      link_url: asString(a.link_url),
+      file_url: asString(a.file_url),
+      file_name: asString(a.file_name),
+      file_size: asString(a.file_size),
+      status: asString(a.status),
+    };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -177,7 +208,7 @@ function readNestedName(primary: unknown, ...fallbacks: unknown[]): string {
     const obj = primary as Record<string, unknown>;
     // Try common name keys
     for (const key of ["categoryName", "segment_name", "formulation_name", "cfu_name",
-                        "supplier_name", "name", "title"]) {
+      "supplier_name", "name", "title"]) {
       if (obj[key]) return asString(obj[key]);
     }
     return "";
@@ -194,7 +225,7 @@ function readNestedId(nested: unknown, flatId: unknown, ...idKeys: string[]): st
   if (nested && typeof nested === "object" && !Array.isArray(nested)) {
     const obj = nested as Record<string, unknown>;
     for (const key of ["id", "category_id", "segment_id", "formulation_id", "cfu_id",
-                        "supplier_id", "hsn_id", "gst_id", ...idKeys]) {
+      "supplier_id", "hsn_id", "gst_id", ...idKeys]) {
       if (obj[key]) return asString(obj[key]);
     }
   }
@@ -207,12 +238,12 @@ function mapItem(
 ): ProductListRecord {
   const srNo = Number(raw.sr_no);
   const categoryObj = raw.category as Record<string, unknown> | null | undefined;
-  const segmentObj  = raw.segment  as Record<string, unknown> | null | undefined;
-  const supplierObj = raw.supplier  as Record<string, unknown> | null | undefined;
+  const segmentObj = raw.segment as Record<string, unknown> | null | undefined;
+  const supplierObj = raw.supplier as Record<string, unknown> | null | undefined;
   const formulationObj = raw.formulation as Record<string, unknown> | null | undefined;
-  const cfuObj      = raw.cfu       as Record<string, unknown> | null | undefined;
-  const hsnObj      = raw.hsn       as Record<string, unknown> | null | undefined;
-  const gstObj      = raw.gst_rate  as Record<string, unknown> | null | undefined;
+  const cfuObj = raw.cfu as Record<string, unknown> | null | undefined;
+  const hsnObj = raw.hsn as Record<string, unknown> | null | undefined;
+  const gstObj = raw.gst_rate as Record<string, unknown> | null | undefined;
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     productUuid: asString(raw.product_id),
@@ -252,6 +283,7 @@ function mapItem(
     gstUuid: readNestedId(gstObj, raw.gst_rate_id ?? raw.gst_id),
     hsnId: toNullableNumber(raw.hsn_id),
     gstId: toNullableNumber(raw.gst_id),
+    assets: mapAssets(raw.assets),
   };
 }
 
@@ -326,13 +358,29 @@ export const ProductListService = {
     );
     const payload = response.data as Record<string, unknown>;
     const data = payload.data as Record<string, unknown> | undefined;
-    return asString(data?.product_code);
+    return asString(data?.previewNumber);
   },
 
-  async create(payload: ProductCreatePayload): Promise<void> {
+  async create(payload: ProductCreatePayload, images: File[] = []): Promise<void> {
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (key === "assets") {
+        formData.append("assets", JSON.stringify(value));
+        return;
+      }
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
+    });
+
+    images.forEach((file) => {
+      formData.append("product_image", file);
+    });
+
     const response = await axiosInstance.post(
       API_ENDPOINTS.MASTER.PRODUCT.CREATE,
-      payload,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
     );
 
     const body = response.data as Record<string, unknown>;
@@ -341,10 +389,26 @@ export const ProductListService = {
     }
   },
 
-  async update(id: string, payload: ProductUpdatePayload): Promise<void> {
+  async update(id: string, payload: ProductUpdatePayload, images: File[] = []): Promise<void> {
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (key === "assets") {
+        formData.append("assets", JSON.stringify(value));
+        return;
+      }
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
+    });
+
+    images.forEach((file) => {
+      formData.append("product_image", file);
+    });
+
     const response = await axiosInstance.put(
       API_ENDPOINTS.MASTER.PRODUCT.UPDATE(id),
-      payload,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
     );
 
     const body = response.data as Record<string, unknown>;

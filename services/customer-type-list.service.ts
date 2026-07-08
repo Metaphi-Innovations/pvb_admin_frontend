@@ -16,6 +16,12 @@ export interface CustomerTypeListDocument {
   title: string;
 }
 
+export interface CustomerTypeDocument {
+  id: string;
+  documentTypeId: string;
+  documentType: { title: string };
+}
+
 export interface CustomerTypeListRecord {
   id: number;
   customerTypeId: string;
@@ -61,6 +67,19 @@ function mapDocuments(raw: unknown): CustomerTypeListDocument[] {
     return {
       id: asString(doc.id),
       title: asString(doc.title),
+    };
+  });
+}
+
+function mapDocumentsWithType(raw: unknown): CustomerTypeDocument[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const doc = (item ?? {}) as Record<string, unknown>;
+    const documentType = (doc.documentType ?? {}) as Record<string, unknown>;
+    return {
+      id: asString(doc.id),
+      documentTypeId: asString(doc.documentTypeId),
+      documentType: { title: asString(documentType.title) },
     };
   });
 }
@@ -121,6 +140,7 @@ export interface CustomerTypeExportParams {
 export interface CustomerTypeDropdownItem {
   id: string;
   customerType: string;
+  documents: CustomerTypeDocument[];
 }
 
 export const CustomerTypeListService = {
@@ -229,6 +249,7 @@ export const CustomerTypeListService = {
     return data.map(item => ({
       id: String(item.id),
       customerType: String(item.customer_type_name),
+      documents: mapDocumentsWithType(item.documents),
     }));
   },
 };

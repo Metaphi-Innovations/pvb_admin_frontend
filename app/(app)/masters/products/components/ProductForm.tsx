@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	AlertCircle,
 	Eye,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { loadHSNMasters } from "../../hsn/hsn-data";
+// import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
 	type ProductImage,
@@ -38,17 +38,17 @@ import {
 	getMouFromUnit,
 	isAllowedProductImageFile,
 	isValidProductUrl,
-	loadActiveCategoryOptions,
+	// loadActiveCategoryOptions,
 	loadActiveCfuOptions,
 	loadActiveFormOptions,
-	loadActiveSegmentOptions,
-	loadActiveSupplierOptions,
-	loadProducts,
-	generateProductCode,
+	// loadActiveSegmentOptions,
+	// loadActiveSupplierOptions,
+	// loadProducts,
+	// generateProductCode,
 	normalizeProductUnit,
 	resolveProductCodeForSave,
 	resolveProductTaxFromHsn,
-	resolveSupplierCode,
+	// resolveSupplierCode,
 	todayStr,
 } from "../product-data";
 import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
@@ -255,6 +255,7 @@ function applyPackagingCalculations(values: ProductFormValues): ProductFormValue
 	return next;
 }
 
+
 export function ProductForm({
 	form,
 	onChange,
@@ -262,6 +263,7 @@ export function ProductForm({
 	onClearError,
 	productImages = [],
 	productUrls = [],
+	previewNumber,
 	onImageAdd,
 	onImageRemove,
 	onUrlAdd,
@@ -277,29 +279,70 @@ export function ProductForm({
 	productUrls?: ProductUrl[];
 	onImageAdd?: (items: ProductImage[]) => void;
 	onImageRemove?: (id: string) => void;
+	previewNumber?: string;
 	onUrlAdd?: (item: ProductUrl) => void;
 	onUrlRemove?: (id: string) => void;
 	readOnly?: boolean;
 	isNew?: boolean;
 }) {
+
+	const computeProductCode = (netWeight: string, apiCode?: string) => {
+		// console.log("netWeight", netWeight);
+		// console.log("apiCode", apiCode);
+		const weightNum = parseFloat(netWeight) * 1000;
+		if (isNaN(weightNum) || !apiCode) return apiCode ?? "";
+
+		const match = apiCode.match(/^(.*?)(\d+)$/);
+		if (!match) return apiCode;
+
+		const [, prefix, numericPart] = match;
+
+		const lastDigit = Number(numericPart.slice(-1));
+		const nextDigit = lastDigit + 1;
+
+		const newNumber = `${weightNum}${nextDigit}`;
+
+		return `${prefix}${newNumber}`;
+	};
+
 	const set = <K extends keyof ProductFormValues>(
 		key: K,
 		value: ProductFormValues[K],
 	) => {
 		let next = { ...form, [key]: value } as ProductFormValues;
+
 		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
 			next = applyPackagingCalculations(next);
+
+			if (isNew && previewNumber && next.netWeightPerPackagingUnit) {
+				next.productCode = computeProductCode(
+					next.netWeightPerPackagingUnit,
+					previewNumber
+				);
+				onClearError("productCode");
+			}
 		}
+
 		onChange(next);
 		onClearError(key);
 	};
 
+	useEffect(() => {
+		if (isNew && previewNumber && form.netWeightPerPackagingUnit) {
+			const generated = computeProductCode(
+				form.netWeightPerPackagingUnit,
+				previewNumber
+			);
+
+			if (generated && generated !== form.productCode) {
+				onChange({ ...form, productCode: generated });
+				onClearError("productCode");
+			}
+		}
+	}, [previewNumber, form.netWeightPerPackagingUnit]);
+
 	const handleCategoryChange = (category: string) => {
 		const next = { ...form, category };
-		if (isNew && category) {
-			next.productCode = generateProductCode(category, loadProducts());
-			onClearError("productCode");
-		}
 		onChange(next);
 		onClearError("category");
 	};
@@ -322,12 +365,12 @@ export function ProductForm({
 
 	const segmentOptions = useMemo(() => {
 		if (!segmentsData) return [];
-		return segmentsData.map((s) => ({ value: s.segmentName, label: s.segmentName }));
+		return segmentsData.map((s) => ({ value: s.id, label: s.segmentName }));
 	}, [segmentsData]);
 
 	const categoryOptions = useMemo(() => {
 		if (!categoriesData) return [];
-		return categoriesData.map((c) => ({ value: c.categoryName, label: c.categoryName }));
+		return categoriesData.map((c) => ({ value: c.id, label: c.categoryName }));
 	}, [categoriesData]);
 
 	const formOptions = useMemo(() => loadActiveFormOptions(), []);
@@ -457,13 +500,13 @@ export function ProductForm({
 							onChange={(e) =>
 								set("productCode", e.target.value.toUpperCase())
 							}
-							placeholder='Auto-generated from category — editable'
+							placeholder='Auto-generated'
 							className={cn("font-mono", inputCls("productCode"))}
-							disabled={readOnly}
+							disabled={true}
 						/>
-						<p className='text-[10px] text-muted-foreground leading-snug'>
-							Auto-filled when category is selected. You can edit if needed.
-						</p>
+						{/* <p className='text-[10px] text-muted-foreground leading-snug'>
+							Auto-filled.
+						</p> */}
 						<FieldError msg={errors.productCode} />
 					</div>
 

@@ -182,7 +182,7 @@ export default function NewCustomerPage() {
 
 
     try {
-      const created = await createCustomer.mutateAsync(payload);
+      const created = await createCustomer.mutateAsync({ payload, branches: form.branches });
       const newId = (created as any)?.id;
       const finalCode = (created as any)?.customerCode ?? customerCode;
 
