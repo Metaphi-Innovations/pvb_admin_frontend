@@ -93,7 +93,7 @@ export default function EditCustomerPage() {
     const payload = formValuesToUpdatePayload(form);
 
     updateCustomer.mutate(
-      { id: customer.customerUuid, payload },
+      { id: customer.customerUuid, payload, branches: form.branches },
       {
         onSuccess: () => {
           if (form.status === "active") {

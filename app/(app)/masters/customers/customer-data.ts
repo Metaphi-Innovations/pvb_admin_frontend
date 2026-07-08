@@ -70,6 +70,9 @@ export interface BranchDocument {
 	required: boolean;
 	fileName?: string;
 	fileUrl?: string;
+	file?: File;
+	fileKey?: string;
+	documentTypeId?: string;
 }
 
 export interface CustomerBranch {

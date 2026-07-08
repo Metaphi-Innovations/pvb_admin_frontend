@@ -7,6 +7,16 @@ export interface CustomerBranchDocumentPayload {
     file_key: string;
 }
 
+export interface CustomerBranchDocument {
+    documentTypeId: string;
+    documentName: string;
+    required: boolean;
+    fileName?: string;
+    fileUrl?: string;
+    file?: File;
+    fileKey?: string;
+}
+
 export interface CustomerBranchPayload {
     branch_name: string;
     is_main_branch: boolean;
@@ -439,6 +449,11 @@ function extractErrorMessage(error: unknown, fallback: string): string {
     );
 }
 
+export function buildFileKey(branchIndex: number, documentTypeId: string): string {
+    return `branch_${branchIndex}_doc_${documentTypeId}`;
+}
+
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -493,10 +508,26 @@ export const CustomerListService = {
         return asString(data?.previewNumber ?? payload?.previewNumber);
     },
 
-    async create(payload: CustomerCreatePayload): Promise<void> {
+    async create(payload: CustomerCreatePayload, branches: CustomerBranch[]): Promise<void> {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+            if (key === "branches") return;
+            if (value !== undefined && value !== null) formData.append(key, String(value));
+        });
+        formData.append("branches", JSON.stringify(payload.branches));
+
+        branches.forEach((branch, branchIndex) => {
+            branch.documents.forEach((doc) => {
+                if (doc.documentTypeId && doc.file) {
+                    formData.append(buildFileKey(branchIndex, doc.documentTypeId), doc.file);
+                }
+            });
+        });
+
         const response = await axiosInstance.post(
             API_ENDPOINTS.MASTER.CUSTOMER.CREATE,
-            payload,
+            formData,
+            { headers: { "Content-Type": "multipart/form-data" } },
         );
 
         const body = response.data as Record<string, unknown>;
@@ -505,10 +536,38 @@ export const CustomerListService = {
         }
     },
 
-    async update(id: string, payload: CustomerUpdatePayload): Promise<void> {
+    // async update(id: string, payload: CustomerUpdatePayload): Promise<void> {
+    //     const response = await axiosInstance.put(
+    //         API_ENDPOINTS.MASTER.CUSTOMER.UPDATE(id),
+    //         payload,
+    //     );
+
+    //     const body = response.data as Record<string, unknown>;
+    //     if (!body.success) {
+    //         throw new Error(asString(body.message) || "Failed to update customer.");
+    //     }
+    // },
+
+    async update(id: string, payload: CustomerUpdatePayload, branches: CustomerBranch[]): Promise<void> {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+            if (key === "branches") return;
+            if (value !== undefined && value !== null) formData.append(key, String(value));
+        });
+        formData.append("branches", JSON.stringify(payload.branches));
+
+        branches.forEach((branch, branchIndex) => {
+            branch.documents.forEach((doc) => {
+                if (doc.documentTypeId && doc.file) {
+                    formData.append(buildFileKey(branchIndex, doc.documentTypeId), doc.file);
+                }
+            });
+        });
+
         const response = await axiosInstance.put(
             API_ENDPOINTS.MASTER.CUSTOMER.UPDATE(id),
-            payload,
+            formData,
+            { headers: { "Content-Type": "multipart/form-data" } },
         );
 
         const body = response.data as Record<string, unknown>;

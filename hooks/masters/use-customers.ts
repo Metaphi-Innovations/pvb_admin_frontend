@@ -10,6 +10,7 @@ import {
     type CustomerDropdownItem
 } from "@/services/customer-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import { CustomerBranch } from "@/app/(app)/masters/customers/customer-data";
 
 function toListParams(params: MasterListKeyParams): CustomerListParams {
     return {
@@ -50,8 +51,13 @@ export function useCreateCustomer() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (payload: CustomerCreatePayload) =>
-            CustomerListService.create(payload),
+        mutationFn: ({
+            payload,
+            branches,
+        }: {
+            payload: CustomerCreatePayload;
+            branches: CustomerBranch[];
+        }) => CustomerListService.create(payload, branches),
 
         onSuccess: async () => {
             await queryClient.invalidateQueries({
@@ -68,10 +74,12 @@ export function useUpdateCustomer() {
         mutationFn: ({
             id,
             payload,
+            branches,
         }: {
             id: string;
             payload: CustomerUpdatePayload;
-        }) => CustomerListService.update(id, payload),
+            branches: CustomerBranch[];
+        }) => CustomerListService.update(id, payload, branches),
 
         onSuccess: async (_data, variables) => {
             await Promise.all([
