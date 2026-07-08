@@ -25,7 +25,7 @@ export function shortCloseReasonLabel(reason: ShortCloseReason): string {
 export interface POShortCloseInfo {
   closeType: "short_close";
   quantity: number;
-  reason: ShortCloseReason;
+  reason: string;
   remarks: string;
   shortClosedBy: string;
   shortClosedDate: string;

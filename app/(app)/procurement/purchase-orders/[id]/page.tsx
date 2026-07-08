@@ -78,7 +78,7 @@ export default function PODetailPage() {
   const cancelMutation = useCancelPurchaseOrder();
 
   const po = detailQuery.data;
-  console.log(po);
+  // console.log(po);
   const [activeTab, setActiveTab] = useState("overview");
   const [uploadOpen, setUploadOpen] = useState(searchParams.get("upload") === "1");
   const [shortCloseOpen, setShortCloseOpen] = useState(searchParams.get("shortClose") === "1");

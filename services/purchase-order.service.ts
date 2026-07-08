@@ -266,6 +266,8 @@ function mapInvoices(raw: unknown): PurchaseOrder["activity"] {
 }
 
 export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
+
+  console.log("raw",raw)
   const supplier = asRecord(raw.supplier);
   const snapshot = asRecord(raw.supplier_snapshot);
   const supplierTypeFromSupplier = asString(
@@ -304,7 +306,7 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
       ? {
           closeType: "short_close" as const,
           quantity: lines.reduce((s, l) => s + (l.shortClosedQty ?? 0), 0),
-          reason: "other" as const,
+          reason: asString(raw.short_close_reason),
           remarks: asString(raw.short_close_remarks),
           shortClosedBy: toDisplayName(raw.short_closed_by_user),
           shortClosedDate: asDateOnly(raw.short_closed_at),
