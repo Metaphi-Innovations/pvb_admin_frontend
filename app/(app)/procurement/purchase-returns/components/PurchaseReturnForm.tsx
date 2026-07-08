@@ -14,7 +14,7 @@ import { recalcPurchaseReturn } from "../purchase-return-calc";
 import {
   type PurchaseReturn,
   type PurchaseReturnItem,
-} from "../purchase-return-data";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import { PReturnLineItemsSection } from "./PReturnLineItemsSection";
 
 const inputCls = "h-8 rounded-lg text-xs";
@@ -51,11 +51,14 @@ export function PurchaseReturnForm({
   onChange,
   readOnly = false,
   errors = {},
+  editMode = false,
 }: {
   record: PurchaseReturn;
   onChange: (record: PurchaseReturn) => void;
   readOnly?: boolean;
   errors?: Record<string, string>;
+  /** When true, line items are split into existing return lines + additional eligible GRNs. */
+  editMode?: boolean;
 }) {
   const detailsGridCls = "grid grid-cols-4 gap-3";
   const po = useMemo(() => getPOById(record.poId), [record.poId]);
@@ -138,6 +141,8 @@ export function PurchaseReturnForm({
           errors={errors}
           taxSupplyType={taxSupplyType}
           onItemChange={setItem}
+          editMode={editMode}
+          warehouseName={record.warehouseName}
         />
 
         <div className="border-t border-border/60 pt-4">

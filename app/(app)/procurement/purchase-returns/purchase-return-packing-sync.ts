@@ -1,7 +1,7 @@
 import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
 import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
-import type { PurchaseReturn } from "./purchase-return-data";
-import { loadPurchaseReturns } from "./purchase-return-data";
+import type { PurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+import { loadPurchaseReturns } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import { getPOById } from "../purchase-orders/po-data";
 
 const PACKING_QUEUE_KEY = "ds_pret_packing_queue_v1";
@@ -24,7 +24,7 @@ function savePackingQueueIds(ids: number[]): void {
 export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOrderRecord {
   const po = getPOById(record.poId);
   const warehouse = po?.warehouseName ?? "Central Warehouse";
-  const activeItems = record.items.filter((it) => it.selected && it.returnQty > 0);
+  const activeItems = record.items.filter((it:any) => it.selected && it.returnQty > 0);
 
   return {
     id: `pret-${record.id}`,
@@ -69,7 +69,7 @@ export function removePurchaseReturnFromPackingQueue(returnId: number): void {
 }
 
 export function getPurchaseReturnByReturnNumber(returnNumber: string): PurchaseReturn | undefined {
-  return loadPurchaseReturns().find((r) => r.returnNumber === returnNumber);
+  return loadPurchaseReturns().find((r:any) => r.returnNumber === returnNumber);
 }
 
 export function getPurchaseReturnsForPacking(): SalesOrderRecord[] {
@@ -81,16 +81,17 @@ export function getPurchaseReturnsForPacking(): SalesOrderRecord[] {
   );
   return loadPurchaseReturns()
     .filter(
-      (r) =>
-        (r.status === "issued_for_packing" || ids.has(r.id)) && !packedIds.has(r.id),
+      (r:any) =>
+        (r.status === "issued_for_packing" || ids.has(Number(r.id))) && !packedIds.has(Number(r.id)),
     )
     .map(mapPurchaseReturnToPackingOrder);
 }
 
 export function addPurchaseReturnToPackingQueue(record: PurchaseReturn): void {
   const ids = loadPackingQueueIds();
-  if (!ids.includes(record.id)) {
-    savePackingQueueIds([...ids, record.id]);
+  const recordId = Number(record.id);
+  if (!ids.includes(recordId)) {
+    savePackingQueueIds([...ids, recordId]);
   }
 }
 

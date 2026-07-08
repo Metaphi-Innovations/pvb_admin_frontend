@@ -147,6 +147,16 @@ export const API_ENDPOINTS = {
       APPROVE: "/procurement/purchase-order/approve",
       REJECT: "/procurement/purchase-order/reject",
     },
+    PURCHASE_RETURN: {
+      LIST: "/procurement/purchase-order-return/list",
+      EXPORT: "/procurement/purchase-order-return/export",
+      PREVIEW_NUMBER: "/procurement/purchase-order-return/preview-number",
+      ELIGIBLE_ITEMS: "/procurement/purchase-order-return/eligible-items",
+      FILTER_DROPDOWN: "/procurement/purchase-order-return/filter-dropdown",
+      CREATE: "/procurement/purchase-order-return/create",
+      UPDATE: (id: string) => `/procurement/purchase-order-return/update/${id}`,
+      DETAILS: (id: string) => `/procurement/purchase-order-return/details/${id}`,
+    },
   },
   SALES: {
     SALES_ORDER: {
