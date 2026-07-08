@@ -160,6 +160,7 @@ export const API_ENDPOINTS = {
       APPROVE_REJECT: (id: string) => `/sales/sales-order/${id}/approve-reject`,
       CANCEL: (id: string) => `/sales/sales-order/${id}/cancel`,
       SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
+      DOWNLOAD_PI: (id: string) => `/sales/sales-order/${id}/download-pi`,
     },
   },
   USER_MANAGEMENT: {

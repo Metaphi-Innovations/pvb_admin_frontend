@@ -47,6 +47,7 @@ import {
   hydrateOrderLineItems,
 } from "./orders-data";
 import { useSalesOrders, useCancelSalesOrder, useSalesOrderFilterOptions } from "@/hooks/sales/use-sales-orders";
+import { SalesOrderService } from "@/services/sales-order.service";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -54,15 +55,28 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
   confirmed: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
+  ready_for_packing: { bg: "bg-cyan-50", text: "text-cyan-700", dot: "bg-cyan-500" },
+  packed: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
   dispatched: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
   delivered: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
 };
 
+const STATUS_OPTIONS = [
+  { label: "Draft", value: "DRAFT" },
+  { label: "Pending Approval", value: "PENDING_APPROVAL" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Rejected", value: "REJECTED" },
+  { label: "Ready For Packing", value: "READY_FOR_PACKING" },
+  { label: "Packed", value: "PACKED" },
+  { label: "Dispatched", value: "DISPATCHED" },
+  { label: "Delivered", value: "DELIVERED" },
+];
+
 type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] ?? STATUS_CFG.draft;
+  const cfg = STATUS_CFG[status.toLowerCase()] ?? STATUS_CFG.draft;
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
@@ -159,6 +173,18 @@ export default function SalesOrdersPage() {
       backendFilters.customer = { customer_name: filters.customerName[0] };
     }
 
+    if (filters.orderDate && typeof filters.orderDate === "object") {
+      const range = filters.orderDate as { fromDate?: string; toDate?: string };
+      if (range.fromDate || range.toDate) {
+        backendFilters.range = {
+          order_date: {
+            from: range.fromDate || undefined,
+            to: range.toDate || undefined,
+          }
+        };
+      }
+    }
+
     return backendFilters;
   }, [activeTab, filters]);
 
@@ -175,6 +201,33 @@ export default function SalesOrdersPage() {
 
   const orders = salesOrdersData?.items ?? [];
   const totalRecords = salesOrdersData?.total ?? 0;
+
+  // Auxiliary queries to fetch counts for all other tabs
+  const { data: allCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    apiFilters: {},
+  });
+  const { data: draftCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    apiFilters: { status: "DRAFT" },
+  });
+  const { data: approvalCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    apiFilters: { status: "PENDING_APPROVAL" },
+  });
+  const { data: rejectedCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    apiFilters: { status: "REJECTED" },
+  });
+
+  const allCount = allCountData?.total ?? 0;
+  const draftCount = draftCountData?.total ?? 0;
+  const approvalCount = approvalCountData?.total ?? 0;
+  const rejectedCount = rejectedCountData?.total ?? 0;
 
   const cancelMutation = useCancelSalesOrder();
 
@@ -252,6 +305,9 @@ export default function SalesOrdersPage() {
       key: "status",
       header: "Status",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: STATUS_OPTIONS,
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />
@@ -262,6 +318,8 @@ export default function SalesOrdersPage() {
       key: "orderDate",
       header: "Order Date",
       sortable: true,
+      filterable: true,
+      filterType: "date",
       render: (val, row) => (
         <span className="text-xs text-muted-foreground">{row.orderDate}</span>
       )
@@ -332,7 +390,15 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!piAllowed}
-                onClick={() => downloadProformaInvoice(hydrated)}
+                onClick={async () => {
+                  try {
+                    await SalesOrderService.downloadPI(row.id);
+                    setToast({ msg: "Proforma Invoice downloaded successfully.", type: "success" });
+                  } catch (e) {
+                    console.error("PI download error", e);
+                    setToast({ msg: "Failed to download Proforma Invoice.", type: "error" });
+                  }
+                }}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -397,10 +463,10 @@ export default function SalesOrdersPage() {
         </div>
       }
       tabs={[
-        { value: "all", label: "Sales" },
-        { value: "draft", label: "Draft" },
-        { value: "pending_approval", label: "Approval" },
-        { value: "rejected", label: "Rejected" },
+        { value: "all", label: `Sales (${allCount})` },
+        { value: "draft", label: `Draft (${draftCount})` },
+        { value: "pending_approval", label: `Approval (${approvalCount})` },
+        { value: "rejected", label: `Rejected (${rejectedCount})` },
         { value: "sales_return", label: `Sales Return (${salesReturnCount})` },
       ]}
       activeTab={activeTab}
@@ -427,7 +493,19 @@ export default function SalesOrdersPage() {
             onAdd={() => router.push("/sales/orders/add")}
             addLabel="New Order"
             loading={isLoading}
-            onExport={() => console.log("Exporting sales orders...")}
+            onExport={async () => {
+              try {
+                await SalesOrderService.export({
+                  search: searchVal,
+                  ordering,
+                  apiFilters,
+                });
+                setToast({ msg: "Export downloaded successfully.", type: "success" });
+              } catch (e) {
+                console.error("Export error", e);
+                setToast({ msg: "Failed to export sales orders.", type: "error" });
+              }
+            }}
           />
         </div>
       )}
