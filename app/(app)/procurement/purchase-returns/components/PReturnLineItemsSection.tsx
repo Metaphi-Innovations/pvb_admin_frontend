@@ -55,42 +55,6 @@ function gstPctFromLine(it: PurchaseReturnItem): number {
   return it.cgstPct + it.sgstPct + it.igstPct || it.gstPct;
 }
 
-function formatCasePiece(qty: number, caseSize: number): string {
-  const safeQty = Number.isFinite(qty) ? Math.max(0, qty) : 0;
-  if (caseSize <= 0) return `${safeQty} Piece`;
-  const cases = Math.floor(safeQty / caseSize);
-  const pieces = safeQty % caseSize;
-  return `${cases} Case, ${pieces} Piece`;
-}
-
-function QtyBreakdownCell({
-  qty,
-  caseSize,
-  tone = "default",
-}: {
-  qty: number;
-  caseSize: number;
-  tone?: "default" | "muted" | "danger" | "strong" | "brand";
-}) {
-  const textToneCls =
-    tone === "danger"
-      ? "text-red-600"
-      : tone === "strong"
-        ? "text-foreground"
-        : tone === "brand"
-          ? "text-brand-700"
-          : tone === "muted"
-            ? "text-muted-foreground"
-            : "text-foreground";
-
-  return (
-    <div className="text-right">
-      <p className={cn("text-xs tabular-nums", textToneCls)}>{qty}</p>
-      <p className="text-[10px] tabular-nums text-muted-foreground">{formatCasePiece(qty, caseSize)}</p>
-    </div>
-  );
-}
-
 type GrnSummary = {
   grnId: string;
   grnNo: string;
@@ -185,7 +149,6 @@ function ReturnItemsTable({
               "QC Rejected",
               "Returned",
               "Remaining",
-              "Case Size",
               readOnly ? "This Return" : "Return Unit",
               readOnly ? "Return Qty" : "Return Value",
               "Base Qty",
@@ -205,7 +168,6 @@ function ReturnItemsTable({
                     "QC Rejected",
                     "Returned",
                     "Remaining",
-                    "Case Size",
                     "Return Unit",
                     "Return Value",
                     "Base Qty",
@@ -265,78 +227,52 @@ function ReturnItemsTable({
                 <td className="px-3 py-2 font-mono text-xs text-foreground">{it.batchNumber}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{it.mfgDate || "—"}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{it.expDate || "—"}</td>
-                <td className="px-3 py-2">
-                  <QtyBreakdownCell qty={it.grnReceivedQty} caseSize={it.caseSize} />
+                <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
+                  {it.grnReceivedQty}
                 </td>
-                <td className="px-3 py-2">
-                  <QtyBreakdownCell qty={it.qcRejectedQty || 0} caseSize={it.caseSize} tone="danger" />
+                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-red-600">
+                  {it.qcRejectedQty || "—"}
                 </td>
-                <td className="px-3 py-2">
-                  <QtyBreakdownCell qty={it.alreadyReturnedQty} caseSize={it.caseSize} tone="muted" />
+                <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
+                  {it.alreadyReturnedQty}
                 </td>
-                <td className="px-3 py-2">
-                  <QtyBreakdownCell
-                    qty={it.currentRemainingQty ?? it.balanceRejectedQty}
-                    caseSize={it.caseSize}
-                    tone="strong"
-                  />
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {it.caseSize > 0 ? (
-                    <div className="space-y-0.5">
-                      <p className="text-xs tabular-nums text-foreground">{it.caseSize}</p>
-                      <p className="text-[10px] text-muted-foreground">1 Case = {it.caseSize} Piece</p>
-                    </div>
-                  ) : (
-                    <span className="text-xs tabular-nums text-muted-foreground">—</span>
-                  )}
+                <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-foreground">
+                  {it.currentRemainingQty ?? it.balanceRejectedQty}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!canEditQty ? (
-                    <div className="text-right">
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {readOnly ? it.returnUnit : "—"}
-                      </span>
-                      {it.caseSize > 0 && (
-                        <p className="text-[10px] text-muted-foreground">1 Case = {it.caseSize} Piece</p>
-                      )}
-                    </div>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {readOnly ? it.returnUnit : "—"}
+                    </span>
                   ) : (
-                    <div className="space-y-1">
-                      <select
-                        value={it.returnUnit}
-                        onChange={(e) => {
-                          const unit = e.target.value as PurchaseReturnUnit;
-                          const nextValue = clampReturnValue(
-                            it.returnValue,
-                            maxQty,
-                            it.caseSize,
-                            unit,
-                          );
-                          onItemChange(it.id, {
-                            returnUnit: unit,
-                            returnValue: nextValue,
-                            returnBaseQty:
-                              unit === "CASE"
-                                ? nextValue * it.caseSize
-                                : nextValue,
-                            returnQty:
-                              unit === "CASE"
-                                ? nextValue * it.caseSize
-                                : nextValue,
-                          });
-                        }}
-                        className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                      >
-                        <option value="PIECE">PIECE</option>
-                        <option value="CASE">CASE</option>
-                      </select>
-                      {it.caseSize > 0 && (
-                        <p className="text-[10px] text-muted-foreground text-right">
-                          1 Case = {it.caseSize} Piece
-                        </p>
-                      )}
-                    </div>
+                    <select
+                      value={it.returnUnit}
+                      onChange={(e) => {
+                        const unit = e.target.value as PurchaseReturnUnit;
+                        const nextValue = clampReturnValue(
+                          it.returnValue,
+                          maxQty,
+                          it.caseSize,
+                          unit,
+                        );
+                        onItemChange(it.id, {
+                          returnUnit: unit,
+                          returnValue: nextValue,
+                          returnBaseQty:
+                            unit === "CASE"
+                              ? nextValue * it.caseSize
+                              : nextValue,
+                          returnQty:
+                            unit === "CASE"
+                              ? nextValue * it.caseSize
+                              : nextValue,
+                        });
+                      }}
+                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                    >
+                      <option value="PIECE">PIECE</option>
+                      <option value="CASE">CASE</option>
+                    </select>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
@@ -384,12 +320,8 @@ function ReturnItemsTable({
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-2">
-                  {baseQty > 0 ? (
-                    <QtyBreakdownCell qty={baseQty} caseSize={it.caseSize} tone="brand" />
-                  ) : (
-                    <div className="text-right text-xs tabular-nums font-medium text-brand-700">—</div>
-                  )}
+                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-brand-700">
+                  {baseQty > 0 ? baseQty : "—"}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
                   {formatCurrency(it.unitPrice)}
