@@ -172,6 +172,20 @@ export const API_ENDPOINTS = {
       SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
       DOWNLOAD_PI: (id: string) => `/sales/sales-order/${id}/download-pi`,
     },
+    STOCK_TRANSFER: {
+      SUMMARY: "/sales/stock-transfer/summary",
+      NEXT_NUMBER: "/sales/stock-transfer/next-number",
+      DROPDOWN: "/sales/stock-transfer/dropdown",
+      FILTER: "/sales/stock-transfer/filter",
+      BATCHES: "/sales/stock-transfer/batches",
+      LIST: "/sales/stock-transfer/list",
+      EXPORT: "/sales/stock-transfer/export",
+      CREATE: "/sales/stock-transfer/create",
+      DETAILS: (id: string) => `/sales/stock-transfer/${id}`,
+      UPDATE: (id: string) => `/sales/stock-transfer/update/${id}`,
+      UPDATE_STATUS: (id: string) => `/sales/stock-transfer/${id}/status`,
+      DOWNLOAD_NOTE: (id: string) => `/sales/stock-transfer/${id}/download-note`,
+    },
   },
   USER_MANAGEMENT: {
     USER: {
