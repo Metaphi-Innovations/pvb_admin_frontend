@@ -22,7 +22,7 @@ import {
 	Plus,
 } from "lucide-react";
 import {
-	WAREHOUSE_STATUSES,
+	// WAREHOUSE_STATUSES,
 	OPERATED_BY_OPTIONS,
 	type WarehouseStatus,
 	type OperatedBy,
@@ -160,7 +160,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	district: "",
 	city: "",
 	pincode: "",
-	status: "active",
+	status: "Active",
 	operatedBy: "Self",
 	customerType: "",
 	contacts: [
@@ -1168,6 +1168,7 @@ export function WarehouseForm({
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
 
+
 	return (
 		<div className='w-full space-y-3'>
 			{/* ── Section 1: Basic Details ─────────────────────────── */}
@@ -1443,22 +1444,22 @@ export function WarehouseForm({
 					headerRight={
 						<div className='ml-auto'>
 							<GstRegisteredToggleControl
-							label='GST Applicable'
-							active={form.gstApplicable}
-							onChange={(yes) => {
-								onChange({
-									...form,
-									gstApplicable: yes,
-									gstRegistrationType: yes
-										? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
-										: GST_REGISTRATION_TYPE_DEFAULT,
-									gstin: yes ? form.gstin : "",
-									registeredLegalName: yes ? form.registeredLegalName : "",
-									registeredAddress: yes ? form.registeredAddress : "",
-								});
-								if (!yes) onClearError("gstin");
-							}}
-						/>
+								label='GST Applicable'
+								active={form.gstApplicable}
+								onChange={(yes) => {
+									onChange({
+										...form,
+										gstApplicable: yes,
+										gstRegistrationType: yes
+											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+											: GST_REGISTRATION_TYPE_DEFAULT,
+										gstin: yes ? form.gstin : "",
+										registeredLegalName: yes ? form.registeredLegalName : "",
+										registeredAddress: yes ? form.registeredAddress : "",
+									});
+									if (!yes) onClearError("gstin");
+								}}
+							/>
 						</div>
 					}
 				>

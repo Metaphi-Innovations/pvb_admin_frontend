@@ -115,7 +115,7 @@ export const API_ENDPOINTS = {
       LIST: "/master/warehouse/list",
       CREATE: "/master/warehouse/create",
       UPDATE: (id: string) => `/master/warehouse/update/${id}`,
-      STATUS_UPDATE: (id: string) => `/master/warehouse/toggle-status/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/warehouse/update-status/${id}`,
       VIEW: (id: string) => `/master/warehouse/details/${id}`,
       EXPORT: "/master/warehouse/export",
       PREVIEW_NUMBER: "/master/warehouse/preview-number",

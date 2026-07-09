@@ -177,6 +177,8 @@ const SORT_FIELD_MAP: Record<string, string> = {
     state: "state",
     city: "city",
     status: "status",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {

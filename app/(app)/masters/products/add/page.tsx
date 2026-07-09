@@ -70,7 +70,7 @@ export default function NewProductPage() {
     const payload = {
       product_code: resolvedForm.productCode,
       product_name: resolvedForm.productName,
-      scientific_name: resolvedForm.scientificName || null,   // was missing
+      scientific_name: resolvedForm.scientificName || null,
       sku: resolvedForm.sku,
       supplier_id: resolvedForm.supplier || null,
       supplier_code: resolvedForm.supplierCode || null,

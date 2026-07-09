@@ -71,9 +71,9 @@ export function useUpdateWarehouse() {
 export function useToggleWarehouseStatus() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-            WarehouseListService.updateStatus(id, isActive),
-        onSuccess: async (_data: void, variables: { id: string; isActive: boolean }) => {
+        mutationFn: ({ id, status }: { id: string; status: "Active" | "Inactive" | "Under Maintenance" | "Closed" }) =>
+            WarehouseListService.updateStatus(id, status),
+        onSuccess: async (_data: void, variables: { id: string; status: "Active" | "Inactive" | "Under Maintenance" | "Closed" }) => {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: masterKeys.warehouses.lists() }),
                 queryClient.invalidateQueries({
