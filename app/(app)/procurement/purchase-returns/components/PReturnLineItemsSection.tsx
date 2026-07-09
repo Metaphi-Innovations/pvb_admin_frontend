@@ -185,6 +185,7 @@ function ReturnItemsTable({
               "QC Rejected",
               "Returned",
               "Remaining",
+              "Case Size",
               readOnly ? "This Return" : "Return Unit",
               readOnly ? "Return Qty" : "Return Value",
               "Base Qty",
@@ -204,6 +205,7 @@ function ReturnItemsTable({
                     "QC Rejected",
                     "Returned",
                     "Remaining",
+                    "Case Size",
                     "Return Unit",
                     "Return Value",
                     "Base Qty",
@@ -278,6 +280,16 @@ function ReturnItemsTable({
                     caseSize={it.caseSize}
                     tone="strong"
                   />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {it.caseSize > 0 ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs tabular-nums text-foreground">{it.caseSize}</p>
+                      <p className="text-[10px] text-muted-foreground">1 Case = {it.caseSize} Piece</p>
+                    </div>
+                  ) : (
+                    <span className="text-xs tabular-nums text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!canEditQty ? (
