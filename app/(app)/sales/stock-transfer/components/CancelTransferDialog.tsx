@@ -6,16 +6,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertTriangle, AlertCircle } from "lucide-react";
-import { type StockTransfer, cancelStockTransfer } from "../stock-transfer-data";
+import { type StockTransfer } from "../stock-transfer-data";
 
 interface CancelTransferDialogProps {
   transfer: StockTransfer | null;
   open: boolean;
   onClose: () => void;
-  onSuccess: (transfer: StockTransfer) => void;
+  onConfirm: (reason: string) => Promise<void>;
+  isLoading?: boolean;
 }
 
-export default function CancelTransferDialog({ transfer, open, onClose, onSuccess }: CancelTransferDialogProps) {
+export default function CancelTransferDialog({ transfer, open, onClose, onConfirm, isLoading }: CancelTransferDialogProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
 
@@ -25,17 +26,20 @@ export default function CancelTransferDialog({ transfer, open, onClose, onSucces
     onClose();
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!transfer) return;
-    const result = cancelStockTransfer(transfer.id, reason);
-    if ("error" in result) {
-      setError(result.error);
+    if (!reason.trim()) {
+      setError("Cancellation reason is required.");
       return;
     }
-    onSuccess(result);
-    setReason("");
-    setError("");
-    onClose();
+    try {
+      await onConfirm(reason);
+      setReason("");
+      setError("");
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to cancel stock transfer.");
+    }
   };
 
   if (!transfer) return null;
@@ -75,9 +79,9 @@ export default function CancelTransferDialog({ transfer, open, onClose, onSucces
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleClose}>Back</Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={handleConfirm}>
-              Confirm Cancel
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleClose} disabled={isLoading}>Back</Button>
+            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={handleConfirm} disabled={isLoading}>
+              {isLoading ? "Cancelling..." : "Confirm Cancel"}
             </Button>
           </div>
         </div>
