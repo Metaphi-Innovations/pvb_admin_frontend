@@ -7,7 +7,6 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
   Monitor,
   Smartphone,
@@ -15,7 +14,6 @@ import {
   Check,
   Save,
   AlertCircle,
-  XCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -36,11 +34,11 @@ import {
   type MobileFeatureDef,
 } from "../../../employee/employee-data";
 import {
-  type PermissionTemplate,
-  loadNewPermissionTemplates,
-  saveNewPermissionTemplates,
-  nextTemplateId,
-} from "../../roles-data";
+  useCreateTemplate,
+  useTemplate,
+  useUpdateTemplate,
+} from "@/hooks/user-management";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 const ALL_WEB_ACTIONS: WebAction[] = ["view", "create", "edit", "delete", "approve", "export", "import"];
 const ALL_MOBILE_ACTIONS: MobileAction[] = ["view", "create", "edit", "delete", "approve"];
@@ -71,10 +69,12 @@ interface TemplateFormProps {
 export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
   const router = useRouter();
   const isReadOnly = mode === "view";
+  const templateQuery = useTemplate(templateId);
+  const createMutation = useCreateTemplate();
+  const updateMutation = useUpdateTemplate();
 
   const [templateName, setTemplateName] = useState("");
   const [accessType, setAccessType] = useState<"web" | "mobile">("web");
-  const [status, setStatus] = useState<"Active" | "Inactive">("Active");
 
   const [activeWebPerms, setActiveWebPerms] = useState<Set<string>>(new Set());
   const [activeMobilePerms, setActiveMobilePerms] = useState<Set<string>>(new Set());
@@ -85,6 +85,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
   const [pendingAccessType, setPendingAccessType] = useState<"web" | "mobile" | null>(null);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [nameError, setNameError] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (PERMISSION_REGISTRY.length > 0) {
@@ -93,31 +94,28 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
     if (MOBILE_PERMISSION_REGISTRY.length > 0) {
       setOpenGroups(new Set([MOBILE_PERMISSION_REGISTRY[0].id]));
     }
+  }, []);
 
-    if ((mode === "edit" || mode === "view") && templateId) {
-      const templates = loadNewPermissionTemplates();
-      const template = templates.find((t: PermissionTemplate) => t.id === templateId);
-      if (template) {
-        setTemplateName(template.templateName);
-        setAccessType(template.accessType);
-        setStatus(template.status);
+  useEffect(() => {
+    if (mode === "add") return;
+    if (!templateQuery.data) return;
 
-        if (template.accessType === "web") {
-          const webSet = new Set<string>();
-          template.webPermissions.forEach((p: { moduleKey: string; actionKey: string }) => {
-            webSet.add(`${p.moduleKey}.${p.actionKey}`);
-          });
-          setActiveWebPerms(webSet);
-        } else {
-          const mobileSet = new Set<string>();
-          template.mobilePermissions.forEach((p: { moduleKey: string; actionKey: string }) => {
-            mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
-          });
-          setActiveMobilePerms(mobileSet);
-        }
-      }
-    }
-  }, [mode, templateId]);
+    setTemplateName(templateQuery.data.templateName);
+    setAccessType(templateQuery.data.accessType);
+    setFormError(null);
+
+    const webSet = new Set<string>();
+    templateQuery.data.webPermissions.forEach((p) => {
+      webSet.add(`${p.moduleKey}.${p.actionKey}`);
+    });
+    setActiveWebPerms(webSet);
+
+    const mobileSet = new Set<string>();
+    templateQuery.data.mobilePermissions.forEach((p) => {
+      mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
+    });
+    setActiveMobilePerms(mobileSet);
+  }, [mode, templateQuery.data]);
 
   const hasSelectedPermissions = (platform: "web" | "mobile") => {
     return platform === "web" ? activeWebPerms.size > 0 : activeMobilePerms.size > 0;
@@ -256,8 +254,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
     }
     setNameError("");
 
-    const templates = loadNewPermissionTemplates();
-    const nowStr = new Date().toISOString().slice(0, 10);
+    setFormError(null);
 
     const webPermissions: { moduleKey: string; actionKey: string }[] = [];
     if (accessType === "web") {
@@ -286,37 +283,46 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
     }
 
     if (mode === "add") {
-      const newId = nextTemplateId();
-      const newTpl: PermissionTemplate = {
-        id: newId,
-        templateName,
-        accessType,
-        webPermissions,
-        mobilePermissions,
-        status,
-        createdAt: nowStr,
-        updatedAt: nowStr,
-      };
-      templates.push(newTpl);
-      saveNewPermissionTemplates(templates);
-    } else if (mode === "edit" && templateId) {
-      const index = templates.findIndex((t: PermissionTemplate) => t.id === templateId);
-      if (index !== -1) {
-        templates[index] = {
-          ...templates[index],
-          templateName,
+      createMutation.mutate(
+        {
+          name: templateName,
+          description: null,
           accessType,
           webPermissions,
           mobilePermissions,
-          status,
-          updatedAt: nowStr,
-        };
-        saveNewPermissionTemplates(templates);
-      }
+        },
+        {
+          onSuccess: () => router.push("/user-management/roles?tab=templates"),
+          onError: (error) =>
+            setFormError(getErrorMessage(error, "Failed to create permission template.")),
+        },
+      );
+      return;
     }
 
-    router.push("/user-management/roles?tab=templates");
+    if (mode === "edit" && templateId) {
+      updateMutation.mutate(
+        {
+          id: templateId,
+          payload: {
+            name: templateName,
+            description: null,
+            accessType,
+            webPermissions,
+            mobilePermissions,
+          },
+        },
+        {
+          onSuccess: () => router.push("/user-management/roles?tab=templates"),
+          onError: (error) =>
+            setFormError(getErrorMessage(error, "Failed to update permission template.")),
+        },
+      );
+    }
   };
+
+  const isLoadingTemplate = mode !== "add" && templateQuery.isLoading;
+  const isTemplateMissing = mode !== "add" && (templateQuery.isError || !templateQuery.data);
 
   return (
     <FormContainer
@@ -338,13 +344,20 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
+            disabled={createMutation.isPending || updateMutation.isPending}
           >
             <Save className="w-3.5 h-3.5" /> Save Template
           </Button>
         )
       }
     >
+      {isLoadingTemplate ? (
+        <div className="px-6 py-10 text-sm text-muted-foreground">Loading template...</div>
+      ) : isTemplateMissing ? (
+        <div className="px-6 py-10 text-sm text-muted-foreground">Template not found.</div>
+      ) : (
       <div className="px-6 pt-1 pb-6 space-y-6">
+        {formError ? <p className="text-xs text-red-600">{formError}</p> : null}
         {/* Template Basic Details */}
         <div className="grid grid-cols-3 gap-4 p-5 bg-white border shadow-sm rounded-xl border-border">
           <div className="space-y-1.5">
@@ -368,19 +381,6 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
             )}
           </div>
 
-          {/* <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Status</Label>
-            <AutocompleteSelect
-              disabled={isReadOnly}
-              placeholder="Select Status"
-              options={[
-                { value: "Active", label: "Active" },
-                { value: "Inactive", label: "Inactive" },
-              ]}
-              value={status}
-              onChange={(val) => setStatus(val as "Active" | "Inactive")}
-            />
-          </div> */}
         </div>
 
         {/* Tab Selection */}
@@ -679,6 +679,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
           )}
         </div>
       </div>
+      )}
 
       {/* Warning Dialog for Access Type switch */}
       <Dialog open={showWarningModal} onOpenChange={setShowWarningModal}>

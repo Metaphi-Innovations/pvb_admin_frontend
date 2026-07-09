@@ -258,7 +258,7 @@ export default function EditSalesOrderPage() {
 						onClick={() => handleSave(false)}
 						disabled={updateMutation.isPending}
 					>
-						<Save className='w-3.5 h-3.5' /> Save Changes
+						<Save className='w-3.5 h-3.5' /> Submit Sales Order
 					</Button>
 				</div>
 			}

@@ -271,9 +271,9 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                             <td className="py-3 px-3 text-xs text-muted-foreground">{p.expDate ?? "—"}</td>
                           </>
                         )}
-                        <td className="py-3 px-3 text-xs font-semibold text-center">{p.orderedQty}</td>
+                        <td className="py-3 px-3 text-xs font-semibold text-center">{p.ordered_cases}</td>
                         <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600">{p.packedQty}</td>
-                        <td className="py-3 px-3 text-xs font-bold text-center text-amber-600">{p.pendingQty}</td>
+                        <td className="py-3 px-3 text-xs font-bold text-center text-amber-600">{p.pending_cases}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -372,7 +372,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                       <tr key={p.sku} className="border-b border-border/60 hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
-                        <td className="py-3 px-3 text-xs font-semibold text-center">{p.orderedQty}</td>
+                        <td className="py-3 px-3 text-xs font-semibold text-center">{p.ordered_cases}</td>
                         <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600">{p.packedQty}</td>
                         <td className="py-3 px-3 text-[10px] text-muted-foreground">
                           {(p.batchAllocations ?? []).length > 0 ? (

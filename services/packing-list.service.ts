@@ -6,11 +6,14 @@ import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
 export interface PackingListListItem {
   id: string;
   packingNumber: string;
+  sourceDocumentNo: string;
   sourceType: "normal_sales" | "sample" | "stock_transfer" | "purchase_return";
   sourceId: string;
   warehouseId: string;
   warehouseName: string;
   customerName: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
   orderAmount: number;
   orderDate: string;
   expectedDeliveryDate: string;
@@ -95,7 +98,7 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
   
   const totalQty = products.reduce((sum: number, p: any) => {
     if (p && typeof p === "object") {
-      const orderQty = asNumber(p.order_qty ?? p.orderQty);
+      const orderQty = asNumber(p.order_cases ?? p.orderQty);
       return sum + orderQty;
     }
     return sum;
@@ -104,11 +107,14 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
   return {
     id: asString(raw.packing_list_id ?? raw.id),
     packingNumber: asString(raw.packing_number),
+    sourceDocumentNo: asString((raw.customer_snapshot as any)?.source_document_no),
     sourceType: asString(raw.source_type) as any,
     sourceId: asString(raw.source_id),
     warehouseId: asString(raw.warehouse_id),
     warehouseName: asString(warehouse.warehouse_name),
     customerName: asString(raw.customer_name),
+    sourceWarehouse: asString(raw.source_warehouse),
+    targetWarehouse: asString(raw.target_warehouse),
     orderAmount: asNumber(raw.order_amount),
     orderDate: asDateOnly(raw.order_date),
     expectedDeliveryDate: asDateOnly(raw.expected_delivery_date),
@@ -145,8 +151,10 @@ export function buildPackingListApiFilters(
     } else {
       apiFilters.warehouse = { warehouse_name: asString(warehouse) };
     }
-  } else if (selectedWarehouse && selectedWarehouse !== "All") {
-    apiFilters.warehouse = { warehouse_name: selectedWarehouse };
+  }
+  
+  if (selectedWarehouse && selectedWarehouse !== "All") {
+    apiFilters.warehouse_id = selectedWarehouse;
   }
 
   const customerName = filters.customer;
@@ -235,10 +243,17 @@ export const PackingListService = {
 
   async getFilterDropdown(
     fieldName: PackingListFilterField,
+    sourceType?: string,
     signal?: AbortSignal,
   ): Promise<PackingListFilterOption[]> {
+    const url = new URL(API_ENDPOINTS.WAREHOUSE.PACKING_LIST.FILTER_DROPDOWN, "http://localhost");
+    url.searchParams.set("field_name", fieldName);
+    if (sourceType) {
+      url.searchParams.set("source_type", sourceType);
+    }
+    
     const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.FILTER_DROPDOWN}?field_name=${fieldName}`,
+      url.pathname + url.search,
       { signal },
     );
 
@@ -268,6 +283,19 @@ export const PackingListService = {
     const payload = response.data as Record<string, unknown>;
     return mapDetailToSalesOrderRecord(payload.data);
   },
+
+  async getBatches(
+    productId: string,
+    warehouseId: string,
+    signal?: AbortSignal,
+  ): Promise<any[]> {
+    const response = await axiosInstance.get(
+      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`,
+      { signal },
+    );
+    const payload = response.data as Record<string, unknown>;
+    return Array.isArray(payload.data) ? payload.data : [];
+  },
 };
 
 function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
@@ -279,7 +307,7 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     salesOrderNo: raw.packing_number,
     customer: raw.customer_name || "",
     totalItems: products.length,
-    totalQuantity: products.reduce((sum: number, p: any) => sum + Number(p.order_qty || 0), 0),
+    totalQuantity: products.reduce((sum: number, p: any) => sum + Number(p.order_cases || p.order_qty || 0), 0),
     orderAmount: Number(raw.order_amount || 0),
     orderDate: raw.order_date ? raw.order_date.slice(0, 10) : "",
     deliveryDate: raw.expected_delivery_date ? raw.expected_delivery_date.slice(0, 10) : "",
@@ -297,10 +325,11 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
       const snap = p.batch_snapshot && typeof p.batch_snapshot === "object" ? p.batch_snapshot : {};
       return {
         product: p.product?.product_name || "",
+        productId: p.product_id || p.product?.product_id || "",
         sku: p.product?.product_code || "",
-        orderedQty: Number(p.order_qty || 0),
-        packedQty: Number(p.packed_qty || 0),
-        pendingQty: Number(p.pending_qty || 0),
+        ordered_cases: Number(p.order_cases || p.order_qty || 0),
+        packedQty: Number(p.packed_cases || p.packed_qty || 0),
+        pending_cases: Number(p.pending_cases || p.pending_qty || 0),
         batchNumber: p.batch_code || snap.batch_code || "",
         expDate: snap.expiry_date || snap.expiryDate || "",
         mfgDate: snap.mfg_date || snap.mfgDate || "",

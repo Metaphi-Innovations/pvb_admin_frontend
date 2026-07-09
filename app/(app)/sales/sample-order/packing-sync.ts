@@ -71,6 +71,8 @@ export function mapSampleOrderToPackingRecord(order: SalesOrder): SalesOrderReco
         orderedQty: line.quantity,
         packedQty: 0,
         pendingQty: line.quantity,
+        ordered_cases: 0,
+        pending_cases: 0,
       })),
     sourceDocumentType: "Sample Order",
     sourceDocumentNo: order.soNumber,

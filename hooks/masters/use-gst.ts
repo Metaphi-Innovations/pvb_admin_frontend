@@ -5,6 +5,7 @@ import {
   GstListService,
   type GstCreatePayload,
   type GstExportParams,
+  type GstFilterField,
   type GstListParams,
   type GstUpdatePayload,
 } from "@/services/gst-list.service";
@@ -89,5 +90,13 @@ export function useToggleGstStatus() {
 export function useExportGst() {
   return useMutation({
     mutationFn: (params: GstExportParams) => GstListService.export(params),
+  });
+}
+
+export function useGstFilterDropdown(fieldName: GstFilterField) {
+  return useQuery({
+    queryKey: masterKeys.gst.filterDropdown(fieldName),
+    queryFn: ({ signal }) => GstListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }

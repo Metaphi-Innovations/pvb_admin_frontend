@@ -57,6 +57,8 @@ function mapBackendStatusToFrontend(status: string): any {
   if (s === "cancelled") return "cancelled";
   if (s === "dispatched") return "dispatched";
   if (s === "delivered") return "delivered";
+  if (s === "ready_for_packing") return "ready_for_packing";
+  if (s === "packed") return "packed";
   return "draft";
 }
 
@@ -69,6 +71,8 @@ function mapFrontendStatusToBackend(status: string): string {
   if (s === "cancelled") return "CANCELLED";
   if (s === "dispatched") return "DISPATCHED";
   if (s === "delivered") return "DELIVERED";
+  if (s === "ready_for_packing") return "READY_FOR_PACKING";
+  if (s === "packed") return "PACKED";
   return "DRAFT";
 }
 
@@ -162,6 +166,8 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
     parentOrderNumber: asString(raw.parent_sales_order_number),
     referenceOrderNumber: asString(raw.reference_sales_order_number),
     remarks: asString(raw.remarks),
+    warehouseId: toUuidOrNull(raw.source_warehouse_id) as any,
+    warehouseName: raw.source_warehouse ? asString((raw.source_warehouse as any).warehouse_name) : "",
   };
 }
 
@@ -234,7 +240,7 @@ export const SalesOrderService = {
   async list(params: {
     page: number;
     pageSize: number;
-    search: string;
+    search?: string;
     ordering?: string;
     apiFilters?: Record<string, unknown>;
     signal?: AbortSignal;
@@ -307,17 +313,17 @@ export const SalesOrderService = {
   },
 
   async getCustomersDropdown(): Promise<any[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.CUSTOMER);
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CUSTOMER.CUSTOMER);
     return response.data?.data || [];
   },
 
   async getCustomerDetails(id: string): Promise<any> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.CUSTOMER_DETAILS(id));
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CUSTOMER.CUSTOMER_DETAILS(id));
     return response.data?.data || {};
   },
 
   async getWarehousesDropdown(): Promise<any[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.WAREHOUSE);
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.WAREHOUSE.DROPDOWN);
     return response.data?.data || [];
   },
 
@@ -329,12 +335,126 @@ export const SalesOrderService = {
   },
 
   async getProductsDropdown(): Promise<any[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.PRODUCT);
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.PRODUCT.DROPDOWN);
     return response.data?.data || [];
   },
 
   async getProductPricingDropdown(): Promise<any[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.PRICING);
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.PRICING.DROPDOWN);
+    return response.data?.data || [];
+  },
+
+  async export(params: {
+    search?: string;
+    ordering?: string;
+    apiFilters?: Record<string, unknown>;
+  }): Promise<void> {
+    const queryParams = new URLSearchParams();
+    if (params.ordering) queryParams.set("ordering", params.ordering);
+    if (params.search) queryParams.set("search", params.search);
+
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.SALES.SALES_ORDER.EXPORT}?${queryParams.toString()}`,
+      { filters: params.apiFilters ?? {} },
+      { responseType: "blob" }
+    );
+
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sales_orders_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async split(
+    id: string | number,
+    form: SalesOrderFormValues,
+    options: { status: string; reason?: string }
+  ): Promise<any> {
+    const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses);
+    const body = {
+      reason: options.reason || "Quantity not available",
+      customer_id: form.customerId,
+      salesman_id: form.salesManId,
+      order_date: form.orderDate ? new Date(form.orderDate).toISOString() : null,
+      delivery_date: form.deliveryDate ? new Date(form.deliveryDate).toISOString() : null,
+      status: mapFrontendStatusToBackend(options.status),
+      remarks: form.remarks || null,
+      source_warehouse_id: toUuidOrNull(form.warehouseId),
+      bill_to: form.billToAddressId ? { address: form.billToAddressId, city: "Mumbai", state: "Maharashtra", pincode: "400001" } : null,
+      ship_to: form.shipToAddressId ? { address: form.shipToAddressId, city: "Pune", state: "Maharashtra", pincode: "411001" } : null,
+      subtotal_amount: totals.netTotal,
+      discount_amount: totals.productDiscountTotal + totals.expenseDiscountTotal,
+      tax_amount: totals.totalGst,
+      grand_total: totals.grandTotal,
+      items: form.lineItems.map((line) => ({
+        product_id: line.productId,
+        per_case_qty: line.caseQuantity || 0,
+        base_qty: line.quantity,
+        unit_price: line.unitPrice,
+        discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
+        discount_percentage: line.schemeDiscountPercent || 0,
+        discount_amount: line.discountValue || 0,
+        gst_percentage: line.gstPercentage ?? 18,
+        gst_amount: line.gstAmount,
+        cgst_percentage: line.cgstPercentage ?? 0,
+        cgst_amount: line.cgstAmount || 0,
+        sgst_percentage: line.sgstPercentage ?? 0,
+        sgst_amount: line.sgstAmount || 0,
+        igst_percentage: line.igstPercentage ?? 0,
+        igst_amount: line.igstAmount || 0,
+        item_total: line.lineTotal,
+        remarks: "",
+      })),
+    };
+
+    const response = await axiosInstance.post(API_ENDPOINTS.SALES.SALES_ORDER.SPLIT(String(id)), body);
+    return response.data?.data || {};
+  },
+
+  async downloadPI(id: string | number): Promise<void> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SALES_ORDER.DOWNLOAD_PI(String(id)),
+      { responseType: "blob" }
+    );
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `proforma-invoice-${id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async createPackingList(payload: {
+    source_type: string;
+    source_id: string;
+    warehouse_id: string;
+    remarks?: string;
+    products: Array<{
+      source_item_id: string;
+      batch_code: string;
+      order_qty: number;
+      available_inventory_id: string;
+    }>;
+  }): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.CREATE,
+      payload
+    );
+    return response.data?.data || {};
+  },
+
+  async getBatches(productId: string | number, warehouseId: string | number): Promise<any[]> {
+    const response = await axiosInstance.get(
+      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`
+    );
     return response.data?.data || [];
   },
 };

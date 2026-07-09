@@ -5,6 +5,7 @@ import {
   CategoryListService,
   type CategoryCreatePayload,
   type CategoryExportParams,
+  type CategoryFilterField,
   type CategoryListParams,
   type CategoryUpdatePayload,
   type CategoryDropdownItem,
@@ -101,5 +102,13 @@ export function useCategoriesDropdown() {
 export function useExportCategories() {
   return useMutation({
     mutationFn: (params: CategoryExportParams) => CategoryListService.export(params),
+  });
+}
+
+export function useCategoryFilterDropdown(fieldName: CategoryFilterField) {
+  return useQuery({
+    queryKey: masterKeys.categories.filterDropdown(fieldName),
+    queryFn: ({ signal }) => CategoryListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }
