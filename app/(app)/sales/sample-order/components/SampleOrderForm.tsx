@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, AlertCircle, Search } from "lucide-react";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
+import { useCustomer } from "@/hooks/masters/use-customers";
+import { useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
 import {
 	loadWarehouses,
 	type WarehouseMaster,
@@ -31,7 +33,7 @@ import {
 
 export type { SalesOrderFormValues };
 
-function SearchableDropdown<T extends { id: number }>({
+function SearchableDropdown<T extends { id: number | string }>({
 	label,
 	required,
 	value,
@@ -44,8 +46,8 @@ function SearchableDropdown<T extends { id: number }>({
 }: {
 	label: string;
 	required?: boolean;
-	value: number | null;
-	onChange: (id: number) => void;
+	value: number | string | null;
+	onChange: (id: any) => void;
 	options: T[];
 	placeholder: string;
 	error?: string;
@@ -216,45 +218,15 @@ export function validateSalesOrderForm(
 	if (!form.warehouseId) e.warehouseId = "Source Warehouse is required";
 	if (!form.orderDate) e.orderDate = "Order date is required";
 
-	const activeLines = form.lineItems.filter((l) => l.productId && l.quantity > 0);
+	const activeLines = form.lineItems.filter((l: any) => l.productId && l.quantity > 0);
 	if (activeLines.length === 0) {
 		e.lineItems = "Add at least one product";
-	} else {
-		const overStock = activeLines.find((l) => l.quantity > l.availableStock);
-		if (overStock) {
-			e.lineItems = `Quantity cannot exceed available stock for ${overStock.productName}`;
-		}
 	}
 	return e;
 }
 
-export function validateSplitOrderForm(
-	form: SalesOrderFormValues,
-	originalOrder: SalesOrder,
-): Record<string, string> {
-	const e = validateSalesOrderForm(form);
-	const splitBySource: Record<string, number> = {};
-
-	for (const line of form.lineItems) {
-		if (!line.splitSourceLineId || !line.productId || line.quantity <= 0) continue;
-		const parentLine = originalOrder.lineItems.find(
-			(l) => l.id === line.splitSourceLineId,
-		);
-		if (!parentLine) continue;
-		const max = line.maxSplitQty ?? parentLine.quantity;
-		const acc = (splitBySource[line.splitSourceLineId] ?? 0) + line.quantity;
-		if (acc > max) {
-			e.lineItems = `Split quantity cannot exceed available quantity for ${line.productName}`;
-			break;
-		}
-		splitBySource[line.splitSourceLineId] = acc;
-	}
-
-	return e;
-}
-
-interface SalesOrderFormProps {
-	mode: "add" | "edit" | "split";
+interface SampleOrderFormProps {
+	mode: "add" | "edit";
 	orderNumber: string;
 	form: SalesOrderFormValues;
 	onChange: (form: SalesOrderFormValues) => void;
@@ -271,7 +243,7 @@ interface SalesOrderFormProps {
 	};
 }
 
-export default function SalesOrderForm({
+export default function SampleOrderForm({
 	mode,
 	orderNumber,
 	form,
@@ -282,10 +254,19 @@ export default function SalesOrderForm({
 	showStatus = false,
 	originalOrder,
 	auditInfo,
-}: SalesOrderFormProps) {
+}: SampleOrderFormProps) {
+	const { data: billingCustomer } = useCustomer("1a15aac2-1e1d-4337-8642-0d1cd6e1366c");
+	const { data: backendWarehousesData } = useWarehousesDropdown();
+
 	const warehouses = useMemo(() => {
-		return loadWarehouses().filter((w) => w.status === "active");
-	}, []);
+		return (backendWarehousesData || []).map((w: any) => ({
+			id: w.warehouse_id,
+			warehouseName: w.warehouse_name,
+			warehouseCode: w.warehouse_code,
+			status: w.status?.toLowerCase() || "active",
+			state: w.state || "",
+		})).filter((w) => w.status === "active") as any;
+	}, [backendWarehousesData]);
 
 	const set = <K extends keyof SalesOrderFormValues>(
 		key: K,
@@ -293,7 +274,7 @@ export default function SalesOrderForm({
 	) => onChange({ ...form, [key]: val });
 
 	const activeLines = form.lineItems
-		.filter((line) => line.productId && line.quantity > 0)
+		.filter((line: any) => line.productId && line.quantity > 0)
 		.map(recalculateSampleOrderLineItem);
 	const totals = calculateOrderTotalsSummary(activeLines);
 
@@ -332,12 +313,12 @@ export default function SalesOrderForm({
 					<SearchableDropdown<WarehouseMaster>
 						label="Source Warehouse"
 						required
-						value={form.warehouseId ?? null}
+						value={form.warehouseId !== undefined && form.warehouseId !== null ? form.warehouseId : null}
 						onChange={(id) => set("warehouseId", id)}
 						options={warehouses}
 						placeholder="Select source warehouse…"
 						error={errors.warehouseId}
-						getLabel={(w) => `${w.warehouseCode} — ${w.warehouseName}`}
+						getLabel={(w) => w.warehouseCode ? `${w.warehouseCode} — ${w.warehouseName}` : w.warehouseName}
 						getSublabel={(w) => w.state}
 					/>
 				</div>
@@ -346,17 +327,17 @@ export default function SalesOrderForm({
 					<SearchableDropdown<Employee>
 						label="Salesperson"
 						required
-						value={form.salesManId}
+						value={form.salesManId !== undefined && form.salesManId !== null ? form.salesManId : null}
 						onChange={(id) => set("salesManId", id)}
 						options={salesmen}
 						placeholder="Select salesperson…"
 						error={errors.salesManId}
-						getLabel={(s) => `${s.employeeId} — ${s.fullName}`}
+						getLabel={(s) => s.employeeId ? `${s.employeeId} — ${s.fullName}` : s.fullName}
 						getSublabel={(s) => `${s.role} · ${s.department}`}
 					/>
 				</div>
 
-				{(showStatus && mode === "edit") || mode === "split" ? (
+				{showStatus && mode === "edit" ? (
 					<div className="space-y-1 md:col-span-2">
 						<Label className="text-xs font-medium">Order Status</Label>
 						<StatusSelect
@@ -379,21 +360,14 @@ export default function SalesOrderForm({
 				/>
 			</div>
 
-			{mode === "split" && originalOrder && (
-				<p className="text-[11px] text-brand-700">
-					Creating split order from{" "}
-					<span className="font-mono font-semibold">{originalOrder.soNumber}</span>
-				</p>
-			)}
-
 			<div className="space-y-1.5">
 				<SectionDivider title="Bill To" />
 				<div className="rounded-xl border border-border bg-muted/20 px-4 py-3 space-y-2.5">
 					<p className="text-sm font-semibold text-foreground">
-						{SAMPLE_BILLING_DETAILS.companyName}
+						{billingCustomer?.customerName || SAMPLE_BILLING_DETAILS.companyName}
 					</p>
 					<p className="text-[13px] text-foreground leading-relaxed max-w-2xl">
-						{SAMPLE_BILLING_DETAILS.address}
+						{billingCustomer?.registeredGstAddress || SAMPLE_BILLING_DETAILS.address}
 					</p>
 					<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-border/60">
 						<div>
@@ -408,7 +382,7 @@ export default function SalesOrderForm({
 							<p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
 								Mobile
 							</p>
-							<p className="text-xs text-foreground">{SAMPLE_BILLING_DETAILS.mobile}</p>
+							<p className="text-xs text-foreground">{billingCustomer?.mobileNo || SAMPLE_BILLING_DETAILS.mobile}</p>
 						</div>
 						<div>
 							<p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">

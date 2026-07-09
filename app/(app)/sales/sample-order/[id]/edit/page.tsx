@@ -6,27 +6,30 @@ import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Save, CheckCircle2, XCircle } from "lucide-react";
-import SalesOrderForm, {
+import SampleOrderForm, {
 	type SalesOrderFormValues,
 	validateSalesOrderForm,
-} from "../../components/SalesOrderForm";
+} from "../../components/SampleOrderForm";
 import {
 	type ProductCatalogItem,
-	buildOrderFromForm,
 	canEditOrder,
-	getOrderById,
 	orderToFormValues,
-	getSalesmenForOrders,
-	loadOrders,
-	loadProductCatalog,
-	saveOrders,
+	setDynamicProducts,
 } from "../../orders-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
+import {
+	useSampleOrder,
+	useUpdateSampleOrder,
+} from "@/hooks/sales/use-sample-orders";
+import {
+	useSalesmenDropdown,
+	useProductsDropdown,
+} from "@/hooks/sales/use-sales-orders";
 
 export default function EditSalesOrderPage() {
 	const params = useParams();
 	const router = useRouter();
-	const id = Number(params.id);
+	const id = String(params.id);
 
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
 	const [products, setProducts] = useState<ProductCatalogItem[]>([]);
@@ -38,28 +41,60 @@ export default function EditSalesOrderPage() {
 		updatedBy: string;
 		updatedDate: string;
 	} | null>(null);
-	const [existingOrder, setExistingOrder] =
-		useState<ReturnType<typeof getOrderById>>(undefined);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [toast, setToast] = useState<{
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
 
-	useEffect(() => {
-		setSalesmen(getSalesmenForOrders());
-		setProducts(loadProductCatalog());
+	const { data: order, isLoading: loadingOrder } = useSampleOrder(id);
+	const updateMutation = useUpdateSampleOrder();
 
-		const order = getOrderById(id);
+	const { data: salesmanData } = useSalesmenDropdown();
+	const { data: productData } = useProductsDropdown();
+
+	useEffect(() => {
+		if (salesmanData) {
+			const mapped = salesmanData.map((s: any) => ({
+				id: s.user_id,
+				employeeId: s.employee_id || s.username || "",
+				employeeCode: s.employee_id || s.username || "",
+				firstName: s.first_name || "",
+				lastName: s.last_name || "",
+				fullName: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "",
+				email: s.email || "",
+				role: s.role?.role_name || s.role_type || "",
+				status: s.is_active ? "active" : "inactive",
+				department: s.department?.department_name || "",
+			}));
+			setSalesmen(mapped as any);
+		}
+	}, [salesmanData]);
+
+	useEffect(() => {
+		if (productData) {
+			const mapped = productData.map((p: any) => ({
+				id: p.product_id,
+				code: p.product_code,
+				name: p.product_name,
+				sku: p.sku || "",
+				stock: Number(p.stock || p.available_stock || 0),
+				sellingPrice: Number(p.mrp || 0),
+				gstRate: String(p.gst_rate?.gstPercentage || 18),
+				category: p.category?.categoryName || "",
+				segment: p.segment?.segment_name || "",
+				packSize: Number(p.unit_per_packing || 1),
+			}));
+			setProducts(mapped as any);
+			setDynamicProducts(mapped as any);
+		} else {
+			setDynamicProducts(null);
+		}
+	}, [productData]);
+
+	useEffect(() => {
 		if (!order) return;
 
-		if (!canEditOrder(order)) {
-			setToast({ msg: "This order cannot be edited.", type: "error" });
-			setTimeout(() => router.push("/sales/sample-order"), 1200);
-			return;
-		}
-
-		setExistingOrder(order);
 		setOrderNumber(order.soNumber);
 		setForm(orderToFormValues(order));
 		setAuditInfo({
@@ -68,7 +103,7 @@ export default function EditSalesOrderPage() {
 			updatedBy: order.updatedBy,
 			updatedDate: order.updatedDate,
 		});
-	}, [id, router]);
+	}, [order]);
 
 	useEffect(() => {
 		if (!toast) return;
@@ -77,7 +112,7 @@ export default function EditSalesOrderPage() {
 	}, [toast]);
 
 	const handleSave = (asDraft: boolean) => {
-		if (!form || !existingOrder) return;
+		if (!form || !order) return;
 
 		const e = validateSalesOrderForm(form);
 		setErrors(e);
@@ -86,52 +121,33 @@ export default function EditSalesOrderPage() {
 			return;
 		}
 
-		const updated = buildOrderFromForm(
-			form,
+		updateMutation.mutate(
 			{
-				id: existingOrder.id,
-				soNumber: existingOrder.soNumber,
-				createdBy: existingOrder.createdBy,
-				createdDate: existingOrder.createdDate,
-				parentOrderId: existingOrder.parentOrderId,
-				parentOrderNumber: existingOrder.parentOrderNumber,
-				splitFromOrderId: existingOrder.splitFromOrderId,
-				splitFromOrderNumber: existingOrder.splitFromOrderNumber,
-				referenceOrderNumber: existingOrder.referenceOrderNumber,
-				packingListId: existingOrder.packingListId,
-				warehouseId: existingOrder.warehouseId,
-				warehouseName: existingOrder.warehouseName,
-				packingListNumber: existingOrder.packingListNumber,
-				packingStatus: existingOrder.packingStatus,
-				approvedBy: existingOrder.approvedBy,
-				approvedDate: existingOrder.approvedDate,
-				rejectedBy: existingOrder.rejectedBy,
-				rejectedDate: existingOrder.rejectedDate,
-				rejectionReason: existingOrder.rejectionReason,
+				id,
+				form,
+				options: {
+					orderNo: orderNumber,
+					status: asDraft ? "draft" : form.status,
+				},
 			},
-			asDraft,
+			{
+				onSuccess: () => {
+					setToast({
+						msg: asDraft
+							? "Sample Order saved as draft."
+							: "Sample Order updated successfully.",
+						type: "success",
+					});
+					setTimeout(() => router.push("/sales/sample-order"), 1000);
+				},
+				onError: () => {
+					setToast({ msg: "Failed to update Sample Order.", type: "error" });
+				},
+			}
 		);
-
-		if (!updated) {
-			setToast({ msg: "Invalid salesperson or warehouse selection.", type: "error" });
-			return;
-		}
-
-		const orders = loadOrders();
-		saveOrders(orders.map((o) => (o.id === updated.id ? updated : o)));
-
-		setToast({
-			msg: asDraft
-				? "Sample Order saved as draft."
-				: updated.requiresApproval
-					? "Sample Order updated and submitted for approval."
-					: "Sample Order updated successfully.",
-			type: "success",
-		});
-		setTimeout(() => router.push("/sales/sample-order"), 1000);
 	};
 
-	if (!form) {
+	if (loadingOrder || !form) {
 		return (
 			<FormContainer
 				title="Edit Sample Order"
@@ -162,6 +178,7 @@ export default function EditSalesOrderPage() {
 							size="sm"
 							className="h-8 text-xs"
 							onClick={() => handleSave(true)}
+							disabled={updateMutation.isPending}
 						>
 							Save Draft
 						</Button>
@@ -170,13 +187,14 @@ export default function EditSalesOrderPage() {
 						size="sm"
 						className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
 						onClick={() => handleSave(false)}
+						disabled={updateMutation.isPending}
 					>
 						<Save className="w-3.5 h-3.5" /> Save Changes
 					</Button>
 				</div>
 			}
 		>
-			<SalesOrderForm
+			<SampleOrderForm
 				mode="edit"
 				orderNumber={orderNumber}
 				form={form}
