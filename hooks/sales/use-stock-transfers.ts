@@ -21,17 +21,13 @@ export function useStockTransfers(params: {
   ordering?: string;
   apiFilters?: any;
 }) {
-  console.log("useStockTransfers hook executing with params:", params);
   return useQuery({
     queryKey: stockTransferKeys.list(params),
     queryFn: async ({ signal }) => {
-      console.log("useStockTransfers queryFn firing fetch request!");
       try {
         const result = await StockTransferService.list({ ...params, signal });
-        console.log("useStockTransfers queryFn succeeded with result:", result);
         return result;
       } catch (err) {
-        console.error("useStockTransfers queryFn failed with error:", err);
         throw err;
       }
     },

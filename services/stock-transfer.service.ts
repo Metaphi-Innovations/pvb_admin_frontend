@@ -33,7 +33,6 @@ export function mapBackendStatusToFrontend(status: string): TransferStatus {
     case "DRAFT": return "draft";
     case "SUBMITTED": return "pending_approval";
     case "APPROVED": return "approved";
-    case "REJECTED": return "rejected";
     case "PICKING": return "packing_in_progress";
     case "IN_TRANSIT": return "in_transit";
     case "RECEIVED": return "received";
