@@ -304,7 +304,7 @@ export function createPackingList(
   return {
     id: nextPackingListId(lists),
     packingListNumber: generatePackingListNumber(lists),
-    salesOrderId: order.id,
+    salesOrderId: typeof order.id === "number" ? order.id : parseInt(String(order.id), 10) || 0,
     salesOrderNumber: order.soNumber,
     customerName: order.customerName,
     warehouseId,

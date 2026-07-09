@@ -256,6 +256,18 @@ export const API_ENDPOINTS = {
       UPDATE_STATUS: (id: string) => `/sales/stock-transfer/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/stock-transfer/${id}/download-note`,
     },
+    SAMPLE_ORDER: {
+      NEXT_NUMBER: "/sales/sample-order/next-number",
+      DROPDOWN: "/sales/sample-order/dropdown",
+      FILTER: "/sales/sample-order/filter",
+      LIST: "/sales/sample-order/list",
+      CREATE: "/sales/sample-order/create",
+      EXPORT: "/sales/sample-order/export",
+      DETAILS: (id: string) => `/sales/sample-order/${id}`,
+      UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
+      UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
+      DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
+    },
   },
   USER_MANAGEMENT: {
     USER: {
