@@ -137,6 +137,8 @@ export default function StockTransferPage() {
         f.status = "SUBMITTED";
       } else if (activeTab === "approved") {
         f.status = "APPROVED";
+      } else if (activeTab === "rejected") {
+        f.status = "CANCELLED";
       } else {
         f.status = activeTab.toUpperCase();
       }
@@ -170,17 +172,7 @@ export default function StockTransferPage() {
   const transfers = listData?.items || [];
   const totalRecords = listData?.total || 0;
 
-  console.log("StockTransferPage query state:", {
-    listData,
-    isLoading,
-    page,
-    pageSize,
-    searchVal,
-    ordering,
-    apiFilters,
-    transfers,
-    totalRecords,
-  });
+
 
   // Summary/Counts Query
   const { data: summaryData } = useStockTransferSummary();
@@ -198,7 +190,7 @@ export default function StockTransferPage() {
     if (activeTab === "draft") return "DRAFT";
     if (activeTab === "pending") return "SUBMITTED";
     if (activeTab === "approved") return "APPROVED";
-    if (activeTab === "rejected") return "REJECTED";
+    if (activeTab === "rejected") return "CANCELLED";
     return activeTab.toUpperCase();
   }, [activeTab]);
 
@@ -475,7 +467,7 @@ export default function StockTransferPage() {
         { value: "draft", label: `Draft (${kpi.draft})` },
         { value: "pending", label: `Pending (${kpi.pending})` },
         { value: "approved", label: `Approved (${kpi.approved})` },
-        { value: "rejected", label: `Rejected (${kpi.rejected})` },
+        { value: "rejected", label: `Cancelled/Rejected (${kpi.rejected})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}
