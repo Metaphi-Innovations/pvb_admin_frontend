@@ -18,6 +18,7 @@ import {
   useDocumentType,
   useToggleDocumentTypeStatus,
   useExportDocumentTypes,
+  useDocumentTypeFilterDropdown,
 } from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
@@ -95,6 +96,33 @@ export default function DocumentTypesPage() {
   const toggleStatusMutation = useToggleDocumentTypeStatus();
   const exportMutation = useExportDocumentTypes();
 
+  const titleOptionsQuery = useDocumentTypeFilterDropdown("title");
+  const descriptionOptionsQuery = useDocumentTypeFilterDropdown("description");
+  const statusOptionsQuery = useDocumentTypeFilterDropdown("is_active");
+  const createdByOptionsQuery = useDocumentTypeFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useDocumentTypeFilterDropdown("updated_by_user__username");
+
+  const titleOptions = useMemo(() => titleOptionsQuery.data ?? [], [titleOptionsQuery.data]);
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toDocumentTypeRow),
     [listQuery.data],
@@ -165,7 +193,8 @@ export default function DocumentTypesPage() {
       header: "Title",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: titleOptions,
       width: "280px",
       render: (val, row) => (
         <span className="text-xs font-semibold text-foreground">
@@ -178,7 +207,8 @@ export default function DocumentTypesPage() {
       header: "Description",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: descriptionOptions,
       width: "480px",
       render: (val, row) => row.description || "—",
     },
@@ -188,10 +218,7 @@ export default function DocumentTypesPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "160px",
       render: (val, row) => (
         <ListingStatusToggle
@@ -206,6 +233,7 @@ export default function DocumentTypesPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -215,6 +243,7 @@ export default function DocumentTypesPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },

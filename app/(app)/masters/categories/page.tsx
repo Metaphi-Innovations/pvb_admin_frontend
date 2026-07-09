@@ -48,6 +48,7 @@ import {
   useUpdateCategory,
   useToggleCategoryStatus,
   useExportCategories,
+  useCategoryFilterDropdown,
 } from "@/hooks/masters";
 import { CategoryForm, DEFAULT_CATEGORY_FORM, type CategoryFormValues, validateCategoryForm } from "./components/CategoryForm";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
@@ -158,6 +159,36 @@ export default function CategoryMasterPage() {
   const toggleStatusMutation = useToggleCategoryStatus();
   const exportMutation = useExportCategories();
 
+  const categoryNameOptionsQuery = useCategoryFilterDropdown("categoryName");
+  const descriptionOptionsQuery = useCategoryFilterDropdown("description");
+  const statusOptionsQuery = useCategoryFilterDropdown("is_active");
+  const createdByOptionsQuery = useCategoryFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useCategoryFilterDropdown("updated_by_user__username");
+
+  const categoryNameOptions = useMemo(
+    () => categoryNameOptionsQuery.data ?? [],
+    [categoryNameOptionsQuery.data],
+  );
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toCategoryRow),
     [listQuery.data],
@@ -222,7 +253,8 @@ export default function CategoryMasterPage() {
       header: "Category Name",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: categoryNameOptions,
       width: "220px",
       render: (val, row) => (
         <span className="text-xs font-semibold text-foreground">{row.categoryName}</span>
@@ -233,7 +265,8 @@ export default function CategoryMasterPage() {
       header: "Description",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: descriptionOptions,
       width: "320px",
     },
     {
@@ -242,10 +275,7 @@ export default function CategoryMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "110px",
       render: (val, row) => (
         <ListingStatusToggle
@@ -260,6 +290,7 @@ export default function CategoryMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -269,6 +300,7 @@ export default function CategoryMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },

@@ -26,6 +26,7 @@ import {
   useCustomerTypes,
   useToggleCustomerTypeStatus,
   useExportCustomerTypes,
+  useCustomerTypeFilterDropdown,
 } from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
@@ -134,6 +135,41 @@ export default function CustomerTypesPage() {
   const toggleStatusMutation = useToggleCustomerTypeStatus();
   const exportMutation = useExportCustomerTypes();
 
+  const customerTypeOptionsQuery = useCustomerTypeFilterDropdown("customer_type_name");
+  const initialCodeOptionsQuery = useCustomerTypeFilterDropdown("customer_initial_code");
+  const descriptionOptionsQuery = useCustomerTypeFilterDropdown("description");
+  const statusOptionsQuery = useCustomerTypeFilterDropdown("is_active");
+  const createdByOptionsQuery = useCustomerTypeFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useCustomerTypeFilterDropdown("updated_by_user__username");
+
+  const customerTypeOptions = useMemo(
+    () => customerTypeOptionsQuery.data ?? [],
+    [customerTypeOptionsQuery.data],
+  );
+  const initialCodeOptions = useMemo(
+    () => initialCodeOptionsQuery.data ?? [],
+    [initialCodeOptionsQuery.data],
+  );
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toCustomerTypeRow),
     [listQuery.data],
@@ -181,7 +217,8 @@ export default function CustomerTypesPage() {
       header: "Customer Type Name",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: customerTypeOptions,
       width: "200px",
       render: (val, row) => (
         <Link href={`/masters/customer-types/${routeId(row)}`} className="font-semibold text-foreground hover:text-brand-700">
@@ -194,7 +231,8 @@ export default function CustomerTypesPage() {
       header: "Initial Code",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: initialCodeOptions,
       width: "120px",
       render: (_val, row) => (
         <span className="font-mono font-medium text-foreground">{row.initialCode}</span>
@@ -205,7 +243,8 @@ export default function CustomerTypesPage() {
       header: "Description",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: descriptionOptions,
       width: "320px",
       render: (val, row) => row.description || "—",
     },
@@ -215,6 +254,7 @@ export default function CustomerTypesPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.createdBy} date={row.createdDate} />
@@ -226,6 +266,7 @@ export default function CustomerTypesPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
@@ -237,10 +278,7 @@ export default function CustomerTypesPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "120px",
       render: (val, row) => (
         <ListingStatusToggle

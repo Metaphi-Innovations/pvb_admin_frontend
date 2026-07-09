@@ -137,6 +137,49 @@ export interface CustomerTypeExportParams {
   apiFilters?: Record<string, unknown>;
 }
 
+export interface CustomerTypeFilterOption {
+  label: string;
+  value: string;
+}
+
+export type CustomerTypeFilterField =
+  | "customer_type_name"
+  | "customer_initial_code"
+  | "description"
+  | "is_active"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
+function mapFilterOptions(
+  data: unknown[],
+  fieldName: CustomerTypeFilterField,
+): CustomerTypeFilterOption[] {
+  const options: CustomerTypeFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export interface CustomerTypeDropdownItem {
   id: string;
   customerType: string;
@@ -217,6 +260,27 @@ export const CustomerTypeListService = {
     if (!body.success) {
       throw new Error(asString(body.message) || "Failed to update customer type status.");
     }
+  },
+
+  async getFilterDropdown(
+    fieldName: CustomerTypeFilterField,
+    signal?: AbortSignal,
+  ): Promise<CustomerTypeFilterOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.MASTER.CUSTOMER_TYPE.FILTER_DROPDOWN,
+      {
+        params: { field_name: fieldName },
+        signal,
+      },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async export(params: CustomerTypeExportParams): Promise<void> {

@@ -25,6 +25,7 @@ import {
   useUpdateGst,
   useToggleGstStatus,
   useExportGst,
+  useGstFilterDropdown,
 } from "@/hooks/masters";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -133,6 +134,36 @@ export default function GSTPage() {
   const toggleStatusMutation = useToggleGstStatus();
   const exportMutation = useExportGst();
 
+  const gstPercentageOptionsQuery = useGstFilterDropdown("gstPercentage");
+  const remarkOptionsQuery = useGstFilterDropdown("remark");
+  const statusOptionsQuery = useGstFilterDropdown("is_active");
+  const createdByOptionsQuery = useGstFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useGstFilterDropdown("updated_by_user__username");
+
+  const gstPercentageOptions = useMemo(
+    () => gstPercentageOptionsQuery.data ?? [],
+    [gstPercentageOptionsQuery.data],
+  );
+  const remarkOptions = useMemo(
+    () => remarkOptionsQuery.data ?? [],
+    [remarkOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toGstRow),
     [listQuery.data],
@@ -228,7 +259,8 @@ export default function GSTPage() {
       header: "GST Percentage",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: gstPercentageOptions,
       width: "140px",
       render: (val, row) => (
         <span className="text-xs font-semibold text-foreground">{row.gstPercentage}%</span>
@@ -239,7 +271,8 @@ export default function GSTPage() {
       header: "Remarks",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: remarkOptions,
       width: "220px",
       render: (val, row) => row.remarks || "—",
     },
@@ -249,10 +282,7 @@ export default function GSTPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "110px",
       render: (val, row) => (
         <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
@@ -264,6 +294,7 @@ export default function GSTPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -273,6 +304,7 @@ export default function GSTPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
