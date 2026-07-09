@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { getDispatchRecords, saveDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
+const getDispatchRecords = (): any[] => [];
+const saveDispatchRecords = (r: any): void => {};
+
 import { DispatchDetailsPanel } from "../../components/DispatchDetailsPanel";
 import {
   buildSalesReturnPackingGroups,

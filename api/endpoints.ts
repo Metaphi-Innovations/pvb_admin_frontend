@@ -319,6 +319,14 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
     },
+    DISPATCH: {
+      PREVIEW_NUMBER: "/warehouse/dispatch/preview-number",
+      LIST: "/warehouse/dispatch/list",
+      FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
+      CREATE: "/warehouse/dispatch/create",
+      DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
+      REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
+    },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
       SUMMARY: "/warehouse/packing-done/summary",

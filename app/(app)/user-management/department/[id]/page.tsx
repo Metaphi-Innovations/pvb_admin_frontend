@@ -56,7 +56,7 @@ export default function DepartmentViewPage() {
         statusVariant="neutral"
         tabs={[OVERVIEW_TAB]}
         activeTab="overview"
-        onTabChange={() => {}}
+        onTabChange={() => { }}
         sidebar={{}}
       >
         <p className="text-sm text-muted-foreground text-center py-8">
