@@ -5,6 +5,7 @@ import {
   DocumentTypeListService,
   type DocumentTypeCreatePayload,
   type DocumentTypeExportParams,
+  type DocumentTypeFilterField,
   type DocumentTypeListParams,
   type DocumentTypeUpdatePayload,
 } from "@/services/document-type-list.service";
@@ -93,5 +94,14 @@ export function useExportDocumentTypes() {
   return useMutation({
     mutationFn: (params: DocumentTypeExportParams) =>
       DocumentTypeListService.export(params),
+  });
+}
+
+export function useDocumentTypeFilterDropdown(fieldName: DocumentTypeFilterField) {
+  return useQuery({
+    queryKey: masterKeys.documentTypes.filterDropdown(fieldName),
+    queryFn: ({ signal }) =>
+      DocumentTypeListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }

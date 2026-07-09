@@ -5,6 +5,7 @@ import {
   CustomerTypeListService,
   type CustomerTypeCreatePayload,
   type CustomerTypeExportParams,
+  type CustomerTypeFilterField,
   type CustomerTypeListParams,
   type CustomerTypeUpdatePayload,
 } from "@/services/customer-type-list.service";
@@ -81,5 +82,14 @@ export function useExportCustomerTypes() {
   return useMutation({
     mutationFn: (params: CustomerTypeExportParams) =>
       CustomerTypeListService.export(params),
+  });
+}
+
+export function useCustomerTypeFilterDropdown(fieldName: CustomerTypeFilterField) {
+  return useQuery({
+    queryKey: masterKeys.customerTypes.filterDropdown(fieldName),
+    queryFn: ({ signal }) =>
+      CustomerTypeListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }

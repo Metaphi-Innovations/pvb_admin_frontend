@@ -64,8 +64,15 @@ export function mapStatusToIsActive(value: FilterValue): boolean | null {
 }
 
 export function buildIsActiveFilter(status: MasterListStatus): Record<string, boolean> {
-  if (status === "active") return { is_active: true };
-  if (status === "inactive") return { is_active: false };
+  return buildStatusFilter(status, "is_active");
+}
+
+export function buildStatusFilter(
+  status: MasterListStatus,
+  field: string = "is_active",
+): Record<string, boolean> {
+  if (status === "active") return { [field]: true };
+  if (status === "inactive") return { [field]: false };
   return {};
 }
 
@@ -144,6 +151,45 @@ function normalizeAuditFilter(value: FilterValue): AuditFilterValue | null {
   }
   return null;
 }
+
+/** Brand API uses flat created_at_from / created_at_to keys instead of range.* */
+export function createFlatDateAuditFieldMapper(options: {
+  userField: string;
+  fromKey: string;
+  toKey: string;
+}): FieldMapper {
+  return (value) => {
+    const audit = normalizeAuditFilter(value as FilterValue);
+    if (!audit) return null;
+
+    const result: Record<string, unknown> = {};
+
+    if (audit.user) {
+      assignNested(result, options.userField, audit.user);
+    }
+
+    if (audit.fromDate) {
+      result[options.fromKey] = audit.fromDate;
+    }
+    if (audit.toDate) {
+      result[options.toKey] = audit.toDate;
+    }
+
+    return Object.keys(result).length > 0 ? result : null;
+  };
+}
+
+const brandCreatedAuditMapper = createFlatDateAuditFieldMapper({
+  userField: "created_by_user.username",
+  fromKey: "created_at_from",
+  toKey: "created_at_to",
+});
+
+const brandUpdatedAuditMapper = createFlatDateAuditFieldMapper({
+  userField: "updated_by_user.username",
+  fromKey: "updated_at_from",
+  toKey: "updated_at_to",
+});
 
 /** Maps Created/Updated audit column filters to API user + date range fields. */
 export function createAuditFieldMapper(options: {
@@ -228,15 +274,30 @@ export function buildListApiFilters(
 export function mergeListRequestFilters(
   filters: FilterState,
   fieldMap: Record<string, FieldMapper>,
-  options?: { statusTab?: MasterListStatus },
+  options?: { statusTab?: MasterListStatus; statusField?: string },
 ): Record<string, unknown> {
   const status = resolveListStatus(filters, options?.statusTab);
   const columnFilters = buildListApiFilters(filters, fieldMap);
   return {
     ...columnFilters,
-    ...buildIsActiveFilter(status),
+    ...buildStatusFilter(status, options?.statusField ?? "is_active"),
   };
 }
+
+const cfuStatusColumnMapper: FieldMapper = (value) => {
+  const active = mapStatusToIsActive(value);
+  return active === null ? null : { status: active };
+};
+
+const cfuCreatedAuditMapper = createAuditFieldMapper({
+  userField: "created_by.username",
+  dateField: "created_at",
+});
+
+const cfuUpdatedAuditMapper = createAuditFieldMapper({
+  userField: "updated_by.username",
+  dateField: "updated_at",
+});
 
 export const statusColumnMapper: FieldMapper = (value) => {
   const isActive = mapStatusToIsActive(value);
@@ -246,6 +307,10 @@ export const statusColumnMapper: FieldMapper = (value) => {
 const AUDIT_FILTER_FIELDS = {
   createdBy: createdAuditMapper,
   updatedBy: updatedAuditMapper,
+  createdDate: createdAuditMapper,
+  updatedDate: updatedAuditMapper,
+  createdAt: createdAuditMapper,
+  updatedAt: updatedAuditMapper,
 } as const;
 
 export const MASTER_FILTER_FIELD_MAPS = {
@@ -266,6 +331,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
   hsn: {
+    hsnCode: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const id = String(raw ?? "").trim();
+      return id ? { id } : null;
+    },
     hsnDescription: "hsnDescription",
     gstRate: (value) => {
       const raw = Array.isArray(value) ? value[0] : value;
@@ -279,6 +349,55 @@ export const MASTER_FILTER_FIELD_MAPS = {
   segment: {
     segmentName: "segment_name",
     description: "description",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  crop: {
+    cropName: "crop_name",
+    fieldType: "field_type",
+    categoryName: "category.categoryName",
+    season: (value) => {
+      const raw = Array.isArray(value) ? value.join(", ") : value;
+      const trimmed = String(raw ?? "").trim();
+      return trimmed ? { season: trimmed } : null;
+    },
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  eventType: {
+    eventTypeName: "event_type_name",
+    remark: "remark",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  brand: {
+    brandName: "brand_name",
+    brandType: "brand_type",
+    remark: "remark",
+    status: statusColumnMapper,
+    createdBy: brandCreatedAuditMapper,
+    updatedBy: brandUpdatedAuditMapper,
+  },
+  cfu: {
+    cfuName: "cfu_name",
+    description: "description",
+    status: cfuStatusColumnMapper,
+    createdBy: cfuCreatedAuditMapper,
+    updatedBy: cfuUpdatedAuditMapper,
+  },
+  department: {
+    name: "department_name",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  role: {
+    roleName: "role_name",
+    department: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const name = String(raw ?? "").trim();
+      return name ? { department: { department_name: name } } : null;
+    },
+    geoLevel: "geography_level",
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
@@ -325,6 +444,26 @@ export const MASTER_FILTER_FIELD_MAPS = {
     formulationName: "formulation_name",
     formulationCode: "formulation_code",
     description: "description",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  user: {
+    employeeId: "employee_id",
+    fullName: "first_name",
+    email: "email",
+    mobile: "mobile_number",
+    role: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const name = String(raw ?? "").trim();
+      return name ? { role: { role_name: name } } : null;
+    },
+    department: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const name = String(raw ?? "").trim();
+      return name ? { department: { department_name: name } } : null;
+    },
+    employeeType: "employee_type",
+    roleType: "role_type",
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
