@@ -25,7 +25,7 @@ function toListParams(params: MasterListKeyParams): SupplierListParams {
 export function useSuppliers(params: MasterListKeyParams) {
     return useQuery({
         queryKey: masterKeys.suppliers.list(params),
-        queryFn: ({ signal }) => SupplierListService.list({ ...toListParams(params), signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => SupplierListService.list({ ...toListParams(params), signal }),
     });
 }
 
@@ -55,7 +55,7 @@ export function useUpdateSupplier() {
     return useMutation({
         mutationFn: ({ id, payload }: { id: string; payload: SupplierUpdatePayload }) =>
             SupplierListService.update(id, payload),
-        onSuccess: async (_data, variables) => {
+        onSuccess: async (_data: void, variables: { id: string; payload: SupplierUpdatePayload }) => {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.lists() }),
                 queryClient.invalidateQueries({
@@ -72,7 +72,7 @@ export function useToggleSupplierStatus() {
     return useMutation({
         mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
             SupplierListService.updateStatus(id, isActive),
-        onSuccess: async (_data, variables) => {
+        onSuccess: async (_data: void, variables: { id: string; isActive: boolean }) => {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.lists() }),
                 queryClient.invalidateQueries({
