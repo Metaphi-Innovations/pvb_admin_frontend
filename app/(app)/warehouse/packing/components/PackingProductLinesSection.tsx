@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { SalesOrderProduct, SalesOrderRecord } from "../types";
 import { getPackingQtyLabel, isPurchaseReturnDoc } from "../lib/packing-document-labels";
+import { getProductPackingConfig } from "@/app/(app)/sales/orders/packing-list-data";
 
 interface PackingProductLinesSectionProps {
   order: SalesOrderRecord;
@@ -108,6 +109,10 @@ function PackingProductGroup({
   const [isExpanded, setIsExpanded] = useState(true);
 
   const product = products[0];
+  const config = product.productId ? getProductPackingConfig(Number(product.productId)) : undefined;
+  const unitsPerCase = config?.unitsPerPackingUnit || 1;
+  const baseUnit = config?.baseUnit || "Units";
+
   const totalOrderedQty = products.reduce((sum, p) => sum + (p.ordered_cases || 0), 0);
   const totalPendingQty = products.reduce((sum, p) => sum + (p.pending_cases || 0), 0);
 
@@ -150,12 +155,18 @@ function PackingProductGroup({
 
         <div className="flex flex-col gap-1 min-w-[120px]">
           <span className="text-xs">
-            <span className="text-muted-foreground">Total {orderedQtyLabel}: </span>
+            <span className="text-muted-foreground">Total {orderedQtyLabel} (Cases): </span>
             <span className="font-semibold text-foreground">{totalOrderedQty}</span>
+            {unitsPerCase > 1 && (
+              <span className="text-muted-foreground ml-1 text-[10px]">({totalOrderedQty * unitsPerCase} {baseUnit})</span>
+            )}
           </span>
           <span className="text-xs">
-            <span className="text-muted-foreground">Total Pending: </span>
+            <span className="text-muted-foreground">Total Pending (Cases): </span>
             <span className="font-bold text-amber-600">{totalPendingQty}</span>
+            {unitsPerCase > 1 && (
+              <span className="text-muted-foreground ml-1 text-[10px]">({totalPendingQty * unitsPerCase} {baseUnit})</span>
+            )}
           </span>
         </div>
       </div>
@@ -204,18 +215,23 @@ function PackingProductGroup({
                   )}
                 </div>
 
-                <div className="flex items-center gap-4 min-w-[120px]">
+                <div className="flex flex-col gap-0.5 min-w-[120px]">
                   <span className="text-xs">
-                    <span className="text-muted-foreground">Pending: </span>
+                    <span className="text-muted-foreground">Pending (Cases): </span>
                     <span className="font-bold text-amber-600">{p.pending_cases}</span>
                   </span>
+                  {unitsPerCase > 1 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      ({p.pending_cases * unitsPerCase} {baseUnit})
+                    </span>
+                  )}
                 </div>
 
                 <div className="w-[140px] flex-shrink-0 text-right pr-2">
                   {isSelected ? (
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-muted-foreground">Pack:</span>
+                        <span className="text-xs font-semibold text-muted-foreground">Pack (Cases):</span>
                         <Input
                           type="number"
                           min={0}
@@ -227,6 +243,11 @@ function PackingProductGroup({
                           )}
                         />
                       </div>
+                      {qtyValue > 0 && unitsPerCase > 1 && !error && (
+                        <span className="text-[10px] text-muted-foreground text-right w-full">
+                          = {qtyValue * unitsPerCase} {baseUnit}
+                        </span>
+                      )}
                       {error && (
                         <span className="text-[10px] text-red-500 leading-tight text-right w-full">{error}</span>
                       )}

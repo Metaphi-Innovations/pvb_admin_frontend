@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building, Layers, Info, Check, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getSalesOrderById } from "../../services";
 import { SalesOrderRecord, SalesOrderProduct } from "../../types";
 import { PackingAllocationSummaryDialog } from "../../components/PackingAllocationSummaryDialog";
 import { PackingProductLinesSection } from "../../components/PackingProductLinesSection";
@@ -90,20 +89,11 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         setSelectedLines(buildInitialSelection(record.products));
 
       } catch (err) {
-        console.error("API loading failed, falling back to static mock data:", err);
-        const record = getSalesOrderById(params.id);
-        if (record && active) {
-          setOrder(record);
-          setPackingNo(`PKG-2026-${Math.floor(100 + Math.random() * 900)}`);
-          setPackingDate(new Date().toISOString().split("T")[0]);
-
-          const initialQty: Record<string, number> = {};
-          record.products.forEach((p) => {
-            initialQty[getLineKey(p)] = p.pending_cases;
-          });
-          setPackingQty(initialQty);
-          setSelectedLines(buildInitialSelection(record.products));
-        }
+        console.error("API loading failed:", err);
+        showToast("Failed to load packing list details.", "error");
+        setTimeout(() => {
+          if (active) router.push("/warehouse/packing");
+        }, 2000);
       } finally {
         if (active) {
           setLoading(false);

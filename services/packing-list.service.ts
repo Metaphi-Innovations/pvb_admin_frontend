@@ -12,6 +12,8 @@ export interface PackingListListItem {
   warehouseId: string;
   warehouseName: string;
   customerName: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
   orderAmount: number;
   orderDate: string;
   expectedDeliveryDate: string;
@@ -111,6 +113,8 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
     warehouseId: asString(raw.warehouse_id),
     warehouseName: asString(warehouse.warehouse_name),
     customerName: asString(raw.customer_name),
+    sourceWarehouse: asString(raw.source_warehouse),
+    targetWarehouse: asString(raw.target_warehouse),
     orderAmount: asNumber(raw.order_amount),
     orderDate: asDateOnly(raw.order_date),
     expectedDeliveryDate: asDateOnly(raw.expected_delivery_date),
@@ -147,8 +151,10 @@ export function buildPackingListApiFilters(
     } else {
       apiFilters.warehouse = { warehouse_name: asString(warehouse) };
     }
-  } else if (selectedWarehouse && selectedWarehouse !== "All") {
-    apiFilters.warehouse = { warehouse_name: selectedWarehouse };
+  }
+  
+  if (selectedWarehouse && selectedWarehouse !== "All") {
+    apiFilters.warehouse_id = selectedWarehouse;
   }
 
   const customerName = filters.customer;
@@ -237,10 +243,17 @@ export const PackingListService = {
 
   async getFilterDropdown(
     fieldName: PackingListFilterField,
+    sourceType?: string,
     signal?: AbortSignal,
   ): Promise<PackingListFilterOption[]> {
+    const url = new URL(API_ENDPOINTS.WAREHOUSE.PACKING_LIST.FILTER_DROPDOWN, "http://localhost");
+    url.searchParams.set("field_name", fieldName);
+    if (sourceType) {
+      url.searchParams.set("source_type", sourceType);
+    }
+    
     const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.FILTER_DROPDOWN}?field_name=${fieldName}`,
+      url.pathname + url.search,
       { signal },
     );
 

@@ -123,8 +123,10 @@ export function buildPackingDoneApiFilters(
     } else {
       apiFilters.warehouse = { warehouse_name: asString(warehouse) };
     }
-  } else if (selectedWarehouse && selectedWarehouse !== "All") {
-    apiFilters.warehouse = { warehouse_name: selectedWarehouse };
+  }
+  
+  if (selectedWarehouse && selectedWarehouse !== "All") {
+    apiFilters.warehouse_id = selectedWarehouse;
   }
 
   const customerName = filters.customer;
@@ -204,10 +206,21 @@ export const PackingDoneService = {
 
   async getFilterDropdown(
     fieldName: PackingDoneFilterField,
+    warehouseId?: string,
+    sourceType?: string,
     signal?: AbortSignal,
   ): Promise<PackingDoneFilterOption[]> {
+    const url = new URL(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.FILTER_DROPDOWN, "http://localhost");
+    url.searchParams.set("field_name", fieldName);
+    if (warehouseId) {
+      url.searchParams.set("warehouse_id", warehouseId);
+    }
+    if (sourceType) {
+      url.searchParams.set("source_type", sourceType);
+    }
+    
     const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.PACKING_DONE.FILTER_DROPDOWN}?field_name=${fieldName}`,
+      url.pathname + url.search,
       { signal },
     );
 
