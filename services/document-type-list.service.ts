@@ -73,6 +73,48 @@ export interface DocumentTypeDropdownItem {
   title: string;
 }
 
+export interface DocumentTypeFilterOption {
+  label: string;
+  value: string;
+}
+
+export type DocumentTypeFilterField =
+  | "title"
+  | "description"
+  | "is_active"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
+function mapFilterOptions(
+  data: unknown[],
+  fieldName: DocumentTypeFilterField,
+): DocumentTypeFilterOption[] {
+  const options: DocumentTypeFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export interface DocumentTypeExportParams {
   search: string;
   status: "all" | "active" | "inactive";
@@ -164,6 +206,27 @@ export const DocumentTypeListService = {
         title: asString(item.title),
       };
     });
+  },
+
+  async getFilterDropdown(
+    fieldName: DocumentTypeFilterField,
+    signal?: AbortSignal,
+  ): Promise<DocumentTypeFilterOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.MASTER.DOCUMENT_TYPE.FILTER_DROPDOWN,
+      {
+        params: { field_name: fieldName },
+        signal,
+      },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async export(params: DocumentTypeExportParams): Promise<void> {

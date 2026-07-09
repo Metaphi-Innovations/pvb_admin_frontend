@@ -2,9 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { PurchaseOrderForm, poToFormValues, validatePOForm, focusFirstPOError, type POFormValues, type POFormErrors } from "../../components/PurchaseOrderForm";
+import {
+  PurchaseOrderForm,
+  poToFormValues,
+  validatePOForm,
+  focusFirstPOError,
+  type POFormValues,
+  type POFormErrors,
+} from "../../components/PurchaseOrderForm";
 import { POFormLayout } from "../../components/POFormLayout";
 import { POFormFooter } from "../../components/POFormFooter";
+import { POFormPageSkeleton } from "../../components/POSkeletons";
 import { usePurchaseOrder, useUpdatePurchaseOrder } from "@/hooks/procurement";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
@@ -24,7 +32,11 @@ export default function EditPOPage() {
 
   useEffect(() => {
     if (!po) return;
-    if (!EDITABLE_STATUSES.includes(po.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (
+      !EDITABLE_STATUSES.includes(
+        po.status as (typeof EDITABLE_STATUSES)[number],
+      )
+    ) {
       router.replace(`/procurement/purchase-orders/${id}`);
       return;
     }
@@ -32,12 +44,16 @@ export default function EditPOPage() {
   }, [po, id, router]);
 
   const canEdit = useMemo(
-    () => !!po && EDITABLE_STATUSES.includes(po.status as (typeof EDITABLE_STATUSES)[number]),
+    () =>
+      !!po &&
+      EDITABLE_STATUSES.includes(
+        po.status as (typeof EDITABLE_STATUSES)[number],
+      ),
     [po],
   );
 
   if (detailQuery.isLoading || !form || !po) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+    return <POFormPageSkeleton />;
   }
 
   if (detailQuery.isError) {
@@ -50,7 +66,9 @@ export default function EditPOPage() {
 
   if (!canEdit) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">This purchase order cannot be edited.</div>
+      <div className="p-8 text-sm text-muted-foreground">
+        This purchase order cannot be edited.
+      </div>
     );
   }
 
@@ -77,7 +95,11 @@ export default function EditPOPage() {
         id: po.id,
         form,
         poNumber: po.poNumber,
-        status: submit ? "approved" : po.status === "rejected" ? "draft" : po.status,
+        status: submit
+          ? "approved"
+          : po.status === "rejected"
+            ? "draft"
+            : po.status,
       },
       {
         onSuccess: () => {
@@ -97,11 +119,11 @@ export default function EditPOPage() {
       mode="edit"
       poNumber={po.poNumber}
       status={po.status}
-      backHref={`/procurement/purchase-orders/${id}`}
+      backHref="/procurement/purchase-orders"
       onSave={() => save(false)}
       footer={
         <POFormFooter
-          onCancel={() => router.push(`/procurement/purchase-orders/${id}`)}
+          onCancel={() => router.push("/procurement/purchase-orders")}
           onSaveDraft={() => save(false)}
           onSubmit={() => save(true)}
           showSubmit={["draft", "rejected"].includes(po.status)}

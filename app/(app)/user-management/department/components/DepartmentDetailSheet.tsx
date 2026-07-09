@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import type { Department } from "./DepartmentSheet";
 import { Building2 } from "lucide-react";
 import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
+import type { Department } from "../department-data";
 
 interface DepartmentDetailSheetProps {
   open: boolean;
@@ -28,7 +28,6 @@ export default function DepartmentDetailSheet({
       onEdit={() => onEdit(dept)}
       title="Department"
       icon={Building2}
-      recordCode={dept.code}
       status={dept.status}
       basicInfo={[{ label: "Department Name", value: dept.name }]}
       description={dept.remarks}

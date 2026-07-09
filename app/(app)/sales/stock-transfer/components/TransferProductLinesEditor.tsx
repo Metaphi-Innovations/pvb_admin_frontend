@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -18,9 +18,10 @@ import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import {
   createEmptyLineItem,
-  getAvailableBatchRowsForTransfer,
   type TransferLineItem,
 } from "../stock-transfer-data";
+import { getStockStatus } from "@/lib/accounts/inventory-accounting-data";
+import { StockTransferService } from "@/services/stock-transfer.service";
 
 const TAX_HEAD =
   "px-2 py-1.5 text-left text-[10px] font-semibold text-foreground whitespace-nowrap";
@@ -38,6 +39,7 @@ interface TransferProductLinesEditorProps {
   targetWarehouseId: number | null;
   onChange: (lines: TransferLineItem[]) => void;
   error?: string;
+  errors?: Record<string, string>;
 }
 
 export default function TransferProductLinesEditor({
@@ -47,6 +49,7 @@ export default function TransferProductLinesEditor({
   targetWarehouseId,
   onChange,
   error,
+  errors,
 }: TransferProductLinesEditorProps) {
   const sourceWarehouseName = useMemo(() => {
     if (!sourceWarehouseId) return "";
@@ -139,14 +142,60 @@ export default function TransferProductLinesEditor({
       return next;
     });
   };
+  const [warehouseBatches, setWarehouseBatches] = useState<Record<string | number, any[]>>({});
+
+  const fetchBatchesForProduct = async (productId: string | number) => {
+    if (!sourceWarehouseId) return;
+    if (warehouseBatches[productId]) return;
+    try {
+      const res = await StockTransferService.getBatches(productId, sourceWarehouseId);
+      const mapped = res.map((b: any) => ({
+        productName: "",
+        batchInventoryId: b.available_inventory_id,
+        batchNumber: b.batch_code || "N/A",
+        mfgDate: b.mfg_date || null,
+        expiryDate: b.expiry_date || null,
+        availableQty: Number(b.available_qty || 0),
+        status: b.expiry_date ? getStockStatus(b.expiry_date) : "Good",
+      })).filter(b => b.availableQty > 0);
+      setWarehouseBatches((prev) => ({ ...prev, [productId]: mapped }));
+      return mapped;
+    } catch (err) {
+      console.error("Failed to fetch batches:", err);
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    if (topSelectedProduct && sourceWarehouseId) {
+      fetchBatchesForProduct(topSelectedProduct.id).then((batches) => {
+        const available = (batches || []).filter(
+          (b: any) => !lines.some((line) => line.productId === topSelectedProduct.id && line.batchInventoryId === b.batchInventoryId)
+        );
+        if (available.length > 0) {
+          setTopSelectedBatch(available[0]);
+        } else {
+          setTopSelectedBatch(null);
+        }
+      });
+    }
+  }, [topSelectedProduct, sourceWarehouseId, lines]);
+
+  useEffect(() => {
+    // Prefetch batches for existing lines
+    if (sourceWarehouseId && lines.length > 0) {
+      lines.forEach((line) => {
+        if (line.productId) {
+          fetchBatchesForProduct(line.productId);
+        }
+      });
+    }
+  }, [sourceWarehouseId, lines]);
+
   const topBatches = useMemo(() => {
-    if (!sourceWarehouseName || !topSelectedProduct) return [];
-    return getAvailableBatchRowsForTransfer(
-      sourceWarehouseName,
-      topSelectedProduct.name,
-      topSelectedProduct.code
-    );
-  }, [sourceWarehouseName, topSelectedProduct]);
+    if (!topSelectedProduct) return [];
+    return warehouseBatches[topSelectedProduct.id] || [];
+  }, [warehouseBatches, topSelectedProduct]);
 
   const handleAddProductFromTop = () => {
     if (!sourceWarehouseId) {
@@ -188,6 +237,7 @@ export default function TransferProductLinesEditor({
     newLine.productCode = topSelectedProduct.code;
     newLine.productName = topSelectedProduct.name;
     newLine.batchNumber = topSelectedBatch.batchNumber;
+    newLine.batchInventoryId = topSelectedBatch.batchInventoryId;
     newLine.mfgDate = topSelectedBatch.mfgDate;
     newLine.expiryDate = topSelectedBatch.expiryDate;
     newLine.availableStock = topSelectedBatch.availableQty;
@@ -243,14 +293,6 @@ export default function TransferProductLinesEditor({
             onSelect={(p) => {
               setTopSelectedProduct(p);
               setLocalError(null);
-              const batches = sourceWarehouseName
-                ? getAvailableBatchRowsForTransfer(sourceWarehouseName, p.name, p.code)
-                : [];
-              if (batches.length > 0) {
-                setTopSelectedBatch(batches[0]);
-              } else {
-                setTopSelectedBatch(null);
-              }
             }}
           />
         }
@@ -376,16 +418,10 @@ export default function TransferProductLinesEditor({
           </tr>
         }
         customTableBody={
-          lines.map((line) => {
-            const batches = sourceWarehouseName
-              ? getAvailableBatchRowsForTransfer(
-                sourceWarehouseName,
-                line.productName,
-                line.productCode,
-              )
-              : [];
+          lines.map((line, idx) => {
+            const batches = warehouseBatches[line.productId ?? ""] || [];
             const product = products.find((p) => p.id === line.productId);
-            const selectedBatch = batches.find((b) => b.batchNumber === line.batchNumber);
+            const selectedBatch = batches.find((b: any) => b.batchNumber === line.batchNumber);
             const isNearExpiry = selectedBatch?.status === "Near Expiry";
             const isExpired = selectedBatch?.status === "Expired";
             const taxBreakdown =
@@ -395,6 +431,7 @@ export default function TransferProductLinesEditor({
 
             const isEditing = editingId === line.id;
             const draftLine = isEditing && editDraft ? (editDraft as TransferLineItem) : line;
+            const lineError = errors?.[`line_${idx}_qty`] || errors?.[`line_${idx}_batch`];
 
             return (
               <tr
@@ -416,11 +453,15 @@ export default function TransferProductLinesEditor({
                         finalRate: p.sellingPrice,
                         gstRate: p.gstRate,
                         batchNumber: undefined,
+                        batchInventoryId: undefined,
                         expiryDate: undefined,
                         mfgDate: undefined,
                       });
                     }}
                   />
+                  {lineError && (
+                    <p className="text-[10px] text-red-500 font-semibold mt-1">{lineError}</p>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
                   {line.productCode || "—"}
@@ -439,8 +480,9 @@ export default function TransferProductLinesEditor({
                     onSelect={(batch) => {
                       updateLine(line.id, {
                         batchNumber: batch.batchNumber,
-                        mfgDate: batch.mfgDate,
-                        expiryDate: batch.expiryDate,
+                        batchInventoryId: batch.batchInventoryId,
+                        mfgDate: batch.mfgDate ?? undefined,
+                        expiryDate: batch.expiryDate ?? undefined,
                         availableStock: batch.availableQty,
                       });
                     }}
@@ -582,6 +624,12 @@ export default function TransferProductLinesEditor({
                           type='button'
                           onClick={() => {
                             if (editDraft) {
+                              const avail = editDraft.availableStock ?? 0;
+                              const qty = editDraft.quantity ?? 0;
+                              if (qty > avail) {
+                                alert(`Cannot save: Transfer quantity (${qty}) exceeds available stock (${avail})`);
+                                return;
+                              }
                               updateLine(line.id, editDraft);
                             }
                             setEditingId(null);
@@ -740,7 +788,7 @@ function BatchSelect({
 }: {
   productName: string;
   productCode: string;
-  batches: ReturnType<typeof getAvailableBatchRowsForTransfer>;
+  batches: { productName: string; batchInventoryId: string; batchNumber: string; mfgDate: string | null; expiryDate: string | null; availableQty: number; status: string }[];
   value?: string;
   disabled?: boolean;
   alreadyAddedBatchNumbers?: string[];
@@ -772,7 +820,7 @@ function BatchSelect({
       </PopoverTrigger>
       <PopoverContent className="w-80 p-1 max-h-[280px] overflow-y-auto">
         {batches.length === 0 ? null : (
-          batches.map((batch) => {
+          batches.map((batch: { productName: string; batchInventoryId: string; batchNumber: string; mfgDate: string | null; expiryDate: string | null; availableQty: number; status: string }) => {
             const isExpired = batch.status === "Expired";
             const isAlreadyAdded = alreadyAddedBatchNumbers.includes(batch.batchNumber);
             return (

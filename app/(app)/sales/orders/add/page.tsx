@@ -218,6 +218,15 @@ export default function AddSalesOrderPage() {
 				<div className='flex items-center gap-2'>
 					<Button
 						size='sm'
+						variant='outline'
+						className='h-8 text-xs gap-1.5 border-border hover:bg-muted/40'
+						onClick={() => handleSave(true)}
+						disabled={createMutation.isPending || loadingOrderNumber}
+					>
+						Save as Draft
+					</Button>
+					<Button
+						size='sm'
 						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
 						onClick={() => handleSave(false)}
 						disabled={createMutation.isPending || loadingOrderNumber}

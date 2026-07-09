@@ -25,7 +25,6 @@ import {
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface DonePackingListingProps {
-  packingsForWarehouse?: PackingRecord[]; // Left for backward compatibility, ignored in favor of real API
   sourceFilter: PackingSourceTab;
 }
 
@@ -97,13 +96,14 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
     if (!mapping) return;
     loadedFiltersRef.current.add(columnKey);
     try {
-      const options = await PackingDoneService.getFilterDropdown(mapping.field);
+      const apiSourceType = sourceFilter === "sales" ? "normal_sales" : sourceFilter;
+      const options = await PackingDoneService.getFilterDropdown(mapping.field, selectedWarehouse === "All" ? undefined : selectedWarehouse, apiSourceType);
       mapping.setter(options);
     } catch (err) {
       console.error(`Error loading filter options for ${columnKey}:`, err);
       loadedFiltersRef.current.delete(columnKey);
     }
-  }, [FILTER_FIELD_MAP]);
+  }, [FILTER_FIELD_MAP, sourceFilter, selectedWarehouse]);
 
   // Fetch list data from backend
   useEffect(() => {
@@ -223,10 +223,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         width: "180px",
         render: (_: unknown, row: PackingRecord) => {
           const type = resolveWarehouseOrderType(row);
-          const label =
-            type === "stock_transfer"
-              ? row.targetWarehouse || row.customer
-              : row.customer;
+          const label = type === "stock_transfer" ? (row.targetWarehouse || row.customer) : row.customer;
           return (
             <div className="min-w-0">
               <span className="text-xs text-foreground font-semibold block truncate">{label}</span>
@@ -245,11 +242,14 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         filterType: "dropdown",
         filterOptions: warehouseOptions,
         width: "160px",
-        render: (_: unknown, row: PackingRecord) => (
-          <span className="text-xs text-foreground">
-            {row.sourceWarehouse || row.warehouse}
-          </span>
-        ),
+        render: (_: unknown, row: PackingRecord) => {
+          const type = resolveWarehouseOrderType(row);
+          return (
+            <span className="text-xs text-foreground">
+              {type === "stock_transfer" ? (row.sourceWarehouse || row.warehouse) : row.warehouse}
+            </span>
+          );
+        },
       },
       {
         key: "totalItems",

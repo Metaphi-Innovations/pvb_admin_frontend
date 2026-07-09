@@ -11,25 +11,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetBody, SheetFooter,
   SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
-
-export interface Department {
-  id: number;
-  code: string;
-  name: string;
-  status: string;
-  remarks: string;
-  createdBy: string;
-  createdDate: string;
-  updatedBy: string;
-  updatedDate: string;
-  lastStatusChange: string;
-}
-
-interface FormState {
-  name: string;
-  status: string;
-  remarks: string;
-}
+import type { Department, DepartmentFormState } from "../department-data";
 
 interface Errors {
   name?: string;
@@ -38,40 +20,48 @@ interface Errors {
 interface DepartmentSheetProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: FormState) => void;
+  onSave: (data: DepartmentFormState) => void;
   dept?: Department | null;
+  saving?: boolean;
+  formError?: string | null;
 }
 
-export default function DepartmentSheet({ open, onClose, onSave, dept }: DepartmentSheetProps) {
+export default function DepartmentSheet({
+  open,
+  onClose,
+  onSave,
+  dept,
+  saving = false,
+  formError,
+}: DepartmentSheetProps) {
   const isEdit = !!dept;
 
-  const [form, setForm] = useState<FormState>({
-    name: "", status: "active", remarks: "",
+  const [form, setForm] = useState<DepartmentFormState>({
+    name: "",
+    remarks: "",
   });
   const [errors, setErrors] = useState<Errors>({});
 
-  // Populate on open / dept change
   useEffect(() => {
     if (dept) {
       setForm({
-        name:    dept.name,
-        status:  dept.status,
+        name: dept.name,
         remarks: dept.remarks,
       });
     } else {
-      setForm({ name: "", status: "active", remarks: "" });
+      setForm({ name: "", remarks: "" });
     }
     setErrors({});
   }, [dept, open]);
 
-  const set = (field: keyof FormState, value: string) => {
-    setForm(p => ({ ...p, [field]: value }));
-    if (errors[field as keyof Errors]) setErrors(p => ({ ...p, [field]: undefined }));
+  const set = (field: keyof DepartmentFormState, value: string) => {
+    setForm((p) => ({ ...p, [field]: value }));
+    if (errors[field as keyof Errors]) setErrors((p) => ({ ...p, [field]: undefined }));
   };
 
   const validate = (): boolean => {
     const e: Errors = {};
-    if (!form.name.trim())          e.name = "Department name is required";
+    if (!form.name.trim()) e.name = "Department name is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -92,38 +82,41 @@ export default function DepartmentSheet({ open, onClose, onSave, dept }: Departm
         </SheetHeader>
 
         <SheetBody className="space-y-5">
-          {/* Name */}
+          {formError ? <p className="text-xs text-red-600">{formError}</p> : null}
+
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">
               Department Name <span className="text-red-500">*</span>
             </Label>
             <Input
               value={form.name}
-              onChange={e => set("name", e.target.value)}
+              onChange={(e) => set("name", e.target.value)}
               placeholder="e.g. Sales, HR, Accounts"
-              className={cn("h-9 text-sm rounded-lg", errors.name && "border-red-400 focus-visible:ring-red-300")}
+              className={cn(
+                "h-9 text-sm rounded-lg",
+                errors.name && "border-red-400 focus-visible:ring-red-300",
+              )}
               autoFocus
             />
             {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
 
-
-          {/* Remarks */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Remarks</Label>
             <Textarea
               value={form.remarks}
-              onChange={e => set("remarks", e.target.value)}
+              onChange={(e) => set("remarks", e.target.value)}
               placeholder="Any additional notes or remarks…"
               className="text-sm rounded-lg resize-none"
               rows={2}
             />
           </div>
 
-          {/* Audit info (edit mode) */}
           {isEdit && dept && (
             <div className="bg-muted/30 rounded-xl p-3.5 space-y-2 text-[11px]">
-              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Record Info</p>
+              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
+                Record Info
+              </p>
               <div className="grid grid-cols-2 gap-y-1.5 gap-x-4">
                 <div>
                   <span className="text-muted-foreground">Created By</span>
@@ -154,6 +147,7 @@ export default function DepartmentSheet({ open, onClose, onSave, dept }: Departm
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
+            disabled={saving}
           >
             <Check className="w-3.5 h-3.5" />
             {isEdit ? "Save Changes" : "Create Department"}
@@ -163,3 +157,5 @@ export default function DepartmentSheet({ open, onClose, onSave, dept }: Departm
     </Sheet>
   );
 }
+
+export type { Department };

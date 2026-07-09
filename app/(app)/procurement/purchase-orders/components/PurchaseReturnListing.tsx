@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -12,28 +12,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, Edit2, Package, MoreVertical } from "lucide-react";
+import { Eye, Edit2, MoreVertical } from "lucide-react";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { Toast } from "../../components/ProcurementUI";
 import { ProcAvatar, HighlightText } from "../../design/proc-design";
 import { useFlashToast } from "../../hooks/useFlashToast";
-import { applySearch, sortRows, type SortDir } from "../../hooks/useListingFilters";
 import { formatListingDate } from "../../components/listing/ListingCells";
 import {
-  issuePurchaseReturnForPacking,
-  loadPurchaseReturns,
   PURCHASE_RETURN_STATUS_CFG,
   type PurchaseReturn,
-  type PurchaseReturnStatus,
-} from "../../purchase-returns/purchase-return-data";
-import { IssuePackingConfirmModal } from "./IssuePackingConfirmModal";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import {
-  canIssuePurchaseReturnForPacking,
   purchaseReturnRoutes,
-  validateReturnItems,
-} from "../../purchase-returns/purchase-return-utils";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import {
+  buildPurchaseReturnApiFilters,
+  buildPurchaseReturnOrdering,
+  usePurchaseReturnFilterDropdown,
+  usePurchaseReturnList,
+} from "@/hooks/procurement";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
 
-function StatusPill({ status }: { status: PurchaseReturnStatus }) {
+function StatusPill({ status }: { status: PurchaseReturn["status"] }) {
   const cfg = PURCHASE_RETURN_STATUS_CFG[status];
   return (
     <span
@@ -51,222 +51,199 @@ function StatusPill({ status }: { status: PurchaseReturnStatus }) {
 
 export function PurchaseReturnListing() {
   const router = useRouter();
-  const [records, setRecords] = useState<PurchaseReturn[]>(() => loadPurchaseReturns());
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
+  const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "returnDate", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [packingTarget, setPackingTarget] = useState<PurchaseReturn | null>(null);
-  const [packingConfirmOpen, setPackingConfirmOpen] = useState(false);
 
   useFlashToast(setToast);
 
-  const refresh = () => setRecords(loadPurchaseReturns());
+  const apiFilters = useMemo(() => buildPurchaseReturnApiFilters(debouncedFilters), [debouncedFilters]);
+  const ordering = useMemo(
+    () => buildPurchaseReturnOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
+  const listQuery = usePurchaseReturnList({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    ordering,
+    apiFilters,
+  });
 
-  const filtered = useMemo(() => {
-    let r = [...records];
+  const statusOptionsQuery = usePurchaseReturnFilterDropdown("status");
+  const supplierOptionsQuery = usePurchaseReturnFilterDropdown("supplier__supplier_name");
+  const poOptionsQuery = usePurchaseReturnFilterDropdown("purchase_order__po_no");
+  const initiatedByOptionsQuery = usePurchaseReturnFilterDropdown("created_by_user__username");
 
-    Object.keys(filters).forEach((key) => {
-      const val = filters[key];
-      if (!val) return;
-      if (key === "search") {
-        r = applySearch(r, val as string, (x) => [
-          x.returnNumber,
-          x.poNumber,
-          x.supplierName,
-          x.initiatedBy,
-        ]);
-      } else if (key === "status") {
-        const selected = val as string[];
-        if (selected.length) r = r.filter((x) => selected.includes(x.status));
-      } else if (key === "returnDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) r = r.filter((x) => x.returnDate >= range.fromDate);
-        if (range.toDate) r = r.filter((x) => x.returnDate <= range.toDate);
-      }
-    });
+  const statusOptions = useMemo(() => statusOptionsQuery.data ?? [], [statusOptionsQuery.data]);
+  const supplierOptions = useMemo(
+    () => supplierOptionsQuery.data ?? [],
+    [supplierOptionsQuery.data],
+  );
+  const poOptions = useMemo(() => poOptionsQuery.data ?? [], [poOptionsQuery.data]);
+  const initiatedByOptions = useMemo(
+    () => initiatedByOptionsQuery.data ?? [],
+    [initiatedByOptionsQuery.data],
+  );
 
-    if (sort.key && sort.direction !== "none") {
-      r = sortRows(r, sort.key, sort.direction as SortDir, {
-        returnNumber: (x) => x.returnNumber,
-        returnDate: (x) => x.returnDate,
-        poNumber: (x) => x.poNumber,
-        supplierName: (x) => x.supplierName,
-        totalItems: (x) => x.totalItems,
-        totalReturnQty: (x) => x.totalReturnQty,
-        grandTotal: (x) => x.summary?.grandTotal ?? 0,
-        status: (x) => x.status,
-        initiatedBy: (x) => x.initiatedBy,
-      });
-    }
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, apiFilters, pageSize]);
 
-    return r;
-  }, [records, filters, sort]);
+  useEffect(() => {
+    setPage(1);
+  }, [sort.key, sort.direction]);
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+  const records = listQuery.data?.items ?? [];
+  const totalRecords = listQuery.data?.total ?? 0;
 
-  const handleIssueForPacking = (row: PurchaseReturn) => {
-    const e = validateReturnItems(row.items);
-    if (Object.keys(e).length > 0) {
-      setToast({ msg: e._form ?? "Complete return lines before issuing for packing.", type: "error" });
-      return;
-    }
-    setPackingTarget(row);
-    setPackingConfirmOpen(true);
-  };
-
-  const confirmIssueForPacking = () => {
-    if (!packingTarget) return;
-    issuePurchaseReturnForPacking(packingTarget);
-    refresh();
-    setToast({ msg: `${packingTarget.returnNumber} issued for packing.`, type: "success" });
-    setPackingTarget(null);
-  };
-
-  const columns: ColumnConfig<PurchaseReturn>[] = [
-    {
-      key: "returnNumber",
-      header: "Return No.",
-      sortable: true,
-      render: (_val, row) => (
-        <button
-          type="button"
-          onClick={() => router.push(purchaseReturnRoutes.detail(row.id))}
-          className="text-left"
-        >
-          <p className="font-semibold text-brand-700 text-xs hover:underline font-mono">
-            <HighlightText text={row.returnNumber} query={(filters.search as string) || ""} />
-          </p>
-          <p className="text-[11px] text-muted-foreground">{formatListingDate(row.returnDate)}</p>
-        </button>
-      ),
-    },
-    {
-      key: "poNumber",
-      header: "PO No.",
-      sortable: true,
-      render: (_val, row) => (
-        <button
-          type="button"
-          onClick={() => router.push(`/procurement/purchase-orders/${row.poId}`)}
-          className="font-mono text-xs text-brand-700 hover:underline"
-        >
-          {row.poNumber}
-        </button>
-      ),
-    },
-    {
-      key: "supplierName",
-      header: "Supplier",
-      sortable: true,
-      render: (_val, row) => (
-        <span className="inline-flex items-center gap-2 text-xs font-medium">
-          <ProcAvatar name={row.supplierName} />
-          <HighlightText text={row.supplierName} query={(filters.search as string) || ""} />
-        </span>
-      ),
-    },
-    {
-      key: "totalItems",
-      header: "Items",
-      sortable: true,
-      render: (_val, row) => <span className="text-xs tabular-nums">{row.totalItems}</span>,
-    },
-    {
-      key: "totalReturnQty",
-      header: "Return Qty",
-      sortable: true,
-      render: (_val, row) => (
-        <span className="text-xs tabular-nums font-semibold">{row.totalReturnQty}</span>
-      ),
-    },
-    {
-      key: "grandTotal",
-      header: "Amount",
-      sortable: true,
-      render: (_val, row) => (
-        <span className="text-xs font-semibold tabular-nums">
-          {formatCurrency(row.summary?.grandTotal ?? 0)}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "Draft", value: "draft" },
-        { label: "Submitted", value: "submitted" },
-        { label: "Approved", value: "approved" },
-        { label: "Issued for Packing", value: "issued_for_packing" },
-        { label: "Returned", value: "returned" },
-      ],
-      render: (_val, row) => <StatusPill status={row.status} />,
-    },
-    {
-      key: "initiatedBy",
-      header: "Initiated By",
-      sortable: true,
-      render: (_val, row) => <span className="text-xs text-muted-foreground">{row.initiatedBy}</span>,
-    },
-    {
-      key: "actions",
-      header: "",
-      align: "right",
-      sticky: true,
-      render: (_val, row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
-              <MoreVertical className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 z-[200]">
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-              Actions
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <button
-              type="button"
-              onClick={() => router.push(purchaseReturnRoutes.detail(row.id))}
-              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
-            >
-              <Eye className="w-3.5 h-3.5" /> View
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(purchaseReturnRoutes.edit(row.id))}
-              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
-            >
-              <Edit2 className="w-3.5 h-3.5" /> Edit
-            </button>
-            {canIssuePurchaseReturnForPacking(row) && (
+  const columns: ColumnConfig<PurchaseReturn>[] = useMemo(
+    () => [
+      {
+        key: "returnNumber",
+        header: "Return No.",
+        sortable: true,
+        render: (_val, row) => (
+          <button
+            type="button"
+            onClick={() => router.push(purchaseReturnRoutes.detail(row.id))}
+            className="text-left"
+          >
+            <p className="font-semibold text-brand-700 text-xs hover:underline font-mono">
+              <HighlightText text={row.returnNumber} query={(filters.search as string) || ""} />
+            </p>
+            <p className="text-[11px] text-muted-foreground">{formatListingDate(row.returnDate)}</p>
+          </button>
+        ),
+      },
+      {
+        key: "poNumber",
+        header: "PO No.",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: poOptions,
+        render: (_val, row) => (
+          <button
+            type="button"
+            onClick={() => router.push(`/procurement/purchase-orders/${String(row.poId)}`)}
+            className="font-mono text-xs text-brand-700 hover:underline"
+          >
+            {row.poNumber}
+          </button>
+        ),
+      },
+      {
+        key: "supplierName",
+        header: "Supplier",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: supplierOptions,
+        render: (_val, row) => (
+          <span className="inline-flex items-center gap-2 text-xs font-medium">
+            <ProcAvatar name={row.supplierName} />
+            <HighlightText text={row.supplierName} query={(filters.search as string) || ""} />
+          </span>
+        ),
+      },
+      {
+        key: "totalItems",
+        header: "Items",
+        sortable: true,
+        render: (_val, row) => <span className="text-xs tabular-nums">{row.totalItems}</span>,
+      },
+      {
+        key: "totalReturnQty",
+        header: "Return Qty",
+        sortable: true,
+        render: (_val, row) => (
+          <span className="text-xs tabular-nums font-semibold">{row.totalReturnQty}</span>
+        ),
+      },
+      {
+        key: "grandTotal",
+        header: "Amount",
+        sortable: true,
+        render: (_val, row) => (
+          <span className="text-xs font-semibold tabular-nums">
+            {formatCurrency(row.summary?.grandTotal ?? 0)}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: statusOptions,
+        render: (_val, row) => <StatusPill status={row.status} />,
+      },
+      {
+        key: "initiatedBy",
+        header: "Initiated By",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: initiatedByOptions,
+        render: (_val, row) => <span className="text-xs text-muted-foreground">{row.initiatedBy}</span>,
+      },
+      {
+        key: "actions",
+        header: "",
+        align: "right",
+        sticky: true,
+        render: (_val, row) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
+                <MoreVertical className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 z-[200]">
+              <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                Actions
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
               <button
                 type="button"
-                onClick={() => handleIssueForPacking(row)}
+                onClick={() => router.push(purchaseReturnRoutes.detail(row.id))}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
               >
-                <Package className="w-3.5 h-3.5" /> Issue for Packing
+                <Eye className="w-3.5 h-3.5" /> View
               </button>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
-    },
-  ];
+              <button
+                type="button"
+                onClick={() => router.push(purchaseReturnRoutes.edit(row.id))}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+      },
+    ],
+    [
+      router,
+      filters.search,
+      statusOptions,
+      supplierOptions,
+      poOptions,
+      initiatedByOptions,
+    ],
+  );
 
   return (
     <>
       <MasterListing<PurchaseReturn>
         columns={columns}
-        data={paginated}
-        totalRecords={filtered.length}
+        data={records}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
@@ -277,19 +254,10 @@ export function PurchaseReturnListing() {
         searchPlaceholder="Search return no., PO no., supplier…"
         currentFilters={filters}
         currentSort={sort}
+        loading={listQuery.isFetching}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-
-      <IssuePackingConfirmModal
-        open={packingConfirmOpen}
-        onOpenChange={(open) => {
-          setPackingConfirmOpen(open);
-          if (!open) setPackingTarget(null);
-        }}
-        record={packingTarget}
-        onConfirm={confirmIssueForPacking}
-      />
     </>
   );
 }

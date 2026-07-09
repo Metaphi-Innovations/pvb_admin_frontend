@@ -37,6 +37,69 @@ export interface HsnDropdownItem {
   gstId: string;
 }
 
+export interface HsnFilterOption {
+  label: string;
+  value: string;
+}
+
+export type HsnFilterField =
+  | "id"
+  | "hsnDescription"
+  | "gstPercentage"
+  | "is_active"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
+function mapFilterOptions(data: unknown[], fieldName: HsnFilterField): HsnFilterOption[] {
+  const options: HsnFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+
+    if (fieldName === "gstPercentage") {
+      const nestedKey = "gst__gstPercentage";
+      const raw = record[nestedKey] ?? record.gstPercentage;
+      const num = Number(raw);
+      if (!Number.isFinite(num)) continue;
+      const value = String(num);
+      if (seen.has(value)) continue;
+      seen.add(value);
+      options.push({ label: `${num}%`, value });
+      continue;
+    }
+
+    const raw = record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    if (fieldName === "id") {
+      const srNo = Number(record.sr_no);
+      const label =
+        Number.isFinite(srNo) && srNo > 0
+          ? `HSN-${String(srNo).padStart(4, "0")}`
+          : value;
+      options.push({ label, value });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export interface HsnCreatePayload {
   hsnDescription: string;
   gstId: string;
@@ -195,6 +258,24 @@ export const HsnListService = {
     if (!body.success) {
       throw new Error(asString(body.message) || "Failed to update HSN status.");
     }
+  },
+
+  async getFilterDropdown(
+    fieldName: HsnFilterField,
+    signal?: AbortSignal,
+  ): Promise<HsnFilterOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.HSN.FILTER_DROPDOWN, {
+      params: { field_name: fieldName },
+      signal,
+    });
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async export(params: HsnExportParams): Promise<void> {

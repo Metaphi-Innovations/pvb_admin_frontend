@@ -661,7 +661,11 @@ export default function SalesOrderForm({
 							<StatusSelect
 								value={form.status}
 								onChange={(s) => set("status", s)}
-								allowedStatuses={EDITABLE_ORDER_STATUSES}
+								allowedStatuses={
+									form.status === "draft"
+										? ["draft", "pending_approval", "approved", "rejected"]
+										: EDITABLE_ORDER_STATUSES
+								}
 							/>
 						</div>
 					) : null}

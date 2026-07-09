@@ -671,7 +671,8 @@ export function POLineItemsSection({
                     </td>
                     <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums">{displaySkuQty}</td>
                     <td className="px-3 py-2 text-right">
-                      {isEditing && draft ? (
+                    <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
+                      {/* {isEditing && draft ? (
                         <IndianRupeeInput
                           value={Number(draft.unitPrice) || 0}
                           onChange={(n) =>
@@ -683,7 +684,7 @@ export function POLineItemsSection({
                         />
                       ) : (
                         <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
-                      )}
+                      )} */}
                     </td>
                     <td className="px-3 py-2">
                       {isEditing && draft ? (
@@ -736,7 +737,8 @@ export function POLineItemsSection({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {isEditing && draft ? (
+                    <span className="text-xs tabular-nums">{displayGstPct}%</span>
+                      {/* {isEditing && draft ? (
                         <AutocompleteSelect
                           options={gstOptions}
                           value={draft.gstMasterId}
@@ -750,7 +752,7 @@ export function POLineItemsSection({
                         />
                       ) : (
                         <span className="text-xs tabular-nums">{displayGstPct}%</span>
-                      )}
+                      )} */}
                     </td>
                     {taxSupplyType === "intra" ? (
                       <>

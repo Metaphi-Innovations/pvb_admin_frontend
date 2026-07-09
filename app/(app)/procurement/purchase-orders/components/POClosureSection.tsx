@@ -46,7 +46,7 @@ export function POClosureInformation({ po }: { po: PurchaseOrder }) {
   const fields = [
     { label: "Close Type", value: "Short Close" },
     { label: "Short Closed Quantity", value: String(sc.quantity) },
-    { label: "Short Close Reason", value: shortCloseReasonLabel(sc.reason) },
+    { label: "Short Close Reason", value: sc.reason },
     { label: "Short Close Remarks", value: sc.remarks },
     { label: "Short Closed By", value: sc.shortClosedBy },
     { label: "Short Closed Date", value: `${sc.shortClosedDate} ${sc.shortClosedTime}` },

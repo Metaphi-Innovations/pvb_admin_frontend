@@ -5,89 +5,88 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuItem
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Plus, Eye, Edit2, Trash2,
-  Shield, CheckCircle2, XCircle, X, AlertTriangle,
-  Clock, MoreHorizontal
+  Eye,
+  Edit2,
+  Shield,
+  CheckCircle2,
+  XCircle,
+  X,
+  AlertTriangle,
+  MoreHorizontal,
 } from "lucide-react";
-import {
-  type Role, type RolePermissionTemplate, DEPARTMENTS, MOCK_USER_COUNTS,
-  loadRoles, saveRoles, todayStr,
-  loadPermissionTemplates, savePermissionTemplates,
-  type PermissionTemplate, loadNewPermissionTemplates, saveNewPermissionTemplates,
-} from "./roles-data";
-import RoleDetailSheet from "./components/RoleDetailSheet";
-import { type UserPermissions } from "../employee/employee-data";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// Listing Container and Master Listing Imports
+import RoleDetailSheet from "./components/RoleDetailSheet";
+import { toRoleRecord, toLegacyRole, type RoleRecord } from "./role-api-data";
+import { sortStateToOrdering } from "@/services/role-list.service";
+import {
+  type TemplateListRecord,
+  templateSortStateToOrdering,
+} from "@/services/template-list.service";
+import {
+  useRoles,
+  useRole,
+  useToggleRoleStatus,
+  useExportRoles,
+  useRoleFilterDropdown,
+  useTemplates,
+  useToggleTemplateStatus,
+  useExportTemplates,
+} from "@/hooks/user-management";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+  buildStatusFilter,
+} from "@/lib/masters/list-api-filters";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-type ConfirmKind = "toggle-status" | "delete";
-
-interface ConfirmTarget {
-  kind: ConfirmKind;
-  role: Role;
-}
+type ConfirmTarget = RoleRecord | null;
 
 interface ToastState {
   msg: string;
   type: "success" | "error";
 }
 
-interface ConfirmConfig {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  destructive: boolean;
-  onConfirm: () => void;
-}
-
-// ── Pure helpers ─────────────────────────────────────────────────────────────
-function getConfirmConfig(
-  target: ConfirmTarget | null,
-  onDelete: () => void,
-  onToggle: () => void,
-): ConfirmConfig | null {
-  if (target === null) {
-    return null;
+function extractAuditFilter(
+  value: unknown,
+): { user: string; fromDate: string; toDate: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { user: "", fromDate: "", toDate: "" };
   }
-  if (target.kind === "delete") {
-    return {
-      title: "Delete Role?",
-      description: target.role.roleName + " will be archived.",
-      confirmLabel: "Archive",
-      destructive: true,
-      onConfirm: onDelete,
-    };
-  }
-  const isActive = target.role.status === "active";
+  const record = value as Record<string, unknown>;
   return {
-    title: isActive ? "Deactivate Role?" : "Activate Role?",
-    description: isActive
-      ? target.role.roleName + " will be marked inactive."
-      : target.role.roleName + " will be marked active again.",
-    confirmLabel: isActive ? "Deactivate" : "Activate",
-    destructive: isActive,
-    onConfirm: onToggle,
+    user: typeof record.user === "string" ? record.user.trim() : "",
+    fromDate: typeof record.fromDate === "string" ? record.fromDate : "",
+    toDate: typeof record.toDate === "string" ? record.toDate : "",
   };
 }
 
-// ── GeoBadge ─────────────────────────────────────────────────────────────────
 function GeoBadge({ level }: { level: string }) {
-  if (level === "None") {
-    return <span className="text-[11px] text-muted-foreground">—</span>;
-  }
+  if (level === "None") return <span className="text-[11px] text-muted-foreground">—</span>;
   return (
     <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 font-medium">
       {level}
@@ -95,18 +94,21 @@ function GeoBadge({ level }: { level: string }) {
   );
 }
 
-// ── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   const bg = toast.type === "success" ? "bg-emerald-600" : "bg-red-600";
   return (
-    <div className={cn(
-      "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-      "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
-      bg,
-    )}>
-      {toast.type === "success"
-        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
-        : <XCircle className="flex-shrink-0 w-4 h-4" />}
+    <div
+      className={cn(
+        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+        bg,
+      )}
+    >
+      {toast.type === "success" ? (
+        <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      ) : (
+        <XCircle className="flex-shrink-0 w-4 h-4" />
+      )}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -115,68 +117,20 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
-// ── ConfirmDialog ────────────────────────────────────────────────────────────
-interface ConfirmDialogProps {
-  open: boolean;
-  onClose: () => void;
-  config: ConfirmConfig;
-}
-
-function ConfirmDialog({ open, onClose, config }: ConfirmDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              config.destructive
-                ? "bg-red-50 border border-red-200"
-                : "bg-amber-50 border border-amber-200",
-            )}>
-              <AlertTriangle className={cn("w-4 h-4", config.destructive ? "text-red-500" : "text-amber-500")} />
-            </div>
-            {config.title}
-          </DialogTitle>
-          <DialogDescription className="pt-1">{config.description}</DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            className={cn(
-              "h-8 text-xs gap-1.5",
-              config.destructive
-                ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-brand-600 hover:bg-brand-700 text-white",
-            )}
-            onClick={() => { config.onConfirm(); onClose(); }}
-          >
-            {config.confirmLabel}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── KPI Card ─────────────────────────────────────────────────────────────────
-interface KpiCardProps {
+function KpiCard({
+  label,
+  value,
+  icon: Icon,
+  bgClass = "bg-brand-600",
+}: {
   label: string;
   value: number;
   icon: React.ElementType;
   bgClass?: string;
-}
-
-function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCardProps) {
+}) {
   return (
     <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-      <div className={cn(
-        "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-        bgClass,
-      )}>
+      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", bgClass)}>
         <Icon className="w-4 h-4 text-white" />
       </div>
       <div>
@@ -187,79 +141,203 @@ function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCard
   );
 }
 
-// ── RolesPage (main) ─────────────────────────────────────────────────────────
+const COUNT_PARAMS = { page: 1, pageSize: 1, search: "", ordering: "" };
+
 export default function RolesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const defaultTab = searchParams.get("tab") || "roles";
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "roles");
 
-  const [roles,         setRoles]         = useState<Role[]>([]);
-  const [permTemplates, setPermTemplates] = useState<Record<string | number, RolePermissionTemplate>>({});
-  const [newTemplates,  setNewTemplates]  = useState<PermissionTemplate[]>([]);
-  
-  // Listing state
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "roleName", direction: "asc" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [roleFilters, setRoleFilters] = useState<FilterState>({ search: "" });
+  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(roleFilters);
+  const [roleSort, setRoleSort] = useState<SortState>({ key: "roleName", direction: "asc" });
+  const [rolePage, setRolePage] = useState(1);
+  const [rolePageSize, setRolePageSize] = useState(10);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const [viewRole, setViewRole] = useState<RoleRecord | null>(null);
+  const [confirmRoleStatus, setConfirmRoleStatus] = useState<ConfirmTarget>(null);
 
-  // New Templates listing state
-  const [templateFilters, setTemplateFilters] = useState<FilterState>({});
-  const [templateSort, setTemplateSort] = useState<SortState>({ key: "templateName", direction: "asc" });
+  const [templateFilters, setTemplateFilters] = useState<FilterState>({ search: "" });
+  const {
+    debouncedFilters: debouncedTemplateFilters,
+    debouncedSearch: debouncedTemplateSearch,
+    isDebouncing: isDebouncingTemplates,
+  } = useDebouncedFilters(templateFilters);
+  const [templateSort, setTemplateSort] = useState<SortState>({
+    key: "templateName",
+    direction: "asc",
+  });
   const [templatePage, setTemplatePage] = useState(1);
   const [templatePageSize, setTemplatePageSize] = useState(10);
 
-  const [viewRole,      setViewRole]      = useState<Role | null>(null);
-  const [toast,         setToast]         = useState<ToastState | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
-  useEffect(() => {
-    setRoles(loadRoles());
-    setPermTemplates(loadPermissionTemplates());
-    setNewTemplates(loadNewPermissionTemplates());
-  }, []);
+  const roleOrdering = useMemo(
+    () => sortStateToOrdering(roleSort.key, roleSort.direction),
+    [roleSort.key, roleSort.direction],
+  );
+  const roleApiFilters = useMemo(
+    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.role),
+    [debouncedFilters],
+  );
+  const roleStatus = useMemo(() => resolveListStatus(debouncedFilters), [debouncedFilters]);
 
-  const toggleTemplateStatus = (tpl: PermissionTemplate) => {
-    const nextStatus: "Active" | "Inactive" = tpl.status === "Active" ? "Inactive" : "Active";
-    const next = newTemplates.map(t =>
-      t.id === tpl.id ? { ...t, status: nextStatus, updatedAt: todayStr() } : t
-    );
-    setNewTemplates(next);
-    saveNewPermissionTemplates(next);
-    showToast("Template status updated to " + nextStatus);
-  };
+  const roleParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page: rolePage,
+      pageSize: rolePageSize,
+      search: debouncedSearch,
+      status: roleStatus,
+      apiFilters: roleApiFilters,
+      ordering: roleOrdering,
+    }),
+    [rolePage, rolePageSize, debouncedSearch, roleStatus, roleApiFilters, roleOrdering],
+  );
 
-  const handleTemplateDelete = (tpl: PermissionTemplate) => {
-    if (confirm(`Are you sure you want to delete template "${tpl.templateName}"?`)) {
-      const next = newTemplates.filter(t => t.id !== tpl.id);
-      setNewTemplates(next);
-      saveNewPermissionTemplates(next);
-      showToast("Template deleted successfully");
+  const templateOrdering = useMemo(
+    () => templateSortStateToOrdering(templateSort.key, templateSort.direction),
+    [templateSort.key, templateSort.direction],
+  );
+  const templateStatus = useMemo(
+    () => resolveListStatus(debouncedTemplateFilters),
+    [debouncedTemplateFilters],
+  );
+  const templateApiFilters = useMemo(() => {
+    const filters: Record<string, unknown> = {};
+    const nameRaw = debouncedTemplateFilters.templateName;
+    const statusRaw = debouncedTemplateFilters.status;
+    const createdAudit = extractAuditFilter(debouncedTemplateFilters.createdAt);
+    const updatedAudit = extractAuditFilter(debouncedTemplateFilters.updatedAt);
+    if (typeof nameRaw === "string" && nameRaw.trim()) filters.name = nameRaw.trim();
+    if (Array.isArray(nameRaw) && nameRaw.length === 1 && String(nameRaw[0]).trim()) {
+      filters.name = String(nameRaw[0]).trim();
     }
-  };
-
-  const filteredTemplates = useMemo(() => {
-    let t = [...newTemplates];
-    const searchVal = templateFilters.search as string;
-    if (searchVal?.trim()) {
-      const q = searchVal.toLowerCase();
-      t = t.filter(x => x.templateName.toLowerCase().includes(q));
+    if (typeof statusRaw === "string") {
+      if (statusRaw.toLowerCase() === "active") filters.is_active = true;
+      if (statusRaw.toLowerCase() === "inactive") filters.is_active = false;
     }
-    if (templateSort.key && templateSort.direction !== "none") {
-      t.sort((a, b) => {
-        const av = String(a[templateSort.key as keyof PermissionTemplate] ?? "").toLowerCase();
-        const bv = String(b[templateSort.key as keyof PermissionTemplate] ?? "").toLowerCase();
-        return templateSort.direction === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-      });
+    if (createdAudit.user) {
+      filters.created_by_user = { username: createdAudit.user };
     }
-    return t;
-  }, [newTemplates, templateFilters, templateSort]);
+    if (createdAudit.fromDate || createdAudit.toDate) {
+      filters.range = {
+        ...(filters.range as Record<string, unknown> | undefined),
+        created_at: {
+          from: createdAudit.fromDate || undefined,
+          to: createdAudit.toDate || undefined,
+        },
+      };
+    }
+    if (updatedAudit.user) {
+      filters.updated_by_user = { username: updatedAudit.user };
+    }
+    if (updatedAudit.fromDate || updatedAudit.toDate) {
+      filters.range = {
+        ...(filters.range as Record<string, unknown> | undefined),
+        updated_at: {
+          from: updatedAudit.fromDate || undefined,
+          to: updatedAudit.toDate || undefined,
+        },
+      };
+    }
+    return { ...filters, ...buildStatusFilter(templateStatus, "is_active") };
+  }, [debouncedTemplateFilters, templateStatus]);
 
-  const paginatedTemplates = useMemo(() => {
-    const start = (templatePage - 1) * templatePageSize;
-    return filteredTemplates.slice(start, start + templatePageSize);
-  }, [filteredTemplates, templatePage, templatePageSize]);
+  const templateParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page: templatePage,
+      pageSize: templatePageSize,
+      search: debouncedTemplateSearch,
+      status: templateStatus,
+      apiFilters: templateApiFilters,
+      ordering: templateOrdering,
+    }),
+    [
+      templatePage,
+      templatePageSize,
+      debouncedTemplateSearch,
+      templateStatus,
+      templateApiFilters,
+      templateOrdering,
+    ],
+  );
+
+  const rolesQuery = useRoles(roleParams);
+  const roleDetailQuery = useRole(viewId);
+  const toggleRoleStatus = useToggleRoleStatus();
+  const exportRoles = useExportRoles();
+  const allCountQuery = useRoles({ ...COUNT_PARAMS, status: "all", apiFilters: {} });
+  const activeCountQuery = useRoles({
+    ...COUNT_PARAMS,
+    status: "active",
+    apiFilters: buildStatusFilter("active", "is_active"),
+  });
+  const inactiveCountQuery = useRoles({
+    ...COUNT_PARAMS,
+    status: "inactive",
+    apiFilters: buildStatusFilter("inactive", "is_active"),
+  });
+  const roleNameOptionsQuery = useRoleFilterDropdown("role_name");
+  const departmentOptionsQuery = useRoleFilterDropdown("department__department_name");
+  const geoLevelOptionsQuery = useRoleFilterDropdown("geography_level");
+  const createdByOptionsQuery = useRoleFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useRoleFilterDropdown("updated_by_user__username");
+
+  const templatesQuery = useTemplates(templateParams);
+  const toggleTemplateStatus = useToggleTemplateStatus();
+  const exportTemplates = useExportTemplates();
+
+  const roleRecords = useMemo(
+    () => (rolesQuery.data?.items ?? []).map(toRoleRecord),
+    [rolesQuery.data],
+  );
+  const templateRecords = useMemo(() => templatesQuery.data?.items ?? [], [templatesQuery.data]);
+  // Access type is derived from JSON permissions — filter client-side until backend supports it.
+  const visibleTemplateRecords = useMemo(() => {
+    const accessFilterRaw = debouncedTemplateFilters.accessType;
+    const accessFilter = Array.isArray(accessFilterRaw)
+      ? String(accessFilterRaw[0] ?? "").trim().toLowerCase()
+      : String(accessFilterRaw ?? "").trim().toLowerCase();
+    if (!accessFilter) return templateRecords;
+    return templateRecords.filter((row) => row.accessType.toLowerCase() === accessFilter);
+  }, [templateRecords, debouncedTemplateFilters.accessType]);
+  const templateNameOptions = useMemo(
+    () =>
+      Array.from(new Set(templateRecords.map((row) => row.templateName)))
+        .sort((a, b) => a.localeCompare(b))
+        .map((v) => ({ label: v, value: v })),
+    [templateRecords],
+  );
+  const templateAccessTypeOptions = useMemo(
+    () => [
+      { label: "Web Portal", value: "web" },
+      { label: "Mobile App", value: "mobile" },
+    ],
+    [],
+  );
+  const templateCreatedByOptions = useMemo(
+    () =>
+      Array.from(new Set(templateRecords.map((row) => row.createdBy).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b))
+        .map((v) => ({ label: v, value: v })),
+    [templateRecords],
+  );
+  const templateUpdatedByOptions = useMemo(
+    () =>
+      Array.from(new Set(templateRecords.map((row) => row.updatedBy).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b))
+        .map((v) => ({ label: v, value: v })),
+    [templateRecords],
+  );
+
+  const summary = useMemo(
+    () => ({
+      total: allCountQuery.data?.total ?? 0,
+      active: activeCountQuery.data?.total ?? 0,
+      inactive: inactiveCountQuery.data?.total ?? 0,
+    }),
+    [allCountQuery.data?.total, activeCountQuery.data?.total, inactiveCountQuery.data?.total],
+  );
 
   const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -271,200 +349,61 @@ export default function RolesPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const filtered = useMemo(() => {
-    let r = roles.filter(role => role.status !== "archived");
-    
-    const searchVal = filters.search as string;
-    if (searchVal?.trim()) {
-      const q = searchVal.toLowerCase();
-      r = r.filter(role =>
-        role.roleName.toLowerCase().includes(q) ||
-        role.department.toLowerCase().includes(q),
-      );
-    }
-    
-    const deptIds = (filters.department as string[])?.map(Number) || [];
-    if (deptIds.length > 0) {
-      r = r.filter(role => deptIds.includes(role.departmentId ?? -1));
-    }
-    
-    const statusVal = filters.status as string[];
-    if (statusVal && statusVal.length > 0) {
-      r = r.filter(role => statusVal.includes(role.status));
-    }
+  useEffect(() => {
+    setRolePage(1);
+  }, [debouncedSearch, roleApiFilters, rolePageSize, roleSort.key, roleSort.direction]);
 
-    if (sort.key && sort.direction !== "none") {
-      r = [...r].sort((a, b) => {
-        const av = String(a[sort.key as keyof Role] ?? "").toLowerCase();
-        const bv = String(b[sort.key as keyof Role] ?? "").toLowerCase();
-        return sort.direction === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-      });
-    }
-    return r;
-  }, [roles, filters, sort]);
+  useEffect(() => {
+    setTemplatePage(1);
+  }, [
+    debouncedTemplateSearch,
+    templateApiFilters,
+    templatePageSize,
+    templateSort.key,
+    templateSort.direction,
+  ]);
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  const visible  = roles.filter(r => r.status !== "archived");
-  const total    = visible.length;
-  const active   = visible.filter(r => r.status === "active").length;
-  const inactive = visible.filter(r => r.status === "inactive").length;
-
-  const openAdd  = () => router.push("/user-management/roles/add");
-  const openEdit = (role: Role) => router.push("/user-management/roles/" + role.id + "/edit");
-
-  const toggleStatus = (role: Role) => {
-    const nextStatus = role.status === "active" ? "inactive" : "active";
-    const count = MOCK_USER_COUNTS[role.id] ?? 0;
-    if (nextStatus === "inactive" && count > 0) {
-      showToast("Cannot deactivate: " + count + " user(s) assigned to this role", "error");
+  useEffect(() => {
+    if (!viewId) return;
+    if (roleDetailQuery.isError) {
+      showToast(getErrorMessage(roleDetailQuery.error, "Failed to load role details."), "error");
+      setViewId(null);
       return;
     }
-    const next = roles.map(r =>
-      r.id === role.id
-        ? { ...r, status: nextStatus, updatedBy: "Admin", updatedDate: todayStr() }
-        : r,
-    ) as Role[];
-    setRoles(next);
-    saveRoles(next);
-    showToast("Role status updated to " + (nextStatus === "active" ? "Active" : "Inactive"));
+    if (roleDetailQuery.data) setViewRole(toRoleRecord(roleDetailQuery.data));
+  }, [viewId, roleDetailQuery.data, roleDetailQuery.isError, roleDetailQuery.error, showToast]);
+
+  const openRoleView = (row: RoleRecord) => {
+    if (!row.roleUuid) return;
+    setViewRole(row);
+    setViewId(row.roleUuid);
   };
 
-  const handleQuickToggle = (role: Role) => setConfirmTarget({ kind: "toggle-status", role });
-  const handleDelete      = (role: Role) => {
-    const count = MOCK_USER_COUNTS[role.id] ?? 0;
-    if (count > 0) { showToast("Cannot delete: " + count + " user(s) assigned to this role", "error"); return; }
-    setConfirmTarget({ kind: "delete", role });
+  const confirmRoleStatusChange = () => {
+    const id = confirmRoleStatus?.roleUuid;
+    if (!confirmRoleStatus || !id) return;
+    const nextActive = confirmRoleStatus.status !== "active";
+    toggleRoleStatus.mutate(id, {
+      onSuccess: () =>
+        showToast(`Role status updated to ${nextActive ? "Active" : "Inactive"}`),
+      onError: (error) =>
+        showToast(getErrorMessage(error, "Failed to update role status."), "error"),
+      onSettled: () => setConfirmRoleStatus(null),
+    });
   };
 
-  const confirmDelete = () => {
-    if (!confirmTarget) return;
-    const next = roles.map(r =>
-      r.id === confirmTarget.role.id
-        ? { ...r, status: "archived", updatedBy: "Admin", updatedDate: todayStr() }
-        : r,
-    ) as Role[];
-    setRoles(next); saveRoles(next); showToast("Role archived");
-  };
-
-  const confirmToggleStatus = () => {
-    if (!confirmTarget) return;
-    const role = confirmTarget.role;
-    const newStatus = role.status === "active" ? "inactive" : "active";
-    const count = MOCK_USER_COUNTS[role.id] ?? 0;
-    if (newStatus === "inactive" && count > 0) {
-      showToast("Cannot deactivate: " + count + " user(s) assigned to this role", "error"); return;
-    }
-    const next = roles.map(r =>
-      r.id === role.id
-        ? { ...r, status: newStatus, updatedBy: "Admin", updatedDate: todayStr() }
-        : r,
-    ) as Role[];
-    setRoles(next); saveRoles(next);
-    showToast("Role " + (newStatus === "active" ? "activated" : "deactivated"));
-  };
-  const handleOpenPermissionTemplate = (role: Role) => {
-    router.push(`/user-management/roles/${role.id}/permissions`);
-  };
-
-  const templateColumns: ColumnConfig<PermissionTemplate>[] = [
-    {
-      key: "templateName",
-      header: "Template Name",
-      sortable: true,
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">
-          {row.templateName}
-        </span>
-      ),
-    },
-    {
-      key: "accessType",
-      header: "Access Type",
-      sortable: true,
-      render: (val, row) => (
-        <span className={cn(
-          "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border capitalize",
-          row.accessType === "web"
-            ? "bg-brand-50 border-brand-100 text-brand-700"
-            : "bg-blue-50 border-blue-100 text-blue-700"
-        )}>
-          {row.accessType === "web" ? "Web Portal" : "Mobile App"}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      render: (val, row) => (
-        <ListingStatusToggle
-          active={isActiveStatus(row.status)}
-          onChange={() => toggleTemplateStatus(row)}
-        />
-      ),
-    },
-    {
-      key: "createdAt",
-      header: "Created",
-      render: (val, row) => (
-        <ListingAuditCell name="Admin" date={row.createdAt} variant="created" />
-      ),
-    },
-    {
-      key: "updatedAt",
-      header: "Updated",
-      render: (val, row) => (
-        <ListingAuditCell name="Admin" date={row.updatedAt} variant="updated" />
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      align: "right",
-      sticky: true,
-      render: (val, row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
-              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44 z-[200]">
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-              Actions
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push(`/user-management/roles/templates/${row.id}/view`)} className="cursor-pointer">
-              <Eye className="w-3.5 h-3.5 mr-2" /> View
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/user-management/roles/templates/${row.id}/edit`)} className="cursor-pointer">
-              <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleTemplateDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
-              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
-    },
-  ];
-
-  const cfg = getConfirmConfig(confirmTarget, confirmDelete, confirmToggleStatus);
-
-  const columns: ColumnConfig<Role>[] = [
+  const roleColumns: ColumnConfig<RoleRecord>[] = [
     {
       key: "roleName",
       header: "Role Name",
       sortable: true,
-      render: (val, row) => (
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: roleNameOptionsQuery.data ?? [],
+      render: (_val, row) => (
         <button
           className="text-xs font-semibold text-left transition-colors text-foreground hover:text-brand-600"
-          onClick={() => router.push(`/user-management/roles/${row.id}`)}
+          onClick={() => openRoleView(row)}
         >
           {row.roleName}
         </button>
@@ -476,16 +415,17 @@ export default function RolesPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: DEPARTMENTS.map(d => ({ label: d.name, value: String(d.id) })),
-      render: (val, row) => (
-        <span className="text-xs text-foreground">{row.department}</span>
-      ),
+      filterOptions: departmentOptionsQuery.data ?? [],
+      render: (_val, row) => <span className="text-xs text-foreground">{row.department}</span>,
     },
     {
       key: "geoLevel",
       header: "Geo Level",
       sortable: true,
-      render: (val, row) => <GeoBadge level={row.geoLevel} />,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: geoLevelOptionsQuery.data ?? [],
+      render: (_val, row) => <GeoBadge level={row.geoLevel} />,
     },
     {
       key: "status",
@@ -497,24 +437,32 @@ export default function RolesPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => (
+      render: (_val, row) => (
         <ListingStatusToggle
           active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
+          onChange={() => setConfirmRoleStatus(row)}
         />
       ),
     },
     {
       key: "createdBy",
       header: "Created",
-      render: (val, row) => (
+      sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: createdByOptionsQuery.data ?? [],
+      render: (_val, row) => (
         <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
       ),
     },
     {
-      key: "updatedDate",
+      key: "updatedBy",
       header: "Updated",
-      render: (val, row) => (
+      sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: updatedByOptionsQuery.data ?? [],
+      render: (_val, row) => (
         <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
       ),
     },
@@ -523,7 +471,7 @@ export default function RolesPage() {
       header: "",
       align: "right",
       sticky: true,
-      render: (val, row) => (
+      render: (_val, row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
@@ -535,19 +483,134 @@ export default function RolesPage() {
               Actions
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push(`/user-management/roles/${row.id}`)} className="cursor-pointer">
+            <DropdownMenuItem onClick={() => openRoleView(row)} className="cursor-pointer">
               <Eye className="w-3.5 h-3.5 mr-2" /> View
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">
+            <DropdownMenuItem
+              onClick={() => router.push(`/user-management/roles/${row.roleUuid}/edit`)}
+              className="cursor-pointer"
+            >
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
+  const templateColumns: ColumnConfig<TemplateListRecord>[] = [
+    {
+      key: "templateName",
+      header: "Template Name",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: templateNameOptions,
+      render: (_val, row) => (
+        <button
+          className="text-xs font-semibold text-left transition-colors text-foreground hover:text-brand-600"
+          onClick={() => router.push(`/user-management/roles/templates/${row.templateUuid}/view`)}
+        >
+          {row.templateName}
+        </button>
+      ),
+    },
+    {
+      key: "accessType",
+      header: "Access Type",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: templateAccessTypeOptions,
+      render: (_val, row) => (
+        <span
+          className={cn(
+            "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border capitalize",
+            row.accessType === "web"
+              ? "bg-brand-50 border-brand-100 text-brand-700"
+              : "bg-blue-50 border-blue-100 text-blue-700",
+          )}
+        >
+          {row.accessType === "web" ? "Web Portal" : "Mobile App"}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      render: (_val, row) => (
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() =>
+            toggleTemplateStatus.mutate(row.templateUuid, {
+              onSuccess: () =>
+                showToast(
+                  `Template status updated to ${row.status === "active" ? "Inactive" : "Active"}`,
+                ),
+              onError: (error) =>
+                showToast(getErrorMessage(error, "Failed to update template status."), "error"),
+            })
+          }
+        />
+      ),
+    },
+    {
+      key: "createdAt",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: templateCreatedByOptions,
+      render: (_val, row) => (
+        <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: templateUpdatedByOptions,
+      render: (_val, row) => (
+        <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      sticky: true,
+      render: (_val, row) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
+              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 z-[200]">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+              Actions
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {/* <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
-              {row.status === "active" ? "Deactivate" : "Activate"}
+            <DropdownMenuItem
+              onClick={() => router.push(`/user-management/roles/templates/${row.templateUuid}/view`)}
+              className="cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5 mr-2" /> View
             </DropdownMenuItem>
-            <DropdownMenuSeparator /> */}
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
-              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+            <DropdownMenuItem
+              onClick={() => router.push(`/user-management/roles/templates/${row.templateUuid}/edit`)}
+              className="cursor-pointer"
+            >
+              <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -561,54 +624,63 @@ export default function RolesPage() {
       titleIcon={Shield}
       metrics={
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Total Roles" value={total}    icon={Shield}       bgClass="bg-brand-600" />
-          <KpiCard label="Active"      value={active}   icon={CheckCircle2} bgClass="bg-emerald-600" />
-          <KpiCard label="Inactive"    value={inactive} icon={XCircle}      bgClass="bg-slate-400" />
+          <KpiCard label="Total Roles" value={summary.total} icon={Shield} bgClass="bg-brand-600" />
+          <KpiCard label="Active" value={summary.active} icon={CheckCircle2} bgClass="bg-emerald-600" />
+          <KpiCard label="Inactive" value={summary.inactive} icon={XCircle} bgClass="bg-slate-400" />
         </div>
       }
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="border-b border-border w-full justify-start rounded-none h-auto p-0 bg-transparent space-x-6">
-          <TabsTrigger
-            value="roles"
-            className="rounded-none border-b-2 border-transparent px-1 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none hover:text-brand-650 transition-all"
-          >
-            Roles
-          </TabsTrigger>
-          <TabsTrigger
-            value="templates"
-            className="rounded-none border-b-2 border-transparent px-1 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none hover:text-brand-650 transition-all"
-          >
-            Template
-          </TabsTrigger>
+          <TabsTrigger value="roles" className="rounded-none border-b-2 border-transparent px-1 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none hover:text-brand-650 transition-all">Roles</TabsTrigger>
+          <TabsTrigger value="templates" className="rounded-none border-b-2 border-transparent px-1 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none hover:text-brand-650 transition-all">Template</TabsTrigger>
         </TabsList>
 
         <TabsContent value="roles" className="m-0 outline-none">
-          <MasterListing<Role>
-            columns={columns}
-            data={paginated}
-            totalRecords={filtered.length}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            onSortChange={setSort}
-            onFilterChange={setFilters}
+          {rolesQuery.isError ? (
+            <p className="mb-2 text-xs text-red-600">
+              {getMasterListErrorMessage(rolesQuery.error, {
+                resource: "roles",
+                notFoundMessage: "Role list endpoint not found.",
+                serverMessage: "Server error while loading roles.",
+              })}
+            </p>
+          ) : null}
+          <MasterListing<RoleRecord>
+            columns={roleColumns}
+            data={roleRecords}
+            loading={rolesQuery.isFetching || isDebouncing}
+            totalRecords={rolesQuery.data?.total ?? 0}
+            page={rolePage}
+            pageSize={rolePageSize}
+            onPageChange={setRolePage}
+            onPageSizeChange={setRolePageSize}
+            onSortChange={setRoleSort}
+            onFilterChange={setRoleFilters}
             emptyMessage="roles"
             searchPlaceholder="Search role or department…"
-            onAdd={openAdd}
+            onAdd={() => router.push("/user-management/roles/add")}
             addLabel="Add Role"
-            onExport={undefined}
-            currentFilters={filters}
-            currentSort={sort}
+            onExport={() =>
+              exportRoles.mutate(
+                { search: debouncedSearch, status: roleStatus, ordering: roleOrdering, apiFilters: roleApiFilters },
+                {
+                  onSuccess: () => showToast("Roles exported successfully"),
+                  onError: (error) => showToast(getErrorMessage(error, "Failed to export roles"), "error"),
+                },
+              )
+            }
+            currentFilters={roleFilters}
+            currentSort={roleSort}
           />
         </TabsContent>
 
         <TabsContent value="templates" className="m-0 outline-none">
-          <MasterListing<PermissionTemplate>
+          <MasterListing<TemplateListRecord>
             columns={templateColumns}
-            data={paginatedTemplates}
-            totalRecords={filteredTemplates.length}
+            data={visibleTemplateRecords}
+            loading={templatesQuery.isFetching || isDebouncingTemplates}
+            totalRecords={visibleTemplateRecords.length}
             page={templatePage}
             pageSize={templatePageSize}
             onPageChange={setTemplatePage}
@@ -619,7 +691,20 @@ export default function RolesPage() {
             searchPlaceholder="Search template name…"
             onAdd={() => router.push("/user-management/roles/templates/add")}
             addLabel="Add Template"
-            onExport={undefined}
+            onExport={() =>
+              exportTemplates.mutate(
+                {
+                  search: debouncedTemplateSearch,
+                  status: templateStatus,
+                  ordering: templateOrdering,
+                  apiFilters: templateApiFilters,
+                },
+                {
+                  onSuccess: () => showToast("Templates exported successfully"),
+                  onError: (error) => showToast(getErrorMessage(error, "Failed to export templates"), "error"),
+                },
+              )
+            }
             currentFilters={templateFilters}
             currentSort={templateSort}
           />
@@ -628,21 +713,41 @@ export default function RolesPage() {
 
       <RoleDetailSheet
         open={viewRole !== null}
-        onClose={() => setViewRole(null)}
-        role={viewRole}
-        onEdit={(role) => { setViewRole(null); openEdit(role); }}
+        onClose={() => {
+          setViewRole(null);
+          setViewId(null);
+        }}
+        role={viewRole ? toLegacyRole(viewRole) : null}
+        onEdit={() => {
+          if (viewRole) router.push(`/user-management/roles/${viewRole.roleUuid}/edit`);
+        }}
       />
 
+      <Dialog open={confirmRoleStatus !== null} onOpenChange={(open) => !open && setConfirmRoleStatus(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              {confirmRoleStatus?.status === "active" ? "Deactivate Role?" : "Activate Role?"}
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              {confirmRoleStatus?.roleName} will be marked {confirmRoleStatus?.status === "active" ? "inactive" : "active"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setConfirmRoleStatus(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700" onClick={confirmRoleStatusChange}>
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      {cfg !== null && (
-        <ConfirmDialog
-          open={confirmTarget !== null}
-          onClose={() => setConfirmTarget(null)}
-          config={cfg}
-        />
-      )}
-
-      {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      {toast ? <Toast toast={toast} onDismiss={() => setToast(null)} /> : null}
     </ListingContainer>
   );
 }
