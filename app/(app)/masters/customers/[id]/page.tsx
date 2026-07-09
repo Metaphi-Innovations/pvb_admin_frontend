@@ -21,11 +21,9 @@ import {
   Ban,
   Calendar,
   CheckCircle,
-  CheckCircle2,
   CreditCard,
   Eye,
   FileText,
-  Info,
   IndianRupee,
   Landmark,
   MapPin,
@@ -40,34 +38,18 @@ import {
   Wallet,
 } from "lucide-react";
 import {
-	type Customer,
-	type CustomerStatus,
-	loadCustomers,
-	saveCustomers,
-	todayStr,
-	CUSTOMER_TYPE_LABELS,
-	formatMobile,
-	formatCreditLimit,
-	getActiveGSTMasters,
-	getActiveTDSMasters,
+  type CustomerStatus,
+  formatMobile,
+  formatCreditLimit,
 } from "../customer-data";
-import { formatPartyPaymentTerms } from "@/lib/masters/payment-terms";
-import { formatTdsSummary } from "../../tds/tds-data";
+import { useCustomer, useToggleCustomerStatus } from "@/hooks/masters";
 import { readCustomerPermissions } from "../customer-permissions";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {
-	deriveGstRegistered,
-	getGstCategoryLabel,
+  deriveGstRegistered,
+  getGstCategoryLabel,
 } from "@/lib/masters/gst-compliance";
-import { ComplianceRegistrationViewRows } from "@/components/masters/ComplianceRegistrationViewRows";
-import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
-import { getCustomerAccountingSummary } from "@/lib/accounts/erp-accounting-mapping";
-import {
-  getCreditSourceLabel,
-  isDistributorConvertedCustomer,
-} from "@/lib/masters/customer-credit";
-import { formatCategoryLabel } from "@/lib/distributor/distributor-scoring";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -103,9 +85,9 @@ function TypeBadge({ label }: { label: string }) {
 }
 
 const COMPLIANCE_TONES = {
-  green: { bg: "#ECFDF5", icon: "#10B981", Icon: CheckCircle2, badgeBg: "#ECFDF5", badgeTx: "#166534", badgeBd: "#86EFAC" },
+  green: { bg: "#ECFDF5", icon: "#10B981", Icon: CheckCircle, badgeBg: "#ECFDF5", badgeTx: "#166534", badgeBd: "#86EFAC" },
   amber: { bg: "#FFFBEB", icon: "#D97706", Icon: AlertCircle, badgeBg: "#FFFBEB", badgeTx: "#92400E", badgeBd: "#FDE68A" },
-  blue: { bg: "#EFF6FF", icon: "#3B82F6", Icon: Info, badgeBg: "#EFF6FF", badgeTx: "#1D4ED8", badgeBd: "#93C5FD" },
+  blue: { bg: "#EFF6FF", icon: "#3B82F6", Icon: AlertCircle, badgeBg: "#EFF6FF", badgeTx: "#1D4ED8", badgeBd: "#93C5FD" },
 } as const;
 
 function ComplianceRow({
@@ -151,8 +133,6 @@ function ComplianceRow({
 export default function CustomerDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [records, setRecords] = useState<Customer[]>([]);
   const [perms, setPerms] = useState(readCustomerPermissions);
   const [activeTab, setActiveTab] = useState("overview");
   const [blockOpen, setBlockOpen] = useState(false);
@@ -164,12 +144,12 @@ export default function CustomerDetailPage() {
     fileName: string;
   } | null>(null);
 
-	useEffect(() => {
-		setPerms(readCustomerPermissions());
-		const list = loadCustomers();
-		setRecords(list);
-		setCustomer(list.find((c) => c.id === Number(id)) ?? null);
-	}, [id]);
+  const { data: customer, isLoading, isError } = useCustomer(id);
+  const toggleStatus = useToggleCustomerStatus();
+
+  useEffect(() => {
+    setPerms(readCustomerPermissions());
+  }, []);
 
   const orders = useMemo(() => {
     if (!customer) return [];
@@ -191,36 +171,13 @@ export default function CustomerDetailPage() {
   }, [orders]);
 
   const accountingSummary = useMemo(
-    () => (customer ? getCustomerAccountingSummary(customer) : null),
+    () => null,
     [customer],
   );
 
-  const updateStatus = (customerId: number, status: CustomerStatus, reason = "") => {
-    const today = todayStr();
-    const updated = records.map((r) => {
-      if (r.id !== customerId) return r;
-      return {
-        ...r,
-        status,
-        blockReason: status === "blocked" ? reason : "",
-        updatedBy: "Admin",
-        updatedDate: today,
-        lastStatusChange: today,
-        statusHistory: [
-          ...r.statusHistory,
-          {
-            date: today,
-            from: r.status,
-            to: status,
-            by: "Admin",
-            reason: reason || `Status → ${status}`,
-          },
-        ],
-      };
-    });
-    setRecords(updated);
-    saveCustomers(updated);
-    setCustomer(updated.find((c) => c.id === customerId) ?? null);
+  const updateStatus = (status: CustomerStatus, isActive: boolean) => {
+    if (!customer) return;
+    toggleStatus.mutate({ id: customer.customerUuid, isActive });
   };
 
   if (!perms.canView) {
@@ -237,7 +194,17 @@ export default function CustomerDetailPage() {
     );
   }
 
-  if (!customer) {
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center">
+          <p className="text-sm text-[#6B80A0]">Loading...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (isError || !customer) {
     return (
       <AppLayout>
         <div className="py-16 text-center">
@@ -250,13 +217,13 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const gst = getActiveGSTMasters().find((g) => g.id === customer.gstMasterId);
-  const tds = getActiveTDSMasters().find((t) => t.id === customer.tdsMasterId);
-  const payLabel = formatPartyPaymentTerms(customer);
-  const typeLabel =
-    CUSTOMER_TYPE_LABELS[customer.customerType.toLowerCase()] ?? customer.customerType;
+  const gst = null; // GST master lookup not available via API record
+  const tds = null; // TDS master lookup not available via API record
+  const payLabel = "—"; // payment terms label not available via API record
+  const typeLabel = customer.customerType || "—";
   const canToggle =
     perms.canEdit && customer.status !== "blocked" && customer.status !== "draft";
+  const creditLimitVal = customer.creditLimit ?? 0;
 
   const tabs = [
     { value: "overview", label: "Overview" },
@@ -287,7 +254,7 @@ export default function CustomerDetailPage() {
       icon: CreditCard,
       iconBg: "#FFFBEB",
       iconColor: "#D97706",
-      value: formatCreditLimit(customer.creditLimit),
+      value: formatCreditLimit(creditLimitVal),
       label: "Credit Limit",
     },
     {
@@ -306,8 +273,7 @@ export default function CustomerDetailPage() {
     },
   ];
 
-  // Credit utilization (used ≈ pending/outstanding amount)
-  const creditLimit = customer.creditLimit;
+  const creditLimit = creditLimitVal;
   const creditUsed = orderStats.pending;
   const creditAvailable = Math.max(creditLimit - creditUsed, 0);
   const creditPct = creditLimit > 0 ? Math.min(Math.round((creditUsed / creditLimit) * 100), 100) : 0;
@@ -361,137 +327,129 @@ export default function CustomerDetailPage() {
       case "overview":
         return (
           <div className="space-y-4">
-            {accountingSummary && (
-              <ErpPartyAccountingCard
-                title="Accounting Integration"
-                summary={accountingSummary}
-                partyLabel="Customer"
-              />
-            )}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
-              <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
-              <RecordKvRow
-                label="Customer Code"
-                value={customer.customerCode}
-                mono
-                copy
-              />
-              <RecordKvRow
-                label="Mobile"
-                value={formatMobile(customer.countryCode, customer.mobile)}
-                mono
-                link
-                href={`tel:${customer.mobile}`}
-              />
-              <RecordKvRow
-                label="Email"
-                value={customer.email || "—"}
-                link={!!customer.email}
-                href={customer.email ? `mailto:${customer.email}` : undefined}
-              />
-              <RecordKvRow label="Customer Type" value={typeLabel} />
-              <RecordKvRow
-                label="Status"
-                value={
-                  <RecordStatusPill
-                    label={STATUS_LABEL[customer.status]}
-                    variant={STATUS_VARIANT[customer.status]}
-                  />
-                }
-                isLast
-              />
-            </RecordSectionCard>
-
-            <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
-              <RecordKvRow label="Territory" value={customer.territoryName} highlight />
-              <RecordKvRow label="State" value={customer.stateName} />
-              <RecordKvRow label="District" value={customer.districtName} />
-              <RecordKvRow label="Pin Code" value={customer.pincode} mono />
-              <RecordKvRow label="Address" value={customer.address} isLast />
-            </RecordSectionCard>
-
-            <div className="lg:col-span-2">
-              <RecordSectionCard title="Recent Orders" icon={ShoppingCart} accent="green">
-                <RecordMiniTable
-                  columns={orderColumns}
-                  rows={[...orders]
-                    .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
-                    .slice(0, 5)}
-                  onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
-                  viewAllHref={`/sales/orders?customer=${customer.id}`}
-                  viewAllLabel={`View all ${orders.length} orders`}
-                />
-              </RecordSectionCard>
-            </div>
-          </div>
-        );
-
-      case "tax":
-        return (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
-              <RecordKvRow
-                label="GST Registered"
-                value={
-                  deriveGstRegistered(
-                    customer.gstApplicable,
-                    customer.gstin,
-                    customer.gstCategory,
-                  )
-                    ? "Yes"
-                    : "No"
-                }
-              />
-              {deriveGstRegistered(
-                customer.gstApplicable,
-                customer.gstin,
-                customer.gstCategory,
-              ) && (
-                <>
-                  <RecordKvRow
-                    label="GST Registration Type"
-                    value={getGstCategoryLabel(customer.gstCategory ?? "regular")}
-                  />
-                  <RecordKvRow label="GSTIN" value={customer.gstin} mono copy />
-                  <RecordKvRow
-                    label="Registered Company Name"
-                    value={customer.registeredLegalName || "—"}
-                  />
-                  <RecordKvRow
-                    label="Registered Address"
-                    value={customer.registeredAddress || "—"}
-                  />
-                  <RecordKvRow
-                    label="GST Code"
-                    value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"}
-                    mono
-                  />
-                </>
-              )}
-              <RecordKvRow label="PAN Number" value={customer.pan || "—"} mono copy />
-              <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
-              {customer.tdsApplicable && (
+              <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
+                <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
                 <RecordKvRow
-                  label="TDS Section"
-                  value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : "—"}
+                  label="Customer Code"
+                  value={customer.customerCode}
                   mono
+                  copy
+                />
+                <RecordKvRow
+                  label="Mobile"
+                  value={formatMobile(customer.countryCode, customer.mobileNo)}
+                  mono
+                  link
+                  href={`tel:${customer.mobileNo}`}
+                />
+                <RecordKvRow
+                  label="Email"
+                  value={customer.email || "—"}
+                  link={!!customer.email}
+                  href={customer.email ? `mailto:${customer.email}` : undefined}
+                />
+                <RecordKvRow label="Customer Type" value={typeLabel} />
+                <RecordKvRow
+                  label="Status"
+                  value={
+                    <RecordStatusPill
+                      label={STATUS_LABEL[customer.status]}
+                      variant={STATUS_VARIANT[customer.status]}
+                    />
+                  }
                   isLast
                 />
-              )}
-            </RecordSectionCard>
+              </RecordSectionCard>
 
-            <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
-              <RecordKvRow label="MSME Registered" value={customer.msmeRegistered ? "Yes" : "No"} />
-              {customer.msmeRegistered && (
-                <RecordKvRow label="MSME Number" value={customer.msmeNumber || "—"} mono copy />
-              )}
-              <ComplianceRegistrationViewRows
-                values={customer}
-                lastRowProps={{ isLast: true }}
-              />
-            </RecordSectionCard>
-          </div>
+              <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
+                <RecordKvRow label="Territory" value={customer.territoryName} highlight />
+                <RecordKvRow label="State" value={customer.stateName} />
+                <RecordKvRow label="District" value={customer.districtName} />
+                <RecordKvRow label="Pin Code" value={(customer as any).pincode ?? "—"} mono />
+                <RecordKvRow label="Address" value={(customer as any).address ?? "—"} isLast />
+              </RecordSectionCard>
+
+              <div className="lg:col-span-2">
+                <RecordSectionCard title="Recent Orders" icon={ShoppingCart} accent="green">
+                  <RecordMiniTable
+                    columns={orderColumns}
+                    rows={[...orders]
+                      .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
+                      .slice(0, 5)}
+                    onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
+                    viewAllHref={`/sales/orders?customer=${customer.id}`}
+                    viewAllLabel={`View all ${orders.length} orders`}
+                  />
+                </RecordSectionCard>
+              </div>
+            </div>
+            );
+
+            case "tax":
+            return (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
+                <RecordKvRow
+                  label="GST Registered"
+                  value={
+                    deriveGstRegistered(
+                      customer.gstApplicable,
+                      customer.gstinNo ?? "",
+                      customer.registrationType ?? "",
+                    )
+                      ? "Yes"
+                      : "No"
+                  }
+                />
+                {deriveGstRegistered(
+                  customer.gstApplicable,
+                  customer.gstinNo ?? "",
+                  customer.registrationType ?? "",
+                ) && (
+                    <>
+                      <RecordKvRow
+                        label="GST Registration Type"
+                        value={getGstCategoryLabel(customer.registrationType ?? "regular")}
+                      />
+                      <RecordKvRow label="GSTIN" value={customer.gstinNo ?? "—"} mono copy />
+                      <RecordKvRow
+                        label="Registered Company Name"
+                        value={customer.registeredLegalName || "—"}
+                      />
+                      <RecordKvRow
+                        label="Registered Address"
+                        value={customer.registeredGstAddress || "—"}
+                      />
+                      <RecordKvRow
+                        label="GST Code"
+                        value="—"
+                        mono
+                      />
+                    </>
+                  )}
+                <RecordKvRow label="PAN Number" value={customer.panNo || "—"} mono copy />
+                <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
+                {customer.tdsApplicable && (
+                  <RecordKvRow
+                    label="TDS Section"
+                    value={customer.tdsSectionId ?? "—"}
+                    mono
+                    isLast
+                  />
+                )}
+              </RecordSectionCard>
+
+              <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
+                <RecordKvRow label="MSME Registered" value={customer.msmeApplicable ? "Yes" : "No"} />
+                {customer.msmeApplicable && (
+                  <RecordKvRow label="MSME Number" value={customer.msmeRegNo || "—"} mono copy />
+                )}
+                <RecordKvRow label="FSSAI Applicable" value={customer.fssaiApplicable ? "Yes" : "No"} />
+                <RecordKvRow label="CIB Applicable" value={customer.cibApplicable ? "Yes" : "No"} />
+                <RecordKvRow label="FCO Applicable" value={customer.fcoApplicable ? "Yes" : "No"} isLast />
+              </RecordSectionCard>
+            </div>
           </div>
         );
 
@@ -499,7 +457,7 @@ export default function CustomerDetailPage() {
         return (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RecordSectionCard title="Bank Details" icon={Wallet} accent="green">
-              {(!customer.accountHolderName || customer.accountHolderName === "-") && (
+              {(!customer.accountHolder || customer.accountHolder === "-") && (
                 <div
                   className="flex items-center gap-2 mb-3"
                   style={{
@@ -513,10 +471,10 @@ export default function CustomerDetailPage() {
                   <span className="text-[12px] text-[#92400E]">Account holder name not added</span>
                 </div>
               )}
-              <RecordKvRow label="Account Holder" value={customer.accountHolderName} highlight />
+              <RecordKvRow label="Account Holder" value={customer.accountHolder} highlight />
               <RecordKvRow label="Bank Name" value={customer.bankName} />
-              <RecordKvRow label="Branch" value={customer.branch || customer.bankBranchAddress} />
-              <RecordKvRow label="Account #" value={customer.bankAccountNo} mono copy />
+              <RecordKvRow label="Branch" value={customer.branchName} />
+              <RecordKvRow label="Account #" value={customer.accountNumber} mono copy />
               <RecordKvRow label="IFSC" value={customer.ifscCode} mono copy />
               <RecordKvRow label="SWIFT" value={customer.swiftCode} mono isLast />
             </RecordSectionCard>
@@ -558,152 +516,91 @@ export default function CustomerDetailPage() {
       case "commercial":
         return (
           <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {isDistributorConvertedCustomer(customer) && (
-              <RecordSectionCard title="Distributor Reference" icon={Info} accent="blue" className="lg:col-span-2">
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <RecordKvRow label="Source" value={getCreditSourceLabel(customer)} />
-                  <RecordKvRow
-                    label="Linked Distributor"
-                    value={customer.linkedDistributorName ?? "—"}
-                  />
-                  <RecordKvRow
-                    label="Distributor Score"
-                    value={
-                      customer.distributorScore != null
-                        ? `${customer.distributorScore}%`
-                        : "—"
-                    }
-                  />
-                  <RecordKvRow
-                    label="Distributor Category"
-                    value={
-                      customer.distributorCategory
-                        ? formatCategoryLabel(customer.distributorCategory)
-                        : "—"
-                    }
-                  />
-                  <RecordKvRow
-                    label="Recommended Credit Limit"
-                    value={formatCreditLimit(customer.recommendedCreditLimit ?? 0)}
-                    amount
-                  />
-                  <RecordKvRow
-                    label="Recommended Credit Days"
-                    value={
-                      customer.recommendedCreditDays != null
-                        ? `${customer.recommendedCreditDays} Days`
-                        : "—"
-                    }
-                  />
-                  <RecordKvRow
-                    label="Recommended Credit Status"
-                    value={customer.recommendedCreditStatus ?? "—"}
-                    isLast
-                  />
-                </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {/* Distributor reference info not available in API record */}
+
+              <RecordSectionCard title="Final Customer Credit" icon={IndianRupee} accent="orange">
+                <RecordKvRow label="Final Credit Limit" value={formatCreditLimit(creditLimitVal)} amount highlight />
+                <RecordKvRow
+                  label="Final Credit Days"
+                  value={customer.creditDays != null ? `${customer.creditDays} Days` : "—"}
+                />
+                <RecordKvRow
+                  label="Credit Status"
+                  value="—"
+                />
+                <RecordKvRow label="Payment Terms" value={payLabel} />
+                <RecordKvRow
+                  label="Sales Man"
+                  value={customer.salesMan}
+                  isLast
+                />
               </RecordSectionCard>
-            )}
 
-            <RecordSectionCard title="Final Customer Credit" icon={IndianRupee} accent="orange">
-              <RecordKvRow label="Final Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
-              <RecordKvRow
-                label="Final Credit Days"
-                value={customer.creditDays != null ? `${customer.creditDays} Days` : "—"}
-              />
-              <RecordKvRow
-                label="Credit Status"
-                value={customer.finalCreditStatus ?? customer.recommendedCreditStatus ?? "—"}
-              />
-              <RecordKvRow label="Payment Terms" value={payLabel} />
-              <RecordKvRow
-                label="Sales Man"
-                value={customer.salesManName}
-                isLast={!customer.creditOverrideReason}
-              />
-              {customer.creditOverrideReason ? (
-                <RecordKvRow label="Override Reason" value={customer.creditOverrideReason} isLast />
-              ) : null}
-            </RecordSectionCard>
-
-            <RecordSectionCard title="Credit Usage" icon={CreditCard} accent="green">
-              <div className="pt-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[28px] font-extrabold text-[#0A1628] leading-none">
-                    {shortINR(creditUsed)}
-                  </span>
-                  <span className="text-[13px] text-[#6B80A0]">
-                    used of {shortINR(creditLimit)} limit
-                  </span>
-                </div>
-
-                <div className="relative" style={{ margin: "14px 0" }}>
-                  <div style={{ height: "10px", background: "#E4EAF4", borderRadius: "5px" }}>
-                    <div
-                      style={{
-                        width: `${creditPct}%`,
-                        height: "10px",
-                        background: "#1E9E61",
-                        borderRadius: "5px",
-                        transition: "width .4s ease",
-                      }}
-                    />
-                  </div>
-                  <span
-                    className="absolute -top-4 text-[11px] text-[#1E9E61] font-medium"
-                    style={{ left: `calc(${creditPct}% - 16px)` }}
-                  >
-                    {creditPct}%
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 mt-3">
-                  <div className="pr-3">
-                    <p className="text-[11px] text-[#6B80A0]">Credit Limit</p>
-                    <p className="text-[13px] font-bold text-[#0A1628]">{shortINR(creditLimit)}</p>
-                  </div>
-                  <div className="px-3 border-l border-[#F0F3FA]">
-                    <p className="text-[11px] text-[#6B80A0]">Used</p>
-                    <p
-                      className="text-[13px] font-bold"
-                      style={{ color: creditPct > 80 ? "#DC2626" : "#0A1628" }}
-                    >
+              <RecordSectionCard title="Credit Usage" icon={CreditCard} accent="green">
+                <div className="pt-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[28px] font-extrabold text-[#0A1628] leading-none">
                       {shortINR(creditUsed)}
-                    </p>
+                    </span>
+                    <span className="text-[13px] text-[#6B80A0]">
+                      used of {shortINR(creditLimit)} limit
+                    </span>
                   </div>
-                  <div className="px-3 border-l border-[#F0F3FA]">
-                    <p className="text-[11px] text-[#6B80A0]">Available</p>
-                    <p className="text-[13px] font-bold text-[#1E9E61]">{shortINR(creditAvailable)}</p>
+
+                  <div className="relative" style={{ margin: "14px 0" }}>
+                    <div style={{ height: "10px", background: "#E4EAF4", borderRadius: "5px" }}>
+                      <div
+                        style={{
+                          width: `${creditPct}%`,
+                          height: "10px",
+                          background: "#1E9E61",
+                          borderRadius: "5px",
+                          transition: "width .4s ease",
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="absolute -top-4 text-[11px] text-[#1E9E61] font-medium"
+                      style={{ left: `calc(${creditPct}% - 16px)` }}
+                    >
+                      {creditPct}%
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 mt-3">
+                    <div className="pr-3">
+                      <p className="text-[11px] text-[#6B80A0]">Credit Limit</p>
+                      <p className="text-[13px] font-bold text-[#0A1628]">{shortINR(creditLimit)}</p>
+                    </div>
+                    <div className="px-3 border-l border-[#F0F3FA]">
+                      <p className="text-[11px] text-[#6B80A0]">Used</p>
+                      <p
+                        className="text-[13px] font-bold"
+                        style={{ color: creditPct > 80 ? "#DC2626" : "#0A1628" }}
+                      >
+                        {shortINR(creditUsed)}
+                      </p>
+                    </div>
+                    <div className="px-3 border-l border-[#F0F3FA]">
+                      <p className="text-[11px] text-[#6B80A0]">Available</p>
+                      <p className="text-[13px] font-bold text-[#1E9E61]">{shortINR(creditAvailable)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[#F0F3FA]">
+                    <span
+                      className="inline-flex items-center rounded-md text-[11px] font-semibold"
+                      style={{ background: "#EEF3FB", color: "#0C3F8A", padding: "3px 9px" }}
+                    >
+                      {payLabel}
+                    </span>
                   </div>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[#F0F3FA]">
-                  <span
-                    className="inline-flex items-center rounded-md text-[11px] font-semibold"
-                    style={{ background: "#EEF3FB", color: "#0C3F8A", padding: "3px 9px" }}
-                  >
-                    {payLabel}
-                  </span>
-                </div>
-              </div>
-            </RecordSectionCard>
-          </div>
-
-          {isDistributorConvertedCustomer(customer) &&
-            (customer.creditAuditLog?.length ?? 0) > 0 && (
-              <RecordSectionCard title="Credit Override Audit" icon={Clock} accent="slate">
-                {[...(customer.creditAuditLog ?? [])]
-                  .reverse()
-                  .map((entry, i, arr) => (
-                    <RecordKvRow
-                      key={`${entry.date}-${entry.field}-${i}`}
-                      label={entry.date}
-                      value={`${entry.field}: ${entry.previousValue} → ${entry.newValue} — ${entry.reason} (${entry.by})`}
-                      isLast={i === arr.length - 1}
-                    />
-                  ))}
               </RecordSectionCard>
-            )}
+            </div>
+
+            {/* Credit audit log not available in API record */}
           </div>
         );
 
@@ -721,20 +618,7 @@ export default function CustomerDetailPage() {
       case "activity":
         return (
           <RecordSectionCard title="Status History" icon={Clock} accent="slate">
-            {customer.statusHistory.length === 0 ? (
-              <p className="py-3 text-sm text-muted-foreground">No activity recorded.</p>
-            ) : (
-              [...customer.statusHistory]
-                .reverse()
-                .map((h, i, arr) => (
-                  <RecordKvRow
-                    key={`${h.date}-${i}`}
-                    label={h.date}
-                    value={`${h.from} → ${h.to} (${h.by})${h.reason ? ` — ${h.reason}` : ""}`}
-                    isLast={i === arr.length - 1}
-                  />
-                ))
-            )}
+            <p className="py-3 text-sm text-muted-foreground">No activity recorded.</p>
           </RecordSectionCard>
         );
 
@@ -746,31 +630,28 @@ export default function CustomerDetailPage() {
   return (
     <>
       <RecordDetailPage
-      alert={
-        customer.status === "blocked" && customer.blockReason ? (
-          <div className="flex items-start gap-2 px-4 py-3 mb-4 border border-red-200 rounded-lg bg-red-50">
-            <Ban className="mt-0.5 h-4 w-4 text-red-500 flex-shrink-0" />
-            <p className="text-xs text-red-700">{customer.blockReason}</p>
-          </div>
-        ) : undefined
-      }
-      listHref="/masters/customers"
-      listLabel="Customers"
-      recordName={customer.customerName}
-      recordCode={customer.customerCode}
+        alert={
+          customer.status === "blocked" ? (
+            <div className="flex items-start gap-2 px-4 py-3 mb-4 border border-red-200 rounded-lg bg-red-50">
+              <Ban className="mt-0.5 h-4 w-4 text-red-500 flex-shrink-0" />
+              <p className="text-xs text-red-700">This customer has been blocked.</p>
+            </div>
+          ) : undefined
+        }
+        listHref="/masters/customers"
+        listLabel="Customers"
+        recordName={customer.customerName}
+        recordCode={customer.customerCode}
         typeBadge={
-          <>
-            <TypeBadge label={typeLabel} />
-            {isDistributorConvertedCustomer(customer) && <ConvertedDistributorBadge />}
-          </>
+          <TypeBadge label={typeLabel} />
         }
         statusLabel={STATUS_LABEL[customer.status]}
         statusVariant={STATUS_VARIANT[customer.status]}
         metaItems={[
           {
-            label: formatMobile(customer.countryCode, customer.mobile),
+            label: formatMobile(customer.countryCode, customer.mobileNo),
             icon: Phone,
-            href: `tel:${customer.mobile}`,
+            href: `tel:${customer.mobileNo}`,
           },
           ...(customer.email
             ? [{ label: customer.email, icon: Mail, href: `mailto:${customer.email}` }]
@@ -787,11 +668,11 @@ export default function CustomerDetailPage() {
         active={customer.status === "active"}
         onActiveChange={
           canToggle
-            ? (on) => updateStatus(customer.id, on ? "active" : "inactive")
+            ? (on) => updateStatus(on ? "active" : "inactive", on)
             : undefined
         }
         toggleDisabled={!canToggle}
-        onEdit={perms.canEdit ? () => router.push(`/masters/customers/${customer.id}/edit`) : undefined}
+        onEdit={perms.canEdit ? () => router.push(`/masters/customers/${customer.customerUuid}/edit`) : undefined}
         secondaryAction={{
           label: "New Order",
           onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
@@ -799,33 +680,33 @@ export default function CustomerDetailPage() {
         moreActions={
           perms.canEdit
             ? [
-                ...(customer.status !== "blocked"
-                  ? [
-                      {
-                        label: "Block Customer",
-                        onClick: () => {
-                          setBlockReason(customer.blockReason || "");
-                          setBlockError("");
-                          setBlockOpen(true);
-                        },
-                        destructive: true,
-                      },
-                    ]
-                  : [
-                      {
-                        label: "Unblock Customer",
-                        onClick: () => updateStatus(customer.id, "active"),
-                      },
-                    ]),
-                ...(customer.status === "draft"
-                  ? [
-                      {
-                        label: "Mark Active",
-                        onClick: () => updateStatus(customer.id, "active"),
-                      },
-                    ]
-                  : []),
-              ]
+              ...(customer.status !== "blocked"
+                ? [
+                  {
+                    label: "Block Customer",
+                    onClick: () => {
+                      setBlockReason("");
+                      setBlockError("");
+                      setBlockOpen(true);
+                    },
+                    destructive: true,
+                  },
+                ]
+                : [
+                  {
+                    label: "Unblock Customer",
+                    onClick: () => updateStatus("active", true),
+                  },
+                ]),
+              ...(customer.status === "draft"
+                ? [
+                  {
+                    label: "Mark Active",
+                    onClick: () => updateStatus("active", true),
+                  },
+                ]
+                : []),
+            ]
             : undefined
         }
         sidebar={{
@@ -833,43 +714,35 @@ export default function CustomerDetailPage() {
             {
               label: "New Order",
               icon: ShoppingCart,
-              onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
+              onClick: () => router.push(`/sales/orders/new?customerId=${customer.customerUuid}`),
               variant: "primary",
             },
             ...(perms.canEdit
               ? [
-                  {
-                    label: "Edit Customer",
-                    icon: Pencil,
-                    onClick: () => router.push(`/masters/customers/${customer.id}/edit`),
-                    variant: "outline" as const,
-                  },
-                ]
+                {
+                  label: "Edit Customer",
+                  icon: Pencil,
+                  onClick: () => router.push(`/masters/customers/${customer.customerUuid}/edit`),
+                  variant: "outline" as const,
+                },
+              ]
               : []),
             {
               label: "View Orders",
               icon: Eye,
-              onClick: () => router.push(`/sales/orders?customer=${customer.id}`),
+              onClick: () => router.push(`/sales/orders?customer=${customer.customerUuid}`),
               variant: "outline" as const,
             },
           ],
           summary: [
-            { label: "Credit Limit", value: formatCreditLimit(customer.creditLimit), highlight: true },
+            { label: "Credit Limit", value: formatCreditLimit(creditLimitVal), highlight: true },
             { label: "Payment Terms", value: payLabel },
-            { label: "Sales Man", value: customer.salesManName || "—" },
+            { label: "Sales Man", value: customer.salesMan || "—" },
             { label: "Territory", value: customer.territoryName || "—" },
-            { label: "Created", value: customer.createdDate },
-            { label: "Updated", value: customer.updatedDate },
+            { label: "Created", value: customer.createdAt },
+            { label: "Updated", value: customer.updatedAt },
           ],
-          activity: [...customer.statusHistory]
-            .slice(-5)
-            .reverse()
-            .map((h, i) => ({
-              id: `${h.date}-${i}`,
-              title: `${h.from} → ${h.to}`,
-              subtitle: h.reason || `By ${h.by}`,
-              date: h.date,
-            })),
+          activity: [],
         }}
       >
         {renderTabContent()}
@@ -896,7 +769,7 @@ export default function CustomerDetailPage() {
                   setBlockError("Block reason is required");
                   return;
                 }
-                updateStatus(customer.id, "blocked", blockReason.trim());
+                updateStatus("blocked", false);
                 setBlockOpen(false);
               }}
             >

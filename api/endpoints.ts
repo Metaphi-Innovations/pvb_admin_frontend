@@ -35,10 +35,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/customer-type/update-status/${id}`,
       VIEW: (id: string) => `/master/customer-type/${id}`,
       EXPORT: "/master/customer-type/export",
-    },
-    CUSTOMER:{
-      CUSTOMER: "/master/customer/dropdown",
-      CUSTOMER_DETAILS: (id: string) => `/master/customer/${id}`,
+      DROPDOWN: "/master/customer-type/dropdown",
     },
     GST: {
       LIST: "/master/gst/list",
@@ -67,7 +64,7 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/segment/export",
       PREVIEW_NUMBER: "/master/segment/preview-number",
       FILTER_DROPDOWN: "/master/segment/filter-dropdown",
-      DROPDOWN: "/master/segment/filter-dropdown",
+      DROPDOWN: "/master/segment/dropdown",
     },
     TDS: {
       LIST: "/master/tds/list",
@@ -110,11 +107,18 @@ export const API_ENDPOINTS = {
       DROPDOWN: "/master/product/dropdown",
       PRICING: "/master/product/pricing",
     },
-    PRICING:{
+    PRICING: {
       DROPDOWN: "/master/product-pricing/dropdown",
     },
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",
+      LIST: "/master/warehouse/list",
+      CREATE: "/master/warehouse/create",
+      UPDATE: (id: string) => `/master/warehouse/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/warehouse/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/warehouse/details/${id}`,
+      EXPORT: "/master/warehouse/export",
+      PREVIEW_NUMBER: "/master/warehouse/preview-number",
     },
     SUPPLIER: {
       LIST: "/master/supplier/list",
@@ -126,7 +130,26 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/master/supplier/preview-number",
       DROPDOWN: "/master/supplier/dropdown",
       DETAILS: (id: string) => `/master/supplier/details/${id}`,
-    }
+    },
+    CUSTOMER: {
+      LIST: "/master/customer/list",
+      CREATE: "/master/customer/create",
+      UPDATE: (id: string) => `/master/customer/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/customer/update-status/${id}`,
+      VIEW: (id: string) => `/master/customer/${id}`,
+      EXPORT: "/master/customer/export",
+      PREVIEW_NUMBER: "/master/customer/preview-number",
+      DROPDOWN: "/master/customer/dropdown",
+    },
+    SUPPLIER_TYPE: {
+      LIST: "/master/supplier-type/list",
+      CREATE: "/master/supplier-type/create",
+      UPDATE: (id: string) => `/master/supplier-type/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/supplier-type/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/supplier-type/details/${id}`,
+      EXPORT: "/master/supplier-type/export",
+      DROPDOWN: "/master/supplier-type/dropdown",
+    },
   },
   PROCUREMENT: {
     PURCHASE_ORDER: {

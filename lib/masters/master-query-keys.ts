@@ -130,5 +130,40 @@ export const masterKeys = {
     dropdown: () => [...masterKeys.suppliers.all(), "dropdown"] as const,
     previewNumber: () => [...masterKeys.suppliers.all(), "preview-number"] as const,
     export: () => [...masterKeys.suppliers.all(), "export"] as const,
-  }
+  },
+
+  customers: {
+    all: () => [...masterKeys.all, "customers"] as const,
+    lists: () => [...masterKeys.customers.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.customers.lists(), params] as const,
+    details: () => [...masterKeys.customers.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.customers.details(), id] as const,
+    dropdown: () => [...masterKeys.customers.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
+    export: () => [...masterKeys.customers.all(), "export"] as const,
+  },
+
+  warehouses: {
+    all: () => [...masterKeys.all, "warehouses"] as const,
+    lists: () => [...masterKeys.warehouses.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.warehouses.lists(), params] as const,
+    details: () => [...masterKeys.warehouses.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.warehouses.details(), id] as const,
+    dropdown: () => [...masterKeys.warehouses.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.warehouses.all(), "preview-number"] as const,
+    export: () => [...masterKeys.warehouses.all(), "export"] as const,
+  },
+
+  supplierTypes: {
+    all: () => [...masterKeys.all, "supplier-types"] as const,
+    lists: () => [...masterKeys.supplierTypes.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.supplierTypes.lists(), params] as const,
+    details: () => [...masterKeys.supplierTypes.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.supplierTypes.details(), id] as const,
+    dropdown: () => [...masterKeys.supplierTypes.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.supplierTypes.all(), "preview-number"] as const,
+    export: () => [...masterKeys.supplierTypes.all(), "export"] as const,
+  },
 } as const;
