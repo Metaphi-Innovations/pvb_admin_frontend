@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { cn } from "@/lib/utils";
 import { axiosInstance } from "@/api/axios";
 import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
@@ -54,18 +53,10 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
   );
 }
 
-const DISCOUNT_TYPE_OPTIONS = [
-  { value: "percentage", label: "Percentage" },
-  { value: "flat", label: "Flat Amount" },
-];
-
 interface InlineEditDraft {
   productId: string;
   packingQty: string;
   unitPrice: string;
-  discountType: "percentage" | "flat";
-  discountPct: string;
-  discountFlatAmount: string;
   gstMasterId: string;
   remarks: string;
 }
@@ -156,9 +147,6 @@ export function POLineItemsSection({
 }: POLineItemsSectionProps) {
   const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
   const [quickQty, setQuickQty] = useState("1");
-  const [quickDiscountType, setQuickDiscountType] = useState<"percentage" | "flat">("percentage");
-  const [quickDiscountPct, setQuickDiscountPct] = useState("0");
-  const [quickDiscountFlat, setQuickDiscountFlat] = useState("0");
   const [quickRemarks, setQuickRemarks] = useState("");
   const [inlineEditUid, setInlineEditUid] = useState<string | null>(null);
   const [inlineEditDraft, setInlineEditDraft] = useState<InlineEditDraft | null>(null);
@@ -212,9 +200,6 @@ export function POLineItemsSection({
   const clearQuickFields = () => {
     setQuickProductIds([]);
     setQuickQty("1");
-    setQuickDiscountType("percentage");
-    setQuickDiscountPct("0");
-    setQuickDiscountFlat("0");
     setQuickRemarks("");
   };
 
@@ -227,9 +212,6 @@ export function POLineItemsSection({
   const quickAdd = async () => {
     if (quickProductIds.length === 0) return;
     const packingQty = Number(quickQty) || 1;
-    const discountType = quickDiscountType;
-    const discountPct = discountType === "percentage" ? Number(quickDiscountPct) || 0 : 0;
-    const discountFlatAmount = discountType === "flat" ? Number(quickDiscountFlat) || 0 : 0;
     let nextLines = [...form.lines];
 
     const pricingPromises = quickProductIds.map(async (productId) => {
@@ -271,9 +253,9 @@ export function POLineItemsSection({
       nextLines.push({
         ...line,
         uid: `pl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        discountType,
-        discountPct,
-        discountFlatAmount,
+        discountType: "percentage",
+        discountPct: 0,
+        discountFlatAmount: 0,
         remarks: quickRemarks,
       });
     }
@@ -289,9 +271,6 @@ export function POLineItemsSection({
       productId: String(line.productId),
       packingQty: String(line.orderedQtyPack),
       unitPrice: String(line.unitPrice),
-      discountType: line.discountType ?? "percentage",
-      discountPct: String(line.discountPct ?? 0),
-      discountFlatAmount: String(line.discountFlatAmount ?? 0),
       gstMasterId: String(gstMasterId),
       remarks: line.remarks ?? "",
     });
@@ -334,9 +313,9 @@ export function POLineItemsSection({
       orderedQtyPack: packingQty,
       unitPrice: Number(inlineEditDraft.unitPrice) || 0,
       cpSource: "manual",
-      discountType: inlineEditDraft.discountType,
-      discountPct: Number(inlineEditDraft.discountPct) || 0,
-      discountFlatAmount: Number(inlineEditDraft.discountFlatAmount) || 0,
+      discountType: "percentage",
+      discountPct: 0,
+      discountFlatAmount: 0,
       remarks: inlineEditDraft.remarks,
       ...taxRates,
     });
@@ -362,7 +341,7 @@ export function POLineItemsSection({
         <div>
           <SectionHead
             label="Product / Item Details"
-            sub="Packaging quantity, SKU conversion, discount and GST are auto-calculated from product master."
+            sub="Packaging quantity, SKU conversion and GST are auto-calculated from product master."
             required={!readOnly}
           />
         </div>
@@ -389,7 +368,7 @@ export function POLineItemsSection({
 
       {poType === "direct" && !readOnly && (
         <div className="mb-3 mt-3 rounded-lg border border-border bg-muted/20 p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_80px_110px_96px_minmax(0,1fr)_auto]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_80px_minmax(0,1fr)_auto]">
             <div className="space-y-1">
               <Label className="text-xs font-medium">Product</Label>
               <AutocompleteSelect
@@ -411,36 +390,6 @@ export function POLineItemsSection({
                 onChange={(e) => setQuickQty(e.target.value)}
                 className={inputCls}
               />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Discount Type</Label>
-              <AutocompleteSelect
-                options={DISCOUNT_TYPE_OPTIONS}
-                value={quickDiscountType}
-                onChange={(v) => setQuickDiscountType(v as "percentage" | "flat")}
-                className={inputCls}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">
-                {quickDiscountType === "percentage" ? "Discount %" : "Discount Amt"}
-              </Label>
-              {quickDiscountType === "percentage" ? (
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={quickDiscountPct}
-                  onChange={(e) => setQuickDiscountPct(e.target.value)}
-                  className={inputCls}
-                />
-              ) : (
-                <IndianRupeeInput
-                  value={Number(quickDiscountFlat) || 0}
-                  onChange={(n) => setQuickDiscountFlat(String(n))}
-                  className={inputCls}
-                />
-              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Remarks</Label>
@@ -503,9 +452,6 @@ export function POLineItemsSection({
                 <th className="w-20 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Qty</th>
                 <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">SKU Qty</th>
                 <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Rate/SKU</th>
-                <th className="w-24 px-3 py-2.5 text-left text-xs font-semibold text-foreground">Disc. Type</th>
-                <th className="w-20 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Disc. %</th>
-                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Disc. Amt</th>
                 <th className="w-16 px-3 py-2.5 text-right text-xs font-semibold text-foreground">GST %</th>
                 {taxSupplyType === "intra" ? (
                   <>
@@ -538,10 +484,6 @@ export function POLineItemsSection({
                     ? calcPackingToBaseQty(Number(draft.packingQty) || 0, displayConversion)
                     : line.orderedQty;
                 const displayRate = isEditing && draft ? Number(draft.unitPrice) || 0 : line.unitPrice;
-                const displayDiscType = isEditing && draft ? draft.discountType : line.discountType ?? "percentage";
-                const displayDiscPct = isEditing && draft ? Number(draft.discountPct) || 0 : line.discountPct;
-                const displayDiscFlat =
-                  isEditing && draft ? Number(draft.discountFlatAmount) || 0 : line.discountFlatAmount ?? 0;
                 const draftTaxRates =
                   isEditing && draft
                     ? applyGstMasterToTaxRates(Number(draft.gstMasterId), taxSupplyType)
@@ -553,14 +495,13 @@ export function POLineItemsSection({
                       draftTaxRates.igstPct,
                     )
                   : totalGstPctFromRates(line.cgstPct, line.sgstPct, line.igstPct);
-                const discAmt = calcLine?.discountAmount ?? line.discountAmount ?? 0;
                 const lineTax = calcLine
                   ? calcLineAmounts({
                       orderedQty: line.orderedQty,
                       unitPrice: isEditing && draft ? Number(draft.unitPrice) || 0 : line.unitPrice,
-                      discountType: displayDiscType,
-                      discountPct: displayDiscPct,
-                      discountFlatAmount: displayDiscFlat,
+                      discountType: "percentage",
+                      discountPct: 0,
+                      discountFlatAmount: 0,
                       cgstPct: draftTaxRates?.cgstPct ?? line.cgstPct,
                       sgstPct: draftTaxRates?.sgstPct ?? line.sgstPct,
                       igstPct: draftTaxRates?.igstPct ?? line.igstPct,
@@ -568,9 +509,9 @@ export function POLineItemsSection({
                   : calcLineAmounts({
                       orderedQty: line.orderedQty,
                       unitPrice: line.unitPrice,
-                      discountType: line.discountType,
-                      discountPct: line.discountPct,
-                      discountFlatAmount: line.discountFlatAmount,
+                      discountType: "percentage",
+                      discountPct: 0,
+                      discountFlatAmount: 0,
                       cgstPct: line.cgstPct,
                       sgstPct: line.sgstPct,
                       igstPct: line.igstPct,
@@ -685,56 +626,6 @@ export function POLineItemsSection({
                       ) : (
                         <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
                       )} */}
-                    </td>
-                    <td className="px-3 py-2">
-                      {isEditing && draft ? (
-                        <AutocompleteSelect
-                          options={DISCOUNT_TYPE_OPTIONS}
-                          value={draft.discountType}
-                          onChange={(v) =>
-                            setInlineEditDraft((prev) =>
-                              prev ? { ...prev, discountType: v as "percentage" | "flat" } : prev,
-                            )
-                          }
-                          className={inputCls}
-                        />
-                      ) : (
-                        <span className="text-xs capitalize">{displayDiscType}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {isEditing && draft && displayDiscType === "percentage" ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          value={draft.discountPct}
-                          onChange={(e) =>
-                            setInlineEditDraft((prev) =>
-                              prev ? { ...prev, discountPct: e.target.value } : prev,
-                            )
-                          }
-                          className={cn(inputCls, "w-16 ml-auto text-right")}
-                        />
-                      ) : (
-                        <span className="text-xs tabular-nums">
-                          {displayDiscType === "percentage" ? `${displayDiscPct}%` : "—"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {isEditing && draft && displayDiscType === "flat" ? (
-                        <IndianRupeeInput
-                          value={Number(draft.discountFlatAmount) || 0}
-                          onChange={(n) =>
-                            setInlineEditDraft((prev) =>
-                              prev ? { ...prev, discountFlatAmount: String(n) } : prev,
-                            )
-                          }
-                          className={cn(inputCls, "w-20 ml-auto")}
-                        />
-                      ) : (
-                        <span className="text-xs tabular-nums">{formatCurrency(discAmt)}</span>
-                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                     <span className="text-xs tabular-nums">{displayGstPct}%</span>

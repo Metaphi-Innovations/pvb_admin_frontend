@@ -14,6 +14,8 @@ export type PurchaseReturnStatus =
   | "Received_By_Supplier"
   | "Cancelled";
 
+export type PurchaseReturnUnit = "CASE" | "PIECE";
+
 export interface PurchaseReturnItem {
   id: string;
   purchaseOrderProductId?: string;
@@ -27,8 +29,9 @@ export interface PurchaseReturnItem {
   qcNo?: string;
   grnItemId?: string;
   grnBatchId?: string;
+  batchGroupKey?: string;
   inventoryDetailId: string;
-  inventoryRejectedItemId: string;
+  inventoryRejectedItemId?: string;
   mfgDate: string;
   expDate: string;
   caseSize: number;
@@ -40,6 +43,16 @@ export interface PurchaseReturnItem {
   alreadyReturnedQty: number;
   balanceCases: number;
   balanceRejectedQty: number;
+  /** Live remaining pool from inventory */
+  currentRemainingQty?: number;
+  /** Quantity returned on this document */
+  documentReturnedQty?: number;
+  /** Max editable quantity on edit */
+  maxEditableQty?: number;
+  returnUnit: PurchaseReturnUnit;
+  returnValue: number;
+  returnBaseQty: number;
+  /** @deprecated Legacy fields — kept for backward compatibility */
   returnCases: number;
   returnQty: number;
   lineRemark: string;

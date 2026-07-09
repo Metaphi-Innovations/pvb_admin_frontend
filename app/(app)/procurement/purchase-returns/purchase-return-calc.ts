@@ -19,6 +19,7 @@ import {
   getPOBillToAddresses,
 } from "../purchase-orders/po-address-utils";
 import type { PurchaseReturn, PurchaseReturnItem } from "./purchase-return-data";
+import { resolveReturnBaseQty } from "./purchase-return-utils";
 
 export function resolveTaxSupplyForPO(po: PurchaseOrder): TaxSupplyType {
   const billToAddresses = getPOBillToAddresses();
@@ -62,7 +63,7 @@ export function resolveBatchPricing(
 }
 
 export function recalcReturnItem(item: PurchaseReturnItem): PurchaseReturnItem {
-  const qty = item.selected && item.returnQty > 0 ? item.returnQty : 0;
+  const qty = item.selected ? resolveReturnBaseQty(item) : 0;
   const calc = calcLineAmounts({
     orderedQty: qty,
     unitPrice: item.unitPrice,
@@ -76,6 +77,8 @@ export function recalcReturnItem(item: PurchaseReturnItem): PurchaseReturnItem {
 
   return {
     ...item,
+    returnBaseQty: qty,
+    returnQty: qty,
     grossAmount: calc.grossAmount,
     taxableValue: calc.taxableValue,
     cgstAmount: calc.cgstAmount,
@@ -98,7 +101,7 @@ export function buildReturnSummary(
   let totalIgst = 0;
 
   items
-    .filter((it) => it.selected && it.returnQty > 0)
+    .filter((it) => it.selected && resolveReturnBaseQty(it) > 0)
     .forEach((it) => {
       const line = recalcReturnItem(it);
       grossAmount += line.grossAmount;
@@ -151,7 +154,7 @@ export function recalcPurchaseReturn(
   });
 
   const summary = buildReturnSummary(items, additionalCharges);
-  const active = items.filter((it) => it.selected && it.returnQty > 0);
+  const active = items.filter((it) => it.selected && resolveReturnBaseQty(it) > 0);
 
   return {
     ...record,
@@ -160,7 +163,7 @@ export function recalcPurchaseReturn(
     summary,
     taxSupplyType,
     totalItems: active.length,
-    totalReturnQty: active.reduce((s, it) => s + it.returnQty, 0),
+    totalReturnQty: active.reduce((s, it) => s + resolveReturnBaseQty(it), 0),
   };
 }
 
