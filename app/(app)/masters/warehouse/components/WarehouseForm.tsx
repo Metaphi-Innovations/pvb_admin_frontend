@@ -51,7 +51,7 @@ import {
 	fetchGstRegistrationDetailsAsync,
 	GST_REGISTRATION_TYPE_DEFAULT,
 } from "@/lib/masters/gst-compliance";
-import { useCfAgentCustomers } from "@/hooks/masters";
+import { useCfDropdown, usePincode } from "@/hooks/masters";
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -834,6 +834,27 @@ export function WarehouseForm({
 		]);
 	};
 
+	const pincodeQuery = usePincode(
+		/^\d{6}$/.test(form.pincode.trim()) ? form.pincode.trim() : null,
+	);
+	const pincodeRecords = pincodeQuery.data ?? [];
+
+	useEffect(() => {
+		if (pincodeRecords.length === 0) return;
+
+		const first = pincodeRecords[0];
+
+		updateWarehouseAddress({
+			...warehouseAddress,
+			state: first.statename || warehouseAddress.state,
+			district: first.district || warehouseAddress.district,
+			...(pincodeRecords.length === 1
+				? { town: first.officename || warehouseAddress.town, city: first.officename || warehouseAddress.city }
+				: {}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeRecords]);
+
 	const addSelectedDocumentTypes = () => {
 		if (bulkDocumentTypeIds.length === 0) return;
 		const incompleteIndex = (form.documents || []).findIndex(
@@ -957,17 +978,16 @@ export function WarehouseForm({
 		window.open(safeUrl, "_blank", "noopener,noreferrer");
 	};
 
-	const isCfAgent = form.operatedBy === "C&F Agent";
-	const cfAgentsQuery = useCfAgentCustomers(isCfAgent);
+	const cfDropdownQuery = useCfDropdown();
 
 	const cfCustomers = useMemo(() => {
-		const items = cfAgentsQuery.data?.items ?? [];
+		const items = cfDropdownQuery.data ?? [];
 
 		const options = items.map((customer) => {
-			const suffix = (customer.mobileNo || "").trim() || (customer.gstinNo || "").trim();
+			const suffix = (customer.mobile_no || "").trim();
 			return {
-				value: customer.customerName,
-				label: suffix ? `${customer.customerName} — ${suffix}` : customer.customerName,
+				value: customer.customer_id,
+				label: suffix ? `${customer.customer_name} — ${suffix}` : customer.customer_name,
 			};
 		});
 
@@ -976,7 +996,7 @@ export function WarehouseForm({
 		}
 
 		return options;
-	}, [cfAgentsQuery.data, form.customerType]);
+	}, [cfDropdownQuery.data, form.customerType]);
 
 	const set = <K extends keyof WarehouseFormValues>(
 		key: K,

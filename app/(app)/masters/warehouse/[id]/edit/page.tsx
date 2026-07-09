@@ -107,6 +107,7 @@ export default function EditWarehousePage() {
           warehouse_name: form.warehouseName.trim(),
           operated_by: form.operatedBy || null,
           gst_applicable: form.gstApplicable,
+          c_f_agent_id: form.operatedBy === "C&F Agent" ? form.customerType : null,
           gst_number: form.gstApplicable ? form.gstin.trim().toUpperCase() : null,
           registration_type: form.gstApplicable ? form.gstRegistrationType : null,
           registered_legal_name: form.gstApplicable ? form.registeredLegalName.trim() : null,

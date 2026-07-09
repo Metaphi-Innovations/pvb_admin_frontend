@@ -108,20 +108,3 @@ export function useExportWarehouses() {
         mutationFn: (params: WarehouseExportParams) => WarehouseListService.export(params),
     });
 }
-
-export function useCfAgentCustomers(enabled: boolean) {
-    return useQuery({
-        queryKey: ["customers", "cf-agents"],
-        queryFn: () =>
-            CustomerListService.list({
-                page: 1,
-                pageSize: 1000,
-                search: "",
-                ordering: "",
-                status: "all",
-                apiFilters: { customer_type__customer_type_name: "C&F" },
-            }),
-        enabled,
-        staleTime: 60_000,
-    });
-}

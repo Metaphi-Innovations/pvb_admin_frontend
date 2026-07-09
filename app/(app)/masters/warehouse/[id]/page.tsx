@@ -13,7 +13,6 @@ import {
 import { Clock, MapPin, Pencil, Phone, User, Warehouse, FileText } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useWarehouse } from "@/hooks/masters";
-import type { WarehouseListRecord } from "@/services/warehouse-list.service";
 
 function formatStatus(status: string): string {
   if (status === "Under Maintenance" || status === "under_maintenance") return "Under Maintenance";

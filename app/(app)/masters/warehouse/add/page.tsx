@@ -46,6 +46,7 @@ export default function AddWarehousePage() {
 			{
 				warehouse_name: form.warehouseName.trim(),
 				operated_by: form.operatedBy || null,
+				c_f_agent_id: form.operatedBy === "C&F Agent" ? form.customerType : null,
 				gst_applicable: form.gstApplicable,
 				gst_number: form.gstApplicable ? form.gstin.trim().toUpperCase() : null,
 				registration_type: form.gstApplicable ? form.gstRegistrationType : null,

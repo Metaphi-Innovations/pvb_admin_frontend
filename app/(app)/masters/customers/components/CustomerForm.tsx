@@ -112,9 +112,10 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload, CustomerBranchDocument, buildFileKey } from "@/services/customer-list.service";
-import { useGstDropdown, useTdsDropdown } from "@/hooks/masters";
+import { useGstDropdown, usePincode, useTdsDropdown } from "@/hooks/masters";
 import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
 import { CustomerTypeDocument } from "@/services/customer-type-list.service";
+import { PincodeService } from "@/services/pincode.service";
 
 export interface BranchAddress {
 	address: string;
@@ -149,6 +150,7 @@ export interface CustomerBranch {
 export interface CustomerTypeWithDocs {
 	id: string;
 	customerType: string;
+	customerInitialCode?: string
 	documents?: CustomerTypeDocument[];
 }
 
@@ -164,6 +166,12 @@ export function getDocumentsForCustomerType(
 		required: true,
 	}));
 }
+
+function extractPreviewSequence(previewNumber: string): string {
+	const parts = previewNumber.split("-");
+	return parts.length > 1 ? parts[parts.length - 1] : previewNumber;
+}
+
 export interface CustomerFormValues {
 	customerName: string;
 	countryCode: string;
@@ -259,7 +267,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	registeredLegalName: "",
 	registeredAddress: "",
 	gstMasterId: "",
-	tdsApplicable: false,
+	tdsApplicable: true,
 	tdsMasterId: "",
 	pan: "",
 	msmeRegistered: false,
@@ -495,17 +503,17 @@ function FieldError({ msg }: { msg?: string }) {
 	);
 }
 
-const YES_NO_OPTIONS = [
-	{ value: "yes", label: "Yes" },
-	{ value: "no", label: "No" },
-];
+// const YES_NO_OPTIONS = [
+// 	{ value: "yes", label: "Yes" },
+// 	{ value: "no", label: "No" },
+// ];
 
-const STATUS_OPTIONS = [
-	{ value: "active", label: "Active" },
-	{ value: "inactive", label: "Inactive" },
-	{ value: "draft", label: "Draft" },
-	{ value: "blocked", label: "Blocked" },
-];
+// const STATUS_OPTIONS = [
+// 	{ value: "active", label: "Active" },
+// 	{ value: "inactive", label: "Inactive" },
+// 	{ value: "draft", label: "Draft" },
+// 	{ value: "blocked", label: "Blocked" },
+// ];
 
 // function SectionHead({ label, sub }: { label: string; sub?: string }) {
 // 	return (
@@ -569,6 +577,52 @@ function CountryCodePicker({
 				))}
 			</PopoverContent>
 		</Popover>
+	);
+}
+
+function BranchAddressWithPincode({
+	address,
+	onChange,
+	readOnly,
+	stateOptions,
+	errors,
+}: {
+	address: BranchAddress;
+	onChange: (addr: BranchAddress) => void;
+	readOnly?: boolean;
+	stateOptions: ReturnType<typeof getStateSelectOptions>;
+	errors?: Record<string, string | undefined>;
+}) {
+	const pincodeQuery = usePincode(
+		/^\d{6}$/.test(address.pincode.trim()) ? address.pincode.trim() : null,
+	);
+	const pincodeRecords = pincodeQuery.data ?? [];
+
+	useEffect(() => {
+		if (pincodeRecords.length === 0) return;
+
+		const first = pincodeRecords[0];
+
+		onChange({
+			...address,
+			state: first.statename || address.state,
+			district: first.district || address.district,
+			pincodeId: pincodeRecords.length === 1 ? first.id : address.pincodeId,
+			...(pincodeRecords.length === 1
+				? { town: first.officename || address.town, city: first.officename || address.city }
+				: {}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeRecords]);
+
+	return (
+		<BranchAddressFields
+			address={address}
+			onChange={onChange}
+			readOnly={readOnly}
+			stateOptions={stateOptions}
+			errors={errors}
+		/>
 	);
 }
 
@@ -777,7 +831,17 @@ export function CustomerForm({
 				return;
 			}
 			const snap = gstDetailsToAddressSnapshot(details);
-			setGstAddressSnapshot(snap);
+
+			let pincodeId: string | undefined;
+			if (snap.pincode && /^\d{6}$/.test(snap.pincode.trim())) {
+				const pincodeRecords = await PincodeService.getByPincode(snap.pincode.trim());
+				if (pincodeRecords.length > 0) {
+					pincodeId = pincodeRecords[0].id;
+				}
+			}
+
+			const enrichedSnap = { ...snap, pincodeId };
+			setGstAddressSnapshot(enrichedSnap);
 			const displayName = details.tradeName || details.legalBusinessName;
 			const updatedBranches = form.branches.map((b, idx) => {
 				const isMain =
@@ -786,16 +850,16 @@ export function CustomerForm({
 				return {
 					...b,
 					billingAddress: {
-						...snap,
-						addressLine2: snap.addressLine2 ?? "",
-						country: snap.country ?? "India",
-						district: snap.district ?? snap.city,
+						...enrichedSnap,
+						addressLine2: enrichedSnap.addressLine2 ?? "",
+						country: enrichedSnap.country ?? "India",
+						district: enrichedSnap.district ?? enrichedSnap.city,
 					},
 					shippingAddress: {
-						...snap,
-						addressLine2: snap.addressLine2 ?? "",
-						country: snap.country ?? "India",
-						district: snap.district ?? snap.city,
+						...enrichedSnap,
+						addressLine2: enrichedSnap.addressLine2 ?? "",
+						country: enrichedSnap.country ?? "India",
+						district: enrichedSnap.district ?? enrichedSnap.city,
 					},
 				};
 			});
@@ -1182,7 +1246,7 @@ export function CustomerForm({
 				<FieldError msg={errors.pan} />
 			</div>
 			<div className="flex flex-wrap items-end gap-3">
-				<div className={ERP.field}>
+				{/* <div className={ERP.field}>
 					<Label className={ERP.label}>TDS Applicable</Label>
 					<div className="flex h-8 items-center">
 						<ListingStatusToggle
@@ -1198,8 +1262,8 @@ export function CustomerForm({
 							disabled={readOnly}
 						/>
 					</div>
-				</div>
-				{form.tdsApplicable ? (
+				</div> */}
+				<div className="flex flex-wrap items-end gap-3">
 					<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 						<Label className={ERP.label}>
 							TDS Section <span className="text-red-500">*</span>
@@ -1217,7 +1281,7 @@ export function CustomerForm({
 						/>
 						<FieldError msg={errors.tdsMasterId} />
 					</div>
-				) : null}
+				</div>
 			</div>
 			{gstRegistered && (
 				<div className={ERP.field}>
@@ -1871,7 +1935,7 @@ export function CustomerForm({
 															</Button>
 														</div>
 													)}
-													<BranchAddressFields
+													<BranchAddressWithPincode
 														address={branch.billingAddress}
 														onChange={(addr) =>
 															updateBranchBillingAddress(bIdx, addr)
@@ -1918,7 +1982,7 @@ export function CustomerForm({
 															</Button>
 														</div>
 													)}
-													<BranchAddressFields
+													<BranchAddressWithPincode
 														address={branch.shippingAddress}
 														onChange={(addr) =>
 															updateBranchShippingAddress(bIdx, addr)
@@ -2256,6 +2320,197 @@ export function CustomerForm({
 	);
 }
 
+// Shape of what the customer detail API actually returns
+export interface CustomerApiBranchDocument {
+	customer_branch_document_id: string;
+	document_type_id: string;
+	file_url: string;
+	document_type?: { id: string; title: string };
+}
+
+export interface CustomerApiBranch {
+	branch_id?: string;
+	branch_name: string;
+	is_main_branch: boolean;
+	billing_country?: string;
+	billing_address_line_1?: string;
+	billing_address_line_2?: string;
+	billing_state?: string;
+	billing_city?: string;
+	billing_town?: string;
+	billing_pincode?: string;
+	billing_pincode_id?: string;
+	shipping_country?: string;
+	shipping_address_line_1?: string;
+	shipping_address_line_2?: string;
+	shipping_state?: string;
+	shipping_city?: string;
+	shipping_town?: string;
+	shipping_pincode?: string;
+	shipping_pincode_id?: string;
+	documents?: CustomerApiBranchDocument[];
+}
+
+export interface CustomerApiRecord {
+	customer_id: string;
+	customer_code: string;
+	customer_name: string;
+	country_code?: string;
+	mobile_no: string;
+	email?: string;
+	customer_type_id: string;
+	sales_man_id?: string;
+	cib_applicable?: boolean;
+	cib_reg_no?: string;
+	fco_applicable?: boolean;
+	fco_reg_no?: string;
+	fssai_applicable?: boolean;
+	fssai_no?: string;
+	msme_applicable?: boolean;
+	msme_reg_no?: string;
+	gst_applicable?: boolean;
+	registration_type?: string;
+	gstin_no?: string;
+	registered_legal_name?: string;
+	registered_gst_address?: string;
+	pan_no?: string;
+	tds_applicable?: boolean;
+	tds_section_id?: string;
+	credit_limit?: string | number;
+	payment_type?: string;
+	credit_days?: string | number;
+	advance?: string | number;
+	account_holder?: string;
+	bank_name?: string;
+	branch_name?: string;
+	account_number?: string;
+	ifsc_code?: string;
+	swift_code?: string;
+	status?: string;
+	branches?: CustomerApiBranch[];
+}
+
+function apiDocToBranchDocument(doc: CustomerApiBranchDocument): BranchDocument {
+	const fileName = doc.file_url ? doc.file_url.split("/").pop() : undefined;
+	return {
+		documentTypeId: doc.document_type_id,
+		documentName: doc.document_type?.title ?? "",
+		required: true,
+		fileUrl: doc.file_url || undefined,
+		fileName: fileName || undefined,
+	};
+}
+
+function apiBranchToFormBranch(b: CustomerApiBranch): CustomerBranch {
+	return {
+		branchName: b.branch_name ?? "",
+		isMain: !!b.is_main_branch,
+		billingAddress: {
+			address: b.billing_address_line_1 ?? "",
+			addressLine2: b.billing_address_line_2 ?? "",
+			country: b.billing_country ?? "India",
+			district: b.billing_city ?? "",
+			town: b.billing_town ?? "",
+			city: b.billing_city ?? "",
+			state: b.billing_state ?? "",
+			pincode: b.billing_pincode ?? "",
+			pincodeId: b.billing_pincode_id || undefined,
+		},
+		shippingAddress: {
+			address: b.shipping_address_line_1 ?? "",
+			addressLine2: b.shipping_address_line_2 ?? "",
+			country: b.shipping_country ?? "India",
+			district: b.shipping_city ?? "",
+			town: b.shipping_town ?? "",
+			city: b.shipping_city ?? "",
+			state: b.shipping_state ?? "",
+			pincode: b.shipping_pincode ?? "",
+			pincodeId: b.shipping_pincode_id || undefined,
+		},
+		documents: (b.documents ?? []).map(apiDocToBranchDocument),
+	};
+}
+
+export function customerApiRecordToFormValues(
+	record: CustomerApiRecord,
+): CustomerFormValues {
+	const gstApplicable = !!record.gst_applicable;
+	const gstin = record.gstin_no ?? "";
+	const gstCategory =
+		record.registration_type || deriveGstCategory(gstApplicable, gstin);
+	const gstRegistered = deriveGstRegistered(gstApplicable, gstin, gstCategory);
+
+	const branches: CustomerBranch[] = record.branches?.length
+		? record.branches.map(apiBranchToFormBranch)
+		: DEFAULT_CUSTOMER_FORM.branches;
+
+	return {
+		...DEFAULT_CUSTOMER_FORM,
+		customerName: record.customer_name ?? "",
+		countryCode: record.country_code || "+91",
+		mobile: record.mobile_no ?? "",
+		email: record.email ?? "",
+		customerType: record.customer_type_id ?? "",
+		status: (record.status?.toLowerCase() as CustomerStatus) ?? "draft",
+		blockReason: "",
+
+		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstRegistered,
+		gstRegistrationType: gstRegistered
+			? deriveGstRegistrationType(gstCategory)
+			: GST_CATEGORY_UNREGISTERED,
+		gstCategory,
+		gstin,
+		registeredLegalName: record.registered_legal_name ?? "",
+		registeredAddress: record.registered_gst_address ?? "",
+		gstMasterId: "",
+
+		tdsApplicable: true,
+		tdsMasterId: record.tds_section_id ?? "",
+		pan: record.pan_no ?? "",
+
+		msmeRegistered: !!record.msme_applicable,
+		msmeNumber: record.msme_reg_no ?? "",
+		fssaiRegistered: !!record.fssai_applicable,
+		fssai: record.fssai_no ?? "",
+		cibRegistered: !!record.cib_applicable,
+		cibRegn: record.cib_reg_no ?? "",
+		fcoRegistered: !!record.fco_applicable,
+		fcoRegn: record.fco_reg_no ?? "",
+
+		address: branches[0]?.billingAddress?.address ?? "",
+		pincode: branches[0]?.billingAddress?.pincode ?? "",
+
+		salesManId: record.sales_man_id ?? "",
+		creditLimit: record.credit_limit != null ? String(record.credit_limit) : "",
+		...structuredToFormValues(
+			resolveStructuredPaymentTerms({
+				paymentType: record.payment_type as any,
+				creditDays:
+					record.credit_days !== undefined && record.credit_days !== null
+						? Number(record.credit_days)
+						: undefined,
+				advancePercentage:
+					record.advance !== undefined && record.advance !== null
+						? Number(record.advance)
+						: undefined,
+			}),
+		),
+
+		bankName: record.bank_name ?? "",
+		bankBranchAddress: record.branch_name ?? "",
+		bankAccountNo: record.account_number ?? "",
+		ifscCode: record.ifsc_code ?? "",
+		accountHolderName: record.account_holder ?? "",
+		branch: record.branch_name ?? "",
+		accountNumber: record.account_number ?? "",
+		confirmAccountNumber: record.account_number ?? "",
+		swiftCode: record.swift_code ?? "",
+
+		branches,
+	};
+}
+
 export function validateCustomerForm(
 	form: CustomerFormValues,
 	isAdd?: boolean,
@@ -2283,7 +2538,7 @@ export function validateCustomerForm(
 			e.msmeNumber = MSME_NUMBER_ERROR;
 		}
 	}
-	if (form.tdsApplicable && !form.tdsMasterId)
+	if (!form.tdsMasterId)
 		e.tdsMasterId = "Select TDS section from master";
 	Object.assign(e, validateComplianceRegistration(form));
 
@@ -2365,10 +2620,12 @@ export function customerRecordToFormValues(
 		record.registrationType || deriveGstCategory(gstApplicable, gstin);
 	const gstRegistered = deriveGstRegistered(gstApplicable, gstin, gstCategory);
 
-	const branches: CustomerBranch[] =
-		(record.branches as CustomerBranch[] | undefined)?.length
-			? (record.branches as CustomerBranch[])
-			: DEFAULT_CUSTOMER_FORM.branches;
+	// record.branches is still the RAW API shape (snake_case), never transformed
+	// by the service layer — map it through apiBranchToFormBranch here.
+	const rawBranches = (record.branches ?? []) as unknown as CustomerApiBranch[];
+	const branches: CustomerBranch[] = rawBranches.length
+		? rawBranches.map(apiBranchToFormBranch)
+		: DEFAULT_CUSTOMER_FORM.branches;
 
 	return {
 		...DEFAULT_CUSTOMER_FORM,
@@ -2462,7 +2719,7 @@ export function formValuesToUpdatePayload(
 		pan_no: form.pan.trim().toUpperCase(),
 
 		tds_applicable: form.tdsApplicable,
-		tds_section_id: form.tdsApplicable ? form.tdsMasterId : "",
+		tds_section_id: form.tdsMasterId,
 
 		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
 		payment_type: form.paymentType || undefined,
@@ -2510,8 +2767,8 @@ export function formValuesToCreatePayload(
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
 		pan_no: form.pan.trim().toUpperCase(),
 
-		tds_applicable: form.tdsApplicable,
-		tds_section_id: form.tdsApplicable ? form.tdsMasterId : "",
+		tds_applicable: true,
+		tds_section_id: form.tdsMasterId,
 
 		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
 		payment_type: form.paymentType || undefined,
@@ -2583,9 +2840,8 @@ export function formValuesToCustomer(
 			form.gstRegistered && form.gstMasterId
 				? Number(form.gstMasterId)
 				: null,
-		tdsApplicable: form.tdsApplicable,
-		tdsMasterId:
-			form.tdsApplicable && form.tdsMasterId ? Number(form.tdsMasterId) : null,
+		tdsApplicable: true,
+		tdsMasterId: form.tdsMasterId ? Number(form.tdsMasterId) : null,
 		pan: form.pan.trim().toUpperCase(),
 		tan: "",
 		msmeRegistered: form.msmeRegistered,

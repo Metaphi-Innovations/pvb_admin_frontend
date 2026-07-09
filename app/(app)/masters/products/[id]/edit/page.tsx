@@ -49,6 +49,7 @@ export default function EditProductPage() {
       supplier: apiProduct.supplierId || "",
       supplierCode: apiProduct.supplierCode || undefined,
       category: apiProduct.category,
+      categoryId: apiProduct.categoryId,
       subCategory: apiProduct.subCategory,
       segment: apiProduct.segment,
       segmentId: apiProduct.segmentId,

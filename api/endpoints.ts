@@ -193,6 +193,7 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/customer/export",
       PREVIEW_NUMBER: "/master/customer/preview-number",
       DROPDOWN: "/master/customer/dropdown",
+      CFDROPDOWN: "/master/customer/cf-customer-dropdown"
     },
     SUPPLIER_TYPE: {
       LIST: "/master/supplier-type/list",
