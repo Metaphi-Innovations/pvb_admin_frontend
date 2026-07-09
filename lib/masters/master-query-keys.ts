@@ -21,7 +21,10 @@ export const masterKeys = {
       [...masterKeys.categories.lists(), params] as const,
     details: () => [...masterKeys.categories.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.categories.details(), id] as const,
-    dropdown: () => [...masterKeys.categories.all(), "dropdown"] as const
+    dropdown: () => [...masterKeys.categories.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.categories.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.categories.filterDropdowns(), fieldName] as const,
   },
 
   gst: {
@@ -31,6 +34,9 @@ export const masterKeys = {
     details: () => [...masterKeys.gst.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.gst.details(), id] as const,
     dropdown: () => [...masterKeys.gst.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.gst.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.gst.filterDropdowns(), fieldName] as const,
   },
 
   hsn: {
@@ -39,7 +45,61 @@ export const masterKeys = {
     list: (params: MasterListKeyParams) => [...masterKeys.hsn.lists(), params] as const,
     details: () => [...masterKeys.hsn.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.hsn.details(), id] as const,
-    dropdown: () => [...masterKeys.hsn.all(), "dropdown"] as const
+    dropdown: () => [...masterKeys.hsn.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.hsn.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.hsn.filterDropdowns(), fieldName] as const,
+  },
+
+  crops: {
+    all: () => [...masterKeys.all, "crops"] as const,
+    lists: () => [...masterKeys.crops.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.crops.lists(), params] as const,
+    details: () => [...masterKeys.crops.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.crops.details(), id] as const,
+    dropdown: () => [...masterKeys.crops.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.crops.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.crops.filterDropdowns(), fieldName] as const,
+  },
+
+  eventTypes: {
+    all: () => [...masterKeys.all, "event-types"] as const,
+    lists: () => [...masterKeys.eventTypes.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.eventTypes.lists(), params] as const,
+    details: () => [...masterKeys.eventTypes.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.eventTypes.details(), id] as const,
+    dropdown: () => [...masterKeys.eventTypes.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.eventTypes.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.eventTypes.filterDropdowns(), fieldName] as const,
+    summary: () => [...masterKeys.eventTypes.all(), "summary"] as const,
+  },
+
+  brands: {
+    all: () => [...masterKeys.all, "brands"] as const,
+    lists: () => [...masterKeys.brands.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.brands.lists(), params] as const,
+    details: () => [...masterKeys.brands.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.brands.details(), id] as const,
+    dropdown: () => [...masterKeys.brands.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.brands.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.brands.filterDropdowns(), fieldName] as const,
+  },
+
+  cfu: {
+    all: () => [...masterKeys.all, "cfu"] as const,
+    lists: () => [...masterKeys.cfu.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.cfu.lists(), params] as const,
+    details: () => [...masterKeys.cfu.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.cfu.details(), id] as const,
+    dropdown: () => [...masterKeys.cfu.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.cfu.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.cfu.filterDropdowns(), fieldName] as const,
+    summary: () => [...masterKeys.cfu.all(), "summary"] as const,
   },
 
   segments: {
@@ -75,6 +135,9 @@ export const masterKeys = {
     details: () => [...masterKeys.documentTypes.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.documentTypes.details(), id] as const,
     dropdown: () => [...masterKeys.documentTypes.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.documentTypes.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.documentTypes.filterDropdowns(), fieldName] as const,
   },
 
   customerTypes: {
@@ -84,6 +147,9 @@ export const masterKeys = {
       [...masterKeys.customerTypes.lists(), params] as const,
     details: () => [...masterKeys.customerTypes.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.customerTypes.details(), id] as const,
+    filterDropdowns: () => [...masterKeys.customerTypes.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.customerTypes.filterDropdowns(), fieldName] as const,
   },
 
   units: {
@@ -130,5 +196,40 @@ export const masterKeys = {
     dropdown: () => [...masterKeys.suppliers.all(), "dropdown"] as const,
     previewNumber: () => [...masterKeys.suppliers.all(), "preview-number"] as const,
     export: () => [...masterKeys.suppliers.all(), "export"] as const,
-  }
+  },
+
+  customers: {
+    all: () => [...masterKeys.all, "customers"] as const,
+    lists: () => [...masterKeys.customers.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.customers.lists(), params] as const,
+    details: () => [...masterKeys.customers.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.customers.details(), id] as const,
+    dropdown: () => [...masterKeys.customers.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
+    export: () => [...masterKeys.customers.all(), "export"] as const,
+  },
+
+  warehouses: {
+    all: () => [...masterKeys.all, "warehouses"] as const,
+    lists: () => [...masterKeys.warehouses.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.warehouses.lists(), params] as const,
+    details: () => [...masterKeys.warehouses.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.warehouses.details(), id] as const,
+    dropdown: () => [...masterKeys.warehouses.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.warehouses.all(), "preview-number"] as const,
+    export: () => [...masterKeys.warehouses.all(), "export"] as const,
+  },
+
+  supplierTypes: {
+    all: () => [...masterKeys.all, "supplier-types"] as const,
+    lists: () => [...masterKeys.supplierTypes.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.supplierTypes.lists(), params] as const,
+    details: () => [...masterKeys.supplierTypes.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.supplierTypes.details(), id] as const,
+    dropdown: () => [...masterKeys.supplierTypes.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.supplierTypes.all(), "preview-number"] as const,
+    export: () => [...masterKeys.supplierTypes.all(), "export"] as const,
+  },
 } as const;

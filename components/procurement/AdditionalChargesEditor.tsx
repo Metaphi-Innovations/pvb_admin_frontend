@@ -25,6 +25,7 @@ import {
   getDefaultGstMasterId,
   totalGstPctFromRates,
 } from "@/lib/procurement/gst-master-utils";
+import { useGstDropdown } from "@/hooks/masters/use-gst";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -123,7 +124,22 @@ export function AdditionalChargesEditor({
   taxSupplyType?: TaxSupplyType;
   className?: string;
 }) {
-  const gstOptions = React.useMemo(() => getActiveGstMasterOptions(), []);
+  const gstDropdownQuery = useGstDropdown();
+  const gstOptions = React.useMemo(() => {
+    const fromApi = (gstDropdownQuery.data ?? [])
+      .map((g) => {
+        const localGstMasterId =
+          findGstMasterIdByTotalPct(g.gstPercentage) ?? getDefaultGstMasterId();
+        return {
+          value: String(localGstMasterId),
+          label: `${g.gstPercentage}%`,
+          sublabel: g.remark || undefined,
+        };
+      })
+      .sort((a, b) => Number(a.label.replace("%", "")) - Number(b.label.replace("%", "")));
+    if (fromApi.length > 0) return fromApi;
+    return getActiveGstMasterOptions();
+  }, [gstDropdownQuery.data]);
 
   const update = (uid: string, patch: Partial<ProcurementAdditionalCharge>) => {
     onChange(charges.map((c) => (c.uid === uid ? { ...c, ...patch } : c)));

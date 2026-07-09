@@ -34,6 +34,48 @@ export interface CategoryDropdownItem {
   categoryCode: string;
 }
 
+export interface CategoryFilterOption {
+  label: string;
+  value: string;
+}
+
+export type CategoryFilterField =
+  | "categoryName"
+  | "description"
+  | "is_active"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
+function mapFilterOptions(
+  data: unknown[],
+  fieldName: CategoryFilterField,
+): CategoryFilterOption[] {
+  const options: CategoryFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
@@ -122,6 +164,26 @@ export function toCategoryNameSelectOptions(
 
   if (currentName && !options.some((option) => option.value === currentName)) {
     return [{ label: currentName, value: currentName }, ...options];
+  }
+
+  return options;
+}
+
+export function toCategoryIdSelectOptions(
+  items: CategoryDropdownItem[],
+  currentId?: string,
+  currentName?: string,
+): CategorySelectOption[] {
+  const options = items.map((item) => ({
+    label: item.categoryName,
+    value: item.id,
+  }));
+
+  if (currentId && !options.some((option) => option.value === currentId)) {
+    return [
+      { label: currentName || currentId, value: currentId },
+      ...options,
+    ];
   }
 
   return options;
@@ -216,6 +278,24 @@ export const CategoryListService = {
         categoryCode: asString(item.category_code ?? item.categoryCode),
       };
     });
+  },
+
+  async getFilterDropdown(
+    fieldName: CategoryFilterField,
+    signal?: AbortSignal,
+  ): Promise<CategoryFilterOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CATEGORY.FILTER_DROPDOWN, {
+      params: { field_name: fieldName },
+      signal,
+    });
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async export(params: CategoryExportParams): Promise<void> {

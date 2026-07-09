@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Filter, X, Search } from "lucide-react";
+import { Filter, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuditFilterValue } from "./types";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
@@ -93,27 +93,14 @@ export function AuditFilterPopover({
         <div className="space-y-2.5">
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground">User</label>
-            {userOptions.length > 0 ? (
-              <AutocompleteSelect
-                options={userOptions}
-                value={user}
-                onChange={setUser}
-                placeholder="Select user..."
-                searchPlaceholder="Search user..."
-                className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
-              />
-            ) : (
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground" />
-                <Input
-                  placeholder="Username (exact match)"
-                  value={user}
-                  onChange={(e) => setUser(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleApply()}
-                  className="h-9 rounded-lg border-border bg-white pl-8 text-xs shadow-sm"
-                />
-              </div>
-            )}
+            <AutocompleteSelect
+              options={userOptions}
+              value={user}
+              onChange={setUser}
+              placeholder="Select user..."
+              searchPlaceholder="Search user..."
+              className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+            />
           </div>
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground">From date</label>

@@ -6,10 +6,11 @@ export interface PackedBatchAllocation {
 
 export interface SalesOrderProduct {
   product: string;
+  productId?: string;
   sku: string;
-  orderedQty: number;
+  ordered_cases: number;
   packedQty: number;
-  pendingQty: number;
+  pending_cases: number;
   batchNumber?: string;
   grnNo?: string;
   mfgDate?: string;
@@ -45,7 +46,7 @@ export interface SalesOrderRecord {
 export interface PackedProduct {
   product: string;
   sku: string;
-  orderedQty: number;
+  ordered_cases: number;
   packedQty: number;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;

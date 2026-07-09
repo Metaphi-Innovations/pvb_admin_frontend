@@ -78,7 +78,7 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     salesOrderNo: raw.packing_list?.packing_number || "",
     customer: customer,
     totalItems: products.length,
-    packedQuantity: products.reduce((sum: number, p: any) => sum + Number(p.packed_qty || 0), 0),
+    packedQuantity: products.reduce((sum: number, p: any) => sum + Number(p.packed_cases || p.packed_qty || 0), 0),
     packingDate: raw.packing_date ? raw.packing_date.slice(0, 10) : "",
     packedBy: raw.packed_by_user ? `${raw.packed_by_user.first_name} ${raw.packed_by_user.last_name}`.trim() || raw.packed_by_user.username : "System",
     status: raw.status as any,
@@ -90,11 +90,11 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     products: products.map((p: any) => ({
       product: p.product_name,
       sku: p.product_code,
-      orderedQty: p.order_qty,
-      packedQty: p.packed_qty,
+      ordered_cases: p.order_cases || p.order_qty,
+      packedQty: p.packed_cases || p.packed_qty,
       batchAllocations: p.batch_code ? [{
         batchNumber: p.batch_code,
-        allocatedQty: p.packed_qty,
+        allocatedQty: p.packed_cases || p.packed_qty,
         expiryDate: "—",
       }] : undefined,
     })),
@@ -123,8 +123,10 @@ export function buildPackingDoneApiFilters(
     } else {
       apiFilters.warehouse = { warehouse_name: asString(warehouse) };
     }
-  } else if (selectedWarehouse && selectedWarehouse !== "All") {
-    apiFilters.warehouse = { warehouse_name: selectedWarehouse };
+  }
+  
+  if (selectedWarehouse && selectedWarehouse !== "All") {
+    apiFilters.warehouse_id = selectedWarehouse;
   }
 
   const customerName = filters.customer;
@@ -204,10 +206,21 @@ export const PackingDoneService = {
 
   async getFilterDropdown(
     fieldName: PackingDoneFilterField,
+    warehouseId?: string,
+    sourceType?: string,
     signal?: AbortSignal,
   ): Promise<PackingDoneFilterOption[]> {
+    const url = new URL(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.FILTER_DROPDOWN, "http://localhost");
+    url.searchParams.set("field_name", fieldName);
+    if (warehouseId) {
+      url.searchParams.set("warehouse_id", warehouseId);
+    }
+    if (sourceType) {
+      url.searchParams.set("source_type", sourceType);
+    }
+    
     const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.PACKING_DONE.FILTER_DROPDOWN}?field_name=${fieldName}`,
+      url.pathname + url.search,
       { signal },
     );
 
@@ -245,13 +258,22 @@ export const PackingDoneService = {
     remarks?: string;
     products: {
       packing_list_product_id: string;
-      packed_qty: number;
+      packed_cases: number;
       remarks?: string;
     }[];
   }): Promise<any> {
+    const transformedPayload = {
+      ...payload,
+      products: payload.products.map(p => ({
+        packing_list_product_id: p.packing_list_product_id,
+        packed_qty: p.packed_cases,
+        remarks: p.remarks,
+      }))
+    };
+
     const response = await axiosInstance.post(
       API_ENDPOINTS.WAREHOUSE.PACKING_DONE.CREATE,
-      payload
+      transformedPayload
     );
     return response.data;
   }

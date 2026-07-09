@@ -5,8 +5,10 @@ import {
   CustomerTypeListService,
   type CustomerTypeCreatePayload,
   type CustomerTypeExportParams,
+  type CustomerTypeFilterField,
   type CustomerTypeListParams,
   type CustomerTypeUpdatePayload,
+  type CustomerTypeDropdownItem,
 } from "@/services/customer-type-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -81,5 +83,22 @@ export function useExportCustomerTypes() {
   return useMutation({
     mutationFn: (params: CustomerTypeExportParams) =>
       CustomerTypeListService.export(params),
+  });
+}
+
+export function useCustomerTypeFilterDropdown(fieldName: CustomerTypeFilterField) {
+  return useQuery({
+    queryKey: masterKeys.customerTypes.filterDropdown(fieldName),
+    queryFn: ({ signal }) =>
+      CustomerTypeListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCustomerTypeDropdown() {
+  return useQuery<CustomerTypeDropdownItem[]>({
+    queryKey: masterKeys.customerTypes.all(),
+    queryFn: () => CustomerTypeListService.dropdown(),
+    staleTime: 30_000,
   });
 }

@@ -216,8 +216,20 @@ export default function ProductDetailPage() {
 			createdDate: apiProduct.createdAt || "",
 			updatedBy: apiProduct.updatedBy || "Admin",
 			updatedDate: apiProduct.updatedAt || "",
-			productImages: [],
-			productUrls: [],
+			productImages: (apiProduct.assets ?? [])
+				.filter((a) => a.asset_type === "MEDIA")
+				.map((a) => ({
+					id: a.product_asset_id ?? crypto.randomUUID(),
+					name: a.file_name ?? "image",
+					url: a.file_url ?? "",
+					size: a.file_size,
+				})),
+			productUrls: (apiProduct.assets ?? [])
+				.filter((a) => a.asset_type === "LINK")
+				.map((a) => ({
+					id: a.product_asset_id ?? crypto.randomUUID(),
+					url: a.link_url ?? "",
+				})),
 		};
 	}, [apiProduct]);
 

@@ -42,10 +42,13 @@ function TaxPctAmountCell({ pct, amount }: { pct: number; amount: number }) {
   );
 }
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
     <div className="mb-2.5 mt-0.5">
-      <p className="text-xs font-bold uppercase tracking-wider text-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </p>
       {sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
     </div>
   );
@@ -137,6 +140,7 @@ interface POLineItemsSectionProps {
   linkedPr: PurchaseRequest | null;
   taxSupplyType?: TaxSupplyType;
   supplierState?: string;
+  linesError?: string;
 }
 
 export function POLineItemsSection({
@@ -148,6 +152,7 @@ export function POLineItemsSection({
   linkedPr,
   taxSupplyType = "intra",
   supplierState,
+  linesError,
 }: POLineItemsSectionProps) {
   const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
   const [quickQty, setQuickQty] = useState("1");
@@ -252,7 +257,7 @@ export function POLineItemsSection({
     const resolvedPricings = await Promise.all(pricingPromises);
     const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
 
-    for (const idStr of Array.from(new Set(quickProductIds))) {
+    for (const idStr of quickProductIds) {
       const productId = idStr;
       const line = lineFromProduct(productId, packingQty, form.supplierId, taxSupplyType, dbProducts);
       if (!line) continue;
@@ -263,30 +268,14 @@ export function POLineItemsSection({
         line.cpSource = "pricing_master";
       }
 
-      const idx = nextLines.findIndex((l) => String(l.productId) === String(productId));
-      if (idx >= 0) {
-        const existing = nextLines[idx];
-        const nextPack = existing.orderedQtyPack + packingQty;
-        nextLines[idx] = {
-          ...existing,
-          orderedQtyPack: nextPack,
-          orderedQty: calcPackingToBaseQty(nextPack, existing.conversionQty),
-          discountType,
-          discountPct,
-          discountFlatAmount,
-          remarks: quickRemarks || existing.remarks,
-          unitPrice: apiPricing && apiPricing.success ? apiPricing.cost_price : existing.unitPrice,
-        };
-      } else {
-        nextLines.push({
-          ...line,
-          uid: `pl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          discountType,
-          discountPct,
-          discountFlatAmount,
-          remarks: quickRemarks,
-        });
-      }
+      nextLines.push({
+        ...line,
+        uid: `pl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        discountType,
+        discountPct,
+        discountFlatAmount,
+        remarks: quickRemarks,
+      });
     }
     patch({ lines: nextLines });
     clearQuickFields();
@@ -368,12 +357,15 @@ export function POLineItemsSection({
   };
 
   return (
-    <div className="border-t border-border/60 pt-4">
+    <div id="po-field-lines" className="border-t border-border/60 pt-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <SectionHead
-          label="Product / Item Details"
-          sub="Packaging quantity, SKU conversion, discount and GST are auto-calculated from product master."
-        />
+        <div>
+          <SectionHead
+            label="Product / Item Details"
+            sub="Packaging quantity, SKU conversion, discount and GST are auto-calculated from product master."
+            required={!readOnly}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-2 mb-2.5 md:mb-0">
           <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
             {filledLines.length} item{filledLines.length === 1 ? "" : "s"}
@@ -390,6 +382,10 @@ export function POLineItemsSection({
           )}
         </div>
       </div>
+
+      {linesError && (
+        <p className="mb-2 text-[11px] text-red-500">{linesError}</p>
+      )}
 
       {poType === "direct" && !readOnly && (
         <div className="mb-3 mt-3 rounded-lg border border-border bg-muted/20 p-3">
@@ -675,7 +671,8 @@ export function POLineItemsSection({
                     </td>
                     <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums">{displaySkuQty}</td>
                     <td className="px-3 py-2 text-right">
-                      {isEditing && draft ? (
+                    <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
+                      {/* {isEditing && draft ? (
                         <IndianRupeeInput
                           value={Number(draft.unitPrice) || 0}
                           onChange={(n) =>
@@ -687,7 +684,7 @@ export function POLineItemsSection({
                         />
                       ) : (
                         <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
-                      )}
+                      )} */}
                     </td>
                     <td className="px-3 py-2">
                       {isEditing && draft ? (
@@ -740,7 +737,8 @@ export function POLineItemsSection({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {isEditing && draft ? (
+                    <span className="text-xs tabular-nums">{displayGstPct}%</span>
+                      {/* {isEditing && draft ? (
                         <AutocompleteSelect
                           options={gstOptions}
                           value={draft.gstMasterId}
@@ -754,7 +752,7 @@ export function POLineItemsSection({
                         />
                       ) : (
                         <span className="text-xs tabular-nums">{displayGstPct}%</span>
-                      )}
+                      )} */}
                     </td>
                     {taxSupplyType === "intra" ? (
                       <>

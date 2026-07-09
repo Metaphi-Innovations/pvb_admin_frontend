@@ -1,7 +1,7 @@
 export type SalesOrderListKeyParams = {
   page: number;
   pageSize: number;
-  search: string;
+  search?: string;
   ordering?: string;
   apiFilters: Record<string, unknown>;
   status?: string;

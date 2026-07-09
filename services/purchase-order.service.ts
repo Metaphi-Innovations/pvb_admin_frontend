@@ -2,7 +2,10 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
-import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
+import {
+  calcPackingToBaseQty,
+  type ProcurementAdditionalCharge,
+} from "@/lib/procurement/procurement-line-utils";
 import {
   mapBackendStatusToFrontend,
   mapFrontendStatusToBackend,
@@ -62,6 +65,11 @@ function toDisplayName(user: unknown): string {
   return `${first} ${last}`.trim();
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
 function mapDiscountType(value: unknown): "percentage" | "flat" {
   const raw = asString(value).toLowerCase();
   return raw === "flat" || raw === "fixed" ? "flat" : "percentage";
@@ -69,6 +77,61 @@ function mapDiscountType(value: unknown): "percentage" | "flat" {
 
 function mapBackendDiscountType(value: unknown): "Percentage" | "Flat" {
   return mapDiscountType(value) === "flat" ? "Flat" : "Percentage";
+}
+
+function resolveLineQtyFields(line: POLineItem): {
+  packingQty: number;
+  baseQty: number;
+} {
+  const conversionQty = line.conversionQty ?? 1;
+  const packingQty = line.orderedQtyPack ?? 0;
+  const baseQty =
+    line.orderedQty ?? calcPackingToBaseQty(packingQty, conversionQty);
+  return { packingQty, baseQty };
+}
+
+function resolveQtyFromBackend(raw: Record<string, unknown>): {
+  packingQty: number;
+  baseQty: number;
+  conversionQty: number;
+} {
+  const snapshot = asRecord(raw.product_snapshot);
+  const snapshotConversion = asNumber(snapshot.unit_per_packing) || 0;
+
+  const requestedPack = asNumber(raw.requested_qty);
+  const orderedPack = asNumber(raw.ordered_qty);
+  const requestedBase = asNumber(raw.requested_base_qty);
+  const orderedBase = asNumber(raw.ordered_base_qty);
+  const hasBaseFields = requestedBase > 0 || orderedBase > 0;
+
+  let packingQty: number;
+  let baseQty: number;
+
+  if (hasBaseFields) {
+    packingQty = orderedPack || requestedPack;
+    baseQty = orderedBase || requestedBase;
+  } else if (requestedPack > 0 && orderedPack > 0 && requestedPack !== orderedPack) {
+    // Legacy payloads stored packing qty in requested_qty and base qty in ordered_qty.
+    packingQty = requestedPack;
+    baseQty = orderedPack;
+  } else {
+    packingQty = orderedPack || requestedPack;
+    baseQty = orderedPack || requestedPack;
+  }
+
+  packingQty = packingQty || 1;
+  baseQty = baseQty || packingQty;
+
+  const conversionQty =
+    snapshotConversion ||
+    (packingQty > 0 ? Math.round((baseQty / packingQty) * 1000) / 1000 : 0) ||
+    1;
+
+  if (!hasBaseFields && !(requestedPack > 0 && orderedPack > 0 && requestedPack !== orderedPack)) {
+    baseQty = calcPackingToBaseQty(packingQty, conversionQty);
+  }
+
+  return { packingQty, baseQty, conversionQty };
 }
 
 function mapAdditionalCharges(raw: unknown): ProcurementAdditionalCharge[] {
@@ -113,15 +176,15 @@ function mapAttachments(raw: unknown): POAttachment[] {
 }
 
 function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
-  const orderedQty = asNumber(raw.ordered_qty ?? raw.ordered_base_qty);
+  const { packingQty, baseQty, conversionQty } = resolveQtyFromBackend(raw);
   const rate = asNumber(raw.rate);
   const discountType = mapDiscountType(raw.discount_type);
   const discountValue = asNumber(raw.discount_value);
   const discountAmount =
     discountType === "percentage"
-      ? round2((orderedQty * rate * discountValue) / 100)
+      ? round2((baseQty * rate * discountValue) / 100)
       : discountValue;
-  const taxable = round2(orderedQty * rate - discountAmount);
+  const taxable = round2(baseQty * rate - discountAmount);
   const cgstPct = asNumber(raw.cgst_percent);
   const sgstPct = asNumber(raw.sgst_percent);
   const igstPct = asNumber(raw.igst_percent);
@@ -141,11 +204,11 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     hsnCode: "",
     baseUnit: asString(raw.base_unit) || "Unit",
     packagingUnit: asString(raw.packing_unit) || "Box",
-    conversionQty: 1,
+    conversionQty,
     orderUom: "Unit",
-    orderedQtyPack: orderedQty || 1,
+    orderedQtyPack: packingQty,
     uom: asString(raw.base_unit) || "Unit",
-    orderedQty: orderedQty || 1,
+    orderedQty: baseQty,
     unitPrice: rate,
     discountType,
     discountPct: discountType === "percentage" ? discountValue : 0,
@@ -154,7 +217,7 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     cgstPct,
     sgstPct,
     igstPct,
-    grossAmount: round2(orderedQty * rate),
+    grossAmount: round2(baseQty * rate),
     taxAmount: gstAmount,
     netAmount: totalAmount || round2(taxable + gstAmount),
     deliverySchedule: "",
@@ -203,16 +266,16 @@ function mapInvoices(raw: unknown): PurchaseOrder["activity"] {
 }
 
 export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
-  const supplier =
-    raw.supplier && typeof raw.supplier === "object" && !Array.isArray(raw.supplier)
-      ? (raw.supplier as Record<string, unknown>)
-      : {};
-  const snapshot =
-    raw.supplier_snapshot &&
-    typeof raw.supplier_snapshot === "object" &&
-    !Array.isArray(raw.supplier_snapshot)
-      ? (raw.supplier_snapshot as Record<string, unknown>)
-      : {};
+
+  console.log("raw",raw)
+  const supplier = asRecord(raw.supplier);
+  const snapshot = asRecord(raw.supplier_snapshot);
+  const supplierTypeFromSupplier = asString(
+    asRecord(supplier.supplier_type).supplier_type_name ?? supplier.supplier_type,
+  );
+  const supplierTypeFromSnapshot = asString(
+    asRecord(snapshot.supplier_type).supplier_type_name ?? snapshot.supplier_type,
+  );
   const pr =
     raw.purchase_requisition &&
     typeof raw.purchase_requisition === "object" &&
@@ -243,7 +306,7 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
       ? {
           closeType: "short_close" as const,
           quantity: lines.reduce((s, l) => s + (l.shortClosedQty ?? 0), 0),
-          reason: "other" as const,
+          reason: asString(raw.short_close_reason),
           remarks: asString(raw.short_close_remarks),
           shortClosedBy: toDisplayName(raw.short_closed_by_user),
           shortClosedDate: asDateOnly(raw.short_closed_at),
@@ -270,7 +333,7 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     poDate: asDateOnly(raw.po_date),
     supplierId: toUuidOrNull(raw.supplier_id ?? supplier.supplier_id) ?? 0,
     supplierName,
-    supplierType: "",
+    supplierType: supplierTypeFromSnapshot || supplierTypeFromSupplier || "",
     supplierContactPerson:
       asString(supplier.contact_person) || asString(snapshot.contact_person),
     supplierMobile: asString(supplier.mobile_number) || asString(snapshot.mobile),
@@ -442,26 +505,31 @@ function buildWriteBody(
     grand_total: draft.summary.grandTotal,
     products: form.lines
       .filter((l) => l.productName || l.productCode || l.productId)
-      .map((line) => ({
-        product_id: toUuidOrNull(line.productId),
-        product_code: line.productCode || null,
-        product_name: line.productName || null,
-        base_unit: line.baseUnit || null,
-        packing_unit: line.packagingUnit || null,
-        requested_qty: line.orderedQtyPack ?? line.orderedQty,
-        ordered_qty: line.orderedQty,
-        rate: line.unitPrice,
-        discount_type: mapBackendDiscountType(line.discountType),
-        discount_value:
-          line.discountType === "flat" ? line.discountFlatAmount : line.discountPct,
-        gst_percent: round2(line.cgstPct + line.sgstPct + line.igstPct),
-        cgst_percent: line.cgstPct,
-        sgst_percent: line.sgstPct,
-        igst_percent: line.igstPct,
-        gst_amount: line.taxAmount,
-        total_amount: line.netAmount,
-        remarks: line.remarks || null,
-      })),
+      .map((line) => {
+        const { packingQty, baseQty } = resolveLineQtyFields(line);
+        return {
+          product_id: toUuidOrNull(line.productId),
+          product_code: line.productCode || null,
+          product_name: line.productName || null,
+          base_unit: line.baseUnit || null,
+          packing_unit: line.packagingUnit || null,
+          requested_qty: packingQty,
+          requested_base_qty: baseQty,
+          ordered_qty: packingQty,
+          ordered_base_qty: baseQty,
+          rate: line.unitPrice,
+          discount_type: mapBackendDiscountType(line.discountType),
+          discount_value:
+            line.discountType === "flat" ? line.discountFlatAmount : line.discountPct,
+          gst_percent: round2(line.cgstPct + line.sgstPct + line.igstPct),
+          cgst_percent: line.cgstPct,
+          sgst_percent: line.sgstPct,
+          igst_percent: line.igstPct,
+          gst_amount: line.taxAmount,
+          total_amount: line.netAmount,
+          remarks: line.remarks || null,
+        };
+      }),
     existingAttachments: (form.existingAttachments ?? [])
       .map((a) => a.url)
       .filter(Boolean),
@@ -614,7 +682,7 @@ export const PurchaseOrderService = {
     formData.append("total_invoice_amount", String(input.totalInvoiceAmount));
     formData.append("remarks", input.remarks ?? "");
     if (input.file) {
-      formData.append("attachments", input.file);
+      formData.append("invoiceAttachments[0]", input.file);
     }
     const response = await axiosInstance.post(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.INVOICE_UPLOAD,
@@ -692,7 +760,7 @@ export function allocateShortCloseProducts(
       if (!productId) return null;
       const pending = Math.max(
         0,
-        (line.orderedQty || 0) - (line.receivedQty ?? 0) - (line.shortClosedQty ?? 0),
+        (line.orderedQtyPack || 0) - (line.receivedQty ?? 0) - (line.shortClosedQty ?? 0),
       );
       if (pending <= 0) {
         return {

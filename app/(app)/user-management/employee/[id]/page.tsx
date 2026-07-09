@@ -53,8 +53,6 @@ import {
 } from "@/lib/address";
 import {
   type Employee,
-  loadEmployees,
-  saveEmployees,
   todayStr,
   applyEmployeeStatusChange,
   PERMISSION_REGISTRY,
@@ -66,6 +64,9 @@ import {
   type SubmodulePermission,
   type MobileFeaturePermission,
 } from "../employee-data";
+import { detailToEmployee } from "../user-api-data";
+import { useUser, useToggleUserStatus } from "@/hooks/user-management";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -570,9 +571,15 @@ function PermissionsTabContent({ permissions }: { permissions?: UserPermissions 
 export default function EmployeeDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const employeeId = parseInt(params.id as string, 10);
+  const userId = params.id as string;
 
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const userQuery = useUser(userId);
+  const toggleStatusMutation = useToggleUserStatus();
+  const employee = useMemo(
+    () => (userQuery.data ? detailToEmployee(userQuery.data) : null),
+    [userQuery.data],
+  );
+
   const [toast, setToast] = useState<ToastState | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -589,15 +596,11 @@ export default function EmployeeDetailPage() {
   });
 
   useEffect(() => {
-    const employees = loadEmployees();
-    const emp = employees.find((e) => e.id === employeeId);
-    if (emp) {
-      setEmployee(emp);
-    } else {
-      setToast({ msg: "User not found", type: "error" });
-      setTimeout(() => router.push("/user-management/employee"), 1500);
-    }
-  }, [employeeId, router]);
+    if (!userQuery.isError) return;
+    setToast({ msg: getErrorMessage(userQuery.error, "User not found"), type: "error" });
+    const timer = setTimeout(() => router.push("/user-management/employee"), 1500);
+    return () => clearTimeout(timer);
+  }, [userQuery.isError, userQuery.error, router]);
 
   useEffect(() => {
     if (!toast) return;
@@ -606,32 +609,33 @@ export default function EmployeeDetailPage() {
   }, [toast]);
 
   const confirmStatusChange = () => {
-    if (!employee || !confirmTarget) return;
+    if (!employee || !confirmTarget || !employee.userUuid) return;
     if (!confirmTarget.nextStatus) return;
-    const newStatus = confirmTarget.nextStatus;
-    const employees = loadEmployees();
-    const updated = employees.map((e) =>
-      e.id === employee.id
-        ? applyEmployeeStatusChange(e, newStatus)
-        : e,
+    const nextActive = confirmTarget.nextStatus === "active";
+
+    toggleStatusMutation.mutate(
+      { id: employee.userUuid, active: nextActive },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: `User ${nextActive ? "activated" : "deactivated"} successfully`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update user status."),
+            type: "error",
+          });
+        },
+        onSettled: () => setConfirmTarget(null),
+      },
     );
-    saveEmployees(updated);
-    setEmployee(updated.find((e) => e.id === employee.id) || null);
-    setToast({ msg: `User ${newStatus === "active" ? "activated" : "deactivated"}`, type: "success" });
-    setConfirmTarget(null);
   };
 
   const confirmDelete = () => {
     if (!employee || !confirmTarget) return;
-    const employees = loadEmployees();
-    const updated = employees.map((e) =>
-      e.id === employee.id
-        ? { ...e, status: "archived" as const, updatedBy: "Admin User", updatedDate: todayStr() }
-        : e,
-    );
-    saveEmployees(updated);
-    setToast({ msg: "User archived", type: "success" });
-    setTimeout(() => router.push("/user-management/employee"), 1500);
+    setToast({ msg: "Archive is not available via API yet.", type: "error" });
     setConfirmTarget(null);
   };
 
@@ -650,6 +654,14 @@ export default function EmployeeDetailPage() {
     setToast({ msg: "Password reset successfully.", type: "success" });
     setPasswordReset({ open: false, newPassword: "", confirmPassword: "", sendEmail: false, errors: {} });
   };
+
+  if (userQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <p className="text-muted-foreground text-sm">Loading user…</p>
+      </div>
+    );
+  }
 
   if (!employee) {
     return (
@@ -926,7 +938,7 @@ export default function EmployeeDetailPage() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onEdit={() => router.push(`/user-management/employee/${employee.id}/edit`)}
+        onEdit={() => router.push(`/user-management/employee/${employee.userUuid || userId}/edit`)}
         headerActions={
           employee.status === "active" || employee.status === "inactive" || employee.status === "draft" ? (
             <EmployeeListingStatusCell

@@ -36,6 +36,7 @@ import {
 	useToggleHsnStatus,
 	useExportHsn,
 	useGstDropdown,
+	useHsnFilterDropdown,
 } from "@/hooks/masters";
 import {
 	MASTER_FILTER_FIELD_MAPS,
@@ -183,6 +184,44 @@ export default function HSNPage() {
 	const updateMutation = useUpdateHsn();
 	const toggleStatusMutation = useToggleHsnStatus();
 	const exportMutation = useExportHsn();
+
+	const hsnCodeOptionsQuery = useHsnFilterDropdown("id");
+	const hsnDescriptionOptionsQuery = useHsnFilterDropdown("hsnDescription");
+	const gstRateOptionsQuery = useHsnFilterDropdown("gstPercentage");
+	const statusOptionsQuery = useHsnFilterDropdown("is_active");
+	const createdByOptionsQuery = useHsnFilterDropdown("created_by_user__username");
+	const updatedByOptionsQuery = useHsnFilterDropdown("updated_by_user__username");
+
+	const hsnCodeOptions = useMemo(
+		() => hsnCodeOptionsQuery.data ?? [],
+		[hsnCodeOptionsQuery.data],
+	);
+	const hsnDescriptionOptions = useMemo(
+		() => hsnDescriptionOptionsQuery.data ?? [],
+		[hsnDescriptionOptionsQuery.data],
+	);
+	const gstRateFilterOptions = useMemo(() => {
+		if (gstRateOptionsQuery.data?.length) return gstRateOptionsQuery.data;
+		return (gstDropdownQuery.data ?? []).map((item) => ({
+			label: `${item.gstPercentage}%`,
+			value: String(item.gstPercentage),
+		}));
+	}, [gstRateOptionsQuery.data, gstDropdownQuery.data]);
+	const statusOptions = useMemo(() => {
+		if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+		return [
+			{ label: "Active", value: "active" },
+			{ label: "Inactive", value: "inactive" },
+		];
+	}, [statusOptionsQuery.data]);
+	const createdByOptions = useMemo(
+		() => createdByOptionsQuery.data ?? [],
+		[createdByOptionsQuery.data],
+	);
+	const updatedByOptions = useMemo(
+		() => updatedByOptionsQuery.data ?? [],
+		[updatedByOptionsQuery.data],
+	);
 
 	const records = useMemo(
 		() => (listQuery.data?.items ?? []).map(toHsnRow),
@@ -334,7 +373,8 @@ export default function HSNPage() {
 			header: "HSN Ref",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: hsnCodeOptions,
 			width: "120px",
 			render: (_val, row) => (
 				<button
@@ -351,7 +391,8 @@ export default function HSNPage() {
 			header: "HSN Description",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: hsnDescriptionOptions,
 			width: "300px",
 			render: (_val, row) => (
 				<span className="text-xs text-foreground line-clamp-2">{row.hsnDescription}</span>
@@ -363,10 +404,7 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
-			filterOptions: gstSelectOptions.map((opt) => ({
-				label: opt.label,
-				value: opt.label.split(" — ")[0],
-			})),
+			filterOptions: gstRateFilterOptions,
 			width: "100px",
 		},
 		{
@@ -375,6 +413,7 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "audit",
+			auditUserOptions: createdByOptions,
 			width: "150px",
 			render: (_val, row) => (
 				<ListingUserCell name={row.createdBy} date={row.createdDate} />
@@ -386,6 +425,7 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "audit",
+			auditUserOptions: updatedByOptions,
 			width: "150px",
 			render: (_val, row) => (
 				<ListingUserCell name={row.updatedBy} date={row.updatedDate} />
@@ -397,10 +437,7 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
-			filterOptions: [
-				{ label: "Active", value: "active" },
-				{ label: "Inactive", value: "inactive" },
-			],
+			filterOptions: statusOptions,
 			width: "100px",
 			render: (_val, row) => (
 				<ListingStatusToggle

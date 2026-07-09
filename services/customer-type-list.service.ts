@@ -16,6 +16,12 @@ export interface CustomerTypeListDocument {
   title: string;
 }
 
+export interface CustomerTypeDocument {
+  id: string;
+  documentTypeId: string;
+  documentType: { title: string };
+}
+
 export interface CustomerTypeListRecord {
   id: number;
   customerTypeId: string;
@@ -61,6 +67,19 @@ function mapDocuments(raw: unknown): CustomerTypeListDocument[] {
     return {
       id: asString(doc.id),
       title: asString(doc.title),
+    };
+  });
+}
+
+function mapDocumentsWithType(raw: unknown): CustomerTypeDocument[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const doc = (item ?? {}) as Record<string, unknown>;
+    const documentType = (doc.documentType ?? {}) as Record<string, unknown>;
+    return {
+      id: asString(doc.id),
+      documentTypeId: asString(doc.documentTypeId),
+      documentType: { title: asString(documentType.title) },
     };
   });
 }
@@ -116,6 +135,55 @@ export interface CustomerTypeExportParams {
   search: string;
   status: "all" | "active" | "inactive";
   apiFilters?: Record<string, unknown>;
+}
+
+export interface CustomerTypeFilterOption {
+  label: string;
+  value: string;
+}
+
+export type CustomerTypeFilterField =
+  | "customer_type_name"
+  | "customer_initial_code"
+  | "description"
+  | "is_active"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
+function mapFilterOptions(
+  data: unknown[],
+  fieldName: CustomerTypeFilterField,
+): CustomerTypeFilterOption[] {
+  const options: CustomerTypeFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export interface CustomerTypeDropdownItem {
+  id: string;
+  customerType: string;
+  documents: CustomerTypeDocument[];
 }
 
 export const CustomerTypeListService = {
@@ -194,6 +262,27 @@ export const CustomerTypeListService = {
     }
   },
 
+  async getFilterDropdown(
+    fieldName: CustomerTypeFilterField,
+    signal?: AbortSignal,
+  ): Promise<CustomerTypeFilterOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.MASTER.CUSTOMER_TYPE.FILTER_DROPDOWN,
+      {
+        params: { field_name: fieldName },
+        signal,
+      },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
+  },
+
   async export(params: CustomerTypeExportParams): Promise<void> {
     const response = await axiosInstance.post(
       `${API_ENDPOINTS.MASTER.CUSTOMER_TYPE.EXPORT}?search=${encodeURIComponent(params.search)}`,
@@ -210,5 +299,21 @@ export const CustomerTypeListService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  async dropdown(): Promise<CustomerTypeDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CUSTOMER_TYPE.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map(item => ({
+      id: String(item.id),
+      customerType: String(item.customer_type_name),
+      documents: mapDocumentsWithType(item.documents),
+    }));
   },
 };

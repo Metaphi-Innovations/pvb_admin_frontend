@@ -9,7 +9,6 @@ import { formatBatchExpiryDate } from "../../dispatch/near-expiry-dispatch";
 import {
   getFefoRecommendedBatchNumbers,
   getMaxBatchPackingQty,
-  getPackingBatchInventoryRows,
   type PackingBatchInventoryRow,
   type PackingBatchStatus,
 } from "../lib/packing-batch-allocation";
@@ -44,7 +43,8 @@ interface PackingBatchSelectionTableProps {
   onSelectionsChange: (selections: Record<string, number>) => void;
   caseSize?: number;
   allocatedQty?: number;
-  pendingQty?: number;
+  pending_cases?: number;
+  inventoryBatches: PackingBatchInventoryRow[];
 }
 
 export function PackingBatchSelectionTable({
@@ -56,10 +56,11 @@ export function PackingBatchSelectionTable({
   onSelectionsChange,
   caseSize = 10,
   allocatedQty,
-  pendingQty,
+  pending_cases,
+  inventoryBatches,
 }: PackingBatchSelectionTableProps) {
   const rows = useMemo(() => {
-    const all = getPackingBatchInventoryRows(productName, warehouse, masterToday(), sku);
+    const all = [...inventoryBatches];
     
     // Ensure any pre-allocated/selected batch is present in the inventory rows
     Object.keys(selections).forEach((bNo) => {
@@ -76,28 +77,17 @@ export function PackingBatchSelectionTable({
       }
     });
 
-    const fefo = getFefoRecommendedBatchNumbers(all, requiredQty);
-    return all.filter((r) => fefo.has(r.batchNumber) || selections[r.batchNumber] > 0);
-  }, [productName, warehouse, sku, requiredQty, selections]);
+    return all;
+  }, [inventoryBatches, selections]);
 
   const handleQtyChange = (row: PackingBatchInventoryRow, value: string) => {
     if (!row.isSelectable) return;
 
     const parsed = parseInt(value, 10);
-    const maxAllowed = getMaxBatchPackingQty(
-      row.batchNumber,
-      selections,
-      requiredQty,
-      row.availableQty,
-    );
-    const qty = Number.isNaN(parsed) ? 0 : Math.max(0, Math.min(parsed, maxAllowed));
+    const qty = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
 
     const next = { ...selections };
-    if (qty <= 0) {
-      delete next[row.batchNumber];
-    } else {
-      next[row.batchNumber] = qty;
-    }
+    next[row.batchNumber] = qty;
     onSelectionsChange(next);
   };
 
@@ -110,7 +100,7 @@ export function PackingBatchSelectionTable({
     return `${cases} Cs, ${loose} Ls`;
   };
 
-  if (requiredQty <= 0 || rows.length === 0) return null;
+  if (rows.length === 0) return null;
 
   return (
     <div className="space-y-2">
@@ -118,6 +108,7 @@ export function PackingBatchSelectionTable({
         <table className="w-full min-w-[800px] border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-muted/40">
+              <th className="px-3 py-2 w-8"></th>
               {[
                 "Batch No.",
                 "SKU",
@@ -146,13 +137,13 @@ export function PackingBatchSelectionTable({
           <tbody>
             {rows.map((row) => {
               const rowQty = selections[row.batchNumber] ?? 0;
-              const isSelected = rowQty > 0;
+              const isSelected = selections[row.batchNumber] !== undefined;
               const isExpired = row.status === "Expired";
               const isNearExpiry = row.status === "Near Expiry";
               const statusCfg = STATUS_CFG[row.status];
 
               const displayAllocated = allocatedQty !== undefined ? allocatedQty : row.availableQty;
-              const displayPending = pendingQty !== undefined ? pendingQty : requiredQty;
+              const displayPending = pending_cases !== undefined ? pending_cases : requiredQty;
 
               return (
                 <tr
@@ -164,6 +155,26 @@ export function PackingBatchSelectionTable({
                     !isExpired && !isSelected && "bg-brand-50/20",
                   )}
                 >
+                  <td className="px-3 py-2 text-center w-8">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded accent-brand-600"
+                      checked={isSelected}
+                      disabled={!row.isSelectable}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const next = { ...selections };
+                        if (checked) {
+                          next[row.batchNumber] = 0;
+                        } else {
+                          // use undefined so it remains in Object.keys and doesn't disappear
+                          next[row.batchNumber] = undefined as unknown as number;
+                        }
+                        onSelectionsChange(next);
+                      }}
+                      aria-label={`Select batch ${row.batchNumber}`}
+                    />
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
                       <span
@@ -211,7 +222,7 @@ export function PackingBatchSelectionTable({
                         <Input
                           type="number"
                           min={0}
-                          disabled={!row.isSelectable}
+                          disabled={!row.isSelectable || !isSelected}
                           value={!isSelected && rowQty === 0 ? "" : Math.floor(rowQty / caseSize)}
                           onChange={(e) => {
                             const newCases = parseInt(e.target.value || "0", 10);
@@ -222,7 +233,7 @@ export function PackingBatchSelectionTable({
                           className={cn(
                             "h-8 w-14 text-xs font-bold text-center tabular-nums",
                             isExpired && "bg-red-50/50 border-red-200 text-red-400 cursor-not-allowed",
-                            !row.isSelectable && "cursor-not-allowed",
+                            (!row.isSelectable || !isSelected) && "cursor-not-allowed opacity-50",
                           )}
                         />
                         <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Cases</span>
@@ -233,7 +244,7 @@ export function PackingBatchSelectionTable({
                           type="number"
                           min={0}
                           max={caseSize - 1}
-                          disabled={!row.isSelectable}
+                          disabled={!row.isSelectable || !isSelected}
                           value={!isSelected && rowQty === 0 ? "" : rowQty % caseSize}
                           onChange={(e) => {
                             const newLoose = parseInt(e.target.value || "0", 10);
@@ -244,7 +255,7 @@ export function PackingBatchSelectionTable({
                           className={cn(
                             "h-8 w-12 text-xs font-bold text-center tabular-nums",
                             isExpired && "bg-red-50/50 border-red-200 text-red-400 cursor-not-allowed",
-                            !row.isSelectable && "cursor-not-allowed",
+                            (!row.isSelectable || !isSelected) && "cursor-not-allowed opacity-50",
                           )}
                         />
                         <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Loose</span>

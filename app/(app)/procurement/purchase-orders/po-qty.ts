@@ -25,7 +25,7 @@ export function shortCloseReasonLabel(reason: ShortCloseReason): string {
 export interface POShortCloseInfo {
   closeType: "short_close";
   quantity: number;
-  reason: ShortCloseReason;
+  reason: string;
   remarks: string;
   shortClosedBy: string;
   shortClosedDate: string;
@@ -60,11 +60,11 @@ export function getLineReceivedQty(po: PurchaseOrder, line: POLineItem): number 
 export function getLinePendingQty(po: PurchaseOrder, line: POLineItem): number {
   const received = getLineReceivedQty(po, line);
   const shortClosed = line.shortClosedQty ?? 0;
-  return Math.max(0, line.orderedQty - received - shortClosed);
+  return Math.max(0, (line.orderedQtyPack || 0) - received - shortClosed);
 }
 
 export function getPOQtySummary(po: PurchaseOrder): POQtySummary {
-  const orderedQty = po.lines.reduce((s, l) => s + l.orderedQty, 0);
+  const orderedQty = po.lines.reduce((s, l) => s + (l.orderedQtyPack || 0), 0);
   const receivedQty = po.lines.reduce((s, l) => s + getLineReceivedQty(po, l), 0);
   const shortClosedQty = po.lines.reduce((s, l) => s + (l.shortClosedQty ?? 0), 0);
   const pendingQty = Math.max(0, orderedQty - receivedQty - shortClosedQty);
