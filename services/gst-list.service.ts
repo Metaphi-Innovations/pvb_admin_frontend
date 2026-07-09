@@ -50,6 +50,58 @@ export interface GstDropdownItem {
   gstPercentage: number;
 }
 
+export interface GstFilterOption {
+  label: string;
+  value: string;
+}
+
+export type GstFilterField =
+  | "gstPercentage"
+  | "remark"
+  | "is_active"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
+function mapFilterOptions(data: unknown[], fieldName: GstFilterField): GstFilterOption[] {
+  const options: GstFilterOption[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[fieldName];
+
+    if (fieldName === "is_active") {
+      const value = asString(raw).trim();
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      const active = raw === true || value.toLowerCase() === "true";
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: active ? "active" : "inactive",
+      });
+      continue;
+    }
+
+    if (fieldName === "gstPercentage") {
+      const num = Number(raw);
+      if (!Number.isFinite(num)) continue;
+      const value = String(num);
+      if (seen.has(value)) continue;
+      seen.add(value);
+      options.push({ label: `${num}%`, value });
+      continue;
+    }
+
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
@@ -191,6 +243,24 @@ export const GstListService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  async getFilterDropdown(
+    fieldName: GstFilterField,
+    signal?: AbortSignal,
+  ): Promise<GstFilterOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.GST.FILTER_DROPDOWN, {
+      params: { field_name: fieldName },
+      signal,
+    });
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async dropdown(): Promise<GstDropdownItem[]> {

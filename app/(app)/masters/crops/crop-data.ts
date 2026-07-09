@@ -1,23 +1,29 @@
-"use client";
-
-import { loadCategories } from "../categories/category-data";
+import type { CropListRecord } from "@/services/crop-list.service";
 
 export type CropStatus = "active" | "inactive";
 
-export interface Crop {
+export interface CropRecord {
   id: number;
+  cropUuid: string;
   cropName: string;
   fieldType: string;
+  categoryId: string;
   categoryName: string;
   season: string[];
+  description: string;
   status: CropStatus;
   createdBy: string;
-  createdDate: string;
+  createdAt: string;
   updatedBy: string;
-  updatedDate: string;
+  updatedAt: string;
 }
 
-export const STORAGE_KEY = "pvb_crops_v1";
+export interface CropForm {
+  cropName: string;
+  fieldType: string;
+  categoryId: string;
+  season: string[];
+}
 
 export const FIELD_TYPES = [
   "Fruit",
@@ -28,7 +34,7 @@ export const FIELD_TYPES = [
   "Cash crop",
   "Spice",
   "Plantation",
-  "Floriculture"
+  "Floriculture",
 ];
 
 export const SEASONS = [
@@ -38,109 +44,50 @@ export const SEASONS = [
   "Autumn",
   "Spring",
   "Kharif",
-  "Rabi"
+  "Rabi",
 ];
 
-const SEED: Crop[] = [
-  {
-    id: 1,
-    cropName: "Mango",
-    fieldType: "Fruit",
-    categoryName: "Seeds",
-    season: ["Summer"],
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-06-19",
-    updatedBy: "Admin",
-    updatedDate: "2026-06-19",
-  },
-  {
-    id: 2,
-    cropName: "Tomato",
-    fieldType: "Vegetable",
-    categoryName: "Seeds",
-    season: ["Year round"],
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-06-19",
-    updatedBy: "Admin",
-    updatedDate: "2026-06-19",
-  },
-];
+export const DEFAULT_CROP_FORM: CropForm = {
+  cropName: "",
+  fieldType: "",
+  categoryId: "",
+  season: [],
+};
 
-export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+export function toCropRecord(item: CropListRecord): CropRecord {
+  return {
+    id: item.id,
+    cropUuid: item.cropUuid,
+    cropName: item.cropName,
+    fieldType: item.fieldType,
+    categoryId: item.categoryId,
+    categoryName: item.categoryName,
+    season: item.season,
+    description: item.description,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdAt: item.createdAt,
+    updatedBy: item.updatedBy || "—",
+    updatedAt: item.updatedAt,
+  };
 }
 
-function normalize(items: Partial<Crop>[]): Crop[] {
-  return items.map((item, idx) => ({
-    id: item.id ?? idx + 1,
-    cropName: item.cropName ?? "",
-    fieldType: item.fieldType ?? "Vegetable",
-    categoryName: item.categoryName ?? "",
-    season: Array.isArray(item.season) ? item.season : [],
-    status: item.status === "inactive" ? "inactive" : "active",
-    createdBy: item.createdBy ?? "Admin",
-    createdDate: item.createdDate ?? todayStr(),
-    updatedBy: item.updatedBy ?? "Admin",
-    updatedDate: item.updatedDate ?? todayStr(),
-  }));
+export function cropToForm(record: CropRecord): CropForm {
+  return {
+    cropName: record.cropName,
+    fieldType: record.fieldType,
+    categoryId: record.categoryId,
+    season: record.season,
+  };
 }
 
-export function loadCrops(): Crop[] {
-  if (typeof window === "undefined") return SEED;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return SEED;
-    const parsed = JSON.parse(raw) as Partial<Crop>[];
-    return normalize(parsed);
-  } catch {
-    return SEED;
+export function validateCropApiForm(form: CropForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.cropName.trim()) errors.cropName = "Crop name is required";
+  if (!form.fieldType) errors.fieldType = "Field type is required";
+  if (!form.categoryId) errors.categoryId = "Category is required";
+  if (!form.season || form.season.length === 0) {
+    errors.season = "At least one season must be selected";
   }
-}
-
-export function saveCrops(items: Crop[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
-
-export function nextCropId(items: Crop[]) {
-  return items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-}
-
-export function getCategoryOptions() {
-  const categories = [
-    "Tropical",
-    "Temperate",
-    "Citrus",
-    "Vine / Berry",
-    "Fruit VegetableRoot & Tuber",
-    "Leafy Green",
-    "Brassica",
-    "Other Vegetable",
-    "Exotic Vegetable",
-    "Oil Seed",
-    "Kharif Cereal",
-    "Rabi Cereal",
-    "Fibre",
-    "Sugar",
-    "Tobacco & Dye",
-    "Rubber & Resin",
-    "Starch & Feed",
-    "Seed Spice",
-    "Fruit / Pod Spice",
-    "Bark / Root Spice",
-    "Flower / Stigma Spice",
-    "Beverage",
-    "Palm",
-    "Timber & Industrial",
-    "Fruit Plantation",
-    "Cut Flower",
-    "Loose Flower",
-    "Potted Plant"
-  ];
-  return categories.map((c) => ({
-    label: c,
-    value: c,
-  }));
+  return errors;
 }

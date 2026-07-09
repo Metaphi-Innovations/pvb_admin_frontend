@@ -5,6 +5,7 @@ import {
   HsnListService,
   type HsnCreatePayload,
   type HsnExportParams,
+  type HsnFilterField,
   type HsnListParams,
   type HsnUpdatePayload,
   type HsnDropdownItem,
@@ -90,5 +91,13 @@ export function useHsnDropdown() {
 export function useExportHsn() {
   return useMutation({
     mutationFn: (params: HsnExportParams) => HsnListService.export(params),
+  });
+}
+
+export function useHsnFilterDropdown(fieldName: HsnFilterField) {
+  return useQuery({
+    queryKey: masterKeys.hsn.filterDropdown(fieldName),
+    queryFn: ({ signal }) => HsnListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }
