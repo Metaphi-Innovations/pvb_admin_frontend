@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { RecordSectionCard } from "@/components/record-detail";
 import { ProcBadge } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
+import { formatListingDate } from "../../components/listing/ListingCells";
 import {
   canAddPOFollowUp,
   formatFollowUpDateTime,
@@ -40,7 +41,7 @@ export function VendorFollowUpPanel({
     return {
       totalFollowUps: entries.length,
       lastFollowUpAt: latest?.followUpAt ?? null,
-      lastSpokeWith: latest?.spokeWith ?? null,
+      nextFollowUpAt: latest?.nextFollowUpAt ?? null,
       availability: entries.length > 0 ? "followup_available" : "no_followup",
     } as const;
   }, [entries]);
@@ -48,21 +49,33 @@ export function VendorFollowUpPanel({
   return (
     <>
       <div className="space-y-4">
-        <RecordSectionCard title="Supplier Follow-up" icon={MessageSquare} accent="orange">
+        <RecordSectionCard
+          title="Supplier Follow-up"
+          icon={MessageSquare}
+          accent="orange"
+        >
           <div className="space-y-2.5 text-xs">
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Last Follow-up Date</span>
               <span className="text-foreground text-right">
-                {summary.lastFollowUpAt ? formatFollowUpDateTime(summary.lastFollowUpAt) : "—"}
+                {summary.lastFollowUpAt
+                  ? formatFollowUpDateTime(summary.lastFollowUpAt)
+                  : "—"}
               </span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Last Spoke With</span>
-              <span className="text-foreground text-right">{summary.lastSpokeWith || "—"}</span>
+              <span className="text-muted-foreground">Next Follow-up</span>
+              <span className="text-foreground text-right">
+                {summary.nextFollowUpAt
+                  ? formatListingDate(summary.nextFollowUpAt.slice(0, 10))
+                  : "—"}
+              </span>
             </div>
             <div className="flex justify-between gap-2 border-t border-border pt-2">
               <span className="text-muted-foreground">Total Follow-ups</span>
-              <span className="font-semibold tabular-nums text-foreground">{summary.totalFollowUps}</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {summary.totalFollowUps}
+              </span>
             </div>
           </div>
 
@@ -88,7 +101,11 @@ export function VendorFollowUpPanel({
         </RecordSectionCard>
 
         <RecordSectionCard title="Recent Activity" accent="blue">
-          <FollowUpActivityFeed entries={entries.slice(0, 3)} showTitle={false} compact />
+          <FollowUpActivityFeed
+            entries={entries.slice(0, 3)}
+            showTitle={false}
+            compact
+          />
           {entries.length > 3 && (
             <button
               type="button"
@@ -128,10 +145,11 @@ export function FollowUpListingCell({
   return (
     <div className="py-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
       <ProcBadge status={availability} />
+
       {followUpCount > 0 && (
         <button
           type="button"
-          className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
+          className="block text-[10px] text-brand-600 hover:underline"
           onClick={onViewHistory}
         >
           View

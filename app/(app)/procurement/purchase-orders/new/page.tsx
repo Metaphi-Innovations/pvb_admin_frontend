@@ -12,6 +12,7 @@ import {
 } from "../components/PurchaseOrderForm";
 import { POFormLayout } from "../components/POFormLayout";
 import { POFormFooter } from "../components/POFormFooter";
+import { POFormPageSkeleton } from "../components/POSkeletons";
 import {
   useCreatePurchaseOrder,
   usePurchaseOrderPreviewNumber,
@@ -20,7 +21,9 @@ import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 export default function NewPOPage() {
   return (
-    <Suspense fallback={<div className="p-4 text-sm text-[#6B80A0]">Loading…</div>}>
+    <Suspense
+      fallback={<POFormPageSkeleton />}
+    >
       <NewPOContent />
     </Suspense>
   );
@@ -46,7 +49,7 @@ function NewPOContent() {
   }, []);
   // }, [prId]);
 
-  if (!form) return <div className="p-4 text-sm text-[#6B80A0]">Loading…</div>;
+  if (!form) return <POFormPageSkeleton />;
 
   const handleFormChange = (next: POFormValues) => {
     setForm(next);

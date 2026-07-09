@@ -15,15 +15,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Upload } from "lucide-react";
 import type { PurchaseOrder } from "../po-data";
-import type { POVendorInvoiceView } from "@/services/purchase-order.service";
 
 export function UploadVendorInvoiceDialog({
   open,
   onClose,
   po,
   onSaved,
-  replaceMode = false,
-  existingInvoice = null,
   submitting = false,
 }: {
   open: boolean;
@@ -38,14 +35,10 @@ export function UploadVendorInvoiceDialog({
     remarks: string;
     file: File | null;
   }) => void;
-  replaceMode?: boolean;
-  existingInvoice?: POVendorInvoiceView | null;
   submitting?: boolean;
 }) {
-  const isReplace = replaceMode || !!existingInvoice;
-
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
-  const [vendorInvoiceDate, setVendorInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [vendorInvoiceDate, setVendorInvoiceDate] = useState("");
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [taxAmount, setTaxAmount] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
@@ -56,30 +49,16 @@ export function UploadVendorInvoiceDialog({
 
   useEffect(() => {
     if (!open) return;
-    const tax = po.summary.totalCgst + po.summary.totalSgst + po.summary.totalIgst;
-    const defaultInvoice = String(po.summary.taxableValue || po.summary.grandTotal - tax);
-
-    if (isReplace && existingInvoice) {
-      setVendorInvoiceNo(existingInvoice.vendorInvoiceNo);
-      setVendorInvoiceDate(existingInvoice.invoiceDate || new Date().toISOString().slice(0, 10));
-      setInvoiceAmount(String(existingInvoice.subtotal));
-      setTaxAmount(String(existingInvoice.taxAmount));
-      setTotalAmount(String(existingInvoice.grandTotal));
-      setRemarks(existingInvoice.remarks);
-      setFile(null);
-      setFileName(existingInvoice.attachmentUrls[0]?.split("/").pop() ?? "");
-    } else {
-      setVendorInvoiceNo("");
-      setVendorInvoiceDate(new Date().toISOString().slice(0, 10));
-      setInvoiceAmount(defaultInvoice);
-      setTaxAmount(String(tax));
-      setTotalAmount(String(po.summary.grandTotal));
-      setRemarks("");
-      setFile(null);
-      setFileName("");
-    }
+    setVendorInvoiceNo("");
+    setVendorInvoiceDate("");
+    setInvoiceAmount("");
+    setTaxAmount("");
+    setTotalAmount("");
+    setRemarks("");
+    setFile(null);
+    setFileName("");
     setError(null);
-  }, [open, po, isReplace, existingInvoice]);
+  }, [open]);
 
   const onAmountChange = (field: "invoice" | "tax" | "total", val: string) => {
     if (field === "invoice") setInvoiceAmount(val);
@@ -117,7 +96,7 @@ export function UploadVendorInvoiceDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md z-[400]">
         <DialogHeader>
-          <DialogTitle className="text-sm">{isReplace ? "Replace Supplier Invoice" : "Upload Supplier Invoice"}</DialogTitle>
+          <DialogTitle className="text-sm">Upload Supplier Invoice</DialogTitle>
           <DialogDescription className="text-xs">
             PO {po.poNumber} · {po.supplierName}.
           </DialogDescription>
