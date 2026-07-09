@@ -51,8 +51,11 @@ export default function EditProductPage() {
       category: apiProduct.category,
       subCategory: apiProduct.subCategory,
       segment: apiProduct.segment,
+      segmentId: apiProduct.segmentId,
       form: apiProduct.form || "",
+      formId: apiProduct.formId,
       cfu: apiProduct.cfu || undefined,
+      cfuId: apiProduct.cfuId,
       authority: apiProduct.authority || undefined,
       hsnCode: apiProduct.hsnUuid || apiProduct.hsnCode,
       hsnId: apiProduct.hsnId ? String(apiProduct.hsnId) : "",
@@ -86,6 +89,7 @@ export default function EditProductPage() {
           url: a.link_url ?? "",
         })),
     };
+
     setForm(productToFormValues(mappedProduct));
     setProductImages(getProductImages(mappedProduct));
     setProductUrls(getProductUrls(mappedProduct));
@@ -127,9 +131,9 @@ export default function EditProductPage() {
       hsn_id: form.hsnId || form.hsnCode || null,
       gst_rate_id: form.gstId || null,
       category_id: form.category,
-      segment_id: form.segment,
-      formulation_id: form.form,
-      cfu_id: form.cfu || null,
+      segment_id: form.segmentId || null,
+      formulation_id: form.formId || null,
+      cfu_id: form.cfuId || null,
       authority: form.authority || null,
       pack_size: parseNum(form.packSize),
       base_unit: form.baseUnit,

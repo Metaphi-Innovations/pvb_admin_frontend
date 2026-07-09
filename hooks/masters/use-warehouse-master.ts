@@ -10,6 +10,7 @@ import {
     type WarehouseDropdownItem,
 } from "@/services/warehouse-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import { CustomerListService } from "@/services/customer-list.service";
 
 function toListParams(params: MasterListKeyParams): WarehouseListParams {
     return {
@@ -105,5 +106,22 @@ export function useWarehousePreviewNumber(enabled = false) {
 export function useExportWarehouses() {
     return useMutation({
         mutationFn: (params: WarehouseExportParams) => WarehouseListService.export(params),
+    });
+}
+
+export function useCfAgentCustomers(enabled: boolean) {
+    return useQuery({
+        queryKey: ["customers", "cf-agents"],
+        queryFn: () =>
+            CustomerListService.list({
+                page: 1,
+                pageSize: 1000,
+                search: "",
+                ordering: "",
+                status: "all",
+                apiFilters: { customer_type__customer_type_name: "C&F" },
+            }),
+        enabled,
+        staleTime: 60_000,
     });
 }

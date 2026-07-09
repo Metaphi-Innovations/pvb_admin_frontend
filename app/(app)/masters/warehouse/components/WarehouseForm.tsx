@@ -51,6 +51,7 @@ import {
 	fetchGstRegistrationDetailsAsync,
 	GST_REGISTRATION_TYPE_DEFAULT,
 } from "@/lib/masters/gst-compliance";
+import { useCfAgentCustomers } from "@/hooks/masters";
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -956,45 +957,26 @@ export function WarehouseForm({
 		window.open(safeUrl, "_blank", "noopener,noreferrer");
 	};
 
+	const isCfAgent = form.operatedBy === "C&F Agent";
+	const cfAgentsQuery = useCfAgentCustomers(isCfAgent);
+
 	const cfCustomers = useMemo(() => {
-		try {
-			const allCustomers = loadCustomers();
-			const filtered = allCustomers.filter((customer) => {
-				// Always include currently selected customer so it shows and prefills
-				if (form.customerType && customer.customerName === form.customerType) {
-					return true;
-				}
-				return isCustomerCf(customer);
-			});
+		const items = cfAgentsQuery.data?.items ?? [];
 
-			const options = filtered.map((customer) => {
-				const suffix =
-					(customer.mobile || "").trim() || (customer.gstin || "").trim();
-				return {
-					value: customer.customerName,
-					label: suffix
-						? `${customer.customerName} — ${suffix}`
-						: customer.customerName,
-				};
-			});
+		const options = items.map((customer) => {
+			const suffix = (customer.mobileNo || "").trim() || (customer.gstinNo || "").trim();
+			return {
+				value: customer.customerName,
+				label: suffix ? `${customer.customerName} — ${suffix}` : customer.customerName,
+			};
+		});
 
-			// If the currently selected customer is not in the list, force add it
-			if (
-				form.customerType &&
-				!options.some((o) => o.value === form.customerType)
-			) {
-				options.push({
-					value: form.customerType,
-					label: form.customerType,
-				});
-			}
-
-			return options;
-		} catch (e) {
-			console.error("Failed to load C&F customers:", e);
-			return [];
+		if (form.customerType && !options.some((o) => o.value === form.customerType)) {
+			options.push({ value: form.customerType, label: form.customerType });
 		}
-	}, [form.customerType]);
+
+		return options;
+	}, [cfAgentsQuery.data, form.customerType]);
 
 	const set = <K extends keyof WarehouseFormValues>(
 		key: K,

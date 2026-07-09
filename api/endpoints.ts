@@ -9,6 +9,12 @@ export const API_ENDPOINTS = {
     VERIFY_OTP: "/auth/verify-otp",
     RESET_PASSWORD: "/auth/reset-password",
   },
+  COMMON: {
+    PINCODE: {
+      LIST: "/user-management/pincode/list",
+      VIEW: (pincode: string) => `/user-management/pincode/code/${pincode}`,
+    },
+  },
   MASTER: {
     CATEGORY: {
       LIST: "/master/category/list",

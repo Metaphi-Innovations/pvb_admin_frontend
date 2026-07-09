@@ -92,3 +92,11 @@ export function useFormulationFilterDropdown(fieldName: FormulationFilterField) 
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useFormulationDropdown() {
+  return useQuery({
+    queryKey: masterKeys.formulations.dropdown(),
+    queryFn: () => FormulationListService.dropdown(),
+    staleTime: 5 * 60 * 1000,
+  });
+}

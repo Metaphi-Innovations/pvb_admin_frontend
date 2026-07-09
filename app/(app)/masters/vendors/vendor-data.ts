@@ -88,6 +88,7 @@ export interface VendorAddress {
   state: string;
   country: string;
   pincode: string;
+  pincodeId?: string;
 }
 
 export interface VendorContact {
@@ -514,15 +515,15 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
     ? (raw.contacts as VendorContact[])
     : legacyContact || raw.mobile
       ? [
-          {
-            uid: "c1",
-            name: legacyContact,
-            designation: String(raw.designation ?? ""),
-            countryCode: "+91",
-            mobile: String(raw.mobile ?? ""),
-            email: String(raw.email ?? ""),
-          },
-        ]
+        {
+          uid: "c1",
+          name: legacyContact,
+          designation: String(raw.designation ?? ""),
+          countryCode: "+91",
+          mobile: String(raw.mobile ?? ""),
+          email: String(raw.email ?? ""),
+        },
+      ]
       : [emptyContact("c1")];
   const primaryContact =
     String(raw.contactPerson ?? "").trim() ||
@@ -585,17 +586,17 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
       ? (raw.documents as VendorDocument[])
       : Array.isArray(raw.attachments)
         ? (raw.attachments as { uid: string; name: string; docType: string; uploadedAt: string; size: string }[]).map(
-            (a) => ({
-              uid: a.uid,
-              documentTypeId: undefined,
-              documentName: a.docType,
-              fileUrl: undefined,
-              uploaded: true,
-              fileName: a.name,
-              uploadedAt: a.uploadedAt,
-              size: a.size,
-            }),
-          )
+          (a) => ({
+            uid: a.uid,
+            documentTypeId: undefined,
+            documentName: a.docType,
+            fileUrl: undefined,
+            uploaded: true,
+            fileName: a.name,
+            uploadedAt: a.uploadedAt,
+            size: a.size,
+          }),
+        )
         : [],
     remarks: String(raw.remarks ?? ""),
     status: (raw.status as VendorStatus) ?? "active",

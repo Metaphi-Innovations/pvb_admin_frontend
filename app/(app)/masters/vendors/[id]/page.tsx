@@ -97,10 +97,10 @@ export default function ViewVendorPage() {
           : []),
         ...(vendor.mobileNumber
           ? [{
-              label: formatMobile(vendor.mobileCountryCode, vendor.mobileNumber),
-              icon: Phone,
-              href: `tel:${vendor.mobileNumber}`,
-            }]
+            label: formatMobile(vendor.mobileCountryCode, vendor.mobileNumber),
+            icon: Phone,
+            href: `tel:${vendor.mobileNumber}`,
+          }]
           : []),
         ...(vendor.email
           ? [{ label: vendor.email, icon: Mail, href: `mailto:${vendor.email}` }]
@@ -111,7 +111,7 @@ export default function ViewVendorPage() {
           icon: Building2,
           iconBg: "#EEF3FB",
           iconColor: "#0C3F8A",
-          value: vendor.supplierTypeId || "—",
+          value: vendor.supplierType?.supplier_type_name || "—",
           label: "Supplier Type",
         },
         {
@@ -147,7 +147,7 @@ export default function ViewVendorPage() {
         ],
         summary: [
           { label: "Supplier Code", value: vendor.supplierCode || "—", highlight: true },
-          { label: "Supplier Type", value: vendor.supplierTypeId || "—" },
+          { label: "Supplier Type", value: vendor.supplierType?.supplier_type_name || "—" },
           { label: "GST", value: vendor.gstinNumber || "—" },
           { label: "PAN", value: vendor.panNumber || "—" },
           { label: "Payment Terms", value: vendor.paymentTerms || "30 Days" },
@@ -166,7 +166,7 @@ export default function ViewVendorPage() {
           <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
             <RecordKvRow label="Supplier Code" value={vendor.supplierCode || "—"} mono highlight />
             <RecordKvRow label="Supplier Name" value={vendor.supplierName} highlight />
-            <RecordKvRow label="Supplier Type" value={vendor.supplierTypeId || "—"} />
+            <RecordKvRow label="Supplier Type" value={vendor.supplierType?.supplier_type_name || "—"} />
             <RecordKvRow label="Payment Terms" value={vendor.paymentTerms || "30 Days"} />
             <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
             <RecordKvRow
