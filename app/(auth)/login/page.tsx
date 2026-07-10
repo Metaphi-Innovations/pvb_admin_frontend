@@ -12,9 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FINANCIAL_YEARS, FY_STATUS_CONFIG, setStoredFYId, type FinancialYear } from "@/lib/fy-store";
-import { AuthService } from "@/services/auth.service";
+import { useAuth } from "@/lib/auth/auth-context";
 import { LoginRequest } from "@/types/api.types";
-import { error } from "console";
+import { FY_PENDING_KEY } from "@/components/auth/GuestGate";
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -187,6 +187,7 @@ function LeftPanel() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LoginPage() {
   // ── State ──────────────────────────────────────────────────────────────────
+  const { login } = useAuth();
   const [step, setStep] = useState<Step>("credentials");
   const [identifier, setIdentifier] = useState("");
   const [idError, setIdError] = useState("");
@@ -260,26 +261,17 @@ export default function LoginPage() {
         payload.email = identifier.trim();
       }
 
-      // const response = await AuthService.login(payload);
-
-      // temporary hardcoded response
-      const response = {
-        success: true,
-        message: "Login successful",
-        data: {
-          access_token: "dummy-token",
-          refresh_token: "dummy-refresh-token",
-        },
-      };
-
-      if (response.success) {
-        setStep("fy-select");
-      } else {
-        // setPwError(response.error || "Login failed. Please check your credentials.");
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(FY_PENDING_KEY, "1");
       }
+      await login(payload);
+      setStep("fy-select");
     } catch (err: any) {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(FY_PENDING_KEY);
+      }
       console.error("Login integration error:", err);
-      setPwError(err.error || err.message || "An unexpected error occurred.");
+      setPwError(err?.message || err?.error || "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
@@ -293,6 +285,9 @@ export default function LoginPage() {
   const handleFYContinue = () => {
     if (!selectedFY) return;
     setStoredFYId(selectedFY.id);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(FY_PENDING_KEY);
+    }
     window.location.href = "/dashboard";
   };
 

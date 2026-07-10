@@ -22,10 +22,11 @@ function toListParams(params: MasterListKeyParams): TemplateListParams {
   };
 }
 
-export function useTemplates(params: MasterListKeyParams, refreshKey?: string) {
+export function useTemplates(params: MasterListKeyParams, options?: { enabled?: boolean; refreshKey?: string }) {
   return useQuery({
-    queryKey: [...userManagementKeys.templates.list(params), refreshKey ?? ""] as const,
+    queryKey: [...userManagementKeys.templates.list(params), options?.refreshKey ?? ""] as const,
     queryFn: ({ signal }) => TemplateListService.list({ ...toListParams(params), signal }),
+    enabled: options?.enabled ?? true,
   });
 }
 

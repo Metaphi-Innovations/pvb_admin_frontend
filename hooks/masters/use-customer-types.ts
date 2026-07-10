@@ -11,6 +11,7 @@ import {
   type CustomerTypeDropdownItem,
 } from "@/services/customer-type-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): CustomerTypeListParams {
   return {
@@ -86,12 +87,16 @@ export function useExportCustomerTypes() {
   });
 }
 
-export function useCustomerTypeFilterDropdown(fieldName: CustomerTypeFilterField) {
+export function useCustomerTypeFilterDropdown(
+  fieldName: CustomerTypeFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.customerTypes.filterDropdown(fieldName),
     queryFn: ({ signal }) =>
       CustomerTypeListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

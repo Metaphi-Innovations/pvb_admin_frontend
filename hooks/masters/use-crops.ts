@@ -10,6 +10,7 @@ import {
   type CropUpdatePayload,
 } from "@/services/crop-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): CropListParams {
   return {
@@ -98,10 +99,14 @@ export function useExportCrops() {
   });
 }
 
-export function useCropFilterDropdown(fieldName: CropFilterField) {
+export function useCropFilterDropdown(
+  fieldName: CropFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.crops.filterDropdown(fieldName),
     queryFn: ({ signal }) => CropListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

@@ -10,6 +10,7 @@ import {
   type UnitUpdatePayload,
 } from "@/services/unit-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): UnitListParams {
   return {
@@ -94,10 +95,14 @@ export function useExportUnits() {
   });
 }
 
-export function useUnitFilterDropdown(fieldName: UnitFilterField) {
+export function useUnitFilterDropdown(
+  fieldName: UnitFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.units.filterDropdown(fieldName),
     queryFn: ({ signal }) => UnitListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

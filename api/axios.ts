@@ -1,5 +1,13 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { API_ENDPOINTS } from "./endpoints";
+import { showToast } from "@/lib/toast";
+
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    /** When true, response interceptor will not toast 403 messages. */
+    skipPermissionToast?: boolean;
+  }
+}
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const DEV_ACCESS_TOKEN = process.env.NEXT_PUBLIC_DEV_ACCESS_TOKEN;
@@ -156,11 +164,28 @@ axiosInstance.interceptors.response.use(
     }
 
     // Global Error Handling: Map backend response errors or network errors
+    const backendData = error.response?.data as
+      | { message?: string; error?: string }
+      | undefined;
+    const backendMessage =
+      backendData?.message || backendData?.error || error.message || "An unexpected error occurred.";
+
+    const status = error.response?.status || 500;
+
+    // Show exact backend message on permission failures (do not replace with generic text)
+    if (
+      status === 403 &&
+      typeof window !== "undefined" &&
+      !originalRequest?.skipPermissionToast
+    ) {
+      showToast(backendMessage, "error");
+    }
+
     const errorResponse = {
-      status: error.response?.status || 500,
+      status,
       success: false,
-      message: (error.response?.data as any)?.message || error.message || "An unexpected error occurred.",
-      error: (error.response?.data as any)?.error || error.message || "Internal Server Error",
+      message: backendMessage,
+      error: backendData?.error || error.message || "Internal Server Error",
     };
 
     return Promise.reject(errorResponse);

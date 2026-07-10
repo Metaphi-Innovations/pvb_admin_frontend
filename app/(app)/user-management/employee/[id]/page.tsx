@@ -833,26 +833,56 @@ export default function EmployeeDetailPage() {
               </CompactInfoCard>
             )}
 
-            {(employee.approvalLevel1Id || employee.approvalLevel2Id || employee.approvalLevel3Id) && (
+            {(employee.approvalLevels?.length ||
+              employee.approvalLevel1Id ||
+              employee.approvalLevel2Id ||
+              employee.approvalLevel3Id) && (
               <ProfileCardGrid>
-                {employee.approvalLevel1Id && (
-                  <CompactInfoCard title="Level 1 Approver" icon={Shield}>
-                    <CompactField label="Name" value={employee.approvalLevel1Name} />
-                    <CompactField label="Role" value={employee.approvalLevel1Role} />
+                {(employee.approvalLevels?.length
+                  ? employee.approvalLevels
+                  : [
+                      employee.approvalLevel1Id
+                        ? {
+                            level: "1",
+                            approverId: String(employee.approvalLevel1Id),
+                            name: employee.approvalLevel1Name || "",
+                            employeeId: "",
+                            designation: "",
+                            department: "",
+                            role: employee.approvalLevel1Role || "",
+                          }
+                        : null,
+                      employee.approvalLevel2Id
+                        ? {
+                            level: "2",
+                            approverId: String(employee.approvalLevel2Id),
+                            name: employee.approvalLevel2Name || "",
+                            employeeId: "",
+                            designation: "",
+                            department: "",
+                            role: employee.approvalLevel2Role || "",
+                          }
+                        : null,
+                      employee.approvalLevel3Id
+                        ? {
+                            level: "3",
+                            approverId: String(employee.approvalLevel3Id),
+                            name: employee.approvalLevel3Name || "",
+                            employeeId: "",
+                            designation: "",
+                            department: "",
+                            role: employee.approvalLevel3Role || "",
+                          }
+                        : null,
+                    ].filter(Boolean))?.map((approver) => (
+                  <CompactInfoCard key={approver!.approverId} title={`Level ${approver!.level} Approver`} icon={Shield}>
+                    <CompactField label="Name" value={approver!.name || "—"} />
+                    <CompactField label="Employee ID" value={approver!.employeeId || "—"} mono />
+                    <CompactField label="Designation" value={approver!.designation || "—"} />
+                    <CompactField label="Department" value={approver!.department || "—"} />
+                    <CompactField label="Role" value={approver!.role || "—"} />
                   </CompactInfoCard>
-                )}
-                {employee.approvalLevel2Id && (
-                  <CompactInfoCard title="Level 2 Approver" icon={Shield}>
-                    <CompactField label="Name" value={employee.approvalLevel2Name} />
-                    <CompactField label="Role" value={employee.approvalLevel2Role} />
-                  </CompactInfoCard>
-                )}
-                {employee.approvalLevel3Id && (
-                  <CompactInfoCard title="Level 3 Approver" icon={Shield}>
-                    <CompactField label="Name" value={employee.approvalLevel3Name} />
-                    <CompactField label="Role" value={employee.approvalLevel3Role} />
-                  </CompactInfoCard>
-                )}
+                ))}
               </ProfileCardGrid>
             )}
           </div>

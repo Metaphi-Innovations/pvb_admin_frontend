@@ -11,6 +11,7 @@ import {
   type SegmentDropdownItem,
 } from "@/services/segment-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): SegmentListParams {
   return {
@@ -99,10 +100,14 @@ export function useExportSegments() {
   });
 }
 
-export function useSegmentFilterDropdown(fieldName: SegmentFilterField) {
+export function useSegmentFilterDropdown(
+  fieldName: SegmentFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.segments.filterDropdown(fieldName),
     queryFn: ({ signal }) => SegmentListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

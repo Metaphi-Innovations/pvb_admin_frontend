@@ -36,7 +36,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -89,8 +90,14 @@ function toGstRow(item: {
 }
 
 export default function GSTPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "gstPercentage", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -107,24 +114,24 @@ export default function GSTPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const apiFilters = useMemo(
-    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.gst),
-    [debouncedFilters],
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.gst),
+    [appliedFilters],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters),
-    [debouncedFilters],
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering: "",
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters],
   );
 
   const listQuery = useGstList(listParams);
@@ -134,11 +141,17 @@ export default function GSTPage() {
   const toggleStatusMutation = useToggleGstStatus();
   const exportMutation = useExportGst();
 
-  const gstPercentageOptionsQuery = useGstFilterDropdown("gstPercentage");
-  const remarkOptionsQuery = useGstFilterDropdown("remark");
-  const statusOptionsQuery = useGstFilterDropdown("is_active");
-  const createdByOptionsQuery = useGstFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useGstFilterDropdown("updated_by_user__username");
+  const gstPercentageOptionsQuery = useGstFilterDropdown("gstPercentage", {
+    enabled: isFilterOpen("gstPercentage"),
+  });
+  const remarkOptionsQuery = useGstFilterDropdown("remark", { enabled: isFilterOpen("remarks") });
+  const statusOptionsQuery = useGstFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useGstFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useGstFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const gstPercentageOptions = useMemo(
     () => gstPercentageOptionsQuery.data ?? [],
@@ -336,11 +349,9 @@ export default function GSTPage() {
     });
   }, [records, sort]);
 
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize]);
+  }, [appliedSearch, apiFilters, pageSize]);
 
   useEffect(() => {
     setPage(1);
@@ -429,7 +440,7 @@ export default function GSTPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         apiFilters,
       },
@@ -469,14 +480,17 @@ export default function GSTPage() {
         <MasterListing<GSTMaster>
           columns={columns}
           data={displayRecords}
-          loading={loading || isFiltering}
+          loading={loading}
           totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
           actions={actions}
           onAdd={openAdd}
           addLabel="Add GST"
@@ -485,6 +499,7 @@ export default function GSTPage() {
           searchPlaceholder="Search percentage or remarks..."
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 
