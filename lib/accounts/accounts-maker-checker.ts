@@ -159,21 +159,21 @@ function approverLevelsFromEmployee(employee: Employee): {
   const levels: { id: number | null; name: string; role: string }[] = [];
   if (employee.approvalLevel1Id || employee.approvalLevel1Name) {
     levels.push({
-      id: employee.approvalLevel1Id ?? null,
+      id: employee.approvalLevel1Id ? Number(employee.approvalLevel1Id) : null,
       name: employee.approvalLevel1Name ?? "—",
       role: employee.approvalLevel1Role ?? "Approver",
     });
   }
   if (employee.approvalLevel2Id || employee.approvalLevel2Name) {
     levels.push({
-      id: employee.approvalLevel2Id ?? null,
+      id: employee.approvalLevel2Id ? Number(employee.approvalLevel2Id) : null,
       name: employee.approvalLevel2Name ?? "—",
       role: employee.approvalLevel2Role ?? "Approver",
     });
   }
   if (employee.approvalLevel3Id || employee.approvalLevel3Name) {
     levels.push({
-      id: employee.approvalLevel3Id ?? null,
+      id: employee.approvalLevel3Id ? Number(employee.approvalLevel3Id) : null,
       name: employee.approvalLevel3Name ?? "—",
       role: employee.approvalLevel3Role ?? "Approver",
     });

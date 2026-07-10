@@ -388,12 +388,12 @@ export const SalesOrderService = {
   },
 
   async getCustomersDropdown(): Promise<any[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.CUSTOMER);
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CUSTOMER.DROPDOWN);
     return response.data?.data || [];
   },
 
   async getCustomerDetails(id: string): Promise<any> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.CUSTOMER_DETAILS(id));
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CUSTOMER.VIEW(id));
     return response.data?.data || {};
   },
 

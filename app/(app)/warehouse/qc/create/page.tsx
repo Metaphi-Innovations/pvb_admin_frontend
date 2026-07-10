@@ -98,35 +98,42 @@ function CreateQcForm() {
     setItems(qc.items.map((it) => ({ ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 })));
   }, [qcIdParam, grnIdParam, router]);
 
-  const handleAcceptedChange = (idx: number, raw: string) => {
-    const received = items[idx]?.receivedQty ?? 0;
-    const accepted = parseQtyInput(raw, received);
-    if (isStockTransfer) {
-      setItems((prev) =>
-        prev.map((item, i) => (i === idx ? { ...item, acceptedQty: accepted } : item)),
-      );
-      return;
-    }
-    const rejected = Math.max(0, received - accepted);
+  const handleQtyChange = (
+    idx: number,
+    field: "accepted" | "rejected" | "hold",
+    type: "cases" | "loose",
+    raw: string
+  ) => {
+    const val = parseQtyInput(raw);
     setItems((prev) =>
-      prev.map((item, i) =>
-        i === idx ? { ...item, acceptedQty: accepted, rejectedQty: rejected, holdQty: 0 } : item,
-      ),
-    );
-  };
+      prev.map((item, i) => {
+        if (i !== idx) return item;
+        
+        const unitPerPacking = item.unitPerPacking || 10;
+        
+        const newCases = type === "cases" ? val : (item[`${field}Cases`] || 0);
+        const newLoose = type === "loose" ? val : (item[`${field}LooseQty`] || 0);
+        const total = newCases * unitPerPacking + newLoose;
 
-  const handleRejectedChange = (idx: number, raw: string) => {
-    const received = items[idx]?.receivedQty ?? 0;
-    const rejected = parseQtyInput(raw, received);
-    setItems((prev) =>
-      prev.map((item, i) => (i === idx ? { ...item, rejectedQty: rejected, holdQty: isStockTransfer ? item.holdQty : 0 } : item)),
-    );
-  };
+        const updated = {
+          ...item,
+          [`${field}Cases`]: newCases,
+          [`${field}LooseQty`]: newLoose,
+          [`${field}Qty`]: total,
+        };
 
-  const handleHoldChange = (idx: number, raw: string) => {
-    const received = items[idx]?.receivedQty ?? 0;
-    const hold = parseQtyInput(raw, received);
-    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, holdQty: hold } : item)));
+        // If not stock transfer, auto-calculate rejected if accepted changes
+        if (!isStockTransfer && field === "accepted") {
+          const received = item.receivedQty ?? 0;
+          updated.rejectedQty = Math.max(0, received - total);
+          updated.rejectedCases = Math.floor(updated.rejectedQty / unitPerPacking);
+          updated.rejectedLooseQty = updated.rejectedQty % unitPerPacking;
+          updated.holdQty = 0;
+        }
+
+        return updated;
+      })
+    );
   };
 
   const handleReasonChange = (idx: number, val: string) => {
@@ -336,38 +343,80 @@ function CreateQcForm() {
                       <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{item.batchNumber}</td>
                       <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground">{item.receivedQty}</td>
                       <td className="px-4 py-2 text-xs">
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={qtyInputValue(item.acceptedQty)}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleAcceptedChange(idx, e.target.value)}
-                          className={cn("h-8 text-xs text-center w-20 mx-auto", !isRowValid && "border-red-300")}
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={qtyInputValue(item.rejectedQty)}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleRejectedChange(idx, e.target.value)}
-                          className={cn("h-8 text-xs text-center w-20 mx-auto", !isRowValid && "border-red-300")}
-                        />
-                      </td>
-                      {isStockTransfer && (
-                        <td className="px-4 py-2 text-xs">
+                        <div className="flex gap-1 mb-1">
                           <Input
                             type="text"
                             inputMode="numeric"
-                            placeholder="0"
-                            value={qtyInputValue(hold)}
+                            placeholder="Cs"
+                            value={qtyInputValue(item.acceptedCases ?? 0)}
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleHoldChange(idx, e.target.value)}
-                            className={cn("h-8 text-xs text-center w-20 mx-auto", !isRowValid && "border-red-300")}
+                            onChange={(e) => handleQtyChange(idx, "accepted", "cases", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                            title="Cases"
                           />
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Ls"
+                            value={qtyInputValue(item.acceptedLooseQty ?? 0)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleQtyChange(idx, "accepted", "loose", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                            title="Loose Qty"
+                          />
+                        </div>
+                        <div className="text-center text-[10px] text-muted-foreground">Total: {item.acceptedQty}</div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex gap-1 mb-1">
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Cs"
+                            value={qtyInputValue(item.rejectedCases ?? 0)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleQtyChange(idx, "rejected", "cases", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                            title="Cases"
+                          />
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Ls"
+                            value={qtyInputValue(item.rejectedLooseQty ?? 0)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleQtyChange(idx, "rejected", "loose", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                            title="Loose Qty"
+                          />
+                        </div>
+                        <div className="text-center text-[10px] text-muted-foreground">Total: {item.rejectedQty}</div>
+                      </td>
+                      {isStockTransfer && (
+                        <td className="px-4 py-2 text-xs">
+                          <div className="flex gap-1 mb-1">
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="Cs"
+                              value={qtyInputValue(item.holdCases ?? 0)}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => handleQtyChange(idx, "hold", "cases", e.target.value)}
+                              className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                              title="Cases"
+                            />
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="Ls"
+                              value={qtyInputValue(item.holdLooseQty ?? 0)}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => handleQtyChange(idx, "hold", "loose", e.target.value)}
+                              className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                              title="Loose Qty"
+                            />
+                          </div>
+                          <div className="text-center text-[10px] text-muted-foreground">Total: {hold}</div>
                         </td>
                       )}
                       <td className="px-4 py-2 text-xs">

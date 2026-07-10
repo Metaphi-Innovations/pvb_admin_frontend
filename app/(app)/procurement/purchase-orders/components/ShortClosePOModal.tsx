@@ -24,7 +24,7 @@ import { allocateShortCloseProducts } from "@/services/purchase-order.service";
 import { shortCloseReasonLabel } from "../po-qty";
 
 export interface ShortCloseSubmitPayload {
-  products: { purchaseOrderProductId: string; shortClosedQty: number }[];
+  products: { purchaseOrderProductId: string; shortClosedQty: number; conversionQty: number }[];
   reason: ShortCloseReason;
   remarks: string;
 }
@@ -89,6 +89,7 @@ export function ShortClosePOModal({
       .map((row) => ({
         purchaseOrderProductId: row.purchaseOrderProductId,
         shortClosedQty: row.shortClosedQty,
+        conversionQty: row.conversionQty,
       }));
     if (!products.length) {
       setError("No product lines available to short close.");

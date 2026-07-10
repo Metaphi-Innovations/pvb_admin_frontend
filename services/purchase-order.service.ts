@@ -70,15 +70,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function mapDiscountType(value: unknown): "percentage" | "flat" {
-  const raw = asString(value).toLowerCase();
-  return raw === "flat" || raw === "fixed" ? "flat" : "percentage";
-}
-
-function mapBackendDiscountType(value: unknown): "Percentage" | "Flat" {
-  return mapDiscountType(value) === "flat" ? "Flat" : "Percentage";
-}
-
 function resolveLineQtyFields(line: POLineItem): {
   packingQty: number;
   baseQty: number;
@@ -178,12 +169,7 @@ function mapAttachments(raw: unknown): POAttachment[] {
 function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
   const { packingQty, baseQty, conversionQty } = resolveQtyFromBackend(raw);
   const rate = asNumber(raw.rate);
-  const discountType = mapDiscountType(raw.discount_type);
-  const discountValue = asNumber(raw.discount_value);
-  const discountAmount =
-    discountType === "percentage"
-      ? round2((baseQty * rate * discountValue) / 100)
-      : discountValue;
+  const discountAmount = 0;
   const taxable = round2(baseQty * rate - discountAmount);
   const cgstPct = asNumber(raw.cgst_percent);
   const sgstPct = asNumber(raw.sgst_percent);
@@ -210,9 +196,9 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     uom: asString(raw.base_unit) || "Unit",
     orderedQty: baseQty,
     unitPrice: rate,
-    discountType,
-    discountPct: discountType === "percentage" ? discountValue : 0,
-    discountFlatAmount: discountType === "flat" ? discountValue : 0,
+    discountType: "percentage",
+    discountPct: 0,
+    discountFlatAmount: 0,
     discountAmount,
     cgstPct,
     sgstPct,
@@ -503,7 +489,7 @@ function buildWriteBody(
     taxable_amount: draft.summary.taxableValue,
     gst_amount: gstAmount,
     grand_total: draft.summary.grandTotal,
-    products: form.lines
+    products: draft.lines
       .filter((l) => l.productName || l.productCode || l.productId)
       .map((line) => {
         const { packingQty, baseQty } = resolveLineQtyFields(line);
@@ -513,14 +499,9 @@ function buildWriteBody(
           product_name: line.productName || null,
           base_unit: line.baseUnit || null,
           packing_unit: line.packagingUnit || null,
-          requested_qty: packingQty,
           requested_base_qty: baseQty,
-          ordered_qty: packingQty,
           ordered_base_qty: baseQty,
           rate: line.unitPrice,
-          discount_type: mapBackendDiscountType(line.discountType),
-          discount_value:
-            line.discountType === "flat" ? line.discountFlatAmount : line.discountPct,
           gst_percent: round2(line.cgstPct + line.sgstPct + line.igstPct),
           cgst_percent: line.cgstPct,
           sgst_percent: line.sgstPct,
@@ -696,7 +677,7 @@ export const PurchaseOrderService = {
     purchaseOrderId: string;
     shortCloseReason?: string;
     shortCloseRemarks?: string;
-    products: { purchaseOrderProductId: string; shortClosedQty: number }[];
+    products: { purchaseOrderProductId: string; shortClosedQty: number; conversionQty?: number }[];
   }): Promise<PurchaseOrder> {
     const response = await axiosInstance.post(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.SHORT_CLOSE,
@@ -706,7 +687,7 @@ export const PurchaseOrderService = {
         short_close_remarks: input.shortCloseRemarks || null,
         products: input.products.map((p) => ({
           purchase_order_product_id: p.purchaseOrderProductId,
-          short_closed_qty: p.shortClosedQty,
+          short_closed_base_qty: Math.round(p.shortClosedQty * (p.conversionQty ?? 1)),
         })),
       },
     );
@@ -752,7 +733,7 @@ export const PurchaseOrderService = {
 export function allocateShortCloseProducts(
   lines: POLineItem[],
   totalQty: number,
-): { purchaseOrderProductId: string; productName: string; productCode: string; pendingQty: number; shortClosedQty: number }[] {
+): { purchaseOrderProductId: string; productName: string; productCode: string; pendingQty: number; shortClosedQty: number; conversionQty: number }[] {
   let remaining = Math.floor(totalQty);
   return lines
     .map((line) => {
@@ -769,6 +750,7 @@ export function allocateShortCloseProducts(
           productCode: line.productCode,
           pendingQty: 0,
           shortClosedQty: 0,
+          conversionQty: line.conversionQty ?? 1,
         };
       }
       const take = Math.min(pending, remaining);
@@ -779,6 +761,7 @@ export function allocateShortCloseProducts(
         productCode: line.productCode,
         pendingQty: pending,
         shortClosedQty: take,
+        conversionQty: line.conversionQty ?? 1,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);

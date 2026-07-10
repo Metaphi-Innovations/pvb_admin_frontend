@@ -226,7 +226,7 @@ export function validateSalesOrderForm(
 }
 
 interface SampleOrderFormProps {
-	mode: "add" | "edit";
+	mode: "add" | "edit" | "split";
 	orderNumber: string;
 	form: SalesOrderFormValues;
 	onChange: (form: SalesOrderFormValues) => void;

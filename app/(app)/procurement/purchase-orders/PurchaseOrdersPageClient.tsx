@@ -175,6 +175,7 @@ export default function PurchaseOrdersPageClient() {
   const isPoTab = tab !== "po_return";
   const listQuery = usePurchaseOrderList(listParams, isPoTab);
   const summaryQuery = usePurchaseOrderSummary();
+  const poNoOptionsQuery = usePurchaseOrderFilterDropdown("po_no");
   const supplierOptionsQuery = usePurchaseOrderFilterDropdown("supplier__supplier_name");
   const prOptionsQuery = usePurchaseOrderFilterDropdown("purchase_requisition__pr_number");
   const exportMutation = useExportPurchaseOrders();
@@ -338,6 +339,10 @@ export default function PurchaseOrdersPageClient() {
     ? getMasterListErrorMessage(listQuery.error, { resource: "purchase orders" })
     : null;
 
+  const poNumbers = useMemo(
+    () => poNoOptionsQuery.data ?? [],
+    [poNoOptionsQuery.data],
+  );
   const suppliers = useMemo(
     () => supplierOptionsQuery.data ?? [],
     [supplierOptionsQuery.data],
@@ -409,6 +414,9 @@ export default function PurchaseOrdersPageClient() {
       key: "poNumber",
       header: "PO No.",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: poNumbers,
       render: (_val, row) => (
         <div>
           <button
