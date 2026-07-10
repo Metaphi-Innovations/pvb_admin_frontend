@@ -7,10 +7,10 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Split, CheckCircle2, XCircle } from "lucide-react";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
-import SalesOrderForm, {
+import SampleOrderForm, {
   type SalesOrderFormValues,
-  validateSplitOrderForm,
-} from "../../components/SalesOrderForm";
+  validateSalesOrderForm as validateSplitOrderForm,
+} from "../../components/SampleOrderForm";
 import {
   type SalesOrder,
   type ProductCatalogItem,
@@ -74,7 +74,7 @@ export default function SplitSalesOrderPage() {
   const handleSave = (asDraft: boolean) => {
     if (!form || !originalOrder) return;
 
-    const e = validateSplitOrderForm(form, originalOrder);
+    const e = validateSplitOrderForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -136,7 +136,7 @@ export default function SplitSalesOrderPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 bg-muted/10">
-          <SalesOrderForm
+          <SampleOrderForm
             mode="split"
             orderNumber={orderNumber}
             form={form}

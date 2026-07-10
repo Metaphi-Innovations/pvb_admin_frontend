@@ -4,7 +4,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+import {
+  ColumnConfig,
+  FilterState,
+  SortState,
+} from "@/components/listing/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,9 +26,7 @@ import {
   PURCHASE_RETURN_STATUS_CFG,
   type PurchaseReturn,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
-import {
-  purchaseReturnRoutes,
-} from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import { purchaseReturnRoutes } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
 import {
   buildPurchaseReturnApiFilters,
   buildPurchaseReturnOrdering,
@@ -51,16 +53,25 @@ function StatusPill({ status }: { status: PurchaseReturn["status"] }) {
 
 export function PurchaseReturnListing() {
   const router = useRouter();
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: "success" | "error";
+  } | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>({ key: "returnDate", direction: "desc" });
+  const [sort, setSort] = useState<SortState>({
+    key: "returnDate",
+    direction: "desc",
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   useFlashToast(setToast);
 
-  const apiFilters = useMemo(() => buildPurchaseReturnApiFilters(debouncedFilters), [debouncedFilters]);
+  const apiFilters = useMemo(
+    () => buildPurchaseReturnApiFilters(debouncedFilters),
+    [debouncedFilters],
+  );
   const ordering = useMemo(
     () => buildPurchaseReturnOrdering(sort.key, sort.direction),
     [sort.key, sort.direction],
@@ -74,16 +85,33 @@ export function PurchaseReturnListing() {
   });
 
   const statusOptionsQuery = usePurchaseReturnFilterDropdown("status");
-  const supplierOptionsQuery = usePurchaseReturnFilterDropdown("supplier__supplier_name");
-  const poOptionsQuery = usePurchaseReturnFilterDropdown("purchase_order__po_no");
-  const initiatedByOptionsQuery = usePurchaseReturnFilterDropdown("created_by_user__username");
+  const returnNoOptionsQuery = usePurchaseReturnFilterDropdown("return_no");
+  const supplierOptionsQuery = usePurchaseReturnFilterDropdown(
+    "supplier__supplier_name",
+  );
+  const poOptionsQuery = usePurchaseReturnFilterDropdown(
+    "purchase_order__po_no",
+  );
+  const initiatedByOptionsQuery = usePurchaseReturnFilterDropdown(
+    "created_by_user__username",
+  );
 
-  const statusOptions = useMemo(() => statusOptionsQuery.data ?? [], [statusOptionsQuery.data]);
+  const statusOptions = useMemo(
+    () => statusOptionsQuery.data ?? [],
+    [statusOptionsQuery.data],
+  );
+  const returnNoOptions = useMemo(
+    () => returnNoOptionsQuery.data ?? [],
+    [returnNoOptionsQuery.data],
+  );
   const supplierOptions = useMemo(
     () => supplierOptionsQuery.data ?? [],
     [supplierOptionsQuery.data],
   );
-  const poOptions = useMemo(() => poOptionsQuery.data ?? [], [poOptionsQuery.data]);
+  const poOptions = useMemo(
+    () => poOptionsQuery.data ?? [],
+    [poOptionsQuery.data],
+  );
   const initiatedByOptions = useMemo(
     () => initiatedByOptionsQuery.data ?? [],
     [initiatedByOptionsQuery.data],
@@ -106,6 +134,9 @@ export function PurchaseReturnListing() {
         key: "returnNumber",
         header: "Return No.",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: returnNoOptions,
         render: (_val, row) => (
           <button
             type="button"
@@ -113,9 +144,14 @@ export function PurchaseReturnListing() {
             className="text-left"
           >
             <p className="font-semibold text-brand-700 text-xs hover:underline font-mono">
-              <HighlightText text={row.returnNumber} query={(filters.search as string) || ""} />
+              <HighlightText
+                text={row.returnNumber}
+                query={(filters.search as string) || ""}
+              />
             </p>
-            <p className="text-[11px] text-muted-foreground">{formatListingDate(row.returnDate)}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {formatListingDate(row.returnDate)}
+            </p>
           </button>
         ),
       },
@@ -129,7 +165,9 @@ export function PurchaseReturnListing() {
         render: (_val, row) => (
           <button
             type="button"
-            onClick={() => router.push(`/procurement/purchase-orders/${String(row.poId)}`)}
+            onClick={() =>
+              router.push(`/procurement/purchase-orders/${String(row.poId)}`)
+            }
             className="font-mono text-xs text-brand-700 hover:underline"
           >
             {row.poNumber}
@@ -146,7 +184,10 @@ export function PurchaseReturnListing() {
         render: (_val, row) => (
           <span className="inline-flex items-center gap-2 text-xs font-medium">
             <ProcAvatar name={row.supplierName} />
-            <HighlightText text={row.supplierName} query={(filters.search as string) || ""} />
+            <HighlightText
+              text={row.supplierName}
+              query={(filters.search as string) || ""}
+            />
           </span>
         ),
       },
@@ -154,16 +195,18 @@ export function PurchaseReturnListing() {
         key: "totalItems",
         header: "Items",
         sortable: true,
-        render: (_val, row) => <span className="text-xs tabular-nums">{row.totalItems}</span>,
-      },
-      {
-        key: "totalReturnQty",
-        header: "Return Qty",
-        sortable: true,
         render: (_val, row) => (
-          <span className="text-xs tabular-nums font-semibold">{row.totalReturnQty}</span>
+          <span className="text-xs tabular-nums">{row.totalItems}</span>
         ),
       },
+      // {
+      //   key: "totalReturnQty",
+      //   header: "Return Qty",
+      //   sortable: true,
+      //   render: (_val, row) => (
+      //     <span className="text-xs tabular-nums font-semibold">{row.totalReturnQty}</span>
+      //   ),
+      // },
       {
         key: "grandTotal",
         header: "Amount",
@@ -190,7 +233,11 @@ export function PurchaseReturnListing() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: initiatedByOptions,
-        render: (_val, row) => <span className="text-xs text-muted-foreground">{row.initiatedBy}</span>,
+        render: (_val, row) => (
+          <span className="text-xs text-muted-foreground">
+            {row.initiatedBy}
+          </span>
+        ),
       },
       {
         key: "actions",
@@ -232,6 +279,7 @@ export function PurchaseReturnListing() {
       router,
       filters.search,
       statusOptions,
+      returnNoOptions,
       supplierOptions,
       poOptions,
       initiatedByOptions,

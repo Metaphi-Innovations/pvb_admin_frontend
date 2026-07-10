@@ -61,14 +61,14 @@ function ProductSelect({
 	onSelectMultiple,
 }: {
 	products: ProductCatalogItem[];
-	value: number | null;
-	selectedValues?: number[];
-	alreadyAddedProductIds?: number[];
+	value: string | null;
+	selectedValues?: string[];
+	alreadyAddedProductIds?: string[];
 	onSelectMultiple: (selectedProducts: ProductCatalogItem[]) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
-	const [checkedIds, setCheckedIds] = useState<number[]>([]);
+	const [checkedIds, setCheckedIds] = useState<string[]>([]);
 
 	const handleOpenChange = (isOpen: boolean) => {
 		setOpen(isOpen);
@@ -85,7 +85,7 @@ function ProductSelect({
 			p.code.toLowerCase().includes(search.toLowerCase()),
 	);
 
-	const toggleProduct = (id: number) => {
+	const toggleProduct = (id: string) => {
 		setCheckedIds((prev) =>
 			prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
 		);
@@ -250,7 +250,7 @@ export default function ProductLinesEditor({
 					if (next.quantityType === "Case") {
 						next.pieceQuantity = 0;
 					}
-					const product = getProductById(next.productId || -1);
+					const product = getProductById(next.productId || "");
 					next.quantity = next.quantityType === "Case"
 						? ((next.caseQuantity || 0) * (product?.packSize || 1))
 						: ((next.caseQuantity || 0) * (product?.packSize || 1)) + (next.pieceQuantity || 0);
@@ -276,21 +276,12 @@ export default function ProductLinesEditor({
 						if (next.quantityType === "Case") {
 							next.pieceQuantity = 0;
 						}
-						const product = getProductById(next.productId || -1);
+						const product = getProductById(next.productId || "");
 						next.quantity = next.quantityType === "Case"
 							? ((next.caseQuantity || 0) * (product?.packSize || 1))
 							: ((next.caseQuantity || 0) * (product?.packSize || 1)) + (next.pieceQuantity || 0);
 					}
 					next = recalculateSampleOrderLineItem(next);
-					if (
-						next.productId &&
-						next.quantity > 0 &&
-						next.quantity > next.availableStock
-					) {
-						setLocalError(
-							`Quantity cannot exceed available stock (${next.availableStock})`,
-						);
-					}
 				}
 				return next;
 			}),
@@ -399,7 +390,6 @@ export default function ProductLinesEditor({
 
 	const columns = [
 		{ h: "Product", className: "min-w-[160px]" },
-		{ h: "Stock", className: "w-14" },
 		{ h: "Type", className: "w-[80px]" },
 		{ h: "Cases", className: "w-20" },
 		{ h: "Pieces", className: "w-20" },
@@ -432,7 +422,7 @@ export default function ProductLinesEditor({
 						products={products}
 						value={null}
 						selectedValues={topSelectedProds.map((p) => p.id)}
-						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is number => id !== null)}
+						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is string => id !== null)}
 						onSelectMultiple={(selected) => setTopSelectedProds(selected)}
 					/>
 				}
@@ -530,23 +520,11 @@ export default function ProductLinesEditor({
 										alreadyAddedProductIds={lines
 											.filter((l) => l.id !== line.id)
 											.map((l) => l.productId)
-											.filter((id): id is number => id !== null)}
+											.filter((id): id is string => id !== null)}
 										onSelectMultiple={(selectedProds) =>
 											handleProductSelectMultiple(line.id, selectedProds)
 										}
 									/>
-								</td>
-								<td className="px-2 py-1.5">
-									<span
-										className={cn(
-											"text-xs font-medium tabular-nums",
-											line.availableStock === 0
-												? "text-amber-600"
-												: "text-foreground",
-										)}
-									>
-										{line.productId != null ? line.availableStock : "—"}
-									</span>
 								</td>
 								<td className='px-2 py-1.5 w-[80px]'>
 									{isEditing ? (

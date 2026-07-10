@@ -14,6 +14,8 @@ export type PurchaseReturnStatus =
   | "Received_By_Supplier"
   | "Cancelled";
 
+export type PurchaseReturnUnit = "CASE" | "PIECE";
+
 export interface PurchaseReturnItem {
   id: string;
   purchaseOrderProductId?: string;
@@ -27,21 +29,19 @@ export interface PurchaseReturnItem {
   qcNo?: string;
   grnItemId?: string;
   grnBatchId?: string;
+  batchGroupKey?: string;
   inventoryDetailId: string;
-  inventoryRejectedItemId: string;
+  inventoryRejectedItemId?: string;
   mfgDate: string;
   expDate: string;
   caseSize: number;
-  grnReceivedCases: number;
   grnReceivedQty: number;
-  qcRejectedCases: number;
   qcRejectedQty: number;
-  alreadyReturnedCases: number;
   alreadyReturnedQty: number;
-  balanceCases: number;
   balanceRejectedQty: number;
-  returnCases: number;
   returnQty: number;
+  returnCases?: number;
+  returnLooseQty?: number;
   lineRemark: string;
   selected: boolean;
   /** Present on edit-merge: true if this line was already saved on the return. */

@@ -59,6 +59,7 @@ export interface PurchaseOrderFilterOption {
 }
 
 export type PurchaseOrderFilterField =
+  | "po_no"
   | "supplier__supplier_name"
   | "purchase_requisition__pr_number"
   | "po_status";
@@ -198,6 +199,11 @@ export function buildPurchaseOrderApiFilters(
   tabStatus?: string | null,
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
+
+  const poNumber = firstFilterValue(filters.poNumber);
+  if (poNumber) {
+    apiFilters.po_no = poNumber;
+  }
 
   const supplierName = firstFilterValue(filters.supplierName);
   if (supplierName) {
