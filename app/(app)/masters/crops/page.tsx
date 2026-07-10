@@ -26,7 +26,7 @@ import {
   cropToForm,
   toCropRecord,
   validateCropApiForm,
-  type CropForm,
+  type CropForm as CropFormValues,
   type CropRecord,
 } from "./crop-data";
 import { CropForm } from "./components/CropForm";
@@ -115,7 +115,7 @@ export default function CropMasterPage() {
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<CropRecord | null>(null);
-  const [form, setForm] = useState<CropForm>(DEFAULT_CROP_FORM);
+  const [form, setForm] = useState<CropFormValues>(DEFAULT_CROP_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<CropRecord | null>(null);
@@ -633,7 +633,7 @@ export default function CropMasterPage() {
               form={form}
               onChange={setForm}
               errors={errors}
-              onClearError={(key) =>
+              onClearError={(key: string) =>
                 setErrors((prev) => {
                   const copy = { ...prev };
                   delete copy[key];

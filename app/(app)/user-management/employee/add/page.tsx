@@ -10,18 +10,22 @@ import { type Employee } from "../employee-data";
 import {
   employeeToCreatePayload,
   approvalUsersToOptions,
+  usersDropdownToOptions,
   templatePermissionsToSets,
+  roleDropdownToApiOptions,
   type ApiRoleOption,
   type GeographyLookupItem,
 } from "../user-api-data";
+import { permissionsHaveEnabled } from "@/services/user-list.service";
 import { cn } from "@/lib/utils";
 import {
   useCreateUser,
   useSaveUserPermissions,
   useNextEmployeeId,
   useApprovalUsers,
+  useUsersDropdown,
   useDepartmentsDropdown,
-  useRoles,
+  useRolesDropdown,
   useTemplatesDropdown,
 } from "@/hooks/user-management";
 import { TemplateListService } from "@/services/template-list.service";
@@ -51,15 +55,9 @@ export default function AddEmployeePage() {
 
   const nextEmployeeIdQuery = useNextEmployeeId();
   const departmentsQuery = useDepartmentsDropdown();
-  const rolesQuery = useRoles({
-    page: 1,
-    pageSize: 500,
-    search: "",
-    status: "active",
-    ordering: "role_name",
-    apiFilters: {},
-  });
+  const rolesDropdownQuery = useRolesDropdown();
   const templatesQuery = useTemplatesDropdown();
+  const usersDropdownQuery = useUsersDropdown();
   const approvalUsersQuery = useApprovalUsers(selectedRoleId);
   const createMutation = useCreateUser();
   const savePermissionsMutation = useSaveUserPermissions();
@@ -101,15 +99,12 @@ export default function AddEmployeePage() {
     [departmentsQuery.data],
   );
 
-  const apiRoles: ApiRoleOption[] = useMemo(
+  const apiRoles: ApiRoleOption[] | undefined = useMemo(
     () =>
-      (rolesQuery.data?.items ?? []).map((role) => ({
-        id: role.roleUuid,
-        name: role.roleName,
-        geoLevel: role.geoLevel || "None",
-        departmentId: role.departmentId,
-      })),
-    [rolesQuery.data],
+      rolesDropdownQuery.data
+        ? roleDropdownToApiOptions(rolesDropdownQuery.data)
+        : undefined,
+    [rolesDropdownQuery.data],
   );
 
   const permissionTemplateOptions = useMemo(
@@ -122,8 +117,16 @@ export default function AddEmployeePage() {
   );
 
   const approvalOptions = useMemo(
-    () => approvalUsersToOptions(approvalUsersQuery.data ?? []),
-    [approvalUsersQuery.data],
+    () =>
+      selectedRoleId
+        ? approvalUsersToOptions(approvalUsersQuery.data ?? [])
+        : undefined,
+    [approvalUsersQuery.data, selectedRoleId],
+  );
+
+  const reportingManagerOptions = useMemo(
+    () => usersDropdownToOptions(usersDropdownQuery.data ?? []),
+    [usersDropdownQuery.data],
   );
 
   const handleApplyPermissionTemplate = useCallback(async (templateId: string) => {
@@ -132,36 +135,39 @@ export default function AddEmployeePage() {
   }, []);
 
   const handleSave = (employee: Employee) => {
-    const selectedRole = apiRoles.find((r) => String(r.id) === String(employee.roleId));
+    const selectedRole = apiRoles?.find((r) => String(r.id) === String(employee.roleId));
     const payload = employeeToCreatePayload(employee, {
       password: employee.password,
       roleGeoLevel: selectedRole?.geoLevel || "None",
       geography,
     });
 
-    createMutation.mutate(payload, {
-      onSuccess: async (result) => {
-        if (employee.permissions && result.userId) {
-          try {
-            await savePermissionsMutation.mutateAsync({
-              id: result.userId,
-              permissions: employee.permissions,
-            });
-          } catch (error) {
-            setToast({
-              msg: getErrorMessage(error, "User created but permissions could not be saved."),
-              type: "error",
-            });
-            return;
+    createMutation.mutate(
+      { payload, documents: employee.documents },
+      {
+        onSuccess: async (result) => {
+          if (result.userId && permissionsHaveEnabled(employee.permissions)) {
+            try {
+              await savePermissionsMutation.mutateAsync({
+                id: result.userId,
+                permissions: employee.permissions,
+              });
+            } catch (error) {
+              setToast({
+                msg: getErrorMessage(error, "User created but permissions could not be saved."),
+                type: "error",
+              });
+              return;
+            }
           }
-        }
-        setToast({ msg: "User created successfully", type: "success" });
-        setTimeout(() => router.push("/user-management/employee"), 1500);
+          setToast({ msg: "User created successfully", type: "success" });
+          setTimeout(() => router.push("/user-management/employee"), 1500);
+        },
+        onError: (error) => {
+          setToast({ msg: getErrorMessage(error, "Failed to create user."), type: "error" });
+        },
       },
-      onError: (error) => {
-        setToast({ msg: getErrorMessage(error, "Failed to create user."), type: "error" });
-      },
-    });
+    );
   };
 
   return (
@@ -176,7 +182,15 @@ export default function AddEmployeePage() {
         permissionTemplateOptions={permissionTemplateOptions}
         onApplyPermissionTemplate={handleApplyPermissionTemplate}
         approvalUserOptions={approvalOptions}
+        reportingManagerOptions={reportingManagerOptions}
         onRoleIdChange={setSelectedRoleId}
+        onValidationFail={(errors) => {
+          const first = Object.values(errors)[0];
+          setToast({
+            msg: first || "Please fix the highlighted fields before saving.",
+            type: "error",
+          });
+        }}
         isSubmitting={createMutation.isPending || savePermissionsMutation.isPending}
       />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

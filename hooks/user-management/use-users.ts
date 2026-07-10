@@ -10,7 +10,9 @@ import {
   type UserFilterField,
   type UserListParams,
   type UserUpdatePayload,
+  permissionsHaveEnabled,
 } from "@/services/user-list.service";
+import type { EmployeeDocument } from "@/app/(app)/user-management/employee/employee-documents";
 
 function toListParams(params: MasterListKeyParams): UserListParams {
   return {
@@ -41,7 +43,13 @@ export function useUser(id: string | null | undefined) {
 export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: UserCreatePayload) => UserListService.create(payload),
+    mutationFn: ({
+      payload,
+      documents,
+    }: {
+      payload: UserCreatePayload;
+      documents?: EmployeeDocument[];
+    }) => UserListService.create(payload, documents),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: userManagementKeys.users.lists() });
     },
@@ -51,8 +59,15 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UserUpdatePayload }) =>
-      UserListService.update(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+      documents,
+    }: {
+      id: string;
+      payload: UserUpdatePayload;
+      documents?: EmployeeDocument[];
+    }) => UserListService.update(id, payload, documents),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: userManagementKeys.users.lists() }),
@@ -127,5 +142,13 @@ export function useApprovalUsers(roleId: string | null | undefined) {
     queryFn: () => UserListService.getApprovalUsers(roleId!),
     enabled: Boolean(roleId),
     staleTime: 60_000,
+  });
+}
+
+export function useUsersDropdown() {
+  return useQuery({
+    queryKey: userManagementKeys.users.dropdown(),
+    queryFn: () => UserListService.dropdown(),
+    staleTime: 5 * 60 * 1000,
   });
 }

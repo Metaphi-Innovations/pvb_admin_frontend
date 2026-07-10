@@ -156,6 +156,15 @@ export interface Employee {
   approvalLevel3Id?: number | string | null;
   approvalLevel3Name?: string;
   approvalLevel3Role?: string;
+  approvalLevels?: Array<{
+    level: string;
+    approverId: string;
+    name: string;
+    employeeId: string;
+    designation: string;
+    department: string;
+    role: string;
+  }>;
   // Legacy fields (kept for backward compat)
   designation?: string;
   branch?: string;

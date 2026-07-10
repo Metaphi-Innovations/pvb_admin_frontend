@@ -117,7 +117,13 @@ export default function EditRolePage() {
     if (roleQuery.data) {
       const record = toRoleRecord(roleQuery.data);
       setOriginal(record);
-      setForm(roleToForm(record));
+      const next = roleToForm(record);
+      setForm({
+        roleName: next.roleName,
+        departmentId: next.departmentId,
+        geoLevel: (next.geoLevel || "None") as GeoLevel,
+        description: next.description,
+      });
     }
   }, [roleQuery.data]);
 

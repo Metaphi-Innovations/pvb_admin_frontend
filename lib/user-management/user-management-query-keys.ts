@@ -50,5 +50,6 @@ export const userManagementKeys = {
     approvalUsers: (roleId: string) =>
       [...userManagementKeys.users.all(), "approval-users", roleId] as const,
     nextEmployeeId: () => [...userManagementKeys.users.all(), "next-employee-id"] as const,
+    dropdown: () => [...userManagementKeys.users.all(), "dropdown"] as const,
   },
 };

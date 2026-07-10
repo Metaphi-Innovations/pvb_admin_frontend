@@ -246,6 +246,9 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/user-management/template/${id}`,
       DROPDOWN: "/user-management/template/dropdown",
     },
+    PINCODE: {
+      BY_CODE: (code: string) => `/user-management/pincode/code/${code}`,
+    },
   },
   MASTER_DROPDOWNS: {
     CUSTOMER: "/master/customer/dropdown",
