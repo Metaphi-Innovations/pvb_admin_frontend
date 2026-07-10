@@ -88,9 +88,9 @@ function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
       productTotal: asNumber(raw.product_total),
       taxableValue: asNumber(raw.taxable_amount),
       additionalChargesTotal: asNumber(raw.additional_charges_amount),
-      totalCgst: asNumber(raw.cgst_percent),
-      totalSgst: asNumber(raw.sgst_percent),
-      totalIgst: asNumber(raw.igst_percent),
+      totalCgst: asNumber(raw.cgst_amount),
+      totalSgst: asNumber(raw.sgst_amount),
+      totalIgst: asNumber(raw.igst_amount),
       grandTotal: asNumber(raw.grand_total),
       amountInWords: amountInWords(asNumber(raw.grand_total)),
     },
@@ -108,26 +108,11 @@ function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
 }
 
 function mapDetailItem(raw: Record<string, unknown>): PurchaseReturnItem {
-  const returnUnitRaw = asString(raw.return_unit).toUpperCase();
-  const returnUnit: PurchaseReturnItem["returnUnit"] =
-    returnUnitRaw === "CASE" ? "CASE" : returnUnitRaw === "PIECE" ? "PIECE" : "PIECE";
-  const returnValue = asNumber(raw.return_value);
-  const returnBaseQty =
-    asNumber(raw.return_base_qty) ||
-    asNumber(raw.document_returned_qty) ||
-    asNumber(raw.return_qty);
-  const currentRemaining = asNumber(raw.current_remaining_qty ?? raw.remaining_qty);
-  const balanceQty = currentRemaining > 0 ? currentRemaining : asNumber(raw.balance_qty);
-  const documentReturned = asNumber(raw.document_returned_qty) || returnBaseQty;
-  const maxEditable = asNumber(raw.max_editable_qty) || balanceQty + documentReturned;
-  const selected = returnBaseQty > 0;
-
+  const balanceQty = asNumber(raw.balance_qty);
+  const returnQty = asNumber(raw.return_base_qty);
+  const selected = returnQty > 0;
   return {
-    id:
-      asString(raw.batch_group_key) ||
-      asString(raw.grn_batch_id) ||
-      asString(raw.purchase_order_return_product_id) ||
-      asString(raw.inventory_rejected_item_id),
+    id: asString(raw.purchase_order_return_product_id) || asString(raw.inventory_rejected_item_id),
     purchaseOrderProductId: asString(raw.purchase_order_product_id) || undefined,
     productId: asString(raw.product_id),
     productCode: asString(raw.product_code),
@@ -137,31 +122,19 @@ function mapDetailItem(raw: Record<string, unknown>): PurchaseReturnItem {
     grnId: asString(raw.grn_id),
     grnItemId: asString(raw.grn_item_id) || undefined,
     grnBatchId: asString(raw.grn_batch_id) || undefined,
-    batchGroupKey: asString(raw.batch_group_key) || undefined,
     inventoryDetailId: asString(raw.inventory_detail_id),
-    inventoryRejectedItemId: asString(raw.inventory_rejected_item_id) || undefined,
+    inventoryRejectedItemId: asString(raw.inventory_rejected_item_id),
     mfgDate: asDateOnly(raw.manufacture_date),
     expDate: asDateOnly(raw.expiry_date),
     caseSize: asNumber(raw.case_size),
-    grnReceivedCases: asNumber(raw.grn_received_cases),
-    grnReceivedQty: asNumber(raw.grn_received_qty),
-    qcRejectedCases: asNumber(raw.qc_rejected_cases),
-    qcRejectedQty: asNumber(raw.qc_rejected_qty),
-    alreadyReturnedCases: asNumber(raw.already_returned_cases),
-    alreadyReturnedQty: asNumber(raw.already_returned_qty),
-    balanceCases: asNumber(raw.balance_cases),
+    grnReceivedQty: asNumber(raw.grn_received_base_qty),
+    qcRejectedQty: asNumber(raw.qc_rejected_base_qty),
+    alreadyReturnedQty: asNumber(raw.already_returned_base_qty),
     balanceRejectedQty: balanceQty,
-    currentRemainingQty: currentRemaining,
-    documentReturnedQty: documentReturned,
-    maxEditableQty: maxEditable,
-    returnUnit,
-    returnValue: returnValue || (returnUnit === "PIECE" ? returnBaseQty : 0),
-    returnBaseQty,
-    returnCases: 0,
-    returnQty: returnBaseQty,
+    returnQty,
     lineRemark: asString(raw.line_remark),
     selected,
-    lineStatus: balanceQty <= 0 && !selected ? "fully_returned" : "available",
+    lineStatus: balanceQty <= 0 ? "fully_returned" : "available",
     unitPrice: asNumber(raw.rate),
     gstPct: asNumber(raw.gst_percent),
     cgstPct: asNumber(raw.cgst_percent),
@@ -203,9 +176,9 @@ function mapDetail(raw: Record<string, unknown>): PurchaseReturn {
       productTotal: asNumber(raw.product_total),
       taxableValue: asNumber(raw.taxable_amount),
       additionalChargesTotal: asNumber(raw.additional_charges_amount),
-      totalCgst: asNumber(raw.cgst_percent),
-      totalSgst: asNumber(raw.sgst_percent),
-      totalIgst: asNumber(raw.igst_percent),
+      totalCgst: asNumber(raw.cgst_amount),
+      totalSgst: asNumber(raw.sgst_amount),
+      totalIgst: asNumber(raw.igst_amount),
       grandTotal: asNumber(raw.grand_total),
       amountInWords: amountInWords(asNumber(raw.grand_total)),
     },
@@ -215,7 +188,7 @@ function mapDetail(raw: Record<string, unknown>): PurchaseReturn {
     taxSupplyType: "intra",
     items,
     totalItems: items.filter((item) => item.selected).length,
-    totalReturnQty: items.reduce((sum, item) => sum + (item.selected ? item.returnBaseQty : 0), 0),
+    totalReturnQty: items.reduce((sum, item) => sum + (item.selected ? item.returnQty : 0), 0),
     createdBy: toDisplayName(raw.created_by_user),
     createdDate: asDateOnly(raw.created_at),
     updatedBy: toDisplayName(raw.updated_by_user),
@@ -231,8 +204,8 @@ export interface PurchaseReturnFilterOption {
 }
 
 export type PurchaseReturnFilterField =
-  | "return_no"
   | "status"
+  | "return_no"
   | "supplier__supplier_name"
   | "purchase_order__po_no"
   | "warehouse__warehouse_name"
@@ -274,9 +247,6 @@ function mapFilterOptions(
 
 export function buildPurchaseReturnApiFilters(filters: FilterState): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
-
-  const returnNumber = firstFilterValue(filters.returnNumber);
-  if (returnNumber) apiFilters.return_no = returnNumber;
 
   const status = firstFilterValue(filters.status);
   if (status) apiFilters.status = status;
@@ -440,10 +410,9 @@ export const PurchaseReturnService = {
     const rows = Array.isArray(payload.data) ? payload.data : [];
     return rows.map((row) => {
       const raw = (row ?? {}) as Record<string, unknown>;
-      const remainingQty = asNumber(raw.remaining_qty ?? raw.balance_qty);
-      const batchGroupKey = asString(raw.batch_group_key) || asString(raw.grn_batch_id);
+      const balanceQty = asNumber(raw.balance_base_qty);
       return {
-        id: batchGroupKey || asString(raw.grn_batch_id),
+        id: asString(raw.inventory_rejected_item_id),
         purchaseOrderProductId: asString(raw.purchase_order_product_id) || undefined,
         productId: asString(raw.product_id),
         productCode: asString(raw.product_code),
@@ -453,28 +422,19 @@ export const PurchaseReturnService = {
         grnId: asString(raw.grn_id),
         grnItemId: asString(raw.grn_item_id) || undefined,
         grnBatchId: asString(raw.grn_batch_id) || undefined,
-        batchGroupKey: batchGroupKey || undefined,
         inventoryDetailId: asString(raw.inventory_detail_id),
+        inventoryRejectedItemId: asString(raw.inventory_rejected_item_id),
         mfgDate: asDateOnly(raw.manufacture_date),
         expDate: asDateOnly(raw.expiry_date),
         caseSize: asNumber(raw.case_size),
-        grnReceivedCases: asNumber(raw.grn_received_cases),
-        grnReceivedQty: asNumber(raw.grn_received_qty),
-        qcRejectedCases: asNumber(raw.qc_rejected_cases),
-        qcRejectedQty: asNumber(raw.qc_rejected_qty),
-        alreadyReturnedCases: asNumber(raw.already_returned_cases),
-        alreadyReturnedQty: asNumber(raw.already_returned_qty),
-        balanceCases: asNumber(raw.balance_cases),
-        balanceRejectedQty: remainingQty,
-        currentRemainingQty: remainingQty,
-        returnUnit: "PIECE" as const,
-        returnValue: 0,
-        returnBaseQty: 0,
-        returnCases: 0,
+        grnReceivedQty: asNumber(raw.grn_received_base_qty),
+        qcRejectedQty: asNumber(raw.qc_rejected_base_qty),
+        alreadyReturnedQty: asNumber(raw.already_returned_base_qty),
+        balanceRejectedQty: balanceQty,
         returnQty: 0,
         lineRemark: "",
         selected: false,
-        lineStatus: remainingQty <= 0 ? "fully_returned" : "available",
+        lineStatus: balanceQty <= 0 ? "fully_returned" : "available",
         unitPrice: asNumber(raw.rate),
         gstPct: asNumber(raw.gst_percent),
         cgstPct: asNumber(raw.cgst_percent),
@@ -542,18 +502,19 @@ export const PurchaseReturnService = {
       product_total: record.summary.productTotal,
       additional_charges_amount: record.summary.additionalChargesTotal,
       taxable_amount: record.summary.taxableValue,
-      cgst_percent: record.summary.totalCgst,
-      sgst_percent: record.summary.totalSgst,
-      igst_percent: record.summary.totalIgst,
-      gst_percent: round2(record.summary.totalCgst + record.summary.totalSgst + record.summary.totalIgst),
+      cgst_amount: record.summary.totalCgst,
+      sgst_amount: record.summary.totalSgst,
+      igst_amount: record.summary.totalIgst,
+      gst_amount: round2(record.summary.totalCgst + record.summary.totalSgst + record.summary.totalIgst),
       grand_total: record.summary.grandTotal,
       attachment_urls: record.attachments ?? [],
       products: record.items
-        .filter((item) => item.selected && (item.returnBaseQty > 0 || item.returnValue > 0))
+        .filter((item) => item.selected && item.returnQty > 0)
         .map((item) => ({
           purchase_order_product_id: item.purchaseOrderProductId || undefined,
           product_id: item.productId,
           inventory_detail_id: item.inventoryDetailId,
+          inventory_rejected_item_id: item.inventoryRejectedItemId,
           grn_id: item.grnId,
           grn_item_id: item.grnItemId || undefined,
           grn_batch_id: item.grnBatchId || undefined,
@@ -564,13 +525,11 @@ export const PurchaseReturnService = {
           manufacture_date: item.mfgDate || undefined,
           expiry_date: item.expDate || undefined,
           case_size: item.caseSize,
-          grn_received_cases: item.grnReceivedCases,
-          grn_received_qty: item.grnReceivedQty,
-          qc_rejected_cases: item.qcRejectedCases,
-          qc_rejected_qty: item.qcRejectedQty,
-          return_unit: item.returnUnit,
-          return_value: item.returnValue,
-          return_base_qty: item.returnBaseQty,
+          grn_received_base_qty: item.grnReceivedQty,
+          qc_rejected_base_qty: item.qcRejectedQty,
+          already_returned_base_qty: item.alreadyReturnedQty,
+          balance_base_qty: item.balanceRejectedQty,
+          return_base_qty: item.returnQty,
           rate: item.unitPrice,
           gst_percent: item.gstPct || round2(item.cgstPct + item.sgstPct + item.igstPct),
           cgst_percent: item.cgstPct,

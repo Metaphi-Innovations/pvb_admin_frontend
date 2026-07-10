@@ -35,26 +35,13 @@ export interface PurchaseReturnItem {
   mfgDate: string;
   expDate: string;
   caseSize: number;
-  grnReceivedCases: number;
   grnReceivedQty: number;
-  qcRejectedCases: number;
   qcRejectedQty: number;
-  alreadyReturnedCases: number;
   alreadyReturnedQty: number;
-  balanceCases: number;
   balanceRejectedQty: number;
-  /** Live remaining pool from inventory */
-  currentRemainingQty?: number;
-  /** Quantity returned on this document */
-  documentReturnedQty?: number;
-  /** Max editable quantity on edit */
-  maxEditableQty?: number;
-  returnUnit: PurchaseReturnUnit;
-  returnValue: number;
-  returnBaseQty: number;
-  /** @deprecated Legacy fields — kept for backward compatibility */
-  returnCases: number;
   returnQty: number;
+  returnCases?: number;
+  returnLooseQty?: number;
   lineRemark: string;
   selected: boolean;
   /** Present on edit-merge: true if this line was already saved on the return. */

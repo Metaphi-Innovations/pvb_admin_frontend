@@ -6,8 +6,7 @@ import { AlertCircle, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, type TaxSupplyType } from "@/lib/procurement/utils";
 import type { PurchaseReturnItem } from "../purchase-return-data";
-import { clampReturnValue, getEditableMaxQty, getReturnQtyError, resolveReturnBaseQty } from "../purchase-return-utils";
-import type { PurchaseReturnUnit } from "../purchase-return-data";
+import { clampReturnQty, getReturnQtyError } from "../purchase-return-utils";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -78,7 +77,7 @@ function buildGrnSummaries(items: PurchaseReturnItem[]): GrnSummary[] {
     };
     cur.receivedQty += it.grnReceivedQty || 0;
     cur.remainingQty += it.balanceRejectedQty || 0;
-    cur.currentReturnQty += it.selected ? resolveReturnBaseQty(it) : 0;
+    cur.currentReturnQty += it.selected ? it.returnQty || 0 : 0;
     cur.batchCount += 1;
     map.set(key, cur);
   }
@@ -102,15 +101,7 @@ function ReturnItemsTable({
     if (checked) {
       onItemChange(it.id, { selected: true });
     } else {
-      onItemChange(it.id, {
-        selected: false,
-        returnUnit: "PIECE",
-        returnValue: 0,
-        returnBaseQty: 0,
-        returnQty: 0,
-        returnCases: 0,
-        lineRemark: "",
-      });
+      onItemChange(it.id, { selected: false, returnQty: 0, lineRemark: "" });
     }
   };
 
@@ -148,10 +139,10 @@ function ReturnItemsTable({
               "GRN Rcvd",
               "QC Rejected",
               "Returned",
-              "Remaining",
-              readOnly ? "This Return" : "Return Unit",
-              readOnly ? "Return Qty" : "Return Value",
-              "Base Qty",
+              "Balance Rejected",
+              "Return Cs",
+              "Return Ls",
+              "Total Return",
               "Rate",
               "GST %",
               ...(taxSupplyType === "intra" ? ["CGST", "SGST"] : ["IGST"]),
@@ -167,10 +158,10 @@ function ReturnItemsTable({
                     "GRN Rcvd",
                     "QC Rejected",
                     "Returned",
-                    "Remaining",
-                    "Return Unit",
-                    "Return Value",
-                    "Base Qty",
+                    "Balance Rejected",
+                    "Return Cs",
+                    "Return Ls",
+                    "Total Return",
                     "Rate",
                     "GST %",
                     "CGST",
@@ -192,9 +183,6 @@ function ReturnItemsTable({
             const canEditQty = it.selected && !rowDisabled;
             const rowError = errors?.[it.id] ?? getReturnQtyError(it);
             const gstPct = gstPctFromLine(it);
-
-            const maxQty = getEditableMaxQty(it);
-            const baseQty = resolveReturnBaseQty(it);
 
             return (
               <tr
@@ -237,80 +225,62 @@ function ReturnItemsTable({
                   {it.alreadyReturnedQty}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-foreground">
-                  {it.currentRemainingQty ?? it.balanceRejectedQty}
+                  {it.balanceRejectedQty}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!canEditQty ? (
                     <span className="text-xs tabular-nums text-muted-foreground">
-                      {readOnly ? it.returnUnit : "—"}
+                      {fullyReturned ? "—" : it.returnCases || "—"}
                     </span>
                   ) : (
-                    <select
-                      value={it.returnUnit}
+                    <Input
+                      type="number"
+                      min={0}
+                      value={it.returnCases || ""}
                       onChange={(e) => {
-                        const unit = e.target.value as PurchaseReturnUnit;
-                        const nextValue = clampReturnValue(
-                          it.returnValue,
-                          maxQty,
-                          it.caseSize,
-                          unit,
-                        );
-                        onItemChange(it.id, {
-                          returnUnit: unit,
-                          returnValue: nextValue,
-                          returnBaseQty:
-                            unit === "CASE"
-                              ? nextValue * it.caseSize
-                              : nextValue,
-                          returnQty:
-                            unit === "CASE"
-                              ? nextValue * it.caseSize
-                              : nextValue,
-                        });
+                        const newCases = e.target.value === "" ? 0 : Number(e.target.value);
+                        const loose = it.returnLooseQty || 0;
+                        const total = newCases * (it.caseSize || 10) + loose;
+                        const v = clampReturnQty(total, it.balanceRejectedQty);
+                        onItemChange(it.id, { returnCases: newCases, returnLooseQty: loose, returnQty: v });
                       }}
-                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                    >
-                      <option value="PIECE">PIECE</option>
-                      <option value="CASE">CASE</option>
-                    </select>
+                      className={cn("h-8 w-16 text-xs tabular-nums", rowError && "border-red-400")}
+                    />
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!canEditQty ? (
                     <span className="text-xs tabular-nums text-muted-foreground">
-                      {fullyReturned ? "—" : it.returnValue || baseQty || "—"}
+                      {fullyReturned ? "—" : it.returnLooseQty || "—"}
+                    </span>
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={it.returnLooseQty || ""}
+                      onChange={(e) => {
+                        const newLoose = e.target.value === "" ? 0 : Number(e.target.value);
+                        const cases = it.returnCases || 0;
+                        const total = cases * (it.caseSize || 10) + newLoose;
+                        const v = clampReturnQty(total, it.balanceRejectedQty);
+                        onItemChange(it.id, { returnCases: cases, returnLooseQty: newLoose, returnQty: v });
+                      }}
+                      className={cn("h-8 w-16 text-xs tabular-nums", rowError && "border-red-400")}
+                    />
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {!canEditQty ? (
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {fullyReturned ? "—" : it.returnQty || "—"}
                     </span>
                   ) : (
                     <div className="inline-block space-y-1 text-left">
                       <Input
                         type="number"
-                        min={0}
-                        max={
-                          it.returnUnit === "CASE" && it.caseSize > 0
-                            ? Math.floor(maxQty / it.caseSize)
-                            : maxQty
-                        }
-                        value={it.returnValue || ""}
-                        onChange={(e) => {
-                          const raw = e.target.value === "" ? 0 : Number(e.target.value);
-                          const v = clampReturnValue(
-                            raw,
-                            maxQty,
-                            it.caseSize,
-                            it.returnUnit,
-                          );
-                          const pieces =
-                            it.returnUnit === "CASE" ? v * it.caseSize : v;
-                          onItemChange(it.id, {
-                            returnValue: v,
-                            returnBaseQty: pieces,
-                            returnQty: pieces,
-                          });
-                        }}
-                        className={cn(
-                          "h-8 w-20 text-xs tabular-nums",
-                          rowError && "border-red-400",
-                        )}
+                        readOnly
+                        value={it.returnQty || ""}
+                        className={cn("h-8 w-20 text-xs tabular-nums bg-muted focus-visible:ring-0", rowError && "border-red-400")}
                       />
                       {rowError && (
                         <p className="text-[10px] leading-tight text-red-500 max-w-[160px]">
@@ -319,9 +289,6 @@ function ReturnItemsTable({
                       )}
                     </div>
                   )}
-                </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-brand-700">
-                  {baseQty > 0 ? baseQty : "—"}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
                   {formatCurrency(it.unitPrice)}
@@ -344,7 +311,7 @@ function ReturnItemsTable({
                   </td>
                 )}
                 <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
-                  {it.selected && baseQty > 0 ? formatCurrency(it.netAmount) : "—"}
+                  {it.selected && it.returnQty > 0 ? formatCurrency(it.netAmount) : "—"}
                 </td>
                 <td className="px-3 py-2">
                   {!canEditQty ? (

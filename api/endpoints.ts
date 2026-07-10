@@ -256,6 +256,18 @@ export const API_ENDPOINTS = {
       UPDATE_STATUS: (id: string) => `/sales/stock-transfer/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/stock-transfer/${id}/download-note`,
     },
+    SAMPLE_ORDER: {
+      NEXT_NUMBER: "/sales/sample-order/next-number",
+      DROPDOWN: "/sales/sample-order/dropdown",
+      FILTER: "/sales/sample-order/filter",
+      LIST: "/sales/sample-order/list",
+      CREATE: "/sales/sample-order/create",
+      EXPORT: "/sales/sample-order/export",
+      DETAILS: (id: string) => `/sales/sample-order/${id}`,
+      UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
+      UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
+      DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
+    },
   },
   USER_MANAGEMENT: {
     USER: {
@@ -318,6 +330,14 @@ export const API_ENDPOINTS = {
       CREATE: "/warehouse/packing-list/create",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
+    },
+    DISPATCH: {
+      PREVIEW_NUMBER: "/warehouse/dispatch/preview-number",
+      LIST: "/warehouse/dispatch/list",
+      FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
+      CREATE: "/warehouse/dispatch/create",
+      DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
+      REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
