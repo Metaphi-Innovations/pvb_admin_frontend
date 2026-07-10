@@ -1,6 +1,6 @@
 // Warehouse Master - data types, seed data & localStorage helpers
 
-export type WarehouseStatus = "Active" | "Inactive" | "Under Maintenance" | "Closed";
+export type WarehouseStatus = "active" | "inactive" | "under_maintenance" | "closed";
 export type WarehouseType =
   | "Central Warehouse"
   | "Regional Warehouse"
@@ -85,12 +85,12 @@ export const WAREHOUSE_TYPES: WarehouseType[] = [
   "Cold Storage Warehouse",
 ];
 
-// export const WAREHOUSE_STATUSES: { value: WarehouseStatus; label: string }[] = [
-//   { value: "active", label: "Active" },
-//   { value: "inactive", label: "Inactive" },
-//   { value: "under_maintenance", label: "Under Maintenance" },
-//   { value: "closed", label: "Closed" },
-// ];
+export const WAREHOUSE_STATUSES: { value: WarehouseStatus; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "under_maintenance", label: "Under Maintenance" },
+  { value: "closed", label: "Closed" },
+];
 
 export const OPERATED_BY_OPTIONS: OperatedBy[] = ["C&F Agent", "Self"];
 
@@ -176,278 +176,278 @@ export function getCitiesForDistrict(district: string): string[] {
 }
 
 // ─── Seed data ─────────────────────────────────────────────────────
-// const STORAGE_KEY = "ds_warehouse_masters";
-// const SEED_VERSION = 3;
+const STORAGE_KEY = "ds_warehouse_masters";
+const SEED_VERSION = 3;
 
-// const SEED: WarehouseMaster[] = [
-//   {
-//     id: 1,
-//     warehouseCode: "WH-0001",
-//     warehouseName: "Central Distribution Hub",
-//     warehouseType: "Central Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "27AABCT1234F1ZA",
-//     contactPerson: "Suresh Mehta",
-//     mobileNumber: "9876543210",
-//     emailAddress: "suresh@pvb.com",
-//     address: "Plot 12, MIDC Industrial Area, Hadapsar",
-//     state: "Maharashtra",
-//     district: "Pune",
-//     city: "Pune",
-//     pincode: "411028",
-//     manager: "Suresh Mehta",
-//     status: "active",
-//     operatedBy: "Self",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Suresh Mehta",
-//         mobileNumber: "9876543210",
-//         emailAddress: "suresh@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-01-10",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-01-10",
-//   },
-//   {
-//     id: 2,
-//     warehouseCode: "WH-0002",
-//     warehouseName: "North Zone Regional Store",
-//     warehouseType: "Regional Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "27AABCT5678G2ZB",
-//     contactPerson: "Priya Kulkarni",
-//     mobileNumber: "9876543211",
-//     emailAddress: "priya@pvb.com",
-//     address: "Sector 22, Industrial Estate",
-//     state: "Maharashtra",
-//     district: "Nagpur",
-//     city: "Nagpur",
-//     pincode: "440018",
-//     manager: "Priya Kulkarni",
-//     status: "active",
-//     operatedBy: "Self",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Priya Kulkarni",
-//         mobileNumber: "9876543211",
-//         emailAddress: "priya@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-01-15",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-01-15",
-//   },
-//   {
-//     id: 3,
-//     warehouseCode: "WH-0003",
-//     warehouseName: "South Zone Depot",
-//     warehouseType: "State Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "36AABCT9012H3ZC",
-//     contactPerson: "Raju Bhandari",
-//     mobileNumber: "9876543212",
-//     emailAddress: "raju@pvb.com",
-//     address: "NH-44 Bypass Road, Near Outer Ring Road",
-//     state: "Telangana",
-//     district: "Hyderabad",
-//     city: "Hyderabad",
-//     pincode: "500032",
-//     manager: "Raju Bhandari",
-//     status: "active",
-//     operatedBy: "C&F Agent",
-//     customerType: "Distributor",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Raju Bhandari",
-//         mobileNumber: "9876543212",
-//         emailAddress: "raju@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-02-01",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-02-01",
-//   },
-//   {
-//     id: 4,
-//     warehouseCode: "WH-0004",
-//     warehouseName: "East Zone Depot",
-//     warehouseType: "Regional Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "21AABCT3456I4ZD",
-//     contactPerson: "Anil Patil",
-//     mobileNumber: "9876543213",
-//     emailAddress: "anil@pvb.com",
-//     address: "Near Ring Road, Industrial Park",
-//     state: "Odisha",
-//     district: "Bhubaneswar",
-//     city: "Bhubaneswar",
-//     pincode: "751002",
-//     manager: "Anil Patil",
-//     status: "inactive",
-//     operatedBy: "C&F Agent",
-//     customerType: "Dealer",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Anil Patil",
-//         mobileNumber: "9876543213",
-//         emailAddress: "anil@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-02-05",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-02-05",
-//   },
-//   {
-//     id: 5,
-//     warehouseCode: "WH-0005",
-//     warehouseName: "Gujarat Distribution Center",
-//     warehouseType: "Distributor Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "24AABCT7890J5ZE",
-//     contactPerson: "Mohan Sharma",
-//     mobileNumber: "9876543214",
-//     emailAddress: "mohan@pvb.com",
-//     address: "GIDC Estate, Phase 2, Naroda",
-//     state: "Gujarat",
-//     district: "Ahmedabad",
-//     city: "Ahmedabad",
-//     pincode: "382330",
-//     manager: "Mohan Sharma",
-//     status: "active",
-//     operatedBy: "Self",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Mohan Sharma",
-//         mobileNumber: "9876543214",
-//         emailAddress: "mohan@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-02-10",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-02-10",
-//   },
-//   {
-//     id: 6,
-//     warehouseCode: "WH-0006",
-//     warehouseName: "Mumbai Transit Point",
-//     warehouseType: "Transit Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "27AABCT2345K6ZF",
-//     contactPerson: "Kavya Reddy",
-//     mobileNumber: "9876543215",
-//     emailAddress: "kavya@pvb.com",
-//     address: "Bhiwandi Warehousing Complex, Unit 8",
-//     state: "Maharashtra",
-//     district: "Mumbai",
-//     city: "Thane",
-//     pincode: "421302",
-//     manager: "Kavya Reddy",
-//     status: "under_maintenance",
-//     operatedBy: "C&F Agent",
-//     customerType: "Retailer",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Kavya Reddy",
-//         mobileNumber: "9876543215",
-//         emailAddress: "kavya@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-02-15",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-03-20",
-//   },
-//   {
-//     id: 7,
-//     warehouseCode: "WH-0007",
-//     warehouseName: "Chennai Cold Storage",
-//     warehouseType: "Cold Storage Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "33AABCT6789L7ZG",
-//     contactPerson: "Ramesh Thakur",
-//     mobileNumber: "9876543216",
-//     emailAddress: "ramesh@pvb.com",
-//     address: "Ambattur Industrial Estate, Plot 45",
-//     state: "Tamil Nadu",
-//     district: "Chennai",
-//     city: "Ambattur",
-//     pincode: "600058",
-//     manager: "Ramesh Thakur",
-//     status: "closed",
-//     operatedBy: "Self",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Ramesh Thakur",
-//         mobileNumber: "9876543216",
-//         emailAddress: "ramesh@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-03-01",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-04-10",
-//   },
-//   {
-//     id: 8,
-//     warehouseCode: "WH-0008",
-//     warehouseName: "Jaipur State Warehouse",
-//     warehouseType: "State Warehouse",
-//     gstApplicable: true,
-//     gstNumber: "08AABCT4567M8ZH",
-//     contactPerson: "Deepak Gupta",
-//     mobileNumber: "9876543217",
-//     emailAddress: "deepak@pvb.com",
-//     address: "Sitapura Industrial Area, Block C",
-//     state: "Rajasthan",
-//     district: "Jaipur",
-//     city: "Jaipur",
-//     pincode: "302022",
-//     manager: "Deepak Gupta",
-//     status: "active",
-//     operatedBy: "Self",
-//     contacts: [
-//       {
-//         id: "CON-1",
-//         contactPerson: "Deepak Gupta",
-//         mobileNumber: "9876543217",
-//         emailAddress: "deepak@pvb.com",
-//         isPrimary: true,
-//       }
-//     ],
-//     documents: [],
-//     createdBy: "Admin",
-//     createdDate: "2026-03-10",
-//     updatedBy: "Admin",
-//     updatedDate: "2026-03-10",
-//   },
-// ];
+const SEED: WarehouseMaster[] = [
+  {
+    id: 1,
+    warehouseCode: "WH-0001",
+    warehouseName: "Central Distribution Hub",
+    warehouseType: "Central Warehouse",
+    gstApplicable: true,
+    gstNumber: "27AABCT1234F1ZA",
+    contactPerson: "Suresh Mehta",
+    mobileNumber: "9876543210",
+    emailAddress: "suresh@pvb.com",
+    address: "Plot 12, MIDC Industrial Area, Hadapsar",
+    state: "Maharashtra",
+    district: "Pune",
+    city: "Pune",
+    pincode: "411028",
+    manager: "Suresh Mehta",
+    status: "active",
+    operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Suresh Mehta",
+        mobileNumber: "9876543210",
+        emailAddress: "suresh@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-01-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-10",
+  },
+  {
+    id: 2,
+    warehouseCode: "WH-0002",
+    warehouseName: "North Zone Regional Store",
+    warehouseType: "Regional Warehouse",
+    gstApplicable: true,
+    gstNumber: "27AABCT5678G2ZB",
+    contactPerson: "Priya Kulkarni",
+    mobileNumber: "9876543211",
+    emailAddress: "priya@pvb.com",
+    address: "Sector 22, Industrial Estate",
+    state: "Maharashtra",
+    district: "Nagpur",
+    city: "Nagpur",
+    pincode: "440018",
+    manager: "Priya Kulkarni",
+    status: "active",
+    operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Priya Kulkarni",
+        mobileNumber: "9876543211",
+        emailAddress: "priya@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-01-15",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-15",
+  },
+  {
+    id: 3,
+    warehouseCode: "WH-0003",
+    warehouseName: "South Zone Depot",
+    warehouseType: "State Warehouse",
+    gstApplicable: true,
+    gstNumber: "36AABCT9012H3ZC",
+    contactPerson: "Raju Bhandari",
+    mobileNumber: "9876543212",
+    emailAddress: "raju@pvb.com",
+    address: "NH-44 Bypass Road, Near Outer Ring Road",
+    state: "Telangana",
+    district: "Hyderabad",
+    city: "Hyderabad",
+    pincode: "500032",
+    manager: "Raju Bhandari",
+    status: "active",
+    operatedBy: "C&F Agent",
+    customerType: "Distributor",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Raju Bhandari",
+        mobileNumber: "9876543212",
+        emailAddress: "raju@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-02-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-02-01",
+  },
+  {
+    id: 4,
+    warehouseCode: "WH-0004",
+    warehouseName: "East Zone Depot",
+    warehouseType: "Regional Warehouse",
+    gstApplicable: true,
+    gstNumber: "21AABCT3456I4ZD",
+    contactPerson: "Anil Patil",
+    mobileNumber: "9876543213",
+    emailAddress: "anil@pvb.com",
+    address: "Near Ring Road, Industrial Park",
+    state: "Odisha",
+    district: "Bhubaneswar",
+    city: "Bhubaneswar",
+    pincode: "751002",
+    manager: "Anil Patil",
+    status: "inactive",
+    operatedBy: "C&F Agent",
+    customerType: "Dealer",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Anil Patil",
+        mobileNumber: "9876543213",
+        emailAddress: "anil@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-02-05",
+    updatedBy: "Admin",
+    updatedDate: "2026-02-05",
+  },
+  {
+    id: 5,
+    warehouseCode: "WH-0005",
+    warehouseName: "Gujarat Distribution Center",
+    warehouseType: "Distributor Warehouse",
+    gstApplicable: true,
+    gstNumber: "24AABCT7890J5ZE",
+    contactPerson: "Mohan Sharma",
+    mobileNumber: "9876543214",
+    emailAddress: "mohan@pvb.com",
+    address: "GIDC Estate, Phase 2, Naroda",
+    state: "Gujarat",
+    district: "Ahmedabad",
+    city: "Ahmedabad",
+    pincode: "382330",
+    manager: "Mohan Sharma",
+    status: "active",
+    operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Mohan Sharma",
+        mobileNumber: "9876543214",
+        emailAddress: "mohan@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-02-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-02-10",
+  },
+  {
+    id: 6,
+    warehouseCode: "WH-0006",
+    warehouseName: "Mumbai Transit Point",
+    warehouseType: "Transit Warehouse",
+    gstApplicable: true,
+    gstNumber: "27AABCT2345K6ZF",
+    contactPerson: "Kavya Reddy",
+    mobileNumber: "9876543215",
+    emailAddress: "kavya@pvb.com",
+    address: "Bhiwandi Warehousing Complex, Unit 8",
+    state: "Maharashtra",
+    district: "Mumbai",
+    city: "Thane",
+    pincode: "421302",
+    manager: "Kavya Reddy",
+    status: "under_maintenance",
+    operatedBy: "C&F Agent",
+    customerType: "Retailer",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Kavya Reddy",
+        mobileNumber: "9876543215",
+        emailAddress: "kavya@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-02-15",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-20",
+  },
+  {
+    id: 7,
+    warehouseCode: "WH-0007",
+    warehouseName: "Chennai Cold Storage",
+    warehouseType: "Cold Storage Warehouse",
+    gstApplicable: true,
+    gstNumber: "33AABCT6789L7ZG",
+    contactPerson: "Ramesh Thakur",
+    mobileNumber: "9876543216",
+    emailAddress: "ramesh@pvb.com",
+    address: "Ambattur Industrial Estate, Plot 45",
+    state: "Tamil Nadu",
+    district: "Chennai",
+    city: "Ambattur",
+    pincode: "600058",
+    manager: "Ramesh Thakur",
+    status: "closed",
+    operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Ramesh Thakur",
+        mobileNumber: "9876543216",
+        emailAddress: "ramesh@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-03-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-04-10",
+  },
+  {
+    id: 8,
+    warehouseCode: "WH-0008",
+    warehouseName: "Jaipur State Warehouse",
+    warehouseType: "State Warehouse",
+    gstApplicable: true,
+    gstNumber: "08AABCT4567M8ZH",
+    contactPerson: "Deepak Gupta",
+    mobileNumber: "9876543217",
+    emailAddress: "deepak@pvb.com",
+    address: "Sitapura Industrial Area, Block C",
+    state: "Rajasthan",
+    district: "Jaipur",
+    city: "Jaipur",
+    pincode: "302022",
+    manager: "Deepak Gupta",
+    status: "active",
+    operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Deepak Gupta",
+        mobileNumber: "9876543217",
+        emailAddress: "deepak@pvb.com",
+        isPrimary: true,
+      }
+    ],
+    documents: [],
+    createdBy: "Admin",
+    createdDate: "2026-03-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-10",
+  },
+];
 
 /** Ship-to options for procurement PO (active warehouses only). */
 // export interface WarehouseLocationOption {
@@ -474,94 +474,94 @@ export function getCitiesForDistrict(district: string): string[] {
 //     }));
 // }
 
-// export function loadWarehouses(): WarehouseMaster[] {
-//   if (typeof window === "undefined") return SEED;
-//   try {
-//     const raw = localStorage.getItem(STORAGE_KEY);
-//     let list: WarehouseMaster[] = [];
-//     if (!raw) {
-//       localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
-//       list = SEED;
-//     } else {
-//       const parsed = JSON.parse(raw);
-//       if (!parsed.version || parsed.version < SEED_VERSION) {
-//         localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
-//         list = SEED;
-//       } else {
-//         list = parsed.data as WarehouseMaster[];
-//       }
-//     }
+export function loadWarehouses(): WarehouseMaster[] {
+  if (typeof window === "undefined") return SEED;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let list: WarehouseMaster[] = [];
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
+      list = SEED;
+    } else {
+      const parsed = JSON.parse(raw);
+      if (!parsed.version || parsed.version < SEED_VERSION) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
+        list = SEED;
+      } else {
+        list = parsed.data as WarehouseMaster[];
+      }
+    }
 
-//     // Migrate legacy data to ensure contacts array exists and top-level fields match the primary contact
-//     const migrated = list.map(w => {
-//       let contacts = w.contacts;
-//       if (!contacts || contacts.length === 0) {
-//         contacts = [
-//           {
-//             id: "CON-1",
-//             contactPerson: w.contactPerson || "",
-//             mobileNumber: w.mobileNumber || "",
-//             emailAddress: w.emailAddress || "",
-//             isPrimary: true
-//           }
-//         ];
-//       }
-//       const primary = contacts.find(c => c.isPrimary) || contacts[0];
-//       return {
-//         ...w,
-//         contacts,
-//         contactPerson: primary ? primary.contactPerson : (w.contactPerson || ""),
-//         mobileNumber: primary ? primary.mobileNumber : (w.mobileNumber || ""),
-//         emailAddress: primary ? primary.emailAddress : (w.emailAddress || ""),
-//       };
-//     });
-//     return migrated;
-//   } catch {
-//     return SEED;
-//   }
-// }
+    // Migrate legacy data to ensure contacts array exists and top-level fields match the primary contact
+    const migrated = list.map(w => {
+      let contacts = w.contacts;
+      if (!contacts || contacts.length === 0) {
+        contacts = [
+          {
+            id: "CON-1",
+            contactPerson: w.contactPerson || "",
+            mobileNumber: w.mobileNumber || "",
+            emailAddress: w.emailAddress || "",
+            isPrimary: true
+          }
+        ];
+      }
+      const primary = contacts.find(c => c.isPrimary) || contacts[0];
+      return {
+        ...w,
+        contacts,
+        contactPerson: primary ? primary.contactPerson : (w.contactPerson || ""),
+        mobileNumber: primary ? primary.mobileNumber : (w.mobileNumber || ""),
+        emailAddress: primary ? primary.emailAddress : (w.emailAddress || ""),
+      };
+    });
+    return migrated;
+  } catch {
+    return SEED;
+  }
+}
 
 // export const loadWarehouseLocations = loadWarehouses;
 
-// export function saveWarehouses(records: WarehouseMaster[]): void {
-//   if (typeof window === "undefined") return;
-//   localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: records }));
-// }
+export function saveWarehouses(records: WarehouseMaster[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: records }));
+}
 
-// export function nextWarehouseId(records: WarehouseMaster[]): number {
-//   if (records.length === 0) return 1;
-//   return Math.max(...records.map((r) => r.id)) + 1;
-// }
+export function nextWarehouseId(records: WarehouseMaster[]): number {
+  if (records.length === 0) return 1;
+  return Math.max(...records.map((r) => r.id)) + 1;
+}
 
-// export function generateWarehouseCode(id: number): string {
-//   return `WH-${String(id).padStart(4, "0")}`;
-// }
+export function generateWarehouseCode(id: number): string {
+  return `WH-${String(id).padStart(4, "0")}`;
+}
 
-// export function formatStatus(status: WarehouseStatus): string {
-//   return WAREHOUSE_STATUSES.find((s) => s.value === status)?.label ?? status;
-// }
+export function formatStatus(status: WarehouseStatus): string {
+  return WAREHOUSE_STATUSES.find((s) => s.value === status)?.label ?? status;
+}
 
-// export interface WarehouseLocation {
-//   code: string;
-//   name: string;
-//   address: string;
-//   city: string;
-//   state: string;
-//   pincode: string;
-// }
+export interface WarehouseLocation {
+  code: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+}
 
-// export function loadWarehouseLocations(): WarehouseLocation[] {
-//   return loadWarehouses()
-//     .filter((w) => w.status === "active")
-//     .map((w) => ({
-//       code: w.warehouseCode,
-//       name: w.warehouseName,
-//       address: w.address,
-//       city: w.city,
-//       state: w.state,
-//       pincode: w.pincode,
-//     }));
-// }
+export function loadWarehouseLocations(): WarehouseLocation[] {
+  return loadWarehouses()
+    .filter((w) => w.status === "active")
+    .map((w) => ({
+      code: w.warehouseCode,
+      name: w.warehouseName,
+      address: w.address,
+      city: w.city,
+      state: w.state,
+      pincode: w.pincode,
+    }));
+}
 
 // export interface WarehouseLocation {
 //   code: string;

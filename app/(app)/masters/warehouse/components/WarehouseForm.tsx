@@ -24,7 +24,8 @@ import {
 import {
 	// WAREHOUSE_STATUSES,
 	OPERATED_BY_OPTIONS,
-	type WarehouseStatus,
+	WarehouseType,
+	// type WarehouseStatus,
 	type OperatedBy,
 	type WarehouseContact,
 	type WarehouseDocument,
@@ -112,6 +113,46 @@ function CountryCodePicker({
 	);
 }
 
+type ApiWarehouseStatus = "Active" | "Inactive" | "Under Maintenance" | "Closed";
+
+export interface ApiWarehouseMaster {
+	id: number;
+	warehouseCode: string; // Auto Generated, e.g. "WH-0001"
+	warehouseName: string;
+	warehouseType: WarehouseType;
+	gstApplicable: boolean;
+	gstNumber: string;
+	gstRegistrationType?: string;
+	registeredLegalName?: string;
+	registeredAddress?: string;
+	accountHolderName?: string;
+	bankName?: string;
+	branch?: string;
+	accountNumber?: string;
+	ifscCode?: string;
+	swiftCode?: string;
+	contactPerson: string;
+	mobileNumber: string;
+	emailAddress: string;
+	address: string; // Address Line 1
+	addressLine2?: string;
+	town?: string;
+	state: string;
+	district: string;
+	city: string;
+	pincode: string;
+	manager: string;
+	status: ApiWarehouseStatus;
+	operatedBy: OperatedBy;
+	customerType?: string;
+	contacts: WarehouseContact[];
+	documents: WarehouseDocument[];
+	createdBy: string;
+	createdDate: string;
+	updatedBy: string;
+	updatedDate: string;
+}
+
 export interface WarehouseFormValues {
 	warehouseName: string;
 	gstApplicable: boolean;
@@ -133,7 +174,7 @@ export interface WarehouseFormValues {
 	district: string;
 	city: string;
 	pincode: string;
-	status: WarehouseStatus;
+	status: ApiWarehouseStatus;
 	operatedBy: OperatedBy;
 	customerType: string;
 	contacts: WarehouseContact[];
@@ -179,7 +220,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	documents: [],
 };
 
-export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormValues {
+export function warehouseRecordToForm(record: ApiWarehouseMaster): WarehouseFormValues {
 	let contacts = record.contacts;
 	if (!contacts || contacts.length === 0) {
 		contacts = [
@@ -228,7 +269,7 @@ export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormVal
 export function warehouseFormToRecordFields(
 	form: WarehouseFormValues,
 ): Pick<
-	WarehouseMaster,
+	ApiWarehouseMaster,
 	| "warehouseName"
 	| "warehouseType"
 	| "gstApplicable"
