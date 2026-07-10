@@ -61,7 +61,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const prod = raw.product_snapshot || {};
   const batch = raw.batch_snapshot || {};
   const unitsPerPacking = asNumber(prod.conversion_qty || 1);
-  const totalQty = asNumber(raw.transfer_qty);
+  const totalQty = asNumber(raw.transfer_base_qty);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
 
@@ -70,7 +70,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     productId: raw.product_id,
     productCode: asString(prod.product_code || raw.product_code),
     productName: asString(prod.product_name || raw.product_name),
-    availableStock: asNumber(raw.available_qty),
+    availableStock: asNumber(raw.available_base_qty),
     quantity: totalQty,
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
@@ -158,8 +158,8 @@ function buildBackendWriteBody(
     return {
       product_id: line.productId,
       inventory_batch_id: line.batchInventoryId || (line.id && line.id.toString().includes("-") && !line.id.toString().startsWith("line-") ? line.id : undefined),
-      available_qty: line.availableStock,
-      transfer_qty: line.quantity,
+      available_base_qty: line.availableStock,
+      transfer_base_qty: line.quantity,
       cp_price: line.unitPrice,
       cgst_percent: 9,
       cgst_amount: cgstAmount,
@@ -189,7 +189,7 @@ function buildBackendWriteBody(
     };
   });
 
-  const totalQty = items.reduce((acc, curr) => acc + curr.transfer_qty, 0);
+  const totalQty = items.reduce((acc, curr) => acc + curr.transfer_base_qty, 0);
   const subtotal = items.reduce((acc, curr) => acc + curr.taxable_amount, 0);
   const additionalExp = expenses.reduce((acc, curr) => acc + curr.amount, 0);
   const totalGst = items.reduce((acc, curr) => acc + (curr.cgst_amount || 0) + (curr.sgst_amount || 0), 0) +

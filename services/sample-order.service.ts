@@ -57,7 +57,7 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
   const prodSnapshot = raw.product_snapshot || {};
   const product = raw.product || {};
   const unitsPerPacking = asNumber(prodSnapshot.conversion_qty || product.unit_per_packing || 1);
-  const totalQty = asNumber(raw.quantity);
+  const totalQty = asNumber(raw.base_qty);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
 
@@ -130,7 +130,7 @@ function buildBackendWriteBody(
     return {
       product_id: line.productId,
       stock_available: line.availableStock || 0,
-      quantity: line.quantity,
+      base_qty: line.quantity,
       dp_price: line.unitPrice || 0,
       discount_percent: line.discount !== undefined ? line.discount : 100,
       discount_amount: line.discountValue || 0,

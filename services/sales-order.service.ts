@@ -284,7 +284,6 @@ function buildBackendWriteBody(
     }),
     items: form.lineItems.map((line) => ({
       product_id: line.productId,
-      per_case_qty: line.caseQuantity || 0,
       base_qty: line.quantity,
       unit_price: line.unitPrice,
       discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
@@ -470,7 +469,6 @@ export const SalesOrderService = {
       grand_total: totals.grandTotal,
       items: form.lineItems.map((line) => ({
         product_id: line.productId,
-        per_case_qty: line.caseQuantity || 0,
         base_qty: line.quantity,
         unit_price: line.unitPrice,
         discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
