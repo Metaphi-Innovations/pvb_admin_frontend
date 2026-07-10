@@ -10,6 +10,7 @@ import {
   type DocumentTypeUpdatePayload,
 } from "@/services/document-type-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): DocumentTypeListParams {
   return {
@@ -97,11 +98,15 @@ export function useExportDocumentTypes() {
   });
 }
 
-export function useDocumentTypeFilterDropdown(fieldName: DocumentTypeFilterField) {
+export function useDocumentTypeFilterDropdown(
+  fieldName: DocumentTypeFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.documentTypes.filterDropdown(fieldName),
     queryFn: ({ signal }) =>
       DocumentTypeListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

@@ -26,7 +26,8 @@ export function getMasterListErrorMessage(
   const status = err?.status ?? err?.response?.status;
 
   if (status === 401) return "Unauthorized. Please login again.";
-  if (status === 403) return "Forbidden. You do not have access.";
+  // Prefer exact backend message for 403 (axios already toasts it)
+  if (status === 403) return getErrorMessage(error, "Forbidden. You do not have access.");
   if (status === 404) {
     return options.notFoundMessage ?? `${options.resource} list endpoint not found.`;
   }

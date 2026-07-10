@@ -45,7 +45,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -104,8 +105,14 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 }
 
 export default function CropMasterPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "cropName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -126,26 +133,26 @@ export default function CropMasterPage() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.crop, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.crop, {
         statusTab,
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useCrops(listParams);
@@ -155,13 +162,19 @@ export default function CropMasterPage() {
   const toggleStatusMutation = useToggleCropStatus();
   const exportMutation = useExportCrops();
 
-  const cropNameOptionsQuery = useCropFilterDropdown("crop_name");
-  const fieldTypeOptionsQuery = useCropFilterDropdown("field_type");
-  const categoryOptionsQuery = useCropFilterDropdown("category__categoryName");
-  const seasonOptionsQuery = useCropFilterDropdown("season");
-  const statusOptionsQuery = useCropFilterDropdown("is_active");
-  const createdByOptionsQuery = useCropFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useCropFilterDropdown("updated_by_user__username");
+  const cropNameOptionsQuery = useCropFilterDropdown("crop_name", { enabled: isFilterOpen("cropName") });
+  const fieldTypeOptionsQuery = useCropFilterDropdown("field_type", { enabled: isFilterOpen("fieldType") });
+  const categoryOptionsQuery = useCropFilterDropdown("category__categoryName", {
+    enabled: isFilterOpen("categoryName"),
+  });
+  const seasonOptionsQuery = useCropFilterDropdown("season", { enabled: isFilterOpen("season") });
+  const statusOptionsQuery = useCropFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useCropFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useCropFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const cropNameOptions = useMemo(
     () => cropNameOptionsQuery.data ?? [],
@@ -210,9 +223,7 @@ export default function CropMasterPage() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -224,7 +235,7 @@ export default function CropMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -515,7 +526,7 @@ export default function CropMasterPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -598,14 +609,17 @@ export default function CropMasterPage() {
       <MasterListing<CropRecord>
         columns={columns}
         data={displayRecords}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add Crop"
@@ -614,6 +628,7 @@ export default function CropMasterPage() {
         searchPlaceholder="Search crop name, field type, category, season..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets

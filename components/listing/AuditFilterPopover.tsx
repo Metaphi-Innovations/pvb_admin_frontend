@@ -14,6 +14,7 @@ interface AuditFilterPopoverProps {
   value?: AuditFilterValue;
   onChange: (value: AuditFilterValue | undefined) => void;
   userOptions?: { label: string; value: string }[];
+  onOpen?: () => void;
 }
 
 function isActiveAuditFilter(value?: AuditFilterValue): boolean {
@@ -26,6 +27,7 @@ export function AuditFilterPopover({
   value,
   onChange,
   userOptions = [],
+  onOpen,
 }: AuditFilterPopoverProps) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState(value?.user ?? "");
@@ -58,7 +60,13 @@ export function AuditFilterPopover({
   const isFiltered = isActiveAuditFilter(value);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (isOpen && onOpen) onOpen();
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"

@@ -1,14 +1,27 @@
 import { axiosInstance, setAuthTokenCallbacks } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import { LoginRequest, LoginResponse, ApiResponse } from "@/types/api.types";
+import { LoginRequest, LoginResponse, ApiResponse, UserData } from "@/types/api.types";
+import { normalizeWebPermissions, type WebPermissionTree } from "@/lib/auth/permissions";
 
+const isSecureContext =
+  typeof window !== "undefined" && window.location.protocol === "https:";
 
-// Helper functions to manage cookies client-side
+const cookieFlags = () =>
+  `path=/; SameSite=Strict${isSecureContext ? "; Secure" : ""}`;
+
 const getCookie = (name: string): string | null => {
   if (typeof window === "undefined") return null;
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  if (parts.length === 2) {
+    const raw = parts.pop()?.split(";").shift() || null;
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
   return null;
 };
 
@@ -20,52 +33,47 @@ const setCookie = (name: string, value: string, days?: number) => {
     date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
     expires = `; expires=${date.toUTCString()}`;
   }
-  document.cookie = `${name}=${value || ""}${expires}; path=/; SameSite=Strict; Secure`;
+  document.cookie = `${name}=${encodeURIComponent(value || "")}${expires}; ${cookieFlags()}`;
 };
 
 const eraseCookie = (name: string) => {
   if (typeof window === "undefined") return;
+  document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Strict`;
   document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Strict; Secure`;
 };
 
+function readJsonCookie(name: string): unknown {
+  const raw = getCookie(name);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export const AuthService = {
-  /**
-   * Gets the stored access token from cookies
-   */
   getAccessToken(): string | null {
     return getCookie("access_token");
   },
 
-  /**
-   * Gets the stored refresh token from cookies
-   */
   getRefreshToken(): string | null {
     return getCookie("refresh_token");
   },
 
-  /**
-   * Gets the stored user data from cookies
-   */
-  getUserData(): any {
-    const raw = getCookie("user_data");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
+  getUserData(): UserData | null {
+    const data = readJsonCookie("user_data");
+    if (!data || typeof data !== "object") return null;
+    return data as UserData;
   },
 
-  /**
-   * Sets or updates tokens in cookies
-   */
   setTokens(access: string | null, refresh?: string | null): void {
     if (access) {
-      setCookie("access_token", access, 7); // expires in 7 days
+      setCookie("access_token", access, 7);
     } else {
       eraseCookie("access_token");
     }
-    
+
     if (refresh !== undefined) {
       if (refresh) {
         setCookie("refresh_token", refresh, 7);
@@ -75,10 +83,7 @@ export const AuthService = {
     }
   },
 
-  /**
-   * Sets user data in cookies
-   */
-  setUserData(userData: any): void {
+  setUserData(userData: UserData | null): void {
     if (userData) {
       setCookie("user_data", JSON.stringify(userData), 7);
     } else {
@@ -86,46 +91,36 @@ export const AuthService = {
     }
   },
 
-  /**
-   * Clear all auth info from cookies
-   */
   clearAuth(): void {
     eraseCookie("access_token");
     eraseCookie("refresh_token");
     eraseCookie("user_data");
+    eraseCookie("user_permissions"); // legacy cleanup if present
   },
 
-  /**
-   * Logs in a user with email/mobile and password
-   */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await axiosInstance.post<LoginResponse>(
       API_ENDPOINTS.AUTH.LOGIN,
-      credentials
+      credentials,
     );
 
     const data = response.data;
 
-    // Store tokens on successful authentication
     if (data.success && data.data) {
-      setCookie("access_token", data.data.access, 7);
-      setCookie("refresh_token", data.data.refresh, 7);
-      setCookie("user_data", JSON.stringify({
+      AuthService.setTokens(data.data.access, data.data.refresh);
+      AuthService.setUserData({
         user_id: data.data.user_id,
         email: data.data.email,
         username: data.data.username,
         user_type: data.data.user_type,
-        permissions: data.data.permissions || [],
-      }), 7);
+      });
     }
 
     return data;
   },
 
-  /**
-   * Logs out the current user and invalidates the session
-   */
-  async logout(): Promise<void> {
+  async logout(options?: { redirect?: boolean }): Promise<void> {
+    const shouldRedirect = options?.redirect !== false;
     try {
       const refreshToken = getCookie("refresh_token");
       if (refreshToken) {
@@ -136,51 +131,63 @@ export const AuthService = {
     } catch (error) {
       console.error("Logout request failed:", error);
     } finally {
-      // Always clear tokens locally on logout
       AuthService.clearAuth();
-      if (typeof window !== "undefined") {
+      if (shouldRedirect && typeof window !== "undefined") {
         window.location.href = "/login";
       }
     }
   },
 
-  /**
-   * Refreshes the access token using the refresh token
-   */
   async refreshToken(refresh: string): Promise<ApiResponse> {
     const response = await axiosInstance.post<ApiResponse>(
       API_ENDPOINTS.AUTH.REFRESH_TOKEN,
-      { refresh }
+      { refresh },
     );
     return response.data;
   },
 
-  /**
-   * Validates the active access token
-   */
+  /** Get current user via validate-token (no dedicated /me endpoint). */
+  async getCurrentUser(): Promise<UserData | null> {
+    const response = await axiosInstance.get<ApiResponse<{ user: UserData }>>(
+      API_ENDPOINTS.AUTH.VALIDATE_TOKEN,
+    );
+    const user = response.data?.data?.user;
+    if (!user?.user_id) return null;
+    AuthService.setUserData(user);
+    return user;
+  },
+
   async validateToken(): Promise<ApiResponse> {
     const response = await axiosInstance.get<ApiResponse>(
-      API_ENDPOINTS.AUTH.VALIDATE_TOKEN
+      API_ENDPOINTS.AUTH.VALIDATE_TOKEN,
     );
     return response.data;
   },
 
   /**
-   * Registers a new user
+   * Always hits the API — no cookie/global cache.
+   * Caller (PermissionsProvider / RouteGuard) owns the in-memory result.
    */
-  async register(userData: any): Promise<ApiResponse> {
+  async fetchUserPermissions(userId: string): Promise<WebPermissionTree> {
+    const response = await axiosInstance.get<ApiResponse<{ web_permission?: unknown }>>(
+      API_ENDPOINTS.USER_MANAGEMENT.USER.PERMISSIONS(userId),
+      { skipPermissionToast: true },
+    );
+    return normalizeWebPermissions(response.data?.data?.web_permission);
+  },
+
+  async register(userData: unknown): Promise<ApiResponse> {
     const response = await axiosInstance.post<ApiResponse>(
       API_ENDPOINTS.AUTH.REGISTER,
-      userData
+      userData,
     );
     return response.data;
   },
 };
 
-// Register cookie handlers directly in Axios instance to avoid circular imports
 setAuthTokenCallbacks(
   () => AuthService.getAccessToken(),
   () => AuthService.getRefreshToken(),
   (access, refresh) => AuthService.setTokens(access, refresh),
-  () => AuthService.clearAuth()
+  () => AuthService.clearAuth(),
 );

@@ -53,7 +53,8 @@ import {
   resolveListStatus,
   buildStatusFilter,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -148,8 +149,14 @@ export default function RolesPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "roles");
 
-  const [roleFilters, setRoleFilters] = useState<FilterState>({ search: "" });
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(roleFilters);
+  const {
+    draftFilters: roleFilters,
+    setDraftFilters: setRoleFilters,
+    appliedFilters: roleAppliedFilters,
+    applyFilters: applyRoleFilters,
+    appliedSearch: roleAppliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [roleSort, setRoleSort] = useState<SortState>({ key: "roleName", direction: "asc" });
   const [rolePage, setRolePage] = useState(1);
   const [rolePageSize, setRolePageSize] = useState(10);
@@ -157,12 +164,13 @@ export default function RolesPage() {
   const [viewRole, setViewRole] = useState<RoleRecord | null>(null);
   const [confirmRoleStatus, setConfirmRoleStatus] = useState<ConfirmTarget>(null);
 
-  const [templateFilters, setTemplateFilters] = useState<FilterState>({ search: "" });
   const {
-    debouncedFilters: debouncedTemplateFilters,
-    debouncedSearch: debouncedTemplateSearch,
-    isDebouncing: isDebouncingTemplates,
-  } = useDebouncedFilters(templateFilters);
+    draftFilters: templateFilters,
+    setDraftFilters: setTemplateFilters,
+    appliedFilters: templateAppliedFilters,
+    applyFilters: applyTemplateFilters,
+    appliedSearch: templateAppliedSearch,
+  } = useAppliedListFilters();
   const [templateSort, setTemplateSort] = useState<SortState>({
     key: "templateName",
     direction: "asc",
@@ -177,21 +185,21 @@ export default function RolesPage() {
     [roleSort.key, roleSort.direction],
   );
   const roleApiFilters = useMemo(
-    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.role),
-    [debouncedFilters],
+    () => mergeListRequestFilters(roleAppliedFilters, MASTER_FILTER_FIELD_MAPS.role),
+    [roleAppliedFilters],
   );
-  const roleStatus = useMemo(() => resolveListStatus(debouncedFilters), [debouncedFilters]);
+  const roleStatus = useMemo(() => resolveListStatus(roleAppliedFilters), [roleAppliedFilters]);
 
   const roleParams = useMemo<MasterListKeyParams>(
     () => ({
       page: rolePage,
       pageSize: rolePageSize,
-      search: debouncedSearch,
+      search: roleAppliedSearch,
       status: roleStatus,
       apiFilters: roleApiFilters,
       ordering: roleOrdering,
     }),
-    [rolePage, rolePageSize, debouncedSearch, roleStatus, roleApiFilters, roleOrdering],
+    [rolePage, rolePageSize, roleAppliedSearch, roleStatus, roleApiFilters, roleOrdering],
   );
 
   const templateOrdering = useMemo(
@@ -199,15 +207,15 @@ export default function RolesPage() {
     [templateSort.key, templateSort.direction],
   );
   const templateStatus = useMemo(
-    () => resolveListStatus(debouncedTemplateFilters),
-    [debouncedTemplateFilters],
+    () => resolveListStatus(templateAppliedFilters),
+    [templateAppliedFilters],
   );
   const templateApiFilters = useMemo(() => {
     const filters: Record<string, unknown> = {};
-    const nameRaw = debouncedTemplateFilters.templateName;
-    const statusRaw = debouncedTemplateFilters.status;
-    const createdAudit = extractAuditFilter(debouncedTemplateFilters.createdAt);
-    const updatedAudit = extractAuditFilter(debouncedTemplateFilters.updatedAt);
+    const nameRaw = templateAppliedFilters.templateName;
+    const statusRaw = templateAppliedFilters.status;
+    const createdAudit = extractAuditFilter(templateAppliedFilters.createdAt);
+    const updatedAudit = extractAuditFilter(templateAppliedFilters.updatedAt);
     if (typeof nameRaw === "string" && nameRaw.trim()) filters.name = nameRaw.trim();
     if (Array.isArray(nameRaw) && nameRaw.length === 1 && String(nameRaw[0]).trim()) {
       filters.name = String(nameRaw[0]).trim();
@@ -241,13 +249,13 @@ export default function RolesPage() {
       };
     }
     return { ...filters, ...buildStatusFilter(templateStatus, "is_active") };
-  }, [debouncedTemplateFilters, templateStatus]);
+  }, [templateAppliedFilters, templateStatus]);
 
   const templateParams = useMemo<MasterListKeyParams>(
     () => ({
       page: templatePage,
       pageSize: templatePageSize,
-      search: debouncedTemplateSearch,
+      search: templateAppliedSearch,
       status: templateStatus,
       apiFilters: templateApiFilters,
       ordering: templateOrdering,
@@ -255,14 +263,14 @@ export default function RolesPage() {
     [
       templatePage,
       templatePageSize,
-      debouncedTemplateSearch,
+      templateAppliedSearch,
       templateStatus,
       templateApiFilters,
       templateOrdering,
     ],
   );
 
-  const rolesQuery = useRoles(roleParams);
+  const rolesQuery = useRoles(roleParams, { enabled: activeTab === "roles" });
   const roleDetailQuery = useRole(viewId);
   const toggleRoleStatus = useToggleRoleStatus();
   const exportRoles = useExportRoles();
@@ -277,13 +285,21 @@ export default function RolesPage() {
     status: "inactive",
     apiFilters: buildStatusFilter("inactive", "is_active"),
   });
-  const roleNameOptionsQuery = useRoleFilterDropdown("role_name");
-  const departmentOptionsQuery = useRoleFilterDropdown("department__department_name");
-  const geoLevelOptionsQuery = useRoleFilterDropdown("geography_level");
-  const createdByOptionsQuery = useRoleFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useRoleFilterDropdown("updated_by_user__username");
+  const roleNameOptionsQuery = useRoleFilterDropdown("role_name", { enabled: isFilterOpen("roleName") });
+  const departmentOptionsQuery = useRoleFilterDropdown("department__department_name", {
+    enabled: isFilterOpen("department"),
+  });
+  const geoLevelOptionsQuery = useRoleFilterDropdown("geography_level", {
+    enabled: isFilterOpen("geoLevel"),
+  });
+  const createdByOptionsQuery = useRoleFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useRoleFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
-  const templatesQuery = useTemplates(templateParams);
+  const templatesQuery = useTemplates(templateParams, { enabled: activeTab === "templates" });
   const toggleTemplateStatus = useToggleTemplateStatus();
   const exportTemplates = useExportTemplates();
 
@@ -294,13 +310,13 @@ export default function RolesPage() {
   const templateRecords = useMemo(() => templatesQuery.data?.items ?? [], [templatesQuery.data]);
   // Access type is derived from JSON permissions — filter client-side until backend supports it.
   const visibleTemplateRecords = useMemo(() => {
-    const accessFilterRaw = debouncedTemplateFilters.accessType;
+    const accessFilterRaw = templateAppliedFilters.accessType;
     const accessFilter = Array.isArray(accessFilterRaw)
       ? String(accessFilterRaw[0] ?? "").trim().toLowerCase()
       : String(accessFilterRaw ?? "").trim().toLowerCase();
     if (!accessFilter) return templateRecords;
     return templateRecords.filter((row) => row.accessType.toLowerCase() === accessFilter);
-  }, [templateRecords, debouncedTemplateFilters.accessType]);
+  }, [templateRecords, templateAppliedFilters.accessType]);
   const templateNameOptions = useMemo(
     () =>
       Array.from(new Set(templateRecords.map((row) => row.templateName)))
@@ -351,12 +367,12 @@ export default function RolesPage() {
 
   useEffect(() => {
     setRolePage(1);
-  }, [debouncedSearch, roleApiFilters, rolePageSize, roleSort.key, roleSort.direction]);
+  }, [roleAppliedSearch, roleApiFilters, rolePageSize, roleSort.key, roleSort.direction]);
 
   useEffect(() => {
     setTemplatePage(1);
   }, [
-    debouncedTemplateSearch,
+    templateAppliedSearch,
     templateApiFilters,
     templatePageSize,
     templateSort.key,
@@ -649,21 +665,24 @@ export default function RolesPage() {
           <MasterListing<RoleRecord>
             columns={roleColumns}
             data={roleRecords}
-            loading={rolesQuery.isFetching || isDebouncing}
+            loading={rolesQuery.isFetching}
             totalRecords={rolesQuery.data?.total ?? 0}
             page={rolePage}
             pageSize={rolePageSize}
             onPageChange={setRolePage}
             onPageSizeChange={setRolePageSize}
             onSortChange={setRoleSort}
-            onFilterChange={setRoleFilters}
+            onFilterChange={(next) => {
+              setRoleFilters(next);
+              applyRoleFilters(next);
+            }}
             emptyMessage="roles"
             searchPlaceholder="Search role or department…"
             onAdd={() => router.push("/user-management/roles/add")}
             addLabel="Add Role"
             onExport={() =>
               exportRoles.mutate(
-                { search: debouncedSearch, status: roleStatus, ordering: roleOrdering, apiFilters: roleApiFilters },
+                { search: appliedSearch, status: roleStatus, ordering: roleOrdering, apiFilters: roleApiFilters },
                 {
                   onSuccess: () => showToast("Roles exported successfully"),
                   onError: (error) => showToast(getErrorMessage(error, "Failed to export roles"), "error"),
@@ -672,6 +691,7 @@ export default function RolesPage() {
             }
             currentFilters={roleFilters}
             currentSort={roleSort}
+            onOpenFilter={handleOpenFilter}
           />
         </TabsContent>
 
@@ -679,14 +699,17 @@ export default function RolesPage() {
           <MasterListing<TemplateListRecord>
             columns={templateColumns}
             data={visibleTemplateRecords}
-            loading={templatesQuery.isFetching || isDebouncingTemplates}
+            loading={templatesQuery.isFetching}
             totalRecords={visibleTemplateRecords.length}
             page={templatePage}
             pageSize={templatePageSize}
             onPageChange={setTemplatePage}
             onPageSizeChange={setTemplatePageSize}
             onSortChange={setTemplateSort}
-            onFilterChange={setTemplateFilters}
+            onFilterChange={(next) => {
+              setTemplateFilters(next);
+              applyTemplateFilters(next);
+            }}
             emptyMessage="templates"
             searchPlaceholder="Search template name…"
             onAdd={() => router.push("/user-management/roles/templates/add")}
@@ -694,7 +717,7 @@ export default function RolesPage() {
             onExport={() =>
               exportTemplates.mutate(
                 {
-                  search: debouncedTemplateSearch,
+                  search: templateAppliedSearch,
                   status: templateStatus,
                   ordering: templateOrdering,
                   apiFilters: templateApiFilters,

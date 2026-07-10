@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 import { userManagementKeys } from "@/lib/user-management/user-management-query-keys";
 import {
   UserListService,
@@ -119,11 +120,15 @@ export function useExportUsers() {
   });
 }
 
-export function useUserFilterDropdown(fieldName: UserFilterField) {
+export function useUserFilterDropdown(
+  fieldName: UserFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: userManagementKeys.users.filterDropdown(fieldName),
     queryFn: ({ signal }) => UserListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

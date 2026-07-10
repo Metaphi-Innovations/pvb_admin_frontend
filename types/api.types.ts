@@ -3,7 +3,9 @@ export interface UserData {
   email: string;
   username: string;
   user_type?: string;
-  permissions?: any[];
+  role_type?: string;
+  /** Login may return flat web_permission object or nested list depending on endpoint. */
+  permissions?: unknown;
 }
 
 export interface LoginRequest {
@@ -23,7 +25,7 @@ export interface LoginResponse {
     user_id: string;
     email: string;
     username: string;
-    permissions?: any[];
+    permissions?: unknown;
     user_type?: string;
   };
   error?: string;

@@ -1,13 +1,13 @@
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: "/auth/login",
-    REGISTER: "/auth/register",
-    LOGOUT: "/auth/logout",
-    REFRESH_TOKEN: "/auth/refresh-token",
-    VALIDATE_TOKEN: "/auth/validate_token",
-    FORGOT_PASSWORD: "/auth/forgot-password",
-    VERIFY_OTP: "/auth/verify-otp",
-    RESET_PASSWORD: "/auth/reset-password",
+    LOGIN: "/user-management/auth/login",
+    REGISTER: "/user-management/auth/register",
+    LOGOUT: "/user-management/auth/logout",
+    REFRESH_TOKEN: "/user-management/auth/refresh-token",
+    VALIDATE_TOKEN: "/user-management/auth/validate-token",
+    FORGOT_PASSWORD: "/user-management/auth/forgot-password",
+    VERIFY_OTP: "/user-management/auth/verify-otp",
+    RESET_PASSWORD: "/user-management/auth/reset-password",
   },
   MASTER: {
     CATEGORY: {

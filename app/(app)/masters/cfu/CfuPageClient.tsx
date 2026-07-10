@@ -47,7 +47,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -106,8 +107,14 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 }
 
 export default function CfuMasterPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "cfuName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -128,27 +135,27 @@ export default function CfuMasterPage() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.cfu, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.cfu, {
         statusTab,
         statusField: "status",
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useCfuList(listParams);
@@ -158,11 +165,17 @@ export default function CfuMasterPage() {
   const toggleStatusMutation = useToggleCfuStatus();
   const exportMutation = useExportCfu();
 
-  const cfuNameOptionsQuery = useCfuFilterDropdown("cfu_name");
-  const descriptionOptionsQuery = useCfuFilterDropdown("description");
-  const statusOptionsQuery = useCfuFilterDropdown("status");
-  const createdByOptionsQuery = useCfuFilterDropdown("created_by__username");
-  const updatedByOptionsQuery = useCfuFilterDropdown("updated_by__username");
+  const cfuNameOptionsQuery = useCfuFilterDropdown("cfu_name", { enabled: isFilterOpen("cfuName") });
+  const descriptionOptionsQuery = useCfuFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useCfuFilterDropdown("status", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useCfuFilterDropdown("created_by__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useCfuFilterDropdown("updated_by__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const cfuNameOptions = useMemo(
     () => cfuNameOptionsQuery.data ?? [],
@@ -203,9 +216,7 @@ export default function CfuMasterPage() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -217,7 +228,7 @@ export default function CfuMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -470,7 +481,7 @@ export default function CfuMasterPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -550,14 +561,17 @@ export default function CfuMasterPage() {
       <MasterListing<CfuRecord>
         columns={columns}
         data={displayRecords}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add CFU"
@@ -566,6 +580,7 @@ export default function CfuMasterPage() {
         searchPlaceholder="Search CFU name, description..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets

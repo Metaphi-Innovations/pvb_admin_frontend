@@ -10,6 +10,7 @@ import {
   type CfuUpdatePayload,
 } from "@/services/cfu-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): CfuListParams {
   return {
@@ -96,10 +97,14 @@ export function useExportCfu() {
   });
 }
 
-export function useCfuFilterDropdown(fieldName: CfuFilterField) {
+export function useCfuFilterDropdown(
+  fieldName: CfuFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.cfu.filterDropdown(fieldName),
     queryFn: ({ signal }) => CfuListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

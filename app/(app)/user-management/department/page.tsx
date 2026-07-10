@@ -55,7 +55,8 @@ import {
   resolveListStatus,
   buildStatusFilter,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -123,8 +124,14 @@ const COUNT_PARAMS = {
 };
 
 export default function DepartmentPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "name", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -142,21 +149,21 @@ export default function DepartmentPage() {
     [sort.key, sort.direction],
   );
   const apiFilters = useMemo(
-    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.department),
-    [debouncedFilters],
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.department),
+    [appliedFilters],
   );
-  const listStatus = useMemo(() => resolveListStatus(debouncedFilters), [debouncedFilters]);
+  const listStatus = useMemo(() => resolveListStatus(appliedFilters), [appliedFilters]);
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useDepartments(listParams);
@@ -182,9 +189,15 @@ export default function DepartmentPage() {
     apiFilters: buildStatusFilter("inactive", "is_active"),
   });
 
-  const nameOptionsQuery = useDepartmentFilterDropdown("department_name");
-  const createdByOptionsQuery = useDepartmentFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useDepartmentFilterDropdown("updated_by_user__username");
+  const nameOptionsQuery = useDepartmentFilterDropdown("department_name", {
+    enabled: isFilterOpen("name"),
+  });
+  const createdByOptionsQuery = useDepartmentFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdDate"),
+  });
+  const updatedByOptionsQuery = useDepartmentFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedDate"),
+  });
 
   const nameOptions = useMemo(() => nameOptionsQuery.data ?? [], [nameOptionsQuery.data]);
   const createdByOptions = useMemo(
@@ -239,7 +252,7 @@ export default function DepartmentPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -358,7 +371,7 @@ export default function DepartmentPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -476,14 +489,17 @@ export default function DepartmentPage() {
       <MasterListing<Department>
         columns={columns}
         data={records}
-        loading={loading || isDebouncing}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         emptyMessage="departments"
         searchPlaceholder="Search department…"
         onAdd={openAdd}
@@ -491,6 +507,7 @@ export default function DepartmentPage() {
         onExport={handleExport}
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <DepartmentSheet

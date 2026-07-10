@@ -11,6 +11,7 @@ import {
   type CategoryDropdownItem,
 } from "@/services/category-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): CategoryListParams {
   return {
@@ -105,10 +106,14 @@ export function useExportCategories() {
   });
 }
 
-export function useCategoryFilterDropdown(fieldName: CategoryFilterField) {
+export function useCategoryFilterDropdown(
+  fieldName: CategoryFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.categories.filterDropdown(fieldName),
     queryFn: ({ signal }) => CategoryListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

@@ -37,7 +37,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -118,25 +119,40 @@ function extractAuditFilter(value: unknown): { user: string; fromDate: string; t
 export default function EmployeeListingPage() {
   const router = useRouter();
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [filters, setFilters] = useState<FilterState>({});
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "employeeId", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [statusTarget, setStatusTarget] = useState<UserRecord | null>(null);
 
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters, 400);
-
-  const employeeIdOptionsQuery = useUserFilterDropdown("employee_id");
-  const nameOptionsQuery = useUserFilterDropdown("first_name");
-  const emailOptionsQuery = useUserFilterDropdown("email");
-  const mobileOptionsQuery = useUserFilterDropdown("mobile_number");
-  const roleOptionsQuery = useUserFilterDropdown("role__role_name");
-  const departmentOptionsQuery = useUserFilterDropdown("department__department_name");
-  const employeeTypeOptionsQuery = useUserFilterDropdown("employee_type");
-  const roleTypeOptionsQuery = useUserFilterDropdown("role_type");
-  const createdByOptionsQuery = useUserFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useUserFilterDropdown("updated_by_user__username");
+  const employeeIdOptionsQuery = useUserFilterDropdown("employee_id", {
+    enabled: isFilterOpen("employeeId"),
+  });
+  const nameOptionsQuery = useUserFilterDropdown("first_name", { enabled: isFilterOpen("fullName") });
+  const emailOptionsQuery = useUserFilterDropdown("email", { enabled: isFilterOpen("email") });
+  const mobileOptionsQuery = useUserFilterDropdown("mobile_number", { enabled: isFilterOpen("mobile") });
+  const roleOptionsQuery = useUserFilterDropdown("role__role_name", { enabled: isFilterOpen("role") });
+  const departmentOptionsQuery = useUserFilterDropdown("department__department_name", {
+    enabled: isFilterOpen("department"),
+  });
+  const employeeTypeOptionsQuery = useUserFilterDropdown("employee_type", {
+    enabled: isFilterOpen("employeeType"),
+  });
+  const roleTypeOptionsQuery = useUserFilterDropdown("role_type", { enabled: isFilterOpen("roleType") });
+  const createdByOptionsQuery = useUserFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useUserFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const employeeIdOptions = employeeIdOptionsQuery.data ?? [];
   const nameOptions = nameOptionsQuery.data ?? [];
@@ -156,26 +172,26 @@ export default function EmployeeListingPage() {
   const createdByOptions = createdByOptionsQuery.data ?? [];
   const updatedByOptions = updatedByOptionsQuery.data ?? [];
 
-  const listStatus = resolveListStatus(debouncedFilters, statusTab);
+  const listStatus = resolveListStatus(appliedFilters, statusTab);
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.user, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.user, {
         statusTab,
         statusField: "is_active",
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
 
   const listParams: MasterListKeyParams = useMemo(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       ordering: sortStateToOrdering(sort.key, sort.direction),
       status: listStatus,
       apiFilters,
     }),
-    [page, pageSize, debouncedSearch, sort.key, sort.direction, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, sort.key, sort.direction, listStatus, apiFilters],
   );
 
   const listQuery = useUsers(listParams);
@@ -200,7 +216,7 @@ export default function EmployeeListingPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   const stats = useMemo(() => {
     const active = records.filter((r) => r.status === "active").length;
@@ -257,7 +273,7 @@ export default function EmployeeListingPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering: sortStateToOrdering(sort.key, sort.direction),
         apiFilters,
@@ -517,7 +533,10 @@ export default function EmployeeListingPage() {
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
           emptyMessage="users"
           searchPlaceholder="Search by Employee ID, Name, Mobile, or Email…"
           onAdd={() => router.push("/user-management/employee/add")}
@@ -525,7 +544,8 @@ export default function EmployeeListingPage() {
           onExport={handleExport}
           currentFilters={filters}
           currentSort={sort}
-          loading={listQuery.isFetching || isDebouncing}
+          onOpenFilter={handleOpenFilter}
+          loading={listQuery.isFetching}
         />
       </div>
 

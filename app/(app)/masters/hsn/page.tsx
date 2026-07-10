@@ -43,7 +43,8 @@ import {
 	mergeListRequestFilters,
 	resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
 	getErrorMessage,
 	getMasterListErrorMessage,
@@ -137,8 +138,14 @@ function toHsnRow(item: {
 }
 
 export default function HSNPage() {
-	const [filters, setFilters] = useState<FilterState>({});
-	const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+	const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+	} = useAppliedListFilters();
+	const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 	const [sort, setSort] = useState<SortState>({ key: "hsnCode", direction: "asc" });
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
@@ -155,26 +162,26 @@ export default function HSNPage() {
 
 	const apiFilters = useMemo(
 		() =>
-			mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.hsn, {
+			mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.hsn, {
 				statusTab,
 			}),
-		[debouncedFilters, statusTab],
+		[appliedFilters, statusTab],
 	);
 	const listStatus = useMemo(
-		() => resolveListStatus(debouncedFilters, statusTab),
-		[debouncedFilters, statusTab],
+		() => resolveListStatus(appliedFilters, statusTab),
+		[appliedFilters, statusTab],
 	);
 
 	const listParams = useMemo<MasterListKeyParams>(
 		() => ({
 			page,
 			pageSize,
-			search: debouncedSearch,
+			search: appliedSearch,
 			status: listStatus,
 			apiFilters,
 			ordering: "",
 		}),
-		[page, pageSize, debouncedSearch, listStatus, apiFilters],
+		[page, pageSize, appliedSearch, listStatus, apiFilters],
 	);
 
 	const listQuery = useHsnList(listParams);
@@ -185,12 +192,18 @@ export default function HSNPage() {
 	const toggleStatusMutation = useToggleHsnStatus();
 	const exportMutation = useExportHsn();
 
-	const hsnCodeOptionsQuery = useHsnFilterDropdown("id");
-	const hsnDescriptionOptionsQuery = useHsnFilterDropdown("hsnDescription");
-	const gstRateOptionsQuery = useHsnFilterDropdown("gstPercentage");
-	const statusOptionsQuery = useHsnFilterDropdown("is_active");
-	const createdByOptionsQuery = useHsnFilterDropdown("created_by_user__username");
-	const updatedByOptionsQuery = useHsnFilterDropdown("updated_by_user__username");
+	const hsnCodeOptionsQuery = useHsnFilterDropdown("id", { enabled: isFilterOpen("hsnCode") });
+	const hsnDescriptionOptionsQuery = useHsnFilterDropdown("hsnDescription", {
+		enabled: isFilterOpen("hsnDescription"),
+	});
+	const gstRateOptionsQuery = useHsnFilterDropdown("gstPercentage", { enabled: isFilterOpen("gstRate") });
+	const statusOptionsQuery = useHsnFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+	const createdByOptionsQuery = useHsnFilterDropdown("created_by_user__username", {
+		enabled: isFilterOpen("createdBy"),
+	});
+	const updatedByOptionsQuery = useHsnFilterDropdown("updated_by_user__username", {
+		enabled: isFilterOpen("updatedBy"),
+	});
 
 	const hsnCodeOptions = useMemo(
 		() => hsnCodeOptionsQuery.data ?? [],
@@ -474,11 +487,9 @@ export default function HSNPage() {
 		});
 	}, [records, sort]);
 
-	const isFiltering = isDebouncing;
-
-	useEffect(() => {
+		useEffect(() => {
 		setPage(1);
-	}, [debouncedSearch, apiFilters, pageSize, statusTab]);
+	}, [appliedSearch, apiFilters, pageSize, statusTab]);
 
 	useEffect(() => {
 		setPage(1);
@@ -539,7 +550,7 @@ export default function HSNPage() {
 	const handleExport = () => {
 		exportMutation.mutate(
 			{
-				search: debouncedSearch,
+				search: appliedSearch,
 				status: listStatus,
 				apiFilters,
 			},
@@ -610,14 +621,17 @@ export default function HSNPage() {
 			<MasterListing<HSNMaster>
 				columns={columns}
 				data={displayRecords}
-				loading={loading || isFiltering}
+				loading={loading}
 				totalRecords={totalRecords}
 				page={page}
 				pageSize={pageSize}
 				onPageChange={setPage}
 				onPageSizeChange={setPageSize}
 				onSortChange={setSort}
-				onFilterChange={setFilters}
+				onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
 				actions={actions}
 				onAdd={openAdd}
 				addLabel="Add HSN"
@@ -626,6 +640,7 @@ export default function HSNPage() {
 				searchPlaceholder="Search HSN description..."
 				currentFilters={filters}
 				currentSort={sort}
+				onOpenFilter={handleOpenFilter}
 			/>
 
 			<MasterListingSheets
