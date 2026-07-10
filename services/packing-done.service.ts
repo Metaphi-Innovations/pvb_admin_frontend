@@ -78,7 +78,10 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     salesOrderNo: raw.packing_list?.packing_number || "",
     customer: customer,
     totalItems: products.length,
-    packedQuantity: products.reduce((sum: number, p: any) => sum + Number(p.packed_cases || p.packed_qty || 0), 0),
+    packedQuantity: products.reduce((sum: number, p: any) => {
+      const packSize = Number(p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      return sum + Math.floor(Number(p.base_qty || 0) / packSize);
+    }, 0),
     packingDate: raw.packing_date ? raw.packing_date.slice(0, 10) : "",
     packedBy: raw.packed_by_user ? `${raw.packed_by_user.first_name} ${raw.packed_by_user.last_name}`.trim() || raw.packed_by_user.username : "System",
     status: raw.status as any,
@@ -87,17 +90,26 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     sourceDocumentNo: raw.packing_list?.packing_number || "",
     sourceWarehouse: warehouse,
     targetWarehouse: "—",
-    products: products.map((p: any) => ({
-      product: p.product_name,
-      sku: p.product_code,
-      ordered_cases: p.order_cases || p.order_qty,
-      packedQty: p.packed_cases || p.packed_qty,
-      batchAllocations: p.batch_code ? [{
-        batchNumber: p.batch_code,
-        allocatedQty: p.packed_cases || p.packed_qty,
-        expiryDate: "—",
-      }] : undefined,
-    })),
+    products: products.map((p: any) => {
+      const packSize = Number(p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      const packedBaseQty = Number(p.base_qty || 0);
+      const orderBaseQty = Number(p.packing_list_product?.order_base_qty || 0);
+      
+      return {
+        product: p.product_name || p.product_snapshot?.product_name || "Unknown",
+        sku: p.product_code || p.product_snapshot?.product_code || "",
+        ordered_cases: Math.floor(orderBaseQty / packSize),
+        packedQty: Math.floor(packedBaseQty / packSize),
+        orderBaseQty,
+        packedBaseQty,
+        packSize,
+        batchAllocations: p.batch_code ? [{
+          batchNumber: p.batch_code,
+          allocatedQty: Math.floor(packedBaseQty / packSize),
+          expiryDate: "—",
+        }] : undefined,
+      };
+    }),
   };
 }
 
@@ -258,7 +270,7 @@ export const PackingDoneService = {
     remarks?: string;
     products: {
       packing_list_product_id: string;
-      packed_cases: number;
+      base_qty: number;
       remarks?: string;
     }[];
   }): Promise<any> {
@@ -266,7 +278,7 @@ export const PackingDoneService = {
       ...payload,
       products: payload.products.map(p => ({
         packing_list_product_id: p.packing_list_product_id,
-        packed_qty: p.packed_cases,
+        base_qty: p.base_qty,
         remarks: p.remarks,
       }))
     };

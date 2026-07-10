@@ -49,6 +49,10 @@ export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOr
       ordered_cases: 0,
       pending_base_qty: it.returnQty,
       pending_cases: 0,
+      orderBaseQty: it.returnQty,
+      packedBaseQty: 0,
+      pendingBaseQty: it.returnQty,
+      packSize: 1, // Purchase returns just use units mostly
       batchNumber: it.batchNumber,
       grnNo: it.grnNo,
       mfgDate: it.mfgDate,

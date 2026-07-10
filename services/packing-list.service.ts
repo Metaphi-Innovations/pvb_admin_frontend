@@ -98,8 +98,9 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
   
   const totalQty = products.reduce((sum: number, p: any) => {
     if (p && typeof p === "object") {
-      const orderQty = asNumber(p.order_cases ?? p.orderQty);
-      return sum + orderQty;
+      const packSize = Number(p.product?.unit_per_packing || p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      const orderQty = asNumber(p.order_base_qty) / packSize;
+      return sum + Math.floor(orderQty);
     }
     return sum;
   }, 0);
@@ -315,7 +316,10 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     salesOrderNo: raw.packing_number,
     customer: raw.customer_name || "",
     totalItems: products.length,
-    totalQuantity: products.reduce((sum: number, p: any) => sum + Number(p.order_cases || p.order_qty || 0), 0),
+    totalQuantity: products.reduce((sum: number, p: any) => {
+      const packSize = Number(p.product?.unit_per_packing || p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      return sum + Math.floor(Number(p.order_base_qty || 0) / packSize);
+    }, 0),
     orderAmount: Number(raw.order_amount || 0),
     orderDate: raw.order_date ? raw.order_date.slice(0, 10) : "",
     deliveryDate: raw.expected_delivery_date ? raw.expected_delivery_date.slice(0, 10) : "",
@@ -331,13 +335,22 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     targetWarehouse: "—",
     products: products.map((p: any) => {
       const snap = p.batch_snapshot && typeof p.batch_snapshot === "object" ? p.batch_snapshot : {};
+      const packSize = Number(p.product?.unit_per_packing || p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      const orderBaseQty = Number(p.order_base_qty || 0);
+      const packedBaseQty = Number(p.packed_base_qty || 0);
+      const pendingBaseQty = Number(p.pending_base_qty || 0);
+
       return {
         product: p.product?.product_name || "",
         productId: p.product_id || p.product?.product_id || "",
         sku: p.product?.product_code || "",
-        ordered_cases: Number(p.order_cases || p.order_qty || 0),
-        packedQty: Number(p.packed_cases || p.packed_qty || 0),
-        pending_cases: Number(p.pending_cases || p.pending_qty || 0),
+        orderBaseQty,
+        packedBaseQty,
+        pendingBaseQty,
+        packSize,
+        ordered_cases: Math.floor(orderBaseQty / packSize),
+        packedQty: Math.floor(packedBaseQty / packSize),
+        pending_cases: Math.floor(pendingBaseQty / packSize),
         batchNumber: p.batch_code || snap.batch_code || "",
         expDate: snap.expiry_date || snap.expiryDate || "",
         mfgDate: snap.mfg_date || snap.mfgDate || "",

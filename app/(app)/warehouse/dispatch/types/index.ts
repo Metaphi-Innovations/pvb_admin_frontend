@@ -86,4 +86,6 @@ export interface DispatchRecord {
   total_items?: number;
   total_quantity?: number;
   dispatch_status?: string;
+
+  [key: string]: any; // Allow fallback to raw backend mappings
 }
