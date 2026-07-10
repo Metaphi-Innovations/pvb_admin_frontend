@@ -553,3 +553,15 @@ export function generateOrderNumber(orders: SalesOrder[]): string {
 }
 
 
+export function canSplitOrder(order: SalesOrder): boolean {
+  return order.status === 'confirmed';
+}
+
+export function splitSalesOrderFromForm(
+  originalOrderId: string | number,
+  form: SalesOrderFormValues,
+  newOrderNumber: string,
+  asDraft: boolean
+): { newOrder: SalesOrder } | { error: string } {
+  return { error: 'Not implemented' };
+}

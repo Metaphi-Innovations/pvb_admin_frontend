@@ -101,7 +101,7 @@ function ReturnItemsTable({
     if (checked) {
       onItemChange(it.id, { selected: true });
     } else {
-      onItemChange(it.id, { selected: false, returnQty: 0, returnCases: 0, lineRemark: "" });
+      onItemChange(it.id, { selected: false, returnQty: 0, lineRemark: "" });
     }
   };
 

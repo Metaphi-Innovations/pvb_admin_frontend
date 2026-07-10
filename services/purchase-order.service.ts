@@ -513,9 +513,7 @@ function buildWriteBody(
           product_name: line.productName || null,
           base_unit: line.baseUnit || null,
           packing_unit: line.packagingUnit || null,
-          requested_qty: packingQty,
           requested_base_qty: baseQty,
-          ordered_qty: packingQty,
           ordered_base_qty: baseQty,
           rate: line.unitPrice,
           discount_type: mapBackendDiscountType(line.discountType),
@@ -696,7 +694,7 @@ export const PurchaseOrderService = {
     purchaseOrderId: string;
     shortCloseReason?: string;
     shortCloseRemarks?: string;
-    products: { purchaseOrderProductId: string; shortClosedQty: number }[];
+    products: { purchaseOrderProductId: string; shortClosedQty: number; conversionQty?: number }[];
   }): Promise<PurchaseOrder> {
     const response = await axiosInstance.post(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.SHORT_CLOSE,
@@ -706,7 +704,7 @@ export const PurchaseOrderService = {
         short_close_remarks: input.shortCloseRemarks || null,
         products: input.products.map((p) => ({
           purchase_order_product_id: p.purchaseOrderProductId,
-          short_closed_qty: p.shortClosedQty,
+          short_closed_base_qty: Math.round(p.shortClosedQty * (p.conversionQty ?? 1)),
         })),
       },
     );
@@ -752,7 +750,7 @@ export const PurchaseOrderService = {
 export function allocateShortCloseProducts(
   lines: POLineItem[],
   totalQty: number,
-): { purchaseOrderProductId: string; productName: string; productCode: string; pendingQty: number; shortClosedQty: number }[] {
+): { purchaseOrderProductId: string; productName: string; productCode: string; pendingQty: number; shortClosedQty: number; conversionQty: number }[] {
   let remaining = Math.floor(totalQty);
   return lines
     .map((line) => {
@@ -769,6 +767,7 @@ export function allocateShortCloseProducts(
           productCode: line.productCode,
           pendingQty: 0,
           shortClosedQty: 0,
+          conversionQty: line.conversionQty ?? 1,
         };
       }
       const take = Math.min(pending, remaining);
@@ -779,6 +778,7 @@ export function allocateShortCloseProducts(
         productCode: line.productCode,
         pendingQty: pending,
         shortClosedQty: take,
+        conversionQty: line.conversionQty ?? 1,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);

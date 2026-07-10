@@ -62,9 +62,7 @@ export function mergeReturnItemsForEdit(
       balanceRejectedQty: avail
         ? Math.max(avail.balanceRejectedQty, item.returnQty)
         : Math.max(item.balanceRejectedQty, item.returnQty),
-      balanceCases: avail ? Math.max(avail.balanceCases, item.returnCases) : item.balanceCases,
       alreadyReturnedQty: avail ? avail.alreadyReturnedQty : item.alreadyReturnedQty,
-      alreadyReturnedCases: avail ? avail.alreadyReturnedCases : item.alreadyReturnedCases,
       lineStatus:
         (avail?.balanceRejectedQty ?? item.balanceRejectedQty) <= 0 && item.returnQty <= 0
           ? "fully_returned"
@@ -79,7 +77,6 @@ export function mergeReturnItemsForEdit(
       ...item,
       selected: false,
       returnQty: 0,
-      returnCases: 0,
       lineRemark: "",
       isExistingOnReturn: false,
     });
@@ -97,7 +94,7 @@ export const purchaseReturnRoutes = {
 
 export function getReturnQtyError(item: PurchaseReturnItem): string | undefined {
   if (!item.selected || item.lineStatus === "fully_returned") return undefined;
-  if (item.returnCases <= 0 && item.returnQty <= 0) return "Enter return quantity for selected batch.";
+  if (item.returnQty <= 0) return "Enter return quantity for selected batch.";
   if (item.returnQty > item.balanceRejectedQty) {
     return "Return quantity cannot exceed balance rejected quantity.";
   }
@@ -128,7 +125,7 @@ export function validateReturnItems(items: PurchaseReturnItem[]): Record<string,
     if (rowError) {
       errors[it.id] = rowError;
     }
-    if (it.selected && it.lineStatus !== "fully_returned" && (it.returnQty > 0 || it.returnCases > 0)) {
+    if (it.selected && it.lineStatus !== "fully_returned" && it.returnQty > 0) {
       hasPositive = true;
     }
   }

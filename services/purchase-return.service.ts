@@ -109,10 +109,8 @@ function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
 
 function mapDetailItem(raw: Record<string, unknown>): PurchaseReturnItem {
   const balanceQty = asNumber(raw.balance_qty);
-  const balanceCases = asNumber(raw.balance_cases);
-  const returnQty = asNumber(raw.return_qty);
-  const returnCases = asNumber(raw.return_cases);
-  const selected = returnQty > 0 || returnCases > 0;
+  const returnQty = asNumber(raw.return_base_qty);
+  const selected = returnQty > 0;
   return {
     id: asString(raw.purchase_order_return_product_id) || asString(raw.inventory_rejected_item_id),
     purchaseOrderProductId: asString(raw.purchase_order_product_id) || undefined,
@@ -129,19 +127,14 @@ function mapDetailItem(raw: Record<string, unknown>): PurchaseReturnItem {
     mfgDate: asDateOnly(raw.manufacture_date),
     expDate: asDateOnly(raw.expiry_date),
     caseSize: asNumber(raw.case_size),
-    grnReceivedCases: asNumber(raw.grn_received_cases),
-    grnReceivedQty: asNumber(raw.grn_received_qty),
-    qcRejectedCases: asNumber(raw.qc_rejected_cases),
-    qcRejectedQty: asNumber(raw.qc_rejected_qty),
-    alreadyReturnedCases: asNumber(raw.already_returned_cases),
-    alreadyReturnedQty: asNumber(raw.already_returned_qty),
-    balanceCases,
+    grnReceivedQty: asNumber(raw.grn_received_base_qty),
+    qcRejectedQty: asNumber(raw.qc_rejected_base_qty),
+    alreadyReturnedQty: asNumber(raw.already_returned_base_qty),
     balanceRejectedQty: balanceQty,
-    returnCases,
     returnQty,
     lineRemark: asString(raw.line_remark),
     selected,
-    lineStatus: balanceCases <= 0 && balanceQty <= 0 ? "fully_returned" : "available",
+    lineStatus: balanceQty <= 0 ? "fully_returned" : "available",
     unitPrice: asNumber(raw.rate),
     gstPct: asNumber(raw.gst_percent),
     cgstPct: asNumber(raw.cgst_percent),
@@ -416,8 +409,7 @@ export const PurchaseReturnService = {
     const rows = Array.isArray(payload.data) ? payload.data : [];
     return rows.map((row) => {
       const raw = (row ?? {}) as Record<string, unknown>;
-      const balanceQty = asNumber(raw.balance_qty);
-      const balanceCases = asNumber(raw.balance_cases);
+      const balanceQty = asNumber(raw.balance_base_qty);
       return {
         id: asString(raw.inventory_rejected_item_id),
         purchaseOrderProductId: asString(raw.purchase_order_product_id) || undefined,
@@ -434,19 +426,14 @@ export const PurchaseReturnService = {
         mfgDate: asDateOnly(raw.manufacture_date),
         expDate: asDateOnly(raw.expiry_date),
         caseSize: asNumber(raw.case_size),
-        grnReceivedCases: asNumber(raw.grn_received_cases),
-        grnReceivedQty: asNumber(raw.grn_received_qty),
-        qcRejectedCases: asNumber(raw.qc_rejected_cases),
-        qcRejectedQty: asNumber(raw.qc_rejected_qty),
-        alreadyReturnedCases: asNumber(raw.already_returned_cases),
-        alreadyReturnedQty: asNumber(raw.already_returned_qty),
-        balanceCases,
+        grnReceivedQty: asNumber(raw.grn_received_base_qty),
+        qcRejectedQty: asNumber(raw.qc_rejected_base_qty),
+        alreadyReturnedQty: asNumber(raw.already_returned_base_qty),
         balanceRejectedQty: balanceQty,
-        returnCases: 0,
         returnQty: 0,
         lineRemark: "",
         selected: false,
-        lineStatus: balanceCases <= 0 && balanceQty <= 0 ? "fully_returned" : "available",
+        lineStatus: balanceQty <= 0 ? "fully_returned" : "available",
         unitPrice: asNumber(raw.rate),
         gstPct: asNumber(raw.gst_percent),
         cgstPct: asNumber(raw.cgst_percent),
@@ -521,7 +508,7 @@ export const PurchaseReturnService = {
       grand_total: record.summary.grandTotal,
       attachment_urls: record.attachments ?? [],
       products: record.items
-        .filter((item) => item.selected && (item.returnQty > 0 || item.returnCases > 0))
+        .filter((item) => item.selected && item.returnQty > 0)
         .map((item) => ({
           purchase_order_product_id: item.purchaseOrderProductId || undefined,
           product_id: item.productId,
@@ -537,16 +524,11 @@ export const PurchaseReturnService = {
           manufacture_date: item.mfgDate || undefined,
           expiry_date: item.expDate || undefined,
           case_size: item.caseSize,
-          grn_received_cases: item.grnReceivedCases,
-          grn_received_qty: item.grnReceivedQty,
-          qc_rejected_cases: item.qcRejectedCases,
-          qc_rejected_qty: item.qcRejectedQty,
-          already_returned_cases: item.alreadyReturnedCases,
-          already_returned_qty: item.alreadyReturnedQty,
-          balance_cases: item.balanceCases,
-          balance_qty: item.balanceRejectedQty,
-          return_cases: item.returnCases,
-          return_qty: item.returnQty,
+          grn_received_base_qty: item.grnReceivedQty,
+          qc_rejected_base_qty: item.qcRejectedQty,
+          already_returned_base_qty: item.alreadyReturnedQty,
+          balance_base_qty: item.balanceRejectedQty,
+          return_base_qty: item.returnQty,
           rate: item.unitPrice,
           gst_percent: item.gstPct || round2(item.cgstPct + item.sgstPct + item.igstPct),
           cgst_percent: item.cgstPct,
