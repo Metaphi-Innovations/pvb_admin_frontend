@@ -76,6 +76,18 @@ export default function PurchaseListingRoutePage() {
         render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName || "—"}</span>,
       },
       {
+        key: "warehouse",
+        header: "Warehouse",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("warehouse"),
+        width: "140px",
+        render: (_val, row) => (
+          <span className="text-xs text-foreground">{row.warehouse || "—"}</span>
+        ),
+      },
+      {
         key: "receivedQty",
         header: "Received Qty",
         sortable: true,

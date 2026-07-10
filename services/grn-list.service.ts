@@ -103,19 +103,40 @@ function mapListItem(
     !Array.isArray(raw.warehouse)
       ? (raw.warehouse as Record<string, unknown>)
       : {};
+  const purchaseOrder =
+    raw.purchase_order &&
+    typeof raw.purchase_order === "object" &&
+    !Array.isArray(raw.purchase_order)
+      ? (raw.purchase_order as Record<string, unknown>)
+      : raw.purchaseOrder &&
+          typeof raw.purchaseOrder === "object" &&
+          !Array.isArray(raw.purchaseOrder)
+        ? (raw.purchaseOrder as Record<string, unknown>)
+        : {};
 
   const status = mapBackendGrnStatus(asString(raw.status));
   const receivedQty = asNumber(raw.receivedQty);
   const acceptedQty = asNumber(raw.acceptedQty);
   const rejectedQty = asNumber(raw.rejectedQty);
   const grnNo = asString(raw.grnNumber);
-  const warehouseName = asString(warehouse.warehouse_name);
+  const warehouseName =
+    asString(warehouse.warehouse_name) ||
+    asString(raw.warehouseName) ||
+    asString(raw.warehouse_name);
   const supplierName = asString(supplier.supplier_name);
+  const poNumber =
+    asString(raw.poNumber) ||
+    asString(raw.po_no) ||
+    asString(raw.purchaseOrderNumber) ||
+    asString(raw.purchase_order_number) ||
+    asString(purchaseOrder.po_no) ||
+    asString(purchaseOrder.poNumber) ||
+    "";
 
   return {
     id: asString(raw.id),
     grnNo,
-    poNumber: "",
+    poNumber,
     vendorName: supplierName,
     warehouse: warehouseName,
     warehouseId: asNumber(warehouse.sr_no) || undefined,
@@ -205,7 +226,10 @@ export function buildGrnApiFilters(
 
   const poNumber = firstFilterValue(filters.poNumber);
   if (poNumber) {
-    apiFilters.grnNumber = poNumber;
+    // Prefer dedicated PO fields when backend relation is available; fall back to source_id text filters later.
+    apiFilters.po_no = poNumber;
+    apiFilters.poNumber = poNumber;
+    apiFilters.purchase_order_number = poNumber;
   }
 
   const warehouseFilter = filters.warehouse;
@@ -253,6 +277,7 @@ export function buildGrnOrdering(
   const fieldMap: Record<string, string> = {
     grnNo: "grnNumber",
     grnDate: "grnDate",
+    poNumber: "po_no",
     vendorName: "supplier__supplier_name",
     warehouse: "warehouse__warehouse_name",
     status: "status",
@@ -283,6 +308,7 @@ export const GRN_FILTER_COLUMN_MAP: Record<string, GrnFilterField> = {
   status: "status",
   vendorName: "supplier__supplier_name",
   warehouse: "warehouse__warehouse_name",
+  poNumber: "grnNumber",
 };
 
 export const GrnListService = {
