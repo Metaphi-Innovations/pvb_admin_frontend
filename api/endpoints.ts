@@ -356,5 +356,12 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/warehouse/packing-done/update/${id}`,
       REVERT: (id: string) => `/warehouse/packing-done/revert/${id}`,
     },
+    GRN: {
+      LIST: "/warehouse/grnqc/grn/list",
+      FILTER: "/warehouse/grnqc/grn/filter",
+      DETAILS: (id: string) => `/warehouse/grnqc/grn/${id}`,
+      CREATE: "/warehouse/grnqc/grn/create",
+      PREVIEW_NUMBER: "/warehouse/grnqc/grn/preview-number",
+    },
   },
 };
