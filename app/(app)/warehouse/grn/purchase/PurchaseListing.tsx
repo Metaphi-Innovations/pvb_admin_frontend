@@ -111,7 +111,7 @@ export function PurchaseListing() {
       header: "GRN No",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
       width: "130px",
       render: (_val, row) => (
         <Link href={`/warehouse/grn/view/${row.id}`} className="block group/name">
@@ -126,7 +126,7 @@ export function PurchaseListing() {
       header: "PO No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
       width: "120px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.poNumber}</span>,
     },
@@ -135,7 +135,7 @@ export function PurchaseListing() {
       header: "Supplier",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
       width: "130px",
       render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
     },

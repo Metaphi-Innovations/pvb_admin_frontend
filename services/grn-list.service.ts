@@ -40,7 +40,8 @@ export type GrnFilterField =
   | "grnNumber"
   | "status"
   | "supplier__supplier_name"
-  | "warehouse__warehouse_name";
+  | "warehouse__warehouse_name"
+  | "po_no";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -226,10 +227,7 @@ export function buildGrnApiFilters(
 
   const poNumber = firstFilterValue(filters.poNumber);
   if (poNumber) {
-    // Prefer dedicated PO fields when backend relation is available; fall back to source_id text filters later.
     apiFilters.po_no = poNumber;
-    apiFilters.poNumber = poNumber;
-    apiFilters.purchase_order_number = poNumber;
   }
 
   const warehouseFilter = filters.warehouse;
@@ -308,7 +306,7 @@ export const GRN_FILTER_COLUMN_MAP: Record<string, GrnFilterField> = {
   status: "status",
   vendorName: "supplier__supplier_name",
   warehouse: "warehouse__warehouse_name",
-  poNumber: "grnNumber",
+  poNumber: "po_no",
 };
 
 export const GrnListService = {

@@ -45,7 +45,8 @@ export default function PurchaseListingRoutePage() {
         header: "GRN No",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("grnNo"),
         width: "130px",
         render: (_val, row) => (
           <Link href={`/warehouse/grn/purchase/${row.id}`} className="block group/name">
@@ -60,7 +61,8 @@ export default function PurchaseListingRoutePage() {
         header: "PO No.",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("poNumber"),
         width: "120px",
         render: (_val, row) => (
           <span className="font-mono text-xs text-foreground">{row.poNumber || "—"}</span>
@@ -71,7 +73,8 @@ export default function PurchaseListingRoutePage() {
         header: "Supplier",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("vendorName"),
         width: "130px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName || "—"}</span>,
       },
