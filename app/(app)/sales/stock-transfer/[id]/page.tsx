@@ -271,7 +271,7 @@ export default function ViewStockTransferPage() {
                     <tr className="border-b bg-muted/40 border-border">
                       <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
@@ -281,6 +281,10 @@ export default function ViewStockTransferPage() {
                   <tbody>
                     {transfer.lineItems.map(line => {
                       const product = line.productId ? getProductById(line.productId) : undefined;
+                      const packSize = product?.packSize || 1;
+                      const cases = Math.floor(line.quantity / packSize);
+                      const loose = line.quantity % packSize;
+
                       return (
                         <tr key={line.id} className="border-b border-border/60">
                           <td className="px-4 py-2">
@@ -288,7 +292,12 @@ export default function ViewStockTransferPage() {
                             <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                           </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
-                          <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">
+                            <div className="flex flex-col items-end">
+                              <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
+                              <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">
