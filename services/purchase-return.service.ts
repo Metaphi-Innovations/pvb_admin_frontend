@@ -530,6 +530,8 @@ export const PurchaseReturnService = {
           already_returned_base_qty: item.alreadyReturnedQty,
           balance_base_qty: item.balanceRejectedQty,
           return_base_qty: item.returnQty,
+          return_unit: item.returnCases && item.returnCases > 0 ? "CASE" : (item.returnLooseQty && item.returnLooseQty > 0 ? "PIECE" : undefined),
+          return_value: item.returnCases && item.returnCases > 0 ? item.returnCases : (item.returnLooseQty && item.returnLooseQty > 0 ? item.returnLooseQty : undefined),
           rate: item.unitPrice,
           gst_percent: item.gstPct || round2(item.cgstPct + item.sgstPct + item.igstPct),
           cgst_percent: item.cgstPct,

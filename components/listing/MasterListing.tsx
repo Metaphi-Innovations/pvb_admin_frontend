@@ -43,8 +43,9 @@ export function MasterListing<T = any>({
     direction: "none",
   });
 
-  // Filter State
+  // Filter State (draft in UI; parent applies to API on explicit actions)
   const [filters, setFilters] = useState<FilterState>({});
+  const [searchDraft, setSearchDraft] = useState("");
 
   // Sync with currentProps if provided
   useEffect(() => {
@@ -52,8 +53,34 @@ export function MasterListing<T = any>({
   }, [currentSort]);
 
   useEffect(() => {
-    if (currentFilters) setFilters(currentFilters);
+    if (currentFilters) {
+      setFilters(currentFilters);
+      setSearchDraft(String(currentFilters.search ?? ""));
+    }
   }, [currentFilters]);
+
+  const applySearch = React.useCallback(() => {
+    const trimmed = searchDraft.trim();
+    const current = String(filters.search ?? "").trim();
+    if (trimmed === current) return;
+
+    const nextFilters = { ...filters };
+    if (trimmed) {
+      nextFilters.search = trimmed;
+    } else {
+      delete nextFilters.search;
+    }
+    setFilters(nextFilters);
+    onFilterChange(nextFilters);
+  }, [searchDraft, filters, onFilterChange]);
+
+  // Debounced search — list API fires after user stops typing
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      applySearch();
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [searchDraft, applySearch]);
 
   // Handle Sort Click
   const handleSort = (key: string) => {
@@ -87,6 +114,7 @@ export function MasterListing<T = any>({
   // Clear All Filters
   const handleClearAllFilters = () => {
     setFilters({});
+    setSearchDraft("");
     onFilterChange({});
   };
 
@@ -106,8 +134,11 @@ export function MasterListing<T = any>({
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
             <Input
-              value={(filters.search as string) || ""}
-              onChange={(e) => handleFilterItemChange("search", e.target.value)}
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applySearch();
+              }}
               placeholder={searchPlaceholder}
               className="pl-8 h-8 text-xs rounded-lg"
             />
@@ -214,6 +245,7 @@ export function MasterListing<T = any>({
                                 value={filters[col.key] as any}
                                 onChange={(val) => handleFilterItemChange(col.key, val)}
                                 userOptions={col.auditUserOptions}
+                                onOpen={onOpenFilter ? () => onOpenFilter(col.key) : undefined}
                               />
                             ) : (
                               <FilterPopover

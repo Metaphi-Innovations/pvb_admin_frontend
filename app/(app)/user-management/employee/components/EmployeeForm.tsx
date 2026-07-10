@@ -71,6 +71,7 @@ interface EmployeeFormProps {
   approvalUserOptions?: ACOption[];
   reportingManagerOptions?: ACOption[];
   onRoleIdChange?: (roleId: string | null) => void;
+  onValidationFail?: (errors: Record<string, string>) => void;
   isSubmitting?: boolean;
 }
 
@@ -155,11 +156,12 @@ function validateStructuredAddress(
   addr: StructuredAddress,
   prefix: string,
   errors: Record<string, string>,
+  options?: { skipPostalMasterCheck?: boolean },
 ) {
   if (!addr.line1.trim()) errors[`${prefix}_line1`] = "Required";
   if (!addr.pincode.trim()) errors[`${prefix}_pincode`] = "Required";
   else if (!isValidPincodeFormat(addr.pincode)) errors[`${prefix}_pincode`] = "Enter a valid 6-digit pincode";
-  else if (!lookupPostalPincode(addr.pincode, addr.town)) {
+  else if (!options?.skipPostalMasterCheck && !lookupPostalPincode(addr.pincode, addr.town)) {
     errors[`${prefix}_pincode`] = "Pincode not found in Postal Master.";
   }
   if (!addr.city.trim()) errors[`${prefix}_city`] = "Required";
@@ -1292,11 +1294,13 @@ export default function EmployeeForm({
   approvalUserOptions,
   reportingManagerOptions,
   onRoleIdChange,
+  onValidationFail,
   isSubmitting,
 }: EmployeeFormProps) {
   const allEmployees = loadEmployees();
+  const isApiMode = Boolean(onRoleIdChange);
   const newEmpId = mode === "add"
-    ? (generatedEmployeeId || nextEmployeeId(allEmployees))
+    ? (generatedEmployeeId ?? (isApiMode ? "" : nextEmployeeId(allEmployees)))
     : (employee?.employeeId || "");
   const initialGeoMappings = (() => {
     if (employee?.geoMappings?.length) {
@@ -1328,6 +1332,12 @@ export default function EmployeeForm({
   useEffect(() => {
     hydratePostalMaster().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (mode === "add" && generatedEmployeeId) {
+      setFormState((prev) => ({ ...prev, employeeId: generatedEmployeeId }));
+    }
+  }, [generatedEmployeeId, mode]);
 
   const [form, setFormState] = useState<EmployeeFormState>(employee || {
     firstName: "", lastName: "", fullName: "",
@@ -1401,6 +1411,10 @@ export default function EmployeeForm({
   const [draggedApprovalUid, setDraggedApprovalUid] = useState<string | null>(null);
   const [dragOverApprovalUid, setDragOverApprovalUid] = useState<string | null>(null);
 
+  const resetApprovalChain = () => {
+    setApprovalLevels([makeApprovalLevel()]);
+  };
+
   const set = (key: string, value: any) => {
     setFormState(prev => {
       const upd: Partial<Employee> = { ...prev, [key]: value };
@@ -1417,6 +1431,8 @@ export default function EmployeeForm({
         setActiveMobilePerms(new Set());
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
+        if (isApiMode) onRoleIdChange?.(null);
+        resetApprovalChain();
       }
       if (key === "salesType") {
         upd.roleId = null; upd.role = "";
@@ -1424,6 +1440,8 @@ export default function EmployeeForm({
         upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
+        if (isApiMode) onRoleIdChange?.(null);
+        resetApprovalChain();
       }
       // Cascade geo resets
       if (key === "geoZone") {
@@ -1502,6 +1520,7 @@ export default function EmployeeForm({
       approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
     }));
     setGeoMappings([emptyGeoMapping()]);
+    resetApprovalChain();
     setErrors(prev => ({
       ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("geoMapping_"))),
       roleId: "",
@@ -1515,7 +1534,7 @@ export default function EmployeeForm({
   const handleRoleChange = (newRoleIdVal: number | string) => {
     const hasExistingPerms = activeWebPerms.size > 0 || activeMobilePerms.size > 0;
     if (hasExistingPerms) {
-      setPendingRoleId(newRoleIdVal as number);
+      setPendingRoleId(newRoleIdVal);
       setShowRoleChangeWarning(true);
     } else {
       applyRoleAndTemplate(newRoleIdVal);
@@ -1556,13 +1575,8 @@ export default function EmployeeForm({
   const deptOptions = departments.map(d => ({ label: d.name, value: d.id }));
 
   const roleOptions = useMemo(() => {
-    if (apiRoles?.length) {
-      const filtered = form.departmentId
-        ? apiRoles.filter(
-            (r) => !r.departmentId || String(r.departmentId) === String(form.departmentId),
-          )
-        : apiRoles;
-      return filtered.map((r) => ({ label: r.name, value: r.id }));
+    if (isApiMode || apiRoles !== undefined) {
+      return (apiRoles ?? []).map((r) => ({ label: r.name, value: r.id }));
     }
     if (!form.roleType) return [];
     if (form.roleType === "Field User") {
@@ -1571,11 +1585,11 @@ export default function EmployeeForm({
       return list.map(r => ({ label: r.fullName, value: r.id }));
     }
     return ADMIN_ROLES.map(r => ({ label: r.fullName, value: r.id }));
-  }, [apiRoles, form.roleType, form.salesType, form.departmentId]);
+  }, [isApiMode, apiRoles, form.roleType, form.salesType]);
 
-  // Reporting manager options — suggested (direct superior) first, all active users available
+  // Reporting manager options — all users from API when integrated
   const managerOptions = useMemo(() => {
-    if (reportingManagerOptions?.length) return reportingManagerOptions;
+    if (reportingManagerOptions !== undefined) return reportingManagerOptions;
     const aboveRoles = form.role ? (ROLES_ABOVE[form.role] || []) : [];
     const directRole = aboveRoles[0] || "";
     const geoMatch = (e: Employee) =>
@@ -1604,9 +1618,9 @@ export default function EmployeeForm({
       }));
   }, [employee?.id, form.role, form.geoZone, form.geoRegion, reportingManagerOptions]);
 
-  // ── Flexible approval options — ALL active users, hierarchy-suggested first ──
+  // ── Flexible approval options from API when integrated ──
   const allApprovalOptions: ACOption[] = useMemo(() => {
-    if (approvalUserOptions?.length) return approvalUserOptions;
+    if (approvalUserOptions !== undefined) return approvalUserOptions;
 
     const aboveRoles = ROLES_ABOVE[form.role || ""] || [];
     const directRole = aboveRoles[0] || "";
@@ -1722,7 +1736,7 @@ export default function EmployeeForm({
       const arr = [...prev];
       arr[idx] = {
         uid: arr[idx].uid,
-        empId: empId ? (typeof empId === "string" ? empId : emp!.id) : null,
+        empId: empId || null,
         name: fromApi?.label || emp?.fullName || "",
         role: fromApi?.sub?.split("·")[1]?.trim() || emp?.role || "",
         employeeCode: fromApi?.sub?.split("·")[0]?.trim() || emp?.employeeId || "",
@@ -1835,19 +1849,36 @@ export default function EmployeeForm({
   };
 
   // ── Validation ────────────────────────────────────────────────────────────────
+  const resolveErrorTab = (key: string): FormTabId => {
+    if (key.startsWith("geoMapping_") || key === "permissions") return "employment";
+    if (
+      [
+        "departmentId",
+        "employeeType",
+        "roleType",
+        "salesType",
+        "roleId",
+        "reportingManagerId",
+      ].includes(key)
+    ) {
+      return "employment";
+    }
+    return "personal";
+  };
+
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!form.firstName?.trim()) e.firstName = "Required";
     if (!form.lastName?.trim()) e.lastName = "Required";
     const eErr = validateEmail(form.email || "");
     if (eErr) e.email = eErr;
-    else {
+    else if (!isApiMode) {
       const eu = validateEmailUnique(form.email || "", allEmployees, employee?.id);
       if (eu) e.email = eu;
     }
     const mErr = validateMobile(form.mobile || "");
     if (mErr) e.mobile = mErr;
-    else {
+    else if (!isApiMode) {
       const mu = validateMobileUnique(form.mobile || "", allEmployees, employee?.id);
       if (mu) e.mobile = mu;
     }
@@ -1859,8 +1890,14 @@ export default function EmployeeForm({
     if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Required";
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
-    validateStructuredAddress(currentAddr, "current", e);
-    if (!sameAddress) validateStructuredAddress(permanentAddr, "permanent", e);
+    validateStructuredAddress(currentAddr, "current", e, {
+      skipPostalMasterCheck: isApiMode,
+    });
+    if (!sameAddress) {
+      validateStructuredAddress(permanentAddr, "permanent", e, {
+        skipPostalMasterCheck: isApiMode,
+      });
+    }
     if (form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
         geoFields.forEach((field) => {
@@ -1878,8 +1915,13 @@ export default function EmployeeForm({
       alert("Only one access type is allowed (Web Portal OR Mobile).");
     }
     const cErr = validateCircularReporting(form.id || 0, form.reportingManagerId || null, allEmployees);
-    if (cErr) e.reportingManagerId = cErr;
+    if (cErr && !isApiMode) e.reportingManagerId = cErr;
     setErrors(e);
+    if (Object.keys(e).length > 0) {
+      const firstKey = Object.keys(e)[0];
+      setActiveTab(resolveErrorTab(firstKey));
+      onValidationFail?.(e);
+    }
     return Object.keys(e).length === 0;
   };
 
@@ -1903,7 +1945,7 @@ export default function EmployeeForm({
     const roleObj = apiRoles?.find((r) => String(r.id) === String(form.roleId))
       || allRoles.find(r => String(r.id) === String(form.roleId));
     const dept = departments.find(d => d.id === form.departmentId);
-    const rm = allEmployees.find(e => e.id === form.reportingManagerId);
+    const rm = managerOptions.find((o) => String(o.value) === String(form.reportingManagerId));
     const now = todayStr();
 
     const resolvedPermanent = sameAddress ? currentAddr : permanentAddr;
@@ -1959,7 +2001,7 @@ export default function EmployeeForm({
       roleId: form.roleId || null,
       role: ("name" in (roleObj || {}) ? (roleObj as { name: string }).name : (roleObj as { fullName?: string })?.fullName) || "",
       reportingManagerId: form.reportingManagerId || null,
-      reportingManager: rm?.fullName || "",
+      reportingManager: rm?.label || "",
       status: (form.status as any) || (mode === "add" ? "inactive" : "draft"),
       joiningDate: form.joiningDate || now,
       geoZone: geoMappings[0]?.geoZone || "",
@@ -2014,10 +2056,15 @@ export default function EmployeeForm({
             "text-[11px] font-mono font-semibold px-2 py-0.5 rounded",
             mode === "add" ? "bg-muted/40 text-muted-foreground" : "bg-brand-50 text-brand-700"
           )}>
-            {mode === "add" ? `ID: ${newEmpId}` : employee?.employeeId}
+            {mode === "add" ? `ID: ${newEmpId || "Loading…"}` : employee?.employeeId}
           </span>
-          <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
-            <Save className="w-3.5 h-3.5" /> Save
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={handleSave}
+            disabled={isSubmitting}
+          >
+            <Save className="w-3.5 h-3.5" /> {isSubmitting ? "Saving…" : "Save"}
           </Button>
         </div>
       }
@@ -2115,6 +2162,7 @@ export default function EmployeeForm({
                 onSameAsCurrentChange={setSameAddress}
                 currentErrors={mapAddressErrors("current", errors)}
                 permanentErrors={mapAddressErrors("permanent", errors)}
+                usePincodeApi={isApiMode}
               />
             </div>
 
@@ -2145,6 +2193,7 @@ export default function EmployeeForm({
                     value={emergencyAddr}
                     onChange={setEmergencyAddr}
                     errors={mapAddressErrors("emergency", errors)}
+                    usePincodeApi={isApiMode}
                   />
                 </div>
               </div>
@@ -2184,7 +2233,7 @@ export default function EmployeeForm({
                   <Label className="text-xs font-medium">Employee ID</Label>
                   <div className="h-8 px-2.5 border border-border rounded-lg bg-muted/30 flex items-center">
                     <span className="font-mono text-xs font-semibold text-brand-700">
-                      {mode === "add" ? newEmpId : employee?.employeeId}
+                      {mode === "add" ? (newEmpId || "Loading…") : employee?.employeeId}
                     </span>
                     <span className="ml-auto text-[10px] text-muted-foreground">Auto</span>
                   </div>
@@ -2270,7 +2319,7 @@ export default function EmployeeForm({
                 {form.roleType && (form.roleType !== "Field User" || form.salesType) && (
                   <div className="grid grid-cols-2 gap-3">
                     <AC label="Role" required value={form.roleId || ""}
-                      onChange={v => handleRoleChange(v as number)}
+                      onChange={v => handleRoleChange(v as number | string)}
                       options={roleOptions}
                       placeholder="Select role"
                       error={errors.roleId} />
@@ -2460,7 +2509,7 @@ export default function EmployeeForm({
                       <AC
                         label=""
                         value={lvl.empId || ""}
-                        onChange={v => setApprovalLevelUser(i, v as number | "")}
+                        onChange={v => setApprovalLevelUser(i, v as number | string | "")}
                         options={allApprovalOptions}
                         placeholder={`Search name, ID, role, department…`}
                       />

@@ -45,7 +45,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -130,8 +131,14 @@ function toSegmentRow(item: {
 }
 
 export default function SegmentMasterPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "segmentName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -152,26 +159,26 @@ export default function SegmentMasterPage() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.segment, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.segment, {
         statusTab,
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useSegments(listParams);
@@ -181,11 +188,21 @@ export default function SegmentMasterPage() {
   const toggleStatusMutation = useToggleSegmentStatus();
   const exportMutation = useExportSegments();
 
-  const segmentNameOptionsQuery = useSegmentFilterDropdown("segment_name");
-  const descriptionOptionsQuery = useSegmentFilterDropdown("description");
-  const statusOptionsQuery = useSegmentFilterDropdown("is_active");
-  const createdByOptionsQuery = useSegmentFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useSegmentFilterDropdown("updated_by_user__username");
+  const segmentNameOptionsQuery = useSegmentFilterDropdown("segment_name", {
+    enabled: isFilterOpen("segmentName"),
+  });
+  const descriptionOptionsQuery = useSegmentFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useSegmentFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useSegmentFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useSegmentFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const segmentNameOptions = useMemo(
     () => segmentNameOptionsQuery.data ?? [],
@@ -226,9 +243,7 @@ export default function SegmentMasterPage() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -240,7 +255,7 @@ export default function SegmentMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -496,7 +511,7 @@ export default function SegmentMasterPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -574,14 +589,17 @@ export default function SegmentMasterPage() {
       <MasterListing<SegmentRecord>
         columns={columns}
         data={displayRecords}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add Segment"
@@ -590,6 +608,7 @@ export default function SegmentMasterPage() {
         searchPlaceholder="Search segment name or description..."
         currentFilters={filters}
         currentSort={sort}
+      onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets

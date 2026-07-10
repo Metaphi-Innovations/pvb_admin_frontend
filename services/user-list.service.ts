@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { UserPermissions } from "@/app/(app)/user-management/employee/employee-data";
+import type { EmployeeDocument } from "@/app/(app)/user-management/employee/employee-documents";
 
 export interface UserListParams {
   page: number;
@@ -47,6 +48,8 @@ export interface UserFilterOption {
 }
 
 export type UserFilterField =
+  | "employee_id"
+  | "first_name"
   | "username"
   | "email"
   | "mobile_number"
@@ -126,6 +129,7 @@ export interface UserExportParams {
 }
 
 export interface UserDetailRecord extends UserListRecord {
+  username?: string;
   gender?: string;
   bloodGroup?: string;
   dob?: string;
@@ -134,10 +138,31 @@ export interface UserDetailRecord extends UserListRecord {
   reportingManager?: string;
   currentAddress?: string;
   permanentAddress?: string;
+  currentAddressLine1?: string;
+  currentAddressLine2?: string;
+  currentPincode?: string;
+  currentCity?: string;
+  currentTown?: string;
+  currentDistrict?: string;
+  currentState?: string;
+  permanentAddressLine1?: string;
+  permanentAddressLine2?: string;
+  permanentPincode?: string;
+  permanentCity?: string;
+  permanentTown?: string;
+  permanentDistrict?: string;
+  permanentState?: string;
   emergencyContactName?: string;
   emergencyContactNumber?: string;
   emergencyContactRelationship?: string;
   emergencyContactAddress?: string;
+  emergencyAddressLine1?: string;
+  emergencyAddressLine2?: string;
+  emergencyPincode?: string;
+  emergencyCity?: string;
+  emergencyTown?: string;
+  emergencyDistrict?: string;
+  emergencyState?: string;
   approvalChain?: unknown;
   geoZoneId?: string;
   geoRegionId?: string;
@@ -156,6 +181,7 @@ export interface UserDetailRecord extends UserListRecord {
   geoCity?: string;
   geoTown?: string;
   permissions?: UserPermissions | null;
+  documents?: EmployeeDocument[];
 }
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
@@ -273,6 +299,37 @@ function geoName(raw: unknown): string {
   return asString((raw as Record<string, unknown>).name);
 }
 
+function parseCombinedAddress(value: unknown): {
+  line1: string;
+  line2: string;
+  town: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+} {
+  const raw = asString(value).trim();
+  if (!raw) {
+    return { line1: "", line2: "", town: "", city: "", district: "", state: "", pincode: "" };
+  }
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const pincodeMatch = raw.match(/\b(\d{6})\b/);
+  const pincode = pincodeMatch?.[1] || "";
+  const noPin = parts.filter((p) => p !== pincode);
+  return {
+    line1: noPin[0] || "",
+    line2: noPin[1] || "",
+    town: noPin[2] || "",
+    city: noPin[3] || noPin[2] || "",
+    district: noPin[4] || noPin[3] || "",
+    state: noPin[5] || noPin[4] || "",
+    pincode,
+  };
+}
+
 function geoId(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
   return asString((raw as Record<string, unknown>).geography_id);
@@ -369,6 +426,136 @@ function permissionsToApiTree(perms: UserPermissions | null | undefined): {
   };
 }
 
+export function permissionsHaveEnabled(perms: UserPermissions | null | undefined): boolean {
+  const { web_permission, mobile_permission } = permissionsToApiTree(perms);
+  return Boolean(web_permission || mobile_permission);
+}
+
+function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string): File | null {
+  try {
+    const [header, base64] = dataUrl.split(",");
+    if (!base64) return null;
+    const mime = mimeType || header.match(/:(.*?);/)?.[1] || "application/octet-stream";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new File([bytes], fileName, { type: mime });
+  } catch {
+    return null;
+  }
+}
+
+function appendCreateFormValue(formData: FormData, key: string, value: unknown) {
+  if (value === undefined || value === null || value === "") return;
+  if (typeof value === "object") {
+    formData.append(key, JSON.stringify(value));
+    return;
+  }
+  formData.append(key, String(value));
+}
+
+function buildCreateFormData(
+  payload: UserCreatePayload,
+  documents?: EmployeeDocument[],
+): FormData {
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    appendCreateFormValue(formData, key, value);
+  });
+
+  const documentMeta: Array<{ document_name?: string | null }> = [];
+  for (const doc of documents ?? []) {
+    const file =
+      doc.file ||
+      (doc.fileUrl?.startsWith("data:") && doc.fileName
+        ? dataUrlToFile(doc.fileUrl, doc.fileName, doc.mimeType)
+        : null);
+    if (file) {
+      formData.append("documents", file, doc.fileName || file.name);
+      documentMeta.push({
+        document_name: (doc.documentName || "").trim() || null,
+      });
+    }
+  }
+  if (documentMeta.length > 0) {
+    formData.append("document_meta", JSON.stringify(documentMeta));
+  }
+
+  return formData;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function buildUpdateFormData(
+  payload: UserUpdatePayload,
+  documents?: EmployeeDocument[],
+): FormData {
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    appendCreateFormValue(formData, key, value);
+  });
+
+  const existingDocumentIds: string[] = [];
+  const existingDocuments: Array<{ id: string; document_name: string | null }> = [];
+  const documentMeta: Array<{
+    replace_document_id?: string | null;
+    document_name?: string | null;
+  }> = [];
+
+  for (const doc of documents ?? []) {
+    const existing = isUuid(String(doc.id));
+    if (existing) {
+      existingDocumentIds.push(String(doc.id));
+      existingDocuments.push({
+        id: String(doc.id),
+        document_name: (doc.documentName || "").trim() || null,
+      });
+    }
+    const file =
+      doc.file ||
+      (doc.fileUrl?.startsWith("data:") && doc.fileName
+        ? dataUrlToFile(doc.fileUrl, doc.fileName, doc.mimeType)
+        : null);
+    if (!file) continue;
+    formData.append("documents", file, doc.fileName || file.name);
+    documentMeta.push({
+      replace_document_id: existing ? String(doc.id) : null,
+      document_name: (doc.documentName || "").trim() || null,
+    });
+  }
+
+  formData.append("existing_document_ids", JSON.stringify(existingDocumentIds));
+  formData.append("existing_documents", JSON.stringify(existingDocuments));
+  formData.append("document_meta", JSON.stringify(documentMeta));
+  return formData;
+}
+
+function mapDocuments(raw: unknown): EmployeeDocument[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row, index) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      const id = asString(item.document_id || item.id || index + 1);
+      const fileName = asString(item.file_name);
+      const documentName = asString(item.document_name).trim();
+      return {
+        id,
+        documentName: documentName || "",
+        fileName,
+        fileUrl: asString(item.file_url),
+        fileSize: Number(item.file_size || 0) || undefined,
+        mimeType: asString(item.file_type) || undefined,
+      } as EmployeeDocument;
+    })
+    .filter((doc) => Boolean(doc.fileName || doc.fileUrl));
+}
+
 export const UserListService = {
   async list(params: UserListParams): Promise<UserListResult> {
     const ordering = encodeURIComponent(params.ordering ?? "");
@@ -408,6 +595,9 @@ export const UserListService = {
     const raw = data as Record<string, unknown>;
     const base = mapListItem(raw, 0);
     const reportingManager = raw.reporting_manager as Record<string, unknown> | undefined;
+    const currentAddr = parseCombinedAddress(raw.current_address);
+    const permanentAddr = parseCombinedAddress(raw.permanent_address);
+    const emergencyAddr = parseCombinedAddress(raw.emergency_contact_address);
 
     let permissions: UserPermissions | null = null;
     try {
@@ -426,6 +616,7 @@ export const UserListService = {
 
     return {
       ...base,
+      username: asString(raw.username),
       gender: asString(raw.gender),
       bloodGroup: asString(raw.blood_group),
       dob: formatDate(raw.date_of_birth),
@@ -434,10 +625,31 @@ export const UserListService = {
       reportingManager: toDisplayName(reportingManager),
       currentAddress: asString(raw.current_address),
       permanentAddress: asString(raw.permanent_address),
+      currentAddressLine1: currentAddr.line1,
+      currentAddressLine2: currentAddr.line2,
+      currentPincode: currentAddr.pincode,
+      currentCity: currentAddr.city,
+      currentTown: currentAddr.town,
+      currentDistrict: currentAddr.district,
+      currentState: currentAddr.state,
+      permanentAddressLine1: permanentAddr.line1,
+      permanentAddressLine2: permanentAddr.line2,
+      permanentPincode: permanentAddr.pincode,
+      permanentCity: permanentAddr.city,
+      permanentTown: permanentAddr.town,
+      permanentDistrict: permanentAddr.district,
+      permanentState: permanentAddr.state,
       emergencyContactName: asString(raw.emergency_contact_name),
       emergencyContactNumber: asString(raw.emergency_contact_number),
       emergencyContactRelationship: asString(raw.emergency_contact_relationship),
       emergencyContactAddress: asString(raw.emergency_contact_address),
+      emergencyAddressLine1: emergencyAddr.line1,
+      emergencyAddressLine2: emergencyAddr.line2,
+      emergencyPincode: emergencyAddr.pincode,
+      emergencyCity: emergencyAddr.city,
+      emergencyTown: emergencyAddr.town,
+      emergencyDistrict: emergencyAddr.district,
+      emergencyState: emergencyAddr.state,
       approvalChain: raw.approval_chain,
       geoZoneId: geoId(raw.zone),
       geoRegionId: geoId(raw.region),
@@ -445,7 +657,7 @@ export const UserListService = {
       geoAreaId: geoId(raw.area),
       geoTerritoryId: geoId(raw.territory),
       geoDistrictId: geoId(raw.district),
-      geoCityId: geoId(raw.city),
+      geoCityId: geoId(raw.city_geo ?? raw.city),
       geoTownId: geoId(raw.town),
       geoZone: geoName(raw.zone),
       geoRegion: geoName(raw.region),
@@ -453,29 +665,45 @@ export const UserListService = {
       geoArea: geoName(raw.area),
       territory: geoName(raw.territory),
       geoDistrict: geoName(raw.district),
-      geoCity: geoName(raw.city),
+      geoCity: geoName(raw.city_geo ?? raw.city),
       geoTown: geoName(raw.town),
       permissions,
+      documents: mapDocuments(raw.documents),
     };
   },
 
-  async create(payload: UserCreatePayload): Promise<{ userId: string }> {
+  async create(
+    payload: UserCreatePayload,
+    documents?: EmployeeDocument[],
+  ): Promise<{ userId: string }> {
+    const formData = buildCreateFormData(payload, documents);
     const response = await axiosInstance.post(
       API_ENDPOINTS.USER_MANAGEMENT.USER.CREATE,
-      payload,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
     );
     const body = response.data as Record<string, unknown>;
     if (body.success === false) {
       throw new Error(asString(body.message) || "Failed to create user.");
     }
     const data = body.data as Record<string, unknown> | undefined;
-    return { userId: asString(data?.user_id) };
+    const userId = asString(data?.user_id);
+    if (!userId) {
+      throw new Error("User created but user id was not returned.");
+    }
+    return { userId };
   },
 
-  async update(id: string, payload: UserUpdatePayload): Promise<void> {
+  async update(
+    id: string,
+    payload: UserUpdatePayload,
+    documents?: EmployeeDocument[],
+  ): Promise<void> {
+    const formData = buildUpdateFormData(payload, documents);
     const response = await axiosInstance.put(
       API_ENDPOINTS.USER_MANAGEMENT.USER.UPDATE(id),
-      payload,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
     );
     const body = response.data as Record<string, unknown>;
     if (body.success === false) {
@@ -583,6 +811,28 @@ export const UserListService = {
         roleName: asString(item.role_name),
         departmentName: asString(item.department_name),
         geographyLevel: asString(item.geography_level),
+      };
+    });
+  },
+
+  async dropdown(): Promise<UserDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.USER_MANAGEMENT.USER.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        userId: asString(item.user_id),
+        label: asString(item.label),
+        username: asString(item.username),
+        firstName: asString(item.first_name),
+        lastName: asString(item.last_name),
+        email: asString(item.email),
+        employeeId: asString(item.employee_id),
       };
     });
   },

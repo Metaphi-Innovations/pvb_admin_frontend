@@ -48,7 +48,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -149,8 +150,14 @@ function buildApiPayload(form: UnitForm) {
 }
 
 export default function UomPageClient() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "unitName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -171,26 +178,26 @@ export default function UomPageClient() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.unit, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.unit, {
         statusTab,
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useUnits(listParams);
@@ -203,14 +210,22 @@ export default function UomPageClient() {
   const excludeUomId = sheetMode === "edit" ? active?.unitUuid : undefined;
   const parentUomQuery = useParentUomDropdown(excludeUomId);
 
-  const unitCodeOptionsQuery = useUnitFilterDropdown("unit_code");
-  const unitNameOptionsQuery = useUnitFilterDropdown("unit_name");
-  const shortNameOptionsQuery = useUnitFilterDropdown("short_name");
-  const parentUomOptionsQuery = useUnitFilterDropdown("uom__unit_name");
-  const conversionOptionsQuery = useUnitFilterDropdown("conversion_factor");
-  const statusOptionsQuery = useUnitFilterDropdown("is_active");
-  const createdByOptionsQuery = useUnitFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useUnitFilterDropdown("updated_by_user__username");
+  const unitCodeOptionsQuery = useUnitFilterDropdown("unit_code", { enabled: isFilterOpen("unitCode") });
+  const unitNameOptionsQuery = useUnitFilterDropdown("unit_name", { enabled: isFilterOpen("unitName") });
+  const shortNameOptionsQuery = useUnitFilterDropdown("short_name", { enabled: isFilterOpen("shortName") });
+  const parentUomOptionsQuery = useUnitFilterDropdown("uom__unit_name", {
+    enabled: isFilterOpen("parentUomName"),
+  });
+  const conversionOptionsQuery = useUnitFilterDropdown("conversion_factor", {
+    enabled: isFilterOpen("conversionFactor"),
+  });
+  const statusOptionsQuery = useUnitFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useUnitFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useUnitFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const unitCodeOptions = useMemo(() => unitCodeOptionsQuery.data ?? [], [unitCodeOptionsQuery.data]);
   const unitNameOptions = useMemo(() => unitNameOptionsQuery.data ?? [], [unitNameOptionsQuery.data]);
@@ -262,9 +277,7 @@ export default function UomPageClient() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -276,7 +289,7 @@ export default function UomPageClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
@@ -557,7 +570,7 @@ export default function UomPageClient() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -624,14 +637,17 @@ export default function UomPageClient() {
       <MasterListing<UnitRecord>
         columns={columns}
         data={displayRecords}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add Unit"
@@ -640,6 +656,7 @@ export default function UomPageClient() {
         searchPlaceholder="Search unit name, short name..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
         rowKey={(row) => row.unitUuid ?? String(row.id)}
       />
 
