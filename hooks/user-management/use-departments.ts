@@ -10,6 +10,7 @@ import {
   type DepartmentUpdatePayload,
 } from "@/services/department-list.service";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 import { userManagementKeys } from "@/lib/user-management/user-management-query-keys";
 
 function toListParams(params: MasterListKeyParams): DepartmentListParams {
@@ -88,11 +89,15 @@ export function useExportDepartments() {
   });
 }
 
-export function useDepartmentFilterDropdown(fieldName: DepartmentFilterField) {
+export function useDepartmentFilterDropdown(
+  fieldName: DepartmentFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: userManagementKeys.departments.filterDropdown(fieldName),
     queryFn: ({ signal }) => DepartmentListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

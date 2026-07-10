@@ -10,6 +10,7 @@ import {
   type BrandUpdatePayload,
 } from "@/services/brand-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): BrandListParams {
   return {
@@ -95,10 +96,14 @@ export function useExportBrands() {
   });
 }
 
-export function useBrandFilterDropdown(fieldName: BrandFilterField) {
+export function useBrandFilterDropdown(
+  fieldName: BrandFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.brands.filterDropdown(fieldName),
     queryFn: ({ signal }) => BrandListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

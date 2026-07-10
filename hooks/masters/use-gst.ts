@@ -10,6 +10,7 @@ import {
   type GstUpdatePayload,
 } from "@/services/gst-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): GstListParams {
   return {
@@ -93,10 +94,14 @@ export function useExportGst() {
   });
 }
 
-export function useGstFilterDropdown(fieldName: GstFilterField) {
+export function useGstFilterDropdown(
+  fieldName: GstFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.gst.filterDropdown(fieldName),
     queryFn: ({ signal }) => GstListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

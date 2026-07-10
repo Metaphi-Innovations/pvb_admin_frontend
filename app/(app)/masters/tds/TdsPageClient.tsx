@@ -52,7 +52,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -151,8 +152,14 @@ function buildApiPayload(form: TdsApiForm) {
 }
 
 export default function TdsPageClient() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "sectionCode", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -175,26 +182,26 @@ export default function TdsPageClient() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.tds, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.tds, {
         statusTab,
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useTdsList(listParams);
@@ -204,14 +211,24 @@ export default function TdsPageClient() {
   const toggleStatusMutation = useToggleTdsStatus();
   const exportMutation = useExportTds();
 
-  const sectionCodeOptionsQuery = useTdsFilterDropdown("tds_code");
-  const sectionNameOptionsQuery = useTdsFilterDropdown("tds_section_name");
-  const tdsRateOptionsQuery = useTdsFilterDropdown("tds_rate");
-  const applicableToOptionsQuery = useTdsFilterDropdown("applicable_to");
-  const descriptionOptionsQuery = useTdsFilterDropdown("description");
-  const statusOptionsQuery = useTdsFilterDropdown("is_active");
-  const createdByOptionsQuery = useTdsFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useTdsFilterDropdown("updated_by_user__username");
+  const sectionCodeOptionsQuery = useTdsFilterDropdown("tds_code", { enabled: isFilterOpen("sectionCode") });
+  const sectionNameOptionsQuery = useTdsFilterDropdown("tds_section_name", {
+    enabled: isFilterOpen("sectionName"),
+  });
+  const tdsRateOptionsQuery = useTdsFilterDropdown("tds_rate", { enabled: isFilterOpen("tdsRate") });
+  const applicableToOptionsQuery = useTdsFilterDropdown("applicable_to", {
+    enabled: isFilterOpen("applicableTo"),
+  });
+  const descriptionOptionsQuery = useTdsFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useTdsFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useTdsFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useTdsFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const sectionCodeOptions = useMemo(
     () => sectionCodeOptionsQuery.data ?? [],
@@ -279,9 +296,7 @@ export default function TdsPageClient() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -293,7 +308,7 @@ export default function TdsPageClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(totalRecords / pageSize));
@@ -579,7 +594,7 @@ export default function TdsPageClient() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -661,14 +676,17 @@ export default function TdsPageClient() {
         rowKey={(row) => row.tdsUuid || String(row.id)}
         columns={columns}
         data={records}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add TDS"
@@ -677,6 +695,7 @@ export default function TdsPageClient() {
         searchPlaceholder="Search TDS code, section name, rate..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets

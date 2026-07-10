@@ -26,7 +26,7 @@ import {
   cropToForm,
   toCropRecord,
   validateCropApiForm,
-  type CropForm,
+  type CropForm as CropFormValues,
   type CropRecord,
 } from "./crop-data";
 import { CropForm } from "./components/CropForm";
@@ -45,7 +45,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -104,8 +105,14 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 }
 
 export default function CropMasterPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "cropName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -115,7 +122,7 @@ export default function CropMasterPage() {
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<CropRecord | null>(null);
-  const [form, setForm] = useState<CropForm>(DEFAULT_CROP_FORM);
+  const [form, setForm] = useState<CropFormValues>(DEFAULT_CROP_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<CropRecord | null>(null);
@@ -126,26 +133,26 @@ export default function CropMasterPage() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.crop, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.crop, {
         statusTab,
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useCrops(listParams);
@@ -155,13 +162,19 @@ export default function CropMasterPage() {
   const toggleStatusMutation = useToggleCropStatus();
   const exportMutation = useExportCrops();
 
-  const cropNameOptionsQuery = useCropFilterDropdown("crop_name");
-  const fieldTypeOptionsQuery = useCropFilterDropdown("field_type");
-  const categoryOptionsQuery = useCropFilterDropdown("category__categoryName");
-  const seasonOptionsQuery = useCropFilterDropdown("season");
-  const statusOptionsQuery = useCropFilterDropdown("is_active");
-  const createdByOptionsQuery = useCropFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useCropFilterDropdown("updated_by_user__username");
+  const cropNameOptionsQuery = useCropFilterDropdown("crop_name", { enabled: isFilterOpen("cropName") });
+  const fieldTypeOptionsQuery = useCropFilterDropdown("field_type", { enabled: isFilterOpen("fieldType") });
+  const categoryOptionsQuery = useCropFilterDropdown("category__categoryName", {
+    enabled: isFilterOpen("categoryName"),
+  });
+  const seasonOptionsQuery = useCropFilterDropdown("season", { enabled: isFilterOpen("season") });
+  const statusOptionsQuery = useCropFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useCropFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useCropFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const cropNameOptions = useMemo(
     () => cropNameOptionsQuery.data ?? [],
@@ -203,15 +216,13 @@ export default function CropMasterPage() {
   const loading = listQuery.isFetching;
   const listError = listQuery.isError
     ? getMasterListErrorMessage(listQuery.error, {
-        resource: "crops",
-        notFoundMessage: "Crop list endpoint not found.",
-        serverMessage: "Server error while loading crops.",
-      })
+      resource: "crops",
+      notFoundMessage: "Crop list endpoint not found.",
+      serverMessage: "Server error while loading crops.",
+    })
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
   useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
@@ -224,7 +235,7 @@ export default function CropMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -515,7 +526,7 @@ export default function CropMasterPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -543,43 +554,43 @@ export default function CropMasterPage() {
 
   const viewDrawer = active
     ? {
-        title: active.cropName,
-        subtitle: active.categoryName || "Read-only crop details",
-        status: active.status,
-        basicInfo: [
-          { label: "Field Type", value: active.fieldType || "—" },
-          { label: "Category", value: active.categoryName || "—" },
-          {
-            label: "Season / Period",
-            value: active.season.length > 0 ? active.season.join(", ") : "—",
-          },
-          {
-            label: "Description",
-            value: active.description?.trim() ? active.description : "—",
-          },
-        ],
-        showDescription: false,
-        children: (
-          <MasterDrawerSection title="Audit Information">
-            <div className="space-y-4">
-              <AuditUserRow label="Created By" name={active.createdBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Created Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.createdAt}
-                </p>
-              </div>
-              <AuditUserRow label="Updated By" name={active.updatedBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Updated Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.updatedAt}
-                </p>
-              </div>
+      title: active.cropName,
+      subtitle: active.categoryName || "Read-only crop details",
+      status: active.status,
+      basicInfo: [
+        { label: "Field Type", value: active.fieldType || "—" },
+        { label: "Category", value: active.categoryName || "—" },
+        {
+          label: "Season / Period",
+          value: active.season.length > 0 ? active.season.join(", ") : "—",
+        },
+        {
+          label: "Description",
+          value: active.description?.trim() ? active.description : "—",
+        },
+      ],
+      showDescription: false,
+      children: (
+        <MasterDrawerSection title="Audit Information">
+          <div className="space-y-4">
+            <AuditUserRow label="Created By" name={active.createdBy} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Created Date</p>
+              <p className="text-sm font-medium text-foreground font-mono">
+                {active.createdAt}
+              </p>
             </div>
-          </MasterDrawerSection>
-        ),
-      }
+            <AuditUserRow label="Updated By" name={active.updatedBy} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Updated Date</p>
+              <p className="text-sm font-medium text-foreground font-mono">
+                {active.updatedAt}
+              </p>
+            </div>
+          </div>
+        </MasterDrawerSection>
+      ),
+    }
     : { title: "Crop", basicInfo: [] };
 
   return (
@@ -598,14 +609,17 @@ export default function CropMasterPage() {
       <MasterListing<CropRecord>
         columns={columns}
         data={displayRecords}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add Crop"
@@ -614,6 +628,7 @@ export default function CropMasterPage() {
         searchPlaceholder="Search crop name, field type, category, season..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets
@@ -633,7 +648,7 @@ export default function CropMasterPage() {
               form={form}
               onChange={setForm}
               errors={errors}
-              onClearError={(key) =>
+              onClearError={(key: string) =>
                 setErrors((prev) => {
                   const copy = { ...prev };
                   delete copy[key];

@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AlertCircle, Check, ChevronsUpDown, Globe, Shield, FileText, Save } from "lucide-react";
 import { GEO_LEVELS, type GeoLevel } from "../../roles-data";
 import DepartmentSelect from "../../components/DepartmentSelect";
-import { roleToForm, toRoleRecord, validateRoleForm } from "../../role-api-data";
+import { roleToForm, toRoleRecord, validateRoleForm, type RoleFormState } from "../../role-api-data";
 import { useRole, useUpdateRole } from "@/hooks/user-management";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
@@ -103,7 +103,7 @@ export default function EditRolePage() {
   const roleQuery = useRole(roleId);
   const updateMutation = useUpdateRole();
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<RoleFormState>({
     roleName: "",
     departmentId: null as string | null,
     geoLevel: "None" as GeoLevel,
@@ -117,7 +117,13 @@ export default function EditRolePage() {
     if (roleQuery.data) {
       const record = toRoleRecord(roleQuery.data);
       setOriginal(record);
-      setForm(roleToForm(record));
+      const next = roleToForm(record);
+      setForm({
+        roleName: next.roleName,
+        departmentId: next.departmentId,
+        geoLevel: (next.geoLevel || "None") as GeoLevel,
+        description: next.description,
+      });
     }
   }, [roleQuery.data]);
 
@@ -224,7 +230,7 @@ export default function EditRolePage() {
 
           <SectionCard icon={Globe} title="Geography Level" subtitle="For field force roles that map to a geographic hierarchy" optional>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <GeoLevelDropdown value={form.geoLevel} onChange={(v) => set("geoLevel", v)} />
+              <GeoLevelDropdown value={form.geoLevel as GeoLevel} onChange={(v) => set("geoLevel", v)} />
               <div className="bg-muted/30 rounded-lg border border-border p-3 text-[11px] text-muted-foreground space-y-1">
                 <p className="text-xs font-semibold text-foreground">Level hierarchy (highest → lowest)</p>
                 {["Country", "Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"].map((l) => (

@@ -32,16 +32,13 @@ export interface PurchaseReturnItem {
   mfgDate: string;
   expDate: string;
   caseSize: number;
-  grnReceivedCases: number;
   grnReceivedQty: number;
-  qcRejectedCases: number;
   qcRejectedQty: number;
-  alreadyReturnedCases: number;
   alreadyReturnedQty: number;
-  balanceCases: number;
   balanceRejectedQty: number;
-  returnCases: number;
   returnQty: number;
+  returnCases?: number;
+  returnLooseQty?: number;
   lineRemark: string;
   selected: boolean;
   /** Present on edit-merge: true if this line was already saved on the return. */

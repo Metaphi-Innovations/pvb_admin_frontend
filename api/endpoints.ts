@@ -1,13 +1,13 @@
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: "/auth/login",
-    REGISTER: "/auth/register",
-    LOGOUT: "/auth/logout",
-    REFRESH_TOKEN: "/auth/refresh-token",
-    VALIDATE_TOKEN: "/auth/validate_token",
-    FORGOT_PASSWORD: "/auth/forgot-password",
-    VERIFY_OTP: "/auth/verify-otp",
-    RESET_PASSWORD: "/auth/reset-password",
+    LOGIN: "/user-management/auth/login",
+    REGISTER: "/user-management/auth/register",
+    LOGOUT: "/user-management/auth/logout",
+    REFRESH_TOKEN: "/user-management/auth/refresh-token",
+    VALIDATE_TOKEN: "/user-management/auth/validate-token",
+    FORGOT_PASSWORD: "/user-management/auth/forgot-password",
+    VERIFY_OTP: "/user-management/auth/verify-otp",
+    RESET_PASSWORD: "/user-management/auth/reset-password",
   },
   MASTER: {
     CATEGORY: {
@@ -256,6 +256,18 @@ export const API_ENDPOINTS = {
       UPDATE_STATUS: (id: string) => `/sales/stock-transfer/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/stock-transfer/${id}/download-note`,
     },
+    SAMPLE_ORDER: {
+      NEXT_NUMBER: "/sales/sample-order/next-number",
+      DROPDOWN: "/sales/sample-order/dropdown",
+      FILTER: "/sales/sample-order/filter",
+      LIST: "/sales/sample-order/list",
+      CREATE: "/sales/sample-order/create",
+      EXPORT: "/sales/sample-order/export",
+      DETAILS: (id: string) => `/sales/sample-order/${id}`,
+      UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
+      UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
+      DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
+    },
   },
   USER_MANAGEMENT: {
     USER: {
@@ -302,6 +314,9 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/user-management/template/${id}`,
       DROPDOWN: "/user-management/template/dropdown",
     },
+    PINCODE: {
+      BY_CODE: (code: string) => `/user-management/pincode/code/${code}`,
+    },
   },
   MASTER_DROPDOWNS: {
     CUSTOMER: "/master/customer/dropdown",
@@ -318,6 +333,14 @@ export const API_ENDPOINTS = {
       CREATE: "/warehouse/packing-list/create",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
+    },
+    DISPATCH: {
+      PREVIEW_NUMBER: "/warehouse/dispatch/preview-number",
+      LIST: "/warehouse/dispatch/list",
+      FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
+      CREATE: "/warehouse/dispatch/create",
+      DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
+      REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",

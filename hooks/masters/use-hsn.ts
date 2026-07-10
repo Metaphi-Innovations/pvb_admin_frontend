@@ -11,6 +11,7 @@ import {
   type HsnDropdownItem,
 } from "@/services/hsn-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): HsnListParams {
   return {
@@ -94,10 +95,14 @@ export function useExportHsn() {
   });
 }
 
-export function useHsnFilterDropdown(fieldName: HsnFilterField) {
+export function useHsnFilterDropdown(
+  fieldName: HsnFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.hsn.filterDropdown(fieldName),
     queryFn: ({ signal }) => HsnListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

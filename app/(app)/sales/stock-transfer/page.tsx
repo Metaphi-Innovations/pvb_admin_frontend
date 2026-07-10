@@ -467,7 +467,7 @@ export default function StockTransferPage() {
         { value: "draft", label: `Draft (${kpi.draft})` },
         { value: "pending", label: `Pending (${kpi.pending})` },
         { value: "approved", label: `Approved (${kpi.approved})` },
-        { value: "rejected", label: `Cancelled/Rejected (${kpi.rejected})` },
+        { value: "rejected", label: `Cancelled (${kpi.rejected})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}

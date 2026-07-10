@@ -36,9 +36,9 @@ import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
   resolveListStatus,
-  buildStatusFilter,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -119,46 +119,79 @@ function extractAuditFilter(value: unknown): { user: string; fromDate: string; t
 export default function EmployeeListingPage() {
   const router = useRouter();
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [filters, setFilters] = useState<FilterState>({});
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "employeeId", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [statusTarget, setStatusTarget] = useState<UserRecord | null>(null);
 
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters, 400);
+  const employeeIdOptionsQuery = useUserFilterDropdown("employee_id", {
+    enabled: isFilterOpen("employeeId"),
+  });
+  const nameOptionsQuery = useUserFilterDropdown("first_name", { enabled: isFilterOpen("fullName") });
+  const emailOptionsQuery = useUserFilterDropdown("email", { enabled: isFilterOpen("email") });
+  const mobileOptionsQuery = useUserFilterDropdown("mobile_number", { enabled: isFilterOpen("mobile") });
+  const roleOptionsQuery = useUserFilterDropdown("role__role_name", { enabled: isFilterOpen("role") });
+  const departmentOptionsQuery = useUserFilterDropdown("department__department_name", {
+    enabled: isFilterOpen("department"),
+  });
+  const employeeTypeOptionsQuery = useUserFilterDropdown("employee_type", {
+    enabled: isFilterOpen("employeeType"),
+  });
+  const roleTypeOptionsQuery = useUserFilterDropdown("role_type", { enabled: isFilterOpen("roleType") });
+  const createdByOptionsQuery = useUserFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useUserFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
-  const roleOptionsQuery = useUserFilterDropdown("role__role_name");
-  const departmentOptionsQuery = useUserFilterDropdown("department__department_name");
-  const statusOptionsQuery = useUserFilterDropdown("is_active");
-  const createdByOptionsQuery = useUserFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useUserFilterDropdown("updated_by_user__username");
-
+  const employeeIdOptions = employeeIdOptionsQuery.data ?? [];
+  const nameOptions = nameOptionsQuery.data ?? [];
+  const emailOptions = emailOptionsQuery.data ?? [];
+  const mobileOptions = mobileOptionsQuery.data ?? [];
   const roleOptions = roleOptionsQuery.data ?? [];
   const departmentOptions = departmentOptionsQuery.data ?? [];
-  const statusOptions = statusOptionsQuery.data ?? [];
+  const employeeTypeOptions = employeeTypeOptionsQuery.data ?? [];
+  const roleTypeOptions = roleTypeOptionsQuery.data ?? [];
+  const statusOptions = useMemo(
+    () => [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ],
+    [],
+  );
   const createdByOptions = createdByOptionsQuery.data ?? [];
   const updatedByOptions = updatedByOptionsQuery.data ?? [];
 
-  const listStatus = resolveListStatus(debouncedFilters, statusTab);
+  const listStatus = resolveListStatus(appliedFilters, statusTab);
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.user, {
-        ...buildStatusFilter(listStatus),
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.user, {
+        statusTab,
+        statusField: "is_active",
       }),
-    [debouncedFilters, listStatus],
+    [appliedFilters, statusTab],
   );
 
   const listParams: MasterListKeyParams = useMemo(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       ordering: sortStateToOrdering(sort.key, sort.direction),
       status: listStatus,
       apiFilters,
     }),
-    [page, pageSize, debouncedSearch, sort.key, sort.direction, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, sort.key, sort.direction, listStatus, apiFilters],
   );
 
   const listQuery = useUsers(listParams);
@@ -183,7 +216,7 @@ export default function EmployeeListingPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   const stats = useMemo(() => {
     const active = records.filter((r) => r.status === "active").length;
@@ -195,6 +228,12 @@ export default function EmployeeListingPage() {
     const next = tab as StatusTab;
     setStatusTab(next);
     sessionStorage.setItem(USER_TAB_KEY, next);
+    // Keep tab-based status authoritative for listing.
+    setFilters((prev) => {
+      const nextFilters = { ...prev };
+      delete nextFilters.status;
+      return nextFilters;
+    });
     setPage(1);
   };
 
@@ -234,7 +273,7 @@ export default function EmployeeListingPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering: sortStateToOrdering(sort.key, sort.direction),
         apiFilters,
@@ -253,6 +292,9 @@ export default function EmployeeListingPage() {
         key: "employeeId",
         header: "Employee ID",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: employeeIdOptions,
         render: (_val, row) => (
           <span className="font-mono text-xs font-semibold text-brand-700">{row.employeeId}</span>
         ),
@@ -261,6 +303,9 @@ export default function EmployeeListingPage() {
         key: "fullName",
         header: "Employee Name",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: nameOptions,
         render: (_val, row) => (
           <p className="text-xs font-semibold truncate text-foreground">{row.fullName}</p>
         ),
@@ -269,6 +314,9 @@ export default function EmployeeListingPage() {
         key: "email",
         header: "Email ID",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: emailOptions,
         render: (_val, row) => (
           <span className="text-xs text-foreground truncate">{row.email}</span>
         ),
@@ -277,6 +325,9 @@ export default function EmployeeListingPage() {
         key: "mobile",
         header: "Mobile Number",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: mobileOptions,
         render: (_val, row) => (
           <span className="text-xs font-mono text-foreground">{formatEmployeeMobile(row.mobile)}</span>
         ),
@@ -301,6 +352,28 @@ export default function EmployeeListingPage() {
         filterOptions: departmentOptions,
         render: (_val, row) => (
           <span className="text-xs text-foreground">{row.department || "—"}</span>
+        ),
+      },
+      {
+        key: "employeeType",
+        header: "Employee Type",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: employeeTypeOptions,
+        render: (_val, row) => (
+          <span className="text-xs text-foreground">{row.employeeType || "—"}</span>
+        ),
+      },
+      {
+        key: "roleType",
+        header: "Role Type",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: roleTypeOptions,
+        render: (_val, row) => (
+          <span className="text-xs text-foreground">{row.roleType || "—"}</span>
         ),
       },
       {
@@ -379,8 +452,14 @@ export default function EmployeeListingPage() {
       },
     ],
     [
+      employeeIdOptions,
+      nameOptions,
+      emailOptions,
+      mobileOptions,
       roleOptions,
       departmentOptions,
+      employeeTypeOptions,
+      roleTypeOptions,
       statusOptions,
       createdByOptions,
       updatedByOptions,
@@ -454,7 +533,10 @@ export default function EmployeeListingPage() {
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
           emptyMessage="users"
           searchPlaceholder="Search by Employee ID, Name, Mobile, or Email…"
           onAdd={() => router.push("/user-management/employee/add")}
@@ -462,7 +544,8 @@ export default function EmployeeListingPage() {
           onExport={handleExport}
           currentFilters={filters}
           currentSort={sort}
-          loading={listQuery.isFetching || isDebouncing}
+          onOpenFilter={handleOpenFilter}
+          loading={listQuery.isFetching}
         />
       </div>
 

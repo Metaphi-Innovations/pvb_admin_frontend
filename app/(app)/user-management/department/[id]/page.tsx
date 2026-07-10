@@ -9,42 +9,41 @@ import {
   RecordSectionCard,
   OVERVIEW_TAB,
 } from "@/components/record-detail";
-import { Building2, Clock, Pencil } from "lucide-react";
-import type { Department } from "../components/DepartmentSheet";
-
-const STORAGE_KEY = "ds_departments_v2";
-
-const SEED: Department[] = [
-  { id: 1, code: "DEPT-001", name: "Accounts", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
-  { id: 2, code: "DEPT-002", name: "HR", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
-  { id: 3, code: "DEPT-003", name: "Procurement", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18", lastStatusChange: "2024-01-18" },
-  { id: 4, code: "DEPT-004", name: "Warehouse", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
-  { id: 5, code: "DEPT-005", name: "Admin", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
-];
-
-function loadDepartments(): Department[] {
-  if (typeof window === "undefined") return SEED;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
-      return SEED;
-    }
-    return JSON.parse(raw) as Department[];
-  } catch {
-    return SEED;
-  }
-}
+import { Building2, Pencil } from "lucide-react";
+import type { Department } from "../department-data";
+import { toDepartmentRecord } from "../department-data";
+import { useDepartment } from "@/hooks/user-management";
 
 export default function DepartmentViewPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [dept, setDept] = useState<Department | null>(null);
+  const departmentQuery = useDepartment(id);
   const [activeTab, setActiveTab] = useState("overview");
+  const [dept, setDept] = useState<Department | null>(null);
 
   useEffect(() => {
-    setDept(loadDepartments().find((d) => d.id === Number(id)) ?? null);
-  }, [id]);
+    if (departmentQuery.data) {
+      setDept(toDepartmentRecord(departmentQuery.data));
+    }
+  }, [departmentQuery.data]);
+
+  if (departmentQuery.isLoading) {
+    return (
+      <RecordDetailPage
+        listHref="/user-management/department"
+        listLabel="Departments"
+        recordName="Loading…"
+        statusLabel="—"
+        statusVariant="neutral"
+        tabs={[OVERVIEW_TAB]}
+        activeTab="overview"
+        onTabChange={() => { }}
+        sidebar={{}}
+      >
+        <p className="text-sm text-muted-foreground text-center py-8">Loading department…</p>
+      </RecordDetailPage>
+    );
+  }
 
   if (!dept) {
     return (
@@ -56,7 +55,7 @@ export default function DepartmentViewPage() {
         statusVariant="neutral"
         tabs={[OVERVIEW_TAB]}
         activeTab="overview"
-        onTabChange={() => {}}
+        onTabChange={() => { }}
         sidebar={{}}
       >
         <p className="text-sm text-muted-foreground text-center py-8">
@@ -68,46 +67,46 @@ export default function DepartmentViewPage() {
     );
   }
 
+  const editHref = `/user-management/department?edit=${dept.departmentUuid || dept.id}`;
+
   return (
     <RecordDetailPage
       listHref="/user-management/department"
       listLabel="Departments"
       recordName={dept.name}
-      recordCode={dept.code}
+      recordCode={dept.departmentUuid || String(dept.id)}
       statusLabel={dept.status.charAt(0).toUpperCase() + dept.status.slice(1)}
       statusVariant={dept.status === "active" ? "active" : "inactive"}
       tabs={[OVERVIEW_TAB]}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      onEdit={() => router.push(`/user-management/department?edit=${dept.id}`)}
+      onEdit={() => router.push(editHref)}
       sidebar={{
         quickActions: [
           {
             label: "Edit Department",
             icon: Pencil,
-            onClick: () => router.push(`/user-management/department?edit=${dept.id}`),
+            onClick: () => router.push(editHref),
             variant: "outline",
           },
         ],
         summary: [
-          { label: "Code", value: dept.code, highlight: true },
           { label: "Status", value: dept.status },
-          { label: "Last Status Change", value: dept.lastStatusChange },
+          { label: "Updated", value: dept.updatedDate },
           { label: "Created", value: dept.createdDate },
         ],
         activity: [
           {
-            id: "status",
-            title: "Status last changed",
+            id: "updated",
+            title: "Last updated",
             subtitle: dept.updatedBy,
-            date: dept.lastStatusChange,
+            date: dept.updatedDate,
           },
         ],
       }}
     >
       <RecordSectionCard title="Department Details" icon={Building2} accent="blue">
         <RecordKvRow label="Name" value={dept.name} highlight />
-        <RecordKvRow label="Code" value={dept.code} mono />
         <RecordKvRow label="Remarks" value={dept.remarks || "—"} />
         <RecordKvRow label="Created By" value={dept.createdBy} muted />
         <RecordKvRow label="Created Date" value={dept.createdDate} mono />
