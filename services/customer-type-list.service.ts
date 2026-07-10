@@ -183,6 +183,7 @@ function mapFilterOptions(
 export interface CustomerTypeDropdownItem {
   id: string;
   customerType: string;
+  customerInitialCode?: string;
   documents: CustomerTypeDocument[];
 }
 
@@ -313,6 +314,7 @@ export const CustomerTypeListService = {
     return data.map(item => ({
       id: String(item.id),
       customerType: String(item.customer_type_name),
+      customerInitialCode: asString(item.customer_initial_code),
       documents: mapDocumentsWithType(item.documents),
     }));
   },

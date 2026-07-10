@@ -288,7 +288,7 @@ export default function CustomersPage() {
 			filterable: true,
 			filterType: "text",
 			width: "240px",
-			render: (val, row) => row.registeredGstAddress || "—",
+			render: (val, row) => row.address || "—",
 		},
 		{
 			key: "stateName",

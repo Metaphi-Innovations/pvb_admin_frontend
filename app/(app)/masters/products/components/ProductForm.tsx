@@ -54,7 +54,7 @@ import {
 import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { ListingStatusToggle } from "@/components/listing";
-import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown } from "@/hooks/masters";
+import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown, useCfuDropdown, useFormulationDropdown } from "@/hooks/masters";
 
 export interface ProductFormValues {
 	productCode: string;
@@ -63,9 +63,14 @@ export interface ProductFormValues {
 	productName: string;
 	scientificName: string;
 	segment: string;
+	segmentId?: string;
 	category: string;
+	categoryId?: string;
+	subCategory?: string;
 	form: string;
+	formId?: string;
 	cfu: string;
+	cfuId?: string;
 	authority: string;
 	sku: string;
 	hsnCode: string;
@@ -140,9 +145,13 @@ export function productToFormValues(product: Product): ProductFormValues {
 		productName: product.productName,
 		scientificName: product.scientificName ?? "",
 		segment: product.segment,
+		segmentId: product.segmentId,
 		category: product.category,
+		categoryId: product.categoryId,
 		form: product.form ?? product.formulation ?? "",
+		formId: product.formId,
 		cfu: product.cfu ?? "",
+		cfuId: product.cfuId,
 		authority: product.authority ?? "",
 		sku: product.sku ?? "",
 		hsnCode: product.hsnCode,
@@ -362,6 +371,8 @@ export function ProductForm({
 	const { data: segmentsData } = useSegmentsDropdown();
 	const { data: hsnData } = useHsnDropdown();
 	const { data: suppliersData } = useSuppliersDropdown();
+	const { data: cfuData } = useCfuDropdown();
+	const { data: formulationData } = useFormulationDropdown();
 
 	const segmentOptions = useMemo(() => {
 		if (!segmentsData) return [];
@@ -373,8 +384,15 @@ export function ProductForm({
 		return categoriesData.map((c) => ({ value: c.id, label: c.categoryName }));
 	}, [categoriesData]);
 
-	const formOptions = useMemo(() => loadActiveFormOptions(), []);
-	const cfuOptions = useMemo(() => loadActiveCfuOptions(), []);
+	const cfuOptions = useMemo(() => {
+		if (!cfuData) return [];
+		return cfuData.map((c) => ({ value: c.id, label: c.cfuName }));
+	}, [cfuData]);
+
+	const formOptions = useMemo(() => {
+		if (!formulationData) return [];
+		return formulationData.map((f) => ({ value: f.id, label: f.label }));
+	}, [formulationData]);
 
 	const supplierOptions = useMemo(() => {
 		if (!suppliersData) return [];
@@ -576,8 +594,8 @@ export function ProductForm({
 					<SelectField
 						label='Segment'
 						required
-						value={form.segment}
-						onChange={(v) => set("segment", v)}
+						value={form.segmentId ?? ""}
+						onChange={(v) => set("segmentId", v)}
 						options={segmentOptions}
 						placeholder='Select segment…'
 						disabled={readOnly}
@@ -587,7 +605,7 @@ export function ProductForm({
 					<SelectField
 						label='Category'
 						required
-						value={form.category}
+						value={form.categoryId ?? ""}
 						onChange={handleCategoryChange}
 						options={categoryOptions}
 						placeholder='Select category…'
@@ -598,8 +616,8 @@ export function ProductForm({
 					<SelectField
 						label='Form'
 						required
-						value={form.form}
-						onChange={(v) => set("form", v)}
+						value={form.formId ?? ""}
+						onChange={(v) => set("formId", v)}
 						options={formOptions}
 						placeholder='Select form…'
 						disabled={readOnly}
@@ -608,8 +626,8 @@ export function ProductForm({
 
 					<SelectField
 						label='CFU'
-						value={form.cfu}
-						onChange={(v) => set("cfu", v)}
+						value={form.cfuId ?? ""}
+						onChange={(v) => set("cfuId", v)}
 						options={cfuOptions}
 						placeholder='Select CFU…'
 						disabled={readOnly}

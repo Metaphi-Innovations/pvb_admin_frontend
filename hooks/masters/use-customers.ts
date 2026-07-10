@@ -125,3 +125,10 @@ export function useExportCustomers() {
             CustomerListService.export(params),
     });
 }
+
+export function useCfDropdown() {
+    return useQuery({
+        queryKey: masterKeys.customers.cfDropdown(),
+        queryFn: () => CustomerListService.getCfCustomerDropdown(),
+    });
+}

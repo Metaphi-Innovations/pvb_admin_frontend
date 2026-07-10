@@ -44,6 +44,14 @@ export function useCreateSupplierType() {
     });
 }
 
+export function useDropdownSupplierTypes() {
+    return useQuery({
+        queryKey: masterKeys.supplierTypes.dropdown(),
+        queryFn: () => SupplierTypeListService.dropdown(),
+        staleTime: 60_000,
+    });
+}
+
 export function useUpdateSupplierType() {
     const queryClient = useQueryClient();
     return useMutation({

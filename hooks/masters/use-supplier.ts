@@ -92,11 +92,11 @@ export function useSuppliersDropdown() {
     });
 }
 
-export function useSupplierPreviewNumber(enabled = false) {
+export function useSupplierPreviewNumber(supplierTypeId?: string, enabled = false) {
     return useQuery({
-        queryKey: masterKeys.suppliers.previewNumber(),
-        queryFn: () => SupplierListService.previewNumber(),
-        enabled,
+        queryKey: masterKeys.suppliers.previewNumber(supplierTypeId),
+        queryFn: () => SupplierListService.previewNumber(supplierTypeId),
+        enabled: enabled && Boolean(supplierTypeId),
         staleTime: 0,
     });
 }

@@ -51,6 +51,11 @@ export interface FormulationFilterOption {
   value: string;
 }
 
+interface FormulationDropdownOption {
+  id: string;
+  label: string;
+}
+
 export type FormulationFilterField =
   | "formulation_code"
   | "formulation_name"
@@ -260,6 +265,19 @@ export const FormulationListService = {
     }
 
     return mapFilterOptions(data, fieldName);
+  },
+
+  async dropdown(): Promise<FormulationDropdownOption[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.FORMULATION.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+    return data.map((item: { formulation_id: string; formulation_name: string }) => ({
+      id: item.formulation_id,
+      label: item.formulation_name,
+    }));
   },
 
   async export(params: FormulationExportParams): Promise<void> {

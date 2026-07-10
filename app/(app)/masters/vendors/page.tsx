@@ -238,7 +238,7 @@ export default function VendorMasterPage() {
     {
       key: "status",
       header: "Status",
-      sortable: true,
+      sortable: false,
       filterable: true,
       filterType: "dropdown",
       filterOptions: [

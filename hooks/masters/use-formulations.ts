@@ -97,3 +97,11 @@ export function useFormulationFilterDropdown(
     enabled: options?.enabled ?? true,
   });
 }
+
+export function useFormulationDropdown() {
+  return useQuery({
+    queryKey: masterKeys.formulations.dropdown(),
+    queryFn: () => FormulationListService.dropdown(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
