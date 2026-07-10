@@ -58,6 +58,10 @@ export interface CustomerProductMapping {
 
 export interface BranchAddress {
 	address: string;
+	addressLine2?: string;
+	country?: string;
+	district?: string;
+	town?: string;
 	city: string;
 	state: string;
 	pincode: string;
