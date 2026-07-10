@@ -7,6 +7,9 @@ import {
   createEmptyLineItem as createEmptySalesLine,
   calculateOrderTotalsSummary,
   recalculateLineItem,
+  recalculateExpense,
+  type TaxSupplyType,
+  resolveTaxSupplyType,
 } from "@/app/(app)/sales/orders/orders-data";
 
 import type { PackedBatchAllocation } from "@/app/(app)/warehouse/packing/types";
@@ -497,7 +500,11 @@ export function buildTransferFromForm(
 
   const totalItems = form.lineItems.length;
   const totalQuantity = form.lineItems.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
-  const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses || []);
+
+  const taxSupplyType = resolveTaxSupplyType(sourceWh.state || "", targetWh.state || "");
+  const recalculatedExpenses = (form.additionalExpenses || []).map((e) => recalculateExpense(e, taxSupplyType));
+
+  const totals = calculateOrderTotalsSummary(form.lineItems, recalculatedExpenses, { taxSupplyType });
   const today = todayStr();
 
   const transfers = loadTransfers();
@@ -525,7 +532,7 @@ export function buildTransferFromForm(
     remarks: form.remarks?.trim() || "",
     status: finalStatus,
     lineItems: form.lineItems,
-    additionalExpenses: form.additionalExpenses || [],
+    additionalExpenses: recalculatedExpenses,
     totalAmount: totals.grandTotal,
     totalItems,
     totalQuantity,

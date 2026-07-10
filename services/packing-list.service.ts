@@ -296,6 +296,14 @@ export const PackingListService = {
     const payload = response.data as Record<string, unknown>;
     return Array.isArray(payload.data) ? payload.data : [];
   },
+
+  async create(payload: any): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.CREATE,
+      payload
+    );
+    return response.data;
+  },
 };
 
 function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {

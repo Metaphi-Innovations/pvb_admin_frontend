@@ -40,6 +40,7 @@ interface TransferProductLinesEditorProps {
   onChange: (lines: TransferLineItem[]) => void;
   error?: string;
   errors?: Record<string, string>;
+  taxSupplyType?: TaxSupplyType;
 }
 
 export default function TransferProductLinesEditor({
@@ -50,18 +51,20 @@ export default function TransferProductLinesEditor({
   onChange,
   error,
   errors,
+  taxSupplyType: propTaxSupplyType,
 }: TransferProductLinesEditorProps) {
-  const sourceWarehouseName = useMemo(() => {
-    if (!sourceWarehouseId) return "";
-    return loadWarehouses().find((w) => w.id === sourceWarehouseId)?.warehouseName ?? "";
+  useEffect(() => {
+    setWarehouseBatches({});
+    setTopSelectedBatch(null);
   }, [sourceWarehouseId]);
 
   const taxSupplyType: TaxSupplyType = useMemo(() => {
+    if (propTaxSupplyType) return propTaxSupplyType;
     const source = loadWarehouses().find((w) => w.id === sourceWarehouseId);
     const target = loadWarehouses().find((w) => w.id === targetWarehouseId);
     if (!source || !target) return "intra";
     return source.state === target.state ? "intra" : "inter";
-  }, [sourceWarehouseId, targetWarehouseId]);
+  }, [sourceWarehouseId, targetWarehouseId, propTaxSupplyType]);
 
   const removeLine = (id: string) => {
     onChange(lines.filter((l) => l.id !== id));
@@ -149,15 +152,25 @@ export default function TransferProductLinesEditor({
     if (warehouseBatches[productId]) return;
     try {
       const res = await StockTransferService.getBatches(productId, sourceWarehouseId);
-      const mapped = res.map((b: any) => ({
-        productName: "",
-        batchInventoryId: b.available_inventory_id,
-        batchNumber: b.batch_code || "N/A",
-        mfgDate: b.mfg_date || null,
-        expiryDate: b.expiry_date || null,
-        availableQty: Number(b.available_qty || 0),
-        status: b.expiry_date ? getStockStatus(b.expiry_date) : "Good",
-      })).filter(b => b.availableQty > 0);
+      
+      const grouped: Record<string, any> = {};
+      res.forEach((b: any) => {
+        const code = b.batch_code || "N/A";
+        if (!grouped[code]) {
+          grouped[code] = {
+            productName: "",
+            batchInventoryId: b.available_inventory_id,
+            batchNumber: code,
+            mfgDate: b.mfg_date || null,
+            expiryDate: b.expiry_date || null,
+            availableQty: 0,
+            status: b.expiry_date ? getStockStatus(b.expiry_date) : "Good",
+          };
+        }
+        grouped[code].availableQty += Number(b.available_qty || 0);
+      });
+
+      const mapped = Object.values(grouped).filter((b: any) => b.availableQty > 0);
       setWarehouseBatches((prev) => ({ ...prev, [productId]: mapped }));
       return mapped;
     } catch (err) {
@@ -170,7 +183,7 @@ export default function TransferProductLinesEditor({
     if (topSelectedProduct && sourceWarehouseId) {
       fetchBatchesForProduct(topSelectedProduct.id).then((batches) => {
         const available = (batches || []).filter(
-          (b: any) => !lines.some((line) => line.productId === topSelectedProduct.id && line.batchInventoryId === b.batchInventoryId)
+          (b: any) => !lines.some((line) => line.productId === topSelectedProduct.id && line.batchNumber === b.batchNumber)
         );
         if (available.length > 0) {
           setTopSelectedBatch(available[0]);
@@ -302,7 +315,7 @@ export default function TransferProductLinesEditor({
             productCode={topSelectedProduct ? topSelectedProduct.code : ""}
             batches={topBatches}
             value={topSelectedBatch ? topSelectedBatch.batchNumber : undefined}
-            disabled={!topSelectedProduct || !sourceWarehouseName}
+            disabled={!topSelectedProduct || !sourceWarehouseId}
             alreadyAddedBatchNumbers={lines
               .filter((l) => l.productId === topSelectedProduct?.id)
               .map((l) => l.batchNumber)
@@ -472,7 +485,7 @@ export default function TransferProductLinesEditor({
                     productCode={line.productCode}
                     batches={batches}
                     value={line.batchNumber}
-                    disabled={!line.productId || !sourceWarehouseName}
+                    disabled={!line.productId || !sourceWarehouseId}
                     alreadyAddedBatchNumbers={lines
                       .filter((l) => l.id !== line.id && l.productId === line.productId)
                       .map((l) => l.batchNumber)

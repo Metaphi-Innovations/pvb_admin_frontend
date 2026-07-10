@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SampleOrderService } from "@/services/sample-order.service";
-import type { SalesOrderFormValues } from "@/app/(app)/sales/sample-order/components/SalesOrderForm";
+import type { SalesOrderFormValues } from "@/app/(app)/sales/sample-order/components/SampleOrderForm";
 
 const sampleOrderKeys = {
   all: ["sample-orders"] as const,

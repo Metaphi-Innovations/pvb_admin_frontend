@@ -538,7 +538,7 @@ export default function SalesOrderForm({
 
 	const taxSupplyType = useMemo((): TaxSupplyType => {
 		const sourceState = selectedWarehouse?.state ?? "";
-		const destState = selectedCustomer?.stateName ?? shipToAddress?.state ?? "";
+		const destState = shipToAddress?.state ?? selectedCustomer?.stateName ?? "";
 		return resolveTaxSupplyType(sourceState, destState);
 	}, [selectedWarehouse, selectedCustomer, shipToAddress]);
 
@@ -557,15 +557,16 @@ export default function SalesOrderForm({
 	}, [selectedCustomer?.id, customerAddresses.length]);
 
 	const pricingContext = useMemo((): SalesOrderPricingContext | null => {
-		if (!selectedCustomer?.stateName || !selectedCustomer.customerType || !form.orderDate) {
+		const activeState = shipToAddress?.state ?? selectedCustomer?.stateName;
+		if (!activeState || !selectedCustomer?.customerType || !form.orderDate) {
 			return null;
 		}
 		return {
-			stateName: selectedCustomer.stateName,
+			stateName: activeState,
 			customerMasterType: selectedCustomer.customerType,
 			orderDate: form.orderDate,
 		};
-	}, [selectedCustomer, form.orderDate]);
+	}, [selectedCustomer, shipToAddress, form.orderDate]);
 
 	const totalsSummary = useMemo(
 		() =>
