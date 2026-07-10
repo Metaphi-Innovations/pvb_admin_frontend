@@ -140,7 +140,9 @@ function ReturnItemsTable({
               "QC Rejected",
               "Returned",
               "Balance Rejected",
-              "Return Qty",
+              "Return Cs",
+              "Return Ls",
+              "Total Return",
               "Rate",
               "GST %",
               ...(taxSupplyType === "intra" ? ["CGST", "SGST"] : ["IGST"]),
@@ -157,7 +159,9 @@ function ReturnItemsTable({
                     "QC Rejected",
                     "Returned",
                     "Balance Rejected",
-                    "Return Qty",
+                    "Return Cs",
+                    "Return Ls",
+                    "Total Return",
                     "Rate",
                     "GST %",
                     "CGST",
@@ -226,24 +230,57 @@ function ReturnItemsTable({
                 <td className="px-3 py-2 text-right">
                   {!canEditQty ? (
                     <span className="text-xs tabular-nums text-muted-foreground">
+                      {fullyReturned ? "—" : it.returnCases || "—"}
+                    </span>
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={it.returnCases || ""}
+                      onChange={(e) => {
+                        const newCases = e.target.value === "" ? 0 : Number(e.target.value);
+                        const loose = it.returnLooseQty || 0;
+                        const total = newCases * (it.caseSize || 10) + loose;
+                        const v = clampReturnQty(total, it.balanceRejectedQty);
+                        onItemChange(it.id, { returnCases: newCases, returnLooseQty: loose, returnQty: v });
+                      }}
+                      className={cn("h-8 w-16 text-xs tabular-nums", rowError && "border-red-400")}
+                    />
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {!canEditQty ? (
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {fullyReturned ? "—" : it.returnLooseQty || "—"}
+                    </span>
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={it.returnLooseQty || ""}
+                      onChange={(e) => {
+                        const newLoose = e.target.value === "" ? 0 : Number(e.target.value);
+                        const cases = it.returnCases || 0;
+                        const total = cases * (it.caseSize || 10) + newLoose;
+                        const v = clampReturnQty(total, it.balanceRejectedQty);
+                        onItemChange(it.id, { returnCases: cases, returnLooseQty: newLoose, returnQty: v });
+                      }}
+                      className={cn("h-8 w-16 text-xs tabular-nums", rowError && "border-red-400")}
+                    />
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {!canEditQty ? (
+                    <span className="text-xs tabular-nums text-muted-foreground">
                       {fullyReturned ? "—" : it.returnQty || "—"}
                     </span>
                   ) : (
                     <div className="inline-block space-y-1 text-left">
                       <Input
                         type="number"
-                        min={0}
-                        max={it.balanceRejectedQty}
+                        readOnly
                         value={it.returnQty || ""}
-                        onChange={(e) => {
-                          const raw = e.target.value === "" ? 0 : Number(e.target.value);
-                          const v = clampReturnQty(raw, it.balanceRejectedQty);
-                          onItemChange(it.id, { returnQty: v });
-                        }}
-                        className={cn(
-                          "h-8 w-20 text-xs tabular-nums",
-                          rowError && "border-red-400",
-                        )}
+                        className={cn("h-8 w-20 text-xs tabular-nums bg-muted focus-visible:ring-0", rowError && "border-red-400")}
                       />
                       {rowError && (
                         <p className="text-[10px] leading-tight text-red-500 max-w-[160px]">

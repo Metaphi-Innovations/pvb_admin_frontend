@@ -9,6 +9,18 @@ export interface QcItem {
   acceptedQty: number;
   rejectedQty: number;
   holdQty: number;
+  
+  // Case conversion fields
+  receivedCases?: number;
+  receivedLooseQty?: number;
+  acceptedCases?: number;
+  acceptedLooseQty?: number;
+  rejectedCases?: number;
+  rejectedLooseQty?: number;
+  holdCases?: number;
+  holdLooseQty?: number;
+  unitPerPacking?: number;
+
   qcResult?: QcResult;
   rejectionReason?: string;
 }

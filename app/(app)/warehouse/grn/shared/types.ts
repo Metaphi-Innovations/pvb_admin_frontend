@@ -36,8 +36,11 @@ export interface GrnItem {
   alreadyReceivedQty?: number;
   /** Remaining quantity eligible for this GRN: Ordered − Previously Received */
   pendingQty?: number;
-  /** Current received quantity entered on this GRN */
+  /** Current received quantity entered on this GRN (this is the base_qty) */
   receivedQty: number;
+  receivedCases?: number;
+  receivedLooseQty?: number;
+  unitPerPacking?: number;
   balanceQty?: number;
   unit?: string;
   serialNumber?: string;
@@ -60,6 +63,9 @@ export interface GrnBatch {
   expDate: string;
   /** Physical received batch qty — flows to QC / inventory */
   quantity: number;
+  receivedCases?: number;
+  receivedLooseQty?: number;
+  unitPerPacking?: number;
   poNumber?: string;
   poLineId?: number;
   invoiceNumber?: string;

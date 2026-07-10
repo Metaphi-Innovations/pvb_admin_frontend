@@ -15,11 +15,11 @@ import type { Department } from "../components/DepartmentSheet";
 const STORAGE_KEY = "ds_departments_v2";
 
 const SEED: Department[] = [
-  { id: 1, code: "DEPT-001", name: "Accounts", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
-  { id: 2, code: "DEPT-002", name: "HR", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
-  { id: 3, code: "DEPT-003", name: "Procurement", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18", lastStatusChange: "2024-01-18" },
-  { id: 4, code: "DEPT-004", name: "Warehouse", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
-  { id: 5, code: "DEPT-005", name: "Admin", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
+  { id: 1, departmentUuid: "d1", name: "Accounts", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15" },
+  { id: 2, departmentUuid: "d2", name: "HR", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12" },
+  { id: 3, departmentUuid: "d3", name: "Procurement", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18" },
+  { id: 4, departmentUuid: "d4", name: "Warehouse", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01" },
+  { id: 5, departmentUuid: "d5", name: "Admin", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05" },
 ];
 
 function loadDepartments(): Department[] {
@@ -73,7 +73,6 @@ export default function DepartmentViewPage() {
       listHref="/user-management/department"
       listLabel="Departments"
       recordName={dept.name}
-      recordCode={dept.code}
       statusLabel={dept.status.charAt(0).toUpperCase() + dept.status.slice(1)}
       statusVariant={dept.status === "active" ? "active" : "inactive"}
       tabs={[OVERVIEW_TAB]}
@@ -90,24 +89,21 @@ export default function DepartmentViewPage() {
           },
         ],
         summary: [
-          { label: "Code", value: dept.code, highlight: true },
           { label: "Status", value: dept.status },
-          { label: "Last Status Change", value: dept.lastStatusChange },
           { label: "Created", value: dept.createdDate },
         ],
         activity: [
           {
             id: "status",
-            title: "Status last changed",
+            title: "Last updated",
             subtitle: dept.updatedBy,
-            date: dept.lastStatusChange,
+            date: dept.updatedDate,
           },
         ],
       }}
     >
       <RecordSectionCard title="Department Details" icon={Building2} accent="blue">
         <RecordKvRow label="Name" value={dept.name} highlight />
-        <RecordKvRow label="Code" value={dept.code} mono />
         <RecordKvRow label="Remarks" value={dept.remarks || "—"} />
         <RecordKvRow label="Created By" value={dept.createdBy} muted />
         <RecordKvRow label="Created Date" value={dept.createdDate} mono />

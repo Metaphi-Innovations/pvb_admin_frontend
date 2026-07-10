@@ -74,7 +74,7 @@ export default function SplitSalesOrderPage() {
   const handleSave = (asDraft: boolean) => {
     if (!form || !originalOrder) return;
 
-    const e = validateSplitOrderForm(form, originalOrder);
+    const e = validateSplitOrderForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });

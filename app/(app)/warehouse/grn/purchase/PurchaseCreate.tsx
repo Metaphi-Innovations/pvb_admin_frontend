@@ -157,6 +157,9 @@ export function PurchaseCreate() {
           alreadyReceivedQty,
           pendingQty,
           receivedQty: 0,
+          receivedCases: 0,
+          receivedLooseQty: 0,
+          unitPerPacking: 10, // Default mock value if real API is missing
           unit: "Unit",
           poNumber: po.poNumber,
         });
@@ -224,14 +227,20 @@ export function PurchaseCreate() {
     setFormError(null);
   };
 
-  const handleItemQtyChange = (productId: string, poNumber: string, val: string) => {
+  const handleItemQtyChange = (productId: string, poNumber: string, field: "cases" | "loose", val: string) => {
     const qty = Math.max(0, parseInt(val, 10) || 0);
     const key = itemKey(productId, poNumber);
 
     setItems((prev) => {
-      const next = prev.map((it) =>
-        it.productId === productId && it.poNumber === poNumber ? { ...it, receivedQty: qty } : it,
-      );
+      const next = prev.map((it) => {
+        if (it.productId === productId && it.poNumber === poNumber) {
+          const newCases = field === "cases" ? qty : (it.receivedCases || 0);
+          const newLoose = field === "loose" ? qty : (it.receivedLooseQty || 0);
+          const totalReceived = newCases * (it.unitPerPacking || 10) + newLoose;
+          return { ...it, receivedCases: newCases, receivedLooseQty: newLoose, receivedQty: totalReceived };
+        }
+        return it;
+      });
       const target = next.find((it) => it.productId === productId && it.poNumber === poNumber);
       const error = target ? validateItemQty(target, qty) : "";
       const warning = target ? getItemQtyWarning(target, qty) : "";
@@ -475,7 +484,13 @@ export function PurchaseCreate() {
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Prev. Received</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Pending</th>
                     <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
-                      Current Received
+                      Cases
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
+                      Loose Qty
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
+                      Total Base Qty
                     </th>
                   </tr>
                 </thead>
@@ -497,15 +512,44 @@ export function PurchaseCreate() {
                             <Input
                               type="number"
                               min={0}
-                              value={it.receivedQty === 0 ? "" : it.receivedQty}
+                              value={it.receivedCases === 0 ? "" : it.receivedCases}
                               placeholder="0"
-                              onChange={(e) => handleItemQtyChange(it.productId, it.poNumber || "", e.target.value)}
+                              onChange={(e) => handleItemQtyChange(it.productId, it.poNumber || "", "cases", e.target.value)}
                               className={cn(
                                 "h-9 w-full text-xs text-center tabular-nums font-semibold rounded-lg",
-                                "bg-white focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400",
+                                "bg-white focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400 border-border text-brand-700"
+                              )}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
+                          <div className="space-y-1">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={it.receivedLooseQty === 0 ? "" : it.receivedLooseQty}
+                              placeholder="0"
+                              onChange={(e) => handleItemQtyChange(it.productId, it.poNumber || "", "loose", e.target.value)}
+                              className={cn(
+                                "h-9 w-full text-xs text-center tabular-nums font-semibold rounded-lg",
+                                "bg-white focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400 border-border text-brand-700"
+                              )}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
+                          <div className="space-y-1">
+                            <Input
+                              type="number"
+                              readOnly
+                              value={it.receivedQty === 0 ? "" : it.receivedQty}
+                              placeholder="0"
+                              className={cn(
+                                "h-9 w-full text-xs text-center tabular-nums font-semibold rounded-lg",
+                                "bg-muted focus-visible:ring-0",
                                 !err && !warn && "border-border text-brand-700",
-                                err && "border-red-400 focus-visible:ring-red-300 text-foreground",
-                                warn && !err && "border-amber-400 focus-visible:ring-amber-300 text-foreground",
+                                err && "border-red-400 text-foreground",
+                                warn && !err && "border-amber-400 text-foreground",
                               )}
                             />
                             {err && (

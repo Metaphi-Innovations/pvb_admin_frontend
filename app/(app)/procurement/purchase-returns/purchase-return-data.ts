@@ -37,6 +37,8 @@ export interface PurchaseReturnItem {
   alreadyReturnedQty: number;
   balanceRejectedQty: number;
   returnQty: number;
+  returnCases?: number;
+  returnLooseQty?: number;
   lineRemark: string;
   selected: boolean;
   /** Present on edit-merge: true if this line was already saved on the return. */

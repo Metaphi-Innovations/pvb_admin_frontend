@@ -1,7 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { SalesOrder, SalesOrderLineItem } from "@/app/(app)/sales/sample-order/orders-data";
-import type { SalesOrderFormValues } from "@/app/(app)/sales/sample-order/components/SalesOrderForm";
+import type { SalesOrderFormValues } from "@/app/(app)/sales/sample-order/components/SampleOrderForm";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -125,7 +125,7 @@ function buildBackendWriteBody(
   form: SalesOrderFormValues,
   options: { orderNo: string; status: string }
 ): Record<string, any> {
-  const items = (form.lineItems || []).map((line) => {
+  const items = (form.lineItems || []).map((line: any) => {
     return {
       product_id: line.productId,
       stock_available: line.availableStock || 0,
@@ -140,7 +140,7 @@ function buildBackendWriteBody(
     };
   });
 
-  const totals = form.lineItems.reduce((acc, line) => {
+  const totals = form.lineItems.reduce((acc: any, line: any) => {
     return {
       total_qty: acc.total_qty + line.quantity,
       product_subtotal: acc.product_subtotal + (line.unitPrice * line.quantity),
