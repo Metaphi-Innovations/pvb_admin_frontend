@@ -10,6 +10,15 @@ import { COA_DEMO_LEDGER_SEEDS, type CoaDemoLedgerSeed } from "../coa-demo-ledge
 
 export const COA_DEMO_SOURCE_MODULE = "coa_demo_bundle";
 
+/** Demo seeds skipped where system statutory ledgers are defined in coa-seed-nodes */
+const SKIP_STATUTORY_DEMO_SUBGROUPS = new Set([
+  "duties & taxes payable",
+  "gst input credit",
+  "gst output",
+  "tds payable",
+  "gst payable",
+]);
+
 const ASSET_SUBGROUP_BASE: Record<string, number> = {
   "Land & Building": 4200000,
   "Plant & Machinery": 1850000,
@@ -215,6 +224,9 @@ export function buildBundledCoaDemoLedgers(
   }
 
   for (const entry of COA_DEMO_LEDGER_SEEDS) {
+    if (SKIP_STATUTORY_DEMO_SUBGROUPS.has(entry.subGroup.trim().toLowerCase())) {
+      continue;
+    }
     const parent = subGroupByName.get(entry.subGroup.trim().toLowerCase());
     if (!parent) continue;
 

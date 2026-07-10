@@ -3,12 +3,8 @@
 import { useMemo } from "react";
 import { SimpleCashVoucherForm } from "@/components/accounts/SimpleCashVoucherForm";
 import { SimpleContraVoucherForm } from "@/components/accounts/SimpleContraVoucherForm";
-import { ZohoVoucherEntryForm } from "@/components/accounts/ZohoVoucherEntryForm";
-import {
-  getVoucherById,
-  inferVoucherEntryMode,
-} from "@/app/(app)/accounts/vouchers/voucher-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { VOUCHER_FORM_OUTER } from "@/components/accounts/voucher-simple-form-ui";
 
 export type DualEntryVoucherType = "receipt" | "payment" | "contra";
 
@@ -23,8 +19,8 @@ interface VoucherDualEntryFormProps {
 }
 
 /**
- * Receipt, payment and contra use a single simple form that posts double-entry lines in the background.
- * Legacy multi-line vouchers (created in old double-entry UI) still open in the line editor for view/edit.
+ * Receipt, payment and contra always use the compact single-transaction form.
+ * Journal keeps the multi-row debit/credit grid (separate route).
  */
 export function VoucherDualEntryForm({
   voucherType,
@@ -33,39 +29,13 @@ export function VoucherDualEntryForm({
   voucherId,
   readOnly = false,
   onEdit,
-  breadcrumbSection = "Transactions",
 }: VoucherDualEntryFormProps) {
   const mounted = useClientMounted();
-  const existing = useMemo(
-    () => (mounted && voucherId != null ? getVoucherById(voucherId) : undefined),
-    [mounted, voucherId],
-  );
-
-  const useLegacyDoubleForm = useMemo(() => {
-    if (!existing) return false;
-    return inferVoucherEntryMode(existing) === "double";
-  }, [existing]);
 
   if (!mounted) {
     return (
-      <div className="border border-border rounded-xl bg-muted/10 h-56 animate-pulse mx-5 my-4" />
-    );
-  }
-
-  if (useLegacyDoubleForm) {
-    return (
-      <ZohoVoucherEntryForm
-        key={`legacy-${voucherType}-${voucherId ?? "new"}`}
-        voucherType={voucherType}
-        cancelHref={cancelHref}
-        voucherId={voucherId}
-        onDone={onDone}
-        readOnly={readOnly}
-        onEdit={onEdit}
-        breadcrumbSection={breadcrumbSection}
-        showFinancialYear={voucherType !== "receipt" && voucherType !== "payment"}
-        strictPostValidation
-        entryMode="double"
+      <div
+        className={`${VOUCHER_FORM_OUTER} border border-border rounded-xl bg-muted/10 h-48 animate-pulse my-4`}
       />
     );
   }
@@ -92,8 +62,6 @@ export function VoucherDualEntryForm({
       voucherId={voucherId}
       readOnly={readOnly}
       onEdit={onEdit}
-      fullWidth
-      flexibleEntry
     />
   );
 }

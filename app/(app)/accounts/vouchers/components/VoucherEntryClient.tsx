@@ -31,7 +31,7 @@ export function VoucherEntryClient({
   readOnly = false,
   cancelHref: cancelHrefProp,
   onEdit,
-  showFinancialYear = true,
+  showFinancialYear = false,
   strictPostValidation = true,
   ledgerFilter,
   quickAddScope,

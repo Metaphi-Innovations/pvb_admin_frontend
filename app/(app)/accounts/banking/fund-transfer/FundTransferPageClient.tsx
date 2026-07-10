@@ -32,7 +32,13 @@ import {
   AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { SortTh, StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -48,15 +54,148 @@ import {
   filterFundTransfers,
   listAllTransferAccountOptions,
   loadFundTransfers,
-  sortFundTransfers,
   type FundTransferMode,
-  type FundTransferSortKey,
+  type FundTransferRecord,
 } from "@/lib/accounts/fund-transfer-data";
 import {
   exportFundTransfersToExcel,
   exportFundTransfersToPdf,
 } from "@/lib/accounts/fund-transfer-export";
 import { cn } from "@/lib/utils";
+
+function FundTransferTable({
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  hasFilters,
+  clearFilters,
+}: {
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  hasFilters: boolean;
+  clearFilters: () => void;
+}) {
+  const router = useRouter();
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<FundTransferRecord>([]);
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <>
+      <AccountsTable className="w-full">
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Transfer Date" colKey="transferDate" filterType="date" />
+            <SortTh label="Transfer No." colKey="transferNo" />
+            <SortTh label="From Account" colKey="fromAccountName" />
+            <SortTh label="To Account" colKey="toAccountName" />
+            <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
+            <SortTh label="Mode" colKey="transferMode" />
+            <SortTh label="Reference No." colKey="referenceNo" />
+            <AccountsColumnHeader
+              label="Actions"
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="right"
+              className={accountsActionColClass("single")}
+            />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {visible.length === 0 ? (
+            <AccountsTableEmpty
+              colSpan={8}
+              message={hasFilters ? "No transfers match your filters." : "No fund transfers recorded yet."}
+              onClear={hasFilters ? clearFilters : undefined}
+            />
+          ) : (
+            paginated.map((r) => (
+              <AccountsTableRow key={r.id} className="group">
+                <AccountsTableCell>{r.transferDate}</AccountsTableCell>
+                <AccountsTableCell className="font-mono font-semibold text-brand-700">
+                  {r.transferNo}
+                </AccountsTableCell>
+                <AccountsTableCell className="accounts-col-wide">{r.fromAccountName}</AccountsTableCell>
+                <AccountsTableCell className="accounts-col-wide">{r.toAccountName}</AccountsTableCell>
+                <AccountsTableCell align="right" className={MONEY_AMOUNT_CLASS}>
+                  {formatMoney(r.amount)}
+                </AccountsTableCell>
+                <AccountsTableCell>{FUND_TRANSFER_MODE_LABELS[r.transferMode]}</AccountsTableCell>
+                <AccountsTableCell className="font-mono text-xs">
+                  {r.referenceNo || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell className={accountsActionColClass("single")}>
+                  <AccountsViewAction
+                    title="View transfer"
+                    onClick={() => router.push(`/accounts/banking/fund-transfer/${r.id}`)}
+                  />
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
+      {visible.length > 0 ? (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          recordLabel="transfers"
+        />
+      ) : null}
+    </>
+  );
+}
+
+function FundTransferExportToolbar({
+  exportMeta,
+  exporting,
+  onExportExcel,
+  onExportPdf,
+  search,
+  onSearchChange,
+}: {
+  exportMeta: {
+    dateFrom: string;
+    dateTo: string;
+    financialYear: string;
+    fromAccount: string;
+    toAccount: string;
+    transferMode: string;
+    search: string;
+  };
+  exporting: boolean;
+  onExportExcel: (rows: FundTransferRecord[], meta: typeof exportMeta) => Promise<void>;
+  onExportPdf: (rows: FundTransferRecord[], meta: typeof exportMeta) => void;
+  search: string;
+  onSearchChange: (v: string) => void;
+}) {
+  const visible = useAccountsFilteredRows<FundTransferRecord>([]);
+
+  return (
+    <AccountsTableToolbar
+      placement="page-header"
+      search={{ value: search, onChange: onSearchChange, placeholder: "Transfer no., reference, account…" }}
+      onExcel={() => void onExportExcel(visible, exportMeta)}
+      onPdf={() => onExportPdf(visible, exportMeta)}
+      exportDisabled={exporting || visible.length === 0}
+    />
+  );
+}
 
 export default function FundTransferPageClient() {
   const router = useRouter();
@@ -66,8 +205,6 @@ export default function FundTransferPageClient() {
   const [fromAccountId, setFromAccountId] = useState("all");
   const [toAccountId, setToAccountId] = useState("all");
   const [transferMode, setTransferMode] = useState("all");
-  const [sortKey, setSortKey] = useState<FundTransferSortKey>("transferDate");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -78,7 +215,6 @@ export default function FundTransferPageClient() {
     setRefreshKey((k) => k + 1);
   }, [sectionRefresh]);
 
-
   const records = useMemo(() => {
     void refreshKey;
     return loadFundTransfers();
@@ -86,7 +222,7 @@ export default function FundTransferPageClient() {
 
   const accountOptions = useMemo(() => listAllTransferAccountOptions(), [refreshKey]);
 
-  const filtered = useMemo(
+  const toolbarFiltered = useMemo(
     () =>
       filterFundTransfers(records, {
         search,
@@ -100,15 +236,10 @@ export default function FundTransferPageClient() {
     [records, search, dateFrom, dateTo, fromAccountId, toAccountId, transferMode],
   );
 
-  const sorted = useMemo(
-    () => sortFundTransfers(filtered, sortKey, sortDir),
-    [filtered, sortKey, sortDir],
-  );
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sorted.slice(start, start + pageSize);
-  }, [sorted, page, pageSize]);
+  const getCellValue = useCallback((row: FundTransferRecord, key: string) => {
+    if (key === "transferMode") return FUND_TRANSFER_MODE_LABELS[row.transferMode];
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
 
   const hasFilters =
     Boolean(search.trim()) ||
@@ -127,15 +258,6 @@ export default function FundTransferPageClient() {
   useEffect(() => {
     setPage(1);
   }, [search, dateFrom, dateTo, fromAccountId, toAccountId, transferMode, pageSize]);
-
-  const handleSort = (key: string) => {
-    const k = key as FundTransferSortKey;
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("asc");
-    }
-  };
 
   const fromAccountLabel = useMemo(() => {
     if (fromAccountId === "all") return "All accounts";
@@ -165,51 +287,67 @@ export default function FundTransferPageClient() {
     [dateFrom, dateTo, fromAccountLabel, toAccountLabel, modeLabel, search],
   );
 
-  const handleExportExcel = async () => {
-    if (sorted.length === 0 || exporting) return;
+  const handleExportExcel = async (rows: FundTransferRecord[], meta: typeof exportMeta) => {
+    if (rows.length === 0 || exporting) return;
     setExporting(true);
     try {
-      await exportFundTransfersToExcel(sorted, exportMeta);
+      await exportFundTransfersToExcel(rows, meta);
     } finally {
       setExporting(false);
     }
   };
 
-  const handleExportPdf = () => {
-    if (sorted.length === 0 || exporting) return;
+  const handleExportPdf = (rows: FundTransferRecord[], meta: typeof exportMeta) => {
+    if (rows.length === 0 || exporting) return;
     setExporting(true);
     try {
-      exportFundTransfersToPdf(sorted, exportMeta);
+      exportFundTransfersToPdf(rows, meta);
     } finally {
       setExporting(false);
     }
   };
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", "Fund Transfer")}
-      title="Fund Transfer"
-      description="Transfer funds between bank and cash accounts."
-      hideDescription
-      actions={
-        <Button
-          size="sm"
-          className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
-          onClick={() => router.push("/accounts/banking/fund-transfer/new")}
-        >
-          <Plus className="w-4 h-4" /> New Transfer
-        </Button>
-      }
-      toolbar={
-        <AccountsTableToolbar
-          placement="page-header"
-          search={{ value: search, onChange: setSearch, placeholder: "Transfer no., reference, account…" }}
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          exportDisabled={exporting || sorted.length === 0}
-        />
-      }
-      filters={
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={{
+        transferDate: { type: "date" },
+        transferNo: { type: "text" },
+        fromAccountName: { type: "text" },
+        toAccountName: { type: "text" },
+        amount: { type: "amount" },
+        transferMode: { type: "text" },
+        referenceNo: { type: "text" },
+      }}
+      defaultSortKey="transferDate"
+      defaultSortDir="desc"
+    >
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Banking", "Fund Transfer")}
+        title="Fund Transfer"
+        description="Transfer funds between bank and cash accounts."
+        hideDescription
+        actions={
+          <Button
+            size="sm"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+            onClick={() => router.push("/accounts/banking/fund-transfer/new")}
+          >
+            <Plus className="w-4 h-4" /> New Transfer
+          </Button>
+        }
+        toolbar={
+          <FundTransferExportToolbar
+            exportMeta={exportMeta}
+            exporting={exporting}
+            onExportExcel={handleExportExcel}
+            onExportPdf={handleExportPdf}
+            search={search}
+            onSearchChange={setSearch}
+          />
+        }
+        filters={
         <ReportFilterRow>
           <ReportDateRangeFilter
             preset={preset}
@@ -268,76 +406,21 @@ export default function FundTransferPageClient() {
             </Select>
           </div>
         </ReportFilterRow>
-      }
-      layout="split"
-      className="h-full min-h-0"
-    >
-      <AccountsTableListing
-        footer={
-          sorted.length > 0 ? (
-            <AccountsTablePagination
-              page={page}
-              pageSize={pageSize}
-              totalRecords={sorted.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              recordLabel="transfers"
-            />
-          ) : null
         }
+        layout="split"
+        className="h-full min-h-0"
       >
-        <AccountsTable className="w-full">
-          <AccountsTableHead>
-            <AccountsTableHeadRow>
-              <SortTh label="Transfer Date" colKey="transferDate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Transfer No." colKey="transferNo" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="From Account" colKey="fromAccountName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="To Account" colKey="toAccountName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Amount" colKey="amount" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
-              <SortTh label="Mode" colKey="transferMode" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Reference No." colKey="referenceNo" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <th className="accounts-col-actions w-10" />
-            </AccountsTableHeadRow>
-          </AccountsTableHead>
-          <AccountsTableBody>
-            {paginated.length === 0 ? (
-              <AccountsTableEmpty
-                colSpan={9}
-                message={hasFilters ? "No transfers match your filters." : "No fund transfers recorded yet."}
-                onClear={hasFilters ? clearFilters : undefined}
-              />
-            ) : (
-              paginated.map((r) => (
-                <AccountsTableRow key={r.id} className="group">
-                  <AccountsTableCell>{r.transferDate}</AccountsTableCell>
-                  <AccountsTableCell className="font-mono font-semibold text-brand-700">
-                    {r.transferNo}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="accounts-col-wide">{r.fromAccountName}</AccountsTableCell>
-                  <AccountsTableCell className="accounts-col-wide">{r.toAccountName}</AccountsTableCell>
-                  <AccountsTableCell align="right" className={MONEY_AMOUNT_CLASS}>
-                    {formatMoney(r.amount)}
-                  </AccountsTableCell>
-                  <AccountsTableCell>{FUND_TRANSFER_MODE_LABELS[r.transferMode]}</AccountsTableCell>
-                  <AccountsTableCell className="font-mono text-xs">
-                    {r.referenceNo || "—"}
-                  </AccountsTableCell>
-                  <AccountsTableCell>
-                    <StatusBadge status={r.status} />
-                  </AccountsTableCell>
-                  <AccountsTableCell className={accountsActionColClass("single")}>
-                    <AccountsViewAction
-                      title="View transfer"
-                      onClick={() => router.push(`/accounts/banking/fund-transfer/${r.id}`)}
-                    />
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))
-            )}
-          </AccountsTableBody>
-        </AccountsTable>
-      </AccountsTableListing>
-    </AccountsPageShell>
+        <AccountsTableListing>
+          <FundTransferTable
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            hasFilters={hasFilters}
+            clearFilters={clearFilters}
+          />
+        </AccountsTableListing>
+      </AccountsPageShell>
+    </AccountsColumnFilterProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -32,6 +31,11 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -70,6 +74,26 @@ function formatGstAmount(amount: number | undefined, highlightNegative = false):
   return formatMoney(amount);
 }
 
+function filterGstDisplayLines(lines: GstSummaryLine[], visibleDataIds: Set<string>): GstSummaryLine[] {
+  const visibleSectionIds = new Set<string>();
+  let currentSectionId: string | null = null;
+  for (const line of lines) {
+    if (line.kind === "section") {
+      currentSectionId = line.id;
+      continue;
+    }
+    if (line.kind === "data" && visibleDataIds.has(line.id) && currentSectionId) {
+      visibleSectionIds.add(currentSectionId);
+    }
+  }
+  return lines.filter((line) => {
+    if (line.kind === "section") return visibleSectionIds.has(line.id);
+    if (line.kind === "data") return visibleDataIds.has(line.id);
+    if (line.kind === "total" || line.kind === "net") return visibleDataIds.size > 0;
+    return false;
+  });
+}
+
 function GstSummaryTableRow({ line }: { line: GstSummaryLine }) {
   const a = line.amounts;
 
@@ -88,8 +112,7 @@ function GstSummaryTableRow({ line }: { line: GstSummaryLine }) {
 
   const isHighlight = line.kind === "total" || line.kind === "net";
   const isNet = line.kind === "net";
-  const showOnlyTotalGst =
-    line.kind === "total" || line.kind === "net";
+  const showOnlyTotalGst = line.kind === "total" || line.kind === "net";
 
   return (
     <AccountsTableRow
@@ -137,6 +160,120 @@ function GstSummaryTableRow({ line }: { line: GstSummaryLine }) {
   );
 }
 
+function GstSummaryBody({
+  mounted,
+  statement,
+  hasFilters,
+  resetFilters,
+  exportMeta,
+  exporting,
+  setExporting,
+  filterBar,
+}: {
+  mounted: boolean;
+  statement: ReturnType<typeof buildGstSummaryStatement>;
+  hasFilters: boolean;
+  resetFilters: () => void;
+  exportMeta: Parameters<typeof exportGstSummaryToExcel>[1];
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  filterBar: React.ReactNode;
+}) {
+  const dataLines = useMemo(
+    () => statement.lines.filter((l) => l.kind === "data"),
+    [statement.lines],
+  );
+  const columnFilteredDataLines = useAccountsFilteredRows(dataLines);
+  const visibleDataIds = useMemo(
+    () => new Set(columnFilteredDataLines.map((l) => l.id)),
+    [columnFilteredDataLines],
+  );
+  const displayLines = useMemo(
+    () => filterGstDisplayLines(statement.lines, visibleDataIds),
+    [statement.lines, visibleDataIds],
+  );
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const rows = flattenGstSummaryForExport(displayLines);
+      await exportGstSummaryToExcel(rows, exportMeta, statement.totals);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    const rows = flattenGstSummaryForExport(displayLines);
+    exportGstSummaryToPdf(rows, exportMeta, statement.totals);
+  };
+
+  return (
+    <AccountsPageShell
+      breadcrumbs={accountsBreadcrumb("Reports", "GST Summary")}
+      title="GST Summary"
+      description="Output GST, input GST and RCM summary for the selected period."
+      hideDescription
+      layout="split"
+      className="h-full min-h-0"
+      actions={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || columnFilteredDataLines.length === 0}
+        />
+      }
+      filters={filterBar}
+    >
+      <AccountsTableListing>
+        {!mounted ? (
+          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+            Loading GST Summary…
+          </div>
+        ) : !statement.hasData ? (
+          <div className="accounts-table-empty py-4 text-center">
+            No GST entries match the current filters.
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="block mx-auto mt-1 text-brand-600 hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        ) : dataLines.length > 0 && columnFilteredDataLines.length === 0 ? (
+          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
+        ) : (
+          <AccountsTableScroll>
+            <AccountsTable minWidth={900}>
+              <AccountsTableHead>
+                <AccountsTableHeadRow>
+                  <SortTh label="GST Type" colKey="label" />
+                  <SortTh label="Taxable Value" colKey="taxableValue" filterType="amount" align="right" />
+                  <SortTh label="CGST" colKey="cgst" filterType="amount" align="right" />
+                  <SortTh label="SGST" colKey="sgst" filterType="amount" align="right" />
+                  <SortTh label="IGST" colKey="igst" filterType="amount" align="right" />
+                  <SortTh label="Total GST" colKey="totalGst" filterType="amount" align="right" />
+                  <SortTh label="Total Invoice Value" colKey="totalInvoiceValue" filterType="amount" align="right" />
+                </AccountsTableHeadRow>
+              </AccountsTableHead>
+              <AccountsTableBody>
+                {displayLines.map((line) => (
+                  <GstSummaryTableRow key={line.id} line={line} />
+                ))}
+              </AccountsTableBody>
+            </AccountsTable>
+          </AccountsTableScroll>
+        )}
+      </AccountsTableListing>
+    </AccountsPageShell>
+  );
+}
+
 export default function GstSummaryPageClient() {
   const mounted = useClientMounted();
 
@@ -161,6 +298,31 @@ export default function GstSummaryPageClient() {
     [gstType, gstRate, debouncedSearch],
   );
 
+  const dataLines = useMemo(
+    () => statement.lines.filter((l) => l.kind === "data"),
+    [statement.lines],
+  );
+
+  const getCellValue = useCallback((row: GstSummaryLine, key: string) => {
+    if (key === "label") return row.label;
+    const a = row.amounts;
+    if (!a) return null;
+    return (a as unknown as Record<string, unknown>)[key];
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      label: { type: "text" as const },
+      taxableValue: { type: "amount" as const },
+      cgst: { type: "amount" as const },
+      sgst: { type: "amount" as const },
+      igst: { type: "amount" as const },
+      totalGst: { type: "amount" as const },
+      totalInvoiceValue: { type: "amount" as const },
+    }),
+    [],
+  );
+
   const hasFilters =
     Boolean(search.trim()) ||
     gstType !== "all" ||
@@ -176,8 +338,6 @@ export default function GstSummaryPageClient() {
     setDateTo(to);
   }, [setPreset, setDateFrom, setDateTo]);
 
-  
-
   const exportMeta = useMemo(
     () => ({
       dateFrom,
@@ -190,136 +350,83 @@ export default function GstSummaryPageClient() {
     [dateFrom, dateTo, gstTypeLabel, gstRateLabel, debouncedSearch],
   );
 
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      const rows = flattenGstSummaryForExport(statement.lines);
-      await exportGstSummaryToExcel(rows, exportMeta, statement.totals);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportPdf = () => {
-    const rows = flattenGstSummaryForExport(statement.lines);
-    exportGstSummaryToPdf(rows, exportMeta, statement.totals);
-  };
+  const filterBar = (
+    <ReportFilterRow className="items-end gap-2">
+      <ReportDateRangeFilter
+        preset={preset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onPresetChange={setPreset}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+      />
+      <div className="space-y-1 min-w-[130px]">
+        <Label className={filterLabelClass}>GST Type</Label>
+        <Select value={gstType} onValueChange={(v) => setGstType(v as GstTypeFilter)}>
+          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GST_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1 min-w-[110px]">
+        <Label className={filterLabelClass}>GST Rate</Label>
+        <Select value={gstRate} onValueChange={(v) => setGstRate(v as GstRateFilter)}>
+          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[110px]")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GST_RATE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <ReportSearchFilter
+        value={search}
+        onChange={setSearch}
+        placeholder="GST type…"
+        className="min-w-[160px]"
+      />
+      {hasFilters && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-sm px-2"
+          onClick={resetFilters}
+        >
+          Reset
+        </Button>
+      )}
+    </ReportFilterRow>
+  );
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", "GST Summary")}
-      title="GST Summary"
-      description="Output GST, input GST and RCM summary for the selected period."
-      hideDescription
-      layout="split"
-      className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !statement.hasData}
-        />
-      }
-      filters={
-        <ReportFilterRow className="items-end gap-2">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-1 min-w-[130px]">
-            <Label className={filterLabelClass}>GST Type</Label>
-            <Select value={gstType} onValueChange={(v) => setGstType(v as GstTypeFilter)}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GST_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[110px]">
-            <Label className={filterLabelClass}>GST Rate</Label>
-            <Select value={gstRate} onValueChange={(v) => setGstRate(v as GstRateFilter)}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[110px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GST_RATE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="GST type…"
-            className="min-w-[160px]"
-          />
-          {hasFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-sm px-2"
-              onClick={resetFilters}
-            >
-              Reset
-            </Button>
-          )}
-        </ReportFilterRow>
-      }
+    <AccountsColumnFilterProvider
+      rows={dataLines}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="label"
+      defaultSortDir="asc"
     >
-      <AccountsTableListing>
-        {!mounted ? (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            Loading GST Summary…
-          </div>
-        ) : !statement.hasData ? (
-          <div className="accounts-table-empty py-4 text-center">
-            No GST entries match the current filters.
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="block mx-auto mt-1 text-brand-600 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <AccountsTableScroll>
-            <AccountsTable minWidth={900}>
-              <AccountsTableHead>
-                <AccountsTableHeadRow>
-                  <AccountsTableHeadCell>GST Type</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">Taxable Value</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">CGST</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">SGST</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">IGST</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">Total GST</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">Total Invoice Value</AccountsTableHeadCell>
-                </AccountsTableHeadRow>
-              </AccountsTableHead>
-              <AccountsTableBody>
-                {statement.lines.map((line) => (
-                  <GstSummaryTableRow key={line.id} line={line} />
-                ))}
-              </AccountsTableBody>
-            </AccountsTable>
-          </AccountsTableScroll>
-        )}
-      </AccountsTableListing>
-    </AccountsPageShell>
+      <GstSummaryBody
+        mounted={mounted}
+        statement={statement}
+        hasFilters={hasFilters}
+        resetFilters={resetFilters}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        filterBar={filterBar}
+      />
+    </AccountsColumnFilterProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Landmark, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,6 @@ import {
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
-import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -22,17 +21,19 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
-import { toSignedBalance } from "@/lib/accounts/running-balance";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
   BANK_BOOK_VOUCHER_TYPE_OPTIONS,
   buildBankBookStatement,
   getBankBookAccountOptions,
-  sortBankBookTransactions,
-  type BankBookSortKey,
+  type BankBookDisplayRow,
 } from "./bank-book-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { exportBankBookToExcel, exportBankBookToPdf } from "./bank-book-export";
@@ -46,10 +47,6 @@ function BankBookPageContent() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<BankBookSortKey>("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
   const sectionRefresh = useAccountsSectionRefresh();
@@ -82,24 +79,7 @@ function BankBookPageContent() {
     });
   }, [mounted, bankLedgerId, dateFrom, dateTo, voucherType, search]);
 
-  const sortedTransactions = useMemo(() => {
-    if (!statement) return [];
-    const openingSigned = toSignedBalance(
-      statement.summary.openingBalance,
-      statement.summary.openingBalanceType,
-    );
-    return sortBankBookTransactions(
-      statement.transactionRows,
-      sortKey,
-      sortDir,
-      openingSigned,
-    );
-  }, [statement, sortKey, sortDir]);
-
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sortedTransactions.slice(start, start + pageSize);
-  }, [sortedTransactions, page, pageSize]);
+  const transactionRows = statement?.transactionRows ?? [];
 
   const exportMeta = useMemo(
     () => ({
@@ -112,44 +92,35 @@ function BankBookPageContent() {
 
   const canExport = Boolean(statement && bankLedgerId);
 
-  const handleExportExcel = async () => {
-    if (!statement) return;
-    setExporting(true);
-    try {
-      await exportBankBookToExcel(
-        statement.openingRow,
-        sortedTransactions,
-        statement.summary,
-        exportMeta,
-      );
-    } finally {
-      setExporting(false);
-    }
-  };
+  const getCellValue = useCallback((row: BankBookDisplayRow, key: string) => {
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
 
-  const handleExportPdf = () => {
-    if (!statement) return;
-    exportBankBookToPdf(
-      statement.openingRow,
-      sortedTransactions,
-      statement.summary,
-      exportMeta,
-    );
-  };
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      voucherNo: { type: "text" as const },
+      voucherType: { type: "text" as const },
+      particular: { type: "text" as const },
+      narration: { type: "text" as const },
+      receipt: { type: "amount" as const },
+      payment: { type: "amount" as const },
+    }),
+    [],
+  );
 
-  const handleSort = (key: string) => {
-    const nextKey = key as BankBookSortKey;
-    if (sortKey === nextKey) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(nextKey);
-      setSortDir("asc");
-    }
-  };
+  const showNoTransactions =
+    bankLedgerId &&
+    statement &&
+    !statement.hasPeriodTransactions &&
+    !search.trim() &&
+    voucherType === "all";
 
-  useEffect(() => {
-    setPage(1);
-  }, [bankLedgerId, dateFrom, dateTo, voucherType, search, sortKey, sortDir, pageSize]);
+  const showNoFilterResults =
+    bankLedgerId &&
+    statement &&
+    statement.hasPeriodTransactions &&
+    transactionRows.length === 0;
 
   const summaryItems = statement
     ? [
@@ -174,18 +145,115 @@ function BankBookPageContent() {
       ]
     : [];
 
-  const showNoTransactions =
-    bankLedgerId &&
-    statement &&
-    !statement.hasPeriodTransactions &&
-    !search.trim() &&
-    voucherType === "all";
+  return (
+    <AccountsColumnFilterProvider
+      rows={transactionRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <BankBookPageBody
+        bankLedgerId={bankLedgerId}
+        statement={statement}
+        transactionRows={transactionRows}
+        canExport={canExport}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        summaryItems={summaryItems}
+        showNoTransactions={Boolean(showNoTransactions)}
+        showNoFilterResults={Boolean(showNoFilterResults)}
+        preset={preset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        setPreset={setPreset}
+        setDateFrom={setDateFrom}
+        setDateTo={setDateTo}
+        bankOptions={bankOptions}
+        setBankLedgerId={setBankLedgerId}
+        voucherType={voucherType}
+        setVoucherType={setVoucherType}
+        search={search}
+        setSearch={setSearch}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
 
-  const showNoFilterResults =
-    bankLedgerId &&
-    statement &&
-    statement.hasPeriodTransactions &&
-    sortedTransactions.length === 0;
+function BankBookPageBody({
+  bankLedgerId,
+  statement,
+  transactionRows,
+  canExport,
+  exporting,
+  setExporting,
+  exportMeta,
+  summaryItems,
+  showNoTransactions,
+  showNoFilterResults,
+  preset,
+  dateFrom,
+  dateTo,
+  setPreset,
+  setDateFrom,
+  setDateTo,
+  bankOptions,
+  setBankLedgerId,
+  voucherType,
+  setVoucherType,
+  search,
+  setSearch,
+}: {
+  bankLedgerId: string;
+  statement: ReturnType<typeof buildBankBookStatement> | null;
+  transactionRows: BankBookDisplayRow[];
+  canExport: boolean;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
+  summaryItems: { label: string; value: string }[];
+  showNoTransactions: boolean;
+  showNoFilterResults: boolean;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  dateFrom: string;
+  dateTo: string;
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  setDateFrom: (v: string) => void;
+  setDateTo: (v: string) => void;
+  bankOptions: ReturnType<typeof getBankBookAccountOptions>;
+  setBankLedgerId: (v: string) => void;
+  voucherType: string;
+  setVoucherType: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(transactionRows);
+
+  const handleExportExcel = async () => {
+    if (!statement) return;
+    setExporting(true);
+    try {
+      await exportBankBookToExcel(
+        statement.openingRow,
+        columnFilteredRows,
+        statement.summary,
+        exportMeta,
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (!statement) return;
+    exportBankBookToPdf(
+      statement.openingRow,
+      columnFilteredRows,
+      statement.summary,
+      exportMeta,
+    );
+  };
 
   return (
     <AccountsPageShell
@@ -217,10 +285,7 @@ function BankBookPageContent() {
             </Label>
             <Select
               value={bankLedgerId || undefined}
-              onValueChange={(value) => {
-                setBankLedgerId(value);
-                setPage(1);
-              }}
+              onValueChange={setBankLedgerId}
             >
               <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
                 <SelectValue placeholder="Select bank account…" />
@@ -315,28 +380,11 @@ function BankBookPageContent() {
                 </div>
               </div>
             ) : statement ? (
-              <>
-                <BankBookTable
-                  openingRow={statement.openingRow}
-                  transactionRows={paginatedTransactions}
-                  summary={statement.summary}
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                />
-                {sortedTransactions.length > 0 && (
-                  <div className="flex-shrink-0 border-t border-border">
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={sortedTransactions.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="transactions"
-                    />
-                  </div>
-                )}
-              </>
+              <BankBookTable
+                openingRow={statement.openingRow}
+                transactionRows={transactionRows}
+                summary={statement.summary}
+              />
             ) : null}
           </>
         )}

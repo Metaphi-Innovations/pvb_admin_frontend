@@ -22,6 +22,7 @@ import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { loadHrEmployees } from "@/app/(app)/hr/employees/employee-master-data";
+import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { ensureAssetRegisterFromCoa, findAssetByLedgerId } from "@/lib/accounts/asset-register-data";
 
 export type CoaMasterLinkCategory =
@@ -280,6 +281,20 @@ export function resolveCoaMasterLink(
         `/assets/register/${asset.id}`,
       );
     }
+
+    if (ledger.erpSourceModule === "warehouse_master" && ledger.erpSourceId) {
+      const wh = loadWarehouses().find((w) => w.id === ledger.erpSourceId);
+      if (wh) {
+        return buildLink(
+          "fixed_asset",
+          "warehouse_master",
+          wh.id,
+          wh.warehouseName,
+          wh.warehouseCode,
+          `/masters/warehouse/${wh.id}`,
+        );
+      }
+    }
   }
 
   return null;
@@ -298,6 +313,8 @@ function moduleToCategory(module: ErpSourceModule): CoaMasterLinkCategory | null
     case "product_master":
       return "inventory";
     case "fixed_asset_master":
+      return "fixed_asset";
+    case "warehouse_master":
       return "fixed_asset";
     default:
       return null;
@@ -318,6 +335,8 @@ function hrefForModule(module: ErpSourceModule, sourceId: number, ledgerId: numb
       return `/masters/products/${sourceId}`;
     case "fixed_asset_master":
       return `/assets/register/${sourceId}`;
+    case "warehouse_master":
+      return `/masters/warehouse/${sourceId}`;
     default:
       return `/accounts/masters/chart-of-accounts?node=${ledgerId}`;
   }
@@ -387,6 +406,17 @@ export function backfillCoaMasterLinks(): void {
         isSystemGenerated: true,
         erpSourceModule: "vendor_master",
         erpSourceId: vendor.id,
+      });
+    }
+  }
+
+  for (const warehouse of loadWarehouses()) {
+    const link = findErpPartyLink("warehouse_master", warehouse.id);
+    if (link) {
+      patchLedger(link.ledgerId, {
+        isSystemGenerated: true,
+        erpSourceModule: "warehouse_master",
+        erpSourceId: warehouse.id,
       });
     }
   }

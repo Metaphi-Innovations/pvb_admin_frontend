@@ -24,6 +24,11 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { demoFinancialYearStart, demoToday } from "@/lib/accounts/demo-date-utils";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -35,9 +40,8 @@ import {
   computeStockLedgerSummary,
   filterStockLedgerRows,
   formatQty,
-  sortStockLedgerRows,
   STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS,
-  type StockLedgerSortKey,
+  type StockLedgerRow,
 } from "./stock-ledger-data";
 import {
   exportStockLedgerToCsv,
@@ -58,8 +62,6 @@ export default function StockLedgerPageClient() {
   const [transactionType, setTransactionType] = useState("all");
   const [documentNo, setDocumentNo] = useState("");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<StockLedgerSortKey>("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -107,33 +109,11 @@ export default function StockLedgerPageClient() {
     [sourceRows, filterParams],
   );
 
-  const sortedRows = useMemo(
-    () => sortStockLedgerRows(filteredRows, sortKey, sortDir),
-    [filteredRows, sortKey, sortDir],
-  );
-
   const summary = useMemo(() => computeStockLedgerSummary(filteredRows), [filteredRows]);
 
   useEffect(() => {
     setPage(1);
-  }, [
-    dateFrom,
-    dateTo,
-    productId,
-    warehouse,
-    batchNo,
-    transactionType,
-    documentNo,
-    search,
-    sortKey,
-    sortDir,
-    pageSize,
-  ]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sortedRows.slice(start, start + pageSize);
-  }, [sortedRows, page, pageSize]);
+  }, [dateFrom, dateTo, productId, warehouse, batchNo, transactionType, documentNo, search, pageSize]);
 
   const hasFilters =
     search.trim() !== "" ||
@@ -151,18 +131,6 @@ export default function StockLedgerPageClient() {
     setBatchNo("all");
     setTransactionType("all");
   };
-
-  const handleSort = useCallback((key: string) => {
-    const k = key as StockLedgerSortKey;
-    setSortKey((prev) => {
-      if (prev === k) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setSortDir("asc");
-      return k;
-    });
-  }, []);
 
   const exportMeta = useMemo(() => {
     const product =
@@ -196,25 +164,40 @@ export default function StockLedgerPageClient() {
     search,
   ]);
 
-  const handleExportExcel = useCallback(async () => {
-    if (filteredRows.length === 0 || exporting) return;
-    setExporting(true);
-    try {
-      await exportStockLedgerToExcel(filteredRows, summary, exportMeta);
-    } finally {
-      setExporting(false);
+  const getCellValue = useCallback((row: StockLedgerRow, key: string) => {
+    if (key === "transactionType") {
+      return (
+        STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS.find((o) => o.value === row.transactionType)?.label ??
+        row.transactionType
+      );
     }
-  }, [filteredRows, summary, exportMeta, exporting]);
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
 
-  const handleExportPdf = useCallback(() => {
-    if (filteredRows.length === 0 || exporting) return;
-    exportStockLedgerToPdf(filteredRows, summary, exportMeta);
-  }, [filteredRows, summary, exportMeta, exporting]);
-
-  const handleExportCsv = useCallback(() => {
-    if (filteredRows.length === 0 || exporting) return;
-    exportStockLedgerToCsv(filteredRows, summary, exportMeta);
-  }, [filteredRows, summary, exportMeta, exporting]);
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      documentNo: { type: "text" as const },
+      transactionType: { type: "text" as const },
+      productName: { type: "text" as const },
+      productCode: { type: "text" as const },
+      warehouse: { type: "text" as const },
+      batchNo: { type: "text" as const },
+      mfgDate: { type: "date" as const },
+      expiryDate: { type: "date" as const },
+      openingQty: { type: "amount" as const },
+      inQty: { type: "amount" as const },
+      outQty: { type: "amount" as const },
+      closingQty: { type: "amount" as const },
+      unit: { type: "text" as const },
+      rate: { type: "amount" as const },
+      value: { type: "amount" as const },
+      referenceModule: { type: "text" as const },
+      createdBy: { type: "text" as const },
+      remarks: { type: "text" as const },
+    }),
+    [],
+  );
 
   const summaryItems = [
     { label: "Total Products", value: String(summary.totalProducts) },
@@ -230,6 +213,158 @@ export default function StockLedgerPageClient() {
   ];
 
   return (
+    <AccountsColumnFilterProvider
+      rows={filteredRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <StockLedgerPageBody
+        filteredRows={filteredRows}
+        sourceRows={sourceRows}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        summaryItems={summaryItems}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        productId={productId}
+        setProductId={setProductId}
+        productOptions={productOptions}
+        warehouse={warehouse}
+        setWarehouse={setWarehouse}
+        warehouseOptions={warehouseOptions}
+        batchNo={batchNo}
+        setBatchNo={setBatchNo}
+        batchOptions={batchOptions}
+        transactionType={transactionType}
+        setTransactionType={setTransactionType}
+        documentNo={documentNo}
+        setDocumentNo={setDocumentNo}
+        search={search}
+        setSearch={setSearch}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function StockLedgerPageBody({
+  filteredRows,
+  sourceRows,
+  hasFilters,
+  clearFilters,
+  exportMeta,
+  exporting,
+  setExporting,
+  summaryItems,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  productId,
+  setProductId,
+  productOptions,
+  warehouse,
+  setWarehouse,
+  warehouseOptions,
+  batchNo,
+  setBatchNo,
+  batchOptions,
+  transactionType,
+  setTransactionType,
+  documentNo,
+  setDocumentNo,
+  search,
+  setSearch,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+}: {
+  filteredRows: StockLedgerRow[];
+  sourceRows: StockLedgerRow[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  exportMeta: Parameters<typeof exportStockLedgerToExcel>[2];
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  summaryItems: { label: string; value: string; warn?: boolean }[];
+  preset: DateRangePresetId;
+  setPreset: (v: DateRangePresetId) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  productId: string;
+  setProductId: (v: string) => void;
+  productOptions: { id: string; name: string; code: string }[];
+  warehouse: string;
+  setWarehouse: (v: string) => void;
+  warehouseOptions: string[];
+  batchNo: string;
+  setBatchNo: (v: string) => void;
+  batchOptions: string[];
+  transactionType: string;
+  setTransactionType: (v: string) => void;
+  documentNo: string;
+  setDocumentNo: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(filteredRows);
+  const exportSummary = useMemo(
+    () => computeStockLedgerSummary(columnFilteredRows),
+    [columnFilteredRows],
+  );
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
+  const handleExportExcel = useCallback(async () => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      await exportStockLedgerToExcel(columnFilteredRows, exportSummary, exportMeta);
+    } finally {
+      setExporting(false);
+    }
+  }, [columnFilteredRows, exportSummary, exportMeta, exporting, setExporting]);
+
+  const handleExportPdf = useCallback(() => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    exportStockLedgerToPdf(columnFilteredRows, exportSummary, exportMeta);
+  }, [columnFilteredRows, exportSummary, exportMeta, exporting]);
+
+  const handleExportCsv = useCallback(() => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    exportStockLedgerToCsv(columnFilteredRows, exportSummary, exportMeta);
+  }, [columnFilteredRows, exportSummary, exportMeta, exporting]);
+
+  return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Ledger")}
       title="Stock Ledger"
@@ -242,7 +377,7 @@ export default function StockLedgerPageClient() {
               onExcel={handleExportExcel}
               onPdf={handleExportPdf}
               onCsv={handleExportCsv}
-              disabled={exporting || filteredRows.length === 0}
+              disabled={exporting || columnFilteredRows.length === 0}
             />
           }
         >
@@ -342,11 +477,11 @@ export default function StockLedgerPageClient() {
 
         <AccountsTableListing
           footer={
-            filteredRows.length > 0 ? (
+            columnFilteredRows.length > 0 ? (
               <AccountsTablePagination
                 page={page}
                 pageSize={pageSize}
-                totalRecords={filteredRows.length}
+                totalRecords={columnFilteredRows.length}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
                 recordLabel="movements"
@@ -369,13 +504,12 @@ export default function StockLedgerPageClient() {
                 </button>
               )}
             </div>
+          ) : columnFilteredRows.length === 0 ? (
+            <div className="accounts-table-empty py-8 text-center text-sm text-muted-foreground">
+              No records match the column filters.
+            </div>
           ) : (
-            <StockLedgerTable
-              rows={paginatedRows}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-            />
+            <StockLedgerTable rows={paginatedRows} />
           )}
         </AccountsTableListing>
       </div>

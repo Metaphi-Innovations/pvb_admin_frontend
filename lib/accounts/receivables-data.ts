@@ -764,6 +764,30 @@ function resolveCustomerFromReceipt(v: AccountingVoucher): Customer | undefined 
   );
 }
 
+function buildReceiptAllocationRecord(v: AccountingVoucher): ReceiptAllocationRecord | null {
+  if (v.voucherType !== "receipt") return null;
+  if (v.status !== "posted" && v.status !== "approved") return null;
+  const customer = resolveCustomerFromReceipt(v);
+  const entry = loadAllocationStore().find((e) => e.voucherId === v.id);
+  const lines = entry?.lines ?? [];
+  const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
+  const receiptAmount = round2(v.totalDebit || v.totalCredit);
+  return {
+    voucherId: v.id,
+    receiptNo: v.voucherNumber,
+    receiptDate: v.date,
+    customerId: customer?.id ?? 0,
+    customerName: customer?.customerName ?? receiptCustomerLine(v)?.name ?? "—",
+    receiptAmount,
+    allocatedAmount,
+    unallocatedAmount: round2(Math.max(0, receiptAmount - allocatedAmount)),
+    bankAccount: bankLineName(v),
+    referenceNo: v.referenceNo || "—",
+    status: allocationStatus(receiptAmount, allocatedAmount),
+    lines,
+  };
+}
+
 function allocationStatus(receiptAmount: number, allocated: number): ReceiptAllocationStatus {
   if (allocated <= 0.009) return "unallocated";
   if (allocated >= receiptAmount - 0.009) return "fully_allocated";
@@ -771,34 +795,14 @@ function allocationStatus(receiptAmount: number, allocated: number): ReceiptAllo
 }
 
 export function loadReceiptAllocationRecords(): ReceiptAllocationRecord[] {
-  const store = loadAllocationStore();
   const vouchers = loadVouchers().filter(
     (v) =>
       v.voucherType === "receipt" && (v.status === "posted" || v.status === "approved"),
   );
 
   return vouchers
-    .map((v) => {
-      const customer = resolveCustomerFromReceipt(v);
-      const entry = store.find((e) => e.voucherId === v.id);
-      const lines = entry?.lines ?? [];
-      const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
-      const receiptAmount = round2(v.totalDebit || v.totalCredit);
-      return {
-        voucherId: v.id,
-        receiptNo: v.voucherNumber,
-        receiptDate: v.date,
-        customerId: customer?.id ?? 0,
-        customerName: customer?.customerName ?? receiptCustomerLine(v)?.name ?? "—",
-        receiptAmount,
-        allocatedAmount,
-        unallocatedAmount: round2(Math.max(0, receiptAmount - allocatedAmount)),
-        bankAccount: bankLineName(v),
-        referenceNo: v.referenceNo || "—",
-        status: allocationStatus(receiptAmount, allocatedAmount),
-        lines,
-      } satisfies ReceiptAllocationRecord;
-    })
+    .map((v) => buildReceiptAllocationRecord(v))
+    .filter((r): r is ReceiptAllocationRecord => r != null)
     .sort((a, b) => b.receiptDate.localeCompare(a.receiptDate));
 }
 
@@ -826,7 +830,11 @@ export function applyReceiptAllocation(
   voucherId: number,
   allocations: Array<{ invoiceId: number; amount: number }>,
 ): string | null {
-  const record = getReceiptAllocationByVoucherId(voucherId);
+  let record = getReceiptAllocationByVoucherId(voucherId);
+  if (!record) {
+    const voucher = loadVouchers().find((v) => v.id === voucherId);
+    record = voucher ? buildReceiptAllocationRecord(voucher) ?? undefined : undefined;
+  }
   if (!record) return "Receipt voucher not found.";
   if (!record.customerId) return "Customer could not be resolved for this receipt.";
 

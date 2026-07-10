@@ -6,7 +6,7 @@ import { hasChildLedgers } from "../chart-of-accounts-data";
 
 import type { LucideIcon } from "lucide-react";
 
-import { Boxes, FileText, Folder, Layers } from "lucide-react";
+import { FileText, Folder, FolderOpen, Folders, Layers } from "lucide-react";
 
 
 
@@ -73,16 +73,20 @@ export const VISUAL_BADGE_LABEL: Record<CoaVisualLevel, string> = {
 
 
 export const VISUAL_ICON: Record<CoaVisualLevel, LucideIcon> = {
-
   primary_head: Layers,
-
-  account_group: Folder,
-
-  sub_group: Boxes,
-
+  account_group: Folders,
+  sub_group: FolderOpen,
   ledger: FileText,
-
 };
+
+/** Sidebar tree icon — distinct shape per hierarchy level */
+export function resolveCoaSidebarIcon(
+  _node: ChartOfAccount,
+  visualLevel: CoaVisualLevel,
+): LucideIcon {
+  if (visualLevel === "primary_head") return Folder;
+  return VISUAL_ICON[visualLevel];
+}
 
 
 
@@ -157,9 +161,80 @@ export const VISUAL_ROW_CLASS: Record<CoaVisualLevel, string> = {
 
 
 
-/** Sidebar left padding from tree depth */
+/** Sidebar left padding from tree depth — clear 4-level stepped indent */
 export function coaSidebarIndentPx(depth: number): number {
-  return 4 + depth * 12;
+  return 4 + depth * 16;
+}
+
+/** Sidebar row typography by hierarchy level */
+export const COA_SIDEBAR_ROW_CLASS: Record<CoaVisualLevel, string> = {
+  primary_head: "text-[13px] font-bold text-foreground",
+  account_group: "text-xs font-medium text-foreground/90",
+  sub_group: "text-xs font-normal text-foreground/85",
+  ledger: "text-[11px] font-normal text-foreground/80",
+};
+
+/** Sidebar icon size by level — compact, not bulky */
+export function coaSidebarIconSizeClass(visualLevel: CoaVisualLevel): string {
+  if (visualLevel === "ledger" || visualLevel === "sub_group") return "w-3.5 h-3.5";
+  return "w-4 h-4";
+}
+
+/** Bank / cash accounting groups — teal accent (not generic "bank" in ledger names). */
+function isBankCashAccountingGroupName(name: string): boolean {
+  const n = name.toLowerCase().trim();
+  return (
+    n === "bank accounts" ||
+    n.includes("bank account") ||
+    n === "cash-in-hand" ||
+    n === "cash in hand" ||
+    n.includes("cash-in-hand") ||
+    (n.includes("cash") && n.includes("hand"))
+  );
+}
+
+function isUnderBankCashGroup(records: ChartOfAccount[], nodeId: number): boolean {
+  const path = getAncestorPath(records, nodeId);
+  return path.some((ancestor) => isBankCashAccountingGroupName(ancestor.accountName));
+}
+
+/**
+ * Colored icons per node type — primary heads by category, bank/cash teal by group, else level colors.
+ */
+export function coaSidebarNodeIconClass(
+  node: ChartOfAccount,
+  visualLevel: CoaVisualLevel,
+  selected: boolean,
+  records?: ChartOfAccount[],
+): string {
+  const name = node.accountName.toLowerCase();
+
+  if (visualLevel === "primary_head") {
+    if (name.includes("asset")) return selected ? "text-leaf-700" : "text-leaf-600";
+    if (name.includes("liabilit")) return selected ? "text-purple-700" : "text-purple-600";
+    if (name.includes("income")) return selected ? "text-navy-700" : "text-navy-600";
+    if (name.includes("expense")) return selected ? "text-brand-700" : "text-brand-600";
+  }
+
+  if (visualLevel === "ledger") {
+    if (records && isUnderBankCashGroup(records, node.id)) {
+      return selected ? "text-teal-700" : "text-teal-600";
+    }
+    return selected ? "text-amber-700" : "text-amber-600";
+  }
+
+  if (visualLevel === "sub_group" || visualLevel === "account_group") {
+    if (isBankCashAccountingGroupName(node.accountName)) {
+      return selected ? "text-teal-700" : "text-teal-600";
+    }
+  }
+
+  return coaTreeIconClass(visualLevel, selected);
+}
+
+/** All sidebar nodes show their level icon */
+export function coaSidebarShowsNodeIcon(_visualLevel: CoaVisualLevel): boolean {
+  return true;
 }
 
 
@@ -219,13 +294,9 @@ export const LEVEL_SELECTED_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], strin
 
 
 export const LEVEL_TITLE_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
-
-  primary_head: "text-xl font-bold text-foreground",
-
-  account_group: "text-base font-semibold text-foreground",
-
-  ledger: "text-base font-semibold text-foreground",
-
+  primary_head: "text-lg font-semibold text-foreground",
+  account_group: "text-sm font-semibold text-foreground",
+  ledger: "text-sm font-semibold text-foreground",
 };
 
 

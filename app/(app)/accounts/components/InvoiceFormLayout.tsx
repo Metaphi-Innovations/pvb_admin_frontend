@@ -7,26 +7,33 @@ import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ACCOUNTS_FILTER_CONTROL_CLASS } from "@/lib/accounts/accounts-typography";
+import {
+  ACCOUNTS_CARD_TITLE_CLASS,
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FORM_LABEL_CLASS,
+  ACCOUNTS_HELPER_TEXT_CLASS,
+  ACCOUNTS_PAGE_SUBTITLE_CLASS,
+  ACCOUNTS_PAGE_TITLE_CLASS,
+} from "@/lib/accounts/accounts-typography";
 
 /** Shared invoice form field styling — Sales & Purchase transaction invoices */
-export const INVOICE_FORM_LABEL_CLASS = "text-xs font-medium text-slate-600";
+export const INVOICE_FORM_LABEL_CLASS = ACCOUNTS_FORM_LABEL_CLASS;
 export const INVOICE_FORM_INPUT_CLASS = cn(
   ACCOUNTS_FILTER_CONTROL_CLASS,
-  "placeholder:text-sm placeholder:text-slate-400",
+  "placeholder:text-[13px] placeholder:text-slate-400",
 );
 export const INVOICE_FORM_READONLY_CLASS = cn(
   INVOICE_FORM_INPUT_CLASS,
   "bg-slate-50 text-slate-700 cursor-default",
 );
-export const INVOICE_FORM_HELPER_CLASS = "text-xs text-slate-500";
+export const INVOICE_FORM_HELPER_CLASS = ACCOUNTS_HELPER_TEXT_CLASS;
 export const INVOICE_FORM_CARD_CLASS =
-  "bg-white rounded-lg border border-slate-200 p-4 h-full";
-export const INVOICE_FORM_CARD_TITLE_CLASS = "text-base font-semibold text-slate-900";
+  "bg-white rounded-lg border border-slate-200 p-3 h-full";
+export const INVOICE_FORM_CARD_TITLE_CLASS = cn(ACCOUNTS_CARD_TITLE_CLASS, "text-slate-900");
 export const INVOICE_FORM_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
 export const INVOICE_FORM_TABLE_TH_CLASS =
   "px-2.5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 whitespace-nowrap";
-export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-sm text-slate-800 align-middle";
+export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-[13px] text-slate-800 align-middle";
 
 export function InvoiceFormLayout({
   title,
@@ -73,9 +80,9 @@ export function InvoiceFormLayout({
                   </span>
                 ))}
               </p>
-              <h1 className="text-xl font-semibold text-slate-900 leading-tight truncate">{title}</h1>
+              <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "truncate")}>{title}</h1>
               {subtitle ? (
-                <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>
+                <p className={cn(ACCOUNTS_PAGE_SUBTITLE_CLASS, "truncate")}>{subtitle}</p>
               ) : null}
             </div>
           </div>

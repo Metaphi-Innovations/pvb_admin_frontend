@@ -1,19 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge, SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  SectionTabs,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { loadInventoryAdjustments } from "@/lib/accounts/accounts-mock-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {
@@ -22,17 +27,71 @@ import {
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 
+type AdjustmentRow = ReturnType<typeof loadInventoryAdjustments>[number];
+
+function InventoryAdjustmentsTable({
+  toolbarRows,
+}: {
+  toolbarRows: AdjustmentRow[];
+}) {
+  const visible = useAccountsFilteredRows(toolbarRows);
+
+  return (
+    <AccountsTable minWidth={720}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Adjustment No." colKey="adjustmentNo" />
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Warehouse" colKey="warehouse" />
+          <SortTh label="Type" colKey="type" />
+          <SortTh label="Value" colKey="amount" filterType="amount" align="right" />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {visible.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={5} className="accounts-table-empty">
+              {toolbarRows.length === 0
+                ? "No inventory adjustments in this status."
+                : "No records match the column filters."}
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          visible.map((r) => (
+            <AccountsTableRow key={r.id}>
+              <AccountsTableCell mono className="font-semibold text-brand-700">
+                {r.adjustmentNo}
+              </AccountsTableCell>
+              <AccountsTableCell>{r.date}</AccountsTableCell>
+              <AccountsTableCell>{r.warehouse}</AccountsTableCell>
+              <AccountsTableCell>{r.type}</AccountsTableCell>
+              <AccountsTableCell align="right" money>
+                {formatMoney(r.amount)}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ))
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
 export default function InventoryAdjustmentsPage() {
   const [tab, setTab] = useState("all");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const records = loadInventoryAdjustments();
 
-  const rows = useMemo(() => {
+  const toolbarRows = useMemo(() => {
     let list = tab === "all" ? records : records.filter((r) => r.status === tab);
     if (dateFrom) list = list.filter((r) => r.date >= dateFrom);
     if (dateTo) list = list.filter((r) => r.date <= dateTo);
     return list;
   }, [records, tab, dateFrom, dateTo]);
+
+  const getCellValue = useCallback(
+    (row: AdjustmentRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
   return (
     <AccountsPageShell
@@ -65,46 +124,23 @@ export default function InventoryAdjustmentsPage() {
       }
       layout="split"
     >
-      <AccountsTableListing>
-        <AccountsTable minWidth={720}>
-          <AccountsTableHead>
-            <AccountsTableHeadRow>
-              <AccountsTableHeadCell uppercase>Adjustment No.</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Warehouse</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Type</AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" uppercase>Value</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
-            </AccountsTableHeadRow>
-          </AccountsTableHead>
-          <AccountsTableBody>
-            {rows.length === 0 ? (
-              <AccountsTableRow>
-                <AccountsTableCell colSpan={6} className="accounts-table-empty">
-                  No inventory adjustments in this status.
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ) : (
-              rows.map((r) => (
-                <AccountsTableRow key={r.id}>
-                  <AccountsTableCell mono className="font-semibold text-brand-700">
-                    {r.adjustmentNo}
-                  </AccountsTableCell>
-                  <AccountsTableCell>{r.date}</AccountsTableCell>
-                  <AccountsTableCell>{r.warehouse}</AccountsTableCell>
-                  <AccountsTableCell>{r.type}</AccountsTableCell>
-                  <AccountsTableCell align="right" money>
-                    {formatMoney(r.amount)}
-                  </AccountsTableCell>
-                  <AccountsTableCell>
-                    <StatusBadge status={r.status} />
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))
-            )}
-          </AccountsTableBody>
-        </AccountsTable>
-      </AccountsTableListing>
+      <AccountsColumnFilterProvider
+        rows={toolbarRows}
+        getCellValue={getCellValue}
+        columnConfig={{
+          adjustmentNo: { type: "text" },
+          date: { type: "date" },
+          warehouse: { type: "text" },
+          type: { type: "text" },
+          amount: { type: "amount" },
+        }}
+        defaultSortKey="date"
+        defaultSortDir="desc"
+      >
+        <AccountsTableListing>
+          <InventoryAdjustmentsTable toolbarRows={toolbarRows} />
+        </AccountsTableListing>
+      </AccountsColumnFilterProvider>
     </AccountsPageShell>
   );
 }

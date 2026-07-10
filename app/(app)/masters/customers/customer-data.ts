@@ -58,6 +58,10 @@ export interface CustomerProductMapping {
 
 export interface BranchAddress {
 	address: string;
+	addressLine2?: string;
+	country?: string;
+	district?: string;
+	town?: string;
 	city: string;
 	state: string;
 	pincode: string;
@@ -75,6 +79,8 @@ export interface BranchDocument {
 export interface CustomerBranch {
 	branchName: string;
 	isMain?: boolean;
+	salesManId?: string | number | null;
+	salesManName?: string;
 	billingAddress: BranchAddress;
 	shippingAddress: BranchAddress;
 	documents: BranchDocument[];
@@ -105,12 +111,16 @@ export interface Customer {
 	tan?: string;
 	msmeRegistered?: boolean;
 	msmeNumber?: string;
+	msmeValidityDate?: string;
 	fssaiRegistered?: boolean;
 	cibRegistered?: boolean;
 	fcoRegistered?: boolean;
 	cibRegn: string;
 	fcoRegn: string;
 	fssai: string;
+	fssaiValidityDate?: string;
+	cibValidityDate?: string;
+	fcoValidityDate?: string;
 
 	address: string;
 	stateId: number | null;

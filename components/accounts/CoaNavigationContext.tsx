@@ -13,11 +13,15 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import {
   getAllExpandableIds,
+  getAncestorPath,
   getSearchMatchingNodes,
   getSearchVisibleIds,
   hasChildLedgers,
-  loadChartOfAccounts,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import {
+  loadChartOfAccounts,
+  loadChartOfAccountsCore,
+} from "@/app/(app)/accounts/data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { GENERAL_LEDGER_HREF, buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
@@ -30,19 +34,46 @@ import {
 import { ensureTdsAccountingLedgers } from "@/lib/accounts/tds-accounting";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
+import { ACCOUNTS_SECTION_SEEDED_EVENT } from "@/lib/accounts/accounts-section-seed";
 import { useAccountsAccordion } from "./AccountsAccordionContext";
 
+/**
+ * Sidebar starts with primary heads only expanded — groups open on user click (ERP style).
+ */
 function defaultExpandedIds(records: ChartOfAccount[]): Set<number> {
-  return new Set(
-    records
-      .filter((r) => r.nodeLevel === "primary_head" || r.nodeLevel === "account_group")
-      .map((r) => r.id),
-  );
+  return new Set(records.filter((r) => r.nodeLevel === "primary_head").map((r) => r.id));
 }
 
-function readCoaRecords(): ChartOfAccount[] {
+/** Expand ancestor path so a selected/deep node remains visible without preloading the full tree. */
+function expandAncestorsOf(
+  records: ChartOfAccount[],
+  nodeId: number,
+  prev: Set<number>,
+): Set<number> {
+  const path = getAncestorPath(records, nodeId);
+  if (path.length <= 1) return prev;
+  const next = new Set(prev);
+  let changed = false;
+  for (let i = 0; i < path.length - 1; i++) {
+    if (!next.has(path[i].id)) {
+      next.add(path[i].id);
+      changed = true;
+    }
+  }
+  return changed ? next : prev;
+}
+
+function readCoaRecords(full = false): ChartOfAccount[] {
   if (typeof window === "undefined") return [];
-  return loadChartOfAccounts();
+  return full ? loadChartOfAccounts() : loadChartOfAccountsCore();
+}
+
+function scheduleOnIdle(fn: () => void, timeoutMs: number): void {
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(fn, { timeout: timeoutMs });
+  } else {
+    window.setTimeout(fn, Math.min(timeoutMs, 500));
+  }
 }
 
 function routeNeedsCoaData(pathname: string): boolean {
@@ -113,38 +144,83 @@ export function CoaNavigationProvider({
   useEffect(() => {
     if (!needsCoaData) return;
 
-    const showTree = () => {
-      const loaded = readCoaRecords();
+    let cancelled = false;
+
+    const showTree = (full = false) => {
+      if (cancelled) return;
+      const loaded = readCoaRecords(full);
       setRecords(loaded);
-      setExpandedIds(defaultExpandedIds(loaded));
+      setExpandedIds((prev) => {
+        const next = defaultExpandedIds(loaded);
+        for (const id of prev) next.add(id);
+        return next;
+      });
       setCoaReady(true);
     };
 
     if (!initRef.current) {
       initRef.current = true;
-      window.setTimeout(showTree, 0);
+
+      const loadInitial = () => {
+        if (cancelled) return;
+        showTree(false);
+      };
+
+      if (typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(loadInitial);
+        });
+      } else {
+        window.setTimeout(loadInitial, 32);
+      }
+
+      if (initMode === "full" && !backfillRef.current) {
+        backfillRef.current = true;
+
+        scheduleOnIdle(() => {
+          if (cancelled) return;
+          showTree(true);
+        }, 3500);
+
+        scheduleOnIdle(() => {
+          if (cancelled) return;
+          backfillErpPartyLedgers();
+          backfillCoaMasterLinks();
+          ensureTdsAccountingLedgers();
+          showTree(true);
+        }, 12000);
+      }
+    } else if (!coaReady) {
+      showTree(false);
     }
 
-    if (initMode !== "full" || backfillRef.current) return;
-    backfillRef.current = true;
-
-    const runBackfill = () => {
-      backfillErpPartyLedgers();
-      backfillCoaMasterLinks();
-      ensureTdsAccountingLedgers();
-      setRecords(readCoaRecords());
+    return () => {
+      cancelled = true;
     };
+  }, [needsCoaData, initMode, coaReady]);
 
-    if (typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(runBackfill, { timeout: 3000 });
-    } else {
-      window.setTimeout(runBackfill, 250);
-    }
-  }, [needsCoaData, initMode]);
+  useEffect(() => {
+    if (!needsCoaData) return;
+    const onCoaSeeded = (e: Event) => {
+      const groupId = (e as CustomEvent<{ groupId: string }>).detail?.groupId;
+      if (groupId !== "coa") return;
+      const loaded = readCoaRecords(true);
+      if (loaded.length === 0) return;
+      setRecords(loaded);
+      setExpandedIds((prev) => {
+        const next = defaultExpandedIds(loaded);
+        for (const id of prev) next.add(id);
+        return next;
+      });
+      setCoaReady(true);
+    };
+    window.addEventListener(ACCOUNTS_SECTION_SEEDED_EVENT, onCoaSeeded);
+    return () => window.removeEventListener(ACCOUNTS_SECTION_SEEDED_EVENT, onCoaSeeded);
+  }, [needsCoaData]);
 
   const refreshRecords = useCallback(() => {
     if (!initRef.current) return;
-    const loaded = readCoaRecords();
+    const loaded = readCoaRecords(true);
     setRecords(loaded);
   }, []);
 
@@ -166,9 +242,16 @@ export function CoaNavigationProvider({
         return;
       }
       setSelectedId(resolved.id);
-      if (resolved.nodeLevel !== "ledger" || hasChildLedgers(records, resolved.id)) {
-        setExpandedIds((prev) => new Set([...prev, resolved.id]));
-      }
+      setExpandedIds((prev) => {
+        let next = expandAncestorsOf(records, resolved.id, prev);
+        if (resolved.nodeLevel !== "ledger" || hasChildLedgers(records, resolved.id)) {
+          if (!next.has(resolved.id)) {
+            next = new Set(next);
+            next.add(resolved.id);
+          }
+        }
+        return next;
+      });
       const href = `${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
@@ -196,6 +279,7 @@ export function CoaNavigationProvider({
             if (node) {
               const resolved = resolveCoaTreeSelectionNode(currentRecords, node);
               setSelectedId((prev) => (prev === resolved.id ? prev : resolved.id));
+              setExpandedIds((prev) => expandAncestorsOf(currentRecords, resolved.id, prev));
               if (resolved.id !== id) {
                 router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`, {
                   scroll: false,

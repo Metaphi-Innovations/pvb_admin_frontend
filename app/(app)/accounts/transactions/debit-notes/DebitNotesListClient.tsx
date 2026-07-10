@@ -25,7 +25,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -35,8 +34,14 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { SectionTabs } from "../../components/AccountsUI";
-import { NoteWorkflowBadge } from "../../components/NoteWorkflowBadge";
+import {
+  SectionTabs,
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "../../components/AccountsUI";
 import { DebitNoteCancelDialog } from "../../debit-notes/components/DebitNoteCancelDialog";
 import { PendingDebitNotesPanel } from "../../debit-notes/components/PendingDebitNotesPanel";
 import {
@@ -67,34 +72,173 @@ const STATUS_TABS = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
-export default function DebitNotesListClient() {
-  const router = useRouter();
-  const mounted = useClientMounted();
-  const [moduleTab, setModuleTab] = useState("pending");
-  const [statusTab, setStatusTab] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [records, setRecords] = useState<DebitNoteRecord[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [search, setSearch] = useState("");
-  const [cancelTarget, setCancelTarget] = useState<DebitNoteRecord | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-
-  const refresh = useCallback(() => {
-    if (!mounted) return;
-    setRecords(loadDebitNotes());
-    setPendingCount(listPendingDebitNoteReturns().length);
-  }, [mounted]);
+function DebitNotesRecordsTable({
+  mounted,
+  toolbarFiltered,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  onCancel,
+  onRefresh,
+}: {
+  mounted: boolean;
+  toolbarFiltered: DebitNoteRecord[];
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  onCancel: (r: DebitNoteRecord) => void;
+  onRefresh: () => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows(toolbarFiltered);
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  const counts = useMemo(() => computeDebitNoteTabCounts(records), [records]);
+  return (
+    <>
+      <AccountsTableScroll>
+        <AccountsTable className="table-fixed w-full">
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="Debit Note No." colKey="debitNoteNo" />
+              <SortTh label="Source" colKey="source" />
+              <SortTh label="Against PI" colKey="sourceInvoiceNo" />
+              <SortTh label="Supplier" colKey="vendorName" className="accounts-col-party" />
+              <SortTh label="Date" colKey="debitNoteDate" filterType="date" />
+              <SortTh label="Taxable" colKey="taxableAmount" filterType="amount" align="right" />
+              <SortTh label="CGST" colKey="cgstAmount" filterType="amount" align="right" />
+              <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
+              <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
+              <SortTh label="Total" colKey="currentDebitAmount" filterType="amount" align="right" />
+              <AccountsColumnHeader
+                label="Actions"
+                colKey="_actions"
+                sortable={false}
+                filterable={false}
+                align="right"
+                className={accountsActionColClass("multi")}
+              />
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {!mounted ? (
+              <AccountsTableEmpty colSpan={11} message="Loading debit notes…" />
+            ) : toolbarFiltered.length === 0 ? (
+              <AccountsTableEmpty colSpan={11} message="No debit notes found." />
+            ) : visible.length === 0 ? (
+              <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
+            ) : (
+              pagedRows.map((r) => (
+                <AccountsTableRow key={r.id}>
+                  <AccountsTableCell mono className="font-semibold text-brand-700">
+                    <Link href={`${LIST_PATH}/${r.id}`} className="hover:underline">
+                      {r.debitNoteNo}
+                    </Link>
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs">{DEBIT_NOTE_SOURCE_LABELS[r.source]}</AccountsTableCell>
+                  <AccountsTableCell mono>{r.sourceInvoiceNo || "—"}</AccountsTableCell>
+                  <AccountsTableCell className="accounts-col-party font-medium">{r.vendorName}</AccountsTableCell>
+                  <AccountsTableCell className="tabular-nums">{r.debitNoteDate}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>{formatINR(r.taxableAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>{formatINR(r.cgstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>{formatINR(r.sgstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>{formatINR(r.igstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className="font-medium">
+                    {formatINR(r.currentDebitAmount)}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                    <AccountsTableActionCell>
+                      <AccountsViewAction href={`${LIST_PATH}/${r.id}`} />
+                      {getDebitNoteRowActions(r).includes("edit") && (
+                        <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
+                      )}
+                      {getDebitNoteRowActions(r).some((a) => a === "post" || a === "cancel") && (
+                        <AccountsMoreActions contentClassName="w-44">
+                          {getDebitNoteRowActions(r).includes("post") && (
+                            <DropdownMenuItem
+                              className="text-xs gap-2"
+                              onClick={() => {
+                                postDebitNoteRecord(r.id);
+                                onRefresh();
+                              }}
+                            >
+                              <FileText className="w-4 h-4" /> Post
+                            </DropdownMenuItem>
+                          )}
+                          {getDebitNoteRowActions(r).includes("cancel") && (
+                            <DropdownMenuItem
+                              className="text-xs gap-2 text-red-600"
+                              onClick={() => onCancel(r)}
+                            >
+                              <XCircle className="w-4 h-4" /> Cancel
+                            </DropdownMenuItem>
+                          )}
+                        </AccountsMoreActions>
+                      )}
+                    </AccountsTableActionCell>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))
+            )}
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableScroll>
+      {mounted && visible.length > 0 ? (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          recordLabel="debit notes"
+        />
+      ) : null}
+    </>
+  );
+}
 
-  const visible = useMemo(
+function DebitNotesRecordsTab({
+  mounted,
+  records,
+  statusTab,
+  setStatusTab,
+  counts,
+  search,
+  setSearch,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  onCancel,
+  onRefresh,
+}: {
+  mounted: boolean;
+  records: DebitNoteRecord[];
+  statusTab: string;
+  setStatusTab: (v: string) => void;
+  counts: ReturnType<typeof computeDebitNoteTabCounts>;
+  search: string;
+  setSearch: (v: string) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  onCancel: (r: DebitNoteRecord) => void;
+  onRefresh: () => void;
+}) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
+
+  const toolbarFiltered = useMemo(
     () =>
       mounted
         ? filterDebitNotes(records, {
@@ -111,14 +255,106 @@ export default function DebitNotesListClient() {
     [records, statusTab, search, dateFrom, dateTo, mounted],
   );
 
+  const getCellValue = useCallback((row: DebitNoteRecord, key: string) => {
+    if (key === "source") return DEBIT_NOTE_SOURCE_LABELS[row.source];
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      debitNoteNo: { type: "text" as const },
+      source: { type: "text" as const },
+      sourceInvoiceNo: { type: "text" as const },
+      vendorName: { type: "text" as const },
+      debitNoteDate: { type: "date" as const },
+      taxableAmount: { type: "amount" as const },
+      cgstAmount: { type: "amount" as const },
+      sgstAmount: { type: "amount" as const },
+      igstAmount: { type: "amount" as const },
+      currentDebitAmount: { type: "amount" as const },
+    }),
+    [],
+  );
+
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, pageSize, statusTab, moduleTab]);
+  }, [search, dateFrom, dateTo, pageSize, statusTab]);
 
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return visible.slice(start, start + pageSize);
-  }, [visible, page, pageSize]);
+  return (
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="debitNoteDate"
+      defaultSortDir="desc"
+    >
+      <DebitNotesRecordsTabBody
+        mounted={mounted}
+        toolbarFiltered={toolbarFiltered}
+        statusTab={statusTab}
+        setStatusTab={setStatusTab}
+        counts={counts}
+        search={search}
+        setSearch={setSearch}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        exporting={exporting}
+        setExporting={setExporting}
+        onCancel={onCancel}
+        onRefresh={onRefresh}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function DebitNotesRecordsTabBody({
+  mounted,
+  toolbarFiltered,
+  statusTab,
+  setStatusTab,
+  counts,
+  search,
+  setSearch,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  exporting,
+  setExporting,
+  onCancel,
+  onRefresh,
+}: {
+  mounted: boolean;
+  toolbarFiltered: DebitNoteRecord[];
+  statusTab: string;
+  setStatusTab: (v: string) => void;
+  counts: ReturnType<typeof computeDebitNoteTabCounts>;
+  search: string;
+  setSearch: (v: string) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  onCancel: (r: DebitNoteRecord) => void;
+  onRefresh: () => void;
+}) {
+  const visible = useAccountsFilteredRows(toolbarFiltered);
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -128,6 +364,75 @@ export default function DebitNotesListClient() {
       setExporting(false);
     }
   };
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
+      <div className="flex-shrink-0">
+        <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
+      </div>
+      <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
+        <AccountsListingFilterCard
+          actions={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportExcel}
+              disabled={exporting || visible.length === 0}
+            />
+          }
+        >
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportSearchFilter
+            value={search}
+            onChange={setSearch}
+            placeholder="Search DN no., source, invoice, return, supplier…"
+            className="min-w-[200px] flex-1 max-w-md"
+          />
+        </AccountsListingFilterCard>
+        <AccountsListingTableCard>
+          <DebitNotesRecordsTable
+            mounted={mounted}
+            toolbarFiltered={toolbarFiltered}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onCancel={onCancel}
+            onRefresh={onRefresh}
+          />
+        </AccountsListingTableCard>
+      </div>
+    </div>
+  );
+}
+
+export default function DebitNotesListClient() {
+  const router = useRouter();
+  const mounted = useClientMounted();
+  const [moduleTab, setModuleTab] = useState("pending");
+  const [statusTab, setStatusTab] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [records, setRecords] = useState<DebitNoteRecord[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [cancelTarget, setCancelTarget] = useState<DebitNoteRecord | null>(null);
+
+  const refresh = useCallback(() => {
+    if (!mounted) return;
+    setRecords(loadDebitNotes());
+    setPendingCount(listPendingDebitNoteReturns().length);
+  }, [mounted]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const counts = useMemo(() => computeDebitNoteTabCounts(records), [records]);
 
   return (
     <>
@@ -162,133 +467,21 @@ export default function DebitNotesListClient() {
           {moduleTab === "pending" ? (
             <PendingDebitNotesPanel />
           ) : (
-            <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
-              <div className="flex-shrink-0">
-                <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
-              </div>
-              <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
-                <AccountsListingFilterCard
-                  actions={
-                    <AccountsExportMenu
-                      onExcel={handleExportExcel}
-                      onPdf={handleExportExcel}
-                      disabled={exporting || visible.length === 0}
-                    />
-                  }
-                >
-                  <AccountsListingDateFilter
-                    dateFrom={dateFrom}
-                    dateTo={dateTo}
-                    onDateFromChange={setDateFrom}
-                    onDateToChange={setDateTo}
-                  />
-                  <ReportSearchFilter
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search DN no., source, invoice, return, supplier…"
-                    className="min-w-[200px] flex-1 max-w-md"
-                  />
-                </AccountsListingFilterCard>
-                <AccountsListingTableCard>
-                  <AccountsTableScroll>
-                    <AccountsTable className="table-fixed w-full">
-                  <AccountsTableHead>
-                    <AccountsTableHeadRow>
-                      <AccountsTableHeadCell uppercase>Debit Note No.</AccountsTableHeadCell>
-                      <AccountsTableHeadCell uppercase>Source</AccountsTableHeadCell>
-                      <AccountsTableHeadCell uppercase>Against PI</AccountsTableHeadCell>
-                      <AccountsTableHeadCell uppercase className="accounts-col-party">Supplier</AccountsTableHeadCell>
-                      <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right" uppercase>Taxable</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
-                      <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>
-                        Actions
-                      </AccountsTableHeadCell>
-                    </AccountsTableHeadRow>
-                  </AccountsTableHead>
-                  <AccountsTableBody>
-                    {!mounted ? (
-                      <AccountsTableEmpty colSpan={12} message="Loading debit notes…" />
-                    ) : visible.length === 0 ? (
-                      <AccountsTableEmpty
-                        colSpan={12}
-                        message="No debit notes found."
-                        onClear={search || dateFrom || dateTo ? () => { setSearch(""); setDateFrom(""); setDateTo(""); } : undefined}
-                      />
-                    ) : (
-                      pagedRows.map((r) => (
-                        <AccountsTableRow key={r.id}>
-                          <AccountsTableCell mono className="font-semibold text-brand-700">
-                            <Link href={`${LIST_PATH}/${r.id}`} className="hover:underline">
-                              {r.debitNoteNo}
-                            </Link>
-                          </AccountsTableCell>
-                          <AccountsTableCell className="text-xs">{DEBIT_NOTE_SOURCE_LABELS[r.source]}</AccountsTableCell>
-                          <AccountsTableCell mono>{r.sourceInvoiceNo || "—"}</AccountsTableCell>
-                          <AccountsTableCell className="accounts-col-party font-medium">{r.vendorName}</AccountsTableCell>
-                          <AccountsTableCell className="tabular-nums">{r.debitNoteDate}</AccountsTableCell>
-                          <AccountsTableCell align="right" money>{formatINR(r.taxableAmount)}</AccountsTableCell>
-                          <AccountsTableCell align="right" money>{formatINR(r.cgstAmount)}</AccountsTableCell>
-                          <AccountsTableCell align="right" money>{formatINR(r.sgstAmount)}</AccountsTableCell>
-                          <AccountsTableCell align="right" money>{formatINR(r.igstAmount)}</AccountsTableCell>
-                          <AccountsTableCell align="right" money className="font-medium">
-                            {formatINR(r.currentDebitAmount)}
-                          </AccountsTableCell>
-                          <AccountsTableCell><NoteWorkflowBadge status={r.status} /></AccountsTableCell>
-                          <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
-                            <AccountsTableActionCell>
-                              <AccountsViewAction href={`${LIST_PATH}/${r.id}`} />
-                              {getDebitNoteRowActions(r).includes("edit") && (
-                                <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
-                              )}
-                              {getDebitNoteRowActions(r).some((a) => a === "post" || a === "cancel") && (
-                                <AccountsMoreActions contentClassName="w-44">
-                                  {getDebitNoteRowActions(r).includes("post") && (
-                                    <DropdownMenuItem
-                                      className="text-xs gap-2"
-                                      onClick={() => {
-                                        postDebitNoteRecord(r.id);
-                                        refresh();
-                                      }}
-                                    >
-                                      <FileText className="w-4 h-4" /> Post
-                                    </DropdownMenuItem>
-                                  )}
-                                  {getDebitNoteRowActions(r).includes("cancel") && (
-                                    <DropdownMenuItem
-                                      className="text-xs gap-2 text-red-600"
-                                      onClick={() => setCancelTarget(r)}
-                                    >
-                                      <XCircle className="w-4 h-4" /> Cancel
-                                    </DropdownMenuItem>
-                                  )}
-                                </AccountsMoreActions>
-                              )}
-                            </AccountsTableActionCell>
-                          </AccountsTableCell>
-                        </AccountsTableRow>
-                      ))
-                    )}
-                    </AccountsTableBody>
-                  </AccountsTable>
-                </AccountsTableScroll>
-                {mounted && visible.length > 0 ? (
-                  <AccountsTablePagination
-                    page={page}
-                    pageSize={pageSize}
-                    totalRecords={visible.length}
-                    onPageChange={setPage}
-                    onPageSizeChange={setPageSize}
-                    recordLabel="debit notes"
-                  />
-                ) : null}
-              </AccountsListingTableCard>
-            </div>
-            </div>
+            <DebitNotesRecordsTab
+              mounted={mounted}
+              records={records}
+              statusTab={statusTab}
+              setStatusTab={setStatusTab}
+              counts={counts}
+              search={search}
+              setSearch={setSearch}
+              dateFrom={dateFrom}
+              setDateFrom={setDateFrom}
+              dateTo={dateTo}
+              setDateTo={setDateTo}
+              onCancel={setCancelTarget}
+              onRefresh={refresh}
+            />
           )}
         </div>
       </AccountsPageShell>

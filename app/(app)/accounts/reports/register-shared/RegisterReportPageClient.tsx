@@ -19,7 +19,6 @@ import {
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
@@ -35,12 +34,19 @@ import {
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { EmptySearch } from "@/components/ui/EmptyState";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
-import { RegisterPaymentStatusBadge } from "../register-shared/RegisterPaymentStatusBadge";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { exportRegisterToExcel, exportRegisterToPdf } from "../register-shared/register-export";
 import type { RegisterPartyOption, RegisterReportRow } from "../register-shared/register-types";
 import {
@@ -109,71 +115,38 @@ function RegisterPartyFilter({
   );
 }
 
-export function RegisterReportPageClient({ config }: { config: RegisterReportPageConfig }) {
+function RegisterReportTable({
+  config,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  toolbarFilteredCount,
+}: {
+  config: RegisterReportPageConfig;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  toolbarFilteredCount: number;
+}) {
   const router = useRouter();
-  const mounted = useClientMounted();
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows<RegisterReportRow>([]);
 
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [partyId, setPartyId] = useState("all");
-  const [invoiceStatus, setInvoiceStatus] = useState("all");
-  const [gstRate, setGstRate] = useState("all");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [exporting, setExporting] = useState(false);
-
-
-  const sourceRows = useMemo(() => (mounted ? config.buildRows() : []), [mounted, config]);
-
-  const partyOptions = useMemo(
-    () =>
-      config.partyOptions && config.partyOptions.length > 0
-        ? config.partyOptions
-        : buildRegisterPartyOptions(sourceRows),
-    [config.partyOptions, sourceRows],
+  const totals = useMemo(
+    () => computeRegisterTotals(columnFilteredRows),
+    [columnFilteredRows],
   );
-
-  const filterParams = useMemo(
-    () => ({
-      dateFrom,
-      dateTo,
-      financialYearId: "all",
-      partyId,
-      invoiceStatus,
-      gstRate,
-      search,
-    }),
-    [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search],
-  );
-
-  const filteredRows = useMemo(
-    () => filterRegisterRows(sourceRows, filterParams),
-    [sourceRows, filterParams],
-  );
-
-  const totals = useMemo(() => computeRegisterTotals(filteredRows), [filteredRows]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search, pageSize]);
 
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageSize]);
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
 
-  const hasFilters =
-    search.trim() !== "" ||
-    partyId !== "all" ||
-    invoiceStatus !== "all" ||
-    gstRate !== "all";
-
-  const clearFilters = () => {
-    setSearch("");
-    setPartyId("all");
-    setInvoiceStatus("all");
-    setGstRate("all");
-  };
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   const openInvoiceView = useCallback(
     (row: RegisterReportRow) => {
@@ -182,54 +155,169 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
     [router, config],
   );
 
-  const exportMeta = useMemo(() => {
-    const party =
-      partyId === "all"
-        ? "All"
-        : (partyOptions.find((p) => String(p.id) === partyId)?.name ?? partyId);
-    const statusLabel =
-      INVOICE_STATUS_OPTIONS.find((o) => o.value === invoiceStatus)?.label ?? invoiceStatus;
-    const gstLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? gstRate;
+  if (toolbarFilteredCount === 0) {
+    return null;
+  }
 
-    return {
-      reportName: config.title,
-      dateFrom,
-      dateTo,
-      financialYear: "",
-      partyLabel: config.partyLabel,
-      partyFilter: party,
-      invoiceStatus: statusLabel,
-      gstRate: gstLabel,
-      search,
-    };
-  }, [
-    config.title,
-    config.partyLabel,
-    partyOptions,
-    dateFrom,
-    dateTo,
-    partyId,
-    invoiceStatus,
-    gstRate,
-    search,
-  ]);
+  return (
+    <>
+      <AccountsTable minWidth={1080}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
+            <SortTh label="Invoice No." colKey="invoiceNo" />
+            <SortTh label={config.partyLabel} colKey="partyName" />
+            <SortTh label="GSTIN" colKey="gstin" />
+            <SortTh label="State" colKey="state" />
+            <SortTh label="Taxable Value" colKey="taxableValue" filterType="amount" align="right" />
+            <SortTh label="GST Amount" colKey="gstAmount" filterType="amount" align="right" />
+            <SortTh label="Invoice Total" colKey="invoiceTotal" filterType="amount" align="right" />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {columnFilteredRows.length === 0 ? (
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={8} className="accounts-table-empty">
+                No records match the column filters.
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ) : (
+            paginatedRows.map((row) => (
+              <AccountsTableRow
+                key={row.id}
+                className="group cursor-pointer"
+                onClick={() => openInvoiceView(row)}
+              >
+                <AccountsTableCell className="text-xs whitespace-nowrap">
+                  {formatRegisterDate(row.invoiceDate)}
+                </AccountsTableCell>
+                <AccountsTableCell mono className="text-brand-700 font-semibold">
+                  {row.invoiceNo}
+                </AccountsTableCell>
+                <AccountsTableCell className="text-xs font-medium">{row.partyName}</AccountsTableCell>
+                <AccountsTableCell mono className="text-xs">
+                  {row.gstin}
+                </AccountsTableCell>
+                <AccountsTableCell className="text-xs">{row.state}</AccountsTableCell>
+                <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+                  {formatMoney(row.taxableValue)}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+                  {formatMoney(row.gstAmount)}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+                  {formatMoney(row.invoiceTotal)}
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+        {columnFilteredRows.length > 0 ? (
+          <AccountsTableFoot>
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={5} className="font-semibold text-xs text-foreground">
+                Totals
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
+                {formatMoney(totals.taxableValue)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
+                {formatMoney(totals.gstAmount)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
+                {formatMoney(totals.grandTotal)}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          </AccountsTableFoot>
+        ) : null}
+      </AccountsTable>
+      {columnFilteredRows.length > 0 ? (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={columnFilteredRows.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          recordLabel="invoices"
+        />
+      ) : null}
+    </>
+  );
+}
+
+function RegisterReportBody({
+  config,
+  filteredRows,
+  hasFilters,
+  clearFilters,
+  exportMeta,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  partyId,
+  setPartyId,
+  partyOptions,
+  invoiceStatus,
+  setInvoiceStatus,
+  gstRate,
+  setGstRate,
+  search,
+  setSearch,
+}: {
+  config: RegisterReportPageConfig;
+  filteredRows: RegisterReportRow[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  exportMeta: Parameters<typeof exportRegisterToExcel>[1];
+  preset: DateRangePresetId;
+  setPreset: (v: DateRangePresetId) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  partyId: string;
+  setPartyId: (v: string) => void;
+  partyOptions: RegisterPartyOption[];
+  invoiceStatus: string;
+  setInvoiceStatus: (v: string) => void;
+  gstRate: string;
+  setGstRate: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(filteredRows);
+  const totals = useMemo(
+    () => computeRegisterTotals(columnFilteredRows),
+    [columnFilteredRows],
+  );
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search, pageSize]);
 
   const handleExportExcel = useCallback(async () => {
-    if (filteredRows.length === 0 || exporting) return;
+    if (columnFilteredRows.length === 0 || exporting) return;
     setExporting(true);
     try {
-      const rows = buildRegisterExportRows(filteredRows, config.partyLabel);
+      const rows = buildRegisterExportRows(columnFilteredRows, config.partyLabel);
       await exportRegisterToExcel(rows, exportMeta, totals, config.exportFilePrefix);
     } finally {
       setExporting(false);
     }
-  }, [filteredRows, exportMeta, totals, config, exporting]);
+  }, [columnFilteredRows, exportMeta, totals, config, exporting]);
 
   const handleExportPdf = useCallback(() => {
-    if (filteredRows.length === 0 || exporting) return;
-    const rows = buildRegisterExportRows(filteredRows, config.partyLabel);
+    if (columnFilteredRows.length === 0 || exporting) return;
+    const rows = buildRegisterExportRows(columnFilteredRows, config.partyLabel);
     exportRegisterToPdf(rows, exportMeta, totals);
-  }, [filteredRows, exportMeta, totals, config, exporting]);
+  }, [columnFilteredRows, exportMeta, totals, config, exporting]);
 
   return (
     <AccountsPageShell
@@ -242,7 +330,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
             <AccountsExportMenu
               onExcel={handleExportExcel}
               onPdf={handleExportPdf}
-              disabled={exporting || filteredRows.length === 0}
+              disabled={exporting || columnFilteredRows.length === 0}
             />
           }
         >
@@ -311,89 +399,158 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
             ]}
           />
         }
-        footer={
-          filteredRows.length > 0 ? (
-            <AccountsTablePagination
-              page={page}
-              pageSize={pageSize}
-              totalRecords={filteredRows.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              recordLabel="invoices"
-            />
-          ) : undefined
-        }
       >
         {filteredRows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
         ) : (
-          <AccountsTable minWidth={1080}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                <AccountsTableHeadCell>Invoice Date</AccountsTableHeadCell>
-                <AccountsTableHeadCell>Invoice No.</AccountsTableHeadCell>
-                <AccountsTableHeadCell>{config.partyLabel}</AccountsTableHeadCell>
-                <AccountsTableHeadCell>GSTIN</AccountsTableHeadCell>
-                <AccountsTableHeadCell>State</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">Taxable Value</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">GST Amount</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">Invoice Total</AccountsTableHeadCell>
-                <AccountsTableHeadCell>Payment Status</AccountsTableHeadCell>
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {paginatedRows.map((row) => (
-                <AccountsTableRow
-                  key={row.id}
-                  className="group cursor-pointer"
-                  onClick={() => openInvoiceView(row)}
-                >
-                  <AccountsTableCell className="text-xs whitespace-nowrap">
-                    {formatRegisterDate(row.invoiceDate)}
-                  </AccountsTableCell>
-                  <AccountsTableCell mono className="text-brand-700 font-semibold">
-                    {row.invoiceNo}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-xs font-medium">{row.partyName}</AccountsTableCell>
-                  <AccountsTableCell mono className="text-xs">
-                    {row.gstin}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-xs">{row.state}</AccountsTableCell>
-                  <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-                    {formatMoney(row.taxableValue)}
-                  </AccountsTableCell>
-                  <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-                    {formatMoney(row.gstAmount)}
-                  </AccountsTableCell>
-                  <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-                    {formatMoney(row.invoiceTotal)}
-                  </AccountsTableCell>
-                  <AccountsTableCell>
-                    <RegisterPaymentStatusBadge status={row.paymentStatus} />
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))}
-            </AccountsTableBody>
-            <AccountsTableFoot>
-              <AccountsTableRow>
-                <AccountsTableCell colSpan={5} className="font-semibold text-xs text-foreground">
-                  Totals
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(totals.taxableValue)}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(totals.gstAmount)}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(totals.grandTotal)}
-                </AccountsTableCell>
-                <AccountsTableCell />
-              </AccountsTableRow>
-            </AccountsTableFoot>
-          </AccountsTable>
+          <RegisterReportTable
+            config={config}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            toolbarFilteredCount={filteredRows.length}
+          />
         )}
       </AccountsTableListing>
     </AccountsPageShell>
+  );
+}
+
+export function RegisterReportPageClient({ config }: { config: RegisterReportPageConfig }) {
+  const mounted = useClientMounted();
+
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
+  const [partyId, setPartyId] = useState("all");
+  const [invoiceStatus, setInvoiceStatus] = useState("all");
+  const [gstRate, setGstRate] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const sourceRows = useMemo(() => (mounted ? config.buildRows() : []), [mounted, config]);
+
+  const partyOptions = useMemo(
+    () =>
+      config.partyOptions && config.partyOptions.length > 0
+        ? config.partyOptions
+        : buildRegisterPartyOptions(sourceRows),
+    [config.partyOptions, sourceRows],
+  );
+
+  const filterParams = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      financialYearId: "all",
+      partyId,
+      invoiceStatus,
+      gstRate,
+      search,
+    }),
+    [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search],
+  );
+
+  const filteredRows = useMemo(
+    () => filterRegisterRows(sourceRows, filterParams),
+    [sourceRows, filterParams],
+  );
+
+  const hasFilters =
+    search.trim() !== "" ||
+    partyId !== "all" ||
+    invoiceStatus !== "all" ||
+    gstRate !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setPartyId("all");
+    setInvoiceStatus("all");
+    setGstRate("all");
+  };
+
+  const exportMeta = useMemo(() => {
+    const party =
+      partyId === "all"
+        ? "All"
+        : (partyOptions.find((p) => String(p.id) === partyId)?.name ?? partyId);
+    const statusLabel =
+      INVOICE_STATUS_OPTIONS.find((o) => o.value === invoiceStatus)?.label ?? invoiceStatus;
+    const gstLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? gstRate;
+
+    return {
+      reportName: config.title,
+      dateFrom,
+      dateTo,
+      financialYear: "",
+      partyLabel: config.partyLabel,
+      partyFilter: party,
+      invoiceStatus: statusLabel,
+      gstRate: gstLabel,
+      search,
+    };
+  }, [
+    config.title,
+    config.partyLabel,
+    partyOptions,
+    dateFrom,
+    dateTo,
+    partyId,
+    invoiceStatus,
+    gstRate,
+    search,
+  ]);
+
+  const getCellValue = useCallback(
+    (row: RegisterReportRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
+
+  const columnConfig = useMemo(
+    () => ({
+      invoiceDate: { type: "date" as const },
+      invoiceNo: { type: "text" as const },
+      partyName: { type: "text" as const },
+      gstin: { type: "text" as const },
+      state: { type: "text" as const },
+      taxableValue: { type: "amount" as const },
+      gstAmount: { type: "amount" as const },
+      invoiceTotal: { type: "amount" as const },
+    }),
+    [],
+  );
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={filteredRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="invoiceDate"
+      defaultSortDir="desc"
+    >
+      <RegisterReportBody
+        config={config}
+        filteredRows={filteredRows}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        exportMeta={exportMeta}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        partyId={partyId}
+        setPartyId={setPartyId}
+        partyOptions={partyOptions}
+        invoiceStatus={invoiceStatus}
+        setInvoiceStatus={setInvoiceStatus}
+        gstRate={gstRate}
+        setGstRate={setGstRate}
+        search={search}
+        setSearch={setSearch}
+      />
+    </AccountsColumnFilterProvider>
   );
 }

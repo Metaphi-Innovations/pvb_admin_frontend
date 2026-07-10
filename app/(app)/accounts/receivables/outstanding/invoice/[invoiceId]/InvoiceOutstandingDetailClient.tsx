@@ -9,23 +9,75 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getInvoiceOutstandingDetail } from "@/lib/accounts/receivables-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  StatusBadge,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import type { InvoiceReceiptHistoryRow } from "@/lib/accounts/receivables-data";
 
 function formatReportDate(value: string): string {
   const [y, m, d] = value.slice(0, 10).split("-");
   if (!y || !m || !d) return value;
   return `${d}-${m}-${y}`;
+}
+
+function ReceiptHistoryTable({ rows }: { rows: InvoiceReceiptHistoryRow[] }) {
+  const visible = useAccountsFilteredRows(rows);
+
+  return (
+    <AccountsTableScroll className="flex-1 min-h-0">
+      <AccountsTable minWidth={720}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Receipt No." colKey="receiptNo" />
+            <SortTh label="Date" colKey="receiptDate" filterType="date" />
+            <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
+            <SortTh label="Mode" colKey="paymentMode" />
+            <SortTh label="Reference" colKey="referenceNo" />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {visible.length === 0 ? (
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={5} className="accounts-table-empty">
+                {rows.length === 0
+                  ? "No receipts recorded against this invoice."
+                  : "No records match the column filters."}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ) : (
+            visible.map((r, i) => (
+              <AccountsTableRow key={`${r.receiptNo}-${i}`}>
+                <AccountsTableCell>
+                  <span className="font-mono text-xs font-semibold text-brand-700">{r.receiptNo}</span>
+                </AccountsTableCell>
+                <AccountsTableCell>{formatReportDate(r.receiptDate)}</AccountsTableCell>
+                <AccountsTableCell align="right">
+                  <span className="tabular-nums">{formatMoney(r.amount)}</span>
+                </AccountsTableCell>
+                <AccountsTableCell>{r.paymentMode}</AccountsTableCell>
+                <AccountsTableCell>
+                  <span className="font-mono text-xs">{r.referenceNo}</span>
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
+    </AccountsTableScroll>
+  );
 }
 
 export default function InvoiceOutstandingDetailClient() {
@@ -169,42 +221,21 @@ export default function InvoiceOutstandingDetailClient() {
             Receipt History
           </p>
         </div>
-        <AccountsTableScroll className="flex-1 min-h-0">
-          <AccountsTable minWidth={720}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                {["Receipt No.", "Date", "Amount", "Mode", "Reference"].map((h) => (
-                  <AccountsTableHeadCell key={h}>{h}</AccountsTableHeadCell>
-                ))}
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {receiptHistory.length === 0 ? (
-                <AccountsTableRow>
-                  <AccountsTableCell colSpan={5} className="accounts-table-empty">
-                    No receipts recorded against this invoice.
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ) : (
-                receiptHistory.map((r, i) => (
-                  <AccountsTableRow key={`${r.receiptNo}-${i}`}>
-                    <AccountsTableCell>
-                      <span className="font-mono text-xs font-semibold text-brand-700">{r.receiptNo}</span>
-                    </AccountsTableCell>
-                    <AccountsTableCell>{formatReportDate(r.receiptDate)}</AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <span className="tabular-nums">{formatMoney(r.amount)}</span>
-                    </AccountsTableCell>
-                    <AccountsTableCell>{r.paymentMode}</AccountsTableCell>
-                    <AccountsTableCell>
-                      <span className="font-mono text-xs">{r.referenceNo}</span>
-                    </AccountsTableCell>
-                  </AccountsTableRow>
-                ))
-              )}
-            </AccountsTableBody>
-          </AccountsTable>
-        </AccountsTableScroll>
+        <AccountsColumnFilterProvider
+          rows={receiptHistory}
+          getCellValue={(row, key) => (row as unknown as Record<string, unknown>)[key]}
+          columnConfig={{
+            receiptNo: { type: "text" },
+            receiptDate: { type: "date" },
+            amount: { type: "amount" },
+            paymentMode: { type: "text" },
+            referenceNo: { type: "text" },
+          }}
+          defaultSortKey="receiptDate"
+          defaultSortDir="desc"
+        >
+          <ReceiptHistoryTable rows={receiptHistory} />
+        </AccountsColumnFilterProvider>
       </div>
     </AccountsPageShell>
   );

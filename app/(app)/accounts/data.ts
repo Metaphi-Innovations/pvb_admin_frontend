@@ -98,9 +98,11 @@ const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
 
 let coaCache: ChartOfAccount[] | null = null;
+let coaCoreCache: ChartOfAccount[] | null = null;
 
 function clearCoaCache(): void {
   coaCache = null;
+  coaCoreCache = null;
   try {
     const { invalidateCoaPathCache } =
       require("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data") as typeof import("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data");
@@ -118,6 +120,8 @@ const LEGACY_COA_KEYS = [
   "ds_accounts_coa_v8",
   "ds_accounts_coa_v9",
 ];
+
+const LEGACY_COA_META_KEYS = ["ds_gst_coa_sync_v2"];
 
 const COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 
@@ -319,6 +323,9 @@ function purgeLegacyCoaStorage() {
   for (const key of LEGACY_COA_KEYS) {
     localStorage.removeItem(key);
   }
+  for (const key of LEGACY_COA_META_KEYS) {
+    localStorage.removeItem(key);
+  }
 }
 
 function coaStorageNeedsReset(stored: ChartOfAccount[]): boolean {
@@ -364,6 +371,8 @@ function save<T>(key: string, list: T[]) {
 
 /** Load COA from storage without GST Master sync (used internally to avoid sync loops). */
 export function loadChartOfAccountsCore(): ChartOfAccount[] {
+  if (coaCoreCache) return coaCoreCache;
+
   if (typeof window !== "undefined") {
     purgeLegacyCoaStorage();
   }
@@ -374,12 +383,21 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
   const source = needsReset ? [] : stripped;
   const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
 
+  coaCoreCache = merged;
+
   if (
     typeof window !== "undefined" &&
     (needsReset || merged.length !== raw.length || stripped.length !== raw.length)
   ) {
-    save(COA_KEY, merged);
-    writeCoaMeta();
+    const persist = () => {
+      save(COA_KEY, merged);
+      writeCoaMeta();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(persist, { timeout: 2500 });
+    } else {
+      window.setTimeout(persist, 0);
+    }
   }
 
   return merged;
@@ -387,12 +405,7 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
 
 export const loadChartOfAccounts = (): ChartOfAccount[] => {
   if (coaCache) return coaCache;
-
-  const core = loadChartOfAccountsCore();
-  if (typeof window === "undefined") return core;
-
-  const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
-  coaCache = applyGstCoaSyncOnLoad(core);
+  coaCache = loadChartOfAccountsCore();
   return coaCache;
 };
 

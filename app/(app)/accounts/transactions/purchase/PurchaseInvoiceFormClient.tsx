@@ -471,7 +471,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         </InvoiceFormSection>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-          <h2 className="text-base font-semibold text-slate-900">Invoice Summary</h2>
+          <h2 className="accounts-card-title">Invoice Summary</h2>
           <div className="space-y-1.5 text-sm text-slate-700">
             <div className="flex justify-between gap-4">
               <span className="text-slate-500">Taxable Amount</span>

@@ -13,7 +13,6 @@ import {
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
@@ -24,6 +23,11 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import {
@@ -38,6 +42,7 @@ import {
   filterBalanceSheetStatement,
   flattenBalanceSheetForExport,
   type BalanceSheetLineItem,
+  type BalanceSheetStatement,
 } from "./balance-sheet-data";
 import { exportBalanceSheetToExcel, exportBalanceSheetToPdf } from "./balance-sheet-export";
 
@@ -83,90 +88,48 @@ function BalanceSheetRow({ line }: { line: BalanceSheetLineItem }) {
   );
 }
 
-export default function BalanceSheetPageClient() {
-  const mounted = useClientMounted();
+function BalanceSheetBody({
+  mounted,
+  statement,
+  hasFilters,
+  resetFilters,
+  exportMeta,
+  exporting,
+  setExporting,
+  filterBar,
+}: {
+  mounted: boolean;
+  statement: BalanceSheetStatement;
+  hasFilters: boolean;
+  resetFilters: () => void;
+  exportMeta: Parameters<typeof exportBalanceSheetToExcel>[1];
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  filterBar: React.ReactNode;
+}) {
+  const columnFilteredLines = useAccountsFilteredRows(statement.lines);
 
-  const [preset, setPreset] = useState<DateRangePresetId>("this_month");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
-  const [datesReady, setDatesReady] = useState(false);
-
-  const [search, setSearch] = useState("");
-  const [exporting, setExporting] = useState(false);
-
-  const debouncedSearch = useDebouncedValue(search, 300);
-
-  useEffect(() => {
-    const { from, to } = resolveDateRangePreset("this_month");
-    setDateFrom(from);
-    setDateTo(to);
-    setDatesReady(true);
-  }, []);
-
-  const handlePresetChange = useCallback((value: DateRangePresetId) => {
-    setPreset(value);
-    if (value !== "custom") {
-      const { from, to } = resolveDateRangePreset(value);
-      setDateFrom(from);
-      setDateTo(to);
-    }
-  }, []);
-
-  const sourceStatement = useMemo(() => {
-    if (!mounted) {
-      return {
-        lines: [],
-        totalLiabilities: 0,
-        totalAssets: 0,
-        difference: 0,
-        isBalanced: true,
-        hasData: false,
-      };
-    }
-    return buildBalanceSheetStatement();
-  }, [mounted, dateFrom, dateTo]);
-
-  const statement = useMemo(
-    () => filterBalanceSheetStatement(sourceStatement, { search: debouncedSearch }),
-    [sourceStatement, debouncedSearch],
-  );
-
-  const hasFilters =
-    Boolean(search.trim()) ||
-    (datesReady && preset !== "this_month");
-
-  const resetFilters = useCallback(() => {
-    setSearch("");
-    setPreset("this_month");
-    const { from, to } = resolveDateRangePreset("this_month");
-    setDateFrom(from);
-    setDateTo(to);
-  }, []);
-
-  
-
-  const exportMeta = useMemo(
-    () => ({
-      dateFrom,
-      dateTo,
-      financialYear: "",
+  const exportStatement = useMemo(
+    (): BalanceSheetStatement => ({
+      ...statement,
+      lines: columnFilteredLines,
     }),
-    [dateFrom, dateTo],
+    [statement, columnFilteredLines],
   );
 
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const rows = flattenBalanceSheetForExport(statement);
-      await exportBalanceSheetToExcel(rows, exportMeta, statement);
+      const rows = flattenBalanceSheetForExport(exportStatement);
+      await exportBalanceSheetToExcel(rows, exportMeta, exportStatement);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    const rows = flattenBalanceSheetForExport(statement);
-    exportBalanceSheetToPdf(rows, exportMeta, statement);
+    const rows = flattenBalanceSheetForExport(exportStatement);
+    exportBalanceSheetToPdf(rows, exportMeta, exportStatement);
   };
 
   const showTable = mounted && statement.hasData;
@@ -183,52 +146,10 @@ export default function BalanceSheetPageClient() {
         <AccountsExportMenu
           onExcel={handleExportExcel}
           onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !statement.hasData}
+          disabled={exporting || !mounted || columnFilteredLines.length === 0}
         />
       }
-      filters={
-        <ReportFilterRow className="items-end gap-2">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={handlePresetChange}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-0.5 min-w-[180px] flex-1">
-            <Label className={filterLabelClass}>Search Particular</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name…"
-                className={cn(filterControlClass, "pr-7")}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
-          {hasFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-sm px-2"
-              onClick={resetFilters}
-            >
-              Reset
-            </Button>
-          )}
-        </ReportFilterRow>
-      }
+      filters={filterBar}
     >
       <AccountsTableListing>
         {!mounted ? (
@@ -248,16 +169,20 @@ export default function BalanceSheetPageClient() {
               </button>
             )}
           </div>
+        ) : statement.lines.length > 0 && columnFilteredLines.length === 0 ? (
+          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
         ) : (
           <AccountsTable minWidth={520}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <AccountsTableHeadCell>Particular</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">Amount</AccountsTableHeadCell>
+                <SortTh label="Particular" colKey="particular" />
+                <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
-              {statement.lines.map((line) => (
+              {columnFilteredLines.map((line) => (
                 <BalanceSheetRow key={line.id} line={line} />
               ))}
             </AccountsTableBody>
@@ -321,5 +246,147 @@ export default function BalanceSheetPageClient() {
         )}
       </AccountsTableListing>
     </AccountsPageShell>
+  );
+}
+
+export default function BalanceSheetPageClient() {
+  const mounted = useClientMounted();
+
+  const [preset, setPreset] = useState<DateRangePresetId>("this_month");
+  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
+  const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
+  const [datesReady, setDatesReady] = useState(false);
+  const [search, setSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  useEffect(() => {
+    const { from, to } = resolveDateRangePreset("this_month");
+    setDateFrom(from);
+    setDateTo(to);
+    setDatesReady(true);
+  }, []);
+
+  const handlePresetChange = useCallback((value: DateRangePresetId) => {
+    setPreset(value);
+    if (value !== "custom") {
+      const { from, to } = resolveDateRangePreset(value);
+      setDateFrom(from);
+      setDateTo(to);
+    }
+  }, []);
+
+  const sourceStatement = useMemo(() => {
+    if (!mounted) {
+      return {
+        lines: [],
+        totalLiabilities: 0,
+        totalAssets: 0,
+        difference: 0,
+        isBalanced: true,
+        hasData: false,
+      };
+    }
+    return buildBalanceSheetStatement();
+  }, [mounted, dateFrom, dateTo]);
+
+  const statement = useMemo(
+    () => filterBalanceSheetStatement(sourceStatement, { search: debouncedSearch }),
+    [sourceStatement, debouncedSearch],
+  );
+
+  const getCellValue = useCallback(
+    (row: BalanceSheetLineItem, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
+
+  const columnConfig = useMemo(
+    () => ({
+      particular: { type: "text" as const },
+      amount: { type: "amount" as const },
+    }),
+    [],
+  );
+
+  const hasFilters =
+    Boolean(search.trim()) ||
+    (datesReady && preset !== "this_month");
+
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setPreset("this_month");
+    const { from, to } = resolveDateRangePreset("this_month");
+    setDateFrom(from);
+    setDateTo(to);
+  }, []);
+
+  const exportMeta = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      financialYear: "",
+    }),
+    [dateFrom, dateTo],
+  );
+
+  const filterBar = (
+    <ReportFilterRow className="items-end gap-2">
+      <ReportDateRangeFilter
+        preset={preset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onPresetChange={handlePresetChange}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+      />
+      <div className="space-y-0.5 min-w-[180px] flex-1">
+        <Label className={filterLabelClass}>Search Particular</Label>
+        <div className="relative">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Name…"
+            className={cn(filterControlClass, "pr-7")}
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+      {hasFilters && (
+        <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
+          Reset
+        </Button>
+      )}
+    </ReportFilterRow>
+  );
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={statement.lines}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="particular"
+      defaultSortDir="asc"
+    >
+      <BalanceSheetBody
+        mounted={mounted}
+        statement={statement}
+        hasFilters={hasFilters}
+        resetFilters={resetFilters}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        filterBar={filterBar}
+      />
+    </AccountsColumnFilterProvider>
   );
 }

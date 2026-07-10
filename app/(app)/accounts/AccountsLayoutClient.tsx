@@ -2,6 +2,7 @@
 
 import { AccountsAccordionProvider } from "@/components/accounts/AccountsAccordionContext";
 import { CoaNavigationProviderLazy } from "@/components/accounts/CoaNavigationProviderLazy";
+import { AccountsSidebarProvider } from "@/components/accounts/AccountsSidebarContext";
 import { AccountsModuleShell } from "@/components/accounts/AccountsModuleShell";
 import { ACCOUNTS_VIEWPORT_HEIGHT } from "@/lib/accounts/accounts-layout-constants";
 
@@ -13,7 +14,9 @@ export default function AccountsLayoutClient({ children }: { children: React.Rea
     >
       <AccountsAccordionProvider>
         <CoaNavigationProviderLazy>
-          <AccountsModuleShell>{children}</AccountsModuleShell>
+          <AccountsSidebarProvider>
+            <AccountsModuleShell>{children}</AccountsModuleShell>
+          </AccountsSidebarProvider>
         </CoaNavigationProviderLazy>
       </AccountsAccordionProvider>
     </div>

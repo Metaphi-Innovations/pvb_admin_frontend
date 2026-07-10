@@ -6,13 +6,19 @@ import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge, SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  SectionTabs,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
@@ -54,60 +60,120 @@ function exportPaymentRunsCsv(rows: PaymentRunRecord[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function PaymentRunsPage() {
-  const [tab, setTab] = useState("all");
-  const [search, setSearch] = useState("");
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+function PaymentRunsTable({
+  toolbarRows,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  toolbarRows: PaymentRunRecord[];
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows(toolbarRows);
+  const paged = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <>
+      <AccountsTable minWidth={720}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Run No." colKey="runNo" />
+            <SortTh label="Date" colKey="date" filterType="date" />
+            <SortTh label="Branch" colKey="branch" />
+            <SortTh label="Payees" colKey="payeeCount" filterType="amount" align="center" />
+            <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {paged.length === 0 ? (
+            <AccountsTableEmpty
+              colSpan={5}
+              message={
+                toolbarRows.length === 0
+                  ? "No payment runs found."
+                  : "No records match the column filters."
+              }
+            />
+          ) : (
+            paged.map((r) => (
+              <AccountsTableRow key={r.id}>
+                <AccountsTableCell mono className="font-semibold text-brand-700">
+                  {r.runNo}
+                </AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{r.date}</AccountsTableCell>
+                <AccountsTableCell>{r.branch}</AccountsTableCell>
+                <AccountsTableCell align="center">{r.payeeCount}</AccountsTableCell>
+                <AccountsTableCell align="right" money>
+                  {formatMoney(r.totalAmount)}
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
+      {visible.length > 0 ? (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function PaymentRunsContent({
+  tab,
+  setTab,
+  search,
+  setSearch,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  counts,
+  toolbarRows,
+  onAdd,
+}: {
+  tab: string;
+  setTab: (t: string) => void;
+  search: string;
+  setSearch: (s: string) => void;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  counts: Record<string, number>;
+  toolbarRows: PaymentRunRecord[];
+  onAdd: () => void;
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const records = useMemo(
-    () => accountsDataService.getPaymentRuns(),
-    [refreshKey],
-  );
-
-  const filtered = useMemo(() => {
-    let list = tab === "all" ? records : records.filter((r) => r.status === tab);
-    list = filterByDateRange(list, "date", dateFrom, dateTo);
-    list = searchRows(list, search, ["runNo", "branch", "status"]);
-    return list;
-  }, [records, tab, dateFrom, dateTo, search]);
-
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(toolbarRows);
 
   useEffect(() => {
     setPage(1);
   }, [tab, search, dateFrom, dateTo, pageSize]);
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: records.length };
-    for (const r of records) c[r.status] = (c[r.status] ?? 0) + 1;
-    return c;
-  }, [records]);
-
-  const handleAdd = () => {
-    const nextId = records.reduce((max, r) => Math.max(max, r.id), 0) + 1;
-    const runNo = `PRUN-${String(nextId).padStart(4, "0")}`;
-    const today = new Date().toISOString().slice(0, 10);
-    const newRun: PaymentRunRecord = {
-      id: nextId,
-      runNo,
-      date: today,
-      payeeCount: 1,
-      totalAmount: 0,
-      status: "draft",
-      branch: "Head Office",
-    };
-    savePaymentRuns([newRun, ...records]);
-    accountsDataService.invalidate("paymentRuns");
-    setRefreshKey((k) => k + 1);
-  };
-
-  const handleExport = useCallback(() => exportPaymentRunsCsv(filtered), [filtered]);
+  const handleExport = useCallback(() => exportPaymentRunsCsv(visible), [visible]);
 
   return (
     <AccountsPageShell
@@ -119,7 +185,7 @@ export default function PaymentRunsPage() {
         <Button
           size="sm"
           className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5 px-2.5"
-          onClick={handleAdd}
+          onClick={onAdd}
         >
           <Plus className="w-4 h-4" /> New Payment Run
         </Button>
@@ -145,74 +211,115 @@ export default function PaymentRunsPage() {
                 onDateToChange={setDateTo}
               />
             }
-            actions={<AccountsExportMenu onExcel={handleExport} onPdf={handleExport} disabled={filtered.length === 0} />}
+            actions={
+              <AccountsExportMenu onExcel={handleExport} onPdf={handleExport} disabled={visible.length === 0} />
+            }
           />
         }
         subheader={
-            <SectionTabs
-              tabs={[
-                { id: "all", label: "All" },
-                { id: "draft", label: "Draft" },
-                { id: "approved", label: "Approved" },
-                { id: "paid", label: "Paid" },
-                { id: "cancelled", label: "Cancelled" },
-              ]}
-              active={tab}
-              onChange={setTab}
-              counts={counts}
-              compact
-            />
-        }
-        footer={
-          filtered.length > 0 ? (
-            <AccountsTablePagination
-              page={page}
-              pageSize={pageSize}
-              totalRecords={filtered.length}
-              onPageChange={setPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setPage(1);
-              }}
-            />
-          ) : undefined
+          <SectionTabs
+            tabs={[
+              { id: "all", label: "All" },
+              { id: "draft", label: "Draft" },
+              { id: "approved", label: "Approved" },
+              { id: "paid", label: "Paid" },
+              { id: "cancelled", label: "Cancelled" },
+            ]}
+            active={tab}
+            onChange={setTab}
+            counts={counts}
+            compact
+          />
         }
       >
-        <AccountsTable minWidth={720}>
-          <AccountsTableHead>
-            <AccountsTableHeadRow>
-              <AccountsTableHeadCell uppercase>Run No.</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Branch</AccountsTableHeadCell>
-              <AccountsTableHeadCell align="center" uppercase>Payees</AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
-            </AccountsTableHeadRow>
-          </AccountsTableHead>
-          <AccountsTableBody>
-            {paged.length === 0 ? (
-              <AccountsTableEmpty colSpan={6} message="No payment runs found." />
-            ) : (
-              paged.map((r) => (
-                <AccountsTableRow key={r.id}>
-                  <AccountsTableCell mono className="font-semibold text-brand-700">
-                    {r.runNo}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="tabular-nums">{r.date}</AccountsTableCell>
-                  <AccountsTableCell>{r.branch}</AccountsTableCell>
-                  <AccountsTableCell align="center">{r.payeeCount}</AccountsTableCell>
-                  <AccountsTableCell align="right" money>
-                    {formatMoney(r.totalAmount)}
-                  </AccountsTableCell>
-                  <AccountsTableCell>
-                    <StatusBadge status={r.status} />
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))
-            )}
-          </AccountsTableBody>
-        </AccountsTable>
+        <PaymentRunsTable
+          toolbarRows={toolbarRows}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
       </AccountsTableListing>
     </AccountsPageShell>
+  );
+}
+
+export default function PaymentRunsPage() {
+  const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const records = useMemo(() => accountsDataService.getPaymentRuns(), [refreshKey]);
+
+  const toolbarRows = useMemo(() => {
+    let list = tab === "all" ? records : records.filter((r) => r.status === tab);
+    list = filterByDateRange(list, "date", dateFrom, dateTo);
+    list = searchRows(list, search, ["runNo", "branch", "status"]);
+    return list;
+  }, [records, tab, dateFrom, dateTo, search]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: records.length };
+    for (const r of records) c[r.status] = (c[r.status] ?? 0) + 1;
+    return c;
+  }, [records]);
+
+  const getCellValue = useCallback(
+    (row: PaymentRunRecord, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
+
+  const handleAdd = () => {
+    const nextId = records.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+    const runNo = `PRUN-${String(nextId).padStart(4, "0")}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const newRun: PaymentRunRecord = {
+      id: nextId,
+      runNo,
+      date: today,
+      payeeCount: 1,
+      totalAmount: 0,
+      status: "draft",
+      branch: "Head Office",
+    };
+    savePaymentRuns([newRun, ...records]);
+    accountsDataService.invalidate("paymentRuns");
+    setRefreshKey((k) => k + 1);
+  };
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={toolbarRows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        runNo: { type: "text" },
+        date: { type: "date" },
+        branch: { type: "text" },
+        payeeCount: { type: "amount" },
+        totalAmount: { type: "amount" },
+      }}
+      defaultSortKey="date"
+      defaultSortDir="desc"
+    >
+      <PaymentRunsContent
+        tab={tab}
+        setTab={setTab}
+        search={search}
+        setSearch={setSearch}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        counts={counts}
+        toolbarRows={toolbarRows}
+        onAdd={handleAdd}
+      />
+    </AccountsColumnFilterProvider>
   );
 }

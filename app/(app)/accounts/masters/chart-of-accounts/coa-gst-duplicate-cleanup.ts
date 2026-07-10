@@ -1,24 +1,17 @@
 /**
  * Removes misplaced duplicate GST ledgers from stored COA.
- * Input GST belongs only under GST Input Credit; output GST only under Duties & Taxes Payable.
+ * Statutory input GST belongs under GST Input Credit; output GST under GST Output.
+ * Rate-suffixed ledgers (e.g. Input CGST (GST 5%)) from legacy GST Master sync are removed.
  */
 
 import type { ChartOfAccount } from "../../data";
-
-const GST_INPUT_CREDIT_LEDGER_NAMES = new Set([
-  "gst input credit (cgst)",
-  "gst input credit (sgst)",
-  "gst input credit (igst)",
-]);
-
-const GST_OUTPUT_COMPONENT_NAMES = new Set([
-  "output cgst payable",
-  "output sgst payable",
-  "output igst payable",
-  "cgst payable",
-  "sgst payable",
-  "igst payable",
-]);
+import {
+  DUTIES_DIRECT_STATUTORY_LEDGER_NAMES,
+  GST_INPUT_LEDGER_NAMES,
+  GST_OUTPUT_LEDGER_NAMES,
+  isRateSpecificGstLedgerName,
+  LEGACY_GST_LEDGER_NAMES,
+} from "./coa-statutory-ledgers";
 
 function ancestorNames(records: ChartOfAccount[], nodeId: number): string[] {
   const names: string[] = [];
@@ -40,19 +33,36 @@ function isUnderGroup(pathNames: string[], groupName: string): boolean {
 export function stripMisplacedGstLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
   return records.filter((r) => {
     if (r.nodeLevel !== "ledger") return true;
-    if (r.erpSourceModule === "gst_master") return true;
+
+    if (r.isSystem && r.isSystemGenerated) return true;
+
+    if (r.erpSourceModule === "gst_master") return false;
+    if (isRateSpecificGstLedgerName(r.accountName)) return false;
 
     const pathNames = ancestorNames(records, r.id);
     const nameLower = r.accountName.trim().toLowerCase();
 
-    if (GST_INPUT_CREDIT_LEDGER_NAMES.has(nameLower)) {
+    if (GST_INPUT_LEDGER_NAMES.has(nameLower)) {
       return isUnderGroup(pathNames, "GST Input Credit");
     }
 
-    if (GST_OUTPUT_COMPONENT_NAMES.has(nameLower)) {
+    if (GST_OUTPUT_LEDGER_NAMES.has(nameLower)) {
+      return isUnderGroup(pathNames, "GST Output");
+    }
+
+    if (DUTIES_DIRECT_STATUTORY_LEDGER_NAMES.has(nameLower)) {
+      return (
+        isUnderGroup(pathNames, "Duties & Taxes Payable") &&
+        !isUnderGroup(pathNames, "GST Output")
+      );
+    }
+
+    if (LEGACY_GST_LEDGER_NAMES.has(nameLower)) {
       if (isUnderGroup(pathNames, "GST Payable")) return false;
-      if (isUnderGroup(pathNames, "Duties & Taxes Payable")) return true;
-      return false;
+      if (isUnderGroup(pathNames, "GST Output")) return false;
+      if (isUnderGroup(pathNames, "GST Input Credit")) return false;
+      if (isUnderGroup(pathNames, "Duties & Taxes Payable")) return false;
+      return true;
     }
 
     return true;

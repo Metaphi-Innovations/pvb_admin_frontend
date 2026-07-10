@@ -15,7 +15,7 @@ import {
   isTdsCoaNode,
 } from "@/lib/accounts/tds-coa-utils";
 import { CoaGroupDrillDownPanel } from "@/components/accounts/CoaGroupDrillDownPanel";
-import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
+import { resolveCoaAddActionLabel, resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import { resolveCoaGroupContext } from "@/lib/accounts/coa-group-drilldown";
 import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
 import type { ChartOfAccount } from "../../../data";
@@ -68,6 +68,7 @@ export function CoaNodeDetail({
   const isPosting = isLedger && isPostableNode(node, records) && !isTds;
   const isMasterOwned = isLedger && isMasterLinkedLedger(node, records);
   const addPolicy = resolveCoaAddLedgerPolicy(node, records);
+  const addActionLabel = resolveCoaAddActionLabel(node, records);
   const allowAddHere = canCreate && canAddLedgerUnder(node, records) && !addPolicy.blocked;
   const hasGroupDashboard = !!groupContext && (isStructuralNode(node) || isGrouping);
   const canEditLedgerHere = isLedger && canEdit && !isMasterOwned && canEditLedger(node);
@@ -175,7 +176,7 @@ export function CoaNodeDetail({
                   className="h-9 text-sm font-medium px-2 bg-brand-600 text-white gap-1"
                   onClick={() => onAddLedger(node.id)}
                 >
-                  <Plus className="w-3 h-3" /> Add Ledger
+                  <Plus className="w-3 h-3" /> {addActionLabel}
                 </Button>
               )}
               {isGrouping && canEditLedgerHere && (

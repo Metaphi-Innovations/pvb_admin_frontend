@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { SectionTabs, StatusBadge } from "../../components/AccountsUI";
+import { SectionTabs } from "../../components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -165,7 +165,7 @@ export default function HrClaimsAccountsClient() {
             <table className="accounts-table w-full min-w-[640px]">
               <thead className="border-b">
                 <tr>
-                  {["Claim No", "Employee", "Department", "Type", "Approved", "Status"].map((h) => (
+                  {["Claim No", "Employee", "Department", "Type", "Approved"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
                   ))}
                 </tr>
@@ -173,7 +173,7 @@ export default function HrClaimsAccountsClient() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="accounts-table-empty">
+                    <td colSpan={5} className="accounts-table-empty">
                       No claims in this stage.
                     </td>
                   </tr>
@@ -192,9 +192,6 @@ export default function HrClaimsAccountsClient() {
                       <td className="px-3 py-2">{ex.department}</td>
                       <td className="px-3 py-2">{ex.categoryName}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatMoney(getApprovedAmount(ex))}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={ex.paidStatus === "paid" ? "paid" : ex.status} />
-                      </td>
                     </tr>
                   ))
                 )}

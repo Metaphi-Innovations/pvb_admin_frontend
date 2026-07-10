@@ -8,7 +8,6 @@ import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } 
 import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge } from "../../components/AccountsUI";
 import {
   loadFinancialYears,
   nextMasterId,
@@ -81,14 +80,13 @@ export default function FinancialYearsPageClient() {
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start Date</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">End Date</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lock Date</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active Status</th>
                 <th className="w-28" />
               </tr>
             </thead>
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={5} className="px-4 py-16 text-center">
                     <p className="text-sm font-medium text-foreground">No financial years defined</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Add a financial year to begin voucher entry and reporting.
@@ -105,9 +103,6 @@ export default function FinancialYearsPageClient() {
                     <td className="px-4 py-3 text-xs">{fy.startDate}</td>
                     <td className="px-4 py-3 text-xs">{fy.endDate}</td>
                     <td className="px-4 py-3 text-xs">{fy.lockDate || "—"}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={fy.status === "active" ? "active" : "inactive"} />
-                    </td>
                     <td className="px-4 py-3">
                       {fy.status !== "active" && (
                         <Button variant="outline" size="sm" className="h-7 text-sm" onClick={() => activate(fy.id)}>

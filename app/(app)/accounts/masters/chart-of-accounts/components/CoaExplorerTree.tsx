@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import type { ChartOfAccount } from "../../../data";
@@ -10,19 +10,24 @@ import {
   getSearchVisibleIds,
   nodeMatchesSearch,
 } from "../chart-of-accounts-data";
-import { getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
+import { coaTreeNodeHasChildren, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
 import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
   COA_TREE_ICON_SIZE_CLASS,
+  COA_SIDEBAR_ROW_CLASS,
   GUIDE_WIDTH_PX,
   LEVEL_SELECTED_ROW_CLASS,
   VISUAL_ICON,
   VISUAL_ROW_CLASS,
   coaNodeShowsExpandChevron,
+  coaSidebarIconSizeClass,
   coaSidebarIndentPx,
+  coaSidebarNodeIconClass,
+  coaSidebarShowsNodeIcon,
   coaTreeIconClass,
+  resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
 } from "./coa-tree-visual";
 
@@ -66,6 +71,7 @@ interface TreeNodeProps {
   node: ChartOfAccount;
   depth: number;
   isLastSibling: boolean;
+  isFirstRoot?: boolean;
   ancestorHasNext: boolean[];
   records: ChartOfAccount[];
   expandedIds: Set<number>;
@@ -81,10 +87,11 @@ interface TreeNodeProps {
   onAddLedger?: (parentGroupId: number) => void;
 }
 
-function TreeNode({
+const TreeNode = memo(function TreeNode({
   node,
   depth,
   isLastSibling,
+  isFirstRoot = false,
   ancestorHasNext,
   records,
   expandedIds,
@@ -100,16 +107,21 @@ function TreeNode({
   onAddLedger,
 }: TreeNodeProps) {
   const isSidebar = variant === "sidebar";
-  const children = getCoaTreeChildren(records, node.id);
-  const hasChildren = children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
   const visualLevel = resolveCoaVisualLevel(node, records);
-  const Icon = VISUAL_ICON[visualLevel];
+  const Icon = isSidebar ? resolveCoaSidebarIcon(node, visualLevel) : VISUAL_ICON[visualLevel];
   const isLedger = node.nodeLevel === "ledger";
   const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
-  const ledgerCount = !isLedger ? countLedgersUnder(records, node.id) : 0;
   const isPrimaryHead = node.nodeLevel === "primary_head";
+  const hasChildren = coaTreeNodeHasChildren(records, node.id);
+  /** Children allocated only when expanded (lazy DOM). */
+  const children = useMemo(
+    () => (isExpanded && hasChildren ? getCoaTreeChildren(records, node.id) : []),
+    [isExpanded, hasChildren, records, node.id],
+  );
+  /** Ledger counts are panel-only — skip expensive walk in sidebar. */
+  const ledgerCount = !isSidebar && !isLedger ? countLedgersUnder(records, node.id) : 0;
   const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
   const allowAdd =
     canCreate &&
@@ -119,6 +131,8 @@ function TreeNode({
   const isHighlighted = highlightedLedgerId === node.id;
   const isSearchMatch =
     Boolean(searchQuery.trim()) && nodeMatchesSearch(records, node, searchQuery);
+  const sidebarShowsIcon = isSidebar && coaSidebarShowsNodeIcon(visualLevel);
+  const showRowIcon = isSidebar ? sidebarShowsIcon : true;
 
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
@@ -131,27 +145,31 @@ function TreeNode({
     <div>
       <div
         className={cn(
-          "group flex items-stretch rounded-md transition-all duration-150",
-          isSidebar ? "mx-0.5" : "pr-2 mx-1",
+          "group flex items-stretch transition-colors duration-100",
+          isSidebar ? "mx-0 rounded-sm" : "rounded-md pr-2 mx-1",
+          isSidebar &&
+            isPrimaryHead &&
+            depth === 0 &&
+            !isFirstRoot &&
+            "border-t border-border/50 mt-1.5 pt-0.5",
           isSelected
             ? cn(
                 isSidebar
-                  ? "bg-brand-50/90 border-l-2 border-brand-500"
+                  ? "bg-brand-50"
                   : "bg-brand-50/90 ring-1 ring-brand-200/90",
                 !isSidebar && isPrimaryHead && "border-l-2 border-orange-500",
                 !isSidebar && !isPrimaryHead && isLedger && "border-l-2 border-emerald-500",
                 !isSidebar && !isPrimaryHead && !isLedger && "border-l-2 border-brand-600",
               )
             : cn(
-                "border-l-2 border-transparent",
-                isSidebar ? "hover:bg-muted/30" : "hover:bg-slate-50/90",
+                isSidebar ? "hover:bg-muted/40" : "hover:bg-slate-50/90 border-l-2 border-transparent",
                 !isSidebar && isPrimaryHead && "hover:border-l-orange-300",
               ),
-          isHighlighted && "bg-brand-50/80 ring-1 ring-brand-300/70",
-          isSearchMatch && !isSelected && "bg-brand-50/60",
+          isHighlighted && !isSidebar && "bg-brand-50/80 ring-1 ring-brand-300/70",
+          isSearchMatch && !isSelected && "bg-brand-50/50",
         )}
         style={{
-          minHeight: isSidebar ? 28 : undefined,
+          minHeight: isSidebar ? 30 : undefined,
           paddingLeft: isSidebar ? coaSidebarIndentPx(depth) : undefined,
         }}
       >
@@ -177,52 +195,61 @@ function TreeNode({
             }}
             className={cn(
               "flex items-center justify-center flex-shrink-0 rounded transition-colors",
-              isSidebar ? "w-4 h-4" : "w-6 h-6",
+              isSidebar ? "w-5 h-5 -ml-0.5" : "w-6 h-6",
               showExpandChevron
-                ? "text-muted-foreground hover:text-brand-700"
-                : "w-4 opacity-0 pointer-events-none",
+                ? "text-muted-foreground/70 hover:text-foreground"
+                : isSidebar
+                  ? "w-5 opacity-0 pointer-events-none"
+                  : "w-4 opacity-0 pointer-events-none",
             )}
             tabIndex={showExpandChevron ? 0 : -1}
             aria-label={showExpandChevron ? (isExpanded ? "Collapse" : "Expand") : undefined}
           >
             {showExpandChevron &&
               (isExpanded ? (
-                <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
+                <ChevronDown className={cn(isSidebar ? "w-3.5 h-3.5" : "w-4 h-4")} strokeWidth={2} />
               ) : (
-                <ChevronRight className="w-4 h-4" strokeWidth={1.75} />
+                <ChevronRight className={cn(isSidebar ? "w-3.5 h-3.5" : "w-4 h-4")} strokeWidth={2} />
               ))}
           </button>
 
           <button
             type="button"
             onClick={handleClick}
+            title={isSidebar ? node.accountName : undefined}
             className={cn(
               "flex flex-1 min-w-0 text-left items-center",
-              isSidebar ? "gap-1.5 py-0.5 pr-1" : "items-start gap-2 py-1.5 pr-2",
+              isSidebar ? "gap-1 py-1 pr-2" : "items-start gap-2 py-1.5 pr-2",
             )}
           >
-            <Icon
-              className={cn(
-                "flex-shrink-0",
-                COA_TREE_ICON_SIZE_CLASS,
-                !isSidebar && "mt-0.5",
-                coaTreeIconClass(visualLevel, isSelected),
-              )}
-              strokeWidth={1.75}
-            />
+            {showRowIcon && (
+              <Icon
+                className={cn(
+                  "flex-shrink-0",
+                  isSidebar ? coaSidebarIconSizeClass(visualLevel) : COA_TREE_ICON_SIZE_CLASS,
+                  !isSidebar && "mt-0.5",
+                  isSidebar
+                    ? coaSidebarNodeIconClass(node, visualLevel, isSelected, records)
+                    : coaTreeIconClass(visualLevel, isSelected),
+                )}
+                strokeWidth={isSidebar && visualLevel === "primary_head" ? 2.25 : 2}
+              />
+            )}
             <span
               className={cn(
-                "flex-1 min-w-0 whitespace-normal break-words",
-                isSidebar ? "text-xs leading-[1.35]" : "leading-snug",
+                "flex-1 min-w-0",
+                isSidebar ? "truncate leading-tight" : "whitespace-normal break-words leading-snug",
                 isSelected
-                  ? cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel], visualLevel === "sub_group" && "text-xs")
-                  : VISUAL_ROW_CLASS[visualLevel],
-                isSidebar && isSelected && "font-semibold text-brand-800",
-                isSidebar && !isSelected && isPrimaryHead && "font-semibold text-foreground",
+                  ? isSidebar
+                    ? "font-semibold text-brand-800"
+                    : cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel], visualLevel === "sub_group" && "text-xs")
+                  : isSidebar
+                    ? COA_SIDEBAR_ROW_CLASS[visualLevel]
+                    : VISUAL_ROW_CLASS[visualLevel],
               )}
             >
               {node.accountName}
-              {isSystemLocked && (
+              {isSystemLocked && !isSidebar && (
                 <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
               )}
               {!isLedger && ledgerCount > 0 && !isSidebar && (
@@ -236,16 +263,16 @@ function TreeNode({
             )}
           </button>
 
-          {allowAdd && (
+          {allowAdd && !isSidebar && (
             <CoaAddLedgerHoverAction
               onClick={() => onAddLedger!(node.id)}
-              className={cn("mr-1", isSidebar ? "self-center" : "mt-1.5")}
+              className="mt-1.5 mr-1"
             />
           )}
         </div>
       </div>
 
-      {hasChildren && isExpanded && (
+      {hasChildren && isExpanded && children.length > 0 && (
         <div>
           {children.map((child, idx) => (
             <TreeNode
@@ -272,7 +299,7 @@ function TreeNode({
       )}
     </div>
   );
-}
+});
 
 interface CoaExplorerTreeProps {
   variant?: "panel" | "sidebar";
@@ -324,7 +351,7 @@ export function CoaExplorerTree({
       <div
         className={cn(
           "flex-1 min-h-0",
-          variant === "sidebar" ? "py-0.5" : "py-2 px-1",
+          variant === "sidebar" ? "py-1 px-0.5 accounts-coa-tree" : "py-2 px-1",
           variant === "panel" && "min-w-[260px]",
         )}
       >
@@ -336,6 +363,7 @@ export function CoaExplorerTree({
               key={root.id}
               node={root}
               depth={0}
+              isFirstRoot={idx === 0}
               isLastSibling={idx === roots.length - 1}
               ancestorHasNext={[]}
               records={records}

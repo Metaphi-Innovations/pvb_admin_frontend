@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { AccountsViewAction, accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import {
@@ -7,37 +9,39 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  AccountsColumnHeader,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { formatGeneralLedgerDate, type GeneralLedgerListingRow } from "./general-ledger-data";
 
-const COLUMNS = [
-  { key: "code", label: "Ledger Code", align: "left" as const },
-  { key: "name", label: "Ledger Name", align: "left" as const },
-  { key: "type", label: "Ledger Type", align: "left" as const },
-  { key: "group", label: "Parent Group", align: "left" as const },
-  { key: "opening", label: "Opening Balance", align: "right" as const },
-  { key: "debit", label: "Total Debit", align: "right" as const },
-  { key: "credit", label: "Total Credit", align: "right" as const },
-  { key: "closing", label: "Closing Balance", align: "right" as const },
-  { key: "lastTx", label: "Last Transaction Date", align: "left" as const },
-  { key: "action", label: "Actions", align: "center" as const },
-];
-
-export function GeneralLedgerListingTable({
+function GeneralLedgerListingTableBody({
   rows,
   onViewLedger,
 }: {
   rows: GeneralLedgerListingRow[];
   onViewLedger: (ledgerId: string) => void;
 }) {
+  const visible = useAccountsFilteredRows(rows);
+
   if (rows.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <p className="text-sm text-muted-foreground">No ledgers match your filters.</p>
+      </div>
+    );
+  }
+
+  if (visible.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <p className="text-sm text-muted-foreground">No records match the column filters.</p>
       </div>
     );
   }
@@ -47,19 +51,27 @@ export function GeneralLedgerListingTable({
       <AccountsTable minWidth={1200} className="text-xs">
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            {COLUMNS.map((col) => (
-              <AccountsTableHeadCell
-                key={col.key}
-                align={col.align}
-                className={col.key === "action" ? accountsActionColClass("single") : "whitespace-nowrap"}
-              >
-                {col.label}
-              </AccountsTableHeadCell>
-            ))}
+            <SortTh label="Ledger Code" colKey="ledgerCode" className="whitespace-nowrap" />
+            <SortTh label="Ledger Name" colKey="ledgerName" className="whitespace-nowrap" />
+            <SortTh label="Ledger Type" colKey="ledgerType" className="whitespace-nowrap" />
+            <SortTh label="Parent Group" colKey="parentGroup" className="whitespace-nowrap" />
+            <SortTh label="Opening Balance" colKey="openingBalance" filterType="amount" align="right" className="whitespace-nowrap" />
+            <SortTh label="Total Debit" colKey="totalDebit" filterType="amount" align="right" className="whitespace-nowrap" />
+            <SortTh label="Total Credit" colKey="totalCredit" filterType="amount" align="right" className="whitespace-nowrap" />
+            <SortTh label="Closing Balance" colKey="closingBalance" filterType="amount" align="right" className="whitespace-nowrap" />
+            <SortTh label="Last Transaction Date" colKey="lastTransactionDate" filterType="date" className="whitespace-nowrap" />
+            <AccountsColumnHeader
+              label="Actions"
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="center"
+              className={accountsActionColClass("single")}
+            />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {rows.map((row) => (
+          {visible.map((row) => (
             <AccountsTableRow
               key={row.ledgerId}
               className="group cursor-pointer"
@@ -114,5 +126,46 @@ export function GeneralLedgerListingTable({
         </AccountsTableBody>
       </AccountsTable>
     </AccountsTableScroll>
+  );
+}
+
+export function GeneralLedgerListingTable({
+  rows,
+  onViewLedger,
+}: {
+  rows: GeneralLedgerListingRow[];
+  onViewLedger: (ledgerId: string) => void;
+}) {
+  const getCellValue = useCallback((row: GeneralLedgerListingRow, key: string) => {
+    switch (key) {
+      case "code":
+        return row.ledgerCode;
+      case "name":
+        return row.ledgerName;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        ledgerCode: { type: "text" },
+        ledgerName: { type: "text" },
+        ledgerType: { type: "text" },
+        parentGroup: { type: "text" },
+        openingBalance: { type: "amount" },
+        totalDebit: { type: "amount" },
+        totalCredit: { type: "amount" },
+        closingBalance: { type: "amount" },
+        lastTransactionDate: { type: "date" },
+      }}
+      defaultSortKey="ledgerName"
+      defaultSortDir="asc"
+    >
+      <GeneralLedgerListingTableBody rows={rows} onViewLedger={onViewLedger} />
+    </AccountsColumnFilterProvider>
   );
 }

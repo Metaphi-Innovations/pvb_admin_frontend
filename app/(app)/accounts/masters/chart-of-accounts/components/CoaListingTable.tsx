@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
@@ -10,7 +10,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -21,7 +20,12 @@ import type { ChartOfAccount } from "../../../data";
 import { canAddLedgerUnder } from "../chart-of-accounts-data";
 import type { CoaLedgerListingRow, CoaListingRow } from "../coa-listing-data";
 import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
-import { StatusBadge } from "../../../components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "../../../components/AccountsUI";
 
 interface CoaHierarchyListingTableProps {
   variant?: "hierarchy";
@@ -87,34 +91,135 @@ export function CoaListingTable(props: CoaListingTableProps) {
   }
 
   return (
+    <CoaHierarchyListingTable
+      rows={rows}
+      records={records}
+      canCreate={canCreate}
+      highlightedLedgerId={highlightedLedgerId}
+      isSearchMode={isSearchMode}
+      onDrillInto={onDrillInto}
+      onAddLedger={onAddLedger}
+    />
+  );
+}
+
+function CoaHierarchyListingTable({
+  rows,
+  records,
+  canCreate,
+  highlightedLedgerId,
+  isSearchMode,
+  onDrillInto,
+  onAddLedger,
+}: {
+  rows: CoaListingRow[];
+  records: ChartOfAccount[];
+  canCreate: boolean;
+  highlightedLedgerId: number | null;
+  isSearchMode: boolean;
+  onDrillInto: (node: ChartOfAccount) => void;
+  onAddLedger: (parentGroupId: number) => void;
+}) {
+  const getCellValue = useCallback((row: CoaListingRow, key: string) => {
+    switch (key) {
+      case "accountCode":
+        return row.node.accountCode;
+      case "accountName":
+        return row.node.accountName;
+      case "parentGroupName":
+        return row.parentGroupName;
+      case "hierarchyPath":
+        return row.hierarchyPath;
+      case "openingAmount":
+        return row.openingAmount;
+      case "periodDebit":
+        return row.periodDebit;
+      case "periodCredit":
+        return row.periodCredit;
+      case "closingAmount":
+        return row.closingAmount;
+      default:
+        return "";
+    }
+  }, []);
+
+  const columnConfig = useMemo(() => {
+    const cfg: Record<string, { type: "text" | "amount" }> = {
+      accountCode: { type: "text" },
+      accountName: { type: "text" },
+      openingAmount: { type: "amount" },
+      periodDebit: { type: "amount" },
+      periodCredit: { type: "amount" },
+      closingAmount: { type: "amount" },
+    };
+    if (isSearchMode) {
+      cfg.parentGroupName = { type: "text" };
+      cfg.hierarchyPath = { type: "text" };
+    }
+    return cfg;
+  }, [isSearchMode]);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="accountCode"
+      defaultSortDir="asc"
+    >
+      <CoaHierarchyTableContent
+        records={records}
+        canCreate={canCreate}
+        highlightedLedgerId={highlightedLedgerId}
+        isSearchMode={isSearchMode}
+        onDrillInto={onDrillInto}
+        onAddLedger={onAddLedger}
+        minWidth={isSearchMode ? 1080 : 860}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CoaHierarchyTableContent({
+  records,
+  canCreate,
+  highlightedLedgerId,
+  isSearchMode,
+  onDrillInto,
+  onAddLedger,
+  minWidth,
+}: {
+  records: ChartOfAccount[];
+  canCreate: boolean;
+  highlightedLedgerId: number | null;
+  isSearchMode: boolean;
+  onDrillInto: (node: ChartOfAccount) => void;
+  onAddLedger: (parentGroupId: number) => void;
+  minWidth: number;
+}) {
+  const visible = useAccountsFilteredRows<CoaListingRow>([]);
+
+  return (
     <AccountsTableScroll>
-      <AccountsTable minWidth={isSearchMode ? 1080 : 860}>
+      <AccountsTable minWidth={minWidth}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            <AccountsTableHeadCell className="w-28">Ledger Code</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[200px]">Ledger Name</AccountsTableHeadCell>
+            <SortTh label="Ledger Code" colKey="accountCode" className="w-28" />
+            <SortTh label="Ledger Name" colKey="accountName" className="min-w-[200px]" />
             {isSearchMode && (
               <>
-                <AccountsTableHeadCell className="min-w-[160px]">Parent Group</AccountsTableHeadCell>
-                <AccountsTableHeadCell className="min-w-[220px]">Hierarchy Path</AccountsTableHeadCell>
+                <SortTh label="Parent Group" colKey="parentGroupName" className="min-w-[160px]" />
+                <SortTh label="Hierarchy Path" colKey="hierarchyPath" className="min-w-[220px]" />
               </>
             )}
-            <AccountsTableHeadCell align="right" className="w-36">
-              Opening Balance
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-28">
-              Debit
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-28">
-              Credit
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-36">
-              Closing Balance
-            </AccountsTableHeadCell>
+            <SortTh label="Opening Balance" colKey="openingAmount" filterType="amount" align="right" className="w-36" />
+            <SortTh label="Debit" colKey="periodDebit" filterType="amount" align="right" className="w-28" />
+            <SortTh label="Credit" colKey="periodCredit" filterType="amount" align="right" className="w-28" />
+            <SortTh label="Closing Balance" colKey="closingAmount" filterType="amount" align="right" className="w-36" />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {rows.map((row) => {
+          {visible.map((row) => {
             const { node } = row;
             const isLedger = node.nodeLevel === "ledger";
             const isSystemLocked = node.isSystem && isStructuralNode(node);
@@ -232,27 +337,91 @@ function CoaLedgerListingTableBody({
   }
 
   return (
+    <CoaLedgerListingTableInner
+      ledgerRows={ledgerRows}
+      highlightedLedgerId={highlightedLedgerId}
+      onSelectLedger={onSelectLedger}
+    />
+  );
+}
+
+function CoaLedgerListingTableInner({
+  ledgerRows,
+  highlightedLedgerId,
+  onSelectLedger,
+}: {
+  ledgerRows: CoaLedgerListingRow[];
+  highlightedLedgerId: number | null;
+  onSelectLedger: (ledger: ChartOfAccount) => void;
+}) {
+  const getCellValue = useCallback((row: CoaLedgerListingRow, key: string) => {
+    switch (key) {
+      case "accountName":
+        return row.ledger.accountName;
+      case "accountCode":
+        return row.ledger.accountCode;
+      case "parentGroupName":
+        return row.parentGroupName;
+      case "source":
+        return row.source;
+      case "openingAmount":
+        return row.openingAmount;
+      case "currentAmount":
+        return row.currentAmount;
+      case "status":
+        return row.ledger.status;
+      default:
+        return "";
+    }
+  }, []);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={ledgerRows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        accountName: { type: "text" },
+        accountCode: { type: "text" },
+        parentGroupName: { type: "text" },
+        source: { type: "text" },
+        openingAmount: { type: "amount" },
+        currentAmount: { type: "amount" },
+      }}
+      defaultSortKey="accountName"
+      defaultSortDir="asc"
+    >
+      <CoaLedgerTableContent
+        highlightedLedgerId={highlightedLedgerId}
+        onSelectLedger={onSelectLedger}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CoaLedgerTableContent({
+  highlightedLedgerId,
+  onSelectLedger,
+}: {
+  highlightedLedgerId: number | null;
+  onSelectLedger: (ledger: ChartOfAccount) => void;
+}) {
+  const visible = useAccountsFilteredRows<CoaLedgerListingRow>([]);
+
+  return (
     <AccountsTableScroll>
       <AccountsTable minWidth={980}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            <AccountsTableHeadCell className="min-w-[200px]">Ledger Name</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="w-28">Ledger Code</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[160px]">Parent Group</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[140px]">Source</AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-36">
-              Opening Balance
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-36">
-              Current Balance
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="center" className="w-24">
-              Status
-            </AccountsTableHeadCell>
+            <SortTh label="Ledger Name" colKey="accountName" className="min-w-[200px]" />
+            <SortTh label="Ledger Code" colKey="accountCode" className="w-28" />
+            <SortTh label="Parent Group" colKey="parentGroupName" className="min-w-[160px]" />
+            <SortTh label="Source" colKey="source" className="min-w-[140px]" />
+            <SortTh label="Opening Balance" colKey="openingAmount" filterType="amount" align="right" className="w-36" />
+            <SortTh label="Current Balance" colKey="currentAmount" filterType="amount" align="right" className="w-36" />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {ledgerRows.map((row) => {
+          {visible.map((row) => {
             const { ledger } = row;
             const isHighlighted = highlightedLedgerId === ledger.id;
 
@@ -293,9 +462,6 @@ function CoaLedgerListingTableBody({
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
-                </AccountsTableCell>
-                <AccountsTableCell align="center">
-                  <StatusBadge status={ledger.status} />
                 </AccountsTableCell>
               </AccountsTableRow>
             );

@@ -673,34 +673,38 @@ function allocationStatus(paymentAmount: number, allocated: number): PaymentAllo
   return "partially_allocated";
 }
 
+function buildPaymentAllocationRecord(v: AccountingVoucher): PaymentAllocationRecord | null {
+  if (v.voucherType !== "payment") return null;
+  if (v.status !== "posted" && v.status !== "approved") return null;
+  const vendor = resolveVendorFromPayment(v);
+  const entry = loadPaymentAllocationStore().find((e) => e.voucherId === v.id);
+  const lines = entry?.lines ?? [];
+  const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
+  const paymentAmount = round2(v.totalDebit || v.totalCredit);
+  return {
+    voucherId: v.id,
+    paymentNo: v.voucherNumber,
+    paymentDate: v.date,
+    vendorId: vendor?.id ?? 0,
+    vendorName: vendor?.vendorName ?? paymentVendorLine(v)?.name ?? "—",
+    paymentAmount,
+    allocatedAmount,
+    unallocatedAmount: round2(Math.max(0, paymentAmount - allocatedAmount)),
+    bankAccount: bankLineName(v),
+    referenceNo: v.referenceNo || "—",
+    status: allocationStatus(paymentAmount, allocatedAmount),
+    lines,
+  };
+}
+
 export function loadPaymentAllocationRecords(): PaymentAllocationRecord[] {
-  const store = loadPaymentAllocationStore();
   const vouchers = loadVouchers().filter(
     (v) => v.voucherType === "payment" && (v.status === "posted" || v.status === "approved"),
   );
 
   return vouchers
-    .map((v) => {
-      const vendor = resolveVendorFromPayment(v);
-      const entry = store.find((e) => e.voucherId === v.id);
-      const lines = entry?.lines ?? [];
-      const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
-      const paymentAmount = round2(v.totalDebit || v.totalCredit);
-      return {
-        voucherId: v.id,
-        paymentNo: v.voucherNumber,
-        paymentDate: v.date,
-        vendorId: vendor?.id ?? 0,
-        vendorName: vendor?.vendorName ?? paymentVendorLine(v)?.name ?? "—",
-        paymentAmount,
-        allocatedAmount,
-        unallocatedAmount: round2(Math.max(0, paymentAmount - allocatedAmount)),
-        bankAccount: bankLineName(v),
-        referenceNo: v.referenceNo || "—",
-        status: allocationStatus(paymentAmount, allocatedAmount),
-        lines,
-      } satisfies PaymentAllocationRecord;
-    })
+    .map((v) => buildPaymentAllocationRecord(v))
+    .filter((r): r is PaymentAllocationRecord => r != null)
     .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
 }
 
@@ -710,6 +714,63 @@ export function seedPaymentAllocations(entries: PaymentAllocationStoreEntry[]): 
 
 export function getPaymentAllocationByVoucherId(voucherId: number): PaymentAllocationRecord | undefined {
   return loadPaymentAllocationRecords().find((r) => r.voucherId === voucherId);
+}
+
+/** Allocate a single posted payment voucher against supplier bills (mirrors receipt allocation). */
+export function applyPaymentAllocation(
+  voucherId: number,
+  allocations: Array<{ billId: number; amount: number }>,
+): string | null {
+  let record = getPaymentAllocationByVoucherId(voucherId);
+  if (!record) {
+    const voucher = loadVouchers().find((v) => v.id === voucherId);
+    record = voucher ? buildPaymentAllocationRecord(voucher) ?? undefined : undefined;
+  }
+  if (!record) return "Payment voucher not found.";
+  if (!record.vendorId) return "Supplier could not be resolved for this payment.";
+
+  const totalNew = round2(allocations.reduce((s, a) => s + a.amount, 0));
+  if (totalNew > record.paymentAmount + 0.009) {
+    return "Total allocation cannot exceed payment amount.";
+  }
+
+  const bills = loadPurchaseInvoices();
+  const store = loadPaymentAllocationStore();
+  const previous = store.find((e) => e.voucherId === voucherId);
+
+  if (previous) {
+    for (const line of previous.lines) {
+      const bill = bills.find((b) => b.id === line.billId);
+      if (bill) {
+        recordPurchaseInvoicePayment(line.billId, -line.amount);
+      }
+    }
+  }
+
+  const lines: PaymentAllocationLine[] = [];
+
+  for (const alloc of allocations) {
+    if (alloc.amount <= 0) continue;
+    const bill = bills.find((b) => b.id === alloc.billId);
+    if (!bill || bill.vendorId !== record.vendorId) {
+      return "Invalid purchase invoice selected for allocation.";
+    }
+    const outstanding = getBillOutstanding(bill);
+    if (alloc.amount > outstanding + 0.009) {
+      return `Allocation for ${bill.invoiceNo} exceeds outstanding (${formatMoney(outstanding)}).`;
+    }
+    lines.push({ billId: bill.id, billNo: bill.invoiceNo, amount: round2(alloc.amount) });
+  }
+
+  const nextStore = store.filter((e) => e.voucherId !== voucherId);
+  nextStore.push({ voucherId, lines });
+  savePaymentAllocationStore(nextStore);
+
+  for (const line of lines) {
+    if (line.amount > 0.009) recordPurchaseInvoicePayment(line.billId, line.amount);
+  }
+
+  return null;
 }
 
 // ── Supplier invoice outstanding (bill-level) ─────────────────────────────────

@@ -31,6 +31,8 @@ interface CoaListingToolbarProps {
   hideDateRange?: boolean;
   /** When false, the New Ledger action is not rendered at all. */
   showNewLedger?: boolean;
+  /** Override toolbar button label (e.g. Add Warehouse under Land & Building). */
+  newLedgerLabel?: string;
 }
 
 export function CoaListingToolbar({
@@ -50,6 +52,7 @@ export function CoaListingToolbar({
   searchPlaceholder = "Search accounts…",
   hideDateRange = false,
   showNewLedger = true,
+  newLedgerLabel = "New Ledger",
 }: CoaListingToolbarProps) {
   return (
     <AccountsListingFilterCard
@@ -66,7 +69,7 @@ export function CoaListingToolbar({
               onClick={onNewLedger}
             >
               <Plus className="w-4 h-4" />
-              New Ledger
+              {newLedgerLabel}
             </Button>
           ) : null}
           <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />

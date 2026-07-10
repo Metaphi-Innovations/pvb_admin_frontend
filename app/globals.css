@@ -160,37 +160,38 @@
     @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
   }
 
-  /* Accounts module — typography utilities (scoped to /accounts routes) */
+  /* Accounts module — compact typography (aligned with voucher entry forms)
+   * Page title 18px · section 14px · body/inputs 13px · labels/helper 12px */
   .accounts-page-title {
-    @apply text-xl font-semibold text-[#1F2937] leading-tight;
+    @apply text-lg font-semibold text-[#1F2937] leading-tight;
   }
 
   .accounts-page-subtitle {
-    @apply text-xs text-[#6B7280] mt-0.5;
+    @apply text-xs text-[#6B7280] mt-0.5 leading-snug;
   }
 
   .accounts-section-heading {
-    @apply text-base font-semibold text-[#1F2937];
+    @apply text-sm font-semibold text-[#1F2937] leading-none;
   }
 
   .accounts-card-title {
-    @apply text-base font-semibold text-[#1F2937];
+    @apply text-sm font-semibold text-[#1F2937] leading-none;
   }
 
   .accounts-tab {
-    @apply text-sm font-medium;
+    @apply text-xs font-medium;
   }
 
   .accounts-form-label {
-    @apply text-xs font-medium text-[#6B7280];
+    @apply text-xs font-medium text-[#6B7280] leading-none;
   }
 
   .accounts-form-input {
-    @apply text-sm text-[#1F2937];
+    @apply text-[13px] text-[#1F2937];
   }
 
   .accounts-helper-text {
-    @apply text-xs text-[#6B7280];
+    @apply text-xs text-[#6B7280] leading-snug;
   }
 
   .accounts-filter-label {
@@ -203,9 +204,9 @@
     max-height: 32px;
     padding-top: 0;
     padding-bottom: 0;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 18px;
-    @apply text-[#1F2937] placeholder:text-sm placeholder:text-[#6B7280];
+    @apply text-[#1F2937] placeholder:text-[13px] placeholder:text-[#6B7280];
     @apply border border-[#E5E7EB] rounded-md bg-white px-2;
   }
 
@@ -220,7 +221,7 @@
     -webkit-line-clamp: unset !important;
     overflow: visible !important;
     white-space: nowrap;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 18px;
   }
 
@@ -236,7 +237,7 @@
   }
 
   .accounts-date-filter-input .accounts-date-display {
-    font-size: 14px;
+    font-size: 13px;
     line-height: 18px;
     white-space: nowrap;
     overflow: hidden;
@@ -247,7 +248,7 @@
   .accounts-action-button {
     height: 32px;
     min-height: 32px;
-    @apply text-sm font-medium gap-1.5;
+    @apply text-xs font-medium gap-1.5;
   }
 
   .accounts-breadcrumb {
@@ -259,19 +260,71 @@
   }
 
   .accounts-sidebar-group-label {
-    @apply text-sm font-medium;
+    @apply text-xs font-medium;
   }
 
   .accounts-sidebar-item {
-    @apply text-sm;
+    @apply text-xs;
+  }
+
+  /* Contextual left sidebar — module title + submenu hierarchy */
+  .accounts-sidebar-sticky-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-shrink: 0;
+    background: #fff;
+  }
+
+  .accounts-sidebar-module-title {
+    margin: 0;
+    padding: 12px 12px 0;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: hsl(var(--foreground));
+  }
+
+  .accounts-sidebar-module-divider {
+    margin: 16px 12px 0;
+    border-bottom: 1px solid hsl(var(--border) / 0.55);
+  }
+
+  .accounts-sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: #4b5563;
+    outline: none;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .accounts-sidebar-nav-item:hover {
+    background-color: rgb(255 243 230 / 0.65);
+    color: #9a3412;
+  }
+
+  .accounts-sidebar-nav-item.is-active {
+    font-weight: 600;
+    background-color: #fff3e6;
+    color: #9a3412;
+  }
+
+  .accounts-sidebar-nav-item:focus-visible {
+    box-shadow: 0 0 0 2px rgb(244 121 32 / 0.3);
   }
 
   .accounts-summary-label {
-    @apply text-xs font-medium text-[#6B7280] leading-none;
+    @apply text-[11px] font-medium text-[#6B7280] leading-none;
   }
 
   .accounts-summary-value {
-    @apply text-sm font-semibold text-[#1F2937] tabular-nums leading-tight mt-0.5 truncate;
+    @apply text-[13px] font-semibold text-[#1F2937] tabular-nums leading-tight mt-0.5 truncate;
   }
 
   .accounts-status-badge {
@@ -332,6 +385,22 @@
 
   .accounts-table-th-uppercase {
     @apply uppercase tracking-wide;
+  }
+
+  .accounts-col-filter-btn {
+    @apply relative inline-flex items-center justify-center w-5 h-5 rounded-sm text-muted-foreground/55 hover:text-foreground hover:bg-muted/50 transition-colors flex-shrink-0;
+  }
+
+  .accounts-col-filter-btn.is-active {
+    @apply text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-700;
+  }
+
+  .accounts-col-filter-dot {
+    @apply absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-brand-600;
+  }
+
+  .accounts-col-filter-popover {
+    @apply rounded-lg border border-border bg-white shadow-lg;
   }
 
   .accounts-table-body {
@@ -420,7 +489,7 @@
     height: 32px;
     min-height: 32px;
     max-height: 32px;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 18px;
     padding-top: 0;
     padding-bottom: 0;
@@ -524,13 +593,81 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    width: min(380px, 32vw);
-    min-width: 340px;
+    position: relative;
+    width: 232px;
+    min-width: 232px;
     height: 100%;
     min-height: 0;
     overflow: hidden;
     background: #fff;
     border-right: 1px solid hsl(var(--border) / 0.8);
+    transition: width 200ms ease, min-width 200ms ease, opacity 150ms ease;
+  }
+
+  .accounts-module-sidebar.is-collapsed {
+    width: 62px;
+    min-width: 62px;
+  }
+
+  /* Chart of Accounts tree needs slightly more width for labels */
+  .accounts-module-sidebar.is-coa-section {
+    width: 272px;
+    min-width: 272px;
+  }
+
+  .accounts-coa-tree {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .accounts-sidebar-header-collapse-btn {
+    flex-shrink: 0;
+  }
+
+  .accounts-sidebar-nav-item.is-collapsed {
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .accounts-sidebar-nav-item.is-collapsed span {
+    display: none;
+  }
+
+  .accounts-sidebar-coa-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 0.5rem;
+    transition: background-color 150ms ease;
+  }
+
+  .accounts-sidebar-coa-icon-btn:hover {
+    background-color: rgb(255 243 230 / 0.65);
+  }
+
+  .accounts-sidebar-coa-icon-btn.is-active {
+    background-color: #fff3e6;
+    box-shadow: inset 0 0 0 1px rgb(244 121 32 / 0.25);
+  }
+
+  .accounts-sidebar-module-title.is-collapsed,
+  .accounts-sidebar-module-divider.is-collapsed {
+    display: none;
+  }
+
+  /* Scrollable panes inside Accounts left sidebar */
+  .accounts-sidebar-tree-scroll,
+  .accounts-sidebar-section-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .accounts-module-main {

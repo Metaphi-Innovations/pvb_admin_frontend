@@ -30,7 +30,14 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
-import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import {
@@ -54,10 +61,8 @@ import {
   filterTrialBalanceDetailedGroups,
   filterTrialBalanceSummaryRows,
   flattenTrialBalanceDetailedGroups,
-  sortTrialBalanceDetailedGroups,
-  sortTrialBalanceSummaryRows,
-  type TrialBalanceDetailedSortKey,
-  type TrialBalanceSummarySortKey,
+  type TrialBalanceDetailedFlatRow,
+  type TrialBalanceSummaryGroupRow,
   type TrialBalanceTab,
 } from "./trial-balance-data";
 import {
@@ -85,10 +90,6 @@ export default function TrialBalancePageClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  const [summarySortKey, setSummarySortKey] = useState<TrialBalanceSummarySortKey>("particular");
-  const [summarySortDir, setSummarySortDir] = useState<"asc" | "desc">("asc");
-  const [detailedSortKey, setDetailedSortKey] = useState<TrialBalanceDetailedSortKey>("particular");
-  const [detailedSortDir, setDetailedSortDir] = useState<"asc" | "desc">("asc");
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
 
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -136,37 +137,68 @@ export default function TrialBalancePageClient() {
     setExpandedGroupIds(collectAllDetailedGroupKeys(sourceDetailedGroups));
   }, [mounted, sourceDetailedGroups, debouncedSearch]);
 
-  const filteredSummaryRows = useMemo(() => {
-    const filtered = filterTrialBalanceSummaryRows(sourceSummaryRows, { search: debouncedSearch }, sourceLedgers);
-    return sortTrialBalanceSummaryRows(filtered, summarySortKey, summarySortDir);
-  }, [sourceSummaryRows, sourceLedgers, debouncedSearch, summarySortKey, summarySortDir]);
+  const filteredSummaryRows = useMemo(
+    () => filterTrialBalanceSummaryRows(sourceSummaryRows, { search: debouncedSearch }, sourceLedgers),
+    [sourceSummaryRows, sourceLedgers, debouncedSearch],
+  );
 
-  const filteredDetailedGroups = useMemo(() => {
-    const filtered = filterTrialBalanceDetailedGroups(sourceDetailedGroups, { search: debouncedSearch });
-    return sortTrialBalanceDetailedGroups(filtered, detailedSortKey, detailedSortDir);
-  }, [sourceDetailedGroups, debouncedSearch, detailedSortKey, detailedSortDir]);
-
-  const summary = useMemo(() => {
-    if (activeTab === "summary") {
-      return computeTrialBalanceSummaryFromGroups(filteredSummaryRows, sourceLedgers);
-    }
-    return computeTrialBalanceSummaryFromDetailedGroups(filteredDetailedGroups);
-  }, [activeTab, filteredSummaryRows, sourceLedgers, filteredDetailedGroups]);
-
-  const paginatedSummaryRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredSummaryRows.slice(start, start + pageSize);
-  }, [filteredSummaryRows, page, pageSize]);
+  const filteredDetailedGroups = useMemo(
+    () => filterTrialBalanceDetailedGroups(sourceDetailedGroups, { search: debouncedSearch }),
+    [sourceDetailedGroups, debouncedSearch],
+  );
 
   const detailedFlatRows = useMemo(
     () => flattenTrialBalanceDetailedGroups(filteredDetailedGroups, expandedGroupIds),
     [filteredDetailedGroups, expandedGroupIds],
   );
 
-  const paginatedDetailedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return detailedFlatRows.slice(start, start + pageSize);
-  }, [detailedFlatRows, page, pageSize]);
+  const providerRows = useMemo(
+    () => (activeTab === "summary" ? filteredSummaryRows : detailedFlatRows),
+    [activeTab, filteredSummaryRows, detailedFlatRows],
+  );
+
+  const getCellValue = useCallback(
+    (row: TrialBalanceSummaryGroupRow | TrialBalanceDetailedFlatRow, key: string) => {
+      if (activeTab === "summary") {
+        return (row as TrialBalanceSummaryGroupRow)[key as keyof TrialBalanceSummaryGroupRow];
+      }
+      const flat = row as TrialBalanceDetailedFlatRow;
+      if (flat.type === "group") {
+        if (key === "particular") return flat.groupName;
+        return "";
+      }
+      const ledger = flat.ledger;
+      switch (key) {
+        case "particular":
+          return ledger.ledgerName;
+        case "opening":
+          return ledger.openingAmount;
+        case "debit":
+          return ledger.debit;
+        case "credit":
+          return ledger.credit;
+        case "closing":
+          return ledger.closingAmount;
+        case "balanceType":
+          return ledger.closingBalanceType;
+        default:
+          return "";
+      }
+    },
+    [activeTab],
+  );
+
+  const columnConfig = useMemo(
+    (): AccountsColumnFilterConfig => ({
+      particular: { type: "text" },
+      debit: { type: "amount" },
+      credit: { type: "amount" },
+      opening: { type: "amount" },
+      closing: { type: "amount" },
+      balanceType: { type: "text" },
+    }),
+    [],
+  );
 
   const hasFilters =
     Boolean(search.trim()) ||
@@ -202,47 +234,6 @@ export default function TrialBalancePageClient() {
       ? filteredSummaryRows.length > 0
       : filteredDetailedGroups.length > 0;
 
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      if (activeTab === "summary") {
-        await exportTrialBalanceSummaryToExcel(filteredSummaryRows, exportMeta, summary);
-      } else {
-        await exportTrialBalanceDetailedToExcel(filteredDetailedGroups, exportMeta, summary);
-      }
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportPdf = () => {
-    if (activeTab === "summary") {
-      exportTrialBalanceSummaryToPdf(filteredSummaryRows, exportMeta, summary);
-    } else {
-      exportTrialBalanceDetailedToPdf(filteredDetailedGroups, exportMeta, summary);
-    }
-  };
-
-  const handleSummarySort = useCallback((key: string) => {
-    const col = key as TrialBalanceSummarySortKey;
-    if (summarySortKey === col) {
-      setSummarySortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSummarySortKey(col);
-      setSummarySortDir("asc");
-    }
-  }, [summarySortKey]);
-
-  const handleDetailedSort = useCallback((key: string) => {
-    const col = key as TrialBalanceDetailedSortKey;
-    if (detailedSortKey === col) {
-      setDetailedSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setDetailedSortKey(col);
-      setDetailedSortDir("asc");
-    }
-  }, [detailedSortKey]);
-
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroupIds((prev) => {
       const next = new Set(prev);
@@ -252,11 +243,204 @@ export default function TrialBalancePageClient() {
     });
   }, []);
 
-  const totalRecords =
-    activeTab === "summary" ? filteredSummaryRows.length : detailedFlatRows.length;
+  return (
+    <AccountsColumnFilterProvider
+      key={activeTab}
+      rows={providerRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="particular"
+      defaultSortDir="asc"
+    >
+      <TrialBalancePageBody
+        mounted={mounted}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        filteredSummaryRows={filteredSummaryRows}
+        filteredDetailedGroups={filteredDetailedGroups}
+        detailedFlatRows={detailedFlatRows}
+        sourceLedgers={sourceLedgers}
+        expandedGroupIds={expandedGroupIds}
+        toggleGroup={toggleGroup}
+        hasFilters={hasFilters}
+        resetFilters={resetFilters}
+        preset={preset}
+        handlePresetChange={handlePresetChange}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        search={search}
+        setSearch={setSearch}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        hasExportData={hasExportData}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
 
+function TrialBalancePageBody({
+  mounted,
+  activeTab,
+  setActiveTab,
+  filteredSummaryRows,
+  filteredDetailedGroups,
+  detailedFlatRows,
+  sourceLedgers,
+  expandedGroupIds,
+  toggleGroup,
+  hasFilters,
+  resetFilters,
+  preset,
+  handlePresetChange,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  search,
+  setSearch,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  exporting,
+  setExporting,
+  exportMeta,
+  hasExportData,
+}: {
+  mounted: boolean;
+  activeTab: TrialBalanceTab;
+  setActiveTab: (v: TrialBalanceTab) => void;
+  filteredSummaryRows: TrialBalanceSummaryGroupRow[];
+  filteredDetailedGroups: ReturnType<typeof buildTrialBalanceDetailedGroups>;
+  detailedFlatRows: TrialBalanceDetailedFlatRow[];
+  sourceLedgers: ReturnType<typeof buildTrialBalanceDisplayRows>;
+  expandedGroupIds: Set<string>;
+  toggleGroup: (groupKey: string) => void;
+  hasFilters: boolean;
+  resetFilters: () => void;
+  preset: DateRangePresetId;
+  handlePresetChange: (value: DateRangePresetId) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: Parameters<typeof exportTrialBalanceSummaryToExcel>[1];
+  hasExportData: boolean;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredSummaryRows = useAccountsFilteredRows(filteredSummaryRows);
+  const columnFilteredDetailedRows = useAccountsFilteredRows(detailedFlatRows);
+  const columnFilteredRows =
+    activeTab === "summary" ? columnFilteredSummaryRows : columnFilteredDetailedRows;
+
+  const rebuildDetailedGroupsFromFlatRows = useCallback(
+    (rows: TrialBalanceDetailedFlatRow[]) => {
+      const ledgerRows = rows
+        .filter((r): r is Extract<TrialBalanceDetailedFlatRow, { type: "ledger" }> => r.type === "ledger")
+        .map((r) => r.ledger);
+      const groupMap = new Map<string, (typeof filteredDetailedGroups)[number]>();
+      for (const ledger of ledgerRows) {
+        if (!groupMap.has(ledger.groupKey)) {
+          groupMap.set(ledger.groupKey, {
+            groupKey: ledger.groupKey,
+            groupName: ledger.groupName,
+            sortOrder: ledger.groupSortOrder,
+            ledgers: [],
+          });
+        }
+        groupMap.get(ledger.groupKey)!.ledgers.push(ledger);
+      }
+      return [...groupMap.values()];
+    },
+    [filteredDetailedGroups],
+  );
+
+  const summary = useMemo(() => {
+    if (activeTab === "summary") {
+      return computeTrialBalanceSummaryFromGroups(
+        columnFilteredSummaryRows,
+        sourceLedgers,
+      );
+    }
+    return computeTrialBalanceSummaryFromDetailedGroups(
+      rebuildDetailedGroupsFromFlatRows(columnFilteredDetailedRows),
+    );
+  }, [
+    activeTab,
+    columnFilteredSummaryRows,
+    columnFilteredDetailedRows,
+    sourceLedgers,
+    rebuildDetailedGroupsFromFlatRows,
+  ]);
+
+  const paginatedSummaryRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredSummaryRows.slice(start, start + pageSize);
+  }, [columnFilteredSummaryRows, page, pageSize]);
+
+  const paginatedDetailedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredDetailedRows.slice(start, start + pageSize);
+  }, [columnFilteredDetailedRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      if (activeTab === "summary") {
+        await exportTrialBalanceSummaryToExcel(
+          columnFilteredSummaryRows,
+          exportMeta,
+          summary,
+        );
+      } else {
+        await exportTrialBalanceDetailedToExcel(
+          rebuildDetailedGroupsFromFlatRows(columnFilteredDetailedRows),
+          exportMeta,
+          summary,
+        );
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (activeTab === "summary") {
+      exportTrialBalanceSummaryToPdf(
+        columnFilteredSummaryRows,
+        exportMeta,
+        summary,
+      );
+    } else {
+      exportTrialBalanceDetailedToPdf(
+        rebuildDetailedGroupsFromFlatRows(columnFilteredDetailedRows),
+        exportMeta,
+        summary,
+      );
+    }
+  };
+
+  const totalRecords = columnFilteredRows.length;
   const recordLabel = activeTab === "summary" ? "groups" : "rows";
-
   const showEmpty = mounted && totalRecords === 0;
   const showTable = mounted && totalRecords > 0;
 
@@ -352,17 +536,17 @@ export default function TrialBalancePageClient() {
             }
             footer={
               <>
-                {mounted && !summary.isBalanced && filteredSummaryRows.length > 0 && (
+                {mounted && !summary.isBalanced && totalRecords > 0 && (
                   <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-xs text-red-700 leading-tight">
                     <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                     Trial Balance is not balanced.
                   </div>
                 )}
-                {mounted && filteredSummaryRows.length > 0 && (
+                {mounted && totalRecords > 0 && (
                   <AccountsTablePagination
                     page={page}
                     pageSize={pageSize}
-                    totalRecords={filteredSummaryRows.length}
+                    totalRecords={totalRecords}
                     onPageChange={setPage}
                     onPageSizeChange={setPageSize}
                     recordLabel={recordLabel}
@@ -381,29 +565,9 @@ export default function TrialBalancePageClient() {
               <AccountsTable minWidth={520}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <SortTh
-                      label="Particular"
-                      colKey="particular"
-                      sortKey={summarySortKey}
-                      sortDir={summarySortDir}
-                      onSort={handleSummarySort}
-                    />
-                    <SortTh
-                      label="Debit"
-                      colKey="debit"
-                      sortKey={summarySortKey}
-                      sortDir={summarySortDir}
-                      onSort={handleSummarySort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Credit"
-                      colKey="credit"
-                      sortKey={summarySortKey}
-                      sortDir={summarySortDir}
-                      onSort={handleSummarySort}
-                      align="right"
-                    />
+                    <SortTh label="Particular" colKey="particular" />
+                    <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+                    <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
@@ -465,17 +629,17 @@ export default function TrialBalancePageClient() {
             }
             footer={
               <>
-                {mounted && !summary.isBalanced && filteredDetailedGroups.length > 0 && (
+                {mounted && !summary.isBalanced && totalRecords > 0 && (
                   <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-xs text-red-700 leading-tight">
                     <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                     Trial Balance is not balanced.
                   </div>
                 )}
-                {mounted && filteredDetailedGroups.length > 0 && (
+                {mounted && totalRecords > 0 && (
                   <AccountsTablePagination
                     page={page}
                     pageSize={pageSize}
-                    totalRecords={detailedFlatRows.length}
+                    totalRecords={totalRecords}
                     onPageChange={setPage}
                     onPageSizeChange={setPageSize}
                     recordLabel={recordLabel}
@@ -494,53 +658,12 @@ export default function TrialBalancePageClient() {
               <AccountsTable minWidth={900}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <SortTh
-                      label="Particular"
-                      colKey="particular"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                    />
-                    <SortTh
-                      label="Opening Balance"
-                      colKey="opening"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Debit"
-                      colKey="debit"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Credit"
-                      colKey="credit"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Closing Balance"
-                      colKey="closing"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Balance Type"
-                      colKey="balanceType"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="center"
-                    />
+                    <SortTh label="Particular" colKey="particular" />
+                    <SortTh label="Opening Balance" colKey="opening" filterType="amount" align="right" />
+                    <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+                    <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+                    <SortTh label="Closing Balance" colKey="closing" filterType="amount" align="right" />
+                    <SortTh label="Balance Type" colKey="balanceType" align="center" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
