@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, Save, X, CheckCircle2, XCircle, ShieldAlert } from "lucide-react";
 import {
   CustomerForm,
-  customerRecordToFormValues, // new — see below
   validateCustomerForm,
-  formValuesToUpdatePayload, // new — see below
+  formValuesToUpdatePayload,
   type CustomerFormValues,
+  customerRecordToFormValues,
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../../customer-permissions";
@@ -65,12 +65,12 @@ export default function EditCustomerPage() {
     setAllowed(hasCustomerPermission("edit"));
   }, []);
 
-  // Seed the form once the record arrives (or when a different id loads)
   useEffect(() => {
     if (customer) {
       setForm(customerRecordToFormValues(customer));
     }
   }, [customer]);
+
 
   const clearErr = (key: string) =>
     setErrors((prev) => {

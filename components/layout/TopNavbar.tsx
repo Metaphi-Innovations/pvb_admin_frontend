@@ -280,8 +280,10 @@ export const TopNavbar = memo(function TopNavbar() {
   const [showRightArrow, setShowRightArrow] = useState(false);
   const { permissions, isLoading: permsLoading } = usePermissions();
 
+  // Keep filtering against the last known tree while a soft-refresh is in flight
+  // so nav items (and their hooks) are not torn down on every scope change.
   const visibleNavItems = useMemo(
-    () => (permsLoading ? [] : filterNavItems(NAV_ITEMS, permissions)),
+    () => (permsLoading && !permissions ? [] : filterNavItems(NAV_ITEMS, permissions)),
     [permissions, permsLoading],
   );
 

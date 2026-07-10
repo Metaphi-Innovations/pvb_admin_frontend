@@ -205,6 +205,7 @@ export interface PurchaseReturnFilterOption {
 
 export type PurchaseReturnFilterField =
   | "status"
+  | "return_no"
   | "supplier__supplier_name"
   | "purchase_order__po_no"
   | "warehouse__warehouse_name"

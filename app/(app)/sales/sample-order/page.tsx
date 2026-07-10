@@ -321,6 +321,23 @@ export default function SalesOrdersPage() {
 
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
+  const handleDownloadNote = async (id: string | number, soNumber: string) => {
+    try {
+      setToast({ msg: "Downloading sample note...", type: "success" });
+      const blob = await SampleOrderService.downloadNote(String(id));
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sample-note-${soNumber.replace(/\//g, "-")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setToast({ msg: "Failed to download note.", type: "error" });
+    }
+  };
+
   const ordersList = listData?.items || [];
   const totalRecords = listData?.total || 0;
 
@@ -558,7 +575,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!piAllowed}
-                onClick={() => downloadProformaInvoice(hydrated)}
+                onClick={() => handleDownloadNote(hydrated.id, hydrated.soNumber)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"

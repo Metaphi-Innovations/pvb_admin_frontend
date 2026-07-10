@@ -69,6 +69,11 @@ const SORT_FIELD_MAP: Record<string, string> = {
     supplierTypeName: "supplier_type_name",
     initialCode: "initial_code",
     status: "status",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+    createdBy: "created_by",
+    updatedBy: "updated_by",
+    description: "description",
 };
 
 export function sortStateToOrdering(

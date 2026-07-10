@@ -97,10 +97,10 @@ export default function ViewVendorPage() {
           : []),
         ...(vendor.mobileNumber
           ? [{
-              label: formatMobile(vendor.mobileCountryCode, vendor.mobileNumber),
-              icon: Phone,
-              href: `tel:${vendor.mobileNumber}`,
-            }]
+            label: formatMobile(vendor.mobileCountryCode, vendor.mobileNumber),
+            icon: Phone,
+            href: `tel:${vendor.mobileNumber}`,
+          }]
           : []),
         ...(vendor.email
           ? [{ label: vendor.email, icon: Mail, href: `mailto:${vendor.email}` }]
@@ -111,7 +111,7 @@ export default function ViewVendorPage() {
           icon: Building2,
           iconBg: "#EEF3FB",
           iconColor: "#0C3F8A",
-          value: vendor.supplierTypeId || "—",
+          value: vendor.supplierType?.supplier_type_name || "—",
           label: "Supplier Type",
         },
         {
@@ -147,7 +147,7 @@ export default function ViewVendorPage() {
         ],
         summary: [
           { label: "Supplier Code", value: vendor.supplierCode || "—", highlight: true },
-          { label: "Supplier Type", value: vendor.supplierTypeId || "—" },
+          { label: "Supplier Type", value: vendor.supplierType?.supplier_type_name || "—" },
           { label: "GST", value: vendor.gstinNumber || "—" },
           { label: "PAN", value: vendor.panNumber || "—" },
           { label: "Payment Terms", value: vendor.paymentTerms || "30 Days" },
@@ -166,7 +166,7 @@ export default function ViewVendorPage() {
           <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
             <RecordKvRow label="Supplier Code" value={vendor.supplierCode || "—"} mono highlight />
             <RecordKvRow label="Supplier Name" value={vendor.supplierName} highlight />
-            <RecordKvRow label="Supplier Type" value={vendor.supplierTypeId || "—"} />
+            <RecordKvRow label="Supplier Type" value={vendor.supplierType?.supplier_type_name || "—"} />
             <RecordKvRow label="Payment Terms" value={vendor.paymentTerms || "30 Days"} />
             <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
             <RecordKvRow
@@ -286,6 +286,74 @@ export default function ViewVendorPage() {
                   </table>
                 </div>
               </div>
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard
+            title="Media & Documents"
+            icon={FileText}
+            accent="purple"
+            className="lg:col-span-2"
+          >
+            {vendor.documents && vendor.documents.length > 0 ? (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Document Type
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          File Name
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Uploaded On
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {vendor.documents.map((doc) => (
+                        <tr
+                          key={doc.supplier_document_id}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2">
+                            {doc.document_name}
+                          </td>
+
+                          <td className="px-3 py-2 font-mono">
+                            {doc.file_name}
+                          </td>
+
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </td>
+
+                          <td className="px-3 py-2">
+                            <a
+                              href={doc.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-700 hover:underline"
+                            >
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="py-4 text-sm text-muted-foreground">
+                No documents uploaded.
+              </p>
             )}
           </RecordSectionCard>
         </div>

@@ -173,16 +173,17 @@ function buildBackendWriteBody(
 
   const expenses = (form.additionalExpenses || []).map((exp) => {
     const gstVal = asNumber(exp.gstRate);
+    const isInter = (exp.igstAmount || 0) > 0;
     return {
       charge_name: exp.expenseName,
       amount: exp.amount,
       gst_percent: gstVal,
-      cgst_percentage: gstVal / 2,
-      cgst_amount: exp.cgstAmount,
-      sgst_percentage: gstVal / 2,
-      sgst_amount: exp.sgstAmount,
-      igst_percentage: 0,
-      igst_amount: 0,
+      cgst_percentage: isInter ? 0 : gstVal / 2,
+      cgst_amount: isInter ? 0 : exp.cgstAmount,
+      sgst_percentage: isInter ? 0 : gstVal / 2,
+      sgst_amount: isInter ? 0 : exp.sgstAmount,
+      igst_percentage: isInter ? gstVal : 0,
+      igst_amount: isInter ? exp.igstAmount : 0,
       total_amount: exp.totalAmount,
       remarks: exp.remarks || "",
     };
@@ -191,7 +192,8 @@ function buildBackendWriteBody(
   const totalQty = items.reduce((acc, curr) => acc + curr.transfer_base_qty, 0);
   const subtotal = items.reduce((acc, curr) => acc + curr.taxable_amount, 0);
   const additionalExp = expenses.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalGst = items.reduce((acc, curr) => acc + curr.cgst_amount + curr.sgst_amount, 0);
+  const totalGst = items.reduce((acc, curr) => acc + (curr.cgst_amount || 0) + (curr.sgst_amount || 0), 0) +
+                   expenses.reduce((acc, curr) => acc + (curr.cgst_amount || 0) + (curr.sgst_amount || 0) + (curr.igst_amount || 0), 0);
 
   return {
     transfer_no: options.transferNo,

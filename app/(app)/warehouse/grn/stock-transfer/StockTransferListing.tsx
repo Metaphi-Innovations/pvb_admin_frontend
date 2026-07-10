@@ -1,28 +1,23 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2, PackageCheck } from "lucide-react";
-import { getGrnRecords } from "../shared/mock-data";
-import { GrnRecord } from "../shared/types";
+import { Eye, FileCheck2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  getDispatchedStockTransfersForGrn,
-  getStockTransferDispatchLines,
-} from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
-import {
-  DEFAULT_DESTINATION_WAREHOUSE,
   getStockTransferGrnDisplayStatus,
   ST_GRN_STATUS_BADGE,
 } from "@/lib/warehouse/grn-source";
+import { getStockTransferSubTabApiContext } from "@/lib/warehouse/grn-list-config";
+import { useGrnListData } from "../shared/useGrnListData";
+import type { GrnListItem } from "@/services/grn-list.service";
 
 type StockTransferGrnRow = {
   id: string;
-  rowType: "pending_transfer" | "grn_record";
-  transferId?: number;
-  grnId?: string;
+  rowType: "grn_record";
+  grnId: string;
   stockTransferNo: string;
   fromWarehouse: string;
   toWarehouse: string;
@@ -31,71 +26,27 @@ type StockTransferGrnRow = {
   dispatchedQty: number;
   receivedQty: number;
   displayStatus: string;
-  grnRecord?: GrnRecord;
+  grnRecord: GrnListItem;
 };
 
-function summarizeProducts(names: string[]): string {
-  const unique = [...new Set(names)];
-  if (unique.length <= 2) return unique.join(", ");
-  return `${unique.slice(0, 2).join(", ")} +${unique.length - 2}`;
-}
-
-function buildStockTransferRows(
-  grns: GrnRecord[],
-  destinationWarehouse: string,
-): { pending: StockTransferGrnRow[]; received: StockTransferGrnRow[] } {
-  const stGrns = grns.filter((g) => g.sourceType === "stock_transfer");
-  const warehouseFilter = destinationWarehouse || "All";
-
-  const pending = getDispatchedStockTransfersForGrn(warehouseFilter).map((transfer) => {
-    const lines = getStockTransferDispatchLines(transfer);
-    const dispatchedQty = lines.reduce((s, l) => s + l.dispatchedQty, 0);
-    return {
-      id: `pending-${transfer.id}`,
-      rowType: "pending_transfer" as const,
-      transferId: transfer.id,
-      stockTransferNo: transfer.transferNumber,
-      fromWarehouse: transfer.sourceWarehouseName,
-      toWarehouse: transfer.targetWarehouseName,
-      dispatchDate: transfer.updatedDate || transfer.transferDate,
-      products: summarizeProducts(lines.map((l) => l.productName)),
-      dispatchedQty,
-      receivedQty: 0,
-      displayStatus: getStockTransferGrnDisplayStatus({ isPendingTransfer: true }),
-    };
-  });
-
-  const received = stGrns
-    .filter((g) => {
-      if (destinationWarehouse === "All") return true;
-      return (g.toWarehouse ?? g.warehouse) === destinationWarehouse;
-    })
-    .map((grn) => {
-      const dispatchedQty = grn.items.reduce((s, it) => s + (it.orderedQty ?? it.pendingQty ?? 0), 0);
-      const receivedQty = grn.items.reduce((s, it) => s + (it.receivedQty ?? 0), 0);
-      const displayStatus = getStockTransferGrnDisplayStatus({
-        isPendingTransfer: false,
-        receiptStatus: grn.receiptStatus,
-        grnStatus: grn.status,
-      });
-
-      return {
-        id: grn.id,
-        rowType: "grn_record" as const,
-        grnId: grn.id,
-        stockTransferNo: grn.stockTransferNo ?? grn.poNumber,
-        fromWarehouse: grn.fromWarehouse ?? grn.vendorName,
-        toWarehouse: grn.toWarehouse ?? grn.warehouse,
-        dispatchDate: grn.dispatchDate ?? grn.grnDate,
-        products: summarizeProducts(grn.items.map((i) => i.productName)),
-        dispatchedQty,
-        receivedQty,
-        displayStatus,
-        grnRecord: grn,
-      };
-    });
-
-  return { pending, received };
+function mapToStockTransferRow(item: GrnListItem): StockTransferGrnRow {
+  return {
+    id: item.id,
+    rowType: "grn_record",
+    grnId: item.id,
+    stockTransferNo: item.stockTransferNo ?? item.grnNo,
+    fromWarehouse: item.fromWarehouse ?? item.vendorName ?? "—",
+    toWarehouse: item.toWarehouse ?? item.warehouse,
+    dispatchDate: item.dispatchDate ?? item.grnDate,
+    products: "—",
+    dispatchedQty: item.receivedQty,
+    receivedQty: item.receivedQty,
+    displayStatus: getStockTransferGrnDisplayStatus({
+      isPendingTransfer: false,
+      grnStatus: item.status,
+    }),
+    grnRecord: item,
+  };
 }
 
 interface StockTransferListingProps {
@@ -104,67 +55,45 @@ interface StockTransferListingProps {
 
 export function StockTransferListing({ destinationWarehouse }: StockTransferListingProps) {
   const router = useRouter();
-  const [grnList, setGrnList] = useState<GrnRecord[]>([]);
   const [subTab, setSubTab] = useState<"pending" | "received">("pending");
-
   const [grnFilters, setGrnFilters] = useState<FilterState>({});
   const [grnSort, setGrnSort] = useState<SortState>({ key: "", direction: "none" });
   const [grnPage, setGrnPage] = useState(1);
   const [grnPageSize, setGrnPageSize] = useState(10);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [receivedCount, setReceivedCount] = useState(0);
 
-  useEffect(() => {
-    setGrnList(getGrnRecords());
-  }, []);
+  const tabContext = useMemo(
+    () => getStockTransferSubTabApiContext(subTab),
+    [subTab],
+  );
+
+  const { items, total, loading } = useGrnListData({
+    tabContext,
+    filters: grnFilters,
+    sort: grnSort,
+    page: grnPage,
+    pageSize: grnPageSize,
+    destinationWarehouse,
+  });
+
+  const rows = useMemo(() => items.map(mapToStockTransferRow), [items]);
 
   useEffect(() => {
     setGrnPage(1);
-  }, [destinationWarehouse, subTab]);
+  }, [destinationWarehouse, subTab, grnFilters, grnPageSize]);
 
-  const { pending, received } = useMemo(
-    () => buildStockTransferRows(grnList, destinationWarehouse),
-    [grnList, destinationWarehouse],
-  );
+  useEffect(() => {
+    setGrnPage(1);
+  }, [grnSort.key, grnSort.direction]);
 
-  const activeRows = useMemo(() => {
-    return subTab === "pending" ? pending : received;
-  }, [subTab, pending, received]);
-
-  const processedRows = useMemo(() => {
-    let result = [...activeRows];
-    const search = grnFilters.search as string | undefined;
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (row) =>
-          row.stockTransferNo.toLowerCase().includes(q) ||
-          row.fromWarehouse.toLowerCase().includes(q) ||
-          row.toWarehouse.toLowerCase().includes(q) ||
-          row.products.toLowerCase().includes(q),
-      );
+  useEffect(() => {
+    if (subTab === "pending") {
+      setPendingCount(total);
+    } else {
+      setReceivedCount(total);
     }
-
-    if (grnSort.key && grnSort.direction !== "none") {
-      result.sort((a, b) => {
-        const key = grnSort.key as keyof StockTransferGrnRow;
-        const valA = a[key];
-        const valB = b[key];
-        if (typeof valA === "number" && typeof valB === "number") {
-          return grnSort.direction === "asc" ? valA - valB : valB - valA;
-        }
-        const strA = String(valA || "");
-        const strB = String(valB || "");
-        return grnSort.direction === "asc" ? strA.localeCompare(strB) : strB.localeCompare(strA);
-      });
-    }
-    return result;
-  }, [activeRows, grnFilters, grnSort]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (grnPage - 1) * grnPageSize;
-    return processedRows.slice(start, start + grnPageSize);
-  }, [processedRows, grnPage, grnPageSize]);
-
-  const totalRecords = processedRows.length;
+  }, [subTab, total]);
 
   const stockTransferColumns = useMemo(() => {
     const cols: ColumnConfig<StockTransferGrnRow>[] = [
@@ -242,35 +171,12 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
 
   const stockTransferActions: ActionItemConfig<StockTransferGrnRow>[] = [
     {
-      label: "Create GRN",
-      action: "receive",
-      icon: PackageCheck,
-      onClick: (row) => {
-        if (row.rowType === "pending_transfer" && row.transferId) {
-          router.push(`/warehouse/grn/stock-transfer/create?dispatchId=${row.transferId}`);
-        }
-      },
-      hide: (row) => row.rowType !== "pending_transfer",
-    },
-    {
-      label: "View Dispatch",
-      action: "view_dispatch",
-      icon: Eye,
-      onClick: (row) => {
-        if (row.rowType === "pending_transfer" && row.transferId) {
-          router.push(`/warehouse/grn/stock-transfer/dispatch-view/${row.transferId}`);
-        }
-      },
-      hide: (row) => row.rowType !== "pending_transfer",
-    },
-    {
       label: "View GRN",
       action: "view",
       icon: Eye,
       onClick: (row) => {
         if (row.grnId) router.push(`/warehouse/grn/stock-transfer/${row.grnId}`);
       },
-      hide: (row) => row.rowType !== "grn_record",
     },
     {
       label: "Perform QC",
@@ -283,14 +189,12 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         }
         if (row.grnId) router.push(`/warehouse/qc/create?grnId=${row.grnId}`);
       },
-      hide: (row) =>
-        row.rowType !== "grn_record" || row.grnRecord?.status === "qc_completed",
+      hide: (row) => row.grnRecord?.status === "qc_completed",
     },
   ];
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs switch */}
       <div className="flex gap-2 border-b border-border pb-3">
         <button
           type="button"
@@ -302,7 +206,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
               : "border-border text-muted-foreground hover:bg-muted bg-white",
           )}
         >
-          Pending ({pending.length})
+          Pending ({pendingCount})
         </button>
         <button
           type="button"
@@ -314,14 +218,15 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
               : "border-border text-muted-foreground hover:bg-muted bg-white",
           )}
         >
-          Received ({received.length})
+          Received ({receivedCount})
         </button>
       </div>
 
       <MasterListing<StockTransferGrnRow>
         columns={stockTransferColumns}
-        data={paginatedRows}
-        totalRecords={totalRecords}
+        data={rows}
+        loading={loading}
+        totalRecords={total}
         page={grnPage}
         pageSize={grnPageSize}
         onPageChange={setGrnPage}
