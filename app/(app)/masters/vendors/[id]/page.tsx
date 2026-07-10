@@ -288,6 +288,74 @@ export default function ViewVendorPage() {
               </div>
             )}
           </RecordSectionCard>
+
+          <RecordSectionCard
+            title="Media & Documents"
+            icon={FileText}
+            accent="purple"
+            className="lg:col-span-2"
+          >
+            {vendor.documents && vendor.documents.length > 0 ? (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Document Type
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          File Name
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Uploaded On
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {vendor.documents.map((doc) => (
+                        <tr
+                          key={doc.supplier_document_id}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2">
+                            {doc.document_name}
+                          </td>
+
+                          <td className="px-3 py-2 font-mono">
+                            {doc.file_name}
+                          </td>
+
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </td>
+
+                          <td className="px-3 py-2">
+                            <a
+                              href={doc.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-700 hover:underline"
+                            >
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="py-4 text-sm text-muted-foreground">
+                No documents uploaded.
+              </p>
+            )}
+          </RecordSectionCard>
         </div>
       </div>
     </RecordDetailPage>
