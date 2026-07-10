@@ -108,6 +108,7 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
     lineItems: rawItems.map((item: any, idx: number) => mapBackendLineItem(item, idx)),
     warehouseId: raw.warehouse_id || wh.warehouse_id,
     warehouseName: asString(wh.warehouse_name),
+    warehouseCode: asString(wh.warehouse_code || wh.code || ""),
     createdBy: raw.created_by_user ? `${raw.created_by_user.first_name || ""} ${raw.created_by_user.last_name || ""}`.trim() : "Admin",
     createdDate: asDateOnly(raw.created_at),
     updatedBy: raw.updated_by_user ? `${raw.updated_by_user.first_name || ""} ${raw.updated_by_user.last_name || ""}`.trim() : "Admin",
@@ -125,7 +126,7 @@ function buildBackendWriteBody(
   form: SalesOrderFormValues,
   options: { orderNo: string; status: string }
 ): Record<string, any> {
-  const items = (form.lineItems || []).map((line: any) => {
+  const items = (form.lineItems || []).map((line: SalesOrderLineItem) => {
     return {
       product_id: line.productId,
       stock_available: line.availableStock || 0,
@@ -140,7 +141,7 @@ function buildBackendWriteBody(
     };
   });
 
-  const totals = form.lineItems.reduce((acc: any, line: any) => {
+  const totals = form.lineItems.reduce((acc: any, line: SalesOrderLineItem) => {
     return {
       total_qty: acc.total_qty + line.quantity,
       product_subtotal: acc.product_subtotal + (line.unitPrice * line.quantity),

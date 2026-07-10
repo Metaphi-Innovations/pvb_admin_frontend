@@ -37,7 +37,7 @@ function resolveSalesOrderTaxOptions(
 		: { appliesLut: false };
 	const taxSupplyType = resolveTaxSupplyType(
 		warehouse?.state ?? "",
-		shipTo?.state ?? "",
+		shipTo?.state ?? customer?.stateName ?? "",
 	);
 	return {
 		sezLutApplies: Boolean(
