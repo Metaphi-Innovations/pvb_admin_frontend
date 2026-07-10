@@ -57,7 +57,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -116,8 +117,14 @@ function toCategoryRow(item: {
 
 
 export default function CategoryMasterPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "categoryName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -133,23 +140,23 @@ export default function CategoryMasterPage() {
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
   const apiFilters = useMemo(
-    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.category),
-    [debouncedFilters],
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.category),
+    [appliedFilters],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters),
-    [debouncedFilters],
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters],
   );
 
   const listQuery = useCategories(listParams);
@@ -159,11 +166,21 @@ export default function CategoryMasterPage() {
   const toggleStatusMutation = useToggleCategoryStatus();
   const exportMutation = useExportCategories();
 
-  const categoryNameOptionsQuery = useCategoryFilterDropdown("categoryName");
-  const descriptionOptionsQuery = useCategoryFilterDropdown("description");
-  const statusOptionsQuery = useCategoryFilterDropdown("is_active");
-  const createdByOptionsQuery = useCategoryFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useCategoryFilterDropdown("updated_by_user__username");
+  const categoryNameOptionsQuery = useCategoryFilterDropdown("categoryName", {
+    enabled: isFilterOpen("categoryName"),
+  });
+  const descriptionOptionsQuery = useCategoryFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useCategoryFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useCategoryFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useCategoryFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const categoryNameOptions = useMemo(
     () => categoryNameOptionsQuery.data ?? [],
@@ -339,11 +356,9 @@ export default function CategoryMasterPage() {
     });
   }, [records, sort]);
 
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize]);
+  }, [appliedSearch, apiFilters, pageSize]);
 
   useEffect(() => {
     setPage(1);
@@ -451,7 +466,7 @@ export default function CategoryMasterPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         apiFilters,
       },
@@ -495,14 +510,17 @@ export default function CategoryMasterPage() {
         <MasterListing<Category>
           columns={columns}
           data={displayRecords}
-          loading={loading || isFiltering}
+          loading={loading}
           totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
           actions={actions}
           onAdd={openAdd}
           addLabel="Add Category"
@@ -511,6 +529,7 @@ export default function CategoryMasterPage() {
           searchPlaceholder="Search category name, description..."
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 

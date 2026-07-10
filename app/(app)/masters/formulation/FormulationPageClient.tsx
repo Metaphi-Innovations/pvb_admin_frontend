@@ -45,7 +45,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -130,8 +131,14 @@ function toFormulationRow(item: {
 }
 
 export default function FormulationMasterPage() {
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "formulationName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -152,26 +159,26 @@ export default function FormulationMasterPage() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.formulation, {
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.formulation, {
         statusTab,
       }),
-    [debouncedFilters, statusTab],
+    [appliedFilters, statusTab],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, statusTab),
-    [debouncedFilters, statusTab],
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useFormulations(listParams);
@@ -181,12 +188,24 @@ export default function FormulationMasterPage() {
   const toggleStatusMutation = useToggleFormulationStatus();
   const exportMutation = useExportFormulations();
 
-  const nameOptionsQuery = useFormulationFilterDropdown("formulation_name");
-  const codeOptionsQuery = useFormulationFilterDropdown("formulation_code");
-  const descriptionOptionsQuery = useFormulationFilterDropdown("description");
-  const statusOptionsQuery = useFormulationFilterDropdown("is_active");
-  const createdByOptionsQuery = useFormulationFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useFormulationFilterDropdown("updated_by_user__username");
+  const nameOptionsQuery = useFormulationFilterDropdown("formulation_name", {
+    enabled: isFilterOpen("formulationName"),
+  });
+  const codeOptionsQuery = useFormulationFilterDropdown("formulation_code", {
+    enabled: isFilterOpen("formulationCode"),
+  });
+  const descriptionOptionsQuery = useFormulationFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useFormulationFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useFormulationFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useFormulationFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const formulationNameOptions = useMemo(
     () => nameOptionsQuery.data ?? [],
@@ -231,9 +250,7 @@ export default function FormulationMasterPage() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -245,7 +262,7 @@ export default function FormulationMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
@@ -517,7 +534,7 @@ export default function FormulationMasterPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         ordering,
         apiFilters,
@@ -585,14 +602,17 @@ export default function FormulationMasterPage() {
       <MasterListing<FormulationRecord>
         columns={columns}
         data={displayRecords}
-        loading={loading || isFiltering}
+        loading={loading}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add Form"
@@ -601,6 +621,7 @@ export default function FormulationMasterPage() {
         searchPlaceholder="Search form name or description..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
         rowKey={(row) => row.formulationUuid ?? String(row.id)}
       />
 

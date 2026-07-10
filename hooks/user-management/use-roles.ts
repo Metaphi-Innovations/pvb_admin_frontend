@@ -10,6 +10,7 @@ import {
   type RoleUpdatePayload,
 } from "@/services/role-list.service";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 import { userManagementKeys } from "@/lib/user-management/user-management-query-keys";
 
 function toListParams(params: MasterListKeyParams): RoleListParams {
@@ -23,10 +24,11 @@ function toListParams(params: MasterListKeyParams): RoleListParams {
   };
 }
 
-export function useRoles(params: MasterListKeyParams) {
+export function useRoles(params: MasterListKeyParams, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: userManagementKeys.roles.list(params),
     queryFn: ({ signal }) => RoleListService.list({ ...toListParams(params), signal }),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -88,11 +90,15 @@ export function useExportRoles() {
   });
 }
 
-export function useRoleFilterDropdown(fieldName: RoleFilterField) {
+export function useRoleFilterDropdown(
+  fieldName: RoleFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: userManagementKeys.roles.filterDropdown(fieldName),
     queryFn: ({ signal }) => RoleListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

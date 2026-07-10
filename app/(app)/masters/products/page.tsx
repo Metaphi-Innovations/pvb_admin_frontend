@@ -29,7 +29,7 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -95,8 +95,13 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function ProductsPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
   const [sort, setSort] = useState<SortState>({ key: "productName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -110,25 +115,25 @@ export default function ProductsPage() {
 
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.product, {}),
-    [debouncedFilters],
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.product, {}),
+    [appliedFilters],
   );
 
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, "all"),
-    [debouncedFilters],
+    () => resolveListStatus(appliedFilters, "all"),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   // ---- queries / mutations ----
@@ -150,7 +155,7 @@ export default function ProductsPage() {
   // ---- reset page on filter / sort change ----
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   // ---- auto-dismiss toast ----
   useEffect(() => {
@@ -187,7 +192,7 @@ export default function ProductsPage() {
   // ---- export ----
   const handleExport = () => {
     exportMutation.mutate(
-      { search: debouncedSearch, status: listStatus, ordering, apiFilters },
+      { search: appliedSearch, status: listStatus, ordering, apiFilters },
       {
         onError: (error) =>
           setToast({

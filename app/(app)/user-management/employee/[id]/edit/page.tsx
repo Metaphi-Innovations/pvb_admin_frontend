@@ -11,10 +11,13 @@ import {
   detailToEmployee,
   employeeToUpdatePayload,
   approvalUsersToOptions,
+  usersDropdownToOptions,
   templatePermissionsToSets,
+  roleDropdownToApiOptions,
   type ApiRoleOption,
   type GeographyLookupItem,
 } from "../../user-api-data";
+import { permissionsHaveEnabled } from "@/services/user-list.service";
 import { cn } from "@/lib/utils";
 import {
   useUser,
@@ -22,8 +25,9 @@ import {
   useSaveUserPermissions,
   useToggleUserStatus,
   useApprovalUsers,
+  useUsersDropdown,
   useDepartmentsDropdown,
-  useRoles,
+  useRolesDropdown,
   useTemplatesDropdown,
 } from "@/hooks/user-management";
 import { TemplateListService } from "@/services/template-list.service";
@@ -56,15 +60,9 @@ export default function EditEmployeePage() {
 
   const userQuery = useUser(userId);
   const departmentsQuery = useDepartmentsDropdown();
-  const rolesQuery = useRoles({
-    page: 1,
-    pageSize: 500,
-    search: "",
-    status: "active",
-    ordering: "role_name",
-    apiFilters: {},
-  });
+  const rolesDropdownQuery = useRolesDropdown();
   const templatesQuery = useTemplatesDropdown();
+  const usersDropdownQuery = useUsersDropdown();
   const approvalUsersQuery = useApprovalUsers(selectedRoleId);
   const updateMutation = useUpdateUser();
   const savePermissionsMutation = useSaveUserPermissions();
@@ -118,15 +116,12 @@ export default function EditEmployeePage() {
     [departmentsQuery.data],
   );
 
-  const apiRoles: ApiRoleOption[] = useMemo(
+  const apiRoles: ApiRoleOption[] | undefined = useMemo(
     () =>
-      (rolesQuery.data?.items ?? []).map((role) => ({
-        id: role.roleUuid,
-        name: role.roleName,
-        geoLevel: role.geoLevel || "None",
-        departmentId: role.departmentId,
-      })),
-    [rolesQuery.data],
+      rolesDropdownQuery.data
+        ? roleDropdownToApiOptions(rolesDropdownQuery.data)
+        : undefined,
+    [rolesDropdownQuery.data],
   );
 
   const permissionTemplateOptions = useMemo(
@@ -139,8 +134,21 @@ export default function EditEmployeePage() {
   );
 
   const approvalOptions = useMemo(
-    () => approvalUsersToOptions(approvalUsersQuery.data ?? []),
-    [approvalUsersQuery.data],
+    () =>
+      selectedRoleId
+        ? approvalUsersToOptions(approvalUsersQuery.data ?? [])
+        : undefined,
+    [approvalUsersQuery.data, selectedRoleId],
+  );
+
+  const reportingManagerOptions = useMemo(
+    () =>
+      usersDropdownToOptions(
+        (usersDropdownQuery.data ?? []).filter(
+          (user) => user.userId !== userId,
+        ),
+      ),
+    [usersDropdownQuery.data, userId],
   );
 
   const handleApplyPermissionTemplate = useCallback(async (templateId: string) => {
@@ -149,17 +157,17 @@ export default function EditEmployeePage() {
   }, []);
 
   const handleSave = (updated: Employee) => {
-    const selectedRole = apiRoles.find((r) => String(r.id) === String(updated.roleId));
+    const selectedRole = apiRoles?.find((r) => String(r.id) === String(updated.roleId));
     const payload = employeeToUpdatePayload(updated, {
       roleGeoLevel: selectedRole?.geoLevel || "None",
       geography,
     });
 
     updateMutation.mutate(
-      { id: userId, payload },
+      { id: userId, payload, documents: updated.documents },
       {
         onSuccess: async () => {
-          if (updated.permissions) {
+          if (permissionsHaveEnabled(updated.permissions)) {
             try {
               await savePermissionsMutation.mutateAsync({
                 id: userId,
@@ -232,6 +240,7 @@ export default function EditEmployeePage() {
         permissionTemplateOptions={permissionTemplateOptions}
         onApplyPermissionTemplate={handleApplyPermissionTemplate}
         approvalUserOptions={approvalOptions}
+        reportingManagerOptions={reportingManagerOptions}
         onRoleIdChange={setSelectedRoleId}
         isSubmitting={
           updateMutation.isPending ||

@@ -10,6 +10,7 @@ import {
   type FormulationUpdatePayload,
 } from "@/services/formulation-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): FormulationListParams {
   return {
@@ -85,11 +86,15 @@ export function useExportFormulations() {
   });
 }
 
-export function useFormulationFilterDropdown(fieldName: FormulationFilterField) {
+export function useFormulationFilterDropdown(
+  fieldName: FormulationFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.formulations.filterDropdown(fieldName),
     queryFn: ({ signal }) => FormulationListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -1,13 +1,13 @@
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: "/auth/login",
-    REGISTER: "/auth/register",
-    LOGOUT: "/auth/logout",
-    REFRESH_TOKEN: "/auth/refresh-token",
-    VALIDATE_TOKEN: "/auth/validate_token",
-    FORGOT_PASSWORD: "/auth/forgot-password",
-    VERIFY_OTP: "/auth/verify-otp",
-    RESET_PASSWORD: "/auth/reset-password",
+    LOGIN: "/user-management/auth/login",
+    REGISTER: "/user-management/auth/register",
+    LOGOUT: "/user-management/auth/logout",
+    REFRESH_TOKEN: "/user-management/auth/refresh-token",
+    VALIDATE_TOKEN: "/user-management/auth/validate-token",
+    FORGOT_PASSWORD: "/user-management/auth/forgot-password",
+    VERIFY_OTP: "/user-management/auth/verify-otp",
+    RESET_PASSWORD: "/user-management/auth/reset-password",
   },
   COMMON: {
     PINCODE: {
@@ -320,6 +320,9 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/user-management/template/update-status/${id}`,
       VIEW: (id: string) => `/user-management/template/${id}`,
       DROPDOWN: "/user-management/template/dropdown",
+    },
+    PINCODE: {
+      BY_CODE: (code: string) => `/user-management/pincode/code/${code}`,
     },
   },
   MASTER_DROPDOWNS: {

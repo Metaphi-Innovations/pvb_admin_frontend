@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { axiosInstance } from "@/api/axios";
 import {
   Plus,
   Upload,
@@ -30,6 +31,31 @@ function DeleteIconButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function toBackendDocumentUrl(fileUrl?: string): string {
+  const raw = (fileUrl || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+  const normalizedBase = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+
+  if (raw.startsWith("/api/")) {
+    // file_url from backend is usually /api/..., so resolve against backend host.
+    return `${normalizedBase.replace(/\/api$/, "")}${raw}`;
+  }
+  if (raw.startsWith("/")) {
+    return `${normalizedBase}${raw}`;
+  }
+  return `${normalizedBase}/${raw}`;
+}
+
 export function EmployeeDocumentsSection({
   documents,
   onChange,
@@ -42,11 +68,6 @@ export function EmployeeDocumentsSection({
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingDocId, setPendingDocId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const patch = (id: string, partial: Partial<EmployeeDocument>) => {
-    if (!onChange) return;
-    onChange(documents.map((d) => (d.id === id ? { ...d, ...partial } : d)));
-  };
 
   const addDocument = () => {
     if (!onChange) return;
@@ -67,34 +88,69 @@ export function EmployeeDocumentsSection({
     fileRef.current?.click();
   };
 
-  const onFileSelected = (file: File) => {
-    if (!pendingDocId || !onChange) return;
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !["pdf", "jpg", "jpeg", "png"].includes(ext)) {
-      setError("Only PDF, JPG, JPEG, and PNG files are allowed.");
-      return;
+  const onFileSelected = (files: FileList | File[]) => {
+    if (!onChange) return;
+    const selected = Array.from(files);
+    if (selected.length === 0) return;
+
+    const pickTargetId = pendingDocId;
+    const remaining = documents.filter((d) => d.id !== pickTargetId);
+    const baseTarget = pickTargetId ? documents.find((d) => d.id === pickTargetId) : undefined;
+    const nextDocs: EmployeeDocument[] = [...remaining];
+
+    for (let i = 0; i < selected.length; i += 1) {
+      const file = selected[i];
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!ext || !["pdf", "jpg", "jpeg", "png"].includes(ext)) {
+        setError("Only PDF, JPG, JPEG, and PNG files are allowed.");
+        return;
+      }
+      if (file.size > EMPLOYEE_DOCUMENT_MAX_BYTES) {
+        setError("File exceeds maximum size of 5 MB.");
+        return;
+      }
     }
-    if (file.size > EMPLOYEE_DOCUMENT_MAX_BYTES) {
-      setError("File exceeds maximum size of 5 MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      patch(pendingDocId, {
+
+    selected.forEach((file, index) => {
+      const target =
+        index === 0 && baseTarget
+          ? { ...baseTarget }
+          : { id: newDocumentId(), documentName: "" };
+      nextDocs.push({
+        ...target,
         fileName: file.name,
-        fileUrl: reader.result as string,
+        // Keep local preview working before save.
+        fileUrl: URL.createObjectURL(file),
+        file,
         fileSize: file.size,
         mimeType: file.type,
       });
-      setPendingDocId(null);
-      setError(null);
-    };
-    reader.readAsDataURL(file);
+    });
+
+    onChange(nextDocs);
+    setPendingDocId(null);
+    setError(null);
   };
 
-  const openFile = (doc: EmployeeDocument) => {
-    if (!doc.fileUrl) return;
-    window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
+  const openFile = async (doc: EmployeeDocument) => {
+    const rawUrl = (doc.fileUrl || "").trim();
+    if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) {
+      window.open(rawUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const targetUrl = toBackendDocumentUrl(rawUrl);
+    if (!targetUrl) return;
+    try {
+      const response = await axiosInstance.get(targetUrl, {
+        responseType: "blob",
+      });
+      const blob = response.data as Blob;
+      const blobUrl = window.URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      setError("Unable to open document. Please login again and retry.");
+    }
   };
 
   return (
@@ -110,10 +166,10 @@ export function EmployeeDocumentsSection({
         ref={fileRef}
         type="file"
         accept={EMPLOYEE_DOCUMENT_ACCEPT}
+        multiple
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFileSelected(f);
+          if (e.target.files?.length) onFileSelected(e.target.files);
           e.target.value = "";
         }}
       />
@@ -123,20 +179,22 @@ export function EmployeeDocumentsSection({
           <thead>
             <tr className="border-b border-border/50 bg-muted/25 text-muted-foreground">
               <th className="px-3 py-2 text-left font-medium w-[38%]">Document Name</th>
-              <th className="px-3 py-2 text-left font-medium">File Name</th>
+              <th className="px-3 py-2 text-left font-medium">File</th>
+              <th className="px-3 py-2 text-left font-medium w-36">Type</th>
+              <th className="px-3 py-2 text-left font-medium w-28">Size</th>
               <th className="px-3 py-2 text-right font-medium w-28">Actions</th>
             </tr>
           </thead>
           <tbody>
             {documents.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-5 text-center text-muted-foreground">
+                <td colSpan={5} className="px-3 py-5 text-center text-muted-foreground">
                   No documents added yet.
                 </td>
               </tr>
             ) : (
               documents.map((doc) => {
-                const displayName = doc.documentName || doc.documentType || "";
+                const documentName = doc.documentName || "";
                 const hasFile = Boolean(doc.fileName && doc.fileUrl);
 
                 return (
@@ -146,17 +204,23 @@ export function EmployeeDocumentsSection({
                   >
                     <td className="px-3 py-2 align-middle">
                       {readOnly ? (
-                        <span className="font-medium text-foreground">
-                          {displayName || "—"}
+                        <span className="font-medium text-foreground break-all">
+                          {documentName || "—"}
                         </span>
                       ) : (
                         <Input
-                          value={displayName}
+                          value={documentName}
                           onChange={(e) =>
-                            patch(doc.id, { documentName: e.target.value })
+                            onChange?.(
+                              documents.map((d) =>
+                                d.id === doc.id
+                                  ? { ...d, documentName: e.target.value }
+                                  : d,
+                              ),
+                            )
                           }
                           placeholder="e.g. Aadhaar Card"
-                          className="h-8 text-xs max-w-xs"
+                          className="h-8 text-xs"
                         />
                       )}
                     </td>
@@ -165,7 +229,7 @@ export function EmployeeDocumentsSection({
                         <button
                           type="button"
                           className="text-brand-600 hover:underline text-left truncate max-w-[280px] block"
-                          onClick={() => openFile(doc)}
+                          onClick={() => void openFile(doc)}
                         >
                           {doc.fileName}
                         </button>
@@ -184,6 +248,12 @@ export function EmployeeDocumentsSection({
                         </Button>
                       )}
                     </td>
+                    <td className="px-3 py-2 align-middle text-muted-foreground">
+                      {doc.mimeType || "—"}
+                    </td>
+                    <td className="px-3 py-2 align-middle text-muted-foreground">
+                      {formatFileSize(doc.fileSize)}
+                    </td>
                     <td className="px-3 py-2 align-middle">
                       <div className="flex items-center justify-end gap-1">
                         {hasFile && (
@@ -192,7 +262,7 @@ export function EmployeeDocumentsSection({
                             variant="outline"
                             size="sm"
                             className="h-7 px-2 text-[11px]"
-                            onClick={() => openFile(doc)}
+                            onClick={() => void openFile(doc)}
                           >
                             <Eye className="w-3 h-3 mr-1" />
                             View

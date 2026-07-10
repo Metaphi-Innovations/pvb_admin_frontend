@@ -33,7 +33,8 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -102,8 +103,14 @@ function routeId(row: CustomerTypeRecord): string {
 
 export default function CustomerTypesPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "customerType", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -111,36 +118,48 @@ export default function CustomerTypesPage() {
   const [deleteTarget, setDeleteTarget] = useState<CustomerTypeRecord | null>(null);
 
   const apiFilters = useMemo(
-    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.customerType),
-    [debouncedFilters],
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.customerType),
+    [appliedFilters],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters),
-    [debouncedFilters],
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering: "",
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters],
   );
 
   const listQuery = useCustomerTypes(listParams);
   const toggleStatusMutation = useToggleCustomerTypeStatus();
   const exportMutation = useExportCustomerTypes();
 
-  const customerTypeOptionsQuery = useCustomerTypeFilterDropdown("customer_type_name");
-  const initialCodeOptionsQuery = useCustomerTypeFilterDropdown("customer_initial_code");
-  const descriptionOptionsQuery = useCustomerTypeFilterDropdown("description");
-  const statusOptionsQuery = useCustomerTypeFilterDropdown("is_active");
-  const createdByOptionsQuery = useCustomerTypeFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useCustomerTypeFilterDropdown("updated_by_user__username");
+  const customerTypeOptionsQuery = useCustomerTypeFilterDropdown("customer_type_name", {
+    enabled: isFilterOpen("customerType"),
+  });
+  const initialCodeOptionsQuery = useCustomerTypeFilterDropdown("customer_initial_code", {
+    enabled: isFilterOpen("initialCode"),
+  });
+  const descriptionOptionsQuery = useCustomerTypeFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useCustomerTypeFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useCustomerTypeFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useCustomerTypeFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
 
   const customerTypeOptions = useMemo(
     () => customerTypeOptionsQuery.data ?? [],
@@ -321,11 +340,9 @@ export default function CustomerTypesPage() {
     });
   }, [records, sort]);
 
-  const isFiltering = isDebouncing;
-
-  useEffect(() => {
+    useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -338,7 +355,7 @@ export default function CustomerTypesPage() {
   const handleExport = () => {
     exportMutation.mutate(
       {
-        search: debouncedSearch,
+        search: appliedSearch,
         status: listStatus,
         apiFilters,
       },
@@ -373,14 +390,17 @@ export default function CustomerTypesPage() {
         <MasterListing<CustomerTypeRecord>
           columns={columns}
           data={displayRecords}
-          loading={loading || isFiltering}
+          loading={loading}
           totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
           actions={actions}
           onAdd={handleAdd}
           addLabel="Add Customer Type"
@@ -389,6 +409,7 @@ export default function CustomerTypesPage() {
           searchPlaceholder="Search customer type, initial code, description..."
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 

@@ -35,6 +35,8 @@ export interface RoleDropdownItem {
   id: string;
   roleName: string;
   label: string;
+  geoLevel: string;
+  departmentId: string;
 }
 
 export interface RoleCreatePayload {
@@ -289,6 +291,8 @@ export const RoleListService = {
         id: asString(item.role_id),
         roleName: asString(item.role_name),
         label: asString(item.label || item.role_name),
+        geoLevel: asString(item.geography_level) || "None",
+        departmentId: asString(item.department_id),
       };
     });
   },

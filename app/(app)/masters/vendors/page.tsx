@@ -35,10 +35,10 @@ import { CURRENT_USER } from "@/lib/procurement/config";
 import { MiniKPICard } from "@/components/ui/KPICard";
 
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import { useSuppliers, useToggleSupplierStatus, useExportSuppliers } from "@/hooks/masters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 
 interface ToastState {
   msg: string;
@@ -62,7 +62,13 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function VendorMasterPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
   const [sort, setSort] = useState<SortState>({ key: "supplierName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -76,16 +82,16 @@ export default function VendorMasterPage() {
   // }, [refresh]);
 
   const listParams: MasterListKeyParams = useMemo(() => {
-    const { search, status, ...rest } = filters as Record<string, unknown>;
+    const { search, status, ...rest } = appliedFilters as Record<string, unknown>;
     return {
       page,
       pageSize,
-      search: (search as string) ?? "",
+      search: appliedSearch || ((search as string) ?? ""),
       ordering: sortStateToOrdering(sort.key, sort.direction),
       status: (status as "all" | "active" | "inactive") ?? "all",
       apiFilters: rest,
     };
-  }, [filters, sort, page, pageSize]);
+  }, [appliedFilters, appliedSearch, sort, page, pageSize]);
 
   const { data, isLoading, isFetching } = useSuppliers(listParams);
   const items = data?.items ?? [];
@@ -339,7 +345,10 @@ export default function VendorMasterPage() {
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => {
+            setFilters(next);
+            applyFilters(next);
+          }}
           actions={actions}
           onAdd={() => router.push("/masters/vendors/new")}
           addLabel="Create Supplier"
