@@ -9,6 +9,7 @@ import { isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
 import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
 import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
 import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
+import { isSundryDebtorsGroup } from "@/lib/accounts/coa-add-ledger-policy";
 import { getCoaDisplayPath, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import {
   type AccountType,
@@ -416,6 +417,9 @@ export function validateLedgerForm(
   if (parent.nodeLevel === "ledger") return LEDGER_UNDER_LEDGER_ERROR;
   if (!canAddLedgerUnder(parent, records)) {
     return "Ledgers must be created under an Accounting Group (e.g. Bank Accounts, Direct Expenses).";
+  }
+  if (isSundryDebtorsGroup(parent, records)) {
+    return "Customer ledgers under Sundry Debtors must be created with the Customer form.";
   }
   const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
   if (addPolicy.blocked) {

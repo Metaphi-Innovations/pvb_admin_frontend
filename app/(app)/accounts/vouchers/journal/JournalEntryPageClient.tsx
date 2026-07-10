@@ -12,8 +12,8 @@ export default function JournalEntryPageClient() {
       voucherType="journal"
       cancelHref={JOURNAL_VOUCHER_HREF}
       onDone={() => router.push(JOURNAL_VOUCHER_HREF)}
-      showFinancialYear
       breadcrumbSection="Transactions"
+      strictPostValidation
     />
   );
 }

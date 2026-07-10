@@ -9,7 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
@@ -51,8 +57,7 @@ import {
   INVENTORY_REGISTER_WAREHOUSE_OPTIONS,
   INVENTORY_TRANSACTION_TYPE_LABELS,
   INVENTORY_TRANSACTION_TYPE_OPTIONS,
-  sortInventoryRegisterRows,
-  type InventoryRegisterSortKey,
+  type InventoryRegisterRow,
 } from "./inventory-register-data";
 import {
   exportInventoryRegisterToExcel,
@@ -69,8 +74,6 @@ export default function InventoryRegisterPageClient() {
   const [batchNo, setBatchNo] = useState("all");
   const [transactionType, setTransactionType] = useState("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<InventoryRegisterSortKey>("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -107,33 +110,31 @@ export default function InventoryRegisterPageClient() {
     [sourceRows, filterParams],
   );
 
-  const sortedRows = useMemo(
-    () => sortInventoryRegisterRows(filteredRows, sortKey, sortDir),
-    [filteredRows, sortKey, sortDir],
+  const getCellValue = useCallback(
+    (row: InventoryRegisterRow, key: string) => {
+      if (key === "transactionType") return INVENTORY_TRANSACTION_TYPE_LABELS[row.transactionType];
+      return (row as unknown as Record<string, unknown>)[key];
+    },
+    [],
   );
 
-  const totals = useMemo(() => computeInventoryRegisterTotals(filteredRows), [filteredRows]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [
-    dateFrom,
-    dateTo,
-    warehouse,
-    productId,
-    category,
-    batchNo,
-    transactionType,
-    search,
-    sortKey,
-    sortDir,
-    pageSize,
-  ]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sortedRows.slice(start, start + pageSize);
-  }, [sortedRows, page, pageSize]);
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      transactionType: { type: "text" as const },
+      documentNo: { type: "text" as const },
+      productName: { type: "text" as const },
+      sku: { type: "text" as const },
+      batchNo: { type: "text" as const },
+      warehouse: { type: "text" as const },
+      inQty: { type: "amount" as const },
+      outQty: { type: "amount" as const },
+      balanceQty: { type: "amount" as const },
+      costPrice: { type: "amount" as const },
+      stockValue: { type: "amount" as const },
+    }),
+    [],
+  );
 
   const hasFilters =
     search.trim() !== "" ||
@@ -152,17 +153,9 @@ export default function InventoryRegisterPageClient() {
     setTransactionType("all");
   };
 
-  const handleSort = useCallback((key: string) => {
-    const k = key as InventoryRegisterSortKey;
-    setSortKey((prev) => {
-      if (prev === k) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setSortDir("asc");
-      return k;
-    });
-  }, []);
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo, warehouse, productId, category, batchNo, transactionType, search, pageSize]);
 
   const exportMeta = useMemo(() => {
     const product =
@@ -184,31 +177,138 @@ export default function InventoryRegisterPageClient() {
       transactionType: txnLabel,
       search,
     };
-  }, [
-    dateFrom,
-    dateTo,
-    warehouse,
-    productId,
-    category,
-    batchNo,
-    transactionType,
-    search,
-  ]);
+  }, [dateFrom, dateTo, warehouse, productId, category, batchNo, transactionType, search]);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={filteredRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <InventoryRegisterBody
+        filteredRows={filteredRows}
+        filterParams={filterParams}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        warehouse={warehouse}
+        setWarehouse={setWarehouse}
+        productId={productId}
+        setProductId={setProductId}
+        category={category}
+        setCategory={setCategory}
+        batchNo={batchNo}
+        setBatchNo={setBatchNo}
+        transactionType={transactionType}
+        setTransactionType={setTransactionType}
+        search={search}
+        setSearch={setSearch}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function InventoryRegisterBody({
+  filteredRows,
+  hasFilters,
+  clearFilters,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  warehouse,
+  setWarehouse,
+  productId,
+  setProductId,
+  category,
+  setCategory,
+  batchNo,
+  setBatchNo,
+  transactionType,
+  setTransactionType,
+  search,
+  setSearch,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  exporting,
+  setExporting,
+  exportMeta,
+}: {
+  filteredRows: InventoryRegisterRow[];
+  filterParams: Record<string, string>;
+  hasFilters: boolean;
+  clearFilters: () => void;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  warehouse: string;
+  setWarehouse: (v: string) => void;
+  productId: string;
+  setProductId: (v: string) => void;
+  category: string;
+  setCategory: (v: string) => void;
+  batchNo: string;
+  setBatchNo: (v: string) => void;
+  transactionType: string;
+  setTransactionType: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: Parameters<typeof exportInventoryRegisterToExcel>[1];
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(filteredRows);
+  const totals = useMemo(() => computeInventoryRegisterTotals(columnFilteredRows), [columnFilteredRows]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
 
   const handleExportExcel = useCallback(async () => {
-    if (filteredRows.length === 0 || exporting) return;
+    if (columnFilteredRows.length === 0 || exporting) return;
     setExporting(true);
     try {
-      await exportInventoryRegisterToExcel(filteredRows, exportMeta, totals);
+      await exportInventoryRegisterToExcel(columnFilteredRows, exportMeta, totals);
     } finally {
       setExporting(false);
     }
-  }, [filteredRows, exportMeta, totals, exporting]);
+  }, [columnFilteredRows, exportMeta, totals, exporting, setExporting]);
 
   const handleExportPdf = useCallback(() => {
-    if (filteredRows.length === 0 || exporting) return;
-    exportInventoryRegisterToPdf(filteredRows, exportMeta, totals);
-  }, [filteredRows, exportMeta, totals, exporting]);
+    if (columnFilteredRows.length === 0 || exporting) return;
+    exportInventoryRegisterToPdf(columnFilteredRows, exportMeta, totals);
+  }, [columnFilteredRows, exportMeta, totals, exporting]);
 
   return (
     <AccountsPageShell
@@ -221,7 +321,7 @@ export default function InventoryRegisterPageClient() {
             <AccountsExportMenu
               onExcel={handleExportExcel}
               onPdf={handleExportPdf}
-              disabled={exporting || filteredRows.length === 0}
+              disabled={exporting || columnFilteredRows.length === 0}
             />
           }
         >
@@ -324,11 +424,11 @@ export default function InventoryRegisterPageClient() {
     >
       <AccountsTableListing
         footer={
-          filteredRows.length > 0 ? (
+          columnFilteredRows.length > 0 ? (
             <AccountsTablePagination
               page={page}
               pageSize={pageSize}
-              totalRecords={filteredRows.length}
+              totalRecords={columnFilteredRows.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               recordLabel="movements"
@@ -338,61 +438,27 @@ export default function InventoryRegisterPageClient() {
       >
         {filteredRows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
+        ) : columnFilteredRows.length === 0 ? (
+          <div className="accounts-table-empty py-8 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
         ) : (
           <AccountsTable minWidth={1280}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <SortTh
-                  label="Date"
-                  colKey="date"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                />
-                <SortTh
-                  label="Transaction Type"
-                  colKey="transactionType"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                />
-                <AccountsTableHeadCell>Document No.</AccountsTableHeadCell>
-                <SortTh
-                  label="Product"
-                  colKey="productName"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                />
-                <AccountsTableHeadCell>SKU</AccountsTableHeadCell>
-                <AccountsTableHeadCell>Batch No.</AccountsTableHeadCell>
-                <SortTh
-                  label="Warehouse"
-                  colKey="warehouse"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                />
-                <SortTh
-                  label="In Qty"
-                  colKey="inQty"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <SortTh
-                  label="Out Qty"
-                  colKey="outQty"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <AccountsTableHeadCell align="right">Balance Qty</AccountsTableHeadCell>
-                <AccountsTableHeadCell>UOM</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">Cost Price</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">Stock Value</AccountsTableHeadCell>
+                <SortTh label="Date" colKey="date" filterType="date" />
+                <SortTh label="Transaction Type" colKey="transactionType" />
+                <SortTh label="Document No." colKey="documentNo" />
+                <SortTh label="Product" colKey="productName" />
+                <SortTh label="SKU" colKey="sku" />
+                <SortTh label="Batch No." colKey="batchNo" />
+                <SortTh label="Warehouse" colKey="warehouse" />
+                <SortTh label="In Qty" colKey="inQty" filterType="amount" align="right" />
+                <SortTh label="Out Qty" colKey="outQty" filterType="amount" align="right" />
+                <SortTh label="Balance Qty" colKey="balanceQty" filterType="amount" align="right" />
+                <AccountsColumnHeader label="UOM" colKey="uom" sortable={false} />
+                <SortTh label="Cost Price" colKey="costPrice" filterType="amount" align="right" />
+                <SortTh label="Stock Value" colKey="stockValue" filterType="amount" align="right" />
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>

@@ -19,7 +19,10 @@ import {
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -33,6 +36,7 @@ import {
   buildSupplierLedgerStatement,
   getSupplierLedgerSuppliers,
   SUPPLIER_LEDGER_VOUCHER_TYPE_OPTIONS,
+  type SupplierLedgerDisplayRow,
 } from "./supplier-ledger-data";
 import {
   exportSupplierLedgerToExcel,
@@ -49,8 +53,6 @@ function SupplierLedgerPageContent() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
   const suppliers = useMemo(() => getSupplierLedgerSuppliers(), []);
@@ -68,7 +70,6 @@ function SupplierLedgerPageContent() {
   const handleSupplierChange = useCallback(
     (value: string) => {
       setSupplierId(value);
-      setPage(1);
       if (value) {
         router.replace(`/accounts/reports/supplier-ledger?supplier=${encodeURIComponent(value)}`, {
           scroll: false,
@@ -94,10 +95,29 @@ function SupplierLedgerPageContent() {
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
   const allTransactionRows = statement?.transactionRows ?? [];
 
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return allTransactionRows.slice(start, start + pageSize);
-  }, [allTransactionRows, page, pageSize]);
+  const getCellValue = useCallback((row: SupplierLedgerDisplayRow, key: string) => {
+    switch (key) {
+      case "voucher":
+        return row.voucherNo;
+      case "type":
+        return row.voucherType;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      voucher: { type: "text" as const },
+      type: { type: "text" as const },
+      particular: { type: "text" as const },
+      narration: { type: "text" as const },
+      debit: { type: "amount" as const },
+      credit: { type: "amount" as const },
+    }),
+    [],
+  );
 
   const exportMeta = useMemo(
     () => ({
@@ -110,24 +130,104 @@ function SupplierLedgerPageContent() {
 
   const canExport = Boolean(statement && supplierId);
 
+  return (
+    <AccountsColumnFilterProvider
+      rows={allTransactionRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <SupplierLedgerPageBody
+        supplierId={supplierId}
+        suppliers={suppliers}
+        handleSupplierChange={handleSupplierChange}
+        statement={statement}
+        allTransactionRows={allTransactionRows}
+        openingRow={openingRow}
+        closingRow={closingRow}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        canExport={canExport}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        voucherType={voucherType}
+        setVoucherType={setVoucherType}
+        search={search}
+        setSearch={setSearch}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function SupplierLedgerPageBody({
+  supplierId,
+  suppliers,
+  handleSupplierChange,
+  statement,
+  allTransactionRows,
+  openingRow,
+  closingRow,
+  exporting,
+  setExporting,
+  exportMeta,
+  canExport,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  voucherType,
+  setVoucherType,
+  search,
+  setSearch,
+}: {
+  supplierId: string;
+  suppliers: ReturnType<typeof getSupplierLedgerSuppliers>;
+  handleSupplierChange: (value: string) => void;
+  statement: ReturnType<typeof buildSupplierLedgerStatement> | null;
+  allTransactionRows: SupplierLedgerDisplayRow[];
+  openingRow: SupplierLedgerDisplayRow | null;
+  closingRow: SupplierLedgerDisplayRow | null | undefined;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
+  canExport: boolean;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  voucherType: string;
+  setVoucherType: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(allTransactionRows);
+
   const handleExportExcel = async () => {
-    if (!statement) return;
+    if (!statement || !openingRow || !closingRow) return;
     setExporting(true);
     try {
-      await exportSupplierLedgerToExcel(statement.displayRows, statement.summary, exportMeta);
+      const exportRows = [openingRow, ...columnFilteredRows, closingRow];
+      await exportSupplierLedgerToExcel(exportRows, statement.summary, exportMeta);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    if (!statement) return;
-    exportSupplierLedgerToPdf(statement.displayRows, statement.summary, exportMeta);
+    if (!statement || !openingRow || !closingRow) return;
+    const exportRows = [openingRow, ...columnFilteredRows, closingRow];
+    exportSupplierLedgerToPdf(exportRows, statement.summary, exportMeta);
   };
-
-  useEffect(() => {
-    setPage(1);
-  }, [supplierId, dateFrom, dateTo, voucherType, search, pageSize]);
 
   const summaryItems = statement
     ? [
@@ -293,20 +393,20 @@ function SupplierLedgerPageContent() {
               <>
                 <SupplierLedgerTable
                   openingRow={openingRow}
-                  transactionRows={paginatedTransactions}
+                  transactionRows={allTransactionRows}
                   closingRow={closingRow}
                 />
                 <div className="flex-shrink-0 border-t border-border bg-muted/10 px-4 py-2 flex flex-wrap items-center justify-end gap-x-6 gap-y-1">
                   <p className="text-xs text-muted-foreground">
                     Total Debit:{" "}
                     <span className="font-semibold text-foreground tabular-nums">
-                      {formatMoney(statement.summary.totalDebit)}
+                      {formatMoney(columnFilteredRows.reduce((s, r) => s + r.debit, 0))}
                     </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Total Credit:{" "}
                     <span className="font-semibold text-foreground tabular-nums">
-                      {formatMoney(statement.summary.totalCredit)}
+                      {formatMoney(columnFilteredRows.reduce((s, r) => s + r.credit, 0))}
                     </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -319,18 +419,6 @@ function SupplierLedgerPageContent() {
                     </span>
                   </p>
                 </div>
-                {allTransactionRows.length > 0 && (
-                  <div className="flex-shrink-0 border-t border-border">
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={allTransactionRows.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="transactions"
-                    />
-                  </div>
-                )}
               </>
             ) : null}
           </>

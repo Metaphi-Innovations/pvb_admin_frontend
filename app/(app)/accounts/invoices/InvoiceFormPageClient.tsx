@@ -780,7 +780,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </Section>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Invoice Summary</h2>
+          <h2 className="accounts-card-title">Invoice Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4 py-1">
                 <span className="text-muted-foreground">Product Sub Total</span>

@@ -50,8 +50,6 @@ import {
   receiveInvoicePayment,
   type InvoiceRecord,
 } from "./invoices-data";
-import { InvoiceStatusBadge } from "./components/InvoiceStatusBadge";
-import { InvoicePaymentStatusBadge } from "./components/InvoicePaymentStatusBadge";
 import { InvoiceReceivePaymentModal } from "./components/InvoiceReceivePaymentModal";
 import { InvoiceCancelDialog } from "./components/InvoiceCancelDialog";
 import { exportInvoicesToExcel } from "./invoices-export";
@@ -196,8 +194,6 @@ export default function InvoicesPageClient() {
                     INVOICE_AMOUNT_LABELS.invoiceTotal,
                     "Received",
                     "Balance Due",
-                    "Payment Status",
-                    "Invoice Status",
                     "Created By",
                     "Updated By",
                     "",
@@ -214,7 +210,7 @@ export default function InvoicesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="accounts-table-empty">
+                    <td colSpan={12} className="accounts-table-empty">
                       No invoices yet. Create your first customer invoice.
                     </td>
                   </tr>
@@ -232,12 +228,6 @@ export default function InvoicesPageClient() {
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(invoiceTotal)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.amountReceived)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.balanceAmount)}</td>
-                      <td className="px-2.5 py-2">
-                        <InvoicePaymentStatusBadge status={r.paymentStatus} />
-                      </td>
-                      <td className="px-2.5 py-2">
-                        <InvoiceStatusBadge status={r.invoiceStatus} />
-                      </td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
                       <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>

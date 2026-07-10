@@ -20,7 +20,10 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -35,6 +38,7 @@ import { cn } from "@/lib/utils";
 import {
   buildGeneralLedgerStatement,
   getGeneralLedgerLedgers,
+  type GeneralLedgerDisplayRow,
 } from "./general-ledger-data";
 import {
   exportGeneralLedgerToExcel,
@@ -59,8 +63,6 @@ function GeneralLedgerPageContent() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
   const [dataTick, setDataTick] = useState(0);
 
@@ -85,7 +87,6 @@ function GeneralLedgerPageContent() {
   const handleLedgerChange = useCallback(
     (value: string) => {
       setLedgerId(value);
-      setPage(1);
       if (value) {
         router.replace(`/accounts/reports/ledger?ledger=${encodeURIComponent(value)}`, { scroll: false });
       } else {
@@ -109,10 +110,37 @@ function GeneralLedgerPageContent() {
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
   const allTransactionRows = statement?.transactionRows ?? [];
 
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return allTransactionRows.slice(start, start + pageSize);
-  }, [allTransactionRows, page, pageSize]);
+  const getCellValue = useCallback((row: GeneralLedgerDisplayRow, key: string) => {
+    switch (key) {
+      case "type":
+        return row.kind === "opening" ? "Opening" : row.voucherType;
+      case "voucher":
+        return row.voucherNo;
+      case "reference":
+        return row.referenceNo;
+      case "particulars":
+        return row.particularsNarration;
+      case "balance":
+        return row.runningBalance;
+      case "side":
+        return row.runningBalanceType;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      type: { type: "text" as const },
+      voucher: { type: "text" as const },
+      reference: { type: "text" as const },
+      particulars: { type: "text" as const },
+      debit: { type: "amount" as const },
+      credit: { type: "amount" as const },
+    }),
+    [],
+  );
 
   const exportMeta = useMemo(
     () => ({
@@ -125,11 +153,96 @@ function GeneralLedgerPageContent() {
 
   const canExport = Boolean(statement && ledgerId);
 
+  return (
+    <AccountsColumnFilterProvider
+      rows={allTransactionRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <GeneralLedgerPageBody
+        ledgerId={ledgerId}
+        ledgers={ledgers}
+        statement={statement}
+        allTransactionRows={allTransactionRows}
+        openingRow={openingRow}
+        closingRow={closingRow}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        canExport={canExport}
+        handleLedgerChange={handleLedgerChange}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        voucherType={voucherType}
+        setVoucherType={setVoucherType}
+        search={search}
+        setSearch={setSearch}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function GeneralLedgerPageBody({
+  ledgerId,
+  ledgers,
+  statement,
+  allTransactionRows,
+  openingRow,
+  closingRow,
+  exporting,
+  setExporting,
+  exportMeta,
+  canExport,
+  handleLedgerChange,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  voucherType,
+  setVoucherType,
+  search,
+  setSearch,
+}: {
+  ledgerId: string;
+  ledgers: ReturnType<typeof getGeneralLedgerLedgers>;
+  statement: ReturnType<typeof buildGeneralLedgerStatement> | null;
+  allTransactionRows: GeneralLedgerDisplayRow[];
+  openingRow: GeneralLedgerDisplayRow | null;
+  closingRow: GeneralLedgerDisplayRow | null | undefined;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
+  canExport: boolean;
+  handleLedgerChange: (value: string) => void;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  voucherType: string;
+  setVoucherType: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(allTransactionRows);
+
   const handleExportExcel = async () => {
     if (!statement) return;
     setExporting(true);
     try {
-      await exportGeneralLedgerToExcel(statement.displayRows, statement.summary, exportMeta);
+      const exportRows = openingRow
+        ? [openingRow, ...columnFilteredRows, ...(closingRow ? [closingRow] : [])]
+        : columnFilteredRows;
+      await exportGeneralLedgerToExcel(exportRows, statement.summary, exportMeta);
     } finally {
       setExporting(false);
     }
@@ -137,12 +250,11 @@ function GeneralLedgerPageContent() {
 
   const handleExportPdf = () => {
     if (!statement) return;
-    exportGeneralLedgerToPdf(statement.displayRows, statement.summary, exportMeta);
+    const exportRows = openingRow
+      ? [openingRow, ...columnFilteredRows, ...(closingRow ? [closingRow] : [])]
+      : columnFilteredRows;
+    exportGeneralLedgerToPdf(exportRows, statement.summary, exportMeta);
   };
-
-  useEffect(() => {
-    setPage(1);
-  }, [ledgerId, dateFrom, dateTo, voucherType, search, pageSize]);
 
   const summaryItems = statement
     ? [
@@ -295,25 +407,11 @@ function GeneralLedgerPageContent() {
                 </div>
               </div>
             ) : statement && openingRow && closingRow ? (
-              <>
-                <GeneralLedgerTable
-                  openingRow={openingRow}
-                  transactionRows={paginatedTransactions}
-                  closingRow={closingRow}
-                />
-                {allTransactionRows.length > 0 && (
-                  <div className="flex-shrink-0 border-t border-border">
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={allTransactionRows.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="transactions"
-                    />
-                  </div>
-                )}
-              </>
+              <GeneralLedgerTable
+                openingRow={openingRow}
+                transactionRows={allTransactionRows}
+                closingRow={closingRow}
+              />
             ) : null}
           </>
         )}

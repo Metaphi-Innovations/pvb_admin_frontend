@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -12,11 +12,16 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  AccountsColumnHeader,
+  useAccountsFilteredRows,
+} from "../../../components/AccountsUI";
 
 export interface CoaLedgerDetailFooter {
   totalDebit: number;
@@ -25,33 +30,23 @@ export interface CoaLedgerDetailFooter {
   closingBalanceType: "Debit" | "Credit";
 }
 
-const COLUMNS = [
-  { key: "date", label: "Date", align: "left" as const },
-  { key: "voucherType", label: "Voucher Type", align: "left" as const },
-  { key: "voucherNo", label: "Voucher No.", align: "left" as const },
-  { key: "particulars", label: "Particulars", align: "left" as const },
-  { key: "debit", label: "Debit", align: "right" as const },
-  { key: "credit", label: "Credit", align: "right" as const },
-  { key: "balance", label: "Balance", align: "right" as const },
-  { key: "side", label: "Dr/Cr", align: "center" as const },
-  { key: "narration", label: "Narration", align: "left" as const },
-];
-
 function particularsLabel(row: CoaLedgerDetailRow): string {
   if (row.isOpeningRow) return "Opening Balance";
   if (row.partyName) return row.partyName;
   return row.narration || "—";
 }
 
-export function CoaLedgerDetailTable({
+function CoaLedgerDetailTableBody({
   rows,
   footer,
-  emptyLabel = "No transactions for this ledger in the selected period.",
+  emptyLabel,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
-  emptyLabel?: string;
+  emptyLabel: string;
 }) {
+  const visible = useAccountsFilteredRows(rows);
+
   if (rows.length === 0) {
     return (
       <div className="px-4 py-8 flex-1">
@@ -66,51 +61,63 @@ export function CoaLedgerDetailTable({
         <AccountsTable minWidth={1100}>
           <AccountsTableHead>
             <AccountsTableHeadRow>
-              {COLUMNS.map((col) => (
-                <AccountsTableHeadCell key={col.key} align={col.align}>
-                  {col.label}
-                </AccountsTableHeadCell>
-              ))}
+              <SortTh label="Date" colKey="date" filterType="date" />
+              <SortTh label="Voucher Type" colKey="voucherType" />
+              <SortTh label="Voucher No." colKey="voucherNo" />
+              <SortTh label="Particulars" colKey="particulars" />
+              <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+              <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+              <SortTh label="Balance" colKey="runningBalance" filterType="amount" align="right" />
+              <AccountsColumnHeader label="Dr/Cr" colKey="runningBalanceType" sortable={false} align="center" />
+              <SortTh label="Narration" colKey="narration" />
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
-            {rows.map((r, i) => (
-              <AccountsTableRow
-                key={`${r.voucherNo}-${r.date}-${i}`}
-                className={cn(r.isOpeningRow && "font-medium bg-muted/10")}
-              >
-                <AccountsTableCell className="whitespace-nowrap tabular-nums">
-                  {r.date ? isoToDisplayDate(r.date) : "—"}
-                </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap font-mono text-xs text-brand-700 font-semibold">
-                  {r.voucherNo || "—"}
-                </AccountsTableCell>
-                <AccountsTableCell className="max-w-[200px] truncate" title={particularsLabel(r)}>
-                  {particularsLabel(r)}
-                </AccountsTableCell>
-                <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
-                <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
-                <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-                  {r.runningBalance > 0 ? formatMoney(r.runningBalance) : "—"}
-                </AccountsTableCell>
-                <AccountsTableCell align="center" className="whitespace-nowrap">
-                  {r.runningBalance > 0 ? (
-                    <DrCrSideBadge
-                      debit={r.debit}
-                      credit={r.credit}
-                      runningBalanceType={r.runningBalanceType}
-                      isBalanceRow={Boolean(r.isOpeningRow)}
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </AccountsTableCell>
-                <AccountsTableCell className="max-w-[220px] truncate text-muted-foreground" title={r.narration}>
-                  {r.narration || "—"}
+            {visible.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={9} className="accounts-table-empty">
+                  No records match the column filters.
                 </AccountsTableCell>
               </AccountsTableRow>
-            ))}
+            ) : (
+              visible.map((r, i) => (
+                <AccountsTableRow
+                  key={`${r.voucherNo}-${r.date}-${i}`}
+                  className={cn(r.isOpeningRow && "font-medium bg-muted/10")}
+                >
+                  <AccountsTableCell className="whitespace-nowrap tabular-nums">
+                    {r.date ? isoToDisplayDate(r.date) : "—"}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
+                  <AccountsTableCell className="whitespace-nowrap font-mono text-xs text-brand-700 font-semibold">
+                    {r.voucherNo || "—"}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="max-w-[200px] truncate" title={particularsLabel(r)}>
+                    {particularsLabel(r)}
+                  </AccountsTableCell>
+                  <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
+                  <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
+                  <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
+                    {r.runningBalance > 0 ? formatMoney(r.runningBalance) : "—"}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="center" className="whitespace-nowrap">
+                    {r.runningBalance > 0 ? (
+                      <DrCrSideBadge
+                        debit={r.debit}
+                        credit={r.credit}
+                        runningBalanceType={r.runningBalanceType}
+                        isBalanceRow={Boolean(r.isOpeningRow)}
+                      />
+                    ) : (
+                      "—"
+                    )}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="max-w-[220px] truncate text-muted-foreground" title={r.narration}>
+                    {r.narration || "—"}
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))
+            )}
           </AccountsTableBody>
         </AccountsTable>
       </AccountsTableScroll>
@@ -137,5 +144,48 @@ export function CoaLedgerDetailTable({
         </div>
       )}
     </div>
+  );
+}
+
+export function CoaLedgerDetailTable({
+  rows,
+  footer,
+  emptyLabel = "No transactions for this ledger in the selected period.",
+}: {
+  rows: CoaLedgerDetailRow[];
+  footer?: CoaLedgerDetailFooter;
+  emptyLabel?: string;
+}) {
+  const getCellValue = useCallback((row: CoaLedgerDetailRow, key: string) => {
+    switch (key) {
+      case "particulars":
+        return particularsLabel(row);
+      case "date":
+        return row.date;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        date: { type: "date" },
+        voucherType: { type: "text" },
+        voucherNo: { type: "text" },
+        particulars: { type: "text" },
+        debit: { type: "amount" },
+        credit: { type: "amount" },
+        runningBalance: { type: "amount" },
+        runningBalanceType: { type: "text" },
+        narration: { type: "text" },
+      }}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <CoaLedgerDetailTableBody rows={rows} footer={footer} emptyLabel={emptyLabel} />
+    </AccountsColumnFilterProvider>
   );
 }

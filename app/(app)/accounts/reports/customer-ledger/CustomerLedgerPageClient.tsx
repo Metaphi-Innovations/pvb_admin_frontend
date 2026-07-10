@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
@@ -18,7 +18,10 @@ import {
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -32,6 +35,7 @@ import {
   buildCustomerLedgerStatement,
   CUSTOMER_LEDGER_VOUCHER_TYPE_OPTIONS,
   getCustomerLedgerCustomers,
+  type CustomerLedgerDisplayRow,
 } from "./customer-ledger-data";
 import {
   exportCustomerLedgerToExcel,
@@ -46,8 +50,6 @@ function CustomerLedgerPageContent() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
   const customers = useMemo(() => getCustomerLedgerCustomers(), []);
@@ -68,10 +70,29 @@ function CustomerLedgerPageContent() {
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
   const allTransactionRows = statement?.transactionRows ?? [];
 
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return allTransactionRows.slice(start, start + pageSize);
-  }, [allTransactionRows, page, pageSize]);
+  const getCellValue = useCallback((row: CustomerLedgerDisplayRow, key: string) => {
+    switch (key) {
+      case "voucher":
+        return row.voucherNo;
+      case "type":
+        return row.voucherType;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      voucher: { type: "text" as const },
+      type: { type: "text" as const },
+      particular: { type: "text" as const },
+      narration: { type: "text" as const },
+      debit: { type: "amount" as const },
+      credit: { type: "amount" as const },
+    }),
+    [],
+  );
 
   const exportMeta = useMemo(
     () => ({
@@ -84,24 +105,104 @@ function CustomerLedgerPageContent() {
 
   const canExport = Boolean(statement && customerId);
 
+  return (
+    <AccountsColumnFilterProvider
+      rows={allTransactionRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <CustomerLedgerPageBody
+        customerId={customerId}
+        setCustomerId={setCustomerId}
+        customers={customers}
+        statement={statement}
+        allTransactionRows={allTransactionRows}
+        openingRow={openingRow}
+        closingRow={closingRow}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        canExport={canExport}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        voucherType={voucherType}
+        setVoucherType={setVoucherType}
+        search={search}
+        setSearch={setSearch}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CustomerLedgerPageBody({
+  customerId,
+  setCustomerId,
+  customers,
+  statement,
+  allTransactionRows,
+  openingRow,
+  closingRow,
+  exporting,
+  setExporting,
+  exportMeta,
+  canExport,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  voucherType,
+  setVoucherType,
+  search,
+  setSearch,
+}: {
+  customerId: string;
+  setCustomerId: (v: string) => void;
+  customers: ReturnType<typeof getCustomerLedgerCustomers>;
+  statement: ReturnType<typeof buildCustomerLedgerStatement> | null;
+  allTransactionRows: CustomerLedgerDisplayRow[];
+  openingRow: CustomerLedgerDisplayRow | null;
+  closingRow: CustomerLedgerDisplayRow | null | undefined;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
+  canExport: boolean;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  voucherType: string;
+  setVoucherType: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(allTransactionRows);
+
   const handleExportExcel = async () => {
-    if (!statement) return;
+    if (!statement || !openingRow || !closingRow) return;
     setExporting(true);
     try {
-      await exportCustomerLedgerToExcel(statement.displayRows, statement.summary, exportMeta);
+      const exportRows = [openingRow, ...columnFilteredRows, closingRow];
+      await exportCustomerLedgerToExcel(exportRows, statement.summary, exportMeta);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    if (!statement) return;
-    exportCustomerLedgerToPdf(statement.displayRows, statement.summary, exportMeta);
+    if (!statement || !openingRow || !closingRow) return;
+    const exportRows = [openingRow, ...columnFilteredRows, closingRow];
+    exportCustomerLedgerToPdf(exportRows, statement.summary, exportMeta);
   };
-
-  useEffect(() => {
-    setPage(1);
-  }, [customerId, dateFrom, dateTo, voucherType, search, pageSize]);
 
   const summaryItems = statement
     ? [
@@ -164,10 +265,7 @@ function CustomerLedgerPageContent() {
             </Label>
             <Select
               value={customerId || undefined}
-              onValueChange={(value) => {
-                setCustomerId(value);
-                setPage(1);
-              }}
+              onValueChange={setCustomerId}
             >
               <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
                 <SelectValue placeholder="Select customer…" />
@@ -267,27 +365,11 @@ function CustomerLedgerPageContent() {
                 </div>
               </div>
             ) : statement && openingRow && closingRow ? (
-              <>
-                <CustomerLedgerTable
-                  openingRow={openingRow}
-                  transactionRows={paginatedTransactions}
-                  closingRow={closingRow}
-                  totalDebit={statement.summary.totalDebit}
-                  totalCredit={statement.summary.totalCredit}
-                />
-                {allTransactionRows.length > 0 && (
-                  <div className="flex-shrink-0 border-t border-border">
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={allTransactionRows.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="transactions"
-                    />
-                  </div>
-                )}
-              </>
+              <CustomerLedgerTable
+                openingRow={openingRow}
+                transactionRows={allTransactionRows}
+                closingRow={closingRow}
+              />
             ) : null}
           </>
         )}

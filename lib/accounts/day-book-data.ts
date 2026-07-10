@@ -1,6 +1,8 @@
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { DAY_BOOK_DEMO_ENTRIES } from "@/lib/accounts/day-book-demo-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { getPostedManualVouchersForDayBook } from "@/lib/accounts/voucher-register-data";
+import type { AccountingVoucher } from "@/app/(app)/accounts/vouchers/voucher-data";
 
 export type DayBookVoucherType =
   | "sales_invoice"
@@ -88,9 +90,48 @@ export function formatDayBookDate(iso: string): string {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-/** Day Book uses self-contained demo data local to this report. */
+function voucherToDayBookEntry(v: AccountingVoucher): DayBookEntry {
+  const partyLine =
+    v.lines.find((l) => (Number(l.debit) || 0) > 0 && l.ledgerName) ??
+    v.lines.find((l) => l.ledgerName) ??
+    v.lines[0];
+  const voucherType = v.voucherType as DayBookVoucherType;
+
+  return {
+    id: `voucher-${v.id}`,
+    sourceId: v.id,
+    date: v.date,
+    time: "00:00:00",
+    voucherNo: v.voucherNumber,
+    voucherType,
+    voucherTypeLabel: DAY_BOOK_TYPE_LABELS[voucherType] ?? v.voucherType,
+    partyLedger: partyLine?.ledgerName?.trim() || "—",
+    narration: v.narration?.trim() || "—",
+    debit: roundMoney(v.totalDebit),
+    credit: roundMoney(v.totalCredit),
+    createdBy: v.createdBy ?? "—",
+    status: "posted",
+    branch: "—",
+    financialYearId: v.financialYearId,
+    financialYearName: v.financialYearName ?? "",
+    viewHref: `/accounts/vouchers/view/${v.id}`,
+    createdAt: v.date,
+  };
+}
+
+/** Day Book — posted vouchers (live) merged with legacy demo rows. */
 export function buildDayBookEntries(): DayBookEntry[] {
-  return [...DAY_BOOK_DEMO_ENTRIES].sort((a, b) => {
+  const liveNos = new Set<string>();
+  let live: DayBookEntry[] = [];
+  try {
+    live = getPostedManualVouchersForDayBook().map(voucherToDayBookEntry);
+    live.forEach((e) => liveNos.add(e.voucherNo));
+  } catch {
+    live = [];
+  }
+
+  const demo = DAY_BOOK_DEMO_ENTRIES.filter((e) => !liveNos.has(e.voucherNo));
+  return [...demo, ...live].sort((a, b) => {
     const dateCmp = a.date.localeCompare(b.date);
     if (dateCmp !== 0) return dateCmp;
     return a.voucherNo.localeCompare(b.voucherNo);

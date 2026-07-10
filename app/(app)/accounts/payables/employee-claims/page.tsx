@@ -26,7 +26,6 @@ export default function EmployeeClaimsPayableClient() {
         { key: "claim", label: "Claim No.", mono: true },
         { key: "amount", label: "Amount", align: "right", money: true },
         { key: "dueDate", label: "Due Date" },
-        { key: "status", label: "Status" },
       ]}
       rows={rows}
     />

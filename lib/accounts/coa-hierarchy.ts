@@ -181,6 +181,25 @@ export function findLedgerById(
   return node && isLedgerNode(node) ? node : null;
 }
 
+/** Resolve a posting ledger by exact account name (for legacy lines saved with name only). */
+export function findPostingLedgerByName(
+  accountName: string,
+  records?: ChartOfAccount[],
+): ChartOfAccount | null {
+  const needle = accountName.trim().toLowerCase();
+  if (!needle) return null;
+  const list = records ?? loadChartOfAccounts();
+  const postable = getActivePostingLedgers(list).find(
+    (l) => l.accountName.trim().toLowerCase() === needle,
+  );
+  if (postable) return postable;
+  return (
+    list.find(
+      (n) => isLedgerNode(n) && n.accountName.trim().toLowerCase() === needle,
+    ) ?? null
+  );
+}
+
 /** Ledgers whose ancestor path includes a standard group with the given name */
 export function getLedgersUnderGroupName(
   groupName: string,

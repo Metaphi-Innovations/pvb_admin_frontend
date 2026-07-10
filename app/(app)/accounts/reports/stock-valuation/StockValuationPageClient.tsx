@@ -35,9 +35,14 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
-import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { EmptySearch } from "@/components/ui/EmptyState";
-import { StockStatusBadge } from "@/components/ui/EnterpriseTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
@@ -52,9 +57,8 @@ import {
   filterStockValuationRows,
   formatStockValuationDate,
   getStockValuationProductOptions,
-  sortStockValuationRows,
   STOCK_VALUATION_CATEGORIES,
-  type StockValuationSortKey,
+  type StockValuationRow,
   type StockValuationStatusFilter,
 } from "./stock-valuation-data";
 import {
@@ -162,8 +166,6 @@ export default function StockValuationPageClient() {
   const [product, setProduct] = useState("all");
   const [stockStatus, setStockStatus] = useState<StockValuationStatusFilter>("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<StockValuationSortKey>("product");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -177,55 +179,46 @@ export default function StockValuationPageClient() {
     setAsOnDate(defaultAsOnDate());
   }, []);
 
-  const handleSort = useCallback((key: string) => {
-    const k = key as StockValuationSortKey;
-    setSortKey((prev) => {
-      if (prev === k) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setSortDir("asc");
-      return k;
-    });
-  }, []);
-
   const sourceRows = useMemo(() => {
     if (!mounted) return [];
     return buildStockValuationRows(asOnDate);
   }, [mounted, asOnDate]);
 
-  const filteredRows = useMemo(() => {
-    const filtered = filterStockValuationRows(sourceRows, {
-      asOnDate,
-      warehouse,
-      category,
-      product,
-      stockStatus,
-      search: debouncedSearch,
-    });
-    return sortStockValuationRows(filtered, sortKey, sortDir);
-  }, [
-    sourceRows,
-    asOnDate,
-    warehouse,
-    category,
-    product,
-    stockStatus,
-    debouncedSearch,
-    sortKey,
-    sortDir,
-  ]);
+  const filteredRows = useMemo(
+    () =>
+      filterStockValuationRows(sourceRows, {
+        asOnDate,
+        warehouse,
+        category,
+        product,
+        stockStatus,
+        search: debouncedSearch,
+      }),
+    [sourceRows, asOnDate, warehouse, category, product, stockStatus, debouncedSearch],
+  );
 
-  const totals = useMemo(() => computeStockValuationTotals(filteredRows), [filteredRows]);
+  const getCellValue = useCallback(
+    (row: StockValuationRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
-  useEffect(() => {
-    setPage(1);
-  }, [asOnDate, warehouse, category, product, stockStatus, debouncedSearch, pageSize, sortKey, sortDir]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageSize]);
+  const columnConfig = useMemo(
+    () => ({
+      product: { type: "text" as const },
+      sku: { type: "text" as const },
+      uom: { type: "text" as const },
+      packSize: { type: "text" as const },
+      unitsPerPack: { type: "amount" as const },
+      batchNo: { type: "text" as const },
+      warehouse: { type: "text" as const },
+      availableQty: { type: "amount" as const },
+      costPrice: { type: "amount" as const },
+      stockValue: { type: "amount" as const },
+      mfgDate: { type: "date" as const },
+      expiryDate: { type: "date" as const },
+    }),
+    [],
+  );
 
   const activeFyId = mounted ? getActiveFinancialYearId() : null;
 
@@ -270,20 +263,9 @@ export default function StockValuationPageClient() {
     };
   }, [asOnDate, financialYearId, warehouse, category, product, stockStatus, search]);
 
-  const handleExportExcel = useCallback(async () => {
-    if (filteredRows.length === 0 || exporting) return;
-    setExporting(true);
-    try {
-      await exportStockValuationToExcel(filteredRows, exportMeta, totals);
-    } finally {
-      setExporting(false);
-    }
-  }, [filteredRows, exportMeta, totals, exporting]);
-
-  const handleExportPdf = useCallback(() => {
-    if (filteredRows.length === 0 || exporting) return;
-    exportStockValuationToPdf(filteredRows, exportMeta, totals);
-  }, [filteredRows, exportMeta, totals, exporting]);
+  useEffect(() => {
+    setPage(1);
+  }, [asOnDate, warehouse, category, product, stockStatus, debouncedSearch, pageSize]);
 
   if (!mounted) {
     return (
@@ -298,6 +280,126 @@ export default function StockValuationPageClient() {
   }
 
   return (
+    <AccountsColumnFilterProvider
+      rows={filteredRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="product"
+      defaultSortDir="asc"
+    >
+      <StockValuationBody
+        filteredRows={filteredRows}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        financialYearId={financialYearId}
+        setFinancialYearId={setFinancialYearId}
+        asOnDate={asOnDate}
+        setAsOnDate={setAsOnDate}
+        warehouse={warehouse}
+        setWarehouse={setWarehouse}
+        category={category}
+        setCategory={setCategory}
+        product={product}
+        setProduct={setProduct}
+        productOptions={productOptions}
+        stockStatus={stockStatus}
+        setStockStatus={setStockStatus}
+        search={search}
+        setSearch={setSearch}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function StockValuationBody({
+  filteredRows,
+  hasFilters,
+  clearFilters,
+  exportMeta,
+  exporting,
+  setExporting,
+  financialYearId,
+  setFinancialYearId,
+  asOnDate,
+  setAsOnDate,
+  warehouse,
+  setWarehouse,
+  category,
+  setCategory,
+  product,
+  setProduct,
+  productOptions,
+  stockStatus,
+  setStockStatus,
+  search,
+  setSearch,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+}: {
+  filteredRows: StockValuationRow[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  exportMeta: StockValuationExportMeta;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  financialYearId: string;
+  setFinancialYearId: (v: string) => void;
+  asOnDate: string;
+  setAsOnDate: (v: string) => void;
+  warehouse: string;
+  setWarehouse: (v: string) => void;
+  category: string;
+  setCategory: (v: string) => void;
+  product: string;
+  setProduct: (v: string) => void;
+  productOptions: string[];
+  stockStatus: StockValuationStatusFilter;
+  setStockStatus: (v: StockValuationStatusFilter) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(filteredRows);
+  const totals = useMemo(() => computeStockValuationTotals(columnFilteredRows), [columnFilteredRows]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
+  const handleExportExcel = useCallback(async () => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      await exportStockValuationToExcel(columnFilteredRows, exportMeta, totals);
+    } finally {
+      setExporting(false);
+    }
+  }, [columnFilteredRows, exportMeta, totals, exporting, setExporting]);
+
+  const handleExportPdf = useCallback(() => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    exportStockValuationToPdf(columnFilteredRows, exportMeta, totals);
+  }, [columnFilteredRows, exportMeta, totals, exporting]);
+
+  return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
       title="Stock Valuation"
@@ -308,7 +410,7 @@ export default function StockValuationPageClient() {
             <AccountsExportMenu
               onExcel={handleExportExcel}
               onPdf={handleExportPdf}
-              disabled={exporting || filteredRows.length === 0}
+              disabled={exporting || columnFilteredRows.length === 0}
             />
           }
         >
@@ -334,11 +436,11 @@ export default function StockValuationPageClient() {
     >
       <AccountsTableListing
         footer={
-          filteredRows.length > 0 ? (
+          columnFilteredRows.length > 0 ? (
             <AccountsTablePagination
               page={page}
               pageSize={pageSize}
-              totalRecords={filteredRows.length}
+              totalRecords={columnFilteredRows.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               recordLabel="batch lines"
@@ -348,65 +450,27 @@ export default function StockValuationPageClient() {
       >
         {filteredRows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
+        ) : columnFilteredRows.length === 0 ? (
+          <div className="accounts-table-empty py-8 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
         ) : (
           <AccountsTableScroll>
             <AccountsTable minWidth={1480}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <SortTh
-                    label="Product"
-                    colKey="product"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <AccountsTableHeadCell uppercase>SKU</AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase>UOM</AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase>Pack Size</AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase align="right">
-                    Units Per Pack
-                  </AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase>Batch No</AccountsTableHeadCell>
-                  <SortTh
-                    label="Warehouse"
-                    colKey="warehouse"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortTh
-                    label="Available Qty"
-                    colKey="availableQty"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortTh
-                    label="Cost Price (CP)"
-                    colKey="costPrice"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortTh
-                    label="Stock Value"
-                    colKey="stockValue"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <AccountsTableHeadCell uppercase>Manufacturing Date</AccountsTableHeadCell>
-                  <SortTh
-                    label="Expiry Date"
-                    colKey="expiryDate"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <AccountsTableHeadCell uppercase>Stock Status</AccountsTableHeadCell>
+                  <SortTh label="Product" colKey="product" />
+                  <SortTh label="SKU" colKey="sku" />
+                  <SortTh label="UOM" colKey="uom" />
+                  <SortTh label="Pack Size" colKey="packSize" />
+                  <SortTh label="Units Per Pack" colKey="unitsPerPack" filterType="amount" align="right" />
+                  <SortTh label="Batch No" colKey="batchNo" />
+                  <SortTh label="Warehouse" colKey="warehouse" />
+                  <SortTh label="Available Qty" colKey="availableQty" filterType="amount" align="right" />
+                  <SortTh label="Cost Price (CP)" colKey="costPrice" filterType="amount" align="right" />
+                  <SortTh label="Stock Value" colKey="stockValue" filterType="amount" align="right" />
+                  <SortTh label="Manufacturing Date" colKey="mfgDate" filterType="date" />
+                  <SortTh label="Expiry Date" colKey="expiryDate" filterType="date" />
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
@@ -440,9 +504,6 @@ export default function StockValuationPageClient() {
                     <AccountsTableCell className="text-xs whitespace-nowrap">
                       {formatStockValuationDate(row.expiryDate)}
                     </AccountsTableCell>
-                    <AccountsTableCell>
-                      <StockStatusBadge status={row.stockStatus} />
-                    </AccountsTableCell>
                   </AccountsTableRow>
                 ))}
               </AccountsTableBody>
@@ -458,7 +519,7 @@ export default function StockValuationPageClient() {
                   <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
                     {formatMoney(totals.totalStockValue)}
                   </AccountsTableCell>
-                  <AccountsTableCell colSpan={3} />
+                  <AccountsTableCell colSpan={2} />
                 </AccountsTableRow>
               </AccountsTableFoot>
             </AccountsTable>

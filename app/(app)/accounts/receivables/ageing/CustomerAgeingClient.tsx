@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -13,7 +13,11 @@ import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-r
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
-import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
@@ -37,15 +41,6 @@ import {
   formatExportAmount,
 } from "../receivables-export";
 
-type SortKey =
-  | "customerName"
-  | "totalOutstanding"
-  | "bucket0_30"
-  | "bucket31_60"
-  | "bucket61_90"
-  | "bucket91_120"
-  | "bucketAbove120";
-
 function AmountCell({ amount }: { amount: number }) {
   return (
     <span className={cn("inline-block whitespace-nowrap tabular-nums", MONEY_CELL_CLASS)}>
@@ -54,75 +49,80 @@ function AmountCell({ amount }: { amount: number }) {
   );
 }
 
-export default function CustomerAgeingClient() {
-  const router = useRouter();
-  const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
-  const [financialYear, setFinancialYear] = useState("all");
-  const [customerId, setCustomerId] = useState("all");
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("totalOutstanding");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+const COLUMNS: AccountsRichColumnDef<CustomerAgeingRow>[] = [
+  {
+    key: "customerName",
+    label: "Customer",
+    filterType: "text",
+    render: (r) => (
+      <Link
+        href={`/accounts/receivables/outstanding/${r.customerId}`}
+        className="text-xs font-medium text-brand-700 hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {r.customerName}
+      </Link>
+    ),
+  },
+  {
+    key: "totalOutstanding",
+    label: "Total Outstanding",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <AmountCell amount={r.totalOutstanding} />,
+  },
+  {
+    key: "bucket0_30",
+    label: "0-30 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <AmountCell amount={r.bucket0_30} />,
+  },
+  {
+    key: "bucket31_60",
+    label: "31-60 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <AmountCell amount={r.bucket31_60} />,
+  },
+  {
+    key: "bucket61_90",
+    label: "61-90 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <AmountCell amount={r.bucket61_90} />,
+  },
+  {
+    key: "bucket91_120",
+    label: "91-120 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <AmountCell amount={r.bucket91_120} />,
+  },
+  {
+    key: "bucketAbove120",
+    label: "Above 120 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <AmountCell amount={r.bucketAbove120} />,
+  },
+];
 
-  const sectionRefresh = useAccountsSectionRefresh();
-
-  useEffect(() => {
-    setPage(1);
-  }, [asOnDate, financialYear, customerId, search, pageSize]);
-
-  const customers = useMemo(() => loadCustomers(), []);
-
-  const rows = useMemo(() => {
-    let data = computeCustomerAgeingRows(asOnDate, {
-      customerId: customerId === "all" ? undefined : Number(customerId),
-    });
-
-    const q = search.trim().toLowerCase();
-    if (q) {
-      data = data.filter(
-        (r) =>
-          r.customerName.toLowerCase().includes(q) ||
-          r.customerCode.toLowerCase().includes(q),
-      );
-    }
-
-    return [...data].sort((a, b) => {
-      const dir = sortDir === "asc" ? 1 : -1;
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-      return String(av).localeCompare(String(bv)) * dir;
-    });
-  }, [asOnDate, customerId, search, sortKey, sortDir, sectionRefresh]);
-
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [rows, page, pageSize]);
-
-  const handleSort = (key: string) => {
-    const k = key as SortKey;
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("desc");
-    }
+function AgeingExport({
+  exportMeta,
+}: {
+  exportMeta: {
+    reportName: string;
+    asOnDate: string;
+    customer: string;
+    search: string;
   };
-
-  const exportMeta = {
-    reportName: "Customer Ageing",
-    asOnDate,
-    customer:
-      customerId === "all"
-        ? "All customers"
-        : customers.find((c) => String(c.id) === customerId)?.customerName ?? "—",
-    search,
-  };
+}) {
+  const visible = useAccountsFilteredRows<CustomerAgeingRow>([]);
 
   const handleExcel = () => {
     void exportReceivablesToExcel(
-      rows.map((r) => ({
+      visible.map((r) => ({
         Customer: r.customerName,
         "Total Outstanding": formatExportAmount(r.totalOutstanding),
         "0-30 Days": formatExportAmount(r.bucket0_30),
@@ -147,7 +147,7 @@ export default function CustomerAgeingClient() {
         "91-120 Days",
         "Above 120 Days",
       ],
-      rows.map((r) => [
+      visible.map((r) => [
         r.customerName,
         formatExportAmount(r.totalOutstanding),
         formatExportAmount(r.bucket0_30),
@@ -160,117 +160,147 @@ export default function CustomerAgeingClient() {
     );
   };
 
-  const columns = useMemo((): AccountsRichColumnDef<CustomerAgeingRow>[] => {
-    const sortHeader = (key: SortKey, label: string) => (
-      <SortTh
-        label={label}
-        colKey={key}
-        sortKey={sortKey}
-        sortDir={sortDir}
-        onSort={handleSort}
-        align={key === "customerName" ? "left" : "right"}
-      />
-    );
+  return <AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={visible.length === 0} />;
+}
 
-    return [
-      {
-        key: "customerName",
-        label: "Customer",
-        header: sortHeader("customerName", "Customer"),
-        render: (r) => (
-          <Link
-            href={`/accounts/receivables/outstanding/${r.customerId}`}
-            className="text-xs font-medium text-brand-700 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {r.customerName}
-          </Link>
-        ),
-      },
-      {
-        key: "totalOutstanding",
-        label: "Total Outstanding",
-        align: "right",
-        header: sortHeader("totalOutstanding", "Total Outstanding"),
-        render: (r) => <AmountCell amount={r.totalOutstanding} />,
-      },
-      {
-        key: "bucket0_30",
-        label: "0-30 Days",
-        align: "right",
-        header: sortHeader("bucket0_30", "0-30 Days"),
-        render: (r) => <AmountCell amount={r.bucket0_30} />,
-      },
-      {
-        key: "bucket31_60",
-        label: "31-60 Days",
-        align: "right",
-        header: sortHeader("bucket31_60", "31-60 Days"),
-        render: (r) => <AmountCell amount={r.bucket31_60} />,
-      },
-      {
-        key: "bucket61_90",
-        label: "61-90 Days",
-        align: "right",
-        header: sortHeader("bucket61_90", "61-90 Days"),
-        render: (r) => <AmountCell amount={r.bucket61_90} />,
-      },
-      {
-        key: "bucket91_120",
-        label: "91-120 Days",
-        align: "right",
-        header: sortHeader("bucket91_120", "91-120 Days"),
-        render: (r) => <AmountCell amount={r.bucket91_120} />,
-      },
-      {
-        key: "bucketAbove120",
-        label: "Above 120 Days",
-        align: "right",
-        header: sortHeader("bucketAbove120", "Above 120 Days"),
-        render: (r) => <AmountCell amount={r.bucketAbove120} />,
-      },
-    ];
-  }, [sortKey, sortDir]);
+function CustomerAgeingTable({
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+}) {
+  const router = useRouter();
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<CustomerAgeingRow>([]);
+
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Receivables", "Customer Ageing")}
-      title="Customer Ageing"
-      description="Customer dues grouped by ageing buckets as on the selected date."
-      filters={
-        <ReportFilterRow
-          end={<AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={rows.length === 0} />}
-        >
-          <ReportFinancialYearFilter value={financialYear} onChange={setFinancialYear} />
-          <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
-          <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
-          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search customer…" />
-        </ReportFilterRow>
-      }
-      layout="split"
-      className="h-full min-h-0"
+    <div className="flex flex-col flex-1 min-h-0">
+      <AccountsTableScroll>
+        <AccountsRichTable
+          columns={COLUMNS}
+          rows={pagedRows}
+          minWidth={1000}
+          getRowKey={(r) => r.customerId}
+          emptyMessage="No records found."
+          onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
+        />
+      </AccountsTableScroll>
+      {visible.length > 0 && (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function CustomerAgeingClient() {
+  const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
+  const [financialYear, setFinancialYear] = useState("all");
+  const [customerId, setCustomerId] = useState("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const sectionRefresh = useAccountsSectionRefresh();
+
+  useEffect(() => {
+    setPage(1);
+  }, [asOnDate, financialYear, customerId, search, pageSize]);
+
+  const customers = useMemo(() => loadCustomers(), []);
+
+  const toolbarFiltered = useMemo(() => {
+    let data = computeCustomerAgeingRows(asOnDate, {
+      customerId: customerId === "all" ? undefined : Number(customerId),
+    });
+
+    const q = search.trim().toLowerCase();
+    if (q) {
+      data = data.filter(
+        (r) =>
+          r.customerName.toLowerCase().includes(q) ||
+          r.customerCode.toLowerCase().includes(q),
+      );
+    }
+
+    return data;
+  }, [asOnDate, customerId, search, sectionRefresh]);
+
+  const getCellValue = useCallback(
+    (row: CustomerAgeingRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
+
+  const exportMeta = useMemo(
+    () => ({
+      reportName: "Customer Ageing",
+      asOnDate,
+      customer:
+        customerId === "all"
+          ? "All customers"
+          : (customers.find((c) => String(c.id) === customerId)?.customerName ?? "—"),
+      search,
+    }),
+    [asOnDate, customerId, customers, search],
+  );
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={{
+        customerName: { type: "text" },
+        totalOutstanding: { type: "amount" },
+        bucket0_30: { type: "amount" },
+        bucket31_60: { type: "amount" },
+        bucket61_90: { type: "amount" },
+        bucket91_120: { type: "amount" },
+        bucketAbove120: { type: "amount" },
+      }}
+      defaultSortKey="totalOutstanding"
+      defaultSortDir="desc"
     >
-      <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableScroll>
-          <AccountsRichTable
-            columns={columns}
-            rows={pagedRows}
-            minWidth={1000}
-            getRowKey={(r) => r.customerId}
-            emptyMessage="No records found."
-            onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
-          />
-        </AccountsTableScroll>
-        {rows.length > 0 && (
-          <AccountsTablePagination
-            page={page}
-            pageSize={pageSize}
-            totalRecords={rows.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        )}
-      </div>
-    </AccountsPageShell>
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Receivables", "Customer Ageing")}
+        title="Customer Ageing"
+        description="Customer dues grouped by ageing buckets as on the selected date."
+        filters={
+          <ReportFilterRow end={<AgeingExport exportMeta={exportMeta} />}>
+            <ReportFinancialYearFilter value={financialYear} onChange={setFinancialYear} />
+            <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+            <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
+            <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search customer…" />
+          </ReportFilterRow>
+        }
+        layout="split"
+        className="h-full min-h-0"
+      >
+        <CustomerAgeingTable
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </AccountsPageShell>
+    </AccountsColumnFilterProvider>
   );
 }

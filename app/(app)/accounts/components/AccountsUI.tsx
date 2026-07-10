@@ -2,44 +2,75 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronsUpDown } from "lucide-react";
 import { StatusBadge as SharedStatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusKey } from "@/lib/tokens";
-import { AccountsTableHeadCell } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnHeader,
+  type AccountsColumnHeaderProps,
+} from "@/components/accounts/AccountsColumnHeader";
+import { useAccountsColumnFilterContext } from "@/components/accounts/AccountsColumnFilterContext";
+
+export { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
+export { AccountsColumnFilterPopover } from "@/components/accounts/AccountsColumnFilterPopover";
+export { useAccountsColumnFilters } from "@/components/accounts/useAccountsColumnFilters";
+export {
+  AccountsColumnFilterProvider,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/components/accounts/AccountsColumnFilterContext";
 
 export function SortTh({
   label,
   colKey,
-  sortKey,
-  sortDir,
-  onSort,
+  sortKey: sortKeyProp,
+  sortDir: sortDirProp,
+  onSort: onSortProp,
   align = "left",
+  filterable = true,
+  filterType = "text",
+  filterValue: filterValueProp,
+  onFilterChange: onFilterChangeProp,
+  uniqueValues: uniqueValuesProp,
+  statusOptions: statusOptionsProp,
+  onRemoveSort: onRemoveSortProp,
+  className,
 }: {
   label: string;
   colKey: string;
-  sortKey: string;
-  sortDir: "asc" | "desc";
-  onSort: (k: string) => void;
+  sortKey?: string;
+  sortDir?: "asc" | "desc";
+  onSort?: (k: string) => void;
   align?: "left" | "right" | "center";
+  filterable?: boolean;
+  filterType?: AccountsColumnHeaderProps["filterType"];
+  filterValue?: AccountsColumnHeaderProps["filterValue"];
+  onFilterChange?: AccountsColumnHeaderProps["onFilterChange"];
+  uniqueValues?: string[];
+  statusOptions?: string[];
+  onRemoveSort?: () => void;
+  className?: string;
 }) {
-  const active = sortKey === colKey;
+  const ctx = useAccountsColumnFilterContext();
+  const fromCtx = ctx?.headerProps(colKey, label, { filterType, align, filterable });
+
   return (
-    <AccountsTableHeadCell
-      onClick={() => onSort(colKey)}
+    <AccountsColumnHeader
+      label={label}
+      colKey={colKey}
       align={align}
-      sorted={active}
-      uppercase
-      className="cursor-pointer select-none"
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active ? (
-          <ChevronDown className={cn("w-3 h-3", sortDir === "desc" && "rotate-180")} />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 opacity-40" />
-        )}
-      </span>
-    </AccountsTableHeadCell>
+      sortable={fromCtx?.sortable ?? Boolean(onSortProp)}
+      sortKey={sortKeyProp ?? fromCtx?.sortKey ?? ""}
+      sortDir={sortDirProp ?? fromCtx?.sortDir ?? "asc"}
+      onSort={onSortProp ?? fromCtx?.onSort}
+      onRemoveSort={onRemoveSortProp ?? fromCtx?.onRemoveSort}
+      filterable={filterable && Boolean(onFilterChangeProp ?? fromCtx?.onFilterChange)}
+      filterType={filterType}
+      filterValue={filterValueProp ?? fromCtx?.filterValue}
+      onFilterChange={onFilterChangeProp ?? fromCtx?.onFilterChange}
+      uniqueValues={uniqueValuesProp ?? fromCtx?.uniqueValues}
+      statusOptions={statusOptionsProp ?? fromCtx?.statusOptions}
+      className={className}
+    />
   );
 }
 

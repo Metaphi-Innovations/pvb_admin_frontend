@@ -53,8 +53,13 @@ import {
   type PurchaseRegisterSourceRow,
 } from "@/lib/accounts/register-data";
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import { cn } from "@/lib/utils";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 
 export type RegisterReportMode = "sales" | "purchase";
 
@@ -333,25 +338,29 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           key: "taxable",
           label: "Taxable Value",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.taxable),
         },
         {
           key: "tax",
           label: isSales ? "GST Amount" : "Tax",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.tax),
         },
         {
           key: "total",
           label: isSales ? "Invoice Total (Incl. GST)" : "Total",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.total),
         },
-        { key: "status", label: "Status", render: (row) => row.status },
         {
           key: "action",
           label: "",
           align: "center",
+          filterable: false,
+          sortable: false,
           className: accountsActionColClass("single"),
           render: (row) => (
             <AccountsViewAction
@@ -381,36 +390,43 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           key: "docCount",
           label: docCountLabel,
           align: "right",
+          filterType: "amount",
           render: (row) => row.docCount,
         },
         {
           key: "taxable",
           label: "Taxable Amount",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.taxable),
         },
         {
           key: "tax",
           label: "GST Amount",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.tax),
         },
         {
           key: "total",
           label: totalAmountLabel,
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.total),
         },
         {
           key: "balance",
           label: balanceLabel,
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.balance),
         },
         {
           key: "action",
           label: "Action",
           align: "center",
+          filterable: false,
+          sortable: false,
           render: (row) => (
             <Button
               variant="ghost"
@@ -447,36 +463,43 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           key: "docCount",
           label: docCountLabel,
           align: "right",
+          filterType: "amount",
           render: (row) => row.docCount,
         },
         {
           key: "taxable",
           label: "Taxable Amount",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.taxable),
         },
         {
           key: "tax",
           label: "GST Amount",
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.tax),
         },
         {
           key: "total",
           label: totalAmountLabel,
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.total),
         },
         {
           key: "balance",
           label: balanceLabel,
           align: "right",
+          filterType: "amount",
           render: (row) => moneyCell(row.balance),
         },
         {
           key: "action",
           label: "Action",
           align: "center",
+          filterable: false,
+          sortable: false,
           render: (row) => (
             <Button
               variant="ghost"
@@ -514,36 +537,43 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
         key: "qty",
         label: isSales ? "Quantity Sold" : "Quantity Purchased",
         align: "right",
+        filterType: "amount",
         render: (row) => row.qty,
       },
       {
         key: "taxable",
         label: "Taxable Amount",
         align: "right",
+        filterType: "amount",
         render: (row) => moneyCell(row.taxable),
       },
       {
         key: "tax",
         label: "GST Amount",
         align: "right",
+        filterType: "amount",
         render: (row) => moneyCell(row.tax),
       },
       {
         key: "total",
         label: totalAmountLabel,
         align: "right",
+        filterType: "amount",
         render: (row) => moneyCell(row.total),
       },
       {
         key: "avgRate",
         label: "Average Rate",
         align: "right",
+        filterType: "amount",
         render: (row) => moneyCell(row.avgRate),
       },
       {
         key: "action",
         label: "Action",
         align: "center",
+        filterable: false,
+        sortable: false,
         render: (row) => (
           <Button
             variant="ghost"
@@ -604,6 +634,62 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
     setBranch("all");
   };
 
+  const toolbarRows = useMemo(() => {
+    if (viewBy === "invoice") return source;
+    if (viewBy === "party") return partyRows;
+    if (viewBy === "month") return monthRows;
+    return commodityRows;
+  }, [viewBy, source, partyRows, monthRows, commodityRows]);
+
+  const getCellValue = useCallback((row: object, key: string) => {
+    return (row as Record<string, unknown>)[key];
+  }, []);
+
+  const columnConfig = useMemo((): AccountsColumnFilterConfig => {
+    if (viewBy === "invoice") {
+      return {
+        docNo: { type: "text" },
+        date: { type: "date" },
+        party: { type: "text" },
+        taxable: { type: "amount" },
+        tax: { type: "amount" },
+        total: { type: "amount" },
+      };
+    }
+    if (viewBy === "party") {
+      return {
+        partyName: { type: "text" },
+        gstin: { type: "text" },
+        pan: { type: "text" },
+        docCount: { type: "amount" },
+        taxable: { type: "amount" },
+        tax: { type: "amount" },
+        total: { type: "amount" },
+        balance: { type: "amount" },
+      };
+    }
+    if (viewBy === "month") {
+      return {
+        monthLabel: { type: "text" },
+        docCount: { type: "amount" },
+        taxable: { type: "amount" },
+        tax: { type: "amount" },
+        total: { type: "amount" },
+        balance: { type: "amount" },
+      };
+    }
+    return {
+      productName: { type: "text" },
+      productCode: { type: "text" },
+      hsn: { type: "text" },
+      qty: { type: "amount" },
+      taxable: { type: "amount" },
+      tax: { type: "amount" },
+      total: { type: "amount" },
+      avgRate: { type: "amount" },
+    };
+  }, [viewBy]);
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb(section, title)}
@@ -643,61 +729,136 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
       layout="split"
       className="h-full min-h-0"
     >
-      <AccountsTableListing
-        summary={
-          <AccountsSummaryBar
-            items={[
-              { label: docLabel, value: String(summary.count) },
-              { label: "Taxable Amount", value: formatMoney(summary.taxable) },
-              { label: totalAmountLabel, value: formatMoney(summary.total) },
-              { label: balanceLabel, value: formatMoney(summary.balance) },
-            ]}
-          />
-        }
+      <AccountsColumnFilterProvider
+        key={viewBy}
+        rows={toolbarRows}
+        getCellValue={getCellValue}
+        columnConfig={columnConfig}
+        defaultSortKey={viewBy === "invoice" ? "date" : viewBy === "month" ? "monthLabel" : "total"}
+        defaultSortDir="desc"
       >
-          {tableEmpty ? (
-            <EmptySearch
-              compact
-              onClear={
-                hasFilters
-                  ? clearFilters
-                  : viewBy !== "invoice"
-                    ? () => setViewBy("invoice")
-                    : undefined
-              }
+        <AccountsTableListing
+          summary={
+            <AccountsSummaryBar
+              items={[
+                { label: docLabel, value: String(summary.count) },
+                { label: "Taxable Amount", value: formatMoney(summary.taxable) },
+                { label: totalAmountLabel, value: formatMoney(summary.total) },
+                { label: balanceLabel, value: formatMoney(summary.balance) },
+              ]}
             />
-          ) : viewBy === "invoice" ? (
-            <AccountsRichTable
-              columns={invoiceColumns}
-              rows={source}
-              getRowKey={(row) => row.docNo}
-              minWidth={960}
-              onRowClick={openInvoiceDetail}
-            />
-          ) : viewBy === "party" ? (
-            <AccountsRichTable
-              columns={partyColumns}
-              rows={partyRows}
-              getRowKey={(row) => row.groupKey}
-              minWidth={1100}
-            />
-          ) : viewBy === "month" ? (
-            <AccountsRichTable
-              columns={monthColumns}
-              rows={monthRows}
-              getRowKey={(row) => row.groupKey}
-              minWidth={960}
-            />
-          ) : (
-            <AccountsRichTable
-              columns={commodityColumns}
-              rows={commodityRows}
-              getRowKey={(row) => row.groupKey}
-              minWidth={1100}
-            />
-          )}
-      </AccountsTableListing>
+          }
+        >
+          <RegisterReportTable
+            tableEmpty={tableEmpty}
+            hasFilters={hasFilters}
+            clearFilters={clearFilters}
+            viewBy={viewBy}
+            setViewBy={setViewBy}
+            toolbarRows={toolbarRows}
+            invoiceColumns={invoiceColumns}
+            partyColumns={partyColumns}
+            monthColumns={monthColumns}
+            commodityColumns={commodityColumns}
+            openInvoiceDetail={openInvoiceDetail}
+          />
+        </AccountsTableListing>
+      </AccountsColumnFilterProvider>
       {transactionDrawer}
     </AccountsPageShell>
+  );
+}
+
+function RegisterReportTable({
+  tableEmpty,
+  hasFilters,
+  clearFilters,
+  viewBy,
+  setViewBy,
+  toolbarRows,
+  invoiceColumns,
+  partyColumns,
+  monthColumns,
+  commodityColumns,
+  openInvoiceDetail,
+}: {
+  tableEmpty: boolean;
+  hasFilters: boolean;
+  clearFilters: () => void;
+  viewBy: RegisterViewMode;
+  setViewBy: (mode: RegisterViewMode) => void;
+  toolbarRows: object[];
+  invoiceColumns: AccountsRichColumnDef<SalesRegisterSourceRow | PurchaseRegisterSourceRow>[];
+  partyColumns: AccountsRichColumnDef<ReturnType<typeof aggregateSalesPartyWise>[number]>[];
+  monthColumns: AccountsRichColumnDef<ReturnType<typeof aggregateSalesMonthWise>[number]>[];
+  commodityColumns: AccountsRichColumnDef<ReturnType<typeof aggregateSalesCommodityWise>[number]>[];
+  openInvoiceDetail: (row: SalesRegisterSourceRow | PurchaseRegisterSourceRow) => void;
+}) {
+  const visible = useAccountsFilteredRows(toolbarRows);
+
+  if (tableEmpty) {
+    return (
+      <EmptySearch
+        compact
+        onClear={
+          hasFilters
+            ? clearFilters
+            : viewBy !== "invoice"
+              ? () => setViewBy("invoice")
+              : undefined
+        }
+      />
+    );
+  }
+
+  if (visible.length === 0) {
+    return (
+      <div className="py-6 text-center text-xs text-muted-foreground">
+        No records match the column filters.
+      </div>
+    );
+  }
+
+  if (viewBy === "invoice") {
+    return (
+      <AccountsRichTable
+        columns={invoiceColumns}
+        rows={visible as (SalesRegisterSourceRow | PurchaseRegisterSourceRow)[]}
+        getRowKey={(row) => row.docNo}
+        minWidth={960}
+        onRowClick={openInvoiceDetail}
+      />
+    );
+  }
+
+  if (viewBy === "party") {
+    return (
+      <AccountsRichTable
+        columns={partyColumns}
+        rows={visible as ReturnType<typeof aggregateSalesPartyWise>}
+        getRowKey={(row) => row.groupKey}
+        minWidth={1100}
+      />
+    );
+  }
+
+  if (viewBy === "month") {
+    return (
+      <AccountsRichTable
+        columns={monthColumns}
+        rows={visible as ReturnType<typeof aggregateSalesMonthWise>}
+        getRowKey={(row) => row.groupKey}
+        minWidth={960}
+      />
+    );
+  }
+
+  return (
+    <AccountsRichTable
+      columns={commodityColumns}
+      rows={visible as ReturnType<typeof aggregateSalesCommodityWise>}
+      getRowKey={(row) => row.groupKey}
+      minWidth={1100}
+    />
   );
 }

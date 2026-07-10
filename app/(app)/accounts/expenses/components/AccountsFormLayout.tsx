@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import {
+  ACCOUNTS_PAGE_SUBTITLE_CLASS,
+  ACCOUNTS_PAGE_TITLE_CLASS,
+} from "@/lib/accounts/accounts-typography";
 
 export function AccountsFormLayout({
   title,
@@ -37,8 +41,8 @@ export function AccountsFormLayout({
                 <ArrowLeft className="w-4 h-4 text-muted-foreground" />
               </button>
               <div className="min-w-0">
-                <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>{title}</h1>
+                <p className={`${ACCOUNTS_PAGE_SUBTITLE_CLASS} truncate`}>
                   {breadcrumb.map((b, i) => (
                     <span key={b.href}>
                       {i > 0 && <span className="mx-1">/</span>}

@@ -22,10 +22,15 @@ export function scheduleAccountsSectionSeed(groupId: AccountsNavGroupId): void {
 
   if (isAccountsSectionStored(groupId)) {
     bootstrappedSections.add(groupId);
-    if (typeof window !== "undefined") {
+    const dispatch = () => {
       window.dispatchEvent(
         new CustomEvent(ACCOUNTS_SECTION_SEEDED_EVENT, { detail: { groupId } }),
       );
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(dispatch, { timeout: 500 });
+    } else {
+      window.setTimeout(dispatch, 0);
     }
     return;
   }
@@ -56,11 +61,7 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
   switch (groupId) {
     case "coa":
       void import("./accounts-demo-seed")
-        .then((m) => {
-          m.seedCoaSectionDemoData();
-          return import("./gst-coa-sync");
-        })
-        .then((m) => m.syncGstCoaFromMaster())
+        .then((m) => m.seedCoaSectionDemoData())
         .then(finish)
         .catch((err) => {
           inflightSections.delete(groupId);

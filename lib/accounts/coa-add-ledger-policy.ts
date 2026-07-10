@@ -1,5 +1,4 @@
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 
 export interface CoaAddLedgerAlternative {
   label: string;
@@ -13,15 +12,19 @@ export interface CoaAddLedgerPolicy {
   alternatives: CoaAddLedgerAlternative[];
 }
 
-const MASTER_OWNED_SUB_GROUPS = new Set([
-  "Trade Receivables / Sundry Debtors",
-  "Trade Payables / Sundry Creditors",
-  "Bank Accounts",
-  "Inventory / Stock-in-Hand",
-]);
+export const SUNDRY_DEBTORS_GROUP_NAME = "Trade Receivables / Sundry Debtors";
+export const SUNDRY_DEBTORS_ADD_LEDGER_HREF =
+  "/accounts/masters/chart-of-accounts/sundry-debtors/new";
+
+export const SUNDRY_CREDITORS_GROUP_NAME = "Trade Payables / Sundry Creditors";
+export const SUNDRY_CREDITORS_ADD_LEDGER_HREF =
+  "/accounts/masters/chart-of-accounts/sundry-creditors/new";
+
+export const LAND_BUILDING_GROUP_NAME = "Land & Building";
+export const LAND_BUILDING_ADD_WAREHOUSE_HREF =
+  "/accounts/masters/chart-of-accounts/land-building/new";
 
 const FIXED_ASSET_SUB_GROUPS = new Set([
-  "Land & Building",
   "Plant & Machinery",
   "Furniture & Fixtures",
   "Office Equipment",
@@ -30,12 +33,102 @@ const FIXED_ASSET_SUB_GROUPS = new Set([
   "Intangible Assets",
 ]);
 
+/** Inline ancestor walk — avoids circular import with chart-of-accounts-data. */
 function pathNames(records: ChartOfAccount[], nodeId: number): string[] {
-  return getAncestorPath(records, nodeId).map((p) => p.accountName);
+  const byId = new Map(records.map((r) => [r.id, r]));
+  const names: string[] = [];
+  let current = byId.get(nodeId);
+  while (current) {
+    names.unshift(current.accountName);
+    current =
+      current.parentAccountId != null ? byId.get(current.parentAccountId) : undefined;
+  }
+  return names;
 }
 
 function matchesAny(names: string[], targets: Set<string>): boolean {
   return names.some((n) => targets.has(n));
+}
+
+function isSundryDebtorsName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    n === "trade receivables / sundry debtors" ||
+    n === "sundry debtors" ||
+    n.includes("sundry debtors")
+  );
+}
+
+/** True when the node is (or sits under) Trade Receivables / Sundry Debtors. */
+export function isSundryDebtorsGroup(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (isSundryDebtorsName(node.accountName)) return true;
+  return pathNames(records, node.id).some(isSundryDebtorsName);
+}
+
+function isSundryCreditorsName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    n === "trade payables / sundry creditors" ||
+    n === "sundry creditors" ||
+    n.includes("sundry creditors")
+  );
+}
+
+/** True when the node is (or sits under) Trade Payables / Sundry Creditors. */
+export function isSundryCreditorsGroup(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (isSundryCreditorsName(node.accountName)) return true;
+  return pathNames(records, node.id).some(isSundryCreditorsName);
+}
+
+function isLandBuildingName(name: string): boolean {
+  return name.trim().toLowerCase() === "land & building";
+}
+
+/** True when the node is (or sits under) Land & Building. */
+export function isLandBuildingGroup(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (isLandBuildingName(node.accountName)) return true;
+  return pathNames(records, node.id).some(isLandBuildingName);
+}
+
+export function landBuildingAddWarehouseHref(parentGroupId?: number | null): string {
+  if (parentGroupId != null && Number.isFinite(parentGroupId)) {
+    return `${LAND_BUILDING_ADD_WAREHOUSE_HREF}?parent=${parentGroupId}`;
+  }
+  return LAND_BUILDING_ADD_WAREHOUSE_HREF;
+}
+
+/** Primary add action label for COA toolbar / node detail. */
+export function resolveCoaAddActionLabel(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): string {
+  if (isLandBuildingGroup(node, records)) return "Add Warehouse";
+  if (isSundryDebtorsGroup(node, records)) return "Add Customer";
+  if (isSundryCreditorsGroup(node, records)) return "Add Supplier";
+  return "Add Ledger";
+}
+
+export function sundryCreditorsAddLedgerHref(parentGroupId?: number | null): string {
+  if (parentGroupId != null && Number.isFinite(parentGroupId)) {
+    return `${SUNDRY_CREDITORS_ADD_LEDGER_HREF}?parent=${parentGroupId}`;
+  }
+  return SUNDRY_CREDITORS_ADD_LEDGER_HREF;
+}
+
+export function sundryDebtorsAddLedgerHref(parentGroupId?: number | null): string {
+  if (parentGroupId != null && Number.isFinite(parentGroupId)) {
+    return `${SUNDRY_DEBTORS_ADD_LEDGER_HREF}?parent=${parentGroupId}`;
+  }
+  return SUNDRY_DEBTORS_ADD_LEDGER_HREF;
 }
 
 export function resolveCoaAddLedgerPolicy(
@@ -44,10 +137,10 @@ export function resolveCoaAddLedgerPolicy(
 ): CoaAddLedgerPolicy {
   const names = [...pathNames(records, node.id), node.accountName];
 
-  if (names.includes("TDS Receivable") || names.includes("TDS Payable")) {
+  if (names.includes("TDS Receivable")) {
     return {
       blocked: true,
-      reason: "TDS section ledgers are auto-created from TDS Master. Manual creation is not allowed.",
+      reason: "TDS receivable ledgers are maintained from ERP TDS Master (integrated later).",
       alternatives: [
         { label: "TDS Settings", href: "/masters/tds", variant: "primary" },
         { label: "TDS Summary", href: "/accounts/reports/tds-party-wise" },
@@ -55,7 +148,11 @@ export function resolveCoaAddLedgerPolicy(
     };
   }
 
-  if (names.includes("Duties & Taxes Payable") || names.includes("GST Payable")) {
+  if (
+    names.includes("Duties & Taxes Payable") ||
+    names.includes("GST Output") ||
+    names.includes("GST Payable")
+  ) {
     return {
       blocked: true,
       reason: "GST tax ledgers are auto-created from GST Master configuration.",
@@ -77,26 +174,16 @@ export function resolveCoaAddLedgerPolicy(
     };
   }
 
-  if (names.includes("Trade Receivables / Sundry Debtors")) {
-    return {
-      blocked: true,
-      reason: "Customer ledgers are created from Customer Master.",
-      alternatives: [
-        { label: "Add Customer", href: "/masters/customers/new", variant: "primary" },
-        { label: "View Customers", href: "/masters/customers" },
-      ],
-    };
-  }
+  // Sundry Debtors: not blocked — Add Ledger opens Accounts Customer form
+  // (see CoaAddLedgerHost / ChartOfAccountsPageClient).
 
-  if (names.includes("Trade Payables / Sundry Creditors")) {
-    return {
-      blocked: true,
-      reason: "Supplier ledgers are created from Supplier Master.",
-      alternatives: [
-        { label: "Add Supplier", href: "/masters/vendors/new", variant: "primary" },
-        { label: "View Suppliers", href: "/masters/vendors" },
-      ],
-    };
+  // Sundry Creditors: not blocked — Add Ledger opens Accounts Supplier form
+  // (see CoaAddLedgerHost / ChartOfAccountsPageClient).
+
+  // Land & Building: not blocked — Add Warehouse opens ERP Warehouse Master form
+  // (see CoaAddLedgerHost / ChartOfAccountsPageClient).
+  if (isLandBuildingGroup(node, records)) {
+    return { blocked: false, alternatives: [] };
   }
 
   if (names.includes("Bank Accounts")) {

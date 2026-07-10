@@ -20,6 +20,11 @@ import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import {
+  AccountsColumnFilterProvider,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
+import {
   ReportFilterRow,
   ReportAsOnDateFilter,
   ReportFinancialYearFilter,
@@ -37,8 +42,152 @@ import {
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { cn } from "@/lib/utils";
 
-export default function VendorAgeingClient() {
+const COLUMNS: AccountsRichColumnDef<VendorAgeingRow>[] = [
+  {
+    key: "vendorName",
+    label: "Supplier",
+    filterType: "text",
+    render: (r) => (
+      <Link
+        href={`/accounts/payables/outstanding/${r.vendorId}`}
+        className="text-xs font-medium text-brand-700 hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {r.vendorName}
+      </Link>
+    ),
+  },
+  {
+    key: "totalOutstanding",
+    label: "Total Outstanding",
+    align: "right",
+    filterType: "amount",
+    render: (r) => (
+      <span className={cn(MONEY_CELL_CLASS, "font-semibold text-foreground")}>
+        {formatMoney(r.totalOutstanding)}
+      </span>
+    ),
+  },
+  {
+    key: "bucket0_30",
+    label: "0-30 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket0_30)}</span>,
+  },
+  {
+    key: "bucket31_60",
+    label: "31-60 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket31_60)}</span>,
+  },
+  {
+    key: "bucket61_90",
+    label: "61-90 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket61_90)}</span>,
+  },
+  {
+    key: "bucket91_120",
+    label: "91-120 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket91_120)}</span>,
+  },
+  {
+    key: "bucketAbove120",
+    label: "Above 120 Days",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucketAbove120)}</span>,
+  },
+];
+
+function AgeingExport({
+  exportMeta,
+  exporting,
+  onExportingChange,
+}: {
+  exportMeta: Parameters<typeof exportSupplierAgeingToExcel>[1];
+  exporting: boolean;
+  onExportingChange: (v: boolean) => void;
+}) {
+  const visible = useAccountsFilteredRows<VendorAgeingRow>([]);
+
+  const handleExportExcel = useCallback(async () => {
+    onExportingChange(true);
+    try {
+      await exportSupplierAgeingToExcel(visible, exportMeta);
+    } finally {
+      onExportingChange(false);
+    }
+  }, [visible, exportMeta, onExportingChange]);
+
+  const handleExportPdf = useCallback(() => {
+    exportSupplierAgeingToPdf(visible, exportMeta);
+  }, [visible, exportMeta]);
+
+  return (
+    <AccountsExportMenu
+      onExcel={handleExportExcel}
+      onPdf={handleExportPdf}
+      disabled={exporting || visible.length === 0}
+    />
+  );
+}
+
+function VendorAgeingTable({
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+}) {
   const router = useRouter();
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<VendorAgeingRow>([]);
+
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <AccountsTableScroll>
+        <AccountsRichTable
+          columns={COLUMNS}
+          rows={pagedRows}
+          minWidth={1100}
+          getRowKey={(r) => r.vendorId}
+          emptyMessage="No records found."
+          onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
+        />
+      </AccountsTableScroll>
+      {visible.length > 0 && (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function VendorAgeingClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
   const [financialYearId, setFinancialYearId] = useState("all");
@@ -67,7 +216,7 @@ export default function VendorAgeingClient() {
 
   const filterOptions = useMemo(() => getPayablesFilterOptions(), [refreshKey]);
 
-  const rows = useMemo(() => {
+  const toolbarFiltered = useMemo(() => {
     let data = computeVendorAgeingRows(asOnDate, {
       vendorId: vendorId === "all" ? undefined : Number(vendorId),
     });
@@ -81,10 +230,10 @@ export default function VendorAgeingClient() {
     return data;
   }, [asOnDate, vendorId, search, refreshKey]);
 
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [rows, page, pageSize]);
+  const getCellValue = useCallback(
+    (row: VendorAgeingRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
   const exportMeta = useMemo(() => {
     const fy =
@@ -105,104 +254,52 @@ export default function VendorAgeingClient() {
     };
   }, [financialYearId, vendorId, search, asOnDate, filterOptions.vendors]);
 
-  const handleExportExcel = useCallback(async () => {
-    setExporting(true);
-    try {
-      await exportSupplierAgeingToExcel(rows, exportMeta);
-    } finally {
-      setExporting(false);
-    }
-  }, [rows, exportMeta]);
-
-  const handleExportPdf = useCallback(() => {
-    exportSupplierAgeingToPdf(rows, exportMeta);
-  }, [rows, exportMeta]);
-
-  const amountCol = (
-    key: keyof Pick<
-      VendorAgeingRow,
-      "totalOutstanding" | "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
-    >,
-    label: string,
-    bold?: boolean,
-  ): AccountsRichColumnDef<VendorAgeingRow> => ({
-    key,
-    label,
-    align: "right",
-    render: (r) => (
-      <span className={cn(MONEY_CELL_CLASS, bold && "font-semibold text-foreground")}>
-        {formatMoney(r[key])}
-      </span>
-    ),
-  });
-
-  const columns = useMemo((): AccountsRichColumnDef<VendorAgeingRow>[] => [
-    {
-      key: "vendorName",
-      label: "Supplier",
-      render: (r) => (
-        <Link
-          href={`/accounts/payables/outstanding/${r.vendorId}`}
-          className="text-xs font-medium text-brand-700 hover:underline"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {r.vendorName}
-        </Link>
-      ),
-    },
-    amountCol("totalOutstanding", "Total Outstanding", true),
-    amountCol("bucket0_30", "0-30 Days"),
-    amountCol("bucket31_60", "31-60 Days"),
-    amountCol("bucket61_90", "61-90 Days"),
-    amountCol("bucket91_120", "91-120 Days"),
-    amountCol("bucketAbove120", "Above 120 Days"),
-  ], []);
-
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Payables", "Supplier Ageing")}
-      title="Supplier Ageing"
-      description="Supplier outstanding grouped by ageing buckets as on the selected date."
-      filters={
-        <ReportFilterRow
-          end={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              disabled={exporting || rows.length === 0}
-            />
-          }
-        >
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
-          <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
-          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search supplier…" />
-        </ReportFilterRow>
-      }
-      layout="split"
-      className="h-full min-h-0"
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={{
+        vendorName: { type: "text" },
+        totalOutstanding: { type: "amount" },
+        bucket0_30: { type: "amount" },
+        bucket31_60: { type: "amount" },
+        bucket61_90: { type: "amount" },
+        bucket91_120: { type: "amount" },
+        bucketAbove120: { type: "amount" },
+      }}
+      defaultSortKey="totalOutstanding"
+      defaultSortDir="desc"
     >
-      <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableScroll>
-          <AccountsRichTable
-            columns={columns}
-            rows={pagedRows}
-            minWidth={1100}
-            getRowKey={(r) => r.vendorId}
-            emptyMessage="No records found."
-            onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
-          />
-        </AccountsTableScroll>
-        {rows.length > 0 && (
-          <AccountsTablePagination
-            page={page}
-            pageSize={pageSize}
-            totalRecords={rows.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        )}
-      </div>
-    </AccountsPageShell>
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Payables", "Supplier Ageing")}
+        title="Supplier Ageing"
+        description="Supplier outstanding grouped by ageing buckets as on the selected date."
+        filters={
+          <ReportFilterRow
+            end={
+              <AgeingExport
+                exportMeta={exportMeta}
+                exporting={exporting}
+                onExportingChange={setExporting}
+              />
+            }
+          >
+            <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
+            <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+            <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
+            <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search supplier…" />
+          </ReportFilterRow>
+        }
+        layout="split"
+        className="h-full min-h-0"
+      >
+        <VendorAgeingTable
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </AccountsPageShell>
+    </AccountsColumnFilterProvider>
   );
 }

@@ -14,7 +14,6 @@ import {
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -22,6 +21,10 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -30,8 +33,7 @@ import {
   buildCashBookStatement,
   CASH_BOOK_VOUCHER_TYPE_OPTIONS,
   getCashBookLedgers,
-  sortCashBookTransactions,
-  type CashBookSortKey,
+  type CashBookDisplayRow,
 } from "./cash-book-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { exportCashBookToExcel, exportCashBookToPdf } from "./cash-book-export";
@@ -44,10 +46,6 @@ function CashBookPageContent() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<CashBookSortKey>("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
   const sectionRefresh = useAccountsSectionRefresh();
@@ -77,17 +75,95 @@ function CashBookPageContent() {
     });
   }, [mounted, ledgerId, dateFrom, dateTo, voucherType, search]);
 
+  const transactionRows = statement?.transactionRows ?? [];
+
+  const getCellValue = useCallback((row: CashBookDisplayRow, key: string) => {
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      voucherNo: { type: "text" as const },
+      voucherType: { type: "text" as const },
+      particular: { type: "text" as const },
+      narration: { type: "text" as const },
+      receipt: { type: "amount" as const },
+      payment: { type: "amount" as const },
+    }),
+    [],
+  );
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={transactionRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <CashBookPageBody
+        ledgerId={ledgerId}
+        setLedgerId={setLedgerId}
+        ledgers={ledgers}
+        statement={statement}
+        transactionRows={transactionRows}
+        exporting={exporting}
+        setExporting={setExporting}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        voucherType={voucherType}
+        setVoucherType={setVoucherType}
+        search={search}
+        setSearch={setSearch}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CashBookPageBody({
+  ledgerId,
+  setLedgerId,
+  ledgers,
+  statement,
+  transactionRows,
+  exporting,
+  setExporting,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  voucherType,
+  setVoucherType,
+  search,
+  setSearch,
+}: {
+  ledgerId: string;
+  setLedgerId: (v: string) => void;
+  ledgers: ReturnType<typeof getCashBookLedgers>;
+  statement: ReturnType<typeof buildCashBookStatement> | null;
+  transactionRows: CashBookDisplayRow[];
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  voucherType: string;
+  setVoucherType: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(transactionRows);
   const openingRow = statement?.displayRows[0] ?? null;
-
-  const sortedTransactions = useMemo(() => {
-    if (!statement) return [];
-    return sortCashBookTransactions(statement.transactionRows, sortKey, sortDir);
-  }, [statement, sortKey, sortDir]);
-
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sortedTransactions.slice(start, start + pageSize);
-  }, [sortedTransactions, page, pageSize]);
 
   const exportMeta = useMemo(
     () => ({
@@ -101,36 +177,21 @@ function CashBookPageContent() {
   const canExport = Boolean(statement && ledgerId);
 
   const handleExportExcel = async () => {
-    if (!statement) return;
+    if (!statement || !openingRow) return;
     setExporting(true);
     try {
-      await exportCashBookToExcel(statement.displayRows, statement.summary, exportMeta);
+      const exportRows = [openingRow, ...columnFilteredRows];
+      await exportCashBookToExcel(exportRows, statement.summary, exportMeta);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    if (!statement) return;
-    exportCashBookToPdf(statement.displayRows, statement.summary, exportMeta);
+    if (!statement || !openingRow) return;
+    const exportRows = [openingRow, ...columnFilteredRows];
+    exportCashBookToPdf(exportRows, statement.summary, exportMeta);
   };
-
-  const handleSort = useCallback((key: string) => {
-    const k = key as CashBookSortKey;
-    setSortKey((prev) => {
-      if (prev === k) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setSortDir("asc");
-      return k;
-    });
-    setPage(1);
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-  }, [ledgerId, dateFrom, dateTo, voucherType, search, pageSize]);
 
   const summaryItems = statement
     ? [
@@ -162,7 +223,7 @@ function CashBookPageContent() {
     voucherType === "all";
 
   const showNoFilterResults =
-    ledgerId && statement && statement.hasPeriodTransactions && sortedTransactions.length === 0;
+    ledgerId && statement && statement.hasPeriodTransactions && transactionRows.length === 0;
 
   return (
     <AccountsPageShell
@@ -192,13 +253,7 @@ function CashBookPageContent() {
             <Label className={filterLabelClass}>
               Cash Ledger <span className="text-red-500">*</span>
             </Label>
-            <Select
-              value={ledgerId || undefined}
-              onValueChange={(value) => {
-                setLedgerId(value);
-                setPage(1);
-              }}
-            >
+            <Select value={ledgerId || undefined} onValueChange={setLedgerId}>
               <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
                 <SelectValue placeholder="Select cash ledger…" />
               </SelectTrigger>
@@ -292,28 +347,11 @@ function CashBookPageContent() {
                 </div>
               </div>
             ) : statement && openingRow ? (
-              <>
-                <CashBookTable
-                  openingRow={openingRow}
-                  transactionRows={paginatedTransactions}
-                  summary={statement.summary}
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                />
-                {sortedTransactions.length > 0 && (
-                  <div className="flex-shrink-0 border-t border-border">
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={sortedTransactions.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="transactions"
-                    />
-                  </div>
-                )}
-              </>
+              <CashBookTable
+                openingRow={openingRow}
+                transactionRows={transactionRows}
+                summary={statement.summary}
+              />
             ) : null}
           </>
         )}

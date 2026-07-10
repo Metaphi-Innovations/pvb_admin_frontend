@@ -18,7 +18,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -34,8 +33,14 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { SectionTabs } from "../../components/AccountsUI";
-import { NoteWorkflowBadge } from "../../components/NoteWorkflowBadge";
+import {
+  SectionTabs,
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "../../components/AccountsUI";
 import { CreditNoteCancelDialog } from "../../credit-notes/components/CreditNoteCancelDialog";
 import { CreditNoteDetailSheet } from "../../credit-notes/components/CreditNoteDetailSheet";
 import { PendingCreditNotesPanel } from "../../credit-notes/components/PendingCreditNotesPanel";
@@ -67,6 +72,365 @@ const STATUS_TABS = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
+function CreditNotesRecordsTable({
+  mounted,
+  toolbarFiltered,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  onView,
+  onCancel,
+}: {
+  mounted: boolean;
+  toolbarFiltered: CreditNoteRecord[];
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  onView: (r: CreditNoteRecord) => void;
+  onCancel: (r: CreditNoteRecord) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows(toolbarFiltered);
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <>
+      <AccountsTableScroll className="[&_.accounts-table-td-inner]:min-w-0 [&_.accounts-table-td-inner]:overflow-hidden">
+        <AccountsTable minWidth={1180}>
+          <colgroup>
+            <col className="w-[9rem]" />
+            <col className="w-[5.5rem]" />
+            <col className="w-[8rem]" />
+            <col className="w-[9rem]" />
+            <col className="w-[6rem]" />
+            <col className="w-[5.5rem]" />
+            <col className="w-[5rem]" />
+            <col className="w-[5rem]" />
+            <col className="w-[5rem]" />
+            <col className="w-[5.5rem]" />
+            <col className="w-[5.5rem]" />
+            <col className="w-[4.5rem]" />
+          </colgroup>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="CN No." colKey="creditNoteNo" />
+              <SortTh label="Source" colKey="source" />
+              <SortTh label="Invoice" colKey="invoice" />
+              <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
+              <SortTh label="Date" colKey="creditNoteDate" filterType="date" />
+              <SortTh label="Taxable" colKey="taxableValue" filterType="amount" align="right" />
+              <SortTh label="CGST" colKey="cgstAmount" filterType="amount" align="right" />
+              <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
+              <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
+              <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" />
+              <AccountsColumnHeader
+                label="Actions"
+                colKey="_actions"
+                sortable={false}
+                filterable={false}
+                align="right"
+                className={accountsActionColClass("multi")}
+              />
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {!mounted ? (
+              <AccountsTableEmpty colSpan={11} message="Loading credit notes…" />
+            ) : toolbarFiltered.length === 0 ? (
+              <AccountsTableEmpty colSpan={11} message="No credit notes found." />
+            ) : visible.length === 0 ? (
+              <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
+            ) : (
+              pagedRows.map((r) => (
+                <AccountsTableRow key={r.id}>
+                  <AccountsTableCell mono className="font-semibold text-brand-700">
+                    <button
+                      type="button"
+                      className="hover:underline text-left truncate max-w-full font-mono text-xs font-semibold text-brand-700"
+                      title={r.creditNoteNo}
+                      onClick={() => onView(r)}
+                    >
+                      {r.creditNoteNo}
+                    </button>
+                  </AccountsTableCell>
+                  <AccountsTableCell className="truncate text-xs">
+                    {CREDIT_NOTE_SOURCE_LABELS[r.source]}
+                  </AccountsTableCell>
+                  <AccountsTableCell mono className="truncate text-xs" title={formatLinkedInvoiceNos(r.linkedInvoices) || r.sourceInvoiceNo || undefined}>
+                    {formatLinkedInvoiceNos(r.linkedInvoices) || r.sourceInvoiceNo || "—"}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="accounts-col-party truncate text-xs font-medium" title={r.customerName}>
+                    {r.customerName}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">{r.creditNoteDate}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className="text-xs">{formatINR(r.taxableValue)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className="text-xs">{formatINR(r.cgstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className="text-xs">{formatINR(r.sgstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className="text-xs">{formatINR(r.igstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money className="text-xs font-medium">
+                    {formatINR(r.currentCreditAmount)}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                    <AccountsTableActionCell>
+                      <AccountsViewAction
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onView(r);
+                        }}
+                      />
+                      {getCreditNoteRowActions(r).includes("edit") && (
+                        <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
+                      )}
+                      {getCreditNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
+                        <AccountsMoreActions contentClassName="w-40">
+                          {getCreditNoteRowActions(r)
+                            .filter((a) => a !== "view" && a !== "edit")
+                            .map((a) =>
+                              a === "cancel" ? (
+                                <DropdownMenuItem
+                                  key="cancel"
+                                  className="text-xs gap-2 text-red-600"
+                                  onClick={() => onCancel(r)}
+                                >
+                                  <XCircle className="w-4 h-4" /> Cancel
+                                </DropdownMenuItem>
+                              ) : null,
+                            )}
+                        </AccountsMoreActions>
+                      )}
+                    </AccountsTableActionCell>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))
+            )}
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableScroll>
+      {mounted && visible.length > 0 ? (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          recordLabel="credit notes"
+        />
+      ) : null}
+    </>
+  );
+}
+
+function CreditNotesRecordsTab({
+  mounted,
+  records,
+  statusTab,
+  setStatusTab,
+  counts,
+  search,
+  setSearch,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  onView,
+  onCancel,
+}: {
+  mounted: boolean;
+  records: CreditNoteRecord[];
+  statusTab: string;
+  setStatusTab: (v: string) => void;
+  counts: ReturnType<typeof computeCreditNoteTabCounts>;
+  search: string;
+  setSearch: (v: string) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  onView: (r: CreditNoteRecord) => void;
+  onCancel: (r: CreditNoteRecord) => void;
+}) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
+
+  const toolbarFiltered = useMemo(
+    () =>
+      mounted
+        ? filterCreditNotes(records, {
+            tab: statusTab,
+            search,
+            dateFrom,
+            dateTo,
+          })
+        : [],
+    [records, statusTab, search, dateFrom, dateTo, mounted],
+  );
+
+  const getCellValue = useCallback((row: CreditNoteRecord, key: string) => {
+    if (key === "source") return CREDIT_NOTE_SOURCE_LABELS[row.source];
+    if (key === "invoice") return formatLinkedInvoiceNos(row.linkedInvoices) || row.sourceInvoiceNo || "";
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
+
+  const columnConfig = useMemo(
+    () => ({
+      creditNoteNo: { type: "text" as const },
+      source: { type: "text" as const },
+      invoice: { type: "text" as const },
+      customerName: { type: "text" as const },
+      creditNoteDate: { type: "date" as const },
+      taxableValue: { type: "amount" as const },
+      cgstAmount: { type: "amount" as const },
+      sgstAmount: { type: "amount" as const },
+      igstAmount: { type: "amount" as const },
+      currentCreditAmount: { type: "amount" as const },
+    }),
+    [],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, pageSize, statusTab]);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="creditNoteDate"
+      defaultSortDir="desc"
+    >
+      <CreditNotesRecordsTabBody
+        mounted={mounted}
+        toolbarFiltered={toolbarFiltered}
+        statusTab={statusTab}
+        setStatusTab={setStatusTab}
+        counts={counts}
+        search={search}
+        setSearch={setSearch}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        exporting={exporting}
+        setExporting={setExporting}
+        onView={onView}
+        onCancel={onCancel}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CreditNotesRecordsTabBody({
+  mounted,
+  toolbarFiltered,
+  statusTab,
+  setStatusTab,
+  counts,
+  search,
+  setSearch,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  exporting,
+  setExporting,
+  onView,
+  onCancel,
+}: {
+  mounted: boolean;
+  toolbarFiltered: CreditNoteRecord[];
+  statusTab: string;
+  setStatusTab: (v: string) => void;
+  counts: ReturnType<typeof computeCreditNoteTabCounts>;
+  search: string;
+  setSearch: (v: string) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  onView: (r: CreditNoteRecord) => void;
+  onCancel: (r: CreditNoteRecord) => void;
+}) {
+  const visible = useAccountsFilteredRows(toolbarFiltered);
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      await exportCreditNotesToExcel(visible);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
+      <div className="flex-shrink-0">
+        <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
+      </div>
+      <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
+        <AccountsListingFilterCard
+          actions={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportExcel}
+              disabled={exporting || visible.length === 0}
+            />
+          }
+        >
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportSearchFilter
+            value={search}
+            onChange={setSearch}
+            placeholder="Search CN no., source, invoice, return, customer, scheme…"
+            className="min-w-[200px] flex-1 max-w-md"
+          />
+        </AccountsListingFilterCard>
+        <AccountsListingTableCard>
+          <CreditNotesRecordsTable
+            mounted={mounted}
+            toolbarFiltered={toolbarFiltered}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onView={onView}
+            onCancel={onCancel}
+          />
+        </AccountsListingTableCard>
+      </div>
+    </div>
+  );
+}
+
 export default function CreditNotesListClient() {
   const router = useRouter();
   const mounted = useClientMounted();
@@ -79,9 +443,6 @@ export default function CreditNotesListClient() {
   const [search, setSearch] = useState("");
   const [cancelTarget, setCancelTarget] = useState<CreditNoteRecord | null>(null);
   const [viewTarget, setViewTarget] = useState<CreditNoteRecord | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
 
   const refresh = useCallback(() => {
     if (!mounted) return;
@@ -95,37 +456,6 @@ export default function CreditNotesListClient() {
 
   const counts = useMemo(() => computeCreditNoteTabCounts(records), [records]);
 
-  const visible = useMemo(
-    () =>
-      mounted
-        ? filterCreditNotes(records, {
-            tab: statusTab,
-            search,
-            dateFrom,
-            dateTo,
-          })
-        : [],
-    [records, statusTab, search, dateFrom, dateTo, mounted],
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, dateFrom, dateTo, pageSize, statusTab, moduleTab]);
-
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return visible.slice(start, start + pageSize);
-  }, [visible, page, pageSize]);
-
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      await exportCreditNotesToExcel(visible);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
     <>
       <AccountsPageShell
@@ -137,13 +467,7 @@ export default function CreditNotesListClient() {
           <Button
             size="sm"
             className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
-            onClick={() => {
-              const target = `${LIST_PATH}/new?mode=fresh`;
-              // #region agent log
-              fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'db7cdd'},body:JSON.stringify({sessionId:'db7cdd',hypothesisId:'A-B',location:'CreditNotesListClient.tsx:create-btn',message:'Create Credit Note clicked',data:{target},timestamp:Date.now()})}).catch(()=>{});
-              // #endregion
-              router.push(target);
-            }}
+            onClick={() => router.push(`${LIST_PATH}/new?mode=fresh`)}
           >
             <Plus className="w-3.5 h-3.5" /> Create Credit Note
           </Button>
@@ -168,165 +492,21 @@ export default function CreditNotesListClient() {
           {moduleTab === "pending" ? (
             <PendingCreditNotesPanel />
           ) : (
-            <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
-              <div className="flex-shrink-0">
-                <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
-              </div>
-              <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
-                <AccountsListingFilterCard
-                  actions={
-                    <AccountsExportMenu
-                      onExcel={handleExportExcel}
-                      onPdf={handleExportExcel}
-                      disabled={exporting || visible.length === 0}
-                    />
-                  }
-                >
-                  <AccountsListingDateFilter
-                    dateFrom={dateFrom}
-                    dateTo={dateTo}
-                    onDateFromChange={setDateFrom}
-                    onDateToChange={setDateTo}
-                  />
-                  <ReportSearchFilter
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search CN no., source, invoice, return, customer, scheme…"
-                    className="min-w-[200px] flex-1 max-w-md"
-                  />
-                </AccountsListingFilterCard>
-                <AccountsListingTableCard>
-                  <AccountsTableScroll className="[&_.accounts-table-td-inner]:min-w-0 [&_.accounts-table-td-inner]:overflow-hidden">
-                    <AccountsTable minWidth={1180}>
-                      <colgroup>
-                        <col className="w-[9rem]" />
-                        <col className="w-[5.5rem]" />
-                        <col className="w-[8rem]" />
-                        <col className="w-[9rem]" />
-                        <col className="w-[6rem]" />
-                        <col className="w-[5.5rem]" />
-                        <col className="w-[5rem]" />
-                        <col className="w-[5rem]" />
-                        <col className="w-[5rem]" />
-                        <col className="w-[5.5rem]" />
-                        <col className="w-[5.5rem]" />
-                        <col className="w-[4.5rem]" />
-                      </colgroup>
-                      <AccountsTableHead>
-                        <AccountsTableHeadRow>
-                          <AccountsTableHeadCell uppercase>CN No.</AccountsTableHeadCell>
-                          <AccountsTableHeadCell uppercase>Source</AccountsTableHeadCell>
-                          <AccountsTableHeadCell uppercase>Invoice</AccountsTableHeadCell>
-                          <AccountsTableHeadCell uppercase className="accounts-col-party">Customer</AccountsTableHeadCell>
-                          <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-                          <AccountsTableHeadCell align="right" uppercase>Taxable</AccountsTableHeadCell>
-                          <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
-                          <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
-                          <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
-                          <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
-                          <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
-                          <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>
-                            Actions
-                          </AccountsTableHeadCell>
-                        </AccountsTableHeadRow>
-                      </AccountsTableHead>
-                      <AccountsTableBody>
-                        {!mounted ? (
-                          <AccountsTableEmpty colSpan={12} message="Loading credit notes…" />
-                        ) : visible.length === 0 ? (
-                          <AccountsTableEmpty
-                            colSpan={12}
-                            message="No credit notes found."
-                            onClear={
-                              search || dateFrom || dateTo
-                                ? () => {
-                                    setSearch("");
-                                    setDateFrom("");
-                                    setDateTo("");
-                                  }
-                                : undefined
-                            }
-                          />
-                        ) : (
-                          pagedRows.map((r) => (
-                            <AccountsTableRow key={r.id}>
-                              <AccountsTableCell mono className="font-semibold text-brand-700">
-                                <button
-                                  type="button"
-                                  className="hover:underline text-left truncate max-w-full font-mono text-xs font-semibold text-brand-700"
-                                  title={r.creditNoteNo}
-                                  onClick={() => setViewTarget(r)}
-                                >
-                                  {r.creditNoteNo}
-                                </button>
-                              </AccountsTableCell>
-                              <AccountsTableCell className="truncate text-xs">
-                                {CREDIT_NOTE_SOURCE_LABELS[r.source]}
-                              </AccountsTableCell>
-                              <AccountsTableCell mono className="truncate text-xs" title={formatLinkedInvoiceNos(r.linkedInvoices) || r.sourceInvoiceNo || undefined}>
-                                {formatLinkedInvoiceNos(r.linkedInvoices) || r.sourceInvoiceNo || "—"}
-                              </AccountsTableCell>
-                              <AccountsTableCell className="accounts-col-party truncate text-xs font-medium" title={r.customerName}>
-                                {r.customerName}
-                              </AccountsTableCell>
-                              <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">{r.creditNoteDate}</AccountsTableCell>
-                              <AccountsTableCell align="right" money className="text-xs">{formatINR(r.taxableValue)}</AccountsTableCell>
-                              <AccountsTableCell align="right" money className="text-xs">{formatINR(r.cgstAmount)}</AccountsTableCell>
-                              <AccountsTableCell align="right" money className="text-xs">{formatINR(r.sgstAmount)}</AccountsTableCell>
-                              <AccountsTableCell align="right" money className="text-xs">{formatINR(r.igstAmount)}</AccountsTableCell>
-                              <AccountsTableCell align="right" money className="text-xs font-medium">
-                                {formatINR(r.currentCreditAmount)}
-                              </AccountsTableCell>
-                              <AccountsTableCell><NoteWorkflowBadge status={r.status} /></AccountsTableCell>
-                              <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
-                                <AccountsTableActionCell>
-                                  <AccountsViewAction
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setViewTarget(r);
-                                    }}
-                                  />
-                                  {getCreditNoteRowActions(r).includes("edit") && (
-                                    <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
-                                  )}
-                                  {getCreditNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
-                                    <AccountsMoreActions contentClassName="w-40">
-                                      {getCreditNoteRowActions(r)
-                                        .filter((a) => a !== "view" && a !== "edit")
-                                        .map((a) =>
-                                          a === "cancel" ? (
-                                            <DropdownMenuItem
-                                              key="cancel"
-                                              className="text-xs gap-2 text-red-600"
-                                              onClick={() => setCancelTarget(r)}
-                                            >
-                                              <XCircle className="w-4 h-4" /> Cancel
-                                            </DropdownMenuItem>
-                                          ) : null,
-                                        )}
-                                    </AccountsMoreActions>
-                                  )}
-                                </AccountsTableActionCell>
-                              </AccountsTableCell>
-                            </AccountsTableRow>
-                          ))
-                        )}
-                      </AccountsTableBody>
-                    </AccountsTable>
-                  </AccountsTableScroll>
-                  {mounted && visible.length > 0 ? (
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={visible.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="credit notes"
-                    />
-                  ) : null}
-                </AccountsListingTableCard>
-              </div>
-            </div>
+            <CreditNotesRecordsTab
+              mounted={mounted}
+              records={records}
+              statusTab={statusTab}
+              setStatusTab={setStatusTab}
+              counts={counts}
+              search={search}
+              setSearch={setSearch}
+              dateFrom={dateFrom}
+              setDateFrom={setDateFrom}
+              dateTo={dateTo}
+              setDateTo={setDateTo}
+              onView={setViewTarget}
+              onCancel={setCancelTarget}
+            />
           )}
         </div>
       </AccountsPageShell>

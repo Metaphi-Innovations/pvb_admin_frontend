@@ -24,6 +24,23 @@ export function getCoaDisplayPath(
   return getAncestorPath(records, nodeId).filter((n) => !n.bankGroupFlag);
 }
 
+/** Cheap expandability check — avoids allocating the children array until expand. */
+export function coaTreeNodeHasChildren(
+  records: ChartOfAccount[],
+  parentId: number,
+): boolean {
+  const parent = records.find((r) => r.id === parentId);
+  if (!parent) return false;
+
+  if (isBankAccountsSubGroup(parent)) {
+    return getBankGroups(records).some(
+      (group) => getBankAccountLedgersUnderGroup(records, group.id).length > 0,
+    );
+  }
+
+  return getDirectChildren(records, parentId).some((c) => !isBankGroupNode(c));
+}
+
 /** Tree children — bank account ledgers appear directly under Bank Accounts (no 5th level). */
 export function getCoaTreeChildren(
   records: ChartOfAccount[],

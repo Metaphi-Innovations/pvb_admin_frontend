@@ -1,6 +1,6 @@
 "use client";
 
-import { VoucherEntryClient } from "./VoucherEntryClient";
+import { VoucherDualEntryForm } from "@/components/accounts/VoucherDualEntryForm";
 
 interface ContraVoucherFormProps {
   onDone?: () => void;
@@ -15,14 +15,18 @@ export function ContraVoucherForm({
   readOnly = false,
   onEdit,
 }: ContraVoucherFormProps) {
+  const cancelHref = voucherId
+    ? `/accounts/vouchers/view/${voucherId}`
+    : "/accounts/vouchers?tab=contra";
+
   return (
-    <VoucherEntryClient
+    <VoucherDualEntryForm
       voucherType="contra"
+      cancelHref={cancelHref}
       voucherId={voucherId}
       readOnly={readOnly}
       onEdit={onEdit}
       onDone={() => onDone?.()}
-      quickAddScope="bank_cash"
     />
   );
 }

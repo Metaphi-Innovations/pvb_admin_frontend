@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
@@ -37,7 +36,7 @@ export default function InventoryLedgerPageClient() {
         <table className="accounts-table w-full">
           <thead className="border-b border-border/60">
             <tr>
-              {["Ledger Code", "Ledger Name", "Type", "Opening Balance", "Current Balance", "Status"].map((h) => (
+              {["Ledger Code", "Ledger Name", "Type", "Opening Balance", "Current Balance"].map((h) => (
                 <th
                   key={h}
                   className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground ${
@@ -52,7 +51,7 @@ export default function InventoryLedgerPageClient() {
           <tbody>
             {ledgers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="accounts-table-empty">
+                <td colSpan={5} className="accounts-table-empty">
                   No inventory ledgers yet. Stock postings will appear here when items and stock opening are configured.
                 </td>
               </tr>
@@ -73,9 +72,6 @@ export default function InventoryLedgerPageClient() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <MoneyAmount amount={bal.amount} side={bal.balanceType} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <StatusBadge status={l.status} />
                     </td>
                   </tr>
                 );

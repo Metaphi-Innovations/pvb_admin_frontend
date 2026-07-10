@@ -12,7 +12,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
@@ -23,6 +22,11 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import {
@@ -38,6 +42,7 @@ import {
   flattenCashFlowForExport,
   formatSignedCashFlowAmount,
   type CashFlowLineItem,
+  type CashFlowStatement,
 } from "./cash-flow-data";
 import { exportCashFlowToExcel, exportCashFlowToPdf } from "./cash-flow-export";
 
@@ -111,6 +116,111 @@ function CashFlowRow({ line }: { line: CashFlowLineItem }) {
   );
 }
 
+function CashFlowBody({
+  mounted,
+  statement,
+  hasFilters,
+  resetFilters,
+  exportMeta,
+  exporting,
+  setExporting,
+  filterBar,
+}: {
+  mounted: boolean;
+  statement: CashFlowStatement;
+  hasFilters: boolean;
+  resetFilters: () => void;
+  exportMeta: Parameters<typeof exportCashFlowToExcel>[1];
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  filterBar: React.ReactNode;
+}) {
+  const columnFilteredLines = useAccountsFilteredRows(statement.lines);
+
+  const exportStatement = useMemo(
+    (): CashFlowStatement => ({
+      ...statement,
+      lines: columnFilteredLines,
+    }),
+    [statement, columnFilteredLines],
+  );
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const rows = flattenCashFlowForExport(exportStatement);
+      await exportCashFlowToExcel(rows, exportMeta, exportStatement);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    const rows = flattenCashFlowForExport(exportStatement);
+    exportCashFlowToPdf(rows, exportMeta, exportStatement);
+  };
+
+  const showTable = mounted && statement.hasData;
+
+  return (
+    <AccountsPageShell
+      breadcrumbs={accountsBreadcrumb("Reports", "Cash Flow")}
+      title="Cash Flow"
+      description="Cash flow statement for the selected period."
+      hideDescription
+      layout="split"
+      className="h-full min-h-0"
+      actions={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || !mounted || columnFilteredLines.length === 0}
+        />
+      }
+      filters={filterBar}
+    >
+      <AccountsTableListing>
+        {!mounted ? (
+          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+            Loading Cash Flow…
+          </div>
+        ) : !showTable ? (
+          <div className="accounts-table-empty py-4 text-center">
+            No Cash Flow entries match the current search.
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="block mx-auto mt-1 text-brand-600 hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        ) : statement.lines.length > 0 && columnFilteredLines.length === 0 ? (
+          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
+        ) : (
+          <AccountsTable minWidth={520}>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                <SortTh label="Particular" colKey="particular" />
+                <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
+              {columnFilteredLines.map((line) => (
+                <CashFlowRow key={line.id} line={line} />
+              ))}
+            </AccountsTableBody>
+          </AccountsTable>
+        )}
+      </AccountsTableListing>
+    </AccountsPageShell>
+  );
+}
+
 export default function CashFlowPageClient() {
   const mounted = useClientMounted();
 
@@ -118,7 +228,6 @@ export default function CashFlowPageClient() {
   const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
   const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
   const [datesReady, setDatesReady] = useState(false);
-
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
@@ -161,6 +270,19 @@ export default function CashFlowPageClient() {
     [sourceStatement, debouncedSearch],
   );
 
+  const getCellValue = useCallback(
+    (row: CashFlowLineItem, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
+
+  const columnConfig = useMemo(
+    () => ({
+      particular: { type: "text" as const },
+      amount: { type: "amount" as const },
+    }),
+    [],
+  );
+
   const hasFilters =
     Boolean(search.trim()) ||
     (datesReady && preset !== "this_month");
@@ -173,8 +295,6 @@ export default function CashFlowPageClient() {
     setDateTo(to);
   }, []);
 
-  
-
   const exportMeta = useMemo(
     () => ({
       dateFrom,
@@ -184,116 +304,63 @@ export default function CashFlowPageClient() {
     [dateFrom, dateTo],
   );
 
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      const rows = flattenCashFlowForExport(statement);
-      await exportCashFlowToExcel(rows, exportMeta, statement);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportPdf = () => {
-    const rows = flattenCashFlowForExport(statement);
-    exportCashFlowToPdf(rows, exportMeta, statement);
-  };
-
-  const showTable = mounted && statement.hasData;
+  const filterBar = (
+    <ReportFilterRow className="items-end gap-2">
+      <ReportDateRangeFilter
+        preset={preset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onPresetChange={handlePresetChange}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+      />
+      <div className="space-y-0.5 min-w-[180px] flex-1">
+        <Label className={filterLabelClass}>Search Particular</Label>
+        <div className="relative">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Name…"
+            className={cn(filterControlClass, "pr-7")}
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+      {hasFilters && (
+        <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
+          Reset
+        </Button>
+      )}
+    </ReportFilterRow>
+  );
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", "Cash Flow")}
-      title="Cash Flow"
-      description="Cash flow statement for the selected period."
-      hideDescription
-      layout="split"
-      className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !statement.hasData}
-        />
-      }
-      filters={
-        <ReportFilterRow className="items-end gap-2">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={handlePresetChange}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-0.5 min-w-[180px] flex-1">
-            <Label className={filterLabelClass}>Search Particular</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name…"
-                className={cn(filterControlClass, "pr-7")}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
-          {hasFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-sm px-2"
-              onClick={resetFilters}
-            >
-              Reset
-            </Button>
-          )}
-        </ReportFilterRow>
-      }
+    <AccountsColumnFilterProvider
+      rows={statement.lines}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="particular"
+      defaultSortDir="asc"
     >
-      <AccountsTableListing>
-        {!mounted ? (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            Loading Cash Flow…
-          </div>
-        ) : !showTable ? (
-          <div className="accounts-table-empty py-4 text-center">
-            No Cash Flow entries match the current search.
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="block mx-auto mt-1 text-brand-600 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <AccountsTable minWidth={520}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                <AccountsTableHeadCell>Particular</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right">Amount</AccountsTableHeadCell>
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {statement.lines.map((line) => (
-                <CashFlowRow key={line.id} line={line} />
-              ))}
-            </AccountsTableBody>
-          </AccountsTable>
-        )}
-      </AccountsTableListing>
-    </AccountsPageShell>
+      <CashFlowBody
+        mounted={mounted}
+        statement={statement}
+        hasFilters={hasFilters}
+        resetFilters={resetFilters}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        filterBar={filterBar}
+      />
+    </AccountsColumnFilterProvider>
   );
 }

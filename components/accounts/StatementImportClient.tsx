@@ -89,8 +89,8 @@ export function StatementImportClient() {
               <Upload className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Import Bank Statement</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h1 className="accounts-page-title">Import Bank Statement</h1>
+              <p className="accounts-page-subtitle">
                 Upload Excel or CSV file to import transactions
               </p>
             </div>
@@ -222,10 +222,10 @@ export function StatementImportClient() {
               <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h2 className="text-base font-semibold text-center text-foreground mb-2">
+              <h2 className="accounts-card-title text-center mb-2">
                 Import Successful!
               </h2>
-              <p className="text-sm text-center text-muted-foreground mb-6">
+              <p className="text-xs text-center text-muted-foreground mb-6">
                 Your bank statement has been imported successfully
               </p>
               <div className="rounded-lg border border-border/60 bg-slate-50/50 p-4 space-y-2 mb-6">
@@ -256,10 +256,10 @@ export function StatementImportClient() {
               <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8" />
               </div>
-              <h2 className="text-base font-semibold text-center text-foreground mb-2">
+              <h2 className="accounts-card-title text-center mb-2">
                 Import Failed
               </h2>
-              <p className="text-sm text-center text-muted-foreground mb-6">{error}</p>
+              <p className="text-xs text-center text-muted-foreground mb-6">{error}</p>
               <div className="flex gap-3">
                 <Button className="flex-1 h-10" onClick={reset}>
                   Try Again
@@ -274,7 +274,7 @@ export function StatementImportClient() {
 
         {/* Help Text */}
         <div className="mt-6 rounded-lg border border-border/60 bg-white p-4">
-          <h3 className="text-sm font-semibold text-foreground mb-2">Expected File Format</h3>
+          <h3 className="accounts-card-title mb-2">Expected File Format</h3>
           <div className="text-xs text-muted-foreground space-y-1">
             <p>• Columns: Date, Narration, Reference Number, Debit, Credit, Balance</p>
             <p>• Date format: DD/MM/YYYY or YYYY-MM-DD</p>

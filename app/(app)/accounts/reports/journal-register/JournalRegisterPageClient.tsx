@@ -26,7 +26,7 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
-import { SortTh } from "../../components/AccountsUI";
+import { SortTh, AccountsColumnHeader, AccountsColumnFilterProvider, useAccountsColumnFilterContext, useAccountsFilteredRows } from "../../components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -40,9 +40,7 @@ import {
   computeJournalRegisterSummary,
   filterJournalRegisterRows,
   formatJournalRegisterDate,
-  sortJournalRegisterRows,
   type JournalRegisterRow,
-  type JournalRegisterSortKey,
 } from "./journal-register-data";
 import {
   exportJournalRegisterToExcel,
@@ -168,8 +166,6 @@ export default function JournalRegisterPageClient() {
 
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<JournalRegisterSortKey>("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -197,17 +193,24 @@ export default function JournalRegisterPageClient() {
     [sourceRows, dateFrom, dateTo, ledgerSearch, search],
   );
 
-  const sorted = useMemo(
-    () => sortJournalRegisterRows(filtered, sortKey, sortDir),
-    [filtered, sortKey, sortDir],
+  const getCellValue = useCallback(
+    (row: JournalRegisterRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
   );
 
-  const summary = useMemo(() => computeJournalRegisterSummary(filtered), [filtered]);
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sorted.slice(start, start + pageSize);
-  }, [sorted, page, pageSize]);
+  const columnConfig = useMemo(
+    () => ({
+      date: { type: "date" as const },
+      journalNo: { type: "text" as const },
+      referenceNo: { type: "text" as const },
+      debitLedger: { type: "text" as const },
+      creditLedger: { type: "text" as const },
+      narration: { type: "text" as const },
+      debitAmount: { type: "amount" as const },
+      creditAmount: { type: "amount" as const },
+    }),
+    [],
+  );
 
   const hasFilters = Boolean(search.trim()) || Boolean(ledgerSearch.trim());
 
@@ -217,17 +220,6 @@ export default function JournalRegisterPageClient() {
     setPage(1);
   }, []);
 
-  const handleSort = (key: JournalRegisterSortKey) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  const onColumnSort = (key: string) => handleSort(key as JournalRegisterSortKey);
-
-  // Reset page on filter change
   useEffect(() => {
     setPage(1);
   }, [dateFrom, dateTo, ledgerSearch, search, pageSize]);
@@ -242,19 +234,118 @@ export default function JournalRegisterPageClient() {
     [dateFrom, dateTo, ledgerSearch, search],
   );
 
+  return (
+    <AccountsColumnFilterProvider
+      rows={filtered}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <JournalRegisterBody
+        mounted={mounted}
+        filtered={filtered}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        preset={preset}
+        handlePresetChange={handlePresetChange}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        ledgerSearch={ledgerSearch}
+        setLedgerSearch={setLedgerSearch}
+        search={search}
+        setSearch={setSearch}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        viewRow={viewRow}
+        setViewRow={setViewRow}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function JournalRegisterBody({
+  mounted,
+  filtered,
+  hasFilters,
+  clearFilters,
+  preset,
+  handlePresetChange,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  ledgerSearch,
+  setLedgerSearch,
+  search,
+  setSearch,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  exporting,
+  setExporting,
+  exportMeta,
+  viewRow,
+  setViewRow,
+}: {
+  mounted: boolean;
+  filtered: JournalRegisterRow[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  preset: DateRangePresetId;
+  handlePresetChange: (newPreset: DateRangePresetId) => void;
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  ledgerSearch: string;
+  setLedgerSearch: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: Parameters<typeof exportJournalRegisterToExcel>[1];
+  viewRow: JournalRegisterRow | null;
+  setViewRow: (row: JournalRegisterRow | null) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(filtered);
+  const summary = useMemo(() => computeJournalRegisterSummary(columnFilteredRows), [columnFilteredRows]);
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
   const handleExportExcel = async () => {
-    if (sorted.length === 0 || exporting) return;
+    if (columnFilteredRows.length === 0 || exporting) return;
     setExporting(true);
     try {
-      await exportJournalRegisterToExcel(sorted, exportMeta, summary);
+      await exportJournalRegisterToExcel(columnFilteredRows, exportMeta, summary);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    if (sorted.length === 0 || exporting) return;
-    exportJournalRegisterToPdf(sorted, exportMeta, summary);
+    if (columnFilteredRows.length === 0 || exporting) return;
+    exportJournalRegisterToPdf(columnFilteredRows, exportMeta, summary);
   };
 
   return (
@@ -267,7 +358,7 @@ export default function JournalRegisterPageClient() {
           <AccountsExportMenu
             onExcel={handleExportExcel}
             onPdf={handleExportPdf}
-            disabled={exporting || sorted.length === 0}
+            disabled={exporting || columnFilteredRows.length === 0}
           />
         }
         filters={
@@ -319,31 +410,15 @@ export default function JournalRegisterPageClient() {
             <AccountsTable minWidth={1120}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                  <SortTh label="Journal No." colKey="journalNo" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                  <AccountsTableHeadCell uppercase>Reference No.</AccountsTableHeadCell>
-                  <SortTh label="Debit Ledger" colKey="debitLedger" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                  <SortTh label="Credit Ledger" colKey="creditLedger" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                  <AccountsTableHeadCell uppercase>Narration</AccountsTableHeadCell>
-                  <SortTh
-                    label="Debit Amount"
-                    colKey="debitAmount"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={onColumnSort}
-                    align="right"
-                  />
-                  <SortTh
-                    label="Credit Amount"
-                    colKey="creditAmount"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={onColumnSort}
-                    align="right"
-                  />
-                  <AccountsTableHeadCell className="w-10 text-center" uppercase>
-                    View
-                  </AccountsTableHeadCell>
+                <SortTh label="Date" colKey="date" filterType="date" />
+                <SortTh label="Journal No." colKey="journalNo" />
+                <SortTh label="Reference No." colKey="referenceNo" />
+                <SortTh label="Debit Ledger" colKey="debitLedger" />
+                <SortTh label="Credit Ledger" colKey="creditLedger" />
+                <SortTh label="Narration" colKey="narration" />
+                <SortTh label="Debit Amount" colKey="debitAmount" filterType="amount" align="right" />
+                <SortTh label="Credit Amount" colKey="creditAmount" filterType="amount" align="right" />
+                <AccountsColumnHeader label="View" colKey="_view" sortable={false} filterable={false} align="center" className="w-10" />
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
@@ -353,12 +428,18 @@ export default function JournalRegisterPageClient() {
                       Loading…
                     </AccountsTableCell>
                   </AccountsTableRow>
-                ) : sorted.length === 0 ? (
+                ) : filtered.length === 0 ? (
                   <AccountsTableEmpty
                     colSpan={9}
                     message="No journal voucher entries found for the selected period."
                     onClear={hasFilters ? clearFilters : undefined}
                   />
+                ) : columnFilteredRows.length === 0 ? (
+                  <AccountsTableRow>
+                    <AccountsTableCell colSpan={9} className="accounts-table-empty">
+                      No records match the column filters.
+                    </AccountsTableCell>
+                  </AccountsTableRow>
                 ) : (
                   paginated.map((row) => (
                     <AccountsTableRow key={row.id}>
@@ -412,7 +493,7 @@ export default function JournalRegisterPageClient() {
                   ))
                 )}
               </AccountsTableBody>
-              {sorted.length > 0 && (
+              {columnFilteredRows.length > 0 && (
                 <AccountsTableFoot>
                   <AccountsTableRow>
                     <AccountsTableCell colSpan={6} className="font-semibold text-xs text-foreground">
@@ -439,7 +520,7 @@ export default function JournalRegisterPageClient() {
             </AccountsTable>
           </AccountsTableScroll>
 
-          {sorted.length > 0 && (
+          {columnFilteredRows.length > 0 && (
             <div className="flex flex-col gap-2 border-t border-border bg-muted/20 px-4 py-2 flex-shrink-0">
               <div className="flex items-center gap-2 text-xs">
                 {summary.isBalanced ? (
@@ -463,7 +544,7 @@ export default function JournalRegisterPageClient() {
               <AccountsTablePagination
                 page={page}
                 pageSize={pageSize}
-                totalRecords={sorted.length}
+                totalRecords={columnFilteredRows.length}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
                 recordLabel="journal vouchers"

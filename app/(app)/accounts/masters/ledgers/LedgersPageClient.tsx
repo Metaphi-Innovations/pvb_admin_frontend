@@ -22,14 +22,19 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
-import { SortTh, StatusBadge } from "../../components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "../../components/AccountsUI";
 import { getCoaLedgers, loadChartOfAccounts, nextId, saveChartOfAccounts, type ChartOfAccount } from "../../data";
 import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
 import { LedgerSheet } from "../chart-of-accounts/components/LedgerSheet";
@@ -54,16 +59,155 @@ import {
 
 const PAGE_SIZE = 15;
 const INITIAL_COA: ChartOfAccount[] = [...SYSTEM_COA_NODES];
-
 type SheetMode = "add" | "edit" | null;
+
+function LedgersExportButton({ onExport }: { onExport: (rows: ChartOfAccount[]) => void }) {
+  const visible = useAccountsFilteredRows<ChartOfAccount>([]);
+  return (
+    <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={() => onExport(visible)}>
+      <Download className="w-4 h-4" /> Export
+    </Button>
+  );
+}
+
+function LedgersTableBody({
+  coaRecords,
+  periodClosingFor,
+  page,
+  onPageChange,
+  canCreate,
+  canEdit,
+  openAdd,
+  openEdit,
+}: {
+  coaRecords: ChartOfAccount[];
+  periodClosingFor: (ledger: ChartOfAccount) => { amount: number; balanceType: "Debit" | "Credit" };
+  page: number;
+  onPageChange: (p: number) => void;
+  canCreate: boolean;
+  canEdit: boolean;
+  openAdd: () => void;
+  openEdit: (row: ChartOfAccount) => void;
+}) {
+  const router = useRouter();
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<ChartOfAccount>([]);
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <>
+      <AccountsTable minWidth={960}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Ledger Code" colKey="accountCode" />
+            <SortTh label="Ledger Name" colKey="accountName" />
+            <SortTh label="Ledger Type" colKey="ledgerType" />
+            <SortTh label="Parent Group" colKey="parentGroup" />
+            <SortTh label="Opening Balance" colKey="openingBalance" filterType="amount" align="right" />
+            <SortTh label="Current Balance" colKey="currentBalance" filterType="amount" align="right" />
+            <AccountsColumnHeader
+              label="Action"
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="center"
+              className={accountsActionColClass("multi")}
+            />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {paged.length === 0 ? (
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                <p className="text-sm font-medium text-foreground">No ledgers found</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Adjust search or date range, or add a ledger under a valid group.
+                </p>
+                {canCreate && (
+                  <Button size="sm" className="h-9 text-sm font-medium mt-3 bg-brand-600 text-white" onClick={openAdd}>
+                    <Plus className="w-4 h-4 mr-1" /> Add Ledger
+                  </Button>
+                )}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ) : (
+            paged.map((r) => {
+              const closing = periodClosingFor(r);
+              const ledgerType = ledgerTypeDisplayLabel(r, coaRecords);
+              return (
+                <AccountsTableRow
+                  key={r.id}
+                  className="group"
+                  onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
+                >
+                  <AccountsTableCell mono className="font-semibold text-brand-700">
+                    {r.accountCode}
+                  </AccountsTableCell>
+                  <AccountsTableCell wrap className="min-w-[180px]">
+                    <p className="text-xs font-semibold text-foreground leading-snug">{r.accountName}</p>
+                    {r.alias ? (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{r.alias}</p>
+                    ) : null}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="whitespace-nowrap">{ledgerType}</AccountsTableCell>
+                  <AccountsTableCell wrap className="text-muted-foreground max-w-[200px]">
+                    <span className="line-clamp-2">
+                      {r.parentAccountId ? parentGroupLabel(coaRecords, r.parentAccountId) : "—"}
+                    </span>
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <MoneyAmount amount={r.openingBalance} side={r.balanceType} sideBadge />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <MoneyAmount amount={closing.amount} side={closing.balanceType} sideBadge />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="center" className={accountsActionColClass("multi")} onClick={(e) => e.stopPropagation()}>
+                    <AccountsTableActionCell>
+                      <AccountsViewAction
+                        title="View ledger"
+                        onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
+                      />
+                      {canEdit && (
+                        <AccountsEditAction title="Edit ledger" onClick={() => openEdit(r)} />
+                      )}
+                    </AccountsTableActionCell>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              );
+            })
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-border/60 bg-muted/5 text-xs text-muted-foreground">
+        <span>
+          {visible.length === 0
+            ? "0 ledgers"
+            : `Showing ${(page - 1) * PAGE_SIZE + 1}—${Math.min(page * PAGE_SIZE, visible.length)} of ${visible.length}`}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+            Previous
+          </Button>
+          <span className="text-xs tabular-nums">Page {page} of {totalPages}</span>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+            Next
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
 
 export default function LedgersPageClient() {
   const router = useRouter();
   const [coaRecords, setCoaRecords] = useState<ChartOfAccount[]>(INITIAL_COA);
   const [search, setSearch] = useState("");
   const { applied, draft, setPreset, setDraftFrom, setDraftTo, apply } = useLedgerTransactionDateFilter();
-  const [sortKey, setSortKey] = useState("accountName");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
@@ -98,7 +242,7 @@ export default function LedgersPageClient() {
     [movementByLedger],
   );
 
-  const visible = useMemo(() => {
+  const toolbarFiltered = useMemo(() => {
     let r = [...ledgers];
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -110,41 +254,20 @@ export default function LedgersPageClient() {
           ledgerTypeDisplayLabel(x, coaRecords).toLowerCase().includes(q),
       );
     }
-    r.sort((a, b) => {
-      let av: string | number;
-      let bv: string | number;
-      if (sortKey === "parentGroup") {
-        av = a.parentAccountId ? parentGroupLabel(coaRecords, a.parentAccountId) : "";
-        bv = b.parentAccountId ? parentGroupLabel(coaRecords, b.parentAccountId) : "";
-      } else if (sortKey === "ledgerType") {
-        av = ledgerTypeDisplayLabel(a, coaRecords);
-        bv = ledgerTypeDisplayLabel(b, coaRecords);
-      } else if (sortKey === "currentBalance") {
-        av = periodClosingFor(a).amount;
-        bv = periodClosingFor(b).amount;
-      } else {
-        av = (a as unknown as Record<string, unknown>)[sortKey] as string | number;
-        bv = (b as unknown as Record<string, unknown>)[sortKey] as string | number;
-      }
-      const cmp =
-        typeof av === "number" && typeof bv === "number"
-          ? av - bv
-          : String(av ?? "").localeCompare(String(bv ?? ""));
-      return sortDir === "asc" ? cmp : -cmp;
-    });
     return r;
-  }, [ledgers, coaRecords, search, sortKey, sortDir, periodClosingFor]);
+  }, [ledgers, coaRecords, search]);
 
-  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const handleSort = (k: string) => {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("asc");
-    }
-  };
+  const getCellValue = useCallback(
+    (row: ChartOfAccount, key: string) => {
+      if (key === "parentGroup") {
+        return row.parentAccountId ? parentGroupLabel(coaRecords, row.parentAccountId) : "";
+      }
+      if (key === "ledgerType") return ledgerTypeDisplayLabel(row, coaRecords);
+      if (key === "currentBalance") return periodClosingFor(row).amount;
+      return (row as unknown as Record<string, unknown>)[key];
+    },
+    [coaRecords, periodClosingFor],
+  );
 
   const openAdd = () => {
     setForm(DEFAULT_LEDGER_FORM);
@@ -196,9 +319,9 @@ export default function LedgersPageClient() {
     closeSheet();
   };
 
-  const exportCsv = () => {
+  const exportCsv = (exportRows: ChartOfAccount[]) => {
     const header = "Ledger Name,Code,Alias,Parent Group,Ledger Type,Opening Balance,Current Balance,Status,GST,TDS\n";
-    const rows = visible
+    const rows = exportRows
       .map((r) => {
         const group = r.parentAccountId ? parentGroupLabel(coaRecords, r.parentAccountId) : "";
         const ledgerType = ledgerTypeDisplayLabel(r, coaRecords);
@@ -255,36 +378,31 @@ export default function LedgersPageClient() {
     </div>
   );
 
-  const paginationFooter = (
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-border/60 bg-muted/5 text-xs text-muted-foreground">
-          <span>
-            {visible.length === 0
-              ? "0 ledgers"
-              : `Showing ${(page - 1) * PAGE_SIZE + 1}—${Math.min(page * PAGE_SIZE, visible.length)} of ${visible.length}`}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </Button>
-            <span className="text-xs tabular-nums">Page {page} of {totalPages}</span>
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-              Next
-            </Button>
-          </div>
-        </div>
-  );
+  const paginationFooter = null;
 
   return (
     <>
+      <AccountsColumnFilterProvider
+        rows={toolbarFiltered}
+        getCellValue={getCellValue}
+        columnConfig={{
+          accountCode: { type: "text" },
+          accountName: { type: "text" },
+          ledgerType: { type: "text" },
+          parentGroup: { type: "text" },
+          openingBalance: { type: "amount" },
+          currentBalance: { type: "amount" },
+        }}
+        defaultSortKey="accountName"
+        defaultSortDir="asc"
+      >
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Masters", "Ledgers")}
         title="Ledgers"
         description="Ledger accounts created under Chart of Accounts groups and sub-groups."
         actions={
           <>
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={exportCsv}>
-              <Download className="w-4 h-4" /> Export
-            </Button>
+            <LedgersExportButton onExport={exportCsv} />
             {canCreate && (
               <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={openAdd}>
                 <Plus className="w-4 h-4" /> Add Ledger
@@ -298,89 +416,19 @@ export default function LedgersPageClient() {
         className="h-full min-h-0"
       >
         <AccountsTableScroll>
-          <AccountsTable minWidth={960}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                <SortTh label="Ledger Code" colKey="accountCode" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <SortTh label="Ledger Name" colKey="accountName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <SortTh label="Ledger Type" colKey="ledgerType" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <SortTh label="Parent Group" colKey="parentGroup" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <SortTh label="Opening Balance" colKey="openingBalance" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
-                <SortTh label="Current Balance" colKey="currentBalance" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
-                <AccountsTableHeadCell align="center">Status</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="center" className={accountsActionColClass("multi")}>
-                  Action
-                </AccountsTableHeadCell>
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {paged.length === 0 ? (
-                <AccountsTableRow>
-                  <AccountsTableCell colSpan={8} className="accounts-table-empty">
-                    <p className="text-sm font-medium text-foreground">No ledgers found</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Adjust search or date range, or add a ledger under a valid group.
-                    </p>
-                    {canCreate && (
-                      <Button size="sm" className="h-9 text-sm font-medium mt-3 bg-brand-600 text-white" onClick={openAdd}>
-                        <Plus className="w-4 h-4 mr-1" /> Add Ledger
-                      </Button>
-                    )}
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ) : (
-                paged.map((r) => {
-                  const closing = periodClosingFor(r);
-                  const ledgerType = ledgerTypeDisplayLabel(r, coaRecords);
-                  return (
-                    <AccountsTableRow
-                      key={r.id}
-                      className="group"
-                      onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
-                    >
-                      <AccountsTableCell mono className="font-semibold text-brand-700">
-                        {r.accountCode}
-                      </AccountsTableCell>
-                      <AccountsTableCell wrap className="min-w-[180px]">
-                        <p className="text-xs font-semibold text-foreground leading-snug">{r.accountName}</p>
-                        {r.alias ? (
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{r.alias}</p>
-                        ) : null}
-                      </AccountsTableCell>
-                      <AccountsTableCell className="whitespace-nowrap">{ledgerType}</AccountsTableCell>
-                      <AccountsTableCell wrap className="text-muted-foreground max-w-[200px]">
-                        <span className="line-clamp-2">
-                          {r.parentAccountId ? parentGroupLabel(coaRecords, r.parentAccountId) : "—"}
-                        </span>
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <MoneyAmount amount={r.openingBalance} side={r.balanceType} sideBadge />
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <MoneyAmount amount={closing.amount} side={closing.balanceType} sideBadge />
-                      </AccountsTableCell>
-                      <AccountsTableCell align="center">
-                        <StatusBadge status={r.status} />
-                      </AccountsTableCell>
-                      <AccountsTableCell align="center" className={accountsActionColClass("multi")} onClick={(e) => e.stopPropagation()}>
-                        <AccountsTableActionCell>
-                          <AccountsViewAction
-                            title="View ledger"
-                            onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
-                          />
-                          {canEdit && (
-                            <AccountsEditAction title="Edit ledger" onClick={() => openEdit(r)} />
-                          )}
-                        </AccountsTableActionCell>
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  );
-                })
-              )}
-            </AccountsTableBody>
-          </AccountsTable>
+          <LedgersTableBody
+            coaRecords={coaRecords}
+            periodClosingFor={periodClosingFor}
+            page={page}
+            onPageChange={setPage}
+            canCreate={canCreate}
+            canEdit={canEdit}
+            openAdd={openAdd}
+            openEdit={openEdit}
+          />
         </AccountsTableScroll>
       </AccountsPageShell>
+      </AccountsColumnFilterProvider>
 
       <LedgerSheet
         open={!!sheetMode}

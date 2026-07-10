@@ -92,6 +92,16 @@ export interface AccountsNavLink {
 
 export type AccountsNavGroupId = "coa" | "transactions" | "receivables" | "payables" | "banking" | "reports";
 
+/** Default landing route when switching Accounts sections from the left sidebar. */
+export const ACCOUNTS_SECTION_LANDING_HREF: Record<AccountsNavGroupId, string> = {
+  coa: CHART_OF_ACCOUNTS_HREF,
+  transactions: VOUCHERS_HUB_HREF,
+  receivables: "/accounts/receivables/outstanding",
+  payables: "/accounts/payables/outstanding",
+  banking: "/accounts/banking/bank-accounts",
+  reports: REPORTS_HOME_HREF,
+};
+
 
 
 export interface AccountsNavGroup {
@@ -366,6 +376,10 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Cash Flow", href: "/accounts/reports/cash-flow", icon: TrendingUp },
   { label: "General Ledger", href: "/accounts/reports/ledger", icon: BookOpen },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: BookMarked },
+  { label: "Receipt Register", href: "/accounts/reports/receipt-register", icon: Receipt },
+  { label: "Payment Register", href: "/accounts/reports/payment-register", icon: Receipt },
+  { label: "Contra Register", href: "/accounts/reports/contra-register", icon: ArrowLeftRight },
+  { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
   { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
   { label: "TDS Summary", href: "/accounts/reports/tds-party-wise", icon: FileText },
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
@@ -374,7 +388,6 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: Package },
   { label: "Customer Ledger", href: "/accounts/reports/customer-ledger", icon: Users },
   { label: "Supplier Ledger", href: "/accounts/reports/supplier-ledger", icon: Truck },
-  { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
   { label: "Stock Ledger", href: "/accounts/reports/stock-ledger", icon: Boxes },
   { label: "Audit Trail", href: "/accounts/reports/audit-trail", icon: History },
 ];
@@ -412,10 +425,13 @@ const ROUTE_GROUP_PREFIXES: { prefix: string; groupId: AccountsNavGroupId }[] = 
   { prefix: "/accounts/sales/", groupId: "transactions" },
   { prefix: "/accounts/purchases/", groupId: "transactions" },
   { prefix: "/accounts/purchase-invoices", groupId: "transactions" },
+  { prefix: "/accounts/claims", groupId: "transactions" },
   { prefix: "/accounts/receivables/", groupId: "receivables" },
   { prefix: "/accounts/payables/", groupId: "payables" },
   { prefix: "/accounts/banking/", groupId: "banking" },
   { prefix: "/accounts/bank-reconciliation", groupId: "banking" },
+  { prefix: "/accounts/reports/bank-book", groupId: "banking" },
+  { prefix: "/accounts/reports/cash-book", groupId: "banking" },
   { prefix: "/accounts/reports/", groupId: "reports" },
   { prefix: "/accounts/dashboard", groupId: "coa" },
 ];
@@ -760,6 +776,8 @@ export function accountsMegaMenuGroups() {
     description: GROUP_DESCRIPTIONS[group.id],
 
     icon: group.icon,
+
+    href: ACCOUNTS_SECTION_LANDING_HREF[group.id],
 
     children: group.items.map(({ label, href, icon }) => ({
 

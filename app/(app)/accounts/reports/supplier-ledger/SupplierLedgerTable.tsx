@@ -1,30 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
+import {
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import type { SupplierLedgerDisplayRow } from "./supplier-ledger-data";
-
-const COLUMNS = [
-  { key: "date", label: "Date", align: "left" as const },
-  { key: "voucher", label: "Voucher No.", align: "left" as const },
-  { key: "type", label: "Voucher Type", align: "left" as const },
-  { key: "particular", label: "Particular", align: "left" as const },
-  { key: "narration", label: "Narration", align: "left" as const },
-  { key: "debit", label: "Debit", align: "right" as const },
-  { key: "credit", label: "Credit", align: "right" as const },
-  { key: "balance", label: "Running Balance", align: "right" as const },
-];
 
 export function SupplierLedgerTable({
   openingRow,
@@ -35,27 +31,72 @@ export function SupplierLedgerTable({
   transactionRows: SupplierLedgerDisplayRow[];
   closingRow: SupplierLedgerDisplayRow;
 }) {
-  const rows = [openingRow, ...transactionRows, closingRow];
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(transactionRows);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir]);
 
   return (
-    <AccountsTableScroll className="flex-1 min-h-0 h-full">
-      <AccountsTable minWidth={1040} className="text-xs">
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            {COLUMNS.map((col) => (
-              <AccountsTableHeadCell key={col.key} align={col.align} sticky>
-                {col.label}
-              </AccountsTableHeadCell>
-            ))}
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {rows.map((row, i) => (
-            <SupplierLedgerTableRow key={`${row.kind}-${row.date}-${i}`} row={row} />
-          ))}
-        </AccountsTableBody>
-      </AccountsTable>
-    </AccountsTableScroll>
+    <>
+      <AccountsTableScroll className="flex-1 min-h-0 h-full">
+        <AccountsTable minWidth={1040} className="text-xs">
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="Date" colKey="date" filterType="date" />
+              <SortTh label="Voucher No." colKey="voucher" />
+              <SortTh label="Voucher Type" colKey="type" />
+              <SortTh label="Particular" colKey="particular" />
+              <SortTh label="Narration" colKey="narration" />
+              <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+              <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+              <AccountsColumnHeader
+                label="Running Balance"
+                colKey="balance"
+                sortable={false}
+                filterable={false}
+                align="right"
+              />
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            <SupplierLedgerTableRow row={openingRow} />
+            {transactionRows.length > 0 && columnFilteredRows.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={8} className="accounts-table-empty">
+                  No records match the column filters.
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : (
+              paginatedTransactions.map((row, i) => (
+                <SupplierLedgerTableRow key={`${row.kind}-${row.date}-${i}`} row={row} />
+              ))
+            )}
+            <SupplierLedgerTableRow row={closingRow} />
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableScroll>
+      {columnFilteredRows.length > 0 && (
+        <div className="flex-shrink-0 border-t border-border">
+          <AccountsTablePagination
+            page={page}
+            pageSize={pageSize}
+            totalRecords={columnFilteredRows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            recordLabel="transactions"
+          />
+        </div>
+      )}
+    </>
   );
 }
 
