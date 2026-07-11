@@ -10,6 +10,7 @@ const bootstrappedSections = new Set<AccountsNavGroupId>();
 const inflightSections = new Set<AccountsNavGroupId>();
 
 export const ACCOUNTS_SECTION_SEEDED_EVENT = "ds-accounts-section-seeded";
+export const ACCOUNTS_VOUCHERS_UPDATED_EVENT = "ds-accounts-vouchers-updated";
 
 export function isAccountsSectionBootstrapped(groupId: AccountsNavGroupId): boolean {
   return bootstrappedSections.has(groupId);
@@ -37,9 +38,9 @@ export function scheduleAccountsSectionSeed(groupId: AccountsNavGroupId): void {
 
   const run = () => ensureAccountsSectionData(groupId);
   if (typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(run, { timeout: 4000 });
+    window.requestIdleCallback(run, { timeout: 10000 });
   } else {
-    window.setTimeout(run, 50);
+    window.setTimeout(run, 200);
   }
 }
 

@@ -39,6 +39,8 @@ interface GroupedLedgerSelectProps {
   listMaxHeight?: number;
   /** Compact trigger and dropdown — for dense voucher forms */
   compact?: boolean;
+  /** Called after a ledger is created via quick-add */
+  onQuickAddSuccess?: (ledger: ChartOfAccount) => void;
 }
 
 function HierarchyNodeRow({
@@ -141,6 +143,7 @@ export function GroupedLedgerSelect({
   enableQuickAdd = true,
   listMaxHeight = 300,
   compact = false,
+  onQuickAddSuccess,
 }: GroupedLedgerSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -206,6 +209,7 @@ export function GroupedLedgerSelect({
     if (!ledgerFilter || ledgerFilter(ledger)) {
       onChange(ledger);
     }
+    onQuickAddSuccess?.(ledger);
     setQuickAddOpen(false);
     setOpen(false);
     setSearch("");

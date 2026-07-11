@@ -4,23 +4,23 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Banknote, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
+  ReportLedgerMultiFilter,
+  ReportVoucherTypeMultiFilter,
+  ReportFilterSummary,
   useReportDateRange,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  buildEntityFilterSummary,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import {
   AccountsColumnFilterProvider,
   useAccountsFilteredRows,
@@ -42,9 +42,9 @@ import { CashBookTable } from "./CashBookTable";
 function CashBookPageContent() {
   const mounted = useClientMounted();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [ledgerId, setLedgerId] = useState("");
+  const [ledgerIds, setLedgerIds] = useState<string[]>([]);
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [voucherType, setVoucherType] = useState("all");
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
@@ -59,21 +59,53 @@ function CashBookPageContent() {
     return getCashBookLedgers();
   }, [refreshKey]);
 
-  useEffect(() => {
-    if (ledgers.length === 0) return;
-    if (ledgerId && ledgers.some((l) => l.id === ledgerId)) return;
-    setLedgerId(ledgers[0].id);
-  }, [ledgers, ledgerId]);
+  const cashLedgerOptions = useMemo(
+    () =>
+      ledgers.map((l) => ({
+        id: Number(l.id),
+        name: l.ledgerName,
+      })),
+    [ledgers],
+  );
+
+  const cashVoucherTypeOptions = useMemo(
+    () => CASH_BOOK_VOUCHER_TYPE_OPTIONS.filter((o) => o.value !== "all"),
+    [],
+  );
+
+  const effectiveLedgerId = useMemo(() => {
+    if (ledgerIds.length > 0) return ledgerIds[0];
+    return ledgers[0]?.id ?? "";
+  }, [ledgerIds, ledgers]);
 
   const statement = useMemo(() => {
-    if (!mounted || !ledgerId) return null;
-    return buildCashBookStatement(ledgerId, {
+    if (!mounted || !effectiveLedgerId) return null;
+    return buildCashBookStatement(effectiveLedgerId, {
       dateFrom,
       dateTo,
-      voucherType,
+      voucherType: voucherTypes,
       search,
     });
-  }, [mounted, ledgerId, dateFrom, dateTo, voucherType, search]);
+  }, [mounted, effectiveLedgerId, dateFrom, dateTo, voucherTypes, search]);
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary(
+        "ledger",
+        "Cash Ledgers",
+        ledgerIds,
+        cashLedgerOptions.map((l) => ({ value: String(l.id), label: l.name })),
+        () => setLedgerIds([]),
+      ),
+      buildEntityFilterSummary(
+        "voucherType",
+        "Voucher Types",
+        voucherTypes,
+        cashVoucherTypeOptions,
+        () => setVoucherTypes([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [ledgerIds, voucherTypes, cashLedgerOptions, cashVoucherTypeOptions]);
 
   const transactionRows = statement?.transactionRows ?? [];
 
@@ -103,9 +135,12 @@ function CashBookPageContent() {
       defaultSortDir="asc"
     >
       <CashBookPageBody
-        ledgerId={ledgerId}
-        setLedgerId={setLedgerId}
-        ledgers={ledgers}
+        effectiveLedgerId={effectiveLedgerId}
+        ledgerIds={ledgerIds}
+        setLedgerIds={setLedgerIds}
+        cashLedgerOptions={cashLedgerOptions}
+        cashVoucherTypeOptions={cashVoucherTypeOptions}
+        filterSummaryItems={filterSummaryItems}
         statement={statement}
         transactionRows={transactionRows}
         exporting={exporting}
@@ -116,8 +151,8 @@ function CashBookPageContent() {
         setDateFrom={setDateFrom}
         dateTo={dateTo}
         setDateTo={setDateTo}
-        voucherType={voucherType}
-        setVoucherType={setVoucherType}
+        voucherTypes={voucherTypes}
+        setVoucherTypes={setVoucherTypes}
         search={search}
         setSearch={setSearch}
       />
@@ -126,9 +161,12 @@ function CashBookPageContent() {
 }
 
 function CashBookPageBody({
-  ledgerId,
-  setLedgerId,
-  ledgers,
+  effectiveLedgerId,
+  ledgerIds,
+  setLedgerIds,
+  cashLedgerOptions,
+  cashVoucherTypeOptions,
+  filterSummaryItems,
   statement,
   transactionRows,
   exporting,
@@ -139,14 +177,17 @@ function CashBookPageBody({
   setDateFrom,
   dateTo,
   setDateTo,
-  voucherType,
-  setVoucherType,
+  voucherTypes,
+  setVoucherTypes,
   search,
   setSearch,
 }: {
-  ledgerId: string;
-  setLedgerId: (v: string) => void;
-  ledgers: ReturnType<typeof getCashBookLedgers>;
+  effectiveLedgerId: string;
+  ledgerIds: string[];
+  setLedgerIds: (v: string[]) => void;
+  cashLedgerOptions: { id: number; name: string }[];
+  cashVoucherTypeOptions: { value: string; label: string }[];
+  filterSummaryItems: ReportFilterSummaryItem[];
   statement: ReturnType<typeof buildCashBookStatement> | null;
   transactionRows: CashBookDisplayRow[];
   exporting: boolean;
@@ -157,8 +198,8 @@ function CashBookPageBody({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  voucherType: string;
-  setVoucherType: (v: string) => void;
+  voucherTypes: string[];
+  setVoucherTypes: (v: string[]) => void;
   search: string;
   setSearch: (v: string) => void;
 }) {
@@ -174,7 +215,7 @@ function CashBookPageBody({
     [dateFrom, dateTo],
   );
 
-  const canExport = Boolean(statement && ledgerId);
+  const canExport = Boolean(statement && effectiveLedgerId);
 
   const handleExportExcel = async () => {
     if (!statement || !openingRow) return;
@@ -216,14 +257,14 @@ function CashBookPageBody({
     : [];
 
   const showNoTransactions =
-    ledgerId &&
+    effectiveLedgerId &&
     statement &&
     !statement.hasPeriodTransactions &&
     !search.trim() &&
-    voucherType === "all";
+    voucherTypes.length === 0;
 
   const showNoFilterResults =
-    ledgerId && statement && statement.hasPeriodTransactions && transactionRows.length === 0;
+    effectiveLedgerId && statement && statement.hasPeriodTransactions && transactionRows.length === 0;
 
   return (
     <AccountsPageShell
@@ -231,85 +272,67 @@ function CashBookPageBody({
       title="Cash Book"
       description="Read-only cash ledger report from posted receipt, payment, contra, and journal vouchers."
       filters={
-        <ReportFilterRow
-          className="items-end"
-          end={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              disabled={!canExport || exporting}
-            />
-          }
-        >
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-1 min-w-[200px]">
-            <Label className={filterLabelClass}>
-              Cash Ledger <span className="text-red-500">*</span>
-            </Label>
-            <Select value={ledgerId || undefined} onValueChange={setLedgerId}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
-                <SelectValue placeholder="Select cash ledger…" />
-              </SelectTrigger>
-              <SelectContent>
-                {ledgers.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.ledgerName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[140px]">
-            <Label className={filterLabelClass}>Voucher Type</Label>
-            <Select value={voucherType} onValueChange={setVoucherType}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                {CASH_BOOK_VOUCHER_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[200px] flex-1">
-            <Label className={filterLabelClass}>Search</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Voucher no., type, particular, narration…"
-                className={cn(filterControlClass, "mt-0 pr-8")}
-                disabled={!ledgerId}
+        <>
+          <ReportFilterRow
+            className="items-end"
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportPdf}
+                disabled={!canExport || exporting}
               />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+            }
+          >
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportLedgerMultiFilter
+              values={ledgerIds}
+              onChange={setLedgerIds}
+              ledgers={cashLedgerOptions}
+              label="Cash Ledger"
+            />
+            <ReportVoucherTypeMultiFilter
+              values={voucherTypes}
+              onChange={setVoucherTypes}
+              options={cashVoucherTypeOptions}
+            />
+            <div className="space-y-1 min-w-[200px] flex-1">
+              <Label className={filterLabelClass}>Search</Label>
+              <div className="relative">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Voucher no., type, particular, narration…"
+                  className={cn(filterControlClass, "mt-0 pr-8")}
+                  disabled={!effectiveLedgerId}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </ReportFilterRow>
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        {!ledgerId ? (
+        {!effectiveLedgerId ? (
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="text-center space-y-2 max-w-sm">
               <Banknote className="w-10 h-10 text-muted-foreground mx-auto" />
@@ -338,7 +361,7 @@ function CashBookPageBody({
                     type="button"
                     onClick={() => {
                       setSearch("");
-                      setVoucherType("all");
+                      setVoucherTypes([]);
                     }}
                     className="text-xs text-brand-600 hover:underline"
                   >
@@ -362,8 +385,24 @@ function CashBookPageBody({
 
 export default function CashBookPageClient() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<CashBookFallback />}>
       <CashBookPageContent />
     </Suspense>
+  );
+}
+
+function CashBookFallback() {
+  return (
+    <AccountsPageShell
+      breadcrumbs={accountsBreadcrumb("Banking", "Cash Book")}
+      title="Cash Book"
+      description="Read-only cash ledger report from posted accounting vouchers."
+      layout="split"
+      className="h-full min-h-0"
+    >
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+        Loading Cash Book…
+      </div>
+    </AccountsPageShell>
   );
 }

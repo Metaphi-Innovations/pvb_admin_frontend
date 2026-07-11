@@ -31,6 +31,9 @@ import { X, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
+import { Switch } from "@/components/ui/switch";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
+import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
 
 import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
@@ -72,6 +75,37 @@ export function ReportFilterRow({
         <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">{end}</div>
       ) : null}
     </div>
+  );
+}
+
+export function ReportFilterResetButton({
+  onClick,
+  disabled,
+  className,
+  /** When true, button is hidden unless `active` is true. */
+  showOnlyWhenActive,
+  active,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  showOnlyWhenActive?: boolean;
+  active?: boolean;
+}) {
+  if (showOnlyWhenActive && !active) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "h-7 px-2.5 text-xs font-medium rounded-md border border-border text-muted-foreground",
+        "hover:bg-muted/40 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none",
+        className,
+      )}
+    >
+      Reset
+    </button>
   );
 }
 
@@ -120,6 +154,7 @@ export function ReportDateRangeFilter({
   onPresetChange,
   onDateFromChange,
   onDateToChange,
+  presetOptions = DATE_RANGE_PRESET_OPTIONS,
 }: {
   preset: DateRangePresetId;
   dateFrom: string;
@@ -127,6 +162,7 @@ export function ReportDateRangeFilter({
   onPresetChange: (preset: DateRangePresetId) => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
+  presetOptions?: { id: DateRangePresetId; label: string }[];
 }) {
   const handlePresetChange = (value: DateRangePresetId) => {
     onPresetChange(value);
@@ -157,7 +193,7 @@ export function ReportDateRangeFilter({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {DATE_RANGE_PRESET_OPTIONS.map((o) => (
+            {presetOptions.map((o) => (
               <SelectItem key={o.id} value={o.id} className="text-xs">
                 {o.label}
               </SelectItem>
@@ -318,6 +354,50 @@ export function ReportLedgerFilter({
   );
 }
 
+export function ReportLedgerGroupFilter({
+  value,
+  onChange,
+  groups,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  groups: { id: number; name: string }[];
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[180px]">
+      <span className={filterLabelClass}>Ledger Group</span>
+      <Select value={value || "all"} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[180px]")}>
+          <SelectValue placeholder="All groups" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All groups</SelectItem>
+          {groups.map((g) => (
+            <SelectItem key={g.id} value={String(g.id)}>
+              {g.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportShowZeroBalanceToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 min-w-[140px] h-8">
+      <Switch checked={checked} onCheckedChange={onChange} />
+      <span className="text-xs font-medium text-foreground whitespace-nowrap">Show zero balance</span>
+    </div>
+  );
+}
+
 const DAY_BOOK_VOUCHER_TYPES = Object.entries(VOUCHER_TYPE_LABELS) as [VoucherTypeCode, string][];
 
 export function DayBookVoucherTypeFilter({
@@ -430,6 +510,65 @@ export function ReportCustomerFilter({
   );
 }
 
+export function ReportPaymentStatusFilter<T extends string>({
+  value,
+  onChange,
+  options,
+  label = "Payment Status",
+}: {
+  value: T | "all";
+  onChange: (value: T | "all") => void;
+  options: { value: T | "all"; label: string }[];
+  label?: string;
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[150px]">
+      <span className={filterLabelClass}>{label}</span>
+      <Select value={value} onValueChange={(v) => onChange(v as T | "all")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-full min-w-[150px]")}>
+          <SelectValue placeholder="All statuses" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportSalespersonFilter({
+  value,
+  onChange,
+  salespeople,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  salespeople: string[];
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[160px]">
+      <span className={filterLabelClass}>Salesperson</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[160px]")}>
+          <SelectValue placeholder="All salespeople" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All salespeople</SelectItem>
+          {salespeople.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function ReportVendorFilter({
   value,
   onChange,
@@ -459,13 +598,68 @@ export function ReportVendorFilter({
   );
 }
 
-export function ReportWarehouseFilter({
+export function ReportPartyFilter({
   value,
   onChange,
+  parties,
 }: {
   value: string;
   onChange: (value: string) => void;
+  parties: { id: string; name: string; kind?: "customer" | "vendor" }[];
 }) {
+  return (
+    <div className="space-y-0.5 min-w-[180px]">
+      <span className={filterLabelClass}>Party</span>
+      <Select value={value || "all"} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[180px]")}>
+          <SelectValue placeholder="All parties" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All parties</SelectItem>
+          {parties.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportViewTypeFilter({
+  value,
+  onChange,
+}: {
+  value: "summary" | "detailed";
+  onChange: (value: "summary" | "detailed") => void;
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[130px]">
+      <span className={filterLabelClass}>View Type</span>
+      <Select value={value} onValueChange={(v) => onChange(v as "summary" | "detailed")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[130px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="summary">Summary</SelectItem>
+          <SelectItem value="detailed">Detailed</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportWarehouseFilter({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options?: string[];
+}) {
+  const warehouseOptions = options?.length ? options : WAREHOUSE_FILTER_OPTIONS;
   return (
     <div className="space-y-0.5 min-w-[150px]">
       <span className={filterLabelClass}>Warehouse</span>
@@ -475,7 +669,7 @@ export function ReportWarehouseFilter({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All warehouses</SelectItem>
-          {WAREHOUSE_FILTER_OPTIONS.map((w) => (
+          {warehouseOptions.map((w) => (
             <SelectItem key={w} value={w}>
               {w}
             </SelectItem>
@@ -712,6 +906,333 @@ export function ReportTdsPaymentStatusFilter({
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+export { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
+export { ReportFilterSummary } from "@/components/accounts/ReportFilterSummary";
+export type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
+
+export function ReportBranchMultiFilter({
+  values,
+  onChange,
+  options = REPORT_BRANCH_OPTIONS,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  options?: readonly string[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = options.map((b) => ({
+    value: b,
+    label: b,
+  }));
+  return (
+    <ReportMultiSelect
+      label="Branch"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Branch"
+      allLabel="All Branches"
+      minWidthClass="min-w-[140px]"
+    />
+  );
+}
+
+export function ReportWarehouseMultiFilter({
+  values,
+  onChange,
+  options,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  options: string[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = options
+    .filter((w) => w !== "all")
+    .map((w) => ({ value: w, label: w }));
+  return (
+    <ReportMultiSelect
+      label="Warehouse"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Warehouse"
+      allLabel="All Warehouses"
+      minWidthClass="min-w-[150px]"
+    />
+  );
+}
+
+export function ReportVoucherTypeMultiFilter({
+  values,
+  onChange,
+  options,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  options?: { value: string; label: string }[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = (options ?? DAY_BOOK_VOUCHER_TYPE_OPTIONS.filter((o) => o.value !== "all")).map(
+    (o) => ({ value: o.value, label: o.label }),
+  );
+  return (
+    <ReportMultiSelect
+      label="Voucher Type"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Type"
+      allLabel="All Types"
+      minWidthClass="min-w-[150px]"
+    />
+  );
+}
+
+export function ReportCustomerMultiFilter({
+  values,
+  onChange,
+  customers,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  customers: { id: number; customerName: string; customerCode?: string }[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = customers.map((c) => ({
+    value: String(c.id),
+    label: c.customerName,
+    searchText: c.customerCode ?? "",
+  }));
+  return (
+    <ReportMultiSelect
+      label="Customer"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Customer"
+      allLabel="All Customers"
+      minWidthClass="min-w-[160px]"
+    />
+  );
+}
+
+export function ReportVendorMultiFilter({
+  values,
+  onChange,
+  vendors,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  vendors: { id: number; vendorName: string; vendorCode?: string }[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = vendors.map((v) => ({
+    value: String(v.id),
+    label: v.vendorName,
+    searchText: v.vendorCode ?? "",
+  }));
+  return (
+    <ReportMultiSelect
+      label="Supplier"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Supplier"
+      allLabel="All Suppliers"
+      minWidthClass="min-w-[160px]"
+    />
+  );
+}
+
+export function ReportPartyMultiFilter({
+  values,
+  onChange,
+  parties,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  parties: { id: string; name: string; kind?: "customer" | "vendor" }[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = parties.map((p) => ({
+    value: p.id,
+    label: p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`,
+    group: p.kind === "vendor" ? "Vendors" : "Customers",
+  }));
+  return (
+    <ReportMultiSelect
+      label="Party"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Party"
+      allLabel="All Parties"
+      minWidthClass="min-w-[180px]"
+      grouped
+    />
+  );
+}
+
+export function ReportLedgerMultiFilter({
+  values,
+  onChange,
+  ledgers,
+  label = "Ledger",
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  ledgers: { id: number; name: string; group?: string }[];
+  label?: string;
+}) {
+  const selectOptions: ReportMultiSelectOption[] = ledgers.map((l) => ({
+    value: String(l.id),
+    label: l.name,
+    group: l.group,
+  }));
+  return (
+    <ReportMultiSelect
+      label={label}
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Ledger"
+      allLabel={`All ${label}s`}
+      minWidthClass="min-w-[180px]"
+      grouped={ledgers.some((l) => l.group)}
+    />
+  );
+}
+
+export function ReportLedgerGroupMultiFilter({
+  values,
+  onChange,
+  groups,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  groups: { id: number; name: string }[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = groups.map((g) => ({
+    value: String(g.id),
+    label: g.name,
+  }));
+  return (
+    <ReportMultiSelect
+      label="Account Group"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Group"
+      allLabel="All Groups"
+      minWidthClass="min-w-[180px]"
+    />
+  );
+}
+
+export function ReportSalespersonMultiFilter({
+  values,
+  onChange,
+  salespeople,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  salespeople: string[];
+}) {
+  const selectOptions: ReportMultiSelectOption[] = salespeople.map((name) => ({
+    value: name,
+    label: name,
+  }));
+  return (
+    <ReportMultiSelect
+      label="Salesperson"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Salesperson"
+      allLabel="All Salespeople"
+      minWidthClass="min-w-[160px]"
+    />
+  );
+}
+
+export function ReportProductMultiFilter({
+  values,
+  onChange,
+  products,
+  label = "Product",
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  products: { value: string; label: string; searchText?: string }[];
+  label?: string;
+}) {
+  const selectOptions: ReportMultiSelectOption[] = products.map((p) => ({
+    value: p.value,
+    label: p.label,
+    searchText: p.searchText,
+  }));
+  return (
+    <ReportMultiSelect
+      label={label}
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Product"
+      allLabel="All Products"
+      minWidthClass="min-w-[160px]"
+    />
+  );
+}
+
+export function ReportStatusMultiFilter<T extends string>({
+  values,
+  onChange,
+  options,
+  label = "Status",
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  options: { value: T; label: string }[];
+  label?: string;
+}) {
+  const selectOptions: ReportMultiSelectOption[] = options.map((o) => ({
+    value: o.value,
+    label: o.label,
+  }));
+  return (
+    <ReportMultiSelect
+      label={label}
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Status"
+      allLabel="All Statuses"
+      minWidthClass="min-w-[150px]"
+    />
+  );
+}
+
+export function ReportTdsSectionMultiFilter({
+  values,
+  onChange,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const sections = getActiveTDSMasters();
+  const selectOptions: ReportMultiSelectOption[] = sections.map((s) => ({
+    value: getTdsSectionCode(s),
+    label: `${getTdsSectionCode(s)} — ${s.sectionName}`,
+    searchText: s.sectionName,
+  }));
+  return (
+    <ReportMultiSelect
+      label="TDS Section"
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="Section"
+      allLabel="All Sections"
+      minWidthClass="min-w-[170px]"
+    />
   );
 }
 

@@ -28,6 +28,8 @@ export interface AccountsColumnHeaderProps {
   uniqueValues?: string[];
   statusOptions?: string[];
   className?: string;
+  /** Value-only filter UI (no operator dropdown). Defaults from column filter context. */
+  simpleFilter?: boolean;
 }
 
 /** Excel-style column header — label + sort + filter in compact ERP layout */
@@ -47,6 +49,7 @@ export function AccountsColumnHeader({
   uniqueValues: uniqueValuesProp,
   statusOptions: statusOptionsProp,
   className,
+  simpleFilter: simpleFilterProp,
 }: AccountsColumnHeaderProps) {
   const ctx = useAccountsColumnFilterContext();
   const fromCtx =
@@ -57,6 +60,7 @@ export function AccountsColumnHeader({
           sortable: sortableProp,
           filterable: filterableProp,
           statusOptions: statusOptionsProp?.length ? statusOptionsProp : undefined,
+          simpleFilter: simpleFilterProp,
         })
       : null;
 
@@ -71,6 +75,7 @@ export function AccountsColumnHeader({
   const onFilterChange = onFilterChangeProp ?? fromCtx?.onFilterChange;
   const uniqueValues = uniqueValuesProp ?? fromCtx?.uniqueValues ?? [];
   const statusOptions = statusOptionsProp ?? fromCtx?.statusOptions ?? [];
+  const simpleFilter = simpleFilterProp ?? fromCtx?.simpleFilter ?? true;
 
   const sorted = sortable && sortKey === colKey;
   const filtered = isColumnFilterActive(filterValue);
@@ -127,6 +132,7 @@ export function AccountsColumnHeader({
             onChange={onFilterChange}
             uniqueValues={uniqueValues}
             statusOptions={statusOptions}
+            simpleFilter={simpleFilter}
           />
         )}
       </div>

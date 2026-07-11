@@ -1,4 +1,4 @@
-import type { AccountType, ChartOfAccount, CoaNodeLevel, ErpUsageModule } from "../data";
+import type { AccountType, ChartOfAccount, CoaNodeLevel, CoaSpecializedGroupType, ErpUsageModule } from "../data";
 import {
   DUTIES_STATUTORY_LEDGERS,
   GST_INPUT_STATUTORY_LEDGERS,
@@ -33,6 +33,7 @@ export function buildCoaNode(partial: CoaPartial): ChartOfAccount {
 interface CoaTreeLeaf {
   name: string;
   code: string;
+  specializedGroupType?: CoaSpecializedGroupType;
   children?: CoaTreeLeaf[];
   ledgers?: CoaStatutoryLedgerSeed[];
 }
@@ -40,6 +41,7 @@ interface CoaTreeLeaf {
 interface CoaTreeBranch {
   name: string;
   code: string;
+  specializedGroupType?: CoaSpecializedGroupType;
   children?: CoaTreeLeaf[];
   ledgers?: CoaStatutoryLedgerSeed[];
 }
@@ -62,7 +64,7 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
     name: "Fixed Assets",
     code: "1100",
     branches: [
-      { name: "Land & Building", code: "1110" },
+      { name: "Land & Building", code: "1110", specializedGroupType: "warehouse" },
       { name: "Plant & Machinery", code: "1111" },
       { name: "Furniture & Fixtures", code: "1112" },
       { name: "Office Equipment", code: "1113" },
@@ -75,17 +77,17 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
     name: "Current Assets",
     code: "1200",
     branches: [
-      { name: "Cash-in-Hand", code: "1210" },
-      { name: "Bank Accounts", code: "1211" },
-      { name: "Trade Receivables / Sundry Debtors", code: "1212" },
-      { name: "Inventory / Stock-in-Hand", code: "1213" },
+      { name: "Cash-in-Hand", code: "1210", specializedGroupType: "cash_in_hand" },
+      { name: "Bank Accounts", code: "1211", specializedGroupType: "bank_accounts" },
+      { name: "Trade Receivables / Sundry Debtors", code: "1212", specializedGroupType: "sundry_debtors" },
+      { name: "Inventory / Stock-in-Hand", code: "1213", specializedGroupType: "inventory" },
       { name: "Loans & Advances Given", code: "1214" },
       { name: "Deposits", code: "1215" },
       { name: "Prepaid Expenses", code: "1216" },
       { name: "Accrued Income", code: "1217" },
       { name: "Other Current Assets", code: "1218" },
-      { name: "GST Input Credit", code: "1219", ledgers: GST_INPUT_STATUTORY_LEDGERS },
-      { name: "TDS Receivable", code: "1220" },
+      { name: "GST Input Credit", code: "1219", specializedGroupType: "gst_input", ledgers: GST_INPUT_STATUTORY_LEDGERS },
+      { name: "TDS Receivable", code: "1220", specializedGroupType: "tds_receivable" },
     ],
   },
   {
@@ -125,17 +127,18 @@ const LIABILITIES_GROUPS: CoaTreeGroup[] = [
     name: "Current Liabilities",
     code: "2300",
     branches: [
-      { name: "Trade Payables / Sundry Creditors", code: "2310" },
+      { name: "Trade Payables / Sundry Creditors", code: "2310", specializedGroupType: "sundry_creditors" },
       {
         name: "Duties & Taxes Payable",
         code: "2311",
         children: [
-          { name: "GST Output", code: "23111", ledgers: GST_OUTPUT_STATUTORY_LEDGERS },
+          { name: "GST Output", code: "23111", specializedGroupType: "gst_output", ledgers: GST_OUTPUT_STATUTORY_LEDGERS },
+          { name: "TDS Payable", code: "23112", specializedGroupType: "tds_payable" },
         ],
         ledgers: DUTIES_STATUTORY_LEDGERS,
       },
       { name: "PF / ESIC Payable", code: "2314" },
-      { name: "Salary Payable", code: "2315" },
+      { name: "Salary Payable", code: "2315", specializedGroupType: "employee_payable" },
       { name: "Expenses Payable", code: "2316" },
       { name: "Advance Received from Customers", code: "2317" },
       { name: "Other Current Liabilities", code: "2318" },
@@ -276,6 +279,7 @@ function systemNode(
   nodeLevel: CoaNodeLevel,
   parentId: number | null,
   parentName: string,
+  specializedGroupType?: CoaSpecializedGroupType,
 ): ChartOfAccount {
   const desc =
     nodeLevel === "primary_head"
@@ -293,6 +297,7 @@ function systemNode(
     status: "active",
     usedIn: [],
     isSystem: true,
+    specializedGroupType,
     createdBy: "System",
     updatedBy: "System",
   });
@@ -369,7 +374,16 @@ function buildTreeNodes(
   for (const branch of branches) {
     const branchId = allocId();
     nodes.push(
-      systemNode(branchId, branch.code, branch.name, accountType, "account_group", parentId, parentName),
+      systemNode(
+        branchId,
+        branch.code,
+        branch.name,
+        accountType,
+        "account_group",
+        parentId,
+        parentName,
+        branch.specializedGroupType,
+      ),
     );
     if (branch.children?.length) {
       buildTreeNodes(nodes, branch.children, branchId, branch.name, accountType);
@@ -447,6 +461,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 10;
+export const COA_SYSTEM_REVISION = 12;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

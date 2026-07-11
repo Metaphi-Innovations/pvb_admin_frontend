@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
@@ -30,7 +30,11 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
+import { ReportSearchFilter, ReportFilterRow, ReportFilterResetButton } from "@/components/accounts/ReportFilters";
+import { resetReportDateRange, accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { noteWorkflowStatusToBadge } from "@/lib/accounts/accounts-status-badges";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import {
@@ -57,6 +61,11 @@ import { listPendingCreditNotes } from "../../credit-notes/pending-credit-notes-
 import { exportCreditNotesToExcel } from "../../credit-notes/credit-notes-export";
 import { formatLinkedInvoiceNos } from "../../credit-notes/components/LinkedInvoicesMultiSelect";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../../credit-notes/note-utils";
+import { loadInvoices } from "../../invoices/invoices-data";
+import {
+  hasDocumentsListingFilters,
+  parseDocumentsListingFiltersFromSearch,
+} from "@/lib/accounts/documents-listing-filter-query";
 
 const LIST_PATH = CREDIT_NOTES_LIST_PATH;
 
@@ -132,6 +141,7 @@ function CreditNotesRecordsTable({
               <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
               <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
               <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" />
+              <SortTh label="Status" colKey="status" />
               <AccountsColumnHeader
                 label="Actions"
                 colKey="_actions"
@@ -144,11 +154,11 @@ function CreditNotesRecordsTable({
           </AccountsTableHead>
           <AccountsTableBody>
             {!mounted ? (
-              <AccountsTableEmpty colSpan={11} message="Loading credit notes…" />
+              <AccountsTableEmpty colSpan={12} message="Loading credit notes…" />
             ) : toolbarFiltered.length === 0 ? (
-              <AccountsTableEmpty colSpan={11} message="No credit notes found." />
+              <AccountsTableEmpty colSpan={12} message="No credit notes found." />
             ) : visible.length === 0 ? (
-              <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
+              <AccountsTableEmpty colSpan={12} message="No records match the column filters." />
             ) : (
               pagedRows.map((r) => (
                 <AccountsTableRow key={r.id}>
@@ -178,6 +188,12 @@ function CreditNotesRecordsTable({
                   <AccountsTableCell align="right" money className="text-xs">{formatINR(r.igstAmount)}</AccountsTableCell>
                   <AccountsTableCell align="right" money className="text-xs font-medium">
                     {formatINR(r.currentCreditAmount)}
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    {(() => {
+                      const badge = noteWorkflowStatusToBadge(r.status);
+                      return <StatusBadge status={badge.status} label={badge.label} size="sm" />;
+                    })()}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                     <AccountsTableActionCell>
@@ -229,6 +245,17 @@ function CreditNotesRecordsTable({
   );
 }
 
+function creditNoteLocation(cn: CreditNoteRecord): { branch: string; warehouse: string } {
+  let branch = (cn as { branch?: string }).branch?.trim() || "";
+  let warehouse = "";
+  if (cn.sourceInvoiceId != null) {
+    const inv = loadInvoices().find((i) => i.id === cn.sourceInvoiceId);
+    if (!branch) branch = inv?.branch?.trim() || "";
+    warehouse = inv?.warehouse?.trim() || "";
+  }
+  return { branch, warehouse };
+}
+
 function CreditNotesRecordsTab({
   mounted,
   records,
@@ -241,6 +268,8 @@ function CreditNotesRecordsTab({
   setDateFrom,
   dateTo,
   setDateTo,
+  branchFilter,
+  warehouseFilter,
   onView,
   onCancel,
 }: {
@@ -255,6 +284,8 @@ function CreditNotesRecordsTab({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
+  branchFilter: string;
+  warehouseFilter: string;
   onView: (r: CreditNoteRecord) => void;
   onCancel: (r: CreditNoteRecord) => void;
 }) {
@@ -263,16 +294,29 @@ function CreditNotesRecordsTab({
   const [exporting, setExporting] = useState(false);
 
   const toolbarFiltered = useMemo(
-    () =>
-      mounted
-        ? filterCreditNotes(records, {
-            tab: statusTab,
-            search,
-            dateFrom,
-            dateTo,
-          })
-        : [],
-    [records, statusTab, search, dateFrom, dateTo, mounted],
+    () => {
+      if (!mounted) return [];
+      let list = filterCreditNotes(records, {
+        tab: statusTab,
+        search,
+        dateFrom,
+        dateTo,
+      });
+      if (branchFilter) {
+        list = list.filter((cn) => {
+          const { branch } = creditNoteLocation(cn);
+          return branch === branchFilter;
+        });
+      }
+      if (warehouseFilter) {
+        list = list.filter((cn) => {
+          const { warehouse } = creditNoteLocation(cn);
+          return warehouse === warehouseFilter;
+        });
+      }
+      return list;
+    },
+    [records, statusTab, search, dateFrom, dateTo, branchFilter, warehouseFilter, mounted],
   );
 
   const getCellValue = useCallback((row: CreditNoteRecord, key: string) => {
@@ -392,27 +436,42 @@ function CreditNotesRecordsTabBody({
         <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
       </div>
       <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
-        <AccountsListingFilterCard
-          actions={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportExcel}
-              disabled={exporting || visible.length === 0}
+        <AccountsListingFilterCard>
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportExcel}
+                disabled={exporting || visible.length === 0}
+              />
+            }
+          >
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Search CN no., source, invoice, return, customer, scheme…"
+              className="min-w-[200px] flex-1 max-w-md"
             />
-          }
-        >
-          <AccountsListingDateFilter
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Search CN no., source, invoice, return, customer, scheme…"
-            className="min-w-[200px] flex-1 max-w-md"
-          />
+            <AccountsListingDateFilter
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportFilterResetButton
+              showOnlyWhenActive
+              active={accountsListingFiltersActive(
+                { search, dateFrom, dateTo, statusTab: statusTab === "all" ? "" : statusTab },
+                { search: "", dateFrom: "", dateTo: "", statusTab: "" },
+              )}
+              onClick={() => {
+                setSearch("");
+                setDateFrom("");
+                setDateTo("");
+                setStatusTab("all");
+              }}
+            />
+          </ReportFilterRow>
         </AccountsListingFilterCard>
         <AccountsListingTableCard>
           <CreditNotesRecordsTable
@@ -433,16 +492,21 @@ function CreditNotesRecordsTabBody({
 
 export default function CreditNotesListClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const [moduleTab, setModuleTab] = useState("pending");
   const [statusTab, setStatusTab] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("");
   const [records, setRecords] = useState<CreditNoteRecord[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [search, setSearch] = useState("");
   const [cancelTarget, setCancelTarget] = useState<CreditNoteRecord | null>(null);
   const [viewTarget, setViewTarget] = useState<CreditNoteRecord | null>(null);
+
+  const sectionRefresh = useAccountsSectionRefresh("credit-notes");
 
   const refresh = useCallback(() => {
     if (!mounted) return;
@@ -452,7 +516,18 @@ export default function CreditNotesListClient() {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, sectionRefresh]);
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    if (!hasDocumentsListingFilters(qs)) return;
+    const parsed = parseDocumentsListingFiltersFromSearch(qs);
+    if (parsed.dateFrom) setDateFrom(parsed.dateFrom);
+    if (parsed.dateTo) setDateTo(parsed.dateTo);
+    if (parsed.branch) setBranchFilter(parsed.branch);
+    if (parsed.warehouse) setWarehouseFilter(parsed.warehouse);
+    setModuleTab("records");
+  }, [searchParams]);
 
   const counts = useMemo(() => computeCreditNoteTabCounts(records), [records]);
 
@@ -504,6 +579,8 @@ export default function CreditNotesListClient() {
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
+              branchFilter={branchFilter}
+              warehouseFilter={warehouseFilter}
               onView={setViewTarget}
               onCancel={setCancelTarget}
             />

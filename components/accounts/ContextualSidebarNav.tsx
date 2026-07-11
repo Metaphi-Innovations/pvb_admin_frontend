@@ -44,7 +44,7 @@ export function ContextualSidebarNav({
                 "border-l-2 -ml-[1px] transition-all duration-150",
                 active
                   ? "border-brand-600 bg-brand-50 text-brand-800 font-semibold"
-                  : "border-transparent text-slate-600 hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
+                  : "border-transparent text-muted-foreground hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30",
               )}
             >

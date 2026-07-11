@@ -16,6 +16,7 @@ import {
   type ChartOfAccount,
 } from "@/app/(app)/accounts/data";
 import { generateLedgerCode } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import {
   isSundryCreditorsGroup,
   SUNDRY_CREDITORS_GROUP_NAME,
@@ -209,6 +210,10 @@ export function createAccountsVendorLedger(
   };
 
   saveChartOfAccounts([...records, ledger]);
+  dispatchAccountsDataChanged("ledgers", {
+    operation: "create",
+    recordId: ledger.id,
+  });
   applyAccountsVendorMeta(ledgerId, vendorRecord);
 
   const now = new Date().toISOString();

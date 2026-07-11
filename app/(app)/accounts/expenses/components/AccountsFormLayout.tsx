@@ -16,6 +16,7 @@ export function AccountsFormLayout({
   children,
   footer,
   fullWidth = false,
+  onBackClick,
 }: {
   title: string;
   breadcrumb: { label: string; href: string }[];
@@ -24,9 +25,16 @@ export function AccountsFormLayout({
   footer?: React.ReactNode;
   /** When true, form uses full content width (Zoho Books-style documents). */
   fullWidth?: boolean;
+  /** When set, overrides default back navigation (e.g. unsaved-changes guard). */
+  onBackClick?: () => void;
 }) {
   const router = useRouter();
   const backHref = breadcrumb[breadcrumb.length - 1]?.href ?? "/accounts";
+
+  const handleBack = () => {
+    if (onBackClick) onBackClick();
+    else router.push(backHref);
+  };
 
   return (
     <div className="min-h-full bg-background flex flex-col -m-3">
@@ -35,7 +43,7 @@ export function AccountsFormLayout({
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
-                onClick={() => router.push(backHref)}
+                onClick={handleBack}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/70 hover:bg-muted/40"
               >
                 <ArrowLeft className="w-4 h-4 text-muted-foreground" />

@@ -33,8 +33,16 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportSearchFilter,
+  ReportTdsSectionMultiFilter,
+  ReportProductMultiFilter,
+  ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import {
+  buildEntityFilterSummary,
+  formatMultiSelectLabel,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
@@ -50,6 +58,7 @@ import {
   buildTdsSummaryStatement,
   flattenTdsSummaryForExport,
   formatTdsRate,
+  getTdsPartyOptions,
   TDS_SECTION_OPTIONS,
   type TdsSummaryLine,
   type TdsSummaryRow,
@@ -310,32 +319,42 @@ export default function TdsPartyWiseReportClient() {
 
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [partyType, setPartyType] = useState("all");
-  const [tdsSection, setTdsSection] = useState("all");
+  const [partyIds, setPartyIds] = useState<string[]>([]);
+  const [tdsSections, setTdsSections] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
+  const partyOptions = useMemo(() => getTdsPartyOptions(), []);
+  const tdsSectionOptions = useMemo(
+    () => TDS_SECTION_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
+    [],
+  );
+
   useEffect(() => {
     const fromUrl = searchParams.get("section");
-    if (fromUrl) setTdsSection(fromUrl.toUpperCase());
+    if (fromUrl) setTdsSections([fromUrl.toUpperCase()]);
   }, [searchParams]);
 
   const partyTypeLabel =
     PARTY_TYPE_OPTIONS.find((o) => o.value === partyType)?.label ?? "All";
-  const tdsSectionLabel =
-    tdsSection === "all"
-      ? "All Sections"
-      : (TDS_SECTION_OPTIONS.find((o) => o.value === tdsSection)?.label ?? tdsSection);
+  const tdsSectionLabel = formatMultiSelectLabel(
+    tdsSections,
+    tdsSectionOptions,
+    "Section",
+    "All Sections",
+  );
 
   const statement = useMemo(
     () =>
       buildTdsSummaryStatement({
         partyType,
-        tdsSection,
+        tdsSection: tdsSections,
+        partyIds,
         search: debouncedSearch,
       }),
-    [partyType, tdsSection, debouncedSearch],
+    [partyType, tdsSections, partyIds, debouncedSearch],
   );
 
   const dataRows = useMemo(
@@ -371,17 +390,26 @@ export default function TdsPartyWiseReportClient() {
   const hasFilters =
     Boolean(search.trim()) ||
     partyType !== "all" ||
-    tdsSection !== "all";
+    partyIds.length > 0 ||
+    tdsSections.length > 0;
 
   const resetFilters = useCallback(() => {
     setSearch("");
     setPartyType("all");
-    setTdsSection("all");
+    setPartyIds([]);
+    setTdsSections([]);
     setPreset("this_year");
     const { from, to } = resolveDateRangePreset("this_year");
     setDateFrom(from);
     setDateTo(to);
   }, [setPreset, setDateFrom, setDateTo]);
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary("party", "Parties", partyIds, partyOptions, () => setPartyIds([])),
+      buildEntityFilterSummary("tdsSection", "TDS Sections", tdsSections, tdsSectionOptions, () => setTdsSections([])),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [partyIds, tdsSections, partyOptions, tdsSectionOptions]);
 
   const exportMeta = useMemo(
     () => ({
@@ -396,65 +424,57 @@ export default function TdsPartyWiseReportClient() {
   );
 
   const filterBar = (
-    <ReportFilterRow className="items-end gap-2">
-      <ReportDateRangeFilter
-        preset={preset}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onPresetChange={setPreset}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-      />
-      <div className="space-y-1 min-w-[130px]">
-        <Label className={filterLabelClass}>Party Type</Label>
-        <Select value={partyType} onValueChange={setPartyType}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PARTY_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1 min-w-[170px]">
-        <Label className={filterLabelClass}>TDS Section</Label>
-        <Select value={tdsSection} onValueChange={setTdsSection}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[170px]")}>
-            <SelectValue placeholder="All sections" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">
-              All Sections
-            </SelectItem>
-            {TDS_SECTION_OPTIONS.map((s) => (
-              <SelectItem key={s.value} value={s.value} className="text-xs">
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <ReportSearchFilter
-        value={search}
-        onChange={setSearch}
-        placeholder="Party, PAN, section…"
-        className="min-w-[180px]"
-      />
-      {hasFilters && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-sm px-2"
-          onClick={resetFilters}
-        >
-          <X className="w-3 h-3 mr-1" /> Reset
-        </Button>
-      )}
-    </ReportFilterRow>
+    <>
+      <ReportFilterRow className="items-end gap-2">
+        <ReportDateRangeFilter
+          preset={preset}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onPresetChange={setPreset}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+        />
+        <div className="space-y-1 min-w-[130px]">
+          <Label className={filterLabelClass}>Party Type</Label>
+          <Select value={partyType} onValueChange={setPartyType}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PARTY_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <ReportProductMultiFilter
+          values={partyIds}
+          onChange={setPartyIds}
+          products={partyOptions}
+          label="Party"
+        />
+        <ReportTdsSectionMultiFilter values={tdsSections} onChange={setTdsSections} />
+        <ReportSearchFilter
+          value={search}
+          onChange={setSearch}
+          placeholder="Party, PAN, section…"
+          className="min-w-[180px]"
+        />
+        {hasFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-sm px-2"
+            onClick={resetFilters}
+          >
+            <X className="w-3 h-3 mr-1" /> Reset
+          </Button>
+        )}
+      </ReportFilterRow>
+      <ReportFilterSummary items={filterSummaryItems} />
+    </>
   );
 
   return (

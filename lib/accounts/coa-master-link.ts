@@ -354,7 +354,7 @@ export function coaHrefForLedger(ledgerId: number): string {
 }
 
 export function ledgerDetailHref(ledgerId: number): string {
-  return `/accounts/masters/ledgers/${ledgerId}`;
+  return coaHrefForLedger(ledgerId);
 }
 
 /** Backfill party links + COA source refs for existing ledgers (non-destructive). */

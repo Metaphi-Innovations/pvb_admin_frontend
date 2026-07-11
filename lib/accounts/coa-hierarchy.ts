@@ -1,12 +1,12 @@
 /**
  * Finance module hierarchy — Chart of Accounts.
  *
- * Primary Head (L1) → Fixed Group (L2) → Accounting Group (L3) → Ledger (L4, user-created)
+ * Primary Head (L1) → Groups (L2+) → Ledger (user-created)
  *
  * Posting rule: voucher entries target posting ledgers only (leaf ledgers with no children).
  * Legacy grouping ledgers (ledgers with children) cannot receive postings.
- * Primary heads and fixed groups are system-defined and locked.
- * New ledgers attach only to Level 3 Accounting Groups — never under another ledger.
+ * Primary heads are system-defined and locked. Users may create nested account groups and ledgers.
+ * New ledgers attach only to leaf account groups — never under another ledger or primary head.
  */
 
 import type { ChartOfAccount, CoaNodeLevel } from "@/app/(app)/accounts/data";
@@ -93,15 +93,36 @@ export function isSystemLockedNode(node: ChartOfAccount): boolean {
 }
 
 export function canUserCreateAtLevel(level: CoaNodeLevel): boolean {
-  return level === "ledger";
+  return level === "ledger" || level === "account_group";
+}
+
+export function isUserCreatedGroup(node: ChartOfAccount): boolean {
+  return node.nodeLevel === "account_group" && !node.isSystem;
+}
+
+export function canUserEditGroup(node: ChartOfAccount): boolean {
+  return isUserCreatedGroup(node);
+}
+
+export function canUserDeleteGroup(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (!canUserEditGroup(node)) return false;
+  if (records.some((r) => r.parentAccountId === node.id)) return false;
+  return true;
 }
 
 export function canUserEditNode(node: ChartOfAccount): boolean {
+  if (canUserEditGroup(node)) return true;
   if (isSystemLockedNode(node)) return false;
   return isLedgerNode(node) && !node.isSystem;
 }
 
-export function canUserDeleteNode(node: ChartOfAccount): boolean {
+export function canUserDeleteNode(node: ChartOfAccount, records?: ChartOfAccount[]): boolean {
+  if (canUserEditGroup(node)) {
+    return canUserDeleteGroup(node, records ?? loadChartOfAccounts());
+  }
   return canUserEditNode(node);
 }
 

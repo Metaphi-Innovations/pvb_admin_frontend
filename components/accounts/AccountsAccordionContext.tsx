@@ -27,7 +27,11 @@ export function AccountsAccordionProvider({ children }: { children: React.ReactN
   );
 
   useEffect(() => {
-    scheduleAccountsSectionSeed(activeAccountsSection);
+    // Defer seed work until after route paint so navigation stays responsive.
+    const timer = window.setTimeout(() => {
+      scheduleAccountsSectionSeed(activeAccountsSection);
+    }, 150);
+    return () => window.clearTimeout(timer);
   }, [activeAccountsSection]);
 
   const value = useMemo(

@@ -5,12 +5,17 @@ import {
   getDirectChildren,
   getSearchMatchingNodes,
   resolveParentName,
+  countChildGroups,
+  countLedgersUnder,
+  getAncestorPath,
 } from "./chart-of-accounts-data";
 
 import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
 import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
-import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
+import { isTdsCoaLedger, tdsLedgerKindAlias } from "@/lib/accounts/tds-coa-sync";
+import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
+import { loadTDSMasters, formatTdsRateDisplay, formatApplicableToLabels, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 
 import {
   computePeriodClosingBalance,
@@ -40,6 +45,42 @@ export interface CoaLedgerListingRow {
   openingSide: "Debit" | "Credit";
   currentAmount: number;
   currentSide: "Debit" | "Credit";
+  /** Populated for TDS section ledgers */
+  tdsSection?: string;
+  tdsRate?: string;
+  tdsKind?: "Payable" | "Receivable";
+  tdsDeductee?: string;
+}
+
+export interface TdsLedgerUsageInfo {
+  section: string;
+  rate: string;
+  kind: "Payable" | "Receivable";
+  deductee: string;
+  linkedMaster: string;
+}
+
+export function resolveTdsLedgerUsageInfo(ledger: ChartOfAccount): TdsLedgerUsageInfo | null {
+  if (!isTdsCoaLedger(ledger)) return null;
+
+  const master =
+    ledger.erpSourceId != null
+      ? loadTDSMasters().find((m) => m.id === ledger.erpSourceId)
+      : undefined;
+  const section =
+    master != null
+      ? getTdsSectionCode(master)
+      : parseTdsSectionCode(ledger.accountName) ?? "—";
+  const kind: "Payable" | "Receivable" =
+    ledger.alias === tdsLedgerKindAlias("receivable") ? "Receivable" : "Payable";
+
+  return {
+    section,
+    rate: master ? formatTdsRateDisplay(master.tdsRate) : "—",
+    kind,
+    deductee: master ? formatApplicableToLabels(master.applicableTo) : "—",
+    linkedMaster: master ? `${getTdsSectionCode(master)} — ${master.sectionName}` : "TDS Master",
+  };
 }
 
 /** Resolve user-facing source label for a COA ledger row. */
@@ -76,7 +117,8 @@ function ledgerListingMatchesSearch(
     row.ledger.accountName.toLowerCase().includes(q) ||
     row.ledger.accountCode.toLowerCase().includes(q) ||
     row.parentGroupName.toLowerCase().includes(q) ||
-    row.source.toLowerCase().includes(q)
+    row.source.toLowerCase().includes(q) ||
+    (row.tdsSection?.toLowerCase().includes(q) ?? false)
   );
 }
 
@@ -93,6 +135,7 @@ export function buildCoaLedgerListingRows(
 
   let rows = ledgers.map((ledger) => {
     const current = computeLedgerCurrentBalance(ledger);
+    const tds = resolveTdsLedgerUsageInfo(ledger);
     return {
       ledger,
       parentGroupName: ledger.parentAccountId
@@ -103,6 +146,14 @@ export function buildCoaLedgerListingRows(
       openingSide: ledger.balanceType,
       currentAmount: current.amount,
       currentSide: current.balanceType,
+      ...(tds
+        ? {
+            tdsSection: tds.section,
+            tdsRate: tds.rate,
+            tdsKind: tds.kind,
+            tdsDeductee: tds.deductee,
+          }
+        : {}),
     };
   });
 
@@ -415,6 +466,40 @@ export function computeCoaListingSummary(
   return {
     totalAccounts: rows.length,
     ...balances,
+  };
+}
+
+export interface CoaGroupDetailSummary {
+  group: ChartOfAccount;
+  parentGroupName: string;
+  childGroupCount: number;
+  ledgerCount: number;
+  closingAmount: number;
+  closingSide: "Debit" | "Credit";
+}
+
+/** Metadata and aggregated balance for an account group drill-down header. */
+export function computeCoaGroupDetailSummary(
+  records: ChartOfAccount[],
+  groupId: number,
+  dateFrom: string,
+  dateTo: string,
+): CoaGroupDetailSummary | null {
+  const group = records.find((r) => r.id === groupId);
+  if (!group || group.nodeLevel !== "account_group") return null;
+
+  const path = getAncestorPath(records, groupId);
+  const parent = path.length >= 2 ? path[path.length - 2] : null;
+  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
+  const balances = balancesForNode(records, group, movementMap);
+
+  return {
+    group,
+    parentGroupName: parent?.accountName ?? "—",
+    childGroupCount: countChildGroups(records, groupId),
+    ledgerCount: countLedgersUnder(records, groupId),
+    closingAmount: balances.closingAmount,
+    closingSide: balances.closingSide,
   };
 }
 

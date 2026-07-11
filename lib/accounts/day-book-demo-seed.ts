@@ -1,6 +1,6 @@
-import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
+import { demoDateAt, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
- * Day Book demo seed — 18 balanced accounting vouchers (Jun 25–30 2026).
+ * Day Book demo seed — balanced accounting vouchers with relative dates.
  * Idempotent via version key; replaces prior day-book demo records on upgrade.
  */
 
@@ -35,8 +35,14 @@ import {
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { DAY_BOOK_DEMO_VOUCHER_PATTERN } from "@/lib/accounts/day-book-data";
+import {
+  maybePostCreditNote,
+  maybePostDebitNote,
+  maybePostPurchaseInvoice,
+  maybePostSalesInvoice,
+} from "@/lib/accounts/document-posting-bridge";
 
-export const DAY_BOOK_DEMO_SEED_VERSION = "relative-dates-v1";
+export const DAY_BOOK_DEMO_SEED_VERSION = "relative-dates-v2-posted";
 const VERSION_KEY = "ds_day_book_demo_seed_version";
 
 const DEMO_ID_BASE = 9100;
@@ -45,12 +51,21 @@ function isDemoVoucherNo(no: string): boolean {
   return DAY_BOOK_DEMO_VOUCHER_PATTERN.test(no);
 }
 
+function isDemoReferenceNo(ref: string | undefined): boolean {
+  const r = ref?.trim() ?? "";
+  return r.length > 0 && isDemoVoucherNo(r);
+}
+
 function cleanupDayBookDemoRecords(): void {
   saveInvoices(loadInvoices().filter((i) => !isDemoVoucherNo(i.invoiceNo)));
   savePurchaseInvoices(loadPurchaseInvoices().filter((i) => !isDemoVoucherNo(i.invoiceNo)));
   saveCreditNotes(loadCreditNotes().filter((c) => !isDemoVoucherNo(c.creditNoteNo)));
   saveDebitNotes(loadDebitNotes().filter((d) => !isDemoVoucherNo(d.debitNoteNo)));
-  saveVouchers(loadVouchers().filter((v) => !isDemoVoucherNo(v.voucherNumber)));
+  saveVouchers(
+    loadVouchers().filter(
+      (v) => !isDemoVoucherNo(v.voucherNumber) && !isDemoReferenceNo(v.referenceNo),
+    ),
+  );
 }
 
 function setVoucherNumber(voucherId: number, voucherNumber: string): void {
@@ -477,7 +492,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 31,
       debitNoteNo: "DN-0001",
       vendorName: "Bharat Seeds",
-      debitNoteDate: "2026-06-28",
+      debitNoteDate: demoDateAt(8),
       time: "15:20",
       amount: 27500,
       remarks: "Purchase rate difference adjustment",
@@ -486,7 +501,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 32,
       debitNoteNo: "DN-0002",
       vendorName: "Kisan Agro Centre",
-      debitNoteDate: "2026-06-29",
+      debitNoteDate: demoDateAt(9),
       time: "16:10",
       amount: 12500,
       remarks: "Purchase rate difference adjustment — short supply",
@@ -496,6 +511,44 @@ function seedDayBookDocuments(): void {
     ...loadDebitNotes().filter((d) => !isDemoVoucherNo(d.debitNoteNo)),
     ...debitNotes,
   ]);
+}
+
+function postDayBookDocuments(): void {
+  for (const invoice of loadInvoices().filter((i) => isDemoVoucherNo(i.invoiceNo))) {
+    maybePostSalesInvoice(invoice);
+  }
+  for (const invoice of loadPurchaseInvoices().filter((i) => isDemoVoucherNo(i.invoiceNo))) {
+    maybePostPurchaseInvoice(invoice);
+  }
+  for (const note of loadCreditNotes().filter((c) => isDemoVoucherNo(c.creditNoteNo))) {
+    maybePostCreditNote(note);
+  }
+  for (const note of loadDebitNotes().filter((d) => isDemoVoucherNo(d.debitNoteNo))) {
+    maybePostDebitNote(note);
+  }
+}
+
+function seedContraVoucher(
+  fromBankId: number,
+  fromBankName: string,
+  toBankId: number,
+  toBankName: string,
+  amount: number,
+  date: string,
+  voucherNo: string,
+  narration: string,
+): void {
+  const v = createVoucher("contra", {
+    date,
+    referenceNo: voucherNo,
+    narration,
+    status: "posted",
+    lines: [
+      { id: 1, ledgerId: toBankId, ledgerName: toBankName, debit: amount, credit: 0, remarks: narration },
+      { id: 2, ledgerId: fromBankId, ledgerName: fromBankName, debit: 0, credit: amount, remarks: narration },
+    ],
+  });
+  setVoucherNumber(v.id, voucherNo);
 }
 
 function seedDayBookVouchers(): void {
@@ -520,7 +573,7 @@ function seedDayBookVouchers(): void {
       { ledgerId: ledgers.gst!.id, ledgerName: ledgers.gst!.accountName, debit: 18750, credit: 0 },
       { ledgerId: bank.id, ledgerName: bank.accountName, debit: 0, credit: 18750 },
     ],
-    "2026-06-25",
+    demoDateAt(10),
     "09:45",
     "JV-0001",
     "GST adjustment entry",
@@ -531,7 +584,7 @@ function seedDayBookVouchers(): void {
       { ledgerId: ledgers.salary!.id, ledgerName: ledgers.salary!.accountName, debit: 0, credit: 48920 },
       { ledgerId: bank.id, ledgerName: bank.accountName, debit: 48920, credit: 0 },
     ],
-    "2026-06-29",
+    demoDateAt(11),
     "17:00",
     "JV-0002",
     "Salary provision",
@@ -542,7 +595,7 @@ function seedDayBookVouchers(): void {
       { ledgerId: ledgers.freight!.id, ledgerName: ledgers.freight!.accountName, debit: 236000, credit: 0 },
       { ledgerId: bank.id, ledgerName: bank.accountName, debit: 0, credit: 236000 },
     ],
-    "2026-06-30",
+    demoDateAt(12),
     "10:00",
     "JV-0003",
     "Freight expense",
@@ -553,7 +606,7 @@ function seedDayBookVouchers(): void {
       { ledgerId: ledgers.inventory!.id, ledgerName: ledgers.inventory!.accountName, debit: 0, credit: 236000 },
       { ledgerId: bank.id, ledgerName: bank.accountName, debit: 236000, credit: 0 },
     ],
-    "2026-06-30",
+    demoDateAt(13),
     "11:30",
     "JV-0004",
     "Inventory adjustment",
@@ -564,7 +617,7 @@ function seedDayBookVouchers(): void {
       { ledgerId: ledgers.bankCharges!.id, ledgerName: ledgers.bankCharges!.accountName, debit: 35400, credit: 0 },
       { ledgerId: bank.id, ledgerName: bank.accountName, debit: 0, credit: 35400 },
     ],
-    "2026-06-30",
+    demoDateAt(14),
     "12:15",
     "JV-0005",
     "Bank charges",
@@ -575,7 +628,7 @@ function seedDayBookVouchers(): void {
       { ledgerId: ledgers.expense.id, ledgerName: ledgers.expense.accountName, debit: 0, credit: 12500 },
       { ledgerId: bank.id, ledgerName: bank.accountName, debit: 12500, credit: 0 },
     ],
-    "2026-06-30",
+    demoDateAt(15),
     "13:00",
     "JV-0006",
     "Round-off adjustment",
@@ -587,7 +640,7 @@ function seedDayBookVouchers(): void {
     partyKrishna!.id,
     partyKrishna!.accountName,
     76500,
-    "2026-06-26",
+    demoDateAt(16),
     "RV-0001",
     "Payment received through NEFT",
   );
@@ -598,7 +651,7 @@ function seedDayBookVouchers(): void {
     partyAbc!.id,
     partyAbc!.accountName,
     18750,
-    "2026-06-28",
+    demoDateAt(17),
     "RV-0002",
     "Payment received through NEFT — partial settlement",
   );
@@ -609,7 +662,7 @@ function seedDayBookVouchers(): void {
     partyMahadev!.id,
     partyMahadev!.accountName,
     35400,
-    "2026-06-25",
+    demoDateAt(18),
     "PV-0001",
     "Vendor payment through HDFC Bank",
   );
@@ -620,9 +673,21 @@ function seedDayBookVouchers(): void {
     partyRamesh!.id,
     partyRamesh!.accountName,
     12500,
-    "2026-06-29",
+    demoDateAt(19),
     "PV-0002",
     "Vendor payment through HDFC Bank — freight charges",
+  );
+
+  const secondBank = getLedgersUnderSubGroupName("Bank Accounts")[1] ?? bank;
+  seedContraVoucher(
+    bank.id,
+    bank.accountName,
+    secondBank.id,
+    secondBank.accountName,
+    50000,
+    demoDateAt(20),
+    "CV-0001",
+    "Fund transfer between bank accounts",
   );
 }
 
@@ -637,6 +702,7 @@ export function seedDayBookDemoData(force = false): void {
 
   seedDayBookDocuments();
   seedDayBookVouchers();
+  postDayBookDocuments();
 
   localStorage.setItem(VERSION_KEY, DAY_BOOK_DEMO_SEED_VERSION);
 }

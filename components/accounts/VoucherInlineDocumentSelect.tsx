@@ -25,6 +25,8 @@ import {
 export interface OpenVoucherDocument {
   id: number;
   no: string;
+  documentDate: string;
+  originalAmount: number;
   outstanding: number;
   href: string;
 }
@@ -80,6 +82,8 @@ export function useOpenVoucherDocuments(
       return getOpenInvoicesForCustomer(partyRef.contactId).map((inv) => ({
         id: inv.invoiceId,
         no: inv.invoiceNo,
+        documentDate: inv.invoiceDate,
+        originalAmount: inv.invoiceAmount,
         outstanding: inv.outstanding,
         href: `/accounts/invoices/${inv.invoiceId}`,
       }));
@@ -87,6 +91,8 @@ export function useOpenVoucherDocuments(
     return getOpenBillsForVendor(partyRef.contactId).map((bill) => ({
       id: bill.billId,
       no: bill.billNo,
+      documentDate: bill.billDate,
+      originalAmount: bill.billAmount,
       outstanding: bill.outstanding,
       href: `/accounts/purchase-invoices/${bill.billId}`,
     }));

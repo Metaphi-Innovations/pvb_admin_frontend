@@ -43,7 +43,8 @@ const nextConfig = {
       { source: "/accounts/transactions/payment", destination: "/accounts/transactions/payments", permanent: false },
       { source: "/accounts/transactions/bank-reconciliation", destination: "/accounts/transactions/reconciliation", permanent: false },
       { source: "/accounts/ledger", destination: "/accounts/masters/chart-of-accounts", permanent: false },
-      { source: "/accounts/masters/ledgers/:path*", destination: "/accounts/masters/chart-of-accounts", permanent: false },
+      { source: "/accounts/masters/ledgers/:id", destination: "/accounts/masters/chart-of-accounts?node=:id", permanent: false },
+      { source: "/accounts/masters/ledgers", destination: "/accounts/masters/chart-of-accounts", permanent: false },
       { source: "/accounts/outstanding", destination: "/accounts/reports/trial-balance", permanent: false },
     ];
   },

@@ -108,16 +108,18 @@ export function VoucherDetailsTableRow({
 }: {
   children: React.ReactNode;
   className?: string;
-  columns?: 2 | 3 | 4;
+  columns?: 1 | 2 | 3 | 4;
 }) {
   return (
     <div
       className={cn(
-        columns === 2
-          ? VOUCHER_ROW_EQUAL_2
-          : columns === 4
-            ? VOUCHER_ROW_EQUAL_4
-            : VOUCHER_ROW_EQUAL_3,
+        columns === 1
+          ? "grid grid-cols-1 gap-3 items-start"
+          : columns === 2
+            ? VOUCHER_ROW_EQUAL_2
+            : columns === 4
+              ? VOUCHER_ROW_EQUAL_4
+              : VOUCHER_ROW_EQUAL_3,
         "px-3 py-2.5",
         className,
       )}
@@ -125,6 +127,17 @@ export function VoucherDetailsTableRow({
       {children}
     </div>
   );
+}
+
+/** Full-width band inside VoucherDetailsTable (party ledger, bank row, etc.) */
+export function VoucherDetailsTableBand({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={cn("px-3 py-2.5", className)}>{children}</div>;
 }
 
 export function resolveVoucherFormId(voucherId?: number): number | null {
@@ -145,7 +158,7 @@ export function VoucherFormField({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-1 shrink-0 min-w-0", className)}>
+    <div className={cn("space-y-1 min-w-0", className)}>
       <Label className={VOUCHER_LABEL_CLASS}>
         {label}
         {required && <span className="text-red-500 ml-0.5">*</span>}

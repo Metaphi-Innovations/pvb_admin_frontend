@@ -83,7 +83,7 @@ export function LedgerTypeFields({ meta, readOnly, mode, onChange }: LedgerTypeF
               <p className="font-medium">Create from Customer Master</p>
               <p>Customer ledgers are auto-created under Trade Receivables when you save a customer.</p>
               <Link href="/masters/customers/new" className="text-brand-600 hover:underline font-medium">
-                Go to Customer Master â†’
+                Go to Customer Master →
               </Link>
             </>
           )}
@@ -92,16 +92,16 @@ export function LedgerTypeFields({ meta, readOnly, mode, onChange }: LedgerTypeF
               <p className="font-medium">Create from Supplier Master</p>
               <p>Supplier ledgers are auto-created under Trade Payables when you save a vendor.</p>
               <Link href="/masters/vendors/new" className="text-brand-600 hover:underline font-medium">
-                Go to Supplier Master â†’
+                Go to Supplier Master →
               </Link>
             </>
           )}
           {type === "Bank" && (
             <>
-              <p className="font-medium">Create from Banking â†’ Bank Accounts</p>
+              <p className="font-medium">Create from Banking → Bank Accounts</p>
               <p>Bank ledgers are linked to bank groups in the Chart of Accounts.</p>
               <Link href="/accounts/banking/bank-accounts/new" className="text-brand-600 hover:underline font-medium">
-                Go to Bank Accounts â†’
+                Go to Bank Accounts →
               </Link>
             </>
           )}

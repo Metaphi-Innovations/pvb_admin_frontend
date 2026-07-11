@@ -56,10 +56,25 @@ const EMPTY_FORM: FormState = {
   status: "active",
 };
 
-export default function BankAccountFormClient({ accountId }: { accountId?: number }) {
+export default function BankAccountFormClient({
+  accountId,
+  presetGroupId: presetGroupIdProp,
+  onClose,
+  onSaved,
+}: {
+  accountId?: number;
+  presetGroupId?: number;
+  onClose?: () => void;
+  onSaved?: (ledgerId: number, parentGroupId: number) => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const presetGroupId = searchParams.get("bankGroupId");
+  const presetGroupIdParam = searchParams.get("bankGroupId");
+  const presetGroupId =
+    presetGroupIdProp ??
+    (presetGroupIdParam && Number.isFinite(Number(presetGroupIdParam))
+      ? Number(presetGroupIdParam)
+      : null);
   const isEdit = accountId != null;
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -136,11 +151,15 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       if (isEdit && accountId != null) {
         updateBankAccount(accountId, savePayload);
       } else {
-        createBankAccountWithLedger({
+        const created = createBankAccountWithLedger({
           ...savePayload,
-          bankGroupCoaId: presetGroupId ? Number(presetGroupId) : null,
+          bankGroupCoaId: presetGroupId,
           openingBalanceDate: new Date().toISOString().slice(0, 10),
         });
+        if (onSaved) {
+          onSaved(created.coaLedgerId, created.bankGroupCoaId);
+          return;
+        }
       }
       router.push("/accounts/banking/bank-accounts");
     } catch (e) {
@@ -159,7 +178,7 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       ]}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => (onClose ? onClose() : router.back())}>
             Cancel
           </Button>
           <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white" onClick={save}>

@@ -39,6 +39,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -46,16 +50,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportCustomerFilter,
+  ReportCustomerMultiFilter,
+  ReportBranchMultiFilter,
+  ReportStatusMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   ReportSearchFilter,
+  ReportFilterResetButton,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { resetReportDateRange } from "@/lib/accounts/use-accounts-listing-reset";
+import {
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
+import { StatusBadge as SharedStatusBadge } from "@/components/ui/StatusBadge";
+import { collectionStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import {
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
@@ -84,10 +101,7 @@ const STATUS_OPTIONS: { value: CollectionFollowUpStatus; label: string }[] = [
   { value: "closed", label: "Closed" },
 ];
 
-const COLLECTION_STATUS_FILTER: { value: CollectionFollowUpStatus | "all"; label: string }[] = [
-  { value: "all", label: "All statuses" },
-  ...STATUS_OPTIONS,
-];
+const COLLECTION_STATUS_FILTER_OPTIONS = STATUS_OPTIONS;
 
 const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.map((o) => o.value);
 
@@ -178,6 +192,9 @@ function CollectionTable({
   onEdit,
   onHistory,
   onQuickStatus,
+  emptyMessage,
+  hasFilters,
+  onClearFilters,
 }: {
   page: number;
   pageSize: number;
@@ -186,6 +203,9 @@ function CollectionTable({
   onEdit: (row: CollectionFollowUp) => void;
   onHistory: (row: CollectionFollowUp) => void;
   onQuickStatus: (row: CollectionFollowUp, status: CollectionFollowUpStatus) => void;
+  emptyMessage: string;
+  hasFilters: boolean;
+  onClearFilters: () => void;
 }) {
   const ctx = useAccountsColumnFilterContext();
   const visible = useAccountsFilteredRows<CollectionFollowUp>([]);
@@ -212,6 +232,7 @@ function CollectionTable({
               <SortTh label="Overdue Days" colKey="overdueDays" filterType="number" align="center" />
               <SortTh label="Last Follow-up" colKey="followUpDate" filterType="date" />
               <SortTh label="Next Follow-up" colKey="nextFollowUpDate" filterType="date" />
+              <SortTh label="Status" colKey="status" filterType="status" />
               <SortTh label="Assigned To" colKey="assignedTo" />
               <AccountsColumnHeader label="Remarks" colKey="remarks" sortable={false} />
               <AccountsColumnHeader
@@ -226,8 +247,19 @@ function CollectionTable({
           <AccountsTableBody>
             {visible.length === 0 ? (
               <AccountsTableRow>
-                <AccountsTableCell colSpan={10} className="accounts-table-empty">
-                  No records found.
+                <AccountsTableCell colSpan={11} className="accounts-table-empty">
+                  <div className="flex flex-col items-center gap-1">
+                    <span>{emptyMessage}</span>
+                    {hasFilters ? (
+                      <button
+                        type="button"
+                        className="text-xs text-brand-600 hover:underline mt-1"
+                        onClick={onClearFilters}
+                      >
+                        Clear filters
+                      </button>
+                    ) : null}
+                  </div>
                 </AccountsTableCell>
               </AccountsTableRow>
             ) : (
@@ -272,6 +304,12 @@ function CollectionTable({
                     </AccountsTableCell>
                     <AccountsTableCell>{formatReportDate(r.followUpDate)}</AccountsTableCell>
                     <AccountsTableCell>{formatReportDate(r.nextFollowUpDate)}</AccountsTableCell>
+                    <AccountsTableCell>
+                      {(() => {
+                        const badge = collectionStatusToBadge(r.status);
+                        return <SharedStatusBadge status={badge.status} label={badge.label} size="sm" />;
+                      })()}
+                    </AccountsTableCell>
                     <AccountsTableCell>{r.assignedTo}</AccountsTableCell>
                     <AccountsTableCell>
                       <span className="text-xs max-w-[180px] truncate block" title={r.remarks}>
@@ -319,12 +357,14 @@ function CollectionTable({
 
 export default function CollectionTrackingClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [customerId, setCustomerId] = useState("all");
-  const [collectionStatus, setCollectionStatus] = useState("all");
+  const [customerIds, setCustomerIds] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [branchIds, setBranchIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const { toast, showCreated, showUpdated, dismissToast } = useAccountsToast();
 
   const sectionRefresh = useAccountsSectionRefresh();
 
@@ -334,18 +374,50 @@ export default function CollectionTrackingClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, customerId, collectionStatus, search, pageSize]);
+  }, [dateFrom, dateTo, customerIds, statuses, branchIds, search, pageSize]);
 
   const records = useMemo(() => loadCollectionFollowUps(), [refreshKey]);
   const customers = useMemo(() => loadCustomers(), []);
+  const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
   const invoices = useMemo(() => getPostedSalesInvoices(), [sectionRefresh]);
+
+  const moreFiltersActiveCount = countActiveMoreFilters({ branch: branchIds, status: statuses });
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary(
+        "customer",
+        "Customers",
+        customerIds,
+        customers.map((c) => ({
+          value: String(c.id),
+          label: c.customerName,
+          searchText: c.customerCode,
+        })),
+        () => setCustomerIds([]),
+      ),
+      buildBranchFilterSummary(branchIds, () => setBranchIds([])),
+      buildEntityFilterSummary(
+        "status",
+        "Statuses",
+        statuses,
+        COLLECTION_STATUS_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        () => setStatuses([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [customerIds, customers, branchIds, statuses]);
 
   const toolbarFiltered = useMemo(() => {
     return records.filter((r) => {
-      if (customerId !== "all" && String(r.customerId) !== customerId) return false;
+      if (customerIds.length > 0 && !customerIds.includes(String(r.customerId))) return false;
+      if (statuses.length > 0 && !statuses.includes(r.status)) return false;
+      if (branchIds.length > 0) {
+        const customer = customerById.get(r.customerId);
+        const branch = customer?.branch?.trim() || customer?.stateName?.trim() || "—";
+        if (!branchIds.includes(branch)) return false;
+      }
       if (dateFrom && r.dueDate && r.dueDate < dateFrom) return false;
       if (dateTo && r.dueDate && r.dueDate > dateTo) return false;
-      if (collectionStatus !== "all" && r.status !== collectionStatus) return false;
       const q = search.trim().toLowerCase();
       if (q) {
         const hay = [r.customerName, r.invoiceNo, r.followUpNo, r.assignedTo, r.remarks]
@@ -355,7 +427,26 @@ export default function CollectionTrackingClient() {
       }
       return true;
     });
-  }, [records, customerId, dateFrom, dateTo, collectionStatus, search]);
+  }, [records, customerIds, branchIds, statuses, customerById, dateFrom, dateTo, search]);
+
+  const hasToolbarFilters =
+    search.trim() !== "" ||
+    isMultiFilterActive(customerIds) ||
+    isMultiFilterActive(statuses) ||
+    isMultiFilterActive(branchIds) ||
+    preset !== "this_month";
+
+  const clearToolbarFilters = () => {
+    setSearch("");
+    setCustomerIds([]);
+    setStatuses([]);
+    setBranchIds([]);
+    resetReportDateRange(setPreset, setDateFrom, setDateTo, "this_month");
+  };
+
+  const emptyMessage = hasToolbarFilters
+    ? "No follow-ups match the selected filters."
+    : "No collection follow-ups recorded yet.";
 
   const getCellValue = useCallback((row: CollectionFollowUp, key: string) => {
     if (key === "overdueDays") return computeOverdueDays(row);
@@ -458,11 +549,14 @@ export default function CollectionTrackingClient() {
     }
     setDialogOpen(false);
     setRefreshKey((k) => k + 1);
+    if (editing) showUpdated("Follow-up");
+    else showCreated("Follow-up");
   };
 
   const quickStatus = (row: CollectionFollowUp, status: CollectionFollowUpStatus) => {
     updateCollectionFollowUp(row.id, { status });
     setRefreshKey((k) => k + 1);
+    showUpdated("Follow-up status");
   };
 
   const exportMeta = useMemo(
@@ -470,17 +564,21 @@ export default function CollectionTrackingClient() {
       reportName: "Collection Tracking",
       dateFrom,
       dateTo,
-      customer:
-        customerId === "all"
-          ? "All customers"
-          : (customers.find((c) => String(c.id) === customerId)?.customerName ?? "—"),
-      status:
-        collectionStatus === "all"
-          ? "All statuses"
-          : (COLLECTION_STATUS_FILTER.find((o) => o.value === collectionStatus)?.label ?? "—"),
+      customer: formatMultiSelectLabel(
+        customerIds,
+        customers.map((c) => ({ value: String(c.id), label: c.customerName })),
+        "Customer",
+        "All customers",
+      ),
+      status: formatMultiSelectLabel(
+        statuses,
+        COLLECTION_STATUS_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        "Status",
+        "All statuses",
+      ),
       search,
     }),
-    [dateFrom, dateTo, customerId, customers, collectionStatus, search],
+    [dateFrom, dateTo, customerIds, customers, statuses, search],
   );
 
   return (
@@ -496,6 +594,7 @@ export default function CollectionTrackingClient() {
         followUpDate: { type: "date" },
         nextFollowUpDate: { type: "date" },
         assignedTo: { type: "text" },
+        status: { type: "status", options: STATUS_FILTER_OPTIONS },
         remarks: { type: "text" },
       }}
       defaultSortKey="dueDate"
@@ -511,34 +610,39 @@ export default function CollectionTrackingClient() {
         </Button>
       }
       filters={
-        <ReportFilterRow end={<CollectionExport exportMeta={exportMeta} />}>
-          <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
-          <div className="space-y-1 min-w-[160px]">
-            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
-              Follow-up Status
-            </Label>
-            <select
-              value={collectionStatus}
-              onChange={(e) => setCollectionStatus(e.target.value)}
-              className="h-7 w-full text-sm rounded-md border border-border bg-white px-2"
-            >
-              {COLLECTION_STATUS_FILTER.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search follow-ups…" />
-        </ReportFilterRow>
+        <>
+          <ReportFilterRow end={<CollectionExport exportMeta={exportMeta} />}>
+            <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search follow-ups…" />
+            <ReportCustomerMultiFilter
+              values={customerIds}
+              onChange={setCustomerIds}
+              customers={customers}
+            />
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+              <ReportBranchMultiFilter values={branchIds} onChange={setBranchIds} />
+              <ReportStatusMultiFilter
+                values={statuses}
+                onChange={setStatuses}
+                options={COLLECTION_STATUS_FILTER_OPTIONS}
+                label="Collection Status"
+              />
+            </ReportMoreFilters>
+            <ReportFilterResetButton
+              showOnlyWhenActive
+              active={hasToolbarFilters}
+              onClick={clearToolbarFilters}
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
@@ -551,7 +655,12 @@ export default function CollectionTrackingClient() {
           onEdit={openEdit}
           onHistory={openHistory}
           onQuickStatus={quickStatus}
+          emptyMessage={emptyMessage}
+          hasFilters={hasToolbarFilters}
+          onClearFilters={clearToolbarFilters}
         />
+
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

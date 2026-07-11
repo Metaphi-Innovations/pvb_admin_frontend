@@ -90,10 +90,10 @@ export default function AccountingSettingsPageClient() {
           </h2>
           {(
             [
-              ["autoPostSales", "Sales Invoice â†’ accounting entries"],
-              ["autoPostPurchase", "Purchase Invoice approval â†’ accounting entries"],
-              ["autoPostHrClaims", "Approved employee claims â†’ payable entries"],
-              ["autoPostStockAdj", "Stock adjustments â†’ inventory accounting"],
+              ["autoPostSales", "Sales Invoice → accounting entries"],
+              ["autoPostPurchase", "Purchase Invoice approval → accounting entries"],
+              ["autoPostHrClaims", "Approved employee claims → payable entries"],
+              ["autoPostStockAdj", "Stock adjustments → inventory accounting"],
             ] as const
           ).map(([key, label]) => (
             <div key={key} className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3">
@@ -112,7 +112,7 @@ export default function AccountingSettingsPageClient() {
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3">
             <div>
               <p className="text-xs font-medium">Require approval before posting</p>
-              <p className="text-xs text-muted-foreground">Draft â†’ Approved â†’ Posted</p>
+              <p className="text-xs text-muted-foreground">Draft → Approved → Posted</p>
             </div>
             <Switch
               checked={settings.requireVoucherApproval}

@@ -1,11 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const FundTransferDetailClient = lazyAccountsPage(() => import("../FundTransferDetailClient"));
-
-export default function FundTransferViewPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  return <FundTransferDetailClient transferId={Number(params.id)} />;
+/** Fund Transfer detail removed — redirect to Contra Voucher listing. */
+export default function FundTransferDetailRedirectPage() {
+  redirect("/accounts/vouchers?tab=contra");
 }

@@ -9,29 +9,29 @@ import {
   formToLedger,
   generateLedgerCode,
   getAncestorPath,
+  ledgerToForm,
   saveChartOfAccounts,
   validateLedgerForm,
   type LedgerFormValues,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
-import { registerCoaAddLedgerHandlers } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
-import { requestSundryDebtorCustomerForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-sundry-debtor-form-bridge";
-import { requestSundryCreditorVendorForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-sundry-creditor-form-bridge";
-import { requestWarehouseForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-warehouse-form-bridge";
-import { loadChartOfAccounts, nextId } from "@/app/(app)/accounts/data";
 import {
-  isLandBuildingGroup,
-  isSundryCreditorsGroup,
-  isSundryDebtorsGroup,
-  landBuildingAddWarehouseHref,
-  sundryCreditorsAddLedgerHref,
-  sundryDebtorsAddLedgerHref,
-} from "@/lib/accounts/coa-add-ledger-policy";
+  registerCoaAddLedgerHandlers,
+  requestCoaSpecializedLedgerForm,
+} from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
+import {
+  registerCoaEditLedgerHandler,
+} from "@/app/(app)/accounts/masters/chart-of-accounts/coa-edit-ledger-bridge";
+import { nextId, type ChartOfAccount } from "@/app/(app)/accounts/data";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { useCoaNavigation } from "./CoaNavigationContext";
 
-/** Global add-ledger drawer — lives in CoaNavigationProvider so sidebar + toolbar always work. */
+type SheetMode = "add" | "edit" | null;
+
+/** Global add/edit-ledger drawer — lives in CoaNavigationProvider so sidebar + toolbar always work. */
 export function CoaAddLedgerHost() {
   const canCreate = useCanCoa("create");
+  const canEdit = useCanCoa("edit");
   const {
     records,
     setRecords,
@@ -42,51 +42,24 @@ export function CoaAddLedgerHost() {
   } = useCoaNavigation();
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMode, setSheetMode] = useState<SheetMode>(null);
+  const [active, setActive] = useState<ChartOfAccount | null>(null);
   const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [previewCode, setPreviewCode] = useState("");
   const [parentGroupLocked, setParentGroupLocked] = useState(false);
 
-  const openSundryDebtorsCustomerForm = useCallback((parentGroupId: number) => {
-    // Prefer in-page form (keeps Accounts sidebar). Falls back only if page not mounted.
-    if (requestSundryDebtorCustomerForm(parentGroupId)) return;
-    if (typeof window !== "undefined") {
-      window.location.assign(sundryDebtorsAddLedgerHref(parentGroupId));
-    }
-  }, []);
-
-  const openSundryCreditorsVendorForm = useCallback((parentGroupId: number) => {
-    if (requestSundryCreditorVendorForm(parentGroupId)) return;
-    if (typeof window !== "undefined") {
-      window.location.assign(sundryCreditorsAddLedgerHref(parentGroupId));
-    }
-  }, []);
-
-  const openLandBuildingWarehouseForm = useCallback((parentGroupId: number) => {
-    if (requestWarehouseForm(parentGroupId)) return;
-    if (typeof window !== "undefined") {
-      window.location.assign(landBuildingAddWarehouseHref(parentGroupId));
-    }
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    setSheetMode(null);
+    setActive(null);
+    setFormError(null);
   }, []);
 
   const openGlobalAdd = useCallback(
     (preferredParentId?: number | null) => {
       const parentGroupId = preferredParentId ?? null;
-      if (parentGroupId != null) {
-        const parent = records.find((r) => r.id === parentGroupId);
-        if (parent && isSundryDebtorsGroup(parent, records)) {
-          openSundryDebtorsCustomerForm(parentGroupId);
-          return;
-        }
-        if (parent && isSundryCreditorsGroup(parent, records)) {
-          openSundryCreditorsVendorForm(parentGroupId);
-          return;
-        }
-        if (parent && isLandBuildingGroup(parent, records)) {
-          openLandBuildingWarehouseForm(parentGroupId);
-          return;
-        }
-      }
+      if (parentGroupId != null && requestCoaSpecializedLedgerForm(parentGroupId)) return;
       setForm({
         ...DEFAULT_LEDGER_FORM,
         ...(parentGroupId != null
@@ -99,26 +72,17 @@ export function CoaAddLedgerHost() {
       setPreviewCode(generateLedgerCode(records));
       setFormError(null);
       setParentGroupLocked(false);
+      setSheetMode("add");
+      setActive(null);
       setSheetOpen(true);
     },
-    [records, openSundryDebtorsCustomerForm, openSundryCreditorsVendorForm, openLandBuildingWarehouseForm],
+    [records],
   );
 
   const openAddUnderParent = useCallback(
     (parentGroupId: number) => {
       const parent = records.find((r) => r.id === parentGroupId);
-      if (parent && isSundryDebtorsGroup(parent, records)) {
-        openSundryDebtorsCustomerForm(parentGroupId);
-        return;
-      }
-      if (parent && isSundryCreditorsGroup(parent, records)) {
-        openSundryCreditorsVendorForm(parentGroupId);
-        return;
-      }
-      if (parent && isLandBuildingGroup(parent, records)) {
-        openLandBuildingWarehouseForm(parentGroupId);
-        return;
-      }
+      if (requestCoaSpecializedLedgerForm(parentGroupId)) return;
       if (!parent || !canAddLedgerUnder(parent, records)) {
         openGlobalAdd(parentGroupId);
         return;
@@ -131,9 +95,26 @@ export function CoaAddLedgerHost() {
       setPreviewCode(generateLedgerCode(records));
       setFormError(null);
       setParentGroupLocked(true);
+      setSheetMode("add");
+      setActive(null);
       setSheetOpen(true);
     },
-    [records, openGlobalAdd, openSundryDebtorsCustomerForm, openSundryCreditorsVendorForm, openLandBuildingWarehouseForm],
+    [records, openGlobalAdd],
+  );
+
+  const openEdit = useCallback(
+    (ledgerId: number) => {
+      const row = records.find((r) => r.id === ledgerId);
+      if (!row) return;
+      setActive(row);
+      setForm(ledgerToForm(row));
+      setPreviewCode(row.accountCode);
+      setFormError(null);
+      setParentGroupLocked(true);
+      setSheetMode("edit");
+      setSheetOpen(true);
+    },
+    [records],
   );
 
   useEffect(() => {
@@ -146,93 +127,115 @@ export function CoaAddLedgerHost() {
   }, [openAddUnderParent, openGlobalAdd]);
 
   useEffect(() => {
+    registerCoaEditLedgerHandler(openEdit);
+    return () => registerCoaEditLedgerHandler(null);
+  }, [openEdit]);
+
+  useEffect(() => {
     if (!coaReady || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+
     const add = params.get("addLedger");
-    if (!add) return;
+    if (add) {
+      params.delete("addLedger");
+      const qs = params.toString();
+      const next = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", next);
 
-    params.delete("addLedger");
-    const qs = params.toString();
-    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
-    window.history.replaceState(null, "", next);
-
-    if (add === "global") {
-      openGlobalAdd(null);
+      if (add === "global") {
+        openGlobalAdd(null);
+        return;
+      }
+      const id = Number(add);
+      if (Number.isFinite(id)) openAddUnderParent(id);
       return;
     }
-    const id = Number(add);
-    if (Number.isFinite(id)) openAddUnderParent(id);
-  }, [coaReady, openAddUnderParent, openGlobalAdd]);
 
-  const closeSheet = () => {
-    setSheetOpen(false);
-    setFormError(null);
-  };
+    const editId = params.get("edit");
+    if (editId) {
+      params.delete("edit");
+      const qs = params.toString();
+      const next = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", next);
+      const id = Number(editId);
+      if (Number.isFinite(id)) openEdit(id);
+    }
+  }, [coaReady, openAddUnderParent, openGlobalAdd, openEdit]);
 
   const handleSave = () => {
-    const err = validateLedgerForm(form, records);
+    const err = validateLedgerForm(form, records, active?.id);
     if (err) {
       setFormError(err);
       return;
     }
 
     const list = [...records];
-    const code = generateLedgerCode(list);
-    const row = formToLedger(form, nextId(list), code, list);
-    list.push(row);
+    let savedId: number;
+
+    if (sheetMode === "add") {
+      const code = generateLedgerCode(list);
+      const row = formToLedger(form, nextId(list), code, list);
+      list.push(row);
+      savedId = row.id;
+    } else if (sheetMode === "edit" && active) {
+      const idx = list.findIndex((r) => r.id === active.id);
+      if (idx < 0) return;
+      list[idx] = formToLedger(form, active.id, active.accountCode, list, active);
+      savedId = active.id;
+    } else {
+      return;
+    }
+
     saveChartOfAccounts(list);
     setRecords(list);
+    dispatchAccountsDataChanged("ledgers", {
+      operation: sheetMode === "add" ? "create" : "update",
+      recordId: savedId,
+    });
 
-    if (row.parentAccountId) {
-      const parent = list.find((r) => r.id === row.parentAccountId);
+    const saved = list.find((r) => r.id === savedId);
+    if (saved?.parentAccountId) {
+      const parent = list.find((r) => r.id === saved.parentAccountId);
       if (parent) {
         const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
         ensureExpanded([...ancestorIds, parent.id]);
-        selectNode(parent);
+        selectNode(saved);
       }
+    } else if (saved) {
+      selectNode(saved);
     }
 
-    setHighlightedLedgerId(row.id);
+    setHighlightedLedgerId(savedId);
     closeSheet();
   };
 
-  if (!canCreate && !sheetOpen) return null;
+  const canOpenSheet =
+    (sheetMode === "add" && canCreate) || (sheetMode === "edit" && canEdit);
+
+  if (!canOpenSheet && !sheetOpen) return null;
 
   return (
     <LedgerSheet
-      open={sheetOpen && canCreate}
-      mode="add"
+      open={sheetOpen && canOpenSheet}
+      mode={sheetMode}
       form={form}
       formError={formError}
       previewCode={previewCode}
       records={records}
-      active={null}
+      active={active}
       onClose={closeSheet}
       onSave={handleSave}
       onFormChange={(next) => {
-        if (next.parentGroupId) {
-          const parent = records.find((r) => r.id === next.parentGroupId);
-          if (parent && isSundryDebtorsGroup(parent, records)) {
+        if (next.parentGroupId && sheetMode === "add") {
+          if (requestCoaSpecializedLedgerForm(next.parentGroupId)) {
             closeSheet();
-            openSundryDebtorsCustomerForm(next.parentGroupId);
-            return;
-          }
-          if (parent && isSundryCreditorsGroup(parent, records)) {
-            closeSheet();
-            openSundryCreditorsVendorForm(next.parentGroupId);
-            return;
-          }
-          if (parent && isLandBuildingGroup(parent, records)) {
-            closeSheet();
-            openLandBuildingWarehouseForm(next.parentGroupId);
             return;
           }
           setFormError(null);
         }
         setForm(next);
       }}
-      canEdit={canCreate}
-      compactAdd
+      canEdit={sheetMode === "edit" ? canEdit : canCreate}
       parentGroupLocked={parentGroupLocked}
     />
   );

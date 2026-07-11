@@ -28,7 +28,6 @@ export const GST_OUTPUT_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
 ];
 
 export const DUTIES_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
-  { name: "TDS Payable", code: "23112", balanceType: "Credit", tdsApplicable: true },
   { name: "TCS Payable", code: "23113", balanceType: "Credit" },
 ];
 

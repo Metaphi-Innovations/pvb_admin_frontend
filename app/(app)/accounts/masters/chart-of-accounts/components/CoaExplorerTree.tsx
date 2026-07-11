@@ -6,73 +6,36 @@ import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import type { ChartOfAccount } from "../../../data";
 import {
   canAddLedgerUnder,
+  canAddSubGroupUnder,
+  canDeleteGroup,
+  canEditGroup,
   countLedgersUnder,
   getSearchVisibleIds,
   nodeMatchesSearch,
 } from "../chart-of-accounts-data";
 import { coaTreeNodeHasChildren, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
-import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
 import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
+import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
+import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
-  COA_TREE_ICON_SIZE_CLASS,
   COA_SIDEBAR_ROW_CLASS,
-  GUIDE_WIDTH_PX,
   LEVEL_SELECTED_ROW_CLASS,
-  VISUAL_ICON,
   VISUAL_ROW_CLASS,
+  coaNodeAccessibleLabel,
   coaNodeShowsExpandChevron,
   coaSidebarIconSizeClass,
   coaSidebarIndentPx,
   coaSidebarNodeIconClass,
   coaSidebarShowsNodeIcon,
-  coaTreeIconClass,
   resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
 } from "./coa-tree-visual";
 
-/** Vertical guides + branch elbow for tree connectors */
-function TreeGuides({
-  depth,
-  ancestorHasNext,
-  isLastSibling,
-}: {
-  depth: number;
-  ancestorHasNext: boolean[];
-  isLastSibling: boolean;
-}) {
-  if (depth === 0) return null;
-
-  return (
-    <div className="flex flex-shrink-0 self-stretch" aria-hidden>
-      {ancestorHasNext.map((hasNext, i) => (
-        <div
-          key={i}
-          className="relative flex-shrink-0"
-          style={{ width: GUIDE_WIDTH_PX }}
-        >
-          {hasNext && (
-            <div className="absolute left-[7px] top-0 bottom-0 w-px bg-border/80" />
-          )}
-        </div>
-      ))}
-      <div className="relative flex-shrink-0" style={{ width: GUIDE_WIDTH_PX }}>
-        <div className="absolute left-[7px] top-0 h-1/2 w-px bg-border/80" />
-        <div className="absolute left-[7px] top-1/2 w-[9px] h-px bg-border/80" />
-        {!isLastSibling && (
-          <div className="absolute left-[7px] top-1/2 bottom-0 w-px bg-border/80" />
-        )}
-      </div>
-    </div>
-  );
-}
-
 interface TreeNodeProps {
   node: ChartOfAccount;
   depth: number;
-  isLastSibling: boolean;
   isFirstRoot?: boolean;
-  ancestorHasNext: boolean[];
   records: ChartOfAccount[];
   expandedIds: Set<number>;
   selectedId: number | null;
@@ -80,19 +43,19 @@ interface TreeNodeProps {
   searchQuery: string;
   variant: "panel" | "sidebar";
   canCreate?: boolean;
+  canEdit?: boolean;
   highlightedLedgerId?: number | null;
   onToggle: (id: number) => void;
   onSelect: (node: ChartOfAccount) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
   onAddLedger?: (parentGroupId: number) => void;
+  onAddSubGroup?: (parentGroupId: number) => void;
 }
 
-const TreeNode = memo(function TreeNode({
+const TreeNode = memo(function TreeNodeComponent({
   node,
   depth,
-  isLastSibling,
   isFirstRoot = false,
-  ancestorHasNext,
   records,
   expandedIds,
   selectedId,
@@ -100,34 +63,38 @@ const TreeNode = memo(function TreeNode({
   searchQuery,
   variant,
   canCreate = false,
+  canEdit = false,
   highlightedLedgerId = null,
   onToggle,
   onSelect,
   onLedgerOpen,
   onAddLedger,
+  onAddSubGroup,
 }: TreeNodeProps) {
   const isSidebar = variant === "sidebar";
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
   const visualLevel = resolveCoaVisualLevel(node, records);
-  const Icon = isSidebar ? resolveCoaSidebarIcon(node, visualLevel) : VISUAL_ICON[visualLevel];
+  const Icon = resolveCoaSidebarIcon(node, visualLevel, records);
   const isLedger = node.nodeLevel === "ledger";
   const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
   const isPrimaryHead = node.nodeLevel === "primary_head";
   const hasChildren = coaTreeNodeHasChildren(records, node.id);
-  /** Children allocated only when expanded (lazy DOM). */
   const children = useMemo(
     () => (isExpanded && hasChildren ? getCoaTreeChildren(records, node.id) : []),
     [isExpanded, hasChildren, records, node.id],
   );
-  /** Ledger counts are panel-only — skip expensive walk in sidebar. */
   const ledgerCount = !isSidebar && !isLedger ? countLedgersUnder(records, node.id) : 0;
   const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
-  const allowAdd =
+  const allowAddSubGroup =
+    canCreate && onAddSubGroup != null && canAddSubGroupUnder(node, records);
+  const allowAddLedger =
     canCreate &&
     onAddLedger != null &&
     canAddLedgerUnder(node, records) &&
     !isAddLedgerBlocked(node, records);
+  const allowEdit = canEdit && canEditGroup(node);
+  const allowDelete = canEdit && canDeleteGroup(node, records);
   const isHighlighted = highlightedLedgerId === node.id;
   const isSearchMatch =
     Boolean(searchQuery.trim()) && nodeMatchesSearch(records, node, searchQuery);
@@ -137,6 +104,10 @@ const TreeNode = memo(function TreeNode({
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
   const handleClick = () => {
+    if (isSidebar && isPrimaryHead) {
+      if (showExpandChevron) onToggle(node.id);
+      return;
+    }
     onSelect(node);
     if (isLedger && onLedgerOpen) onLedgerOpen(node);
   };
@@ -146,45 +117,27 @@ const TreeNode = memo(function TreeNode({
       <div
         className={cn(
           "group flex items-stretch transition-colors duration-100",
-          isSidebar ? "mx-0 rounded-sm" : "rounded-md pr-2 mx-1",
+          isSidebar ? "mx-0 rounded-sm" : "rounded-md mx-1",
           isSidebar &&
             isPrimaryHead &&
             depth === 0 &&
             !isFirstRoot &&
             "border-t border-border/50 mt-1.5 pt-0.5",
           isSelected
-            ? cn(
-                isSidebar
-                  ? "bg-brand-50"
-                  : "bg-brand-50/90 ring-1 ring-brand-200/90",
-                !isSidebar && isPrimaryHead && "border-l-2 border-orange-500",
-                !isSidebar && !isPrimaryHead && isLedger && "border-l-2 border-emerald-500",
-                !isSidebar && !isPrimaryHead && !isLedger && "border-l-2 border-brand-600",
-              )
-            : cn(
-                isSidebar ? "hover:bg-muted/40" : "hover:bg-slate-50/90 border-l-2 border-transparent",
-                !isSidebar && isPrimaryHead && "hover:border-l-orange-300",
-              ),
+            ? cn(isSidebar ? "bg-brand-50" : "bg-brand-50/90 ring-1 ring-brand-200/90")
+            : cn(isSidebar ? "hover:bg-muted/40" : "hover:bg-muted/30"),
           isHighlighted && !isSidebar && "bg-brand-50/80 ring-1 ring-brand-300/70",
           isSearchMatch && !isSelected && "bg-brand-50/50",
         )}
         style={{
-          minHeight: isSidebar ? 30 : undefined,
-          paddingLeft: isSidebar ? coaSidebarIndentPx(depth) : undefined,
+          minHeight: isSidebar ? 30 : 32,
+          paddingLeft: coaSidebarIndentPx(depth),
         }}
       >
-        {!isSidebar && (
-          <TreeGuides
-            depth={depth}
-            ancestorHasNext={ancestorHasNext}
-            isLastSibling={isLastSibling}
-          />
-        )}
-
         <div
           className={cn(
-            "flex gap-0.5 flex-1 min-w-0",
-            isSidebar ? "items-center pl-0" : "items-start pl-1",
+            "flex gap-1 flex-1 min-w-0 items-center",
+            isSidebar ? "pl-0" : "pr-2",
           )}
         >
           <button
@@ -194,22 +147,19 @@ const TreeNode = memo(function TreeNode({
               if (showExpandChevron) onToggle(node.id);
             }}
             className={cn(
-              "flex items-center justify-center flex-shrink-0 rounded transition-colors",
-              isSidebar ? "w-5 h-5 -ml-0.5" : "w-6 h-6",
+              "flex items-center justify-center flex-shrink-0 rounded transition-colors w-5 h-5",
               showExpandChevron
                 ? "text-muted-foreground/70 hover:text-foreground"
-                : isSidebar
-                  ? "w-5 opacity-0 pointer-events-none"
-                  : "w-4 opacity-0 pointer-events-none",
+                : "opacity-0 pointer-events-none",
             )}
             tabIndex={showExpandChevron ? 0 : -1}
             aria-label={showExpandChevron ? (isExpanded ? "Collapse" : "Expand") : undefined}
           >
             {showExpandChevron &&
               (isExpanded ? (
-                <ChevronDown className={cn(isSidebar ? "w-3.5 h-3.5" : "w-4 h-4")} strokeWidth={2} />
+                <ChevronDown className="w-3.5 h-3.5" strokeWidth={2} />
               ) : (
-                <ChevronRight className={cn(isSidebar ? "w-3.5 h-3.5" : "w-4 h-4")} strokeWidth={2} />
+                <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
               ))}
           </button>
 
@@ -217,22 +167,20 @@ const TreeNode = memo(function TreeNode({
             type="button"
             onClick={handleClick}
             title={isSidebar ? node.accountName : undefined}
+            aria-label={coaNodeAccessibleLabel(node, records)}
             className={cn(
-              "flex flex-1 min-w-0 text-left items-center",
-              isSidebar ? "gap-1 py-1 pr-2" : "items-start gap-2 py-1.5 pr-2",
+              "flex flex-1 min-w-0 text-left items-center gap-1.5",
+              isSidebar ? "py-1 pr-2" : "py-1.5 pr-1",
             )}
           >
             {showRowIcon && (
               <Icon
                 className={cn(
                   "flex-shrink-0",
-                  isSidebar ? coaSidebarIconSizeClass(visualLevel) : COA_TREE_ICON_SIZE_CLASS,
-                  !isSidebar && "mt-0.5",
-                  isSidebar
-                    ? coaSidebarNodeIconClass(node, visualLevel, isSelected, records)
-                    : coaTreeIconClass(visualLevel, isSelected),
+                  coaSidebarIconSizeClass(node, records),
+                  coaSidebarNodeIconClass(node, visualLevel, isSelected, records),
                 )}
-                strokeWidth={isSidebar && visualLevel === "primary_head" ? 2.25 : 2}
+                strokeWidth={visualLevel === "primary_head" ? 2 : 1.75}
               />
             )}
             <span
@@ -242,7 +190,7 @@ const TreeNode = memo(function TreeNode({
                 isSelected
                   ? isSidebar
                     ? "font-semibold text-brand-800"
-                    : cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel], visualLevel === "sub_group" && "text-xs")
+                    : cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel])
                   : isSidebar
                     ? COA_SIDEBAR_ROW_CLASS[visualLevel]
                     : VISUAL_ROW_CLASS[visualLevel],
@@ -259,28 +207,32 @@ const TreeNode = memo(function TreeNode({
               )}
             </span>
             {!isSidebar && (
-              <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0 mt-0.5" />
+              <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0" />
             )}
           </button>
 
-          {allowAdd && !isSidebar && (
-            <CoaAddLedgerHoverAction
-              onClick={() => onAddLedger!(node.id)}
-              className="mt-1.5 mr-1"
-            />
-          )}
+          <CoaNodeHoverActions
+            compact={isSidebar}
+            showAddSubGroup={allowAddSubGroup}
+            showAddLedger={allowAddLedger}
+            showEdit={allowEdit}
+            showDelete={allowDelete}
+            onAddSubGroup={() => (onAddSubGroup ?? requestCoaAddSubGroup)(node.id)}
+            onAddLedger={() => onAddLedger!(node.id)}
+            onEdit={() => requestCoaEditGroup(node.id)}
+            onDelete={() => requestCoaDeleteGroup(node.id)}
+            className={isSidebar ? "mr-1" : "mr-0.5"}
+          />
         </div>
       </div>
 
       {hasChildren && isExpanded && children.length > 0 && (
         <div>
-          {children.map((child, idx) => (
+          {children.map((child) => (
             <TreeNode
               key={child.id}
               node={child}
               depth={depth + 1}
-              isLastSibling={idx === children.length - 1}
-              ancestorHasNext={[...ancestorHasNext, !isLastSibling]}
               records={records}
               expandedIds={expandedIds}
               selectedId={selectedId}
@@ -288,11 +240,13 @@ const TreeNode = memo(function TreeNode({
               searchQuery={searchQuery}
               variant={variant}
               canCreate={canCreate}
+              canEdit={canEdit}
               highlightedLedgerId={highlightedLedgerId}
               onToggle={onToggle}
               onSelect={onSelect}
               onLedgerOpen={onLedgerOpen}
               onAddLedger={onAddLedger}
+              onAddSubGroup={onAddSubGroup}
             />
           ))}
         </div>
@@ -308,11 +262,13 @@ interface CoaExplorerTreeProps {
   expandedIds: Set<number>;
   search: string;
   canCreate?: boolean;
+  canEdit?: boolean;
   highlightedLedgerId?: number | null;
   onSelect: (node: ChartOfAccount) => void;
   onToggle: (id: number) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
   onAddLedger?: (parentGroupId: number) => void;
+  onAddSubGroup?: (parentGroupId: number) => void;
 }
 
 export function CoaExplorerTree({
@@ -322,11 +278,13 @@ export function CoaExplorerTree({
   expandedIds,
   search,
   canCreate = false,
+  canEdit = false,
   highlightedLedgerId = null,
   onSelect,
   onToggle,
   onLedgerOpen,
   onAddLedger,
+  onAddSubGroup,
 }: CoaExplorerTreeProps) {
   const roots = useMemo(
     () =>
@@ -364,8 +322,6 @@ export function CoaExplorerTree({
               node={root}
               depth={0}
               isFirstRoot={idx === 0}
-              isLastSibling={idx === roots.length - 1}
-              ancestorHasNext={[]}
               records={records}
               expandedIds={expandedIds}
               selectedId={selectedId}
@@ -373,11 +329,13 @@ export function CoaExplorerTree({
               searchQuery={search}
               variant={variant}
               canCreate={canCreate}
+              canEdit={canEdit}
               highlightedLedgerId={highlightedLedgerId}
               onToggle={onToggle}
               onSelect={onSelect}
               onLedgerOpen={onLedgerOpen}
               onAddLedger={onAddLedger}
+              onAddSubGroup={onAddSubGroup}
             />
           ))
         )}

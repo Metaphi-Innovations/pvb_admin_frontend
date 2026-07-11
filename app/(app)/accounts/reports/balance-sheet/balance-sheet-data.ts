@@ -1,6 +1,27 @@
+import { loadChartOfAccounts, type ChartOfAccount } from "@/app/(app)/accounts/data";
+import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
+import { isGroupingLedger, isPostingLedger } from "@/lib/accounts/coa-hierarchy";
 import { roundMoney } from "@/lib/accounts/money-format";
+import {
+  computeBalanceSheetLedgerRows,
+  getBalanceSheetActivePartyOptions,
+  getBalanceSheetBranchOptions,
+  getBalanceSheetLedgerGroupOptions,
+  getBalanceSheetLedgerOptions,
+  getBalanceSheetWarehouseOptions,
+  resolveFinancialYearLabel,
+  resolvePartyFilterLabel,
+  type BalanceSheetFilters,
+  type BalanceSheetViewType,
+} from "@/lib/accounts/balance-sheet-compute";
 
-export type BalanceSheetRowKind = "section" | "line" | "total";
+export type { BalanceSheetFilters, BalanceSheetViewType };
+
+export type BalanceSheetRowKind = "section" | "line" | "total" | "pl";
+
+/** Primary Group → Sub Group → Ledger presentation roles (not calculation). */
+export type BalanceSheetHierarchyRole = "primary_group" | "sub_group" | "ledger";
 
 export interface BalanceSheetLineItem {
   id: string;
@@ -8,6 +29,29 @@ export interface BalanceSheetLineItem {
   amount: number | null;
   kind: BalanceSheetRowKind;
   section?: "liabilities" | "assets";
+  parentId?: string;
+  ledgerId?: number;
+  sortOrder?: number;
+  hierarchyRole?: BalanceSheetHierarchyRole;
+  isPlBalance?: boolean;
+  partyId?: string | null;
+  partyKind?: "customer" | "vendor" | null;
+  drillDownHref?: string;
+}
+
+export interface BalanceSheetTreeNode {
+  item: BalanceSheetLineItem;
+  children: BalanceSheetTreeNode[];
+  depth: number;
+}
+
+export interface BalanceSheetSide {
+  sectionTitle: string;
+  amountColumnLabel: string;
+  balanceSide: "Credit" | "Debit";
+  tree: BalanceSheetTreeNode[];
+  grandTotal: number;
+  grandTotalLabel: string;
 }
 
 export interface BalanceSheetStatement {
@@ -17,132 +61,387 @@ export interface BalanceSheetStatement {
   difference: number;
   isBalanced: boolean;
   hasData: boolean;
+  netProfit: number;
+  unpostedVoucherCount: number;
 }
 
 export interface BalanceSheetFilterParams {
   search?: string;
 }
 
-/** Demo Balance Sheet line items for client approval / testing. */
-const DEMO_BS_LINES: Omit<BalanceSheetLineItem, "amount">[] = [
-  { id: "sec-liabilities", particular: "Liabilities", kind: "section", section: "liabilities" },
-  { id: "capital", particular: "Capital Account", kind: "line", section: "liabilities" },
-  { id: "reserves", particular: "Reserves & Surplus", kind: "line", section: "liabilities" },
-  { id: "secured-loans", particular: "Secured Loans", kind: "line", section: "liabilities" },
-  { id: "unsecured-loans", particular: "Unsecured Loans", kind: "line", section: "liabilities" },
-  { id: "current-liabilities", particular: "Current Liabilities", kind: "line", section: "liabilities" },
-  { id: "sundry-creditors", particular: "Sundry Creditors", kind: "line", section: "liabilities" },
-  { id: "gst-payable", particular: "GST Payable", kind: "line", section: "liabilities" },
-  { id: "tds-payable", particular: "TDS Payable", kind: "line", section: "liabilities" },
-  { id: "duties-taxes", particular: "Duties & Taxes", kind: "line", section: "liabilities" },
-  { id: "other-liabilities", particular: "Other Liabilities", kind: "line", section: "liabilities" },
-  { id: "total-liabilities", particular: "Total Liabilities", kind: "total", section: "liabilities" },
-
-  { id: "sec-assets", particular: "Assets", kind: "section", section: "assets" },
-  { id: "fixed-assets", particular: "Fixed Assets", kind: "line", section: "assets" },
-  { id: "plant-machinery", particular: "Plant & Machinery", kind: "line", section: "assets" },
-  { id: "furniture", particular: "Furniture & Fixtures", kind: "line", section: "assets" },
-  { id: "computer-it", particular: "Computer & IT Equipment", kind: "line", section: "assets" },
-  { id: "investments", particular: "Investments", kind: "line", section: "assets" },
-  { id: "current-assets", particular: "Current Assets", kind: "line", section: "assets" },
-  { id: "sundry-debtors", particular: "Sundry Debtors", kind: "line", section: "assets" },
-  { id: "bank-accounts", particular: "Bank Accounts", kind: "line", section: "assets" },
-  { id: "cash-in-hand", particular: "Cash in Hand", kind: "line", section: "assets" },
-  { id: "loans-advances", particular: "Loans & Advances", kind: "line", section: "assets" },
-  { id: "closing-stock", particular: "Closing Stock", kind: "line", section: "assets" },
-  { id: "other-assets", particular: "Other Assets", kind: "line", section: "assets" },
-  { id: "total-assets", particular: "Total Assets", kind: "total", section: "assets" },
-];
-
-const DEMO_AMOUNTS: Record<string, number> = {
-  capital: 1_250_000,
-  reserves: 475_000,
-  "secured-loans": 800_000,
-  "unsecured-loans": 350_000,
-  "current-liabilities": 225_000,
-  "sundry-creditors": 680_000,
-  "gst-payable": 115_000,
-  "tds-payable": 42_000,
-  "duties-taxes": 58_000,
-  "other-liabilities": 75_000,
-  "fixed-assets": 950_000,
-  "plant-machinery": 725_000,
-  furniture: 180_000,
-  "computer-it": 240_000,
-  investments: 300_000,
-  "current-assets": 375_000,
-  "sundry-debtors": 690_000,
-  "bank-accounts": 285_000,
-  "cash-in-hand": 65_000,
-  "loans-advances": 80_000,
-  "closing-stock": 100_000,
-  "other-assets": 80_000,
-};
-
-const LIABILITY_LINE_IDS = [
-  "capital",
-  "reserves",
-  "secured-loans",
-  "unsecured-loans",
-  "current-liabilities",
-  "sundry-creditors",
-  "gst-payable",
-  "tds-payable",
-  "duties-taxes",
-  "other-liabilities",
-];
-
-const ASSET_LINE_IDS = [
-  "fixed-assets",
-  "plant-machinery",
-  "furniture",
-  "computer-it",
-  "investments",
-  "current-assets",
-  "sundry-debtors",
-  "bank-accounts",
-  "cash-in-hand",
-  "loans-advances",
-  "closing-stock",
-  "other-assets",
-];
-
-function sumLineAmounts(ids: string[]): number {
-  return roundMoney(ids.reduce((sum, id) => sum + (DEMO_AMOUNTS[id] ?? 0), 0));
+export interface BalanceSheetDrillDownFilters {
+  asOnDate: string;
+  branch?: string;
+  warehouse?: string;
+  partyId?: string;
 }
 
-function buildDemoLines(): BalanceSheetLineItem[] {
-  const totalLiabilities = sumLineAmounts(LIABILITY_LINE_IDS);
-  const totalAssets = sumLineAmounts(ASSET_LINE_IDS);
-
-  return DEMO_BS_LINES.map((item) => {
-    if (item.kind === "section") {
-      return { ...item, amount: null };
-    }
-    if (item.id === "total-liabilities") {
-      return { ...item, amount: totalLiabilities };
-    }
-    if (item.id === "total-assets") {
-      return { ...item, amount: totalAssets };
-    }
-    return { ...item, amount: DEMO_AMOUNTS[item.id] ?? 0 };
-  });
+interface InternalNode {
+  id: string;
+  particular: string;
+  section: "liabilities" | "assets";
+  parentId?: string;
+  ledgerId?: number;
+  amount: number;
+  sortOrder: number;
+  isPostableLeaf: boolean;
+  hierarchyRole: BalanceSheetHierarchyRole;
+  isPlBalance?: boolean;
+  partyId?: string | null;
+  partyKind?: "customer" | "vendor" | null;
 }
 
-export function buildBalanceSheetStatement(): BalanceSheetStatement {
-  const lines = buildDemoLines();
-  const totalLiabilities = lines.find((l) => l.id === "total-liabilities")?.amount ?? 0;
-  const totalAssets = lines.find((l) => l.id === "total-assets")?.amount ?? 0;
+function resolveHierarchyRole(
+  segment: ChartOfAccount,
+  records: ChartOfAccount[],
+  isPostableLeaf: boolean,
+): BalanceSheetHierarchyRole {
+  if (segment.nodeLevel === "ledger") {
+    if (isPostableLeaf) return "ledger";
+    if (isGroupingLedger(segment, records)) return "sub_group";
+    return "ledger";
+  }
+
+  const path = getAncestorPath(records, segment.id);
+  const parent = path[path.length - 2];
+  if (parent?.nodeLevel === "primary_head") return "primary_group";
+  return "sub_group";
+}
+
+export function isBalanceSheetGroupHeading(
+  item: Pick<BalanceSheetLineItem, "hierarchyRole">,
+): boolean {
+  return item.hierarchyRole === "primary_group" || item.hierarchyRole === "sub_group";
+}
+
+function nodeIdForCoa(coaId: number): string {
+  return `coa-${coaId}`;
+}
+
+function displayPathUnderPrimaryHead(ledgerId: number) {
+  const records = loadChartOfAccounts();
+  const path = getAncestorPath(records, ledgerId);
+  const phIdx = path.findIndex((n) => n.nodeLevel === "primary_head");
+  if (phIdx < 0) return { path: [], records };
+  return { path: path.slice(phIdx + 1), records };
+}
+
+function buildInternalNodes(
+  filters: BalanceSheetFilters,
+  netProfit: number,
+  ledgers: ReturnType<typeof computeBalanceSheetLedgerRows>["ledgers"],
+): Map<string, InternalNode> {
+  const nodeMap = new Map<string, InternalNode>();
+
+  for (const row of ledgers) {
+    const { path, records } = displayPathUnderPrimaryHead(row.ledgerId);
+    if (path.length === 0) continue;
+
+    let parentId: string | undefined;
+
+    for (let i = 0; i < path.length; i++) {
+      const segment = path[i];
+      const id = nodeIdForCoa(segment.id);
+      const isLast = i === path.length - 1;
+      const isPostableLeaf = isLast && isPostingLedger(segment, records);
+
+      if (!isPostableLeaf) {
+        if (!nodeMap.has(id)) {
+          nodeMap.set(id, {
+            id,
+            particular: segment.accountName,
+            section: row.section,
+            parentId,
+            amount: 0,
+            sortOrder: segment.id,
+            isPostableLeaf: false,
+            hierarchyRole: resolveHierarchyRole(segment, records, false),
+          });
+        }
+        parentId = id;
+        continue;
+      }
+
+      nodeMap.set(id, {
+        id,
+        particular: segment.accountName,
+        section: row.section,
+        parentId,
+        amount: row.amount,
+        sortOrder: segment.id,
+        isPostableLeaf: true,
+        hierarchyRole: resolveHierarchyRole(segment, records, true),
+        ledgerId: row.ledgerId,
+        partyId: row.partyId,
+        partyKind: row.partyKind,
+      });
+    }
+  }
+
+  for (const node of nodeMap.values()) {
+    if (!node.isPostableLeaf) node.amount = 0;
+  }
+
+  const leaves = [...nodeMap.values()].filter((n) => n.isPostableLeaf);
+  for (const leaf of leaves) {
+    let parentId = leaf.parentId;
+    while (parentId) {
+      const parent = nodeMap.get(parentId);
+      if (!parent) break;
+      parent.amount = roundMoney(parent.amount + leaf.amount);
+      parentId = parent.parentId;
+    }
+  }
+
+  if (filters.viewType === "summary") {
+    for (const [id, node] of [...nodeMap.entries()]) {
+      if (node.isPostableLeaf && !node.isPlBalance) nodeMap.delete(id);
+    }
+    for (const [id, node] of [...nodeMap.entries()]) {
+      if (node.parentId && !node.isPlBalance) nodeMap.delete(id);
+    }
+  }
+
+  if (Math.abs(netProfit) > 0) {
+    const reservesNode = [...nodeMap.values()].find(
+      (n) =>
+        n.section === "liabilities" &&
+        /reserves|surplus|capital/i.test(n.particular) &&
+        !n.isPostableLeaf,
+    );
+    const plId = "current-period-pl";
+    const plNode: InternalNode = {
+      id: plId,
+      particular:
+        netProfit >= 0 ? "Current Period Net Profit" : "Current Period Net Loss",
+      section: "liabilities",
+      parentId: reservesNode?.id,
+      amount: roundMoney(Math.abs(netProfit)),
+      sortOrder: 999_999,
+      isPostableLeaf: true,
+      hierarchyRole: "ledger",
+      isPlBalance: true,
+    };
+    nodeMap.set(plId, plNode);
+    let parentId = reservesNode?.id;
+    while (parentId) {
+      const parent = nodeMap.get(parentId);
+      if (!parent) break;
+      parent.amount = roundMoney(parent.amount + plNode.amount);
+      parentId = parent.parentId;
+    }
+  }
+
+  return nodeMap;
+}
+
+function internalNodesToLineItems(nodeMap: Map<string, InternalNode>): BalanceSheetLineItem[] {
+  const items: BalanceSheetLineItem[] = [];
+
+  for (const node of nodeMap.values()) {
+    if (node.amount === 0) continue;
+    items.push({
+      id: node.id,
+      particular: node.particular,
+      amount: node.amount,
+      kind: node.isPlBalance ? "pl" : "line",
+      section: node.section,
+      parentId: node.parentId,
+      ledgerId: node.ledgerId,
+      sortOrder: node.sortOrder,
+      hierarchyRole: node.hierarchyRole,
+      isPlBalance: node.isPlBalance,
+      partyId: node.partyId,
+      partyKind: node.partyKind,
+    });
+  }
+
+  return items.sort(
+    (a, b) =>
+      (a.section ?? "").localeCompare(b.section ?? "") ||
+      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+      a.particular.localeCompare(b.particular),
+  );
+}
+
+function sumRootAmounts(lines: BalanceSheetLineItem[], section: "liabilities" | "assets"): number {
+  const sideLines = lines.filter((l) => l.section === section && l.kind !== "section" && l.kind !== "total");
+  const byId = new Map(sideLines.map((l) => [l.id, l]));
+  const roots = sideLines.filter((l) => !l.parentId || !byId.has(l.parentId));
+  return roundMoney(roots.reduce((sum, root) => sum + (root.amount ?? 0), 0));
+}
+
+function assembleStatement(
+  lineItems: BalanceSheetLineItem[],
+  netProfit: number,
+  unpostedVoucherCount: number,
+): BalanceSheetStatement {
+  const liabilityLines = lineItems.filter((l) => l.section === "liabilities");
+  const assetLines = lineItems.filter((l) => l.section === "assets");
+
+  const totalLiabilities = sumRootAmounts(liabilityLines, "liabilities");
+  const totalAssets = sumRootAmounts(assetLines, "assets");
   const difference = roundMoney(totalAssets - totalLiabilities);
+
+  const lines: BalanceSheetLineItem[] = [];
+
+  if (liabilityLines.length > 0) {
+    lines.push({
+      id: "sec-liabilities",
+      particular: "Liabilities",
+      amount: null,
+      kind: "section",
+      section: "liabilities",
+    });
+    lines.push(...liabilityLines);
+    lines.push({
+      id: "total-liabilities",
+      particular: "Total Liabilities",
+      amount: totalLiabilities,
+      kind: "total",
+      section: "liabilities",
+    });
+  }
+
+  if (assetLines.length > 0) {
+    lines.push({
+      id: "sec-assets",
+      particular: "Assets",
+      amount: null,
+      kind: "section",
+      section: "assets",
+    });
+    lines.push(...assetLines);
+    lines.push({
+      id: "total-assets",
+      particular: "Total Assets",
+      amount: totalAssets,
+      kind: "total",
+      section: "assets",
+    });
+  }
 
   return {
     lines,
     totalLiabilities,
     totalAssets,
     difference,
-    isBalanced: difference === 0,
-    hasData: lines.length > 0,
+    isBalanced: Math.abs(difference) < 0.01,
+    hasData: liabilityLines.length > 0 || assetLines.length > 0,
+    netProfit,
+    unpostedVoucherCount,
   };
+}
+
+export function buildBalanceSheetStatement(filters: BalanceSheetFilters): BalanceSheetStatement {
+  const computed = computeBalanceSheetLedgerRows(filters);
+  const nodeMap = buildInternalNodes(filters, computed.netProfit, computed.ledgers);
+  const lineItems = internalNodesToLineItems(nodeMap);
+  return assembleStatement(lineItems, computed.netProfit, computed.unpostedVoucherCount);
+}
+
+export function buildBalanceSheetSideTree(
+  lines: BalanceSheetLineItem[],
+  section: "liabilities" | "assets",
+): BalanceSheetTreeNode[] {
+  const sideLines = lines.filter(
+    (l) => l.section === section && (l.kind === "line" || l.kind === "pl"),
+  );
+  const byId = new Map(sideLines.map((l) => [l.id, l]));
+  const childMap = new Map<string, BalanceSheetLineItem[]>();
+
+  for (const line of sideLines) {
+    const parentId = line.parentId;
+    if (parentId && byId.has(parentId)) {
+      if (!childMap.has(parentId)) childMap.set(parentId, []);
+      childMap.get(parentId)!.push(line);
+    }
+  }
+
+  function buildNode(item: BalanceSheetLineItem, depth: number): BalanceSheetTreeNode {
+    const children = (childMap.get(item.id) ?? [])
+      .sort(
+        (a, b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          a.particular.localeCompare(b.particular),
+      )
+      .map((c) => buildNode(c, depth + 1));
+    return { item, children, depth };
+  }
+
+  const roots = sideLines
+    .filter((l) => !l.parentId || !byId.has(l.parentId))
+    .sort(
+      (a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+        a.particular.localeCompare(b.particular),
+    );
+
+  return roots.map((r) => buildNode(r, 0));
+}
+
+export function splitBalanceSheetHorizontal(statement: BalanceSheetStatement): {
+  liabilities: BalanceSheetSide;
+  assets: BalanceSheetSide;
+} {
+  return {
+    liabilities: {
+      sectionTitle: "Liabilities & Equity",
+      amountColumnLabel: "Credit (₹)",
+      balanceSide: "Credit",
+      tree: buildBalanceSheetSideTree(statement.lines, "liabilities"),
+      grandTotal: statement.totalLiabilities,
+      grandTotalLabel: "Total",
+    },
+    assets: {
+      sectionTitle: "Assets",
+      amountColumnLabel: "Debit (₹)",
+      balanceSide: "Debit",
+      tree: buildBalanceSheetSideTree(statement.lines, "assets"),
+      grandTotal: statement.totalAssets,
+      grandTotalLabel: "Total",
+    },
+  };
+}
+
+export function collectBalanceSheetGroupIds(tree: BalanceSheetTreeNode[]): string[] {
+  const ids: string[] = [];
+  const walk = (nodes: BalanceSheetTreeNode[]) => {
+    for (const node of nodes) {
+      if (node.children.length > 0) {
+        ids.push(node.item.id);
+        walk(node.children);
+      }
+    }
+  };
+  walk(tree);
+  return ids;
+}
+
+export function buildBalanceSheetLedgerHref(
+  ledgerId: number,
+  filters: BalanceSheetDrillDownFilters,
+): string {
+  const params = new URLSearchParams();
+  params.set("ledger", String(ledgerId));
+  if (filters.asOnDate) params.set("to", filters.asOnDate);
+  if (filters.branch && filters.branch !== "all") params.set("branch", filters.branch);
+  if (filters.warehouse && filters.warehouse !== "all") {
+    params.set("warehouse", filters.warehouse);
+  }
+  if (filters.partyId && filters.partyId !== "all") params.set("party", filters.partyId);
+  return `${GENERAL_LEDGER_HREF}?${params.toString()}`;
+}
+
+export function buildBalanceSheetPartyHref(
+  partyId: string,
+  partyKind: "customer" | "vendor",
+): string {
+  const [, idStr] = partyId.split(":");
+  if (partyKind === "customer") {
+    return `/accounts/receivables/outstanding/${idStr}`;
+  }
+  return `/accounts/payables/outstanding/${idStr}`;
 }
 
 export function filterBalanceSheetStatement(
@@ -170,9 +469,46 @@ export function filterBalanceSheetStatement(
     else if (currentSection === "assets") assetMatches.push(line);
   }
 
+  const includeParents = (
+    matches: BalanceSheetLineItem[],
+    section: "liabilities" | "assets",
+  ): BalanceSheetLineItem[] => {
+    const allSectionLines = statement.lines.filter(
+      (l) =>
+        l.section === section &&
+        (l.kind === "line" || l.kind === "pl"),
+    );
+    const byId = new Map(allSectionLines.map((l) => [l.id, l]));
+    const result = new Map<string, BalanceSheetLineItem>();
+
+    for (const line of matches) {
+      result.set(line.id, line);
+      let parentId = line.parentId;
+      while (parentId && byId.has(parentId)) {
+        const parent = byId.get(parentId)!;
+        result.set(parent.id, parent);
+        parentId = parent.parentId;
+      }
+    }
+
+    const order = allSectionLines.map((l) => l.id);
+    return order.filter((id) => result.has(id)).map((id) => result.get(id)!);
+  };
+
+  const liabilityWithParents = includeParents(liabilityMatches, "liabilities");
+  const assetWithParents = includeParents(assetMatches, "assets");
+
+  function sumFilteredSideAmounts(lines: BalanceSheetLineItem[]): number {
+    const parentIdsInSet = new Set(
+      lines.filter((l) => l.parentId).map((l) => l.parentId as string),
+    );
+    const leaves = lines.filter((l) => !parentIdsInSet.has(l.id));
+    return roundMoney(leaves.reduce((s, l) => s + (l.amount ?? 0), 0));
+  }
+
   const filteredLines: BalanceSheetLineItem[] = [];
 
-  if (liabilityMatches.length > 0) {
+  if (liabilityWithParents.length > 0) {
     filteredLines.push({
       id: "sec-liabilities",
       particular: "Liabilities",
@@ -180,20 +516,17 @@ export function filterBalanceSheetStatement(
       kind: "section",
       section: "liabilities",
     });
-    filteredLines.push(...liabilityMatches);
-    const totalLiabilities = roundMoney(
-      liabilityMatches.reduce((s, l) => s + (l.amount ?? 0), 0),
-    );
+    filteredLines.push(...liabilityWithParents);
     filteredLines.push({
       id: "total-liabilities",
       particular: "Total Liabilities",
-      amount: totalLiabilities,
+      amount: sumFilteredSideAmounts(liabilityWithParents),
       kind: "total",
       section: "liabilities",
     });
   }
 
-  if (assetMatches.length > 0) {
+  if (assetWithParents.length > 0) {
     filteredLines.push({
       id: "sec-assets",
       particular: "Assets",
@@ -201,12 +534,11 @@ export function filterBalanceSheetStatement(
       kind: "section",
       section: "assets",
     });
-    filteredLines.push(...assetMatches);
-    const totalAssets = roundMoney(assetMatches.reduce((s, l) => s + (l.amount ?? 0), 0));
+    filteredLines.push(...assetWithParents);
     filteredLines.push({
       id: "total-assets",
       particular: "Total Assets",
-      amount: totalAssets,
+      amount: sumFilteredSideAmounts(assetWithParents),
       kind: "total",
       section: "assets",
     });
@@ -221,8 +553,10 @@ export function filterBalanceSheetStatement(
     totalLiabilities,
     totalAssets,
     difference,
-    isBalanced: difference === 0,
+    isBalanced: Math.abs(difference) < 0.01,
     hasData: filteredLines.length > 0,
+    netProfit: statement.netProfit,
+    unpostedVoucherCount: statement.unpostedVoucherCount,
   };
 }
 
@@ -233,34 +567,118 @@ export interface BalanceSheetExportRow {
   indent: number;
 }
 
-export function flattenBalanceSheetForExport(
-  statement: BalanceSheetStatement,
-): BalanceSheetExportRow[] {
-  const rows: BalanceSheetExportRow[] = statement.lines.map((line) => ({
-    particular: line.particular,
-    amount: line.amount,
-    rowType: line.kind,
-    indent: line.kind === "line" ? 1 : 0,
-  }));
+export interface BalanceSheetHorizontalExportRow {
+  liabilityParticular: string;
+  liabilityAmount: number | null;
+  assetParticular: string;
+  assetAmount: number | null;
+  rowType: "title" | "header" | "line" | "subtotal" | "total";
+  liabilityIndent: number;
+  assetIndent: number;
+  liabilityBold?: boolean;
+  assetBold?: boolean;
+}
 
-  rows.push(
-    { particular: "Total Assets", amount: statement.totalAssets, rowType: "footer", indent: 0 },
+export function flattenBalanceSheetSideTree(
+  tree: BalanceSheetTreeNode[],
+  expandedIds: Set<string>,
+): Array<{ item: BalanceSheetLineItem; depth: number }> {
+  const rows: Array<{ item: BalanceSheetLineItem; depth: number }> = [];
+  const walk = (nodes: BalanceSheetTreeNode[]) => {
+    for (const node of nodes) {
+      rows.push({ item: node.item, depth: node.depth });
+      if (node.children.length > 0 && expandedIds.has(node.item.id)) {
+        walk(node.children);
+      }
+    }
+  };
+  walk(tree);
+  return rows;
+}
+
+export function flattenBalanceSheetHorizontalForExport(
+  statement: BalanceSheetStatement,
+  expandedIds: Set<string>,
+): BalanceSheetHorizontalExportRow[] {
+  const { liabilities, assets } = splitBalanceSheetHorizontal(statement);
+  const leftRows = flattenBalanceSheetSideTree(liabilities.tree, expandedIds);
+  const rightRows = flattenBalanceSheetSideTree(assets.tree, expandedIds);
+  const maxLen = Math.max(leftRows.length, rightRows.length);
+
+  const rows: BalanceSheetHorizontalExportRow[] = [
     {
-      particular: "Total Liabilities",
-      amount: statement.totalLiabilities,
-      rowType: "footer",
-      indent: 0,
+      liabilityParticular: "Balance Sheet",
+      liabilityAmount: null,
+      assetParticular: "",
+      assetAmount: null,
+      rowType: "title",
+      liabilityIndent: 0,
+      assetIndent: 0,
+      liabilityBold: true,
+      assetBold: true,
     },
-    { particular: "Difference", amount: statement.difference, rowType: "footer", indent: 0 },
     {
-      particular: statement.isBalanced
-        ? "Balance Sheet is balanced"
-        : "Balance Sheet is not balanced",
-      amount: null,
-      rowType: "footer",
-      indent: 0,
+      liabilityParticular: liabilities.sectionTitle,
+      liabilityAmount: null,
+      assetParticular: assets.sectionTitle,
+      assetAmount: null,
+      rowType: "header",
+      liabilityIndent: 0,
+      assetIndent: 0,
+      liabilityBold: true,
+      assetBold: true,
     },
-  );
+  ];
+
+  for (let i = 0; i < maxLen; i++) {
+    const left = leftRows[i];
+    const right = rightRows[i];
+
+    rows.push({
+      liabilityParticular: left?.item.particular ?? "",
+      liabilityAmount: left?.item.amount ?? null,
+      assetParticular: right?.item.particular ?? "",
+      assetAmount: right?.item.amount ?? null,
+      rowType: "line",
+      liabilityIndent: left?.depth ?? 0,
+      assetIndent: right?.depth ?? 0,
+      liabilityBold: left ? isBalanceSheetGroupHeading(left.item) : false,
+      assetBold: right ? isBalanceSheetGroupHeading(right.item) : false,
+    });
+  }
+
+  rows.push({
+    liabilityParticular: liabilities.grandTotalLabel,
+    liabilityAmount: liabilities.grandTotal,
+    assetParticular: assets.grandTotalLabel,
+    assetAmount: assets.grandTotal,
+    rowType: "total",
+    liabilityIndent: 0,
+    assetIndent: 0,
+    liabilityBold: true,
+    assetBold: true,
+  });
 
   return rows;
 }
+
+export function flattenBalanceSheetForExport(
+  statement: BalanceSheetStatement,
+): BalanceSheetExportRow[] {
+  return statement.lines.map((line) => ({
+    particular: line.particular,
+    amount: line.amount,
+    rowType: line.kind === "total" ? "total" : line.kind === "section" ? "section" : "line",
+    indent: line.kind === "line" || line.kind === "pl" ? 1 : 0,
+  }));
+}
+
+export {
+  getBalanceSheetActivePartyOptions,
+  getBalanceSheetBranchOptions,
+  getBalanceSheetLedgerGroupOptions,
+  getBalanceSheetLedgerOptions,
+  getBalanceSheetWarehouseOptions,
+  resolveFinancialYearLabel,
+  resolvePartyFilterLabel,
+};

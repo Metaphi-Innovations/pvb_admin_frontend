@@ -21,6 +21,7 @@ import { Plus } from "lucide-react";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { accountsBreadcrumb, JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
 import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
@@ -376,6 +377,7 @@ export default function JournalListPageClient() {
         setPage={setPage}
         setPageSize={setPageSize}
       />
+      <VoucherFormToastHost />
     </AccountsColumnFilterProvider>
   );
 }

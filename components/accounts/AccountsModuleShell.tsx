@@ -1,14 +1,38 @@
 "use client";
 
-import React, { memo } from "react";
+import React, { memo, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ACCOUNTS_MAIN_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
+import { resolveAccountsNavLabel } from "@/lib/accounts/accounts-nav";
 import {
   AccountsSectionSidebar,
   useActiveAccountsSectionId,
 } from "./AccountsSectionSidebar";
 import { useAccountsSidebar } from "./AccountsSidebarContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useNavigationPendingOptional } from "@/components/navigation/NavigationPendingContext";
+import { AccountsModuleErrorBoundary } from "./AccountsModuleErrorBoundary";
+
+function AccountsNavigationOverlay() {
+  const pending = useNavigationPendingOptional();
+  if (!pending?.isNavigating) return null;
+
+  const label =
+    pending.pendingLabel ??
+    (pending.pendingHref ? resolveAccountsNavLabel(pending.pendingHref) : "page");
+
+  return (
+    <div
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-white/75 backdrop-blur-[1px] pointer-events-none"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <Loader2 className="w-5 h-5 text-brand-600 animate-spin" aria-hidden />
+      <p className="text-xs font-medium text-muted-foreground">Loading {label}…</p>
+    </div>
+  );
+}
 
 /**
  * Accounts two-panel shell. Left rail shows only the active section
@@ -32,11 +56,16 @@ export const AccountsModuleShell = memo(function AccountsModuleShell({
             sectionId === "coa" && !collapsed && "is-coa-section",
           )}
         >
-          <AccountsSectionSidebar key={sectionId} sectionId={sectionId} collapsed={collapsed} />
+          <AccountsSectionSidebar sectionId={sectionId} collapsed={collapsed} />
         </aside>
 
-        <main className="accounts-module-main flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
-          <div className={cn(ACCOUNTS_MAIN_PANEL_CLASS, "px-3 py-2")}>{children}</div>
+        <main className="accounts-module-main relative flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
+          <AccountsNavigationOverlay />
+          <div className={cn(ACCOUNTS_MAIN_PANEL_CLASS, "px-3 py-2 min-h-0 flex-1 overflow-hidden flex flex-col")}>
+            <AccountsModuleErrorBoundary>
+              <Suspense fallback={null}>{children}</Suspense>
+            </AccountsModuleErrorBoundary>
+          </div>
         </main>
       </div>
     </TooltipProvider>

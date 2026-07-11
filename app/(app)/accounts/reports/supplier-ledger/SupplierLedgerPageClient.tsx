@@ -26,8 +26,15 @@ import {
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
+  ReportVoucherTypeMultiFilter,
+  ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import {
+  buildEntityFilterSummary,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -51,7 +58,7 @@ function SupplierLedgerPageContent() {
 
   const [supplierId, setSupplierId] = useState("");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [voucherType, setVoucherType] = useState("all");
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
@@ -86,10 +93,27 @@ function SupplierLedgerPageContent() {
     return buildSupplierLedgerStatement(supplierId, {
       dateFrom,
       dateTo,
-      voucherType,
+      voucherType: voucherTypes,
       search,
     });
-  }, [mounted, supplierId, dateFrom, dateTo, voucherType, search]);
+  }, [mounted, supplierId, dateFrom, dateTo, voucherTypes, search]);
+
+  const voucherTypeOptions = useMemo(
+    () => SUPPLIER_LEDGER_VOUCHER_TYPE_OPTIONS.filter((o) => o.value !== "all"),
+    [],
+  );
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary(
+        "voucherType",
+        "Voucher Types",
+        voucherTypes,
+        voucherTypeOptions,
+        () => setVoucherTypes([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [voucherTypes, voucherTypeOptions]);
 
   const openingRow = statement?.displayRows[0] ?? null;
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
@@ -156,8 +180,10 @@ function SupplierLedgerPageContent() {
         setDateFrom={setDateFrom}
         dateTo={dateTo}
         setDateTo={setDateTo}
-        voucherType={voucherType}
-        setVoucherType={setVoucherType}
+        voucherTypes={voucherTypes}
+        setVoucherTypes={setVoucherTypes}
+        voucherTypeOptions={voucherTypeOptions}
+        filterSummaryItems={filterSummaryItems}
         search={search}
         setSearch={setSearch}
       />
@@ -183,8 +209,10 @@ function SupplierLedgerPageBody({
   setDateFrom,
   dateTo,
   setDateTo,
-  voucherType,
-  setVoucherType,
+  voucherTypes,
+  setVoucherTypes,
+  voucherTypeOptions,
+  filterSummaryItems,
   search,
   setSearch,
 }: {
@@ -205,8 +233,10 @@ function SupplierLedgerPageBody({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  voucherType: string;
-  setVoucherType: (v: string) => void;
+  voucherTypes: string[];
+  setVoucherTypes: (v: string[]) => void;
+  voucherTypeOptions: { value: string; label: string }[];
+  filterSummaryItems: ReportFilterSummaryItem[];
   search: string;
   setSearch: (v: string) => void;
 }) {
@@ -261,7 +291,7 @@ function SupplierLedgerPageBody({
     statement.summary.openingBalance === 0 &&
     statement.summary.closingBalance === 0 &&
     !search.trim() &&
-    voucherType === "all";
+    !isMultiFilterActive(voucherTypes);
 
   const showNoFilterResults =
     supplierId &&
@@ -275,75 +305,68 @@ function SupplierLedgerPageBody({
       title="Supplier Ledger"
       description="Complete supplier-wise transaction history with running balance."
       filters={
-        <ReportFilterRow className="items-end">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-1 min-w-[200px]">
-            <Label className={filterLabelClass}>
-              Supplier <span className="text-red-500">*</span>
-            </Label>
-            <Select value={supplierId || undefined} onValueChange={handleSupplierChange}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
-                <SelectValue placeholder="Select supplier…" />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[150px]">
-            <Label className={filterLabelClass}>Voucher Type</Label>
-            <Select value={voucherType} onValueChange={setVoucherType} disabled={!supplierId}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPLIER_LEDGER_VOUCHER_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[200px] flex-1">
-            <Label className={filterLabelClass}>Search</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Voucher no., particular, narration, amount…"
-                className={cn(filterControlClass, "mt-0 pr-8")}
-                disabled={!supplierId}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+        <>
+          <ReportFilterRow className="items-end">
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <div className="space-y-1 min-w-[200px]">
+              <Label className={filterLabelClass}>
+                Supplier <span className="text-red-500">*</span>
+              </Label>
+              <Select value={supplierId || undefined} onValueChange={handleSupplierChange}>
+                <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
+                  <SelectValue placeholder="Select supplier…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-          <AccountsExportMenu
-            onExcel={handleExportExcel}
-            onPdf={handleExportPdf}
-            disabled={!canExport || exporting}
-          />
-        </ReportFilterRow>
+            <ReportVoucherTypeMultiFilter
+              values={voucherTypes}
+              onChange={setVoucherTypes}
+              options={voucherTypeOptions}
+            />
+            <div className="space-y-1 min-w-[200px] flex-1">
+              <Label className={filterLabelClass}>Search</Label>
+              <div className="relative">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Voucher no., particular, narration, amount…"
+                  className={cn(filterControlClass, "mt-0 pr-8")}
+                  disabled={!supplierId}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={!canExport || exporting}
+            />
+          </ReportFilterRow>
+          {supplierId ? <ReportFilterSummary items={filterSummaryItems} /> : null}
+        </>
       }
       layout="split"
       className="h-full min-h-0"
@@ -381,7 +404,7 @@ function SupplierLedgerPageBody({
                     type="button"
                     onClick={() => {
                       setSearch("");
-                      setVoucherType("all");
+                      setVoucherTypes([]);
                     }}
                     className="text-xs text-brand-600 hover:underline"
                   >

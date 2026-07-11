@@ -12,6 +12,11 @@ const CoaAddLedgerHost = dynamic(
   { ssr: false },
 );
 
+const CoaAddGroupHost = dynamic(
+  () => import("./CoaAddGroupHost").then((m) => ({ default: m.CoaAddGroupHost })),
+  { ssr: false },
+);
+
 function routeNeedsCoaData(pathname: string): boolean {
   return (
     pathname.startsWith(CHART_OF_ACCOUNTS_HREF) ||
@@ -36,7 +41,8 @@ export function CoaNavigationProviderLazy({ children }: { children: React.ReactN
   return (
     <CoaNavigationProvider initMode={needsFullCoa ? "full" : "tree-only"}>
       {children}
-      {needsFullCoa ? <CoaAddLedgerHost /> : null}
+      <CoaAddLedgerHost />
+      <CoaAddGroupHost />
     </CoaNavigationProvider>
   );
 }

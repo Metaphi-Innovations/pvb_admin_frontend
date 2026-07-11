@@ -3,6 +3,8 @@ import {
   canAddLedgerUnder,
   getAncestorPath,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
+import { isTdsGroupContext } from "@/lib/accounts/coa-specialized-groups";
 import { isBankAccountsSubGroup, isBankGroupNode } from "@/lib/accounts/bank-coa-utils";
 
 /** Sub-groups whose ledgers are owned by other ERP masters — not manually created in COA/Ledgers. */
@@ -23,7 +25,12 @@ export function isMasterOwnedSubGroup(node: ChartOfAccount): boolean {
 export function isGstLedgerParent(node: ChartOfAccount): boolean {
   if (node.nodeLevel !== "account_group") return false;
   const name = node.accountName.toLowerCase();
-  return name.includes("gst payable") || name.includes("duties & taxes");
+  return name.includes("gst payable") || name.includes("gst output") || name.includes("duties & taxes");
+}
+
+export function isTdsLedgerParent(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (node.nodeLevel !== "account_group") return false;
+  return isTdsGroupContext(node, records);
 }
 
 function isExpenseLedgerParent(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
@@ -31,14 +38,16 @@ function isExpenseLedgerParent(node: ChartOfAccount, records: ChartOfAccount[]):
   return path.some((p) => p.accountType === "Expense" || p.accountName === "Expenses");
 }
 
-/** Chart of Accounts is view-only — no ledger creation from COA UI. */
-export function canAddLedgerFromCoa(_node: ChartOfAccount, _records: ChartOfAccount[]): boolean {
-  return false;
+/** True when ledger creation is allowed under this COA node (structure remains fixed). */
+export function canAddLedgerFromCoa(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (!canAddLedgerUnder(node, records)) return false;
+  if (isAddLedgerBlocked(node, records)) return false;
+  return true;
 }
 
-/** Ledgers page is view-only in demo — balances from ERP masters and postings. */
-export function canAddLedgerFromLedgersPage(_node: ChartOfAccount, _records: ChartOfAccount[]): boolean {
-  return false;
+/** Same eligibility rules as COA — used by quick-create modals. */
+export function canAddLedgerFromLedgersPage(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  return canAddLedgerFromCoa(node, records);
 }
 
 export const LEDGER_TYPE_FILTERS = [
@@ -49,6 +58,7 @@ export const LEDGER_TYPE_FILTERS = [
   { id: "cash", label: "Cash" },
   { id: "expense", label: "Expense" },
   { id: "gst", label: "GST" },
+  { id: "tds", label: "TDS" },
   { id: "employee", label: "Employee Payable" },
   { id: "loan", label: "Loan" },
   { id: "fixed_asset", label: "Fixed Asset" },

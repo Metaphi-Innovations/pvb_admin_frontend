@@ -5,6 +5,8 @@ export type DateRangePresetId =
   | "last_month"
   | "this_quarter"
   | "this_year"
+  | "this_financial_year"
+  | "all_transactions"
   | "custom";
 
 export const DATE_RANGE_PRESET_OPTIONS: { id: DateRangePresetId; label: string }[] = [
@@ -17,6 +19,16 @@ export const DATE_RANGE_PRESET_OPTIONS: { id: DateRangePresetId; label: string }
   { id: "custom", label: "Custom Range" },
 ];
 
+/** Day Book and similar reports — includes FY-wide and unfiltered presets. */
+export const DAY_BOOK_DATE_RANGE_PRESET_OPTIONS: { id: DateRangePresetId; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "this_week", label: "This Week" },
+  { id: "this_month", label: "This Month" },
+  { id: "this_financial_year", label: "This Financial Year" },
+  { id: "all_transactions", label: "All Transactions" },
+  { id: "custom", label: "Custom Date Range" },
+];
+
 /** Presets used on Pending Invoice & Sales Invoice listing pages. */
 export const INVOICE_LISTING_DATE_PRESETS: { id: DateRangePresetId; label: string }[] = [
   { id: "today", label: "Today" },
@@ -25,6 +37,8 @@ export const INVOICE_LISTING_DATE_PRESETS: { id: DateRangePresetId; label: strin
   { id: "last_month", label: "Last Month" },
   { id: "custom", label: "Custom Range" },
 ];
+
+import { demoFinancialYearStart } from "@/lib/accounts/demo-date-utils";
 
 function formatIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -75,6 +89,10 @@ export function resolveDateRangePreset(
       d.setMonth(0, 1);
       return { from: formatIsoDate(d), to };
     }
+    case "this_financial_year":
+      return { from: demoFinancialYearStart(refDate), to };
+    case "all_transactions":
+      return { from: "", to: "" };
     case "custom":
     default:
       return { from: to, to };

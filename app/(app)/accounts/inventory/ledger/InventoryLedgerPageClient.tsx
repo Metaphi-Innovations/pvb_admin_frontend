@@ -24,7 +24,7 @@ export default function InventoryLedgerPageClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Inventory", "Inventory Ledger")}
       title="Inventory Ledger"
-      description="View stock-related ledgers under Chart of Accounts. Create items from Inventory â†’ Items."
+      description="View stock-related ledgers under Chart of Accounts. Create items from Inventory → Items."
       actions={
         <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
           <Link href="/accounts/masters/chart-of-accounts">View in Chart of Accounts</Link>
@@ -62,7 +62,7 @@ export default function InventoryLedgerPageClient() {
                   <tr
                     key={l.id}
                     className="accounts-table-row group cursor-pointer"
-                    onClick={() => router.push(`/accounts/masters/ledgers/${l.id}`)}
+                    onClick={() => router.push(`/accounts/masters/chart-of-accounts?node=${l.id}`)}
                   >
                     <td className="px-4 py-3 text-xs font-mono">{l.accountCode}</td>
                     <td className="px-4 py-3 text-sm font-medium">{l.accountName}</td>

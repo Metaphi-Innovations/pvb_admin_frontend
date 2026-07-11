@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "../masters/masters-data";
 import { VoucherListClient } from "./components/VoucherListClient";
@@ -88,6 +89,7 @@ export default function VouchersHubPageClient() {
       layout="split"
     >
       <VoucherListClient voucherType={activeTab} embedded />
+      <VoucherFormToastHost ready={mode !== "new"} />
     </AccountsPageShell>
   );
 }

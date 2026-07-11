@@ -23,6 +23,20 @@ import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import {
+  matchesMultiFilter,
+  matchesMultiIdFilter,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
+import {
+  DEFAULT_AGEING_BREAKPOINTS,
+  classifyAgeingBucketIndex,
+  effectiveOverdueDays,
+  emptyAgeingBuckets,
+  generateAgeingBucketsFromBreakpoints,
+  type AgeingBreakpoints,
+  type GeneratedAgeingBucket,
+} from "@/lib/accounts/ageing-breakpoints";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,8 +74,14 @@ export interface InvoiceOutstandingRow {
 }
 
 export interface InvoiceOutstandingFilters {
+  /** @deprecated use customerIds */
   customerId?: number;
+  customerIds?: string | string[];
+  branch?: string | string[];
+  salespersons?: string | string[];
+  /** @deprecated use statuses */
   status?: ReceivableStatus | "all";
+  statuses?: string | string[];
   dateFrom?: string;
   dateTo?: string;
   financialYearId?: number;
@@ -97,6 +117,26 @@ export interface CustomerReceiptAllocationSummary {
   unallocatedReceipts: ReceiptAllocationRecord[];
 }
 
+export interface CustomerOutstandingFilters {
+  customerIds?: string | string[];
+  branch?: string | string[];
+  salespersons?: string | string[];
+  statuses?: string | string[];
+}
+
+export function filterCustomerOutstandingRows(
+  rows: CustomerOutstandingRow[],
+  filters: CustomerOutstandingFilters = {},
+): CustomerOutstandingRow[] {
+  return rows.filter((row) => {
+    if (!matchesMultiIdFilter(filters.customerIds, row.customerId)) return false;
+    if (!matchesMultiFilter(filters.branch, row.branch)) return false;
+    if (!matchesMultiFilter(filters.salespersons, row.salesExecutive)) return false;
+    if (!matchesMultiFilter(filters.statuses, row.status)) return false;
+    return true;
+  });
+}
+
 export interface CustomerOutstandingRow {
   customerName: string;
   ledgerId: number;
@@ -109,6 +149,7 @@ export interface CustomerOutstandingRow {
   customerCode: string;
   territory: string;
   branch: string;
+  salesExecutive: string;
   totalInvoiceAmount: number;
   totalTaxableValue: number;
   totalGstAmount: number;
@@ -156,17 +197,22 @@ export interface AgeingBucket {
   amount: number;
 }
 
+
+/** Breakpoint values that define ageing bucket boundaries. First value must be 0. */
+export type CustomerAgeingBreakpoints = AgeingBreakpoints;
+
+export const DEFAULT_CUSTOMER_AGEING_BREAKPOINTS = DEFAULT_AGEING_BREAKPOINTS;
+
+export type { GeneratedAgeingBucket };
+
 export interface CustomerAgeingRow {
   customerId: number;
   customerName: string;
   customerCode: string;
   territory: string;
   salesExecutive: string;
-  bucket0_30: number;
-  bucket31_60: number;
-  bucket61_90: number;
-  bucket91_120: number;
-  bucketAbove120: number;
+  /** Bucket amounts aligned with generated ageing columns (same order as breakpoints). */
+  buckets: number[];
   totalOutstanding: number;
   oldestInvoiceDate: string;
 }
@@ -308,20 +354,14 @@ export function getAgeingBucketLabel(daysOverdue: number, asOfDate: string, dueD
   return "Above 120 Days";
 }
 
-function bucketKey(
-  daysOverdue: number,
-  asOfDate: string,
-  dueDate: string,
-): keyof Pick<
-  CustomerAgeingRow,
-  "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
-> {
-  if (daysBetween(dueDate, asOfDate) <= 0 || daysOverdue <= 30) return "bucket0_30";
-  if (daysOverdue <= 60) return "bucket31_60";
-  if (daysOverdue <= 90) return "bucket61_90";
-  if (daysOverdue <= 120) return "bucket91_120";
-  return "bucketAbove120";
-}
+export {
+  generateAgeingBucketsFromBreakpoints,
+  getAgeingBucketLabels as getCustomerAgeingBucketLabels,
+  validateAgeingBreakpoints as validateCustomerAgeingBreakpoints,
+  classifyAgeingBucketIndex as classifyCustomerAgeingBucketIndex,
+  ageingBucketColumnKey as customerAgeingBucketColumnKey,
+  getVisibleAgeingBucketIndices as getVisibleCustomerAgeingBucketIndices,
+} from "@/lib/accounts/ageing-breakpoints";
 
 function invoiceMatchesFinancialYear(invoiceDate: string, fyId?: number): boolean {
   if (!fyId) return true;
@@ -407,13 +447,24 @@ export function computeInvoiceOutstanding(
     const customer = customers.find((c) => c.id === inv.customerId);
     if (!customer) continue;
 
-    if (filters.customerId && inv.customerId !== filters.customerId) continue;
+    const customerIds = filters.customerIds ?? (filters.customerId != null ? [String(filters.customerId)] : []);
+    if (!matchesMultiIdFilter(customerIds, inv.customerId)) continue;
+
+    const customerBranch = customer.branch?.trim() || customer.stateName?.trim() || "—";
+    if (!matchesMultiFilter(filters.branch, customerBranch)) continue;
+
+    const salesExecutive = customer.salesManName?.trim() || inv.salesperson?.trim() || "";
+    if (!matchesMultiFilter(filters.salespersons, salesExecutive)) continue;
+
     if (filters.dateFrom && inv.invoiceDate < filters.dateFrom) continue;
     if (filters.dateTo && inv.invoiceDate > filters.dateTo) continue;
     if (!invoiceMatchesFinancialYear(inv.invoiceDate, filters.financialYearId)) continue;
 
     const invoiceRow = buildInvoiceRow(inv, asOfDate);
-    if (filters.status && filters.status !== "all" && invoiceRow.status !== filters.status) continue;
+    const statusValues = normalizeMultiFilter(
+      filters.statuses ?? (filters.status && filters.status !== "all" ? [filters.status] : []),
+    );
+    if (statusValues.length > 0 && !statusValues.includes(invoiceRow.status)) continue;
 
     if (q) {
       const hay = [
@@ -554,6 +605,11 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
     const lastInvoiceDate =
       custInvoices.sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate))[0]?.invoiceDate ?? "—";
 
+    const salesExecutive =
+      customer.salesManName?.trim() ||
+      custInvoices.map((i) => i.salesperson?.trim()).find(Boolean) ||
+      "—";
+
     const ledgerId = resolveCustomerLedgerId(customer);
 
     rows.push({
@@ -568,6 +624,7 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
       customerCode: customer.customerCode,
       territory: customer.territoryName || customer.districtName || "—",
       branch: customer.branch || customer.stateName || "—",
+      salesExecutive,
       totalInvoiceAmount,
       totalTaxableValue,
       totalGstAmount,
@@ -636,26 +693,32 @@ export function getCustomerOutstandingDetail(
 
 // ── Ageing ───────────────────────────────────────────────────────────────────
 
-export function computeCustomerAgeing(asOfDate = TODAY()): AgeingBucket[] {
-  const summary = computeAgeingSummary(asOfDate);
-  return [
-    { label: "0–30 Days", daysMin: 0, daysMax: 30, amount: summary.bucket0_30 },
-    { label: "31–60 Days", daysMin: 31, daysMax: 60, amount: summary.bucket31_60 },
-    { label: "61–90 Days", daysMin: 61, daysMax: 90, amount: summary.bucket61_90 },
-    { label: "91–120 Days", daysMin: 91, daysMax: 120, amount: summary.bucket91_120 },
-    { label: "Above 120 Days", daysMin: 121, daysMax: null, amount: summary.bucketAbove120 },
-  ];
+export function computeCustomerAgeing(
+  asOfDate = TODAY(),
+  breakpoints: CustomerAgeingBreakpoints = DEFAULT_CUSTOMER_AGEING_BREAKPOINTS,
+): AgeingBucket[] {
+  const summary = computeAgeingSummary(asOfDate, breakpoints);
+  const generated = generateAgeingBucketsFromBreakpoints(breakpoints);
+  return generated.map((bucket, i) => ({
+    label: bucket.label,
+    daysMin: bucket.from,
+    daysMax: bucket.to,
+    amount: summary.buckets[i] ?? 0,
+  }));
 }
 
-export function computeAgeingSummary(asOfDate = TODAY()) {
-  const rows = computeCustomerAgeingRows(asOfDate);
+export function computeAgeingSummary(
+  asOfDate = TODAY(),
+  breakpoints: CustomerAgeingBreakpoints = DEFAULT_CUSTOMER_AGEING_BREAKPOINTS,
+) {
+  const rows = computeCustomerAgeingRows(asOfDate, {}, breakpoints);
+  const bucketCount = breakpoints.length;
+  const buckets = Array.from({ length: bucketCount }, (_, i) =>
+    round2(rows.reduce((s, r) => s + (r.buckets[i] ?? 0), 0)),
+  );
   return {
     totalOutstanding: round2(rows.reduce((s, r) => s + r.totalOutstanding, 0)),
-    bucket0_30: round2(rows.reduce((s, r) => s + r.bucket0_30, 0)),
-    bucket31_60: round2(rows.reduce((s, r) => s + r.bucket31_60, 0)),
-    bucket61_90: round2(rows.reduce((s, r) => s + r.bucket61_90, 0)),
-    bucket91_120: round2(rows.reduce((s, r) => s + r.bucket91_120, 0)),
-    bucketAbove120: round2(rows.reduce((s, r) => s + r.bucketAbove120, 0)),
+    buckets,
   };
 }
 
@@ -669,10 +732,12 @@ export interface AgeingFilters {
 export function computeCustomerAgeingRows(
   asOfDate = TODAY(),
   filters: AgeingFilters = {},
+  breakpoints: CustomerAgeingBreakpoints = DEFAULT_CUSTOMER_AGEING_BREAKPOINTS,
 ): CustomerAgeingRow[] {
   const customers = loadCustomers();
   const invoices = getPostedSalesInvoices().filter((i) => getInvoiceOutstanding(i) > 0.009);
   const map = new Map<number, CustomerAgeingRow>();
+  const bucketCount = breakpoints.length;
 
   for (const inv of invoices) {
     if (!inv.customerId) continue;
@@ -682,11 +747,15 @@ export function computeCustomerAgeingRows(
     if (filters.customerId && customer.id !== filters.customerId) continue;
     if (filters.branch && (customer.branch || customer.stateName || "—") !== filters.branch) continue;
     if (filters.territory && customer.territoryName !== filters.territory) continue;
-    if (filters.salesExecutive && customer.salesManName !== filters.salesExecutive) continue;
+    if (filters.salesExecutive) {
+      const exec = customer.salesManName?.trim() || inv.salesperson?.trim() || "";
+      if (exec !== filters.salesExecutive) continue;
+    }
 
     const outstanding = getInvoiceOutstanding(inv);
     const daysOverdue = Math.max(0, daysBetween(inv.dueDate, asOfDate));
-    const key = bucketKey(daysOverdue, asOfDate, inv.dueDate);
+    const effectiveDays = effectiveOverdueDays(daysOverdue, asOfDate, inv.dueDate);
+    const bucketIndex = classifyAgeingBucketIndex(effectiveDays, breakpoints);
 
     const row =
       map.get(customer.id) ??
@@ -695,17 +764,13 @@ export function computeCustomerAgeingRows(
         customerName: customer.customerName,
         customerCode: customer.customerCode,
         territory: customer.territoryName || customer.districtName || "—",
-        salesExecutive: customer.salesManName || inv.salesperson || "—",
-        bucket0_30: 0,
-        bucket31_60: 0,
-        bucket61_90: 0,
-        bucket91_120: 0,
-        bucketAbove120: 0,
+        salesExecutive: customer.salesManName?.trim() || inv.salesperson?.trim() || "—",
+        buckets: emptyAgeingBuckets(bucketCount),
         totalOutstanding: 0,
         oldestInvoiceDate: inv.invoiceDate,
       } satisfies CustomerAgeingRow);
 
-    row[key] = round2(row[key] + outstanding);
+    row.buckets[bucketIndex] = round2(row.buckets[bucketIndex] + outstanding);
     row.totalOutstanding = round2(row.totalOutstanding + outstanding);
     if (inv.invoiceDate < row.oldestInvoiceDate) row.oldestInvoiceDate = inv.invoiceDate;
     map.set(customer.id, row);

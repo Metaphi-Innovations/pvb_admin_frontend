@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -243,7 +245,35 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
     { key: "action", label: "", align: "right" as const },
   ];
 
+  const [baselineReady, setBaselineReady] = useState(false);
+  useEffect(() => {
+    setBaselineReady(false);
+    const id = window.setTimeout(() => setBaselineReady(true), 350);
+    return () => window.clearTimeout(id);
+  }, [invoiceId]);
+
+  const formSnapshot = useMemo(
+    () => ({
+      vendorId,
+      invoiceDate,
+      dueDate,
+      vendorInvoiceNo,
+      purchaseperson,
+      remarks,
+      lines,
+      billingAddress,
+      shippingAddress,
+    }),
+    [vendorId, invoiceDate, dueDate, vendorInvoiceNo, purchaseperson, remarks, lines, billingAddress, shippingAddress],
+  );
+  const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
+  const { requestCancel, discardDialog } = useTransactionFormCancel({
+    listHref: PURCHASE_LIST_PATH,
+    isDirty,
+  });
+
   return (
+    <>
     <InvoiceFormLayout
       title={isEdit ? `Edit ${existing?.invoiceNo ?? "Purchase Invoice"}` : "New Purchase Invoice"}
       subtitle="Create a purchase bill with vendor details, line items, GST and ledger impact preview."
@@ -253,13 +283,15 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         PURCHASE_LIST_PATH,
       )}
       backHref={PURCHASE_LIST_PATH}
+      onBackClick={requestCancel}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button
+            type="button"
             variant="outline"
             size="sm"
             className={INVOICE_FORM_INPUT_CLASS}
-            onClick={() => router.push(PURCHASE_LIST_PATH)}
+            onClick={requestCancel}
           >
             Cancel
           </Button>
@@ -499,5 +531,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         className="border border-slate-200 rounded-lg"
       />
     </InvoiceFormLayout>
+    {discardDialog}
+    </>
   );
 }

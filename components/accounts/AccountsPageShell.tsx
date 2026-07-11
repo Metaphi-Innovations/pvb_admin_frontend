@@ -67,7 +67,7 @@ export function AccountsPageShell({
               {i > 0 && (
                 <ChevronRight
                   className={cn(
-                    "text-slate-400",
+                    "text-muted-foreground",
                     isSplit ? "w-2.5 h-2.5" : "w-3 h-3",
                   )}
                 />

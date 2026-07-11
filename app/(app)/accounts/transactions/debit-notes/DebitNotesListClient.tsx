@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
@@ -31,7 +31,11 @@ import {
 } from "@/components/accounts/AccountsTable";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
+import { ReportSearchFilter, ReportFilterRow, ReportFilterResetButton } from "@/components/accounts/ReportFilters";
+import { accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { noteWorkflowStatusToBadge } from "@/lib/accounts/accounts-status-badges";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import {
@@ -57,6 +61,10 @@ import {
 import { listPendingDebitNoteReturns } from "../../debit-notes/pending-debit-notes-data";
 import { exportDebitNotesToExcel } from "../../debit-notes/debit-notes-export";
 import { DEBIT_NOTES_LIST_PATH, formatINR } from "../../debit-notes/note-utils";
+import {
+  hasDocumentsListingFilters,
+  parseDocumentsListingFiltersFromSearch,
+} from "@/lib/accounts/documents-listing-filter-query";
 
 const LIST_PATH = DEBIT_NOTES_LIST_PATH;
 
@@ -118,6 +126,7 @@ function DebitNotesRecordsTable({
               <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
               <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
               <SortTh label="Total" colKey="currentDebitAmount" filterType="amount" align="right" />
+              <SortTh label="Status" colKey="status" />
               <AccountsColumnHeader
                 label="Actions"
                 colKey="_actions"
@@ -130,11 +139,11 @@ function DebitNotesRecordsTable({
           </AccountsTableHead>
           <AccountsTableBody>
             {!mounted ? (
-              <AccountsTableEmpty colSpan={11} message="Loading debit notes…" />
+              <AccountsTableEmpty colSpan={12} message="Loading debit notes…" />
             ) : toolbarFiltered.length === 0 ? (
-              <AccountsTableEmpty colSpan={11} message="No debit notes found." />
+              <AccountsTableEmpty colSpan={12} message="No debit notes found." />
             ) : visible.length === 0 ? (
-              <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
+              <AccountsTableEmpty colSpan={12} message="No records match the column filters." />
             ) : (
               pagedRows.map((r) => (
                 <AccountsTableRow key={r.id}>
@@ -153,6 +162,12 @@ function DebitNotesRecordsTable({
                   <AccountsTableCell align="right" money>{formatINR(r.igstAmount)}</AccountsTableCell>
                   <AccountsTableCell align="right" money className="font-medium">
                     {formatINR(r.currentDebitAmount)}
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    {(() => {
+                      const badge = noteWorkflowStatusToBadge(r.status);
+                      return <StatusBadge status={badge.status} label={badge.label} size="sm" />;
+                    })()}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                     <AccountsTableActionCell>
@@ -217,6 +232,7 @@ function DebitNotesRecordsTab({
   setDateFrom,
   dateTo,
   setDateTo,
+  branchFilter,
   onCancel,
   onRefresh,
 }: {
@@ -231,6 +247,7 @@ function DebitNotesRecordsTab({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
+  branchFilter: string;
   onCancel: (r: DebitNoteRecord) => void;
   onRefresh: () => void;
 }) {
@@ -239,20 +256,26 @@ function DebitNotesRecordsTab({
   const [exporting, setExporting] = useState(false);
 
   const toolbarFiltered = useMemo(
-    () =>
-      mounted
-        ? filterDebitNotes(records, {
-            tab: statusTab,
-            search,
-            vendor: "all",
-            referenceType: "all",
-            referenceNo: "",
-            dateFrom,
-            dateTo,
-            status: "all",
-          })
-        : [],
-    [records, statusTab, search, dateFrom, dateTo, mounted],
+    () => {
+      if (!mounted) return [];
+      let list = filterDebitNotes(records, {
+        tab: statusTab,
+        search,
+        vendor: "all",
+        referenceType: "all",
+        referenceNo: "",
+        dateFrom,
+        dateTo,
+        status: "all",
+      });
+      if (branchFilter) {
+        list = list.filter(
+          (dn) => ((dn as { branch?: string }).branch?.trim() || "") === branchFilter,
+        );
+      }
+      return list;
+    },
+    [records, statusTab, search, dateFrom, dateTo, branchFilter, mounted],
   );
 
   const getCellValue = useCallback((row: DebitNoteRecord, key: string) => {
@@ -371,27 +394,42 @@ function DebitNotesRecordsTabBody({
         <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
       </div>
       <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
-        <AccountsListingFilterCard
-          actions={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportExcel}
-              disabled={exporting || visible.length === 0}
+        <AccountsListingFilterCard>
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportExcel}
+                disabled={exporting || visible.length === 0}
+              />
+            }
+          >
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Search DN no., source, invoice, return, supplier…"
+              className="min-w-[200px] flex-1 max-w-md"
             />
-          }
-        >
-          <AccountsListingDateFilter
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Search DN no., source, invoice, return, supplier…"
-            className="min-w-[200px] flex-1 max-w-md"
-          />
+            <AccountsListingDateFilter
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportFilterResetButton
+              showOnlyWhenActive
+              active={accountsListingFiltersActive(
+                { search, dateFrom, dateTo, statusTab: statusTab === "all" ? "" : statusTab },
+                { search: "", dateFrom: "", dateTo: "", statusTab: "" },
+              )}
+              onClick={() => {
+                setSearch("");
+                setDateFrom("");
+                setDateTo("");
+                setStatusTab("all");
+              }}
+            />
+          </ReportFilterRow>
         </AccountsListingFilterCard>
         <AccountsListingTableCard>
           <DebitNotesRecordsTable
@@ -412,15 +450,19 @@ function DebitNotesRecordsTabBody({
 
 export default function DebitNotesListClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const [moduleTab, setModuleTab] = useState("pending");
   const [statusTab, setStatusTab] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
   const [records, setRecords] = useState<DebitNoteRecord[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [search, setSearch] = useState("");
   const [cancelTarget, setCancelTarget] = useState<DebitNoteRecord | null>(null);
+
+  const sectionRefresh = useAccountsSectionRefresh("debit-notes");
 
   const refresh = useCallback(() => {
     if (!mounted) return;
@@ -430,7 +472,17 @@ export default function DebitNotesListClient() {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, sectionRefresh]);
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    if (!hasDocumentsListingFilters(qs)) return;
+    const parsed = parseDocumentsListingFiltersFromSearch(qs);
+    if (parsed.dateFrom) setDateFrom(parsed.dateFrom);
+    if (parsed.dateTo) setDateTo(parsed.dateTo);
+    if (parsed.branch) setBranchFilter(parsed.branch);
+    setModuleTab("records");
+  }, [searchParams]);
 
   const counts = useMemo(() => computeDebitNoteTabCounts(records), [records]);
 
@@ -479,6 +531,7 @@ export default function DebitNotesListClient() {
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
+              branchFilter={branchFilter}
               onCancel={setCancelTarget}
               onRefresh={refresh}
             />

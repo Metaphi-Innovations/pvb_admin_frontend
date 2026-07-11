@@ -24,7 +24,7 @@ export function InventoryAccountsKpiStrip() {
           Inventory Accounting
         </p>
         <Link href="/accounts/reports/stock-valuation" className="text-xs text-primary hover:underline">
-          Stock Valuation â†’
+          Stock Valuation →
         </Link>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">

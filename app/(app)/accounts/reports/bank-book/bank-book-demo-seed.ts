@@ -1,7 +1,7 @@
 import { demoDateAt } from "@/lib/accounts/demo-date-utils";
 /**
  * Bank Book demo seed — ensures voucher-backed demo data for Bank Book only.
- * Creates transactions through Receipt, Payment, Contra, Journal, and Fund Transfer vouchers.
+ * Creates transactions through Receipt, Payment, Contra, and Journal vouchers.
  */
 
 import { loadChartOfAccounts, type ChartOfAccount } from "@/app/(app)/accounts/data";

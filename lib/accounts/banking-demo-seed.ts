@@ -1,6 +1,6 @@
 import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
- * Banking module demo seed — bank book (50+), cash book (20+), fund transfers (10).
+ * Banking module demo seed — bank book (50+), cash book (20+).
  * Runs as part of accounts demo seed; idempotent via version key.
  */
 
@@ -14,22 +14,16 @@ import {
   ensureDemoBankCoaStructure,
   loadBankAccountMasters,
 } from "@/lib/accounts/bank-accounts-data";
-import {
-  formatTransferAccountName,
-  saveFundTransferSeed,
-  type FundTransferMode,
-  type FundTransferRecord,
-} from "@/lib/accounts/fund-transfer-data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { scheduleDeferredDemoSeed } from "./deferred-demo-seed";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 
 import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
 
-export const BANKING_DEMO_SEED_VERSION = "relative-dates-v3";
+export const BANKING_DEMO_SEED_VERSION = "relative-dates-v4";
 const VERSION_KEY = "ds_banking_demo_seed_version";
+const FUND_TRANSFER_STORAGE_KEY = "ds_accounts_fund_transfers_v2";
 const FUND_TRANSFER_SEED_KEY = "ds_fund_transfer_demo_seed_version";
-export const FUND_TRANSFER_DEMO_SEED_VERSION = "relative-dates-v3";
 
 const BANKING_DEMO_VOUCHER_PREFIXES = ["RV-", "PV-", "FT-", "CSH-", "CV-", "JV-000"];
 
@@ -429,220 +423,10 @@ function seedCashBookTransactions(): void {
   }
 }
 
-function seedFundTransferRecords(): void {
+function clearFundTransferModuleData(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(FUND_TRANSFER_SEED_KEY) === FUND_TRANSFER_DEMO_SEED_VERSION) return;
-
-  const { hdfc, icici, sbi, axis } = getDemoBankLedgers();
-  const pettyCash = findCashLedger("Petty");
-  if (!hdfc || !icici || !sbi || !axis || !pettyCash) return;
-
-  const specs: Array<{
-    mode: FundTransferMode;
-    from: number;
-    to: number;
-    amount: number;
-    date: string;
-    transferNo: string;
-    referenceNo: string;
-    narration: string;
-    status: FundTransferRecord["status"];
-  }> = [
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: icici.id,
-      amount: 100000,
-      date: demoDateAt(55),
-      transferNo: "FT-0001",
-      referenceNo: "NEFT-HDFC-ICICI-0420",
-      narration: "HDFC → ICICI working capital transfer",
-      status: "completed",
-    },
-    {
-      mode: "rtgs",
-      from: icici.id,
-      to: sbi.id,
-      amount: 125000,
-      date: demoDateAt(56),
-      transferNo: "FT-0002",
-      referenceNo: "RTGS-ICICI-SBI-0428",
-      narration: "ICICI → SBI operations funding",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: axis.id,
-      amount: 175000,
-      date: demoDateAt(57),
-      transferNo: "FT-0003",
-      referenceNo: "NEFT-HDFC-AXIS-0508",
-      narration: "HDFC → Axis OD account salary funding",
-      status: "completed",
-    },
-    {
-      mode: "cash_deposit",
-      from: pettyCash.id,
-      to: hdfc.id,
-      amount: 50000,
-      date: demoDateAt(58),
-      transferNo: "FT-0004",
-      referenceNo: "",
-      narration: "Cash deposit to HDFC Bank Current Account",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: sbi.id,
-      to: icici.id,
-      amount: 85000,
-      date: demoDateAt(59),
-      transferNo: "FT-0005",
-      referenceNo: "NEFT-SBI-ICICI-0515",
-      narration: "SBI → ICICI collection sweep",
-      status: "completed",
-    },
-    {
-      mode: "cash_withdrawal",
-      from: icici.id,
-      to: pettyCash.id,
-      amount: 25000,
-      date: demoDateAt(60),
-      transferNo: "FT-0006",
-      referenceNo: "",
-      narration: "Cash withdrawal from ICICI for petty cash replenishment",
-      status: "completed",
-    },
-    {
-      mode: "imps",
-      from: icici.id,
-      to: hdfc.id,
-      amount: 95000,
-      date: demoDateAt(61),
-      transferNo: "FT-0007",
-      referenceNo: "IMPS-ICICI-HDFC-0522",
-      narration: "ICICI → HDFC surplus transfer",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: sbi.id,
-      amount: 110000,
-      date: demoDateAt(62),
-      transferNo: "FT-0008",
-      referenceNo: "NEFT-HDFC-SBI-0601",
-      narration: "HDFC → SBI vendor payment buffer",
-      status: "completed",
-    },
-    {
-      mode: "upi",
-      from: axis.id,
-      to: icici.id,
-      amount: 65000,
-      date: demoDateAt(63),
-      transferNo: "FT-0009",
-      referenceNo: "UPI-AXIS-ICICI-0608",
-      narration: "Axis OD → ICICI quick transfer",
-      status: "completed",
-    },
-    {
-      mode: "cash_deposit",
-      from: pettyCash.id,
-      to: icici.id,
-      amount: 35000,
-      date: demoDateAt(64),
-      transferNo: "FT-0010",
-      referenceNo: "",
-      narration: "Cash deposit to ICICI Bank Current Account",
-      status: "completed",
-    },
-    {
-      mode: "cheque",
-      from: hdfc.id,
-      to: axis.id,
-      amount: 78000,
-      date: demoDateAt(65),
-      transferNo: "FT-0011",
-      referenceNo: "CHQ-784521",
-      narration: "Cheque transfer HDFC → Axis OD account",
-      status: "completed",
-    },
-    {
-      mode: "rtgs",
-      from: sbi.id,
-      to: hdfc.id,
-      amount: 142000,
-      date: demoDateAt(66),
-      transferNo: "FT-0012",
-      referenceNo: "RTGS-SBI-HDFC-0618",
-      narration: "SBI → HDFC end-of-month consolidation",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: icici.id,
-      to: axis.id,
-      amount: 92000,
-      date: demoDateAt(67),
-      transferNo: "FT-0013",
-      referenceNo: "NEFT-ICICI-AXIS-0622",
-      narration: "ICICI → Axis payment account top-up",
-      status: "completed",
-    },
-    {
-      mode: "cash_withdrawal",
-      from: hdfc.id,
-      to: pettyCash.id,
-      amount: 18000,
-      date: demoDateAt(68),
-      transferNo: "FT-0014",
-      referenceNo: "",
-      narration: "ATM cash withdrawal for field collections float",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: icici.id,
-      amount: 45000,
-      date: demoDateAt(69),
-      transferNo: "FT-0015",
-      referenceNo: "NEFT-HDFC-ICICI-0628",
-      narration: "Cancelled transfer — duplicate entry reversed",
-      status: "cancelled",
-    },
-  ];
-
-  const seeded: FundTransferRecord[] = specs.map((s, index) => {
-    const existingVoucher = loadVouchers().find(
-      (v) => v.voucherNumber === s.transferNo || v.referenceNo === s.transferNo,
-    );
-    return {
-      id: index + 1,
-      transferDate: s.date,
-      transferNo: s.transferNo,
-      transferMode: s.mode,
-      fromAccountId: s.from,
-      fromAccountName: formatTransferAccountName(s.from),
-      toAccountId: s.to,
-      toAccountName: formatTransferAccountName(s.to),
-      amount: s.amount,
-      referenceNo: s.referenceNo,
-      narration: s.narration,
-      status: s.status,
-      voucherId: existingVoucher?.id ?? null,
-      financialYearId: 1,
-      createdBy: ACCOUNTS_CURRENT_USER,
-      updatedBy: ACCOUNTS_CURRENT_USER,
-      createdDate: s.date,
-      updatedDate: s.date,
-    };
-  });
-
-  saveFundTransferSeed(seeded);
-  localStorage.setItem(FUND_TRANSFER_SEED_KEY, FUND_TRANSFER_DEMO_SEED_VERSION);
+  localStorage.removeItem(FUND_TRANSFER_STORAGE_KEY);
+  localStorage.removeItem(FUND_TRANSFER_SEED_KEY);
 }
 
 export function seedBankingDemoData(force = false): void {
@@ -650,15 +434,15 @@ export function seedBankingDemoData(force = false): void {
   const stored = localStorage.getItem(VERSION_KEY);
   if (!force && stored === BANKING_DEMO_SEED_VERSION) return;
 
+  clearFundTransferModuleData();
+
   if (force || stored !== BANKING_DEMO_SEED_VERSION) {
     removeBankingDemoVouchers();
-    localStorage.removeItem(FUND_TRANSFER_SEED_KEY);
   }
 
   ensureDemoBankAccounts();
   seedBankBookTransactions(force);
   seedCashBookTransactions();
-  seedFundTransferRecords();
 
   localStorage.setItem(VERSION_KEY, BANKING_DEMO_SEED_VERSION);
 }

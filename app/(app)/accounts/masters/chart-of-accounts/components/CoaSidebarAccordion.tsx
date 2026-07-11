@@ -4,22 +4,21 @@ import React, { useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartOfAccount } from "../../../data";
-import { getDirectChildren, getSearchVisibleIds, hasChildLedgers } from "../chart-of-accounts-data";
+import { getDirectChildren, getSearchVisibleIds } from "../chart-of-accounts-data";
 import {
-  COA_TREE_ICON_SIZE_CLASS,
-  VISUAL_ICON,
+  COA_SIDEBAR_ROW_CLASS,
   coaNodeShowsExpandChevron,
+  coaSidebarIconSizeClass,
+  coaSidebarIndentPx,
+  coaSidebarNodeIconClass,
   coaTreeIconClass,
-  VISUAL_ROW_CLASS,
-  ledgerRowExpandable,
+  resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
   type CoaVisualLevel,
 } from "./coa-tree-visual";
 
-const INDENT = 14;
-
 const CHEVRON_BTN =
-  "w-4 h-4 flex-shrink-0 flex items-center justify-center rounded text-muted-foreground hover:text-brand-700 transition-colors outline-none focus:outline-none focus-visible:outline-none";
+  "w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-muted-foreground/70 hover:text-foreground transition-colors outline-none focus:outline-none focus-visible:outline-none";
 
 function hasChildren(records: ChartOfAccount[], nodeId: number): boolean {
   return getDirectChildren(records, nodeId).length > 0;
@@ -27,12 +26,9 @@ function hasChildren(records: ChartOfAccount[], nodeId: number): boolean {
 
 function navRowClass(visual: CoaVisualLevel, selected: boolean) {
   return cn(
-    "w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-left leading-snug transition-colors cursor-pointer",
-    VISUAL_ROW_CLASS[visual],
-    "border-l-2 outline-none focus:outline-none focus-visible:outline-none",
-    selected
-      ? "bg-brand-50/80 border-l-brand-500 text-brand-800"
-      : "border-l-transparent hover:bg-muted/30",
+    "w-full flex items-center gap-1.5 px-1 py-1 rounded-md text-left leading-snug transition-colors cursor-pointer",
+    COA_SIDEBAR_ROW_CLASS[visual],
+    selected ? "bg-brand-50/80 text-brand-800 font-semibold" : "hover:bg-muted/30",
   );
 }
 
@@ -40,7 +36,7 @@ interface NavRowProps {
   node: ChartOfAccount;
   records: ChartOfAccount[];
   selectedId: number | null;
-  indent: number;
+  depth: number;
   onSelect: (node: ChartOfAccount) => void;
   onToggle?: (id: number) => void;
   expanded?: boolean;
@@ -51,18 +47,18 @@ function NavRow({
   node,
   records,
   selectedId,
-  indent,
+  depth,
   onSelect,
   onToggle,
   expanded,
   showChevron,
 }: NavRowProps) {
   const visual = resolveCoaVisualLevel(node, records);
-  const Icon = VISUAL_ICON[visual];
+  const Icon = resolveCoaSidebarIcon(node, visual, records);
   const isSelected = selectedId === node.id;
 
   return (
-    <div className="flex items-center gap-0" style={{ paddingLeft: indent }}>
+    <div className="flex items-center gap-0" style={{ paddingLeft: coaSidebarIndentPx(depth) }}>
       {showChevron ? (
         <button
           type="button"
@@ -74,12 +70,12 @@ function NavRow({
           aria-label={expanded ? "Collapse" : "Expand"}
         >
           <ChevronDown
-            className={cn("w-4 h-4 transition-transform duration-150", !expanded && "-rotate-90")}
-            strokeWidth={1.75}
+            className={cn("w-3.5 h-3.5 transition-transform duration-150", !expanded && "-rotate-90")}
+            strokeWidth={2}
           />
         </button>
       ) : (
-        <span className="w-4 flex-shrink-0" aria-hidden />
+        <span className="w-5 flex-shrink-0" aria-hidden />
       )}
       <button
         type="button"
@@ -87,10 +83,14 @@ function NavRow({
         className={cn(navRowClass(visual, isSelected), "flex-1 min-w-0")}
       >
         <Icon
-          className={cn(COA_TREE_ICON_SIZE_CLASS, "flex-shrink-0", coaTreeIconClass(visual, isSelected))}
-          strokeWidth={1.75}
+          className={cn(
+            coaSidebarIconSizeClass(node, records),
+            "flex-shrink-0",
+            coaSidebarNodeIconClass(node, visual, isSelected, records),
+          )}
+          strokeWidth={visual === "primary_head" ? 2 : 1.75}
         />
-        <span className="flex-1 min-w-0 whitespace-normal break-words">{node.accountName}</span>
+        <span className="flex-1 min-w-0 whitespace-normal break-words truncate">{node.accountName}</span>
       </button>
     </div>
   );
@@ -102,7 +102,7 @@ function TreeChildren({
   selectedId,
   expandedIds,
   visibleIds,
-  baseIndent,
+  depth,
   onSelect,
   onToggle,
 }: {
@@ -111,7 +111,7 @@ function TreeChildren({
   selectedId: number | null;
   expandedIds: Set<number>;
   visibleIds: Set<number> | null;
-  baseIndent: number;
+  depth: number;
   onSelect: (node: ChartOfAccount) => void;
   onToggle: (id: number) => void;
 }) {
@@ -132,7 +132,7 @@ function TreeChildren({
               node={child}
               records={records}
               selectedId={selectedId}
-              indent={baseIndent}
+              depth={depth}
               onSelect={onSelect}
               onToggle={showChevron ? onToggle : undefined}
               expanded={isExpanded}
@@ -145,7 +145,7 @@ function TreeChildren({
                 selectedId={selectedId}
                 expandedIds={expandedIds}
                 visibleIds={visibleIds}
-                baseIndent={baseIndent + INDENT}
+                depth={depth + 1}
                 onSelect={onSelect}
                 onToggle={onToggle}
               />
@@ -200,11 +200,11 @@ export function CoaSidebarAccordion({
   }
 
   return (
-    <div className="space-y-1 px-0.5">
+    <div className="space-y-1 px-0.5 accounts-coa-tree">
       {filteredHeads.map((head) => {
         const isHeadExpanded = expandedIds.has(head.id);
         const isHeadSelected = selectedId === head.id;
-        const HeadIcon = VISUAL_ICON.primary_head;
+        const HeadIcon = resolveCoaSidebarIcon(head, "primary_head", records);
         const groups = getDirectChildren(records, head.id).filter(
           (c) => !visibleIds || visibleIds.has(c.id),
         );
@@ -218,7 +218,7 @@ export function CoaSidebarAccordion({
               isHeadExpanded && headHasChildren && "border-border/50",
             )}
           >
-            <div className="flex items-center gap-0 px-0.5">
+            <div className="flex items-center gap-0 px-0.5" style={{ paddingLeft: coaSidebarIndentPx(0) }}>
               {headHasChildren ? (
                 <button
                   type="button"
@@ -228,14 +228,14 @@ export function CoaSidebarAccordion({
                 >
                   <ChevronDown
                     className={cn(
-                      "w-4 h-4 transition-transform duration-150",
+                      "w-3.5 h-3.5 transition-transform duration-150",
                       !isHeadExpanded && "-rotate-90",
                     )}
-                    strokeWidth={1.75}
+                    strokeWidth={2}
                   />
                 </button>
               ) : (
-                <span className="w-4 flex-shrink-0" aria-hidden />
+                <span className="w-5 flex-shrink-0" aria-hidden />
               )}
               <button
                 type="button"
@@ -244,13 +244,13 @@ export function CoaSidebarAccordion({
               >
                 <HeadIcon
                   className={cn(
-                    COA_TREE_ICON_SIZE_CLASS,
+                    coaSidebarIconSizeClass(head, records),
                     "flex-shrink-0",
-                    coaTreeIconClass("primary_head", isHeadSelected),
+                    coaSidebarNodeIconClass(head, "primary_head", isHeadSelected, records),
                   )}
-                  strokeWidth={1.75}
+                  strokeWidth={2}
                 />
-                <span className="flex-1 whitespace-normal break-words font-semibold">
+                <span className="flex-1 whitespace-normal break-words font-semibold truncate">
                   {head.accountName}
                 </span>
               </button>
@@ -264,7 +264,7 @@ export function CoaSidebarAccordion({
                   selectedId={selectedId}
                   expandedIds={expandedIds}
                   visibleIds={visibleIds}
-                  baseIndent={4}
+                  depth={1}
                   onSelect={onSelect}
                   onToggle={onToggle}
                 />

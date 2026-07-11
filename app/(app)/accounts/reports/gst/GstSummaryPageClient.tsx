@@ -1,218 +1,365 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AlertTriangle,
+  FileText,
+  IndianRupee,
+  Layers,
+  MinusCircle,
+  PlusCircle,
+  Receipt,
+  Scale,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
+  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportSearchFilter,
-  useReportDateRange,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  ReportFinancialYearFilter,
+  ReportBranchMultiFilter,
+  ReportWarehouseMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
+  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
-  AccountsColumnFilterProvider,
-  SortTh,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  isMultiFilterActive,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
-import { useDebouncedValue } from "../pl/pl-hooks";
+import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import {
-  buildGstSummaryStatement,
-  flattenGstSummaryForExport,
-  type GstRateFilter,
-  type GstSummaryLine,
-  type GstTypeFilter,
+  buildGstDashboard,
+  buildGstr1SectionHref,
+  flattenGstDashboardForExport,
+  flattenGstSummaryCardsForExport,
+  getGstDashboardBranchOptions,
+  getGstDashboardWarehouseOptions,
+  parseGstDashboardFiltersFromSearch,
+  resolveBranchFilterLabel,
+  resolveFinancialYearLabel,
+  resolveWarehouseFilterLabel,
+  type GstDashboardFilters,
+  type GstSummaryCards,
 } from "./gst-summary-data";
-import { exportGstSummaryToExcel, exportGstSummaryToPdf } from "./gst-summary-export";
-import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
+import { exportGstDashboardToExcel, exportGstDashboardToPdf } from "./gst-summary-export";
 
-const GST_TYPE_OPTIONS: { value: GstTypeFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "output", label: "Output GST" },
-  { value: "input", label: "Input GST" },
-  { value: "rcm", label: "RCM" },
-];
+const PLACEHOLDER_DATE = "2025-04-01";
 
-const GST_RATE_OPTIONS: { value: GstRateFilter; label: string }[] = [
-  { value: "all", label: "All rates" },
-  { value: "5", label: "5%" },
-  { value: "12", label: "12%" },
-  { value: "18", label: "18%" },
-  { value: "28", label: "28%" },
-];
-
-function formatGstAmount(amount: number | undefined, highlightNegative = false): string {
-  if (amount == null) return "—";
-  if (highlightNegative && amount < 0) {
-    return `(${formatMoney(Math.abs(amount))})`;
-  }
-  return formatMoney(amount);
+function defaultFyDateRange(): { from: string; to: string; fyId: string } {
+  ensureFinancialYearsCurrent();
+  const activeFyId = getActiveFinancialYearId();
+  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!fy) return { from: PLACEHOLDER_DATE, to: today, fyId: "all" };
+  return {
+    from: fy.startDate,
+    to: today < fy.endDate ? today : fy.endDate,
+    fyId: String(fy.id),
+  };
 }
 
-function filterGstDisplayLines(lines: GstSummaryLine[], visibleDataIds: Set<string>): GstSummaryLine[] {
-  const visibleSectionIds = new Set<string>();
-  let currentSectionId: string | null = null;
-  for (const line of lines) {
-    if (line.kind === "section") {
-      currentSectionId = line.id;
-      continue;
-    }
-    if (line.kind === "data" && visibleDataIds.has(line.id) && currentSectionId) {
-      visibleSectionIds.add(currentSectionId);
-    }
-  }
-  return lines.filter((line) => {
-    if (line.kind === "section") return visibleSectionIds.has(line.id);
-    if (line.kind === "data") return visibleDataIds.has(line.id);
-    if (line.kind === "total" || line.kind === "net") return visibleDataIds.size > 0;
-    return false;
-  });
+interface GstKpiCardProps {
+  label: string;
+  value: string | number;
+  icon: React.ComponentType<{ className?: string }>;
+  accent?: boolean;
+  warning?: boolean;
+  isCount?: boolean;
 }
 
-function GstSummaryTableRow({ line }: { line: GstSummaryLine }) {
-  const a = line.amounts;
-
-  if (line.kind === "section") {
-    return (
-      <AccountsTableRow className="bg-muted/20">
-        <AccountsTableCell
-          colSpan={7}
-          className="text-xs font-bold text-navy-700 py-2 uppercase tracking-wide"
-        >
-          {line.label}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  const isHighlight = line.kind === "total" || line.kind === "net";
-  const isNet = line.kind === "net";
-  const showOnlyTotalGst = line.kind === "total" || line.kind === "net";
-
+function GstKpiCard({ label, value, icon: Icon, accent, warning, isCount }: GstKpiCardProps) {
+  const displayValue =
+    typeof value === "number"
+      ? isCount
+        ? String(value)
+        : formatMoney(value)
+      : value;
   return (
-    <AccountsTableRow
+    <div
       className={cn(
-        isHighlight && "bg-muted/30 border-t border-border",
-        isNet && "bg-brand-50/40",
+        "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0",
+        warning && "border-amber-300 bg-amber-50/40",
       )}
     >
-      <AccountsTableCell
+      <div
         className={cn(
-          "text-xs",
-          isHighlight ? "font-bold text-foreground" : "text-foreground",
-          isNet && line.amounts && line.amounts.totalGst < 0 && "text-emerald-700",
+          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
+          warning ? "bg-amber-100" : accent ? "bg-brand-600" : "bg-muted",
         )}
       >
-        {line.label}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={cn(isHighlight && "font-bold", MONEY_AMOUNT_CLASS)}>
-        {showOnlyTotalGst ? "—" : formatGstAmount(a?.taxableValue)}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={cn(isHighlight && "font-bold", MONEY_AMOUNT_CLASS)}>
-        {showOnlyTotalGst ? "—" : formatGstAmount(a?.cgst)}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={cn(isHighlight && "font-bold", MONEY_AMOUNT_CLASS)}>
-        {showOnlyTotalGst ? "—" : formatGstAmount(a?.sgst)}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={cn(isHighlight && "font-bold", MONEY_AMOUNT_CLASS)}>
-        {showOnlyTotalGst ? "—" : formatGstAmount(a?.igst)}
-      </AccountsTableCell>
-      <AccountsTableCell
-        align="right"
-        money
-        className={cn(
-          isHighlight && "font-bold",
-          MONEY_AMOUNT_CLASS,
-          isNet && a && a.totalGst < 0 && "text-emerald-700",
-        )}
-      >
-        {formatGstAmount(a?.totalGst, isNet)}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={cn(isHighlight && "font-bold", MONEY_AMOUNT_CLASS)}>
-        {showOnlyTotalGst ? "—" : formatGstAmount(a?.totalInvoiceValue)}
-      </AccountsTableCell>
-    </AccountsTableRow>
+        <Icon
+          className={cn(
+            "w-4 h-4",
+            warning ? "text-amber-600" : accent ? "text-white" : "text-muted-foreground",
+          )}
+        />
+      </div>
+      <div className="min-w-0">
+        <p className="text-lg font-bold text-foreground leading-none truncate">
+          {displayValue}
+        </p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight truncate">{label}</p>
+      </div>
+    </div>
   );
 }
 
-function GstSummaryBody({
-  mounted,
-  statement,
-  hasFilters,
-  resetFilters,
-  exportMeta,
-  exporting,
-  setExporting,
-  filterBar,
-}: {
-  mounted: boolean;
-  statement: ReturnType<typeof buildGstSummaryStatement>;
-  hasFilters: boolean;
-  resetFilters: () => void;
-  exportMeta: Parameters<typeof exportGstSummaryToExcel>[1];
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  filterBar: React.ReactNode;
-}) {
-  const dataLines = useMemo(
-    () => statement.lines.filter((l) => l.kind === "data"),
-    [statement.lines],
+function buildKpiCards(cards: GstSummaryCards): GstKpiCardProps[] {
+  return [
+    { label: "Total Sales Invoices", value: cards.totalSalesInvoices, icon: Receipt, accent: true, isCount: true },
+    { label: "Total Taxable Value", value: cards.totalTaxableValue, icon: IndianRupee },
+    { label: "Total CGST", value: cards.totalCgst, icon: Scale },
+    { label: "Total SGST", value: cards.totalSgst, icon: Scale },
+    { label: "Total IGST", value: cards.totalIgst, icon: Scale },
+    { label: "Total Cess", value: cards.totalCess, icon: Layers },
+    { label: "Total Credit Notes", value: cards.totalCreditNotes, icon: MinusCircle, isCount: true },
+    { label: "Total Debit Notes", value: cards.totalDebitNotes, icon: PlusCircle, isCount: true },
+    { label: "Nil Rated / Exempt Value", value: cards.totalNilRatedExemptValue, icon: FileText },
+    {
+      label: "Total Exceptions",
+      value: cards.totalExceptions,
+      icon: AlertTriangle,
+      warning: cards.totalExceptions > 0,
+      isCount: true,
+    },
+  ];
+}
+
+export default function GstSummaryPageClient() {
+  const mounted = useClientMounted();
+  const searchParams = useSearchParams();
+
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
+  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
+  const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
+  const [datesReady, setDatesReady] = useState(false);
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [branch, setBranch] = useState<string[]>([]);
+  const [warehouse, setWarehouse] = useState<string[]>([]);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    const { from, to, fyId } = defaultFyDateRange();
+    setDateFrom(from);
+    setDateTo(to);
+    setFinancialYearId(fyId);
+    setDatesReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!datesReady) return;
+    const qs = searchParams.toString();
+    if (!qs) return;
+    const { from, to, fyId } = defaultFyDateRange();
+    const parsed = parseGstDashboardFiltersFromSearch(qs, {
+      financialYearId: fyId,
+      dateFrom: from,
+      dateTo: to,
+      branch: [],
+      warehouse: [],
+    });
+    setFinancialYearId(parsed.financialYearId);
+    setDateFrom(parsed.dateFrom);
+    setDateTo(parsed.dateTo);
+    setBranch(normalizeMultiFilter(parsed.branch));
+    setWarehouse(normalizeMultiFilter(parsed.warehouse));
+    setPreset("custom");
+  }, [searchParams, datesReady]);
+
+  const handleFinancialYearChange = useCallback((fyId: string) => {
+    setFinancialYearId(fyId);
+    if (fyId !== "all") {
+      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (fy) {
+        setDateFrom(fy.startDate);
+        const today = new Date().toISOString().slice(0, 10);
+        setDateTo(today < fy.endDate ? today : fy.endDate);
+        setPreset("custom");
+      }
+    }
+  }, []);
+
+  const gstFilters = useMemo((): GstDashboardFilters => ({
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branch,
+    warehouse,
+  }), [financialYearId, dateFrom, dateTo, branch, warehouse]);
+
+  const branchOptions = useMemo(
+    () => (mounted ? getGstDashboardBranchOptions() : REPORT_BRANCH_OPTIONS),
+    [mounted, gstFilters],
   );
-  const columnFilteredDataLines = useAccountsFilteredRows(dataLines);
-  const visibleDataIds = useMemo(
-    () => new Set(columnFilteredDataLines.map((l) => l.id)),
-    [columnFilteredDataLines],
+  const warehouseOptions = useMemo(
+    () => (mounted ? getGstDashboardWarehouseOptions() : []),
+    [mounted, gstFilters],
   );
-  const displayLines = useMemo(
-    () => filterGstDisplayLines(statement.lines, visibleDataIds),
-    [statement.lines, visibleDataIds],
+
+  const dashboard = useMemo(() => {
+    if (!mounted || !datesReady) {
+      return {
+        cards: {
+          totalSalesInvoices: 0,
+          totalTaxableValue: 0,
+          totalCgst: 0,
+          totalSgst: 0,
+          totalIgst: 0,
+          totalCess: 0,
+          totalCreditNotes: 0,
+          totalDebitNotes: 0,
+          totalNilRatedExemptValue: 0,
+          totalExceptions: 0,
+        },
+        sections: [],
+        transactions: [],
+        hasData: false,
+      };
+    }
+    return buildGstDashboard(gstFilters);
+  }, [mounted, datesReady, gstFilters]);
+
+  const defaultFyRange = useMemo(() => defaultFyDateRange(), []);
+
+  const hasFilters =
+    datesReady &&
+    (financialYearId !== defaultFyRange.fyId ||
+      dateFrom !== defaultFyRange.from ||
+      dateTo !== defaultFyRange.to ||
+      isMultiFilterActive(branch) ||
+      isMultiFilterActive(warehouse));
+
+  const resetFilters = useCallback(() => {
+    const { from, to, fyId } = defaultFyDateRange();
+    setPreset("custom");
+    setDateFrom(from);
+    setDateTo(to);
+    setFinancialYearId(fyId);
+    setBranch([]);
+    setWarehouse([]);
+  }, []);
+
+  const moreFilterCount = countActiveMoreFilters({ warehouse });
+  const warehouseOptionsForFilter = warehouseOptions.filter((w) => w !== "all");
+
+  const filterSummaryItems = useMemo(() => {
+    return [
+      buildBranchFilterSummary(normalizeMultiFilter(branch), () => setBranch([])),
+      buildEntityFilterSummary(
+        "warehouse",
+        "Warehouses",
+        normalizeMultiFilter(warehouse),
+        warehouseOptionsForFilter.map((w) => ({ value: w, label: w })),
+        () => setWarehouse([]),
+      ),
+    ].filter((item): item is NonNullable<typeof item> => item != null);
+  }, [branch, warehouse, warehouseOptionsForFilter]);
+
+  const exportMeta = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      financialYear: resolveFinancialYearLabel(financialYearId),
+      branch: resolveBranchFilterLabel(branch),
+      warehouse: resolveWarehouseFilterLabel(warehouse),
+    }),
+    [dateFrom, dateTo, financialYearId, branch, warehouse],
   );
 
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const rows = flattenGstSummaryForExport(displayLines);
-      await exportGstSummaryToExcel(rows, exportMeta, statement.totals);
+      await exportGstDashboardToExcel(
+        flattenGstSummaryCardsForExport(dashboard.cards),
+        flattenGstDashboardForExport(dashboard.sections),
+        exportMeta,
+      );
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    const rows = flattenGstSummaryForExport(displayLines);
-    exportGstSummaryToPdf(rows, exportMeta, statement.totals);
+    exportGstDashboardToPdf(
+      flattenGstSummaryCardsForExport(dashboard.cards),
+      flattenGstDashboardForExport(dashboard.sections),
+      exportMeta,
+    );
   };
+
+  const kpiCards = buildKpiCards(dashboard.cards);
+
+  const filterBar = (
+    <>
+      <ReportFilterRow className="items-end gap-2">
+        <ReportFinancialYearFilter
+          value={financialYearId}
+          onChange={handleFinancialYearChange}
+        />
+        <ReportDateRangeFilter
+          preset={preset}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onPresetChange={setPreset}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+        />
+        <ReportBranchMultiFilter
+          values={branch}
+          onChange={setBranch}
+          options={branchOptions}
+        />
+        <ReportMoreFilters activeCount={moreFilterCount}>
+          <ReportWarehouseMultiFilter
+            values={warehouse}
+            onChange={setWarehouse}
+            options={warehouseOptionsForFilter}
+          />
+        </ReportMoreFilters>
+        {hasFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-sm px-2"
+            onClick={resetFilters}
+          >
+            Reset
+          </Button>
+        )}
+      </ReportFilterRow>
+      <ReportFilterSummary items={filterSummaryItems} />
+    </>
+  );
 
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "GST Summary")}
-      title="GST Summary"
-      description="Output GST, input GST and RCM summary for the selected period."
+      title="GST Summary Dashboard"
+      description="Consolidated outward GST view for GSTR-1 preparation."
       hideDescription
       layout="split"
       className="h-full min-h-0"
@@ -220,213 +367,110 @@ function GstSummaryBody({
         <AccountsExportMenu
           onExcel={handleExportExcel}
           onPdf={handleExportPdf}
-          disabled={exporting || columnFilteredDataLines.length === 0}
+          disabled={exporting || !dashboard.hasData}
         />
       }
       filters={filterBar}
     >
-      <AccountsTableListing>
-        {!mounted ? (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            Loading GST Summary…
-          </div>
-        ) : !statement.hasData ? (
-          <div className="accounts-table-empty py-4 text-center">
-            No GST entries match the current filters.
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="block mx-auto mt-1 text-brand-600 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : dataLines.length > 0 && columnFilteredDataLines.length === 0 ? (
-          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
-            No records match the column filters.
-          </div>
-        ) : (
-          <AccountsTableScroll>
-            <AccountsTable minWidth={900}>
-              <AccountsTableHead>
-                <AccountsTableHeadRow>
-                  <SortTh label="GST Type" colKey="label" />
-                  <SortTh label="Taxable Value" colKey="taxableValue" filterType="amount" align="right" />
-                  <SortTh label="CGST" colKey="cgst" filterType="amount" align="right" />
-                  <SortTh label="SGST" colKey="sgst" filterType="amount" align="right" />
-                  <SortTh label="IGST" colKey="igst" filterType="amount" align="right" />
-                  <SortTh label="Total GST" colKey="totalGst" filterType="amount" align="right" />
-                  <SortTh label="Total Invoice Value" colKey="totalInvoiceValue" filterType="amount" align="right" />
-                </AccountsTableHeadRow>
-              </AccountsTableHead>
-              <AccountsTableBody>
-                {displayLines.map((line) => (
-                  <GstSummaryTableRow key={line.id} line={line} />
-                ))}
-              </AccountsTableBody>
-            </AccountsTable>
-          </AccountsTableScroll>
-        )}
-      </AccountsTableListing>
+      <div className="flex flex-col gap-4 min-h-0 flex-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {kpiCards.map((card) => (
+            <GstKpiCard key={card.label} {...card} />
+          ))}
+        </div>
+
+        <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
+          {!mounted || !datesReady ? (
+            <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+              Loading GST Summary…
+            </div>
+          ) : !dashboard.hasData ? (
+            <div className="accounts-table-empty py-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                No outward GST transactions match the selected filters.
+              </p>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="block mx-auto mt-1 text-brand-600 hover:underline text-xs"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <AccountsTableScroll>
+              <AccountsTable minWidth={860}>
+                <AccountsTableHead>
+                  <AccountsTableHeadRow>
+                    <AccountsTableHeadCell className="text-xs font-semibold">
+                      Section
+                    </AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                      Document Count
+                    </AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                      Taxable Value
+                    </AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                      Tax Amount
+                    </AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                      Exceptions
+                    </AccountsTableHeadCell>
+                    <AccountsTableHeadCell className="text-xs font-semibold w-28">
+                      Action
+                    </AccountsTableHeadCell>
+                  </AccountsTableHeadRow>
+                </AccountsTableHead>
+                <AccountsTableBody>
+                  {dashboard.sections.map((row) => (
+                    <AccountsTableRow
+                      key={row.sectionId}
+                      className={cn(
+                        row.sectionId === "exceptions" &&
+                          row.exceptions > 0 &&
+                          "bg-amber-50/30",
+                      )}
+                    >
+                      <AccountsTableCell className="text-xs font-medium text-foreground">
+                        {row.section}
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right" className="text-xs tabular-nums">
+                        {row.documentCount}
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right" money className={cn("text-xs", MONEY_AMOUNT_CLASS)}>
+                        {formatMoney(row.taxableValue)}
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right" money className={cn("text-xs", MONEY_AMOUNT_CLASS)}>
+                        {formatMoney(row.taxAmount)}
+                      </AccountsTableCell>
+                      <AccountsTableCell
+                        align="right"
+                        className={cn(
+                          "text-xs tabular-nums",
+                          row.exceptions > 0 && "text-amber-700 font-semibold",
+                        )}
+                      >
+                        {row.exceptions}
+                      </AccountsTableCell>
+                      <AccountsTableCell>
+                        <Link
+                          href={buildGstr1SectionHref(row.sectionId, gstFilters)}
+                          className="text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium"
+                        >
+                          View Details
+                        </Link>
+                      </AccountsTableCell>
+                    </AccountsTableRow>
+                  ))}
+                </AccountsTableBody>
+              </AccountsTable>
+            </AccountsTableScroll>
+          )}
+        </AccountsListingTableCard>
+      </div>
     </AccountsPageShell>
-  );
-}
-
-export default function GstSummaryPageClient() {
-  const mounted = useClientMounted();
-
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [gstType, setGstType] = useState<GstTypeFilter>("all");
-  const [gstRate, setGstRate] = useState<GstRateFilter>("all");
-  const [search, setSearch] = useState("");
-  const [exporting, setExporting] = useState(false);
-
-  const debouncedSearch = useDebouncedValue(search, 300);
-
-  const gstTypeLabel = GST_TYPE_OPTIONS.find((o) => o.value === gstType)?.label ?? "All";
-  const gstRateLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? "All rates";
-
-  const statement = useMemo(
-    () =>
-      buildGstSummaryStatement({
-        gstType,
-        gstRate,
-        search: debouncedSearch,
-      }),
-    [gstType, gstRate, debouncedSearch],
-  );
-
-  const dataLines = useMemo(
-    () => statement.lines.filter((l) => l.kind === "data"),
-    [statement.lines],
-  );
-
-  const getCellValue = useCallback((row: GstSummaryLine, key: string) => {
-    if (key === "label") return row.label;
-    const a = row.amounts;
-    if (!a) return null;
-    return (a as unknown as Record<string, unknown>)[key];
-  }, []);
-
-  const columnConfig = useMemo(
-    () => ({
-      label: { type: "text" as const },
-      taxableValue: { type: "amount" as const },
-      cgst: { type: "amount" as const },
-      sgst: { type: "amount" as const },
-      igst: { type: "amount" as const },
-      totalGst: { type: "amount" as const },
-      totalInvoiceValue: { type: "amount" as const },
-    }),
-    [],
-  );
-
-  const hasFilters =
-    Boolean(search.trim()) ||
-    gstType !== "all" ||
-    gstRate !== "all";
-
-  const resetFilters = useCallback(() => {
-    setSearch("");
-    setGstType("all");
-    setGstRate("all");
-    setPreset("this_year");
-    const { from, to } = resolveDateRangePreset("this_year");
-    setDateFrom(from);
-    setDateTo(to);
-  }, [setPreset, setDateFrom, setDateTo]);
-
-  const exportMeta = useMemo(
-    () => ({
-      dateFrom,
-      dateTo,
-      financialYear: "",
-      gstType: gstTypeLabel,
-      gstRate: gstRateLabel,
-      search: debouncedSearch,
-    }),
-    [dateFrom, dateTo, gstTypeLabel, gstRateLabel, debouncedSearch],
-  );
-
-  const filterBar = (
-    <ReportFilterRow className="items-end gap-2">
-      <ReportDateRangeFilter
-        preset={preset}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onPresetChange={setPreset}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-      />
-      <div className="space-y-1 min-w-[130px]">
-        <Label className={filterLabelClass}>GST Type</Label>
-        <Select value={gstType} onValueChange={(v) => setGstType(v as GstTypeFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GST_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1 min-w-[110px]">
-        <Label className={filterLabelClass}>GST Rate</Label>
-        <Select value={gstRate} onValueChange={(v) => setGstRate(v as GstRateFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[110px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GST_RATE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <ReportSearchFilter
-        value={search}
-        onChange={setSearch}
-        placeholder="GST type…"
-        className="min-w-[160px]"
-      />
-      {hasFilters && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-sm px-2"
-          onClick={resetFilters}
-        >
-          Reset
-        </Button>
-      )}
-    </ReportFilterRow>
-  );
-
-  return (
-    <AccountsColumnFilterProvider
-      rows={dataLines}
-      getCellValue={getCellValue}
-      columnConfig={columnConfig}
-      defaultSortKey="label"
-      defaultSortDir="asc"
-    >
-      <GstSummaryBody
-        mounted={mounted}
-        statement={statement}
-        hasFilters={hasFilters}
-        resetFilters={resetFilters}
-        exportMeta={exportMeta}
-        exporting={exporting}
-        setExporting={setExporting}
-        filterBar={filterBar}
-      />
-    </AccountsColumnFilterProvider>
   );
 }

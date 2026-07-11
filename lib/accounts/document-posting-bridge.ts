@@ -51,6 +51,7 @@ export function maybePostSalesInvoice(invoice: InvoiceRecord): PostingResult | n
     invoiceNo: invoice.invoiceNo,
     customerName: invoice.customerName,
     date: invoice.invoiceDate,
+    grandTotal: invoice.grandTotal,
     taxableAmount: taxableFromGrand(invoice),
     ...tax,
     gstBreakdowns,
