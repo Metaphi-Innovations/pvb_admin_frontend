@@ -310,6 +310,111 @@ export function validateManualForm(
   return errors;
 }
 
+export function createManualReconListingEntry(input: {
+  bankAccountId: string;
+  statementDate: string;
+  partyLedgerId: number;
+  partyLedger: string;
+  narration: string;
+  reference?: string;
+  deposit: number;
+  withdrawal: number;
+}): ManualSaveResult {
+  if (input.deposit <= 0 && input.withdrawal <= 0) {
+    return { ok: false, error: "Amount must be greater than zero." };
+  }
+  if (input.deposit > 0 && input.withdrawal > 0) {
+    return { ok: false, error: "Enter either a credit or debit amount, not both." };
+  }
+  if (!input.statementDate.trim()) {
+    return { ok: false, error: "Date is required." };
+  }
+  if (!input.partyLedgerId || !input.partyLedger.trim()) {
+    return { ok: false, error: "Ledger is required." };
+  }
+
+  const mbtNumber = nextManualTransactionNumber(input.bankAccountId);
+  const record = enrichRecordWithManualDefaults({
+    id: createTransactionId(),
+    bankAccountId: input.bankAccountId,
+    statementDate: input.statementDate,
+    valueDate: input.statementDate,
+    bookDate: null,
+    reference: input.reference?.trim() || "",
+    utrNumber: null,
+    chequeNo: null,
+    narration: input.narration.trim() || "Manual bank entry",
+    partyLedger: input.partyLedger.trim(),
+    partyLedgerId: input.partyLedgerId,
+    againstType: "On Account",
+    deposit: input.deposit,
+    withdrawal: input.withdrawal,
+    runningBalance: null,
+    source: "Manual",
+    matchStatus: "Pending",
+    verificationStatus: "Not Applicable",
+    reconciliationDate: null,
+    reconciliationStatus: "Unreconciled",
+    relatedRecord: null,
+    importedFileName: null,
+    importBatchId: null,
+    importedBy: null,
+    importedOn: null,
+    originalRowNumber: null,
+    originalRawData: null,
+    savedFormatId: null,
+    statementPeriodFrom: null,
+    statementPeriodTo: null,
+    internalStatementId: null,
+    linkedManualTransactionId: null,
+    manualTransactionNumber: mbtNumber,
+    manualEntryStatus: "Recorded",
+    transactionMode: "Other",
+    transactionDate: input.statementDate,
+    expectedClearingDate: null,
+    chequeDate: null,
+    depositedDate: null,
+    drawerBank: null,
+    drawerBranch: null,
+    transactionIdRef: null,
+    instrumentNumber: null,
+    bankSlipNumber: null,
+    externalReference: null,
+    partyType: null,
+    expectedVoucherType: input.deposit > 0 ? "Receipt Voucher" : "Payment Voucher",
+    existingVoucherRef: null,
+    customerVendorRef: null,
+    invoiceReference: null,
+    purposeCategory: null,
+    costCentre: null,
+    internalRemarks: null,
+    bankNarration: input.narration.trim() || null,
+    importedNarration: null,
+    followUpNote: null,
+    referenceStatus: input.reference?.trim() ? "Available" : "Pending",
+    currency: "INR",
+    attachments: [],
+    createdBy: CURRENT_USER,
+    createdOn: nowIso(),
+    updatedBy: CURRENT_USER,
+    updatedOn: nowIso(),
+    cancelReason: null,
+    possibleDuplicateOverrideReason: null,
+    activity: [
+      activity("Manual entry added", `${mbtNumber} · ${formatManualAmount(input.deposit, input.withdrawal)}`, CURRENT_USER),
+    ],
+  });
+
+  upsertBankReconTransaction(record);
+  notifyRegisterUpdated();
+  return { ok: true, record };
+}
+
+function formatManualAmount(deposit: number, withdrawal: number): string {
+  if (deposit > 0) return `Credit ${deposit.toFixed(2)}`;
+  return `Debit ${withdrawal.toFixed(2)}`;
+}
+
 export function saveManualTransaction(
   form: ManualTransactionFormState,
   opts: ManualSaveOptions = {},

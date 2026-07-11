@@ -225,7 +225,7 @@ function AccountSummaryPanel({
   accountMeta,
 }: {
   account: ReturnType<typeof getBankReconAccountById>;
-  accountMeta: ReturnType<typeof loadAccountImportMeta>;
+  accountMeta: ReturnType<typeof loadAccountImportMeta> | null;
 }) {
   if (!account) {
     return (
