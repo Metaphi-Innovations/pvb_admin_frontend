@@ -10,6 +10,7 @@ export type TdsLedgerKind = "payable" | "receivable";
 const GST_DUTIES_NAMES = new Set([
   "duties & taxes payable",
   "gst output",
+  "gst input",
   "gst input credit",
   "gst payable",
 ]);

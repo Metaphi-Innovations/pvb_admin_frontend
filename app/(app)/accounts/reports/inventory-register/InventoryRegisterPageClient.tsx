@@ -24,16 +24,26 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import {
+  AccountsReportBody,
+  AccountsReportKpiCard,
+  AccountsReportKpiGrid,
+} from "@/components/accounts/AccountsReportLayout";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   AccountsTableListing,
   AccountsTablePagination,
@@ -70,6 +80,7 @@ import {
   getInventoryRegisterWarehouseOptions,
   type InventoryRegisterFilters,
   type InventoryRegisterProductRow,
+  type InventoryRegisterTotals,
 } from "./inventory-register-data";
 import {
   exportInventoryRegisterToExcel,
@@ -89,34 +100,6 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
     to: today < fy.endDate ? today : fy.endDate,
     fyId: String(fy.id),
   };
-}
-
-interface SummaryCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  isCount?: boolean;
-}
-
-function SummaryCard({ label, value, icon: Icon, isCount }: SummaryCardProps) {
-  const display =
-    typeof value === "number"
-      ? isCount
-        ? String(value)
-        : formatQty(value, true)
-      : value;
-
-  return (
-    <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0">
-      <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-white" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-bold text-foreground leading-none tabular-nums">{display}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 export default function InventoryRegisterPageClient() {
@@ -265,10 +248,29 @@ export default function InventoryRegisterPageClient() {
     };
   }, [dateFrom, dateTo, financialYearId, warehouses, productIds, productOptions, warehouseOptions, category, search]);
 
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return report.rows.slice(start, start + pageSize);
-  }, [report.rows, page, pageSize]);
+  const getInventoryCellValue = useCallback(
+    (row: InventoryRegisterProductRow, key: string) => {
+      switch (key) {
+        case "productCode":
+          return row.productCode;
+        case "productName":
+          return row.productName;
+        case "openingStock":
+          return row.openingStock;
+        case "stockIn":
+          return row.stockIn;
+        case "stockOut":
+          return row.stockOut;
+        case "closingStock":
+          return row.closingStock;
+        case "unit":
+          return row.unit;
+        default:
+          return "";
+      }
+    },
+    [],
+  );
 
   const toggleExpand = (rowKey: string) => {
     setExpandedKeys((prev) => {
@@ -366,14 +368,34 @@ export default function InventoryRegisterPageClient() {
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex flex-col gap-4 min-h-0 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <SummaryCard label="Total Products" value={totals.totalProducts} icon={Package} isCount />
-          <SummaryCard label="Total Opening Stock" value={totals.totalOpeningStock} icon={Boxes} />
-          <SummaryCard label="Total Stock In" value={totals.totalStockIn} icon={ArrowDownToLine} />
-          <SummaryCard label="Total Stock Out" value={totals.totalStockOut} icon={ArrowUpFromLine} />
-          <SummaryCard label="Total Closing Stock" value={totals.totalClosingStock} icon={Warehouse} />
-        </div>
+      <AccountsReportBody>
+        <AccountsReportKpiGrid>
+          <AccountsReportKpiCard label="Total Products" value={totals.totalProducts} icon={Package} accent isCount />
+          <AccountsReportKpiCard
+            label="Total Opening Stock"
+            value={totals.totalOpeningStock}
+            icon={Boxes}
+            formatValue={(v) => formatQty(v, true)}
+          />
+          <AccountsReportKpiCard
+            label="Total Stock In"
+            value={totals.totalStockIn}
+            icon={ArrowDownToLine}
+            formatValue={(v) => formatQty(v, true)}
+          />
+          <AccountsReportKpiCard
+            label="Total Stock Out"
+            value={totals.totalStockOut}
+            icon={ArrowUpFromLine}
+            formatValue={(v) => formatQty(v, true)}
+          />
+          <AccountsReportKpiCard
+            label="Total Closing Stock"
+            value={totals.totalClosingStock}
+            icon={Warehouse}
+            formatValue={(v) => formatQty(v, true)}
+          />
+        </AccountsReportKpiGrid>
 
         <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
           {!mounted || !datesReady ? (
@@ -396,71 +418,128 @@ export default function InventoryRegisterPageClient() {
               )}
             </div>
           ) : (
-            <AccountsTableListing
-              footer={
-                <AccountsTablePagination
-                  page={page}
-                  pageSize={pageSize}
-                  totalRecords={report.rows.length}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                  recordLabel="products"
-                />
-              }
+            <AccountsColumnFilterProvider
+              rows={report.rows}
+              getCellValue={getInventoryCellValue}
+              defaultSortKey="productName"
+              defaultSortDir="asc"
             >
-              <AccountsTableScroll>
-                <AccountsTable minWidth={1100}>
-                  <AccountsTableHead>
-                    <AccountsTableHeadRow>
-                      <AccountsTableHeadCell className="w-8" />
-                      <AccountsTableHeadCell>Product Code</AccountsTableHeadCell>
-                      <AccountsTableHeadCell>Product Name</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right">Opening Stock</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right">Stock In</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right">Stock Out</AccountsTableHeadCell>
-                      <AccountsTableHeadCell align="right">Closing Stock</AccountsTableHeadCell>
-                      <AccountsTableHeadCell>Unit</AccountsTableHeadCell>
-                      <AccountsTableHeadCell className="w-24">Action</AccountsTableHeadCell>
-                    </AccountsTableHeadRow>
-                  </AccountsTableHead>
-                  <AccountsTableBody>
-                    {paginatedRows.map((row) => (
-                      <ProductSummaryRows
-                        key={row.rowKey}
-                        row={row}
-                        isExpanded={expandedKeys.has(row.rowKey)}
-                        onToggle={() => toggleExpand(row.rowKey)}
-                        onVoucherClick={(href) => router.push(href)}
-                      />
-                    ))}
-                  </AccountsTableBody>
-                  <AccountsTableFoot>
-                    <AccountsTableRow>
-                      <AccountsTableCell colSpan={3} className="font-semibold text-xs text-foreground">
-                        Totals ({totals.totalProducts} products)
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
-                        {formatQty(totals.totalOpeningStock, true)}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
-                        {formatQty(totals.totalStockIn, true)}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
-                        {formatQty(totals.totalStockOut, true)}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
-                        {formatQty(totals.totalClosingStock, true)}
-                      </AccountsTableCell>
-                      <AccountsTableCell colSpan={2} />
-                    </AccountsTableRow>
-                  </AccountsTableFoot>
-                </AccountsTable>
-              </AccountsTableScroll>
-            </AccountsTableListing>
+              <InventoryRegisterTableSection
+                rows={report.rows}
+                page={page}
+                pageSize={pageSize}
+                expandedKeys={expandedKeys}
+                totals={totals}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                onToggleExpand={toggleExpand}
+                onVoucherClick={(href) => router.push(href)}
+              />
+            </AccountsColumnFilterProvider>
           )}
         </AccountsListingTableCard>
-      </div>
+      </AccountsReportBody>
     </AccountsPageShell>
+  );
+}
+
+function InventoryRegisterTableSection({
+  rows,
+  page,
+  pageSize,
+  expandedKeys,
+  totals,
+  onPageChange,
+  onPageSizeChange,
+  onToggleExpand,
+  onVoucherClick,
+}: {
+  rows: InventoryRegisterProductRow[];
+  page: number;
+  pageSize: number;
+  expandedKeys: Set<string>;
+  totals: InventoryRegisterTotals;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  onToggleExpand: (rowKey: string) => void;
+  onVoucherClick: (href: string) => void;
+}) {
+  const filtered = useAccountsFilteredRows(rows);
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
+
+  return (
+    <AccountsTableListing
+      footer={
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={filtered.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          recordLabel="products"
+        />
+      }
+    >
+      <AccountsTableScroll>
+        <AccountsTable minWidth={1100}>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <AccountsColumnHeader label="" colKey="_expand" sortable={false} filterable={false} className="w-8" />
+              <SortTh label="Product Code" colKey="productCode" />
+              <SortTh label="Product Name" colKey="productName" />
+              <SortTh label="Opening Stock" colKey="openingStock" filterType="number" align="right" />
+              <SortTh label="Stock In" colKey="stockIn" filterType="number" align="right" />
+              <SortTh label="Stock Out" colKey="stockOut" filterType="number" align="right" />
+              <SortTh label="Closing Stock" colKey="closingStock" filterType="number" align="right" />
+              <SortTh label="Unit" colKey="unit" filterType="select" />
+              <AccountsColumnHeader label="Action" colKey="_actions" sortable={false} filterable={false} className="w-24" />
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {paginated.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={9} className="accounts-table-empty">
+                  No products match the column filters.
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : (
+              paginated.map((row) => (
+                <ProductSummaryRows
+                  key={row.rowKey}
+                  row={row}
+                  isExpanded={expandedKeys.has(row.rowKey)}
+                  onToggle={() => onToggleExpand(row.rowKey)}
+                  onVoucherClick={onVoucherClick}
+                />
+              ))
+            )}
+          </AccountsTableBody>
+          <AccountsTableFoot>
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={3} className="font-semibold text-xs text-foreground">
+                Totals ({filtered.length} products)
+              </AccountsTableCell>
+              <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
+                {formatQty(totals.totalOpeningStock, true)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
+                {formatQty(totals.totalStockIn, true)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
+                {formatQty(totals.totalStockOut, true)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" className="font-semibold tabular-nums text-xs">
+                {formatQty(totals.totalClosingStock, true)}
+              </AccountsTableCell>
+              <AccountsTableCell colSpan={2} />
+            </AccountsTableRow>
+          </AccountsTableFoot>
+        </AccountsTable>
+      </AccountsTableScroll>
+    </AccountsTableListing>
   );
 }
 

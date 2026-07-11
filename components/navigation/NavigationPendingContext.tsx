@@ -45,7 +45,7 @@ function hrefMatchesRoute(href: string, pathname: string, search: string): boole
 export function NavigationPendingProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isTransitionPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [target, setTarget] = useState<{ href: string; label: string | null } | null>(null);
   const inFlightRef = useRef<string | null>(null);
 
@@ -109,12 +109,12 @@ export function NavigationPendingProvider({ children }: { children: React.ReactN
     (): NavigationPendingContextValue => ({
       pendingHref: target?.href ?? null,
       pendingLabel: target?.label ?? null,
-      isNavigating: Boolean(target) || isTransitionPending,
+      isNavigating: Boolean(target),
       trackNavigation,
       navigateTo,
       isHrefPending,
     }),
-    [target, isTransitionPending, trackNavigation, navigateTo, isHrefPending],
+    [target, trackNavigation, navigateTo, isHrefPending],
   );
 
   return (

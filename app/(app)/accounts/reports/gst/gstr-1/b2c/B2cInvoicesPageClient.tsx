@@ -27,6 +27,11 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  AccountsReportBody,
+  AccountsReportKpiCard,
+  AccountsReportKpiGrid,
+} from "@/components/accounts/AccountsReportLayout";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
@@ -45,6 +50,7 @@ import {
   ReportWarehouseMultiFilter,
   ReportMoreFilters,
   ReportFilterSummary,
+  ReportFilterField,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -115,40 +121,6 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
     to: today < fy.endDate ? today : fy.endDate,
     fyId: String(fy.id),
   };
-}
-
-interface SummaryCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  warning?: boolean;
-  isCount?: boolean;
-}
-
-function SummaryCard({ label, value, icon: Icon, warning, isCount }: SummaryCardProps) {
-  const display =
-    typeof value === "number" ? (isCount ? String(value) : formatMoney(value)) : value;
-  return (
-    <div
-      className={cn(
-        "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0",
-        warning && "border-amber-300 bg-amber-50/40",
-      )}
-    >
-      <div
-        className={cn(
-          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-          warning ? "bg-amber-100" : "bg-muted",
-        )}
-      >
-        <Icon className={cn("w-4 h-4", warning ? "text-amber-600" : "text-muted-foreground")} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-bold text-foreground leading-none">{display}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 function InvoiceStatusBadge({ status }: { status: "valid" | "exception" }) {
@@ -490,45 +462,42 @@ export default function B2cInvoicesPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <div className="space-y-0.5 min-w-[110px]">
-        <Label className={filterLabelClass}>GST Rate</Label>
-        <Select value={gstRate} onValueChange={(v) => setGstRate(v as B2cGstRateFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[110px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GST_RATE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-0.5 min-w-[140px]">
-        <Label className={filterLabelClass}>Invoice Number</Label>
-        <Input
-          value={invoiceNo}
-          onChange={(e) => setInvoiceNo(e.target.value)}
-          placeholder="Search invoice…"
-          className={cn(filterControlClass, "mt-0 w-[140px]")}
-        />
-      </div>
-      <div className="space-y-0.5 min-w-[120px]">
-        <Label className={filterLabelClass}>Status</Label>
-        <Select value={status} onValueChange={(v) => setStatus(v as B2cStatusFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
+          <Select value={gstRate} onValueChange={(v) => setGstRate(v as B2cGstRateFilter)}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GST_RATE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
+        <ReportFilterField label="Invoice Number" minWidthClass="min-w-[180px]">
+          <Input
+            value={invoiceNo}
+            onChange={(e) => setInvoiceNo(e.target.value)}
+            placeholder="Search invoice…"
+            className={cn(filterControlClass, "mt-0 w-full")}
+          />
+        </ReportFilterField>
+        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
+          <Select value={status} onValueChange={(v) => setStatus(v as B2cStatusFilter)}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -565,23 +534,23 @@ export default function B2cInvoicesPageClient() {
       }
       filters={filterBar}
     >
-      <div className="flex flex-col gap-4 min-h-0 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-          <SummaryCard label="Total B2C Invoices" value={totals.totalInvoices} icon={Receipt} isCount />
-          <SummaryCard label="Total Invoice Value" value={totals.totalInvoiceValue} icon={IndianRupee} />
-          <SummaryCard label="Total Taxable Value" value={totals.totalTaxableValue} icon={IndianRupee} />
-          <SummaryCard label="Total CGST" value={totals.totalCgst} icon={Scale} />
-          <SummaryCard label="Total SGST" value={totals.totalSgst} icon={Scale} />
-          <SummaryCard label="Total IGST" value={totals.totalIgst} icon={Scale} />
-          <SummaryCard label="Total Cess" value={totals.totalCess} icon={Scale} />
-          <SummaryCard
+      <AccountsReportBody>
+        <AccountsReportKpiGrid>
+          <AccountsReportKpiCard label="Total B2C Invoices" value={totals.totalInvoices} icon={Receipt} isCount />
+          <AccountsReportKpiCard label="Total Invoice Value" value={totals.totalInvoiceValue} icon={IndianRupee} />
+          <AccountsReportKpiCard label="Total Taxable Value" value={totals.totalTaxableValue} icon={IndianRupee} />
+          <AccountsReportKpiCard label="Total CGST" value={totals.totalCgst} icon={Scale} />
+          <AccountsReportKpiCard label="Total SGST" value={totals.totalSgst} icon={Scale} />
+          <AccountsReportKpiCard label="Total IGST" value={totals.totalIgst} icon={Scale} />
+          <AccountsReportKpiCard label="Total Cess" value={totals.totalCess} icon={Scale} />
+          <AccountsReportKpiCard
             label="Total Exceptions"
             value={totals.totalExceptions}
             icon={AlertTriangle}
             warning={totals.totalExceptions > 0}
             isCount
           />
-        </div>
+        </AccountsReportKpiGrid>
 
         <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
           {!mounted || !datesReady ? (
@@ -604,7 +573,7 @@ export default function B2cInvoicesPageClient() {
               )}
             </div>
           ) : (
-            <AccountsTableScroll>
+            <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1400}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
@@ -731,7 +700,7 @@ export default function B2cInvoicesPageClient() {
             </AccountsTableScroll>
           )}
         </AccountsListingTableCard>
-      </div>
+      </AccountsReportBody>
 
       <B2cInvoiceDetailSheet
         row={viewRow}

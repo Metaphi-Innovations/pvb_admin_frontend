@@ -19,18 +19,21 @@ import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } fro
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
-  COA_SIDEBAR_ROW_CLASS,
   LEVEL_SELECTED_ROW_CLASS,
-  VISUAL_ROW_CLASS,
+  COA_TREE_CHEVRON_WIDTH_CLASS,
   coaNodeAccessibleLabel,
   coaNodeShowsExpandChevron,
   coaSidebarIconSizeClass,
   coaSidebarIndentPx,
   coaSidebarNodeIconClass,
+  coaSidebarRowClass,
   coaSidebarShowsNodeIcon,
+  coaVisualRowClass,
   resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
 } from "./coa-tree-visual";
+import { CoaTreeNodeLabel } from "./CoaTreeNodeLabel";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface TreeNodeProps {
   node: ChartOfAccount;
@@ -77,8 +80,8 @@ const TreeNode = memo(function TreeNodeComponent({
   const visualLevel = resolveCoaVisualLevel(node, records);
   const Icon = resolveCoaSidebarIcon(node, visualLevel, records);
   const isLedger = node.nodeLevel === "ledger";
-  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
   const isPrimaryHead = node.nodeLevel === "primary_head";
+  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
   const hasChildren = coaTreeNodeHasChildren(records, node.id);
   const children = useMemo(
     () => (isExpanded && hasChildren ? getCoaTreeChildren(records, node.id) : []),
@@ -104,10 +107,6 @@ const TreeNode = memo(function TreeNodeComponent({
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
   const handleClick = () => {
-    if (isSidebar && isPrimaryHead) {
-      if (showExpandChevron) onToggle(node.id);
-      return;
-    }
     onSelect(node);
     if (isLedger && onLedgerOpen) onLedgerOpen(node);
   };
@@ -115,8 +114,9 @@ const TreeNode = memo(function TreeNodeComponent({
   return (
     <div>
       <div
+        data-coa-tree-row
         className={cn(
-          "group flex items-stretch transition-colors duration-100",
+          "group flex w-full min-w-0 items-stretch transition-colors duration-100",
           isSidebar ? "mx-0 rounded-sm" : "rounded-md mx-1",
           isSidebar &&
             isPrimaryHead &&
@@ -129,15 +129,17 @@ const TreeNode = memo(function TreeNodeComponent({
           isHighlighted && !isSidebar && "bg-brand-50/80 ring-1 ring-brand-300/70",
           isSearchMatch && !isSelected && "bg-brand-50/50",
         )}
-        style={{
-          minHeight: isSidebar ? 30 : 32,
-          paddingLeft: coaSidebarIndentPx(depth),
-        }}
+        style={{ minHeight: isSidebar ? 30 : 32 }}
       >
         <div
+          className="shrink-0"
+          style={{ width: coaSidebarIndentPx(depth) }}
+          aria-hidden
+        />
+        <div
           className={cn(
-            "flex gap-1 flex-1 min-w-0 items-center",
-            isSidebar ? "pl-0" : "pr-2",
+            "flex flex-1 min-w-0 items-center gap-0.5",
+            isSidebar ? "pr-0.5" : "pr-2",
           )}
         >
           <button
@@ -147,7 +149,8 @@ const TreeNode = memo(function TreeNodeComponent({
               if (showExpandChevron) onToggle(node.id);
             }}
             className={cn(
-              "flex items-center justify-center flex-shrink-0 rounded transition-colors w-5 h-5",
+              "flex items-center justify-center rounded transition-colors h-5",
+              COA_TREE_CHEVRON_WIDTH_CLASS,
               showExpandChevron
                 ? "text-muted-foreground/70 hover:text-foreground"
                 : "opacity-0 pointer-events-none",
@@ -166,46 +169,51 @@ const TreeNode = memo(function TreeNodeComponent({
           <button
             type="button"
             onClick={handleClick}
-            title={isSidebar ? node.accountName : undefined}
             aria-label={coaNodeAccessibleLabel(node, records)}
             className={cn(
-              "flex flex-1 min-w-0 text-left items-center gap-1.5",
-              isSidebar ? "py-1 pr-2" : "py-1.5 pr-1",
+              "flex flex-1 min-w-0 text-left items-center gap-1",
+              isSidebar ? "py-1 pr-1" : "py-1.5 pr-1",
             )}
           >
             {showRowIcon && (
               <Icon
                 className={cn(
-                  "flex-shrink-0",
+                  "shrink-0",
                   coaSidebarIconSizeClass(node, records),
                   coaSidebarNodeIconClass(node, visualLevel, isSelected, records),
                 )}
                 strokeWidth={visualLevel === "primary_head" ? 2 : 1.75}
               />
             )}
-            <span
-              className={cn(
-                "flex-1 min-w-0",
-                isSidebar ? "truncate leading-tight" : "whitespace-normal break-words leading-snug",
-                isSelected
-                  ? isSidebar
+            {isSidebar ? (
+              <CoaTreeNodeLabel
+                name={node.accountName}
+                className={cn(
+                  isSelected
                     ? "font-semibold text-brand-800"
-                    : cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel])
-                  : isSidebar
-                    ? COA_SIDEBAR_ROW_CLASS[visualLevel]
-                    : VISUAL_ROW_CLASS[visualLevel],
-              )}
-            >
-              {node.accountName}
-              {isSystemLocked && !isSidebar && (
-                <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
-              )}
-              {!isLedger && ledgerCount > 0 && !isSidebar && (
-                <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums whitespace-nowrap">
-                  ({ledgerCount})
-                </span>
-              )}
-            </span>
+                    : coaSidebarRowClass(visualLevel),
+                )}
+              />
+            ) : (
+              <span
+                className={cn(
+                  "flex-1 min-w-0 whitespace-normal break-words leading-snug",
+                  isSelected
+                    ? cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel])
+                    : coaVisualRowClass(visualLevel),
+                )}
+              >
+                {node.accountName}
+                {isSystemLocked && (
+                  <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
+                )}
+                {!isLedger && ledgerCount > 0 && (
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums whitespace-nowrap">
+                    ({ledgerCount})
+                  </span>
+                )}
+              </span>
+            )}
             {!isSidebar && (
               <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0" />
             )}
@@ -221,7 +229,7 @@ const TreeNode = memo(function TreeNodeComponent({
             onAddLedger={() => onAddLedger!(node.id)}
             onEdit={() => requestCoaEditGroup(node.id)}
             onDelete={() => requestCoaDeleteGroup(node.id)}
-            className={isSidebar ? "mr-1" : "mr-0.5"}
+            className={isSidebar ? "mr-0.5 shrink-0" : "mr-0.5 shrink-0"}
           />
         </div>
       </div>
@@ -300,46 +308,48 @@ export function CoaExplorerTree({
   );
 
   return (
-    <div
-      className={cn(
-        "flex flex-col min-h-0",
-        variant === "sidebar" ? "bg-transparent" : "h-full bg-white",
-      )}
-    >
+    <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          "flex-1 min-h-0",
-          variant === "sidebar" ? "py-1 px-0.5 accounts-coa-tree" : "py-2 px-1",
-          variant === "panel" && "min-w-[260px]",
+          "flex flex-col min-h-0",
+          variant === "sidebar" ? "bg-transparent" : "h-full bg-white",
         )}
       >
-        {roots.length === 0 ? (
-          <p className="px-4 text-sm text-muted-foreground">Loading chart…</p>
-        ) : (
-          roots.map((root, idx) => (
-            <TreeNode
-              key={root.id}
-              node={root}
-              depth={0}
-              isFirstRoot={idx === 0}
-              records={records}
-              expandedIds={expandedIds}
-              selectedId={selectedId}
-              visibleIds={visibleIds}
-              searchQuery={search}
-              variant={variant}
-              canCreate={canCreate}
-              canEdit={canEdit}
-              highlightedLedgerId={highlightedLedgerId}
-              onToggle={onToggle}
-              onSelect={onSelect}
-              onLedgerOpen={onLedgerOpen}
-              onAddLedger={onAddLedger}
-              onAddSubGroup={onAddSubGroup}
-            />
-          ))
-        )}
+        <div
+          className={cn(
+            "flex-1 min-h-0",
+            variant === "sidebar" ? "py-1 px-0.5 accounts-coa-tree" : "py-2 px-1",
+            variant === "panel" && "min-w-[260px]",
+          )}
+        >
+          {roots.length === 0 ? (
+            <p className="px-4 text-sm text-muted-foreground">Loading chart…</p>
+          ) : (
+            roots.map((root, idx) => (
+              <TreeNode
+                key={root.id}
+                node={root}
+                depth={0}
+                isFirstRoot={idx === 0}
+                records={records}
+                expandedIds={expandedIds}
+                selectedId={selectedId}
+                visibleIds={visibleIds}
+                searchQuery={search}
+                variant={variant}
+                canCreate={canCreate}
+                canEdit={canEdit}
+                highlightedLedgerId={highlightedLedgerId}
+                onToggle={onToggle}
+                onSelect={onSelect}
+                onLedgerOpen={onLedgerOpen}
+                onAddLedger={onAddLedger}
+                onAddSubGroup={onAddSubGroup}
+              />
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

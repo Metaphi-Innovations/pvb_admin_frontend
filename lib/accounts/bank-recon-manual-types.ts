@@ -8,6 +8,11 @@ export type ReferenceStatus = "Pending" | "Available";
 
 export type ManualTransactionDirection = "Deposit" | "Withdrawal";
 
+/** Receipt = money in (Deposit); Payment = money out (Withdrawal) */
+export type ManualTransactionType = "Receipt" | "Payment";
+
+export type ManualAgainstType = "Invoice" | "Advance" | "On Account";
+
 export type ManualPartyType =
   | "Customer"
   | "Vendor"
@@ -75,6 +80,9 @@ export interface ManualTransactionFormState {
   narration: string;
   partyType: ManualPartyType;
   partyLedger: string;
+  partyLedgerId: number | null;
+  againstType: ManualAgainstType;
+  invoiceAllocations: Record<string, string>;
   expectedVoucherType: ExpectedVoucherType;
   existingVoucherRef: string;
   customerVendorRef: string;
@@ -92,6 +100,16 @@ export interface ManualTransactionFormState {
   bankNarration: string;
   followUpNote: string;
   attachments: ManualAttachmentMeta[];
+}
+
+export const MANUAL_AGAINST_OPTIONS: ManualAgainstType[] = ["Invoice", "Advance", "On Account"];
+
+export function manualTypeToDirection(type: ManualTransactionType): ManualTransactionDirection {
+  return type === "Receipt" ? "Deposit" : "Withdrawal";
+}
+
+export function directionToManualType(direction: ManualTransactionDirection): ManualTransactionType {
+  return direction === "Deposit" ? "Receipt" : "Payment";
 }
 
 export const TRANSACTION_MODE_OPTIONS: TransactionMode[] = [
@@ -133,6 +151,9 @@ export function emptyManualForm(bankAccountId = ""): ManualTransactionFormState 
     narration: "",
     partyType: "Unknown",
     partyLedger: "",
+    partyLedgerId: null,
+    againstType: "On Account",
+    invoiceAllocations: {},
     expectedVoucherType: "Unknown",
     existingVoucherRef: "",
     customerVendorRef: "",

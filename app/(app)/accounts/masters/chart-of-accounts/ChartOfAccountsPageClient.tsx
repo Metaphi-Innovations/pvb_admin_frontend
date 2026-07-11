@@ -6,7 +6,7 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { CoaListingToolbar } from "./components/CoaListingToolbar";
 import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
-import { isGroupingLedger } from "@/lib/accounts/coa-hierarchy";
+import { isGroupingLedger, isPostingLedger } from "@/lib/accounts/coa-hierarchy";
 import { buildCoaLedgerDetailSummary } from "./coa-demo-accounting";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-date-filter";
@@ -33,6 +33,7 @@ import {
   canAddSubGroupUnder,
   getAncestorPath,
   isAccountingGroupNode,
+  showCoaMaxHierarchyMessage,
 } from "./chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_LIST_PATH } from "./chart-of-accounts-utils";
 import {
@@ -76,7 +77,10 @@ import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
 import { CoaGroupDetailHeader } from "./components/CoaGroupDetailHeader";
 import { CoaTdsLedgerDetailHeader } from "./components/CoaTdsLedgerDetailHeader";
 import { CoaDrillDownEmptyState } from "./components/CoaDrillDownEmptyState";
+import { CoaMaxHierarchyNotice } from "./components/CoaMaxHierarchyNotice";
 import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { ensureCoaPostingLedgerTransactionsOnPageLoad } from "@/lib/accounts/coa-ledger-transactions-seed";
 
 const AccountsSundryDebtorCustomerFormClient = dynamic(
   () => import("./sundry-debtors/new/AccountsSundryDebtorCustomerFormClient"),
@@ -105,9 +109,9 @@ const BankAccountFormClient = dynamic(
 
 const HIGHLIGHT_MS = 4000;
 
-/** Ledger detail view for posting ledgers (TDS and bank name containers excluded). */
+/** Ledger detail view for posting ledgers only (TDS and bank name containers excluded). */
 function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
-  if (node.nodeLevel !== "ledger") return false;
+  if (!isPostingLedger(node, records)) return false;
   if (node.bankGroupFlag) return false;
   if (isTdsCoaNode(node, records)) return false;
   return true;
@@ -127,6 +131,13 @@ export default function ChartOfAccountsPageClient() {
   } = useCoaNavigation();
 
   const deferredRecords = useDeferredValue(records);
+  const ledgerDataTick = useAccountsSectionRefresh([
+    "ledgers",
+    "receipt-vouchers",
+    "payment-vouchers",
+    "contra-vouchers",
+    "journal-vouchers",
+  ]);
 
   const [showRoot, setShowRoot] = useState(false);
   const [contentSearch, setContentSearch] = useState("");
@@ -147,6 +158,10 @@ export default function ChartOfAccountsPageClient() {
 
   const canCreate = useCanCoa("create");
   const canEdit = useCanCoa("edit");
+
+  useEffect(() => {
+    ensureCoaPostingLedgerTransactionsOnPageLoad();
+  }, []);
 
   useEffect(() => {
     registerSundryDebtorCustomerFormHandler((parentGroupId) => {
@@ -206,12 +221,12 @@ export default function ChartOfAccountsPageClient() {
   const tdsLedgerBalance = useMemo(() => {
     if (!isTdsLedgerSummaryView || !selectedNode) return null;
     return computeLedgerCurrentBalance(selectedNode);
-  }, [isTdsLedgerSummaryView, selectedNode]);
+  }, [isTdsLedgerSummaryView, selectedNode, ledgerDataTick]);
 
   const groupDetailSummary = useMemo(() => {
     if (!isGroupView || !selectedNode || !datesReady) return null;
     return computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
-  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady]);
+  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady, ledgerDataTick]);
   /** Parent whose immediate children are shown in the hierarchy listing table */
   const tableParentId =
     showEmptyState || isLedgerStatementView || isAccountingGroupLedgerListing
@@ -230,6 +245,16 @@ export default function ChartOfAccountsPageClient() {
     if (selectedNode) setShowRoot(false);
   }, [selectedNode]);
 
+  /** Dismiss full-page add forms when the user picks another node in the COA tree. */
+  useEffect(() => {
+    setSundryDebtorFormParentId(null);
+    setSundryCreditorFormParentId(null);
+    setWarehouseFormParentId(null);
+    setTdsFormParentId(null);
+    setMasterLinkedForm(null);
+    setBankFormParentId(null);
+  }, [selectedNode?.id]);
+
   useEffect(() => {
     setContentSearch("");
   }, [selectedNode?.id, showRoot]);
@@ -243,12 +268,26 @@ export default function ChartOfAccountsPageClient() {
   const ledgerAccounting = useMemo(() => {
     if (!isLedgerStatementView || !selectedNode || !datesReady) return null;
     return buildCoaLedgerDetailSummary(selectedNode, deferredRecords, dateFrom, dateTo);
-  }, [isLedgerStatementView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady]);
+  }, [
+    isLedgerStatementView,
+    selectedNode,
+    deferredRecords,
+    dateFrom,
+    dateTo,
+    datesReady,
+    ledgerDataTick,
+  ]);
+
+  const ledgerDataReady =
+    Boolean(selectedNode) &&
+    Boolean(ledgerAccounting) &&
+    ledgerAccounting!.ledgerId === selectedNode!.id;
 
   const filteredTransactions = useMemo(() => {
-    if (!ledgerAccounting) return [];
+    if (!ledgerAccounting || !ledgerDataReady || !selectedNode) return [];
+    if (ledgerAccounting.ledgerId !== selectedNode.id) return [];
     return filterLedgerStatementRows(ledgerAccounting.transactions, contentSearch);
-  }, [ledgerAccounting, contentSearch]);
+  }, [ledgerAccounting, ledgerDataReady, selectedNode, contentSearch]);
 
   const ledgerListingRows = useMemo(() => {
     if (!selectedNode || !isAccountingGroupLedgerListing) return [];
@@ -271,6 +310,7 @@ export default function ChartOfAccountsPageClient() {
     datesReady,
     isLedgerStatementView,
     isAccountingGroupLedgerListing,
+    ledgerDataTick,
   ]);
 
   const ledgerListingSummary = useMemo(() => {
@@ -281,7 +321,7 @@ export default function ChartOfAccountsPageClient() {
   const summary = useMemo(() => {
     if (!datesReady || isAccountingGroupLedgerListing) return null;
 
-    if (ledgerAccounting) {
+    if (ledgerAccounting && ledgerDataReady) {
       const transactionCount = filteredTransactions.filter((row) => !row.isOpeningRow).length;
       return {
         totalAccounts: transactionCount,
@@ -313,8 +353,10 @@ export default function ChartOfAccountsPageClient() {
     contentSearch,
     datesReady,
     ledgerAccounting,
+    ledgerDataReady,
     filteredTransactions,
     isAccountingGroupLedgerListing,
+    ledgerDataTick,
   ]);
 
   const pageBreadcrumbs = useMemo(() => {
@@ -468,7 +510,6 @@ export default function ChartOfAccountsPageClient() {
     const parentId =
       selectedNode &&
       !showRoot &&
-      selectedNode.nodeLevel === "account_group" &&
       canAddLedgerUnder(selectedNode, records) &&
       !resolveCoaAddLedgerPolicy(selectedNode, records).blocked
         ? selectedNode.id
@@ -523,16 +564,28 @@ export default function ChartOfAccountsPageClient() {
   );
 
   const newLedgerLabel = useMemo(() => {
+    if (selectedNode && !showRoot && selectedNode.nodeLevel === "ledger") {
+      return "Add Sub-Ledger";
+    }
     if (selectedNode && !showRoot && selectedNode.nodeLevel === "account_group") {
       return resolveCoaAddActionLabel(selectedNode, records);
     }
     return "New Ledger";
   }, [selectedNode, showRoot, records]);
 
+  const showMaxHierarchyNotice = Boolean(
+    canCreate &&
+      selectedNode &&
+      !showRoot &&
+      !showEmptyState &&
+      showCoaMaxHierarchyMessage(selectedNode, records),
+  );
+
   const canShowAddSubGroup =
     canCreate &&
     !isLedgerStatementView &&
     !showEmptyState &&
+    !showMaxHierarchyNotice &&
     selectedNode?.nodeLevel !== "ledger" &&
     (selectedNode == null ||
       showRoot ||
@@ -542,11 +595,15 @@ export default function ChartOfAccountsPageClient() {
     canCreate &&
     !isLedgerStatementView &&
     !showEmptyState &&
-    selectedNode?.nodeLevel !== "ledger" &&
+    !showMaxHierarchyNotice &&
+    selectedNode?.nodeLevel !== "primary_head" &&
     (isAccountingGroupLedgerListing ||
+      isGroupingLedgerView ||
       showRoot ||
       !selectedNode ||
-      !resolveCoaAddLedgerPolicy(selectedNode, records).blocked);
+      (selectedNode &&
+        canAddLedgerUnder(selectedNode, records) &&
+        !resolveCoaAddLedgerPolicy(selectedNode, records).blocked));
 
   if (sundryDebtorFormParentId != null) {
     return (
@@ -666,12 +723,14 @@ export default function ChartOfAccountsPageClient() {
           />
           )}
 
+          {showMaxHierarchyNotice && <CoaMaxHierarchyNotice />}
+
           <AccountsListingTableCard className="flex-1 min-h-0">
           {showEmptyState ? (
             <CoaDrillDownEmptyState />
           ) : (
             <>
-          {isLedgerStatementView && selectedNode && ledgerAccounting && (
+          {isLedgerStatementView && selectedNode && ledgerDataReady && ledgerAccounting && (
             <CoaLedgerDetailHeader
               ledger={selectedNode}
               records={records}
@@ -704,15 +763,16 @@ export default function ChartOfAccountsPageClient() {
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {isLedgerStatementView && selectedNode ? (
-              datesReady && ledgerAccounting ? (
+              datesReady && ledgerDataReady ? (
                 <CoaLedgerDetailTable
                   rows={filteredTransactions}
                   footer={{
-                    totalDebit: ledgerAccounting.totalDebit,
-                    totalCredit: ledgerAccounting.totalCredit,
-                    closingBalance: ledgerAccounting.currentBalance,
-                    closingBalanceType: ledgerAccounting.balanceType,
+                    totalDebit: ledgerAccounting!.totalDebit,
+                    totalCredit: ledgerAccounting!.totalCredit,
+                    closingBalance: ledgerAccounting!.currentBalance,
+                    closingBalanceType: ledgerAccounting!.balanceType,
                   }}
+                  emptyLabel="No transactions found for this ledger."
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center py-12">

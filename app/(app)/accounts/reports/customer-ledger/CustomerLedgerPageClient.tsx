@@ -49,9 +49,19 @@ import {
   exportCustomerLedgerToPdf,
 } from "./customer-ledger-export";
 import { CustomerLedgerTable } from "./CustomerLedgerTable";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 
 function CustomerLedgerPageContent() {
   const mounted = useClientMounted();
+  const ledgerDataTick = useAccountsSectionRefresh([
+    "ledgers",
+    "receipt-vouchers",
+    "payment-vouchers",
+    "journal-vouchers",
+    "sales-invoices",
+    "credit-notes",
+    "debit-notes",
+  ]);
 
   const [customerId, setCustomerId] = useState("");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
@@ -71,7 +81,7 @@ function CustomerLedgerPageContent() {
       voucherType: voucherTypes,
       search,
     });
-  }, [mounted, customerId, dateFrom, dateTo, voucherTypes, search]);
+  }, [mounted, customerId, dateFrom, dateTo, voucherTypes, search, ledgerDataTick]);
 
   const voucherTypeOptions = useMemo(
     () => CUSTOMER_LEDGER_VOUCHER_TYPE_OPTIONS.filter((o) => o.value !== "all"),
@@ -361,7 +371,7 @@ function CustomerLedgerPageBody({
           </div>
         ) : (
           <>
-            {statement && <AccountsSummaryBar items={summaryItems} className="lg:grid-cols-4" />}
+            {statement && <AccountsSummaryBar items={summaryItems} />}
 
             {showNoTransactions ? (
               <div className="flex-1 flex items-center justify-center p-8">

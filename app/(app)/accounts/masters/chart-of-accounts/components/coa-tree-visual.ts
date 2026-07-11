@@ -1,64 +1,50 @@
 import type { ChartOfAccount } from "../../../data";
-
-import { getAncestorPath } from "../chart-of-accounts-data";
-
-import { hasChildLedgers } from "../chart-of-accounts-data";
-
+import { getAncestorPath, hasChildLedgers } from "../chart-of-accounts-data";
+import {
+  COA_HIERARCHY_LEVEL_LABELS,
+  COA_MAX_HIERARCHY_LEVEL,
+} from "@/lib/accounts/coa-hierarchy-constants";
+import { getCoaHierarchyLevelForNode } from "../chart-of-accounts-data";
 import type { LucideIcon } from "lucide-react";
-
-import {
-  BadgeIndianRupee,
-  BadgePercent,
-  BookOpen,
-  Building2,
-  CircleDollarSign,
-  FolderOpen,
-  FolderTree,
-  Handshake,
-  Landmark,
-  Package,
-  PieChart,
-  Receipt,
-  ReceiptText,
-  Scale,
-  TrendingDown,
-  TrendingUp,
-  Users,
-  Wallet,
-} from "lucide-react";
-
-import { isUserCreatedGroup } from "@/lib/accounts/coa-hierarchy";
-import {
-  isSundryCreditorsGroup,
-  isSundryDebtorsGroup,
-} from "@/lib/accounts/coa-add-ledger-policy";
-import { isTdsGroupContext } from "@/lib/accounts/coa-specialized-groups";
-
-/** @deprecated Tree connector guides removed — kept for import compatibility */
+import { Database, File, FileText, Folder, FolderOpen } from "lucide-react";
 export const GUIDE_WIDTH_PX = 0;
 
+/**
+ * Five-level COA visual keys — one fixed icon + colour per hierarchy level (1–5).
+ * Not account-type based; depth alone determines styling.
+ */
 export type CoaVisualLevel =
   | "primary_head"
-  | "system_group"
-  | "predefined_group"
-  | "custom_group"
-  | "ledger";
+  | "account_group"
+  | "sub_group"
+  | "ledger"
+  | "sub_ledger";
 
+/** Map numeric hierarchy level (1–5) to visual level key. */
+export function hierarchyLevelToVisualLevel(level: number): CoaVisualLevel {
+  const clamped = Math.min(Math.max(Math.round(level), 1), COA_MAX_HIERARCHY_LEVEL);
+  switch (clamped) {
+    case 1:
+      return "primary_head";
+    case 2:
+      return "account_group";
+    case 3:
+      return "sub_group";
+    case 4:
+      return "ledger";
+    case 5:
+      return "sub_ledger";
+    default:
+      return "sub_ledger";
+  }
+}
+
+/** Resolve visual level from tree depth only — same depth always yields same icon/colour. */
 export function resolveCoaVisualLevel(
   node: ChartOfAccount,
   records: ChartOfAccount[],
 ): CoaVisualLevel {
-  if (node.nodeLevel === "ledger") return "ledger";
-
-  if (node.nodeLevel === "primary_head") return "primary_head";
-
-  if (isUserCreatedGroup(node)) return "custom_group";
-
-  const path = getAncestorPath(records, node.id);
-  const parent = path[path.length - 2];
-  if (parent?.nodeLevel === "primary_head") return "system_group";
-
-  return "predefined_group";
+  return hierarchyLevelToVisualLevel(getCoaHierarchyLevelForNode(node, records));
 }
 
 export function resolveCoaTreeDepth(node: ChartOfAccount, records: ChartOfAccount[]): number {
@@ -66,223 +52,181 @@ export function resolveCoaTreeDepth(node: ChartOfAccount, records: ChartOfAccoun
 }
 
 export const VISUAL_BADGE_LABEL: Record<CoaVisualLevel, string> = {
-  primary_head: "Primary Group",
-  system_group: "System Group",
-  predefined_group: "Sub-Group",
-  custom_group: "Custom Sub-Group",
-  ledger: "Ledger",
+  primary_head: COA_HIERARCHY_LEVEL_LABELS[1],
+  account_group: COA_HIERARCHY_LEVEL_LABELS[2],
+  sub_group: COA_HIERARCHY_LEVEL_LABELS[3],
+  ledger: COA_HIERARCHY_LEVEL_LABELS[4],
+  sub_ledger: COA_HIERARCHY_LEVEL_LABELS[5],
 };
 
-function normalizeCoaName(name: string): string {
-  return name.trim().toLowerCase();
+/** Level 1 — Primary Head: Database, blue */
+export function resolvePrimaryHeadIcon(_name?: string): LucideIcon {
+  return Database;
 }
 
-function primaryHeadFromPath(records: ChartOfAccount[], nodeId: number): ChartOfAccount | undefined {
-  return getAncestorPath(records, nodeId).find((p) => p.nodeLevel === "primary_head");
+/** Level 2 — Account Group: Folder, orange */
+export function resolveCoaAccountGroupIcon(): LucideIcon {
+  return Folder;
 }
 
-/** Level 1 — primary accounting heads */
-export function resolvePrimaryHeadIcon(name: string): LucideIcon {
-  const n = normalizeCoaName(name);
-  if (n.includes("asset")) return Landmark;
-  if (n.includes("liabilit")) return Scale;
-  if (n.includes("income")) return TrendingUp;
-  if (n.includes("expense")) return TrendingDown;
-  return Landmark;
-}
-
-/** Contextual outline icon for account groups (levels 2–3). */
-export function resolveCoaGroupIcon(node: ChartOfAccount, records: ChartOfAccount[]): LucideIcon {
-  const name = normalizeCoaName(node.accountName);
-
-  if (isUserCreatedGroup(node)) return FolderTree;
-  if (isSundryDebtorsGroup(node, records)) return Users;
-  if (isSundryCreditorsGroup(node, records)) return Handshake;
-  if (isTdsGroupContext(node, records)) return BadgePercent;
-
-  if (name.includes("bank account")) return Landmark;
-  if (name.includes("cash-in-hand") || name.includes("cash in hand")) return Wallet;
-  if (name.includes("inventory") || name.includes("stock-in-hand")) return Package;
-  if (name.includes("trade receivables") || name.includes("sundry debtors")) return Users;
-  if (name.includes("trade payables") || name.includes("sundry creditors")) return Handshake;
-  if (name.includes("gst input")) return Receipt;
-  if (name.includes("gst output")) return ReceiptText;
-  if (name.includes("tds receivable") || name.includes("tds payable")) return BadgePercent;
-  if (name.includes("loan") || name.includes("borrowing") || name.includes("nbfc")) {
-    return BadgeIndianRupee;
-  }
-  if (name.includes("deposit")) return CircleDollarSign;
-  if (name.includes("fixed asset")) return Building2;
-  if (name.includes("investment")) return PieChart;
-  if (name.includes("land & building") || name.includes("plant & machinery")) return Building2;
-  if (name.includes("capital") || name.includes("equity")) return Landmark;
-
+/** Level 3 — Sub Group: Open folder, purple */
+export function resolveCoaSubGroupIcon(): LucideIcon {
   return FolderOpen;
 }
 
-/** All posting ledgers use BookOpen — never folder icons. */
-export function resolveCoaLedgerIcon(_node: ChartOfAccount, _records: ChartOfAccount[]): LucideIcon {
-  return BookOpen;
+/** Level 4 — Ledger: File text, teal */
+export function resolveCoaLedgerIcon(): LucideIcon {
+  return FileText;
+}
+
+/** Level 5 — Sub Ledger: File, red */
+export function resolveCoaSubLedgerIcon(): LucideIcon {
+  return File;
+}
+
+/** @deprecated Use resolveCoaSubGroupIcon */
+export function resolveCoaGroupIcon(_node: ChartOfAccount, _records: ChartOfAccount[]): LucideIcon {
+  return FolderOpen;
+}
+
+/** @deprecated Use resolveCoaLedgerIcon */
+export function resolveCoaSystemLedgerIcon(): LucideIcon {
+  return FileText;
+}
+
+/** @deprecated Use resolveCoaSubLedgerIcon */
+export function resolveCoaManualLedgerIcon(): LucideIcon {
+  return File;
+}
+
+/** Map legacy visual level keys from older COA tree code. */
+export function normalizeCoaVisualLevel(level: CoaVisualLevel | string): CoaVisualLevel {
+  switch (level) {
+    case "primary_head":
+    case "account_group":
+    case "sub_group":
+    case "ledger":
+    case "sub_ledger":
+      return level;
+    case "group":
+      return "sub_group";
+    case "system_ledger":
+      return "ledger";
+    case "manual_ledger":
+      return "sub_ledger";
+    default:
+      return "ledger";
+  }
 }
 
 export function resolveCoaSidebarIcon(
-  node: ChartOfAccount,
-  _visualLevel: CoaVisualLevel,
-  records?: ChartOfAccount[],
+  _node: ChartOfAccount,
+  visualLevel: CoaVisualLevel,
+  _records?: ChartOfAccount[],
 ): LucideIcon {
-  if (node.nodeLevel === "ledger") {
-    return BookOpen;
-  }
-  if (node.nodeLevel === "primary_head") {
-    return resolvePrimaryHeadIcon(node.accountName);
-  }
-  if (records) {
-    return resolveCoaGroupIcon(node, records);
-  }
-  return FolderOpen;
+  return VISUAL_ICON[normalizeCoaVisualLevel(visualLevel)] ?? FileText;
 }
 
-/** @deprecated Panel tree uses resolveCoaSidebarIcon — kept for legacy imports */
+/** Fixed icon per hierarchy level — level-based, not account-based. */
 export const VISUAL_ICON: Record<CoaVisualLevel, LucideIcon> = {
-  primary_head: Landmark,
-  system_group: FolderOpen,
-  predefined_group: FolderOpen,
-  custom_group: FolderTree,
-  ledger: BookOpen,
+  primary_head: Database,
+  account_group: Folder,
+  sub_group: FolderOpen,
+  ledger: FileText,
+  sub_ledger: File,
 };
 
 export const COA_TREE_ICON_SIZE_CLASS = "w-4 h-4";
 
+/** Distinct colour families per level — no shared palette shades across levels. */
 export const VISUAL_TREE_ICON_CLASS: Record<CoaVisualLevel, { default: string; selected: string }> = {
-  primary_head: { default: "text-brand-600", selected: "text-brand-700" },
-  system_group: { default: "text-navy-500", selected: "text-navy-700" },
-  predefined_group: { default: "text-leaf-600", selected: "text-leaf-700" },
-  custom_group: { default: "text-purple-500", selected: "text-purple-700" },
-  ledger: { default: "text-slate-500", selected: "text-slate-600" },
+  primary_head: { default: "text-blue-600", selected: "text-blue-700" },
+  account_group: { default: "text-brand-600", selected: "text-brand-700" },
+  sub_group: { default: "text-purple-600", selected: "text-purple-700" },
+  ledger: { default: "text-teal-600", selected: "text-teal-700" },
+  sub_ledger: { default: "text-red-600", selected: "text-red-700" },
 };
 
+export function coaSidebarRowClass(visualLevel: CoaVisualLevel | string): string {
+  return COA_SIDEBAR_ROW_CLASS[normalizeCoaVisualLevel(visualLevel)];
+}
+
+export function coaVisualRowClass(visualLevel: CoaVisualLevel | string): string {
+  return VISUAL_ROW_CLASS[normalizeCoaVisualLevel(visualLevel)];
+}
+
 export function coaTreeIconClass(visualLevel: CoaVisualLevel, selected: boolean): string {
-  const cfg = VISUAL_TREE_ICON_CLASS[visualLevel];
+  const key = normalizeCoaVisualLevel(visualLevel);
+  const cfg = VISUAL_TREE_ICON_CLASS[key] ?? VISUAL_TREE_ICON_CLASS.ledger;
   return selected ? cfg.selected : cfg.default;
 }
 
 export const VISUAL_BADGE_CLASS: Record<CoaVisualLevel, string> = {
-  primary_head: "bg-brand-50 text-brand-700 border-brand-200",
-  system_group: "bg-navy-50 text-navy-700 border-navy-200",
-  predefined_group: "bg-leaf-50 text-leaf-700 border-leaf-200",
-  custom_group: "bg-purple-50 text-purple-700 border-purple-200",
-  ledger: "bg-muted/40 text-muted-foreground border-border",
+  primary_head: "bg-blue-50 text-blue-700 border-blue-200",
+  account_group: "bg-brand-50 text-brand-700 border-brand-200",
+  sub_group: "bg-purple-50 text-purple-700 border-purple-200",
+  ledger: "bg-teal-50 text-teal-700 border-teal-200",
+  sub_ledger: "bg-red-50 text-red-700 border-red-200",
 };
 
 export const VISUAL_ICON_CLASS: Record<CoaVisualLevel, string> = {
-  primary_head: "text-brand-600",
-  system_group: "text-navy-600",
-  predefined_group: "text-leaf-600",
-  custom_group: "text-purple-600",
-  ledger: "text-slate-500",
+  primary_head: "text-blue-600",
+  account_group: "text-brand-600",
+  sub_group: "text-purple-600",
+  ledger: "text-teal-600",
+  sub_ledger: "text-red-600",
+};
+
+/** Icon badge background — used in legend and optional row adornments. */
+export const VISUAL_ICON_BG_CLASS: Record<CoaVisualLevel, string> = {
+  primary_head: "bg-blue-50 border-blue-200",
+  account_group: "bg-brand-50 border-brand-200",
+  sub_group: "bg-purple-50 border-purple-200",
+  ledger: "bg-teal-50 border-teal-200",
+  sub_ledger: "bg-red-50 border-red-200",
 };
 
 export const VISUAL_ROW_CLASS: Record<CoaVisualLevel, string> = {
   primary_head: "text-xs font-bold text-foreground",
-  system_group: "text-xs font-semibold text-foreground",
-  predefined_group: "text-xs font-medium text-foreground/90",
-  custom_group: "text-xs font-medium text-foreground/90",
+  account_group: "text-xs font-semibold text-foreground/95",
+  sub_group: "text-xs font-medium text-foreground/90",
   ledger: "text-xs font-normal text-foreground/85",
+  sub_ledger: "text-[11px] font-normal text-foreground/80",
 };
 
-/** ~20px per hierarchy level — no tree connector lines */
+/** Horizontal indent per hierarchy level (compact sidebar tree). */
+export const COA_TREE_LEVEL_INDENT_PX = 14;
+
+/** Fixed width for expand/collapse control — keeps chevrons aligned at every depth. */
+export const COA_TREE_CHEVRON_WIDTH_CLASS = "w-5 shrink-0";
+
+/** ~14px per hierarchy level — compact indent for deep COA trees */
 export function coaSidebarIndentPx(depth: number): number {
-  return 8 + depth * 20;
+  return Math.max(0, depth) * COA_TREE_LEVEL_INDENT_PX;
 }
 
 export const COA_SIDEBAR_ROW_CLASS: Record<CoaVisualLevel, string> = {
-  primary_head: "text-[13px] font-semibold text-foreground",
-  system_group: "text-xs font-semibold text-foreground/95",
-  predefined_group: "text-xs font-medium text-foreground/90",
-  custom_group: "text-xs font-medium text-foreground/90",
-  ledger: "text-[11px] font-normal text-foreground/80",
+  primary_head: "text-[13px] font-bold text-foreground",
+  account_group: "text-xs font-semibold text-foreground/95",
+  sub_group: "text-xs font-medium text-foreground/90",
+  ledger: "text-[11px] font-normal text-foreground/85",
+  sub_ledger: "text-[11px] font-normal text-foreground/80",
 };
 
+/** Same icon size at every level — level is conveyed by icon shape + colour, not size. */
 export function coaSidebarIconSizeClass(
-  node: ChartOfAccount,
-  records: ChartOfAccount[],
+  _node: ChartOfAccount,
+  _records: ChartOfAccount[],
 ): string {
-  if (node.nodeLevel === "ledger") return "w-3.5 h-3.5";
-  const depth = resolveCoaTreeDepth(node, records);
-  if (depth === 0) return "w-[18px] h-[18px]";
-  if (depth === 1) return "w-4 h-4";
-  return "w-3.5 h-3.5";
-}
-
-function primaryHeadIconClass(name: string, selected: boolean): string {
-  const n = normalizeCoaName(name);
-  if (n.includes("asset")) return selected ? "text-leaf-700" : "text-leaf-600";
-  if (n.includes("liabilit")) return selected ? "text-purple-700" : "text-purple-600";
-  if (n.includes("income")) return selected ? "text-navy-700" : "text-navy-600";
-  if (n.includes("expense")) return selected ? "text-brand-700" : "text-brand-600";
-  return selected ? "text-brand-700" : "text-brand-600";
-}
-
-function contextualGroupIconClass(
-  node: ChartOfAccount,
-  records: ChartOfAccount[],
-  selected: boolean,
-): string | null {
-  const name = normalizeCoaName(node.accountName);
-
-  if (name.includes("bank account")) {
-    return selected ? "text-sky-700" : "text-sky-600";
-  }
-  if (
-    isSundryDebtorsGroup(node, records) ||
-    name.includes("trade receivables") ||
-    name.includes("sundry debtors")
-  ) {
-    return selected ? "text-cyan-700" : "text-cyan-600";
-  }
-  if (
-    isSundryCreditorsGroup(node, records) ||
-    name.includes("trade payables") ||
-    name.includes("sundry creditors")
-  ) {
-    return selected ? "text-orange-700" : "text-orange-600";
-  }
-  if (name.includes("gst input") || (name.includes("gst") && name.includes("input"))) {
-    return selected ? "text-purple-700" : "text-purple-600";
-  }
-  if (name.includes("gst output") || (name.includes("gst") && name.includes("output"))) {
-    return selected ? "text-purple-700" : "text-purple-600";
-  }
-  if (isTdsGroupContext(node, records) || name.includes("tds")) {
-    const root = primaryHeadFromPath(records, node.id);
-    if (root) return primaryHeadIconClass(root.accountName, selected);
-  }
-
-  return null;
+  return COA_TREE_ICON_SIZE_CLASS;
 }
 
 export function coaSidebarNodeIconClass(
-  node: ChartOfAccount,
+  _node: ChartOfAccount,
   visualLevel: CoaVisualLevel,
   selected: boolean,
-  records?: ChartOfAccount[],
+  _records?: ChartOfAccount[],
 ): string {
-  if (visualLevel === "primary_head") {
-    return primaryHeadIconClass(node.accountName, selected);
-  }
-
-  if (visualLevel === "ledger") {
-    return selected ? "text-slate-600" : "text-slate-500";
-  }
-
-  if (records) {
-    const contextual = contextualGroupIconClass(node, records, selected);
-    if (contextual) return contextual;
-
-    const root = primaryHeadFromPath(records, node.id);
-    if (root) return primaryHeadIconClass(root.accountName, selected);
-  }
-
   return coaTreeIconClass(visualLevel, selected);
 }
 
@@ -292,8 +236,8 @@ export function coaNodeAccessibleLabel(
 ): string {
   const visualLevel = resolveCoaVisualLevel(node, records);
   const badge = VISUAL_BADGE_LABEL[visualLevel];
-  const depth = resolveCoaTreeDepth(node, records);
-  return `${node.accountName}, ${badge}${depth > 0 ? `, level ${depth + 1}` : ""}`;
+  const depth = getCoaHierarchyLevelForNode(node, records);
+  return `${node.accountName}, ${badge}${depth > 0 ? `, level ${depth}` : ""}`;
 }
 
 export function coaSidebarShowsNodeIcon(_visualLevel: CoaVisualLevel): boolean {
@@ -302,11 +246,13 @@ export function coaSidebarShowsNodeIcon(_visualLevel: CoaVisualLevel): boolean {
 
 export function coaNodeShowsExpandChevron(
   node: ChartOfAccount,
-  _records: ChartOfAccount[],
+  records: ChartOfAccount[],
   hasChildren: boolean,
 ): boolean {
   if (!hasChildren) return false;
-  if (node.nodeLevel === "ledger") return false;
+  if (node.nodeLevel === "ledger") {
+    return ledgerRowExpandable(node, records);
+  }
   return true;
 }
 
@@ -321,12 +267,12 @@ export const LEVEL_ICON_CLASS = VISUAL_ICON_CLASS;
 
 export const LEVEL_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
   primary_head: VISUAL_ROW_CLASS.primary_head,
-  account_group: VISUAL_ROW_CLASS.system_group,
+  account_group: VISUAL_ROW_CLASS.sub_group,
   ledger: VISUAL_ROW_CLASS.ledger,
 };
 
 export const LEVEL_SELECTED_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
-  primary_head: "text-xs font-semibold text-brand-800",
+  primary_head: "text-xs font-bold text-brand-800",
   account_group: "text-xs font-semibold text-brand-800",
   ledger: "text-xs font-semibold text-foreground",
 };
@@ -349,7 +295,23 @@ export function resolveCoaVisualLevelLegacy(
   records: ChartOfAccount[],
 ): CoaLegacyVisualLevel {
   const level = resolveCoaVisualLevel(node, records);
-  if (level === "system_group") return "account_group";
-  if (level === "predefined_group" || level === "custom_group") return "sub_group";
+  if (level === "sub_ledger") return "ledger";
+  if (level === "account_group" || level === "sub_group") {
+    return level === "account_group" ? "account_group" : "sub_group";
+  }
+  return level;
+}
+
+/** @deprecated Legacy group levels map to unified group styling */
+export type LegacyCoaVisualLevel =
+  | "primary_head"
+  | "system_group"
+  | "predefined_group"
+  | "custom_group"
+  | "ledger";
+
+export function mapLegacyVisualLevel(level: CoaVisualLevel): LegacyCoaVisualLevel {
+  if (level === "account_group" || level === "sub_group") return "system_group";
+  if (level === "ledger" || level === "sub_ledger") return "ledger";
   return level;
 }

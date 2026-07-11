@@ -386,7 +386,7 @@ function SupplierLedgerPageBody({
           </div>
         ) : (
           <>
-            {statement && <AccountsSummaryBar items={summaryItems} className="lg:grid-cols-8" />}
+            {statement && <AccountsSummaryBar items={summaryItems} />}
 
             {showNoTransactions ? (
               <div className="flex-1 flex items-center justify-center p-8">

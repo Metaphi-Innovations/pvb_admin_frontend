@@ -31,6 +31,7 @@ import {
 import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
+import { drCrSideFilterValue } from "@/lib/accounts/column-filter-display";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
@@ -137,7 +138,13 @@ function GeneralLedgerPageContent() {
       case "balance":
         return row.runningBalance;
       case "side":
-        return row.runningBalanceType;
+        return drCrSideFilterValue({
+          debit: row.debit,
+          credit: row.credit,
+          runningBalanceType: row.runningBalanceType,
+          runningBalance: row.runningBalance,
+          isBalanceRow: row.kind === "opening" || row.kind === "closing",
+        });
       default:
         return (row as unknown as Record<string, unknown>)[key];
     }
@@ -152,6 +159,7 @@ function GeneralLedgerPageContent() {
       particulars: { type: "text" as const },
       debit: { type: "amount" as const },
       credit: { type: "amount" as const },
+      side: { type: "text" as const },
     }),
     [],
   );
@@ -406,7 +414,7 @@ function GeneralLedgerPageBody({
           </div>
         ) : (
           <>
-            {statement && <AccountsSummaryBar items={summaryItems} className="lg:grid-cols-7" />}
+            {statement && <AccountsSummaryBar items={summaryItems} />}
 
             {showNoTransactions ? (
               <div className="flex-1 flex items-center justify-center p-8">

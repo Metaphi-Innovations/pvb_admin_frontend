@@ -18,7 +18,11 @@ import {
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "../../components/AccountsUI";
-import { canEditVoucher, type VoucherTypeCode } from "../voucher-data";
+import {
+  canEditVoucherForList,
+  getVouchersByTypeForList,
+  type AccountingVoucher as VoucherRow,
+} from "../voucher-list-data";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -37,14 +41,12 @@ import {
   ReportDateRangeFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import { accountsDataService } from "@/lib/accounts/accounts-data-service";
+import type { VoucherTypeCode } from "../../masters/masters-data";
 
 interface VoucherListClientProps {
   voucherType: VoucherTypeCode;
   embedded?: boolean;
 }
-
-type VoucherRow = ReturnType<typeof accountsDataService.getVouchersByType>[number];
 
 function VoucherListTable({
   mounted,
@@ -130,7 +132,7 @@ function VoucherListTable({
                       title="View"
                       onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
                     />
-                    {canEditVoucher(v) && (
+                    {canEditVoucherForList(v) && (
                       <AccountsEditAction
                         title="Edit"
                         onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
@@ -166,7 +168,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
 
   const records = useMemo(
-    () => (mounted ? accountsDataService.getVouchersByType(voucherType) : []),
+    () => (mounted ? getVouchersByTypeForList(voucherType) : []),
     [voucherType, mounted, listRefreshKey],
   );
 

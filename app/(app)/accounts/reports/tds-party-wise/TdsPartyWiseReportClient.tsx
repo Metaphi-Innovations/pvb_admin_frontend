@@ -376,7 +376,7 @@ export default function TdsPartyWiseReportClient() {
   const columnConfig = useMemo(
     () => ({
       partyName: { type: "text" as const },
-      partyType: { type: "status" as const, options: PARTY_TYPE_COLUMN_OPTIONS },
+      partyType: { type: "text" as const },
       pan: { type: "text" as const },
       tdsSection: { type: "text" as const },
       grossAmount: { type: "amount" as const },

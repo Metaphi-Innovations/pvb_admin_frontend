@@ -39,6 +39,7 @@ import {
   ReportSalespersonMultiFilter,
   ReportMoreFilters,
   ReportFilterSummary,
+  ReportFilterField,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   useReportDateRange,
@@ -407,10 +408,9 @@ function RegisterReportBody({
                 />
               ) : null}
             </ReportMoreFilters>
-            <div className="space-y-1 min-w-[110px]">
-              <Label className={filterLabelClass}>GST Rate</Label>
+            <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
               <Select value={gstRate} onValueChange={setGstRate}>
-                <SelectTrigger className={cn(filterControlClass, "w-[110px]")}>
+                <SelectTrigger className={cn(filterControlClass, "w-full")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -421,7 +421,7 @@ function RegisterReportBody({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </ReportFilterField>
             <ReportSearchFilter
               value={search}
               onChange={setSearch}

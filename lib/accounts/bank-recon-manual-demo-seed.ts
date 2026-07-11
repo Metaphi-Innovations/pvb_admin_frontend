@@ -82,6 +82,9 @@ const MANUAL_DEFAULTS: Omit<
   updatedOn: null,
   cancelReason: null,
   possibleDuplicateOverrideReason: null,
+  partyLedgerId: null,
+  againstType: null,
+  invoiceMatchingPayload: null,
 };
 
 export function enrichRecordWithManualDefaults(

@@ -19,6 +19,7 @@ import {
 } from "@/lib/accounts/inventory-accounting-data";
 import { ensurePricingDemoSeed } from "@/app/(app)/masters/pricing/pricing-data";
 import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { seedCoaPostingLedgerTransactions } from "@/lib/accounts/coa-ledger-transactions-seed";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
 
 const FY_OPENING_DATE = demoFinancialYearStart();
@@ -196,17 +197,14 @@ export function assignDemoOpeningBalances(): void {
 const PRODUCT_INVENTORY_MAP: Array<{ pattern: RegExp; ledgerName: string }> = [
   { pattern: /urea/i, ledgerName: "Urea 50kg Stock" },
   { pattern: /dap/i, ledgerName: "DAP Fertilizer Stock" },
-  { pattern: /npk|10:26:26|fertilizer/i, ledgerName: "NPK Fertilizer Stock" },
-  { pattern: /pesticide|chlorpyrifos|imidacloprid|mancozeb/i, ledgerName: "Pesticide Inventory" },
-  { pattern: /seed|maize|hybrid/i, ledgerName: "Seed Inventory" },
-  { pattern: /zinc|micronutrient|bio|humic/i, ledgerName: "NPK Fertilizer Stock" },
+  { pattern: /npk|10:26:26|fertilizer|pesticide|chlorpyrifos|imidacloprid|mancozeb|seed|maize|hybrid|zinc|micronutrient|bio|humic/i, ledgerName: "DAP Fertilizer Stock" },
 ];
 
 function mapProductToInventoryLedger(product: string): string {
   for (const { pattern, ledgerName } of PRODUCT_INVENTORY_MAP) {
     if (pattern.test(product)) return ledgerName;
   }
-  return "NPK Fertilizer Stock";
+  return "DAP Fertilizer Stock";
 }
 
 /** Post opening stock journal from Warehouse Batch Register valuation. */
@@ -226,10 +224,7 @@ export function seedInventoryLedgersFromBatchRegister(): void {
 
   if (byLedger.size === 0) {
     byLedger.set("Urea 50kg Stock", 840000);
-    byLedger.set("NPK Fertilizer Stock", 620000);
-    byLedger.set("DAP Fertilizer Stock", 410000);
-    byLedger.set("Pesticide Inventory", 285000);
-    byLedger.set("Seed Inventory", 195000);
+    byLedger.set("DAP Fertilizer Stock", 1030000);
   }
 
   for (const [ledgerName, value] of byLedger) {
@@ -265,196 +260,10 @@ function postBalancedJournal(
   createVoucher("journal", { date, referenceNo, narration, status: "posted", lines });
 }
 
-/** Post demo vouchers covering all major transaction types. */
+/** Ensure GST statutory ledgers exist, then seed exactly 2 demo transactions per posting ledger. */
 export function seedDemoAccountingVouchers(): void {
   ensureGstAccountingLedgers();
-
-  postBalancedJournal(FY_OPENING_DATE, "OB-SAL-2026", "Opening salary accrual — March 2026", [
-    { ledgerName: "HO Salary Expense", debit: 185000, credit: 0 },
-    { ledgerName: "Salary Payable - HO Staff", debit: 0, credit: 185000 },
-  ]);
-
-  postBalancedJournal(demoDateAt(7), "JRN-RENT-APR", "April rent — Head Office", [
-    { ledgerName: "Head Office Rent", debit: 45000, credit: 0 },
-    { ledgerName: "HDFC Bank", debit: 0, credit: 45000 },
-  ]);
-
-  postBalancedJournal(demoDateAt(8), "JRN-DEPR-Q1", "Q1 depreciation provision", [
-    { ledgerName: "Depreciation - Plant & Machinery", debit: 42000, credit: 0 },
-    { ledgerName: "Depreciation - Buildings", debit: 18000, credit: 0 },
-    { ledgerName: "Depreciation - Vehicles", debit: 8500, credit: 0 },
-    { ledgerName: "Accumulated Surplus - Prior Years", debit: 0, credit: 68500 },
-  ]);
-
-  postBalancedJournal(demoDateAt(9), "JRN-INT-APR", "Bank interest accrued", [
-    { ledgerName: "Accrued Bank Interest Income", debit: 12500, credit: 0 },
-    { ledgerName: "Bank Interest - HDFC Current Account", debit: 0, credit: 12500 },
-  ]);
-
-  postBalancedJournal(demoDateAt(10), "JRN-MKT-MAY", "May marketing spend", [
-    { ledgerName: "Farmer Awareness Campaign", debit: 28000, credit: 0 },
-    { ledgerName: "Google Ads", debit: 15000, credit: 0 },
-    { ledgerName: "HDFC Bank", debit: 0, credit: 43000 },
-  ]);
-
-  postBalancedJournal(demoDateAt(11), "JRN-ELEC-MAY", "May electricity charges", [
-    { ledgerName: "Warehouse Electricity", debit: 18500, credit: 0 },
-    { ledgerName: "Head Office Electricity", debit: 9200, credit: 0 },
-    { ledgerName: "Electricity Charges Payable", debit: 0, credit: 27700 },
-  ]);
-
-  const hdfc = requireLedger("HDFC Bank");
-  const axis = requireLedger("Axis Bank");
-  const pettyCash = requireLedger("Office Petty Cash");
-
-  createVoucher("contra", {
-    date: demoDateAt(0),
-    referenceNo: "CONTRA-001",
-    narration: "Cash deposited to HDFC Bank",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: hdfc.id, ledgerName: hdfc.accountName, debit: 50000, credit: 0, remarks: "Cash deposit" },
-      { id: 2, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 0, credit: 50000, remarks: "Cash out" },
-    ],
-  });
-
-  createVoucher("contra", {
-    date: demoDateAt(1),
-    referenceNo: "CONTRA-002",
-    narration: "Fund transfer HDFC → Axis Bank",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: axis.id, ledgerName: axis.accountName, debit: 100000, credit: 0, remarks: "Transfer in" },
-      { id: 2, ledgerId: hdfc.id, ledgerName: hdfc.accountName, debit: 0, credit: 100000, remarks: "Transfer out" },
-    ],
-  });
-
-  const branchCash = requireLedger("Branch Counter Cash");
-
-  createVoucher("contra", {
-    date: demoDateAt(2),
-    referenceNo: "CONTRA-003",
-    narration: "Cash withdrawal from HDFC Bank",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 25000, credit: 0, remarks: "Cash in" },
-      { id: 2, ledgerId: hdfc.id, ledgerName: hdfc.accountName, debit: 0, credit: 25000, remarks: "Bank out" },
-    ],
-  });
-
-  createVoucher("contra", {
-    date: demoDateAt(3),
-    referenceNo: "CONTRA-004",
-    narration: "Petty cash replenishment from Axis Bank",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 15000, credit: 0, remarks: "Cash in" },
-      { id: 2, ledgerId: axis.id, ledgerName: axis.accountName, debit: 0, credit: 15000, remarks: "Bank out" },
-    ],
-  });
-
-  createVoucher("contra", {
-    date: demoDateAt(4),
-    referenceNo: "CONTRA-005",
-    narration: "Inter-branch cash transfer to HO Cash",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: branchCash.id, ledgerName: branchCash.accountName, debit: 10000, credit: 0, remarks: "Branch cash in" },
-      { id: 2, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 0, credit: 10000, remarks: "Office petty cash out" },
-    ],
-  });
-
-  const abcAgro = requireLedger("ABC Agro Distributor");
-  const fertilizerSales = requireLedger("Fertilizer Sales");
-  const outputCgst = requireLedger("Output CGST Payable") ?? requireLedger("CGST Payable");
-  const outputSgst = requireLedger("Output SGST Payable") ?? requireLedger("SGST Payable");
-
-  createVoucher("credit_note", {
-    date: demoDateAt(5),
-    referenceNo: "CN-2026-001",
-    narration: "Credit note — partial return ABC Agro Distributor",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: fertilizerSales.id, ledgerName: fertilizerSales.accountName, debit: 8500, credit: 0, remarks: "Sales reversal" },
-      { id: 2, ledgerId: outputCgst.id, ledgerName: outputCgst.accountName, debit: 765, credit: 0, remarks: "CGST reversal" },
-      { id: 3, ledgerId: outputSgst.id, ledgerName: outputSgst.accountName, debit: 765, credit: 0, remarks: "SGST reversal" },
-      { id: 4, ledgerId: abcAgro.id, ledgerName: abcAgro.accountName, debit: 0, credit: 10030, remarks: "CN-2026-001" },
-    ],
-  });
-
-  const greenField = requireLedger("GreenField Suppliers");
-  const fertilizerPurchase = requireLedger("Fertilizer Purchase");
-  const inputCgst = requireLedger("CGST Receivable") ?? requireLedger("GST Input Credit (CGST)");
-  const inputSgst = requireLedger("SGST Receivable") ?? requireLedger("GST Input Credit (SGST)");
-
-  createVoucher("debit_note", {
-    date: demoDateAt(6),
-    referenceNo: "DN-2026-001",
-    narration: "Debit note — purchase return GreenField Suppliers",
-    status: "posted",
-    lines: [
-      { id: 1, ledgerId: greenField.id, ledgerName: greenField.accountName, debit: 11800, credit: 0, remarks: "DN-2026-001" },
-      { id: 2, ledgerId: fertilizerPurchase.id, ledgerName: fertilizerPurchase.accountName, debit: 0, credit: 10000, remarks: "Purchase reversal" },
-      { id: 3, ledgerId: inputCgst.id, ledgerName: inputCgst.accountName, debit: 0, credit: 900, remarks: "ITC reversal CGST" },
-      { id: 4, ledgerId: inputSgst.id, ledgerName: inputSgst.accountName, debit: 0, credit: 900, remarks: "ITC reversal SGST" },
-    ],
-  });
-
-  postBalancedJournal(demoDateAt(12), "JRN-BANK-CHG", "Bank service charges — May 2026", [
-    { ledgerName: "HDFC Bank Service Charges", debit: 2500, credit: 0 },
-    { ledgerName: "HDFC Bank", debit: 0, credit: 2500 },
-  ]);
-
-  postBalancedJournal(demoDateAt(13), "JRN-GST-MAY", "May GST liability accrual", [
-    { ledgerName: "Output CGST Payable", debit: 0, credit: 32400 },
-    { ledgerName: "Output SGST Payable", debit: 0, credit: 32400 },
-    { ledgerName: "GST Payable Control Account", debit: 64800, credit: 0 },
-  ]);
-
-  seedIncomeExpenseActivity();
-}
-
-/** Spread P&L activity across income and expense ledgers via batched journal entries. */
-function seedIncomeExpenseActivity(): void {
-  const incomeLedgers = getCoaLedgers().filter((l) => l.accountType === "Income");
-  const expenseLedgers = getCoaLedgers().filter((l) => l.accountType === "Expense");
-  const retained = findLedger("Current Year Retained Profit") ?? findLedger("Profit & Loss Account");
-  if (!retained) return;
-
-  const incomeEntries: Array<{ ledgerName: string; debit: number; credit: number }> = [];
-  let incomeTotal = 0;
-  for (const l of incomeLedgers) {
-    const amount = hashAmount(l.accountName, 12000, 35000);
-    if (amount <= 0) continue;
-    incomeTotal += amount;
-    incomeEntries.push({ ledgerName: l.accountName, debit: 0, credit: amount });
-  }
-  if (incomeTotal > 0) {
-    postBalancedJournal(demoDateAt(14), "JRN-INC-FY26", "FY26 income recognition — all income ledgers", [
-      { ledgerName: retained.accountName, debit: incomeTotal, credit: 0 },
-      ...incomeEntries,
-    ]);
-  }
-
-  const BATCH = 12;
-  for (let i = 0; i < expenseLedgers.length; i += BATCH) {
-    const batch = expenseLedgers.slice(i, i + BATCH);
-    const entries: Array<{ ledgerName: string; debit: number; credit: number }> = [];
-    let batchTotal = 0;
-    for (const l of batch) {
-      const amount = hashAmount(l.accountName, 8000, 22000);
-      if (amount <= 0) continue;
-      batchTotal += amount;
-      entries.push({ ledgerName: l.accountName, debit: amount, credit: 0 });
-    }
-    if (batchTotal <= 0) continue;
-    postBalancedJournal(
-      "2026-05-30",
-      `JRN-EXP-FY26-${Math.floor(i / BATCH) + 1}`,
-      `FY26 expense accrual — batch ${Math.floor(i / BATCH) + 1}`,
-      [...entries, { ledgerName: retained.accountName, debit: 0, credit: batchTotal }],
-    );
-  }
+  seedCoaPostingLedgerTransactions(true);
 }
 
 /** Customer / vendor prior-period balances posted as opening journal entries. */

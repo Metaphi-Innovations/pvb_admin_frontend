@@ -69,7 +69,7 @@ export function ReportFilterRow({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end gap-2 w-full", className)}>
+    <div className={cn("flex flex-wrap items-end gap-x-2 gap-y-2.5 w-full min-w-0", className)}>
       {children}
       {end ? (
         <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">{end}</div>
@@ -123,7 +123,7 @@ export function ReportSearchFilter({
   const mounted = useClientMounted();
 
   return (
-    <div className={cn("space-y-0.5 min-w-[160px] flex-1 max-w-sm", className)}>
+    <div className={cn("space-y-0.5 min-w-[200px] flex-1 basis-[200px] max-w-md", className)}>
       <span className={filterLabelClass}>Search</span>
       <div className="relative">
         <Input
@@ -155,6 +155,7 @@ export function ReportDateRangeFilter({
   onDateFromChange,
   onDateToChange,
   presetOptions = DATE_RANGE_PRESET_OPTIONS,
+  inlineCustomDates = true,
 }: {
   preset: DateRangePresetId;
   dateFrom: string;
@@ -163,6 +164,8 @@ export function ReportDateRangeFilter({
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   presetOptions?: { id: DateRangePresetId; label: string }[];
+  /** When false, From/To fields are not rendered inline (use separate date filters). */
+  inlineCustomDates?: boolean;
 }) {
   const handlePresetChange = (value: DateRangePresetId) => {
     onPresetChange(value);
@@ -200,7 +203,7 @@ export function ReportDateRangeFilter({
             ))}
           </SelectContent>
         </Select>
-        {preset === "custom" && (
+        {inlineCustomDates && preset === "custom" && (
           <>
             <AccountsDateInput
               value={dateFrom}
@@ -393,7 +396,9 @@ export function ReportShowZeroBalanceToggle({
   return (
     <div className="flex items-center gap-2 min-w-[140px] h-8">
       <Switch checked={checked} onCheckedChange={onChange} />
-      <span className="text-xs font-medium text-foreground whitespace-nowrap">Show zero balance</span>
+      <span className="text-xs font-medium text-foreground whitespace-nowrap">
+        Include zero balance
+      </span>
     </div>
   );
 }
@@ -623,6 +628,121 @@ export function ReportPartyFilter({
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+export function ReportTrialBalanceViewTypeFilter({
+  value,
+  onChange,
+}: {
+  value: "normal" | "detailed";
+  onChange: (value: "normal" | "detailed") => void;
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[120px] shrink-0">
+      <span className={filterLabelClass}>View Type</span>
+      <Select value={value} onValueChange={(v) => onChange(v as "normal" | "detailed")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[120px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="normal">Normal</SelectItem>
+          <SelectItem value="detailed">Detailed</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportIncludeOpeningBalanceToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 min-h-8">
+      <Switch checked={checked} onCheckedChange={onChange} />
+      <span className="text-xs font-medium text-foreground whitespace-nowrap">
+        Include opening balance
+      </span>
+    </div>
+  );
+}
+
+export function ReportFromDateFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-0.5 shrink-0">
+      <span className={filterLabelClass}>From Date</span>
+      <AccountsDateInput
+        value={value}
+        onChange={onChange}
+        aria-label="From date"
+        className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
+      />
+    </div>
+  );
+}
+
+export function ReportToDateFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-0.5 shrink-0">
+      <span className={filterLabelClass}>To Date</span>
+      <AccountsDateInput
+        value={value}
+        onChange={onChange}
+        aria-label="To date"
+        className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
+      />
+    </div>
+  );
+}
+
+export function ReportParticularSearchFilter({
+  value,
+  onChange,
+  placeholder = "Search particular…",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const mounted = useClientMounted();
+  return (
+    <div className="space-y-0.5 min-w-[180px] flex-1 basis-[180px] max-w-xs shrink-0">
+      <span className={filterLabelClass}>Search Particular</span>
+      <div className="relative">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cn(filterControlClass, "mt-0 pr-8 w-full")}
+        />
+        {mounted && value ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -911,6 +1031,7 @@ export function ReportTdsPaymentStatusFilter({
 
 export { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
 export { ReportFilterSummary } from "@/components/accounts/ReportFilterSummary";
+export { ReportFilterField } from "@/components/accounts/AccountsReportLayout";
 export type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
 
 export function ReportBranchMultiFilter({
@@ -1105,10 +1226,12 @@ export function ReportLedgerGroupMultiFilter({
   values,
   onChange,
   groups,
+  label = "Ledger Group",
 }: {
   values: string[];
   onChange: (values: string[]) => void;
   groups: { id: number; name: string }[];
+  label?: string;
 }) {
   const selectOptions: ReportMultiSelectOption[] = groups.map((g) => ({
     value: String(g.id),
@@ -1116,7 +1239,7 @@ export function ReportLedgerGroupMultiFilter({
   }));
   return (
     <ReportMultiSelect
-      label="Account Group"
+      label={label}
       values={values}
       onChange={onChange}
       options={selectOptions}

@@ -8,6 +8,7 @@ import { enrichRecordWithManualDefaults } from "@/lib/accounts/bank-recon-manual
 import { checkManualDuplicate } from "@/lib/accounts/bank-recon-manual-duplicate";
 import type {
   DuplicateCheckResult,
+  ManualAgainstType,
   ManualAttachmentMeta,
   ManualTransactionFormState,
 } from "@/lib/accounts/bank-recon-manual-types";
@@ -15,6 +16,8 @@ import {
   hasBankReference,
   primaryReferenceDisplay,
 } from "@/lib/accounts/bank-recon-manual-types";
+import type { UnpaidInvoiceOption } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
+import { buildAllocationSummary } from "@/app/(app)/accounts/bank-reconciliation/components/InvoiceAllocationPanel";
 import {
   createTransactionId,
   getBankReconTransactionById,
@@ -54,6 +57,76 @@ function activity(
 function parseAmount(raw: string): number {
   const n = parseFloat(raw.replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
+}
+
+export function sumInvoiceAllocations(allocations: Record<string, string>): number {
+  return Object.values(allocations).reduce((sum, raw) => {
+    const n = parseAmount(raw);
+    return sum + (n > 0 ? n : 0);
+  }, 0);
+}
+
+export function validateInvoiceAllocations(
+  allocations: Record<string, string>,
+  invoices: UnpaidInvoiceOption[],
+  transactionAmount: number,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  let total = 0;
+
+  for (const inv of invoices) {
+    const key = String(inv.id);
+    const amt = parseAmount(allocations[key] ?? "");
+    if (amt <= 0) continue;
+    total += amt;
+    if (amt > inv.balance + 0.01) {
+      errors[`allocation_${key}`] = `Cannot exceed outstanding (${inv.balance.toFixed(2)})`;
+    }
+  }
+
+  if (total > transactionAmount + 0.01) {
+    errors.allocations = `Total allocation (${total.toFixed(2)}) exceeds transaction amount (${transactionAmount.toFixed(2)})`;
+  }
+
+  return errors;
+}
+
+function serializeInvoiceMatchingPayload(form: ManualTransactionFormState): string | null {
+  if (form.againstType !== "Invoice") return null;
+  const allocations: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(form.invoiceAllocations)) {
+    const amt = parseAmount(raw);
+    if (amt > 0) allocations[key] = amt;
+  }
+  if (Object.keys(allocations).length === 0) return null;
+  return JSON.stringify({ againstType: form.againstType, allocations });
+}
+
+function parseInvoiceMatchingPayload(payload: string | null | undefined): {
+  againstType: ManualAgainstType | null;
+  invoiceAllocations: Record<string, string>;
+} {
+  if (!payload?.trim()) {
+    return { againstType: null, invoiceAllocations: {} };
+  }
+  try {
+    const parsed = JSON.parse(payload) as {
+      againstType?: ManualAgainstType;
+      allocations?: Record<string, number>;
+    };
+    const invoiceAllocations: Record<string, string> = {};
+    if (parsed.allocations) {
+      for (const [key, val] of Object.entries(parsed.allocations)) {
+        if (val > 0) invoiceAllocations[key] = String(val);
+      }
+    }
+    return {
+      againstType: parsed.againstType ?? null,
+      invoiceAllocations,
+    };
+  } catch {
+    return { againstType: null, invoiceAllocations: {} };
+  }
 }
 
 export function formToDuplicateInput(
@@ -116,6 +189,7 @@ function buildReferenceFields(form: ManualTransactionFormState): Pick<
 function formToRecordFields(
   form: ManualTransactionFormState,
   opts: ManualSaveOptions,
+  outstandingInvoices: UnpaidInvoiceOption[] = [],
 ): Omit<BankReconTransactionRecord, "id" | "activity" | "manualTransactionNumber"> {
   const amount = parseAmount(form.amount);
   const deposit = form.direction === "Deposit" ? amount : 0;
@@ -132,17 +206,26 @@ function formToRecordFields(
   if (opts.duplicateOverrideReason) matchStatus = "Possible Duplicate";
 
   const narration = form.narration.trim() || form.bankNarration.trim() || "Manual bank entry";
+  const invoicePayload = serializeInvoiceMatchingPayload(form);
+  const allocationSummary =
+    form.againstType === "Invoice"
+      ? buildAllocationSummary(outstandingInvoices, form.invoiceAllocations)
+      : null;
+  const txnDate = form.transactionDate || form.bookDate || "";
 
   return {
     bankAccountId: form.bankAccountId,
     statementDate: "",
     valueDate: "",
-    bookDate: form.bookDate || null,
-    transactionDate: form.transactionDate || form.bookDate || null,
+    bookDate: txnDate || null,
+    transactionDate: txnDate || null,
     expectedClearingDate: form.expectedClearingDate || null,
     ...refs,
     narration,
     partyLedger: form.partyLedger.trim() || "—",
+    partyLedgerId: form.partyLedgerId,
+    againstType: form.againstType,
+    invoiceMatchingPayload: invoicePayload,
     deposit,
     withdrawal,
     runningBalance: null,
@@ -175,8 +258,13 @@ function formToRecordFields(
     expectedVoucherType: form.expectedVoucherType,
     existingVoucherRef: form.existingVoucherRef.trim() || null,
     customerVendorRef: form.customerVendorRef.trim() || null,
-    invoiceReference: form.invoiceReference.trim() || null,
-    purposeCategory: form.purposeCategory.trim() || null,
+    invoiceReference:
+      form.againstType === "Invoice"
+        ? allocationSummary?.label || form.invoiceReference.trim() || null
+        : form.againstType === "Advance"
+          ? "Advance"
+          : null,
+    purposeCategory: form.againstType || form.purposeCategory.trim() || null,
     costCentre: form.costCentre.trim() || null,
     internalRemarks: form.internalRemarks.trim() || null,
     bankNarration: form.bankNarration.trim() || null,
@@ -196,13 +284,28 @@ function formToRecordFields(
 export function validateManualForm(
   form: ManualTransactionFormState,
   asDraft: boolean,
+  outstandingInvoices: UnpaidInvoiceOption[] = [],
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!form.bankAccountId) errors.bankAccountId = "Bank account is required";
   if (!asDraft) {
-    if (!form.bookDate) errors.bookDate = "Book date is required";
+    if (!form.transactionDate) errors.transactionDate = "Transaction date is required";
     const amt = parseAmount(form.amount);
     if (amt <= 0) errors.amount = "Amount must be greater than zero";
+    if (!form.partyLedgerId) errors.partyLedgerId = "Party / ledger is required";
+
+    if (form.againstType === "Invoice") {
+      const allocErrors = validateInvoiceAllocations(
+        form.invoiceAllocations,
+        outstandingInvoices,
+        amt,
+      );
+      Object.assign(errors, allocErrors);
+      const totalAllocated = sumInvoiceAllocations(form.invoiceAllocations);
+      if (totalAllocated <= 0) {
+        errors.allocations = "Allocate at least one invoice amount";
+      }
+    }
   }
   return errors;
 }
@@ -210,8 +313,9 @@ export function validateManualForm(
 export function saveManualTransaction(
   form: ManualTransactionFormState,
   opts: ManualSaveOptions = {},
+  outstandingInvoices: UnpaidInvoiceOption[] = [],
 ): ManualSaveResult {
-  const errors = validateManualForm(form, Boolean(opts.asDraft));
+  const errors = validateManualForm(form, Boolean(opts.asDraft), outstandingInvoices);
   if (Object.keys(errors).length > 0) {
     return { ok: false, error: Object.values(errors)[0] };
   }
@@ -227,7 +331,7 @@ export function saveManualTransaction(
   }
 
   const user = opts.user ?? CURRENT_USER;
-  const fields = formToRecordFields(form, { ...opts, user });
+  const fields = formToRecordFields(form, { ...opts, user }, outstandingInvoices);
   const mbtNumber = nextManualTransactionNumber(form.bankAccountId);
 
   const events: BankReconActivityEvent[] = [];
@@ -258,6 +362,12 @@ export function saveManualTransaction(
 export function recordToForm(record: BankReconTransactionRecord): ManualTransactionFormState {
   const direction = record.deposit > 0 ? "Deposit" : "Withdrawal";
   const amount = record.deposit || record.withdrawal;
+  const parsedPayload = parseInvoiceMatchingPayload(record.invoiceMatchingPayload);
+  const againstType =
+    (record.againstType as ManualAgainstType | null) ??
+    parsedPayload.againstType ??
+    (record.invoiceReference ? "Invoice" : record.purposeCategory === "Advance" ? "Advance" : "On Account");
+
   return {
     bankAccountId: record.bankAccountId,
     direction,
@@ -276,6 +386,9 @@ export function recordToForm(record: BankReconTransactionRecord): ManualTransact
     narration: record.narration,
     partyType: (record.partyType as ManualTransactionFormState["partyType"]) ?? "Unknown",
     partyLedger: record.partyLedger === "—" ? "" : record.partyLedger,
+    partyLedgerId: record.partyLedgerId ?? null,
+    againstType,
+    invoiceAllocations: parsedPayload.invoiceAllocations,
     expectedVoucherType: record.expectedVoucherType ?? "Unknown",
     existingVoucherRef: record.existingVoucherRef ?? "",
     customerVendorRef: record.customerVendorRef ?? "",
@@ -324,12 +437,13 @@ export function updateManualTransaction(
   id: string,
   form: ManualTransactionFormState,
   opts: { duplicateOverrideReason?: string; user?: string } = {},
+  outstandingInvoices: UnpaidInvoiceOption[] = [],
 ): ManualSaveResult {
   const existing = getBankReconTransactionById(id);
   if (!existing) return { ok: false, error: "Transaction not found" };
   if (!canEditManualTransaction(existing)) return { ok: false, error: "This transaction cannot be edited" };
 
-  const errors = validateManualForm(form, existing.manualEntryStatus === "Draft");
+  const errors = validateManualForm(form, existing.manualEntryStatus === "Draft", outstandingInvoices);
   if (Object.keys(errors).length > 0) {
     return { ok: false, error: Object.values(errors)[0] };
   }
@@ -349,7 +463,7 @@ export function updateManualTransaction(
     asDraft: existing.manualEntryStatus === "Draft",
     duplicateOverrideReason: opts.duplicateOverrideReason ?? existing.possibleDuplicateOverrideReason ?? undefined,
     user,
-  });
+  }, outstandingInvoices);
 
   const track = (label: string, oldVal: string | number | null | undefined, newVal: string | number | null | undefined) => {
     const o = oldVal ?? "—";
@@ -381,6 +495,9 @@ export function updateManualTransaction(
     ...(linked
       ? {
           partyLedger: newFields.partyLedger,
+          partyLedgerId: newFields.partyLedgerId,
+          againstType: newFields.againstType,
+          invoiceMatchingPayload: newFields.invoiceMatchingPayload,
           partyType: newFields.partyType,
           expectedVoucherType: newFields.expectedVoucherType,
           internalRemarks: newFields.internalRemarks,

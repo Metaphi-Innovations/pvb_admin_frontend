@@ -9,6 +9,7 @@ import { useAccountsColumnFilterContext } from "./AccountsColumnFilterContext";
 import type {
   AccountsColumnFilterState,
   AccountsColumnFilterType,
+  ColumnValueOption,
 } from "@/lib/accounts/column-filter-types";
 import { isColumnFilterActive } from "@/lib/accounts/column-filter-engine";
 
@@ -25,11 +26,12 @@ export interface AccountsColumnHeaderProps {
   filterType?: AccountsColumnFilterType;
   filterValue?: AccountsColumnFilterState;
   onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
+  /** @deprecated Use valueOptions */
   uniqueValues?: string[];
   statusOptions?: string[];
+  optionLabels?: Record<string, string>;
   className?: string;
-  /** Value-only filter UI (no operator dropdown). Defaults from column filter context. */
-  simpleFilter?: boolean;
 }
 
 /** Excel-style column header — label + sort + filter in compact ERP layout */
@@ -46,10 +48,11 @@ export function AccountsColumnHeader({
   filterType: filterTypeProp = "text",
   filterValue: filterValueProp,
   onFilterChange: onFilterChangeProp,
+  valueOptions: valueOptionsProp,
   uniqueValues: uniqueValuesProp,
   statusOptions: statusOptionsProp,
+  optionLabels: optionLabelsProp,
   className,
-  simpleFilter: simpleFilterProp,
 }: AccountsColumnHeaderProps) {
   const ctx = useAccountsColumnFilterContext();
   const fromCtx =
@@ -60,7 +63,6 @@ export function AccountsColumnHeader({
           sortable: sortableProp,
           filterable: filterableProp,
           statusOptions: statusOptionsProp?.length ? statusOptionsProp : undefined,
-          simpleFilter: simpleFilterProp,
         })
       : null;
 
@@ -73,9 +75,9 @@ export function AccountsColumnHeader({
   const filterType = filterTypeProp;
   const filterValue = filterValueProp ?? fromCtx?.filterValue;
   const onFilterChange = onFilterChangeProp ?? fromCtx?.onFilterChange;
-  const uniqueValues = uniqueValuesProp ?? fromCtx?.uniqueValues ?? [];
+  const valueOptions = valueOptionsProp ?? fromCtx?.valueOptions ?? [];
   const statusOptions = statusOptionsProp ?? fromCtx?.statusOptions ?? [];
-  const simpleFilter = simpleFilterProp ?? fromCtx?.simpleFilter ?? true;
+  const optionLabels = optionLabelsProp ?? fromCtx?.optionLabels ?? {};
 
   const sorted = sortable && sortKey === colKey;
   const filtered = isColumnFilterActive(filterValue);
@@ -130,9 +132,10 @@ export function AccountsColumnHeader({
             filterType={filterType}
             value={filterValue}
             onChange={onFilterChange}
-            uniqueValues={uniqueValues}
+            valueOptions={valueOptions}
+            uniqueValues={uniqueValuesProp}
             statusOptions={statusOptions}
-            simpleFilter={simpleFilter}
+            optionLabels={optionLabels}
           />
         )}
       </div>

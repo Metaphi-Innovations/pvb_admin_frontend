@@ -35,6 +35,7 @@ import {
   getBankBookAccountOptions,
   type BankBookDisplayRow,
 } from "./bank-book-data";
+import { ensureBankAccountsReady } from "@/lib/accounts/bank-accounts-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { exportBankBookToExcel, exportBankBookToPdf } from "./bank-book-export";
 import { BankBookTable } from "./BankBookTable";
@@ -52,6 +53,7 @@ function BankBookPageContent() {
   const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
+    ensureBankAccountsReady();
     setRefreshKey((k) => k + 1);
   }, [sectionRefresh]);
 
@@ -135,6 +137,8 @@ function BankBookPageContent() {
       voucherType: { type: "text" as const },
       particular: { type: "text" as const },
       narration: { type: "text" as const },
+      reference: { type: "text" as const },
+      status: { type: "text" as const },
       receipt: { type: "amount" as const },
       payment: { type: "amount" as const },
     }),
@@ -373,7 +377,7 @@ function BankBookPageBody({
           </div>
         ) : (
           <>
-            {statement && <AccountsSummaryBar items={summaryItems} className="lg:grid-cols-3" />}
+            {statement && <AccountsSummaryBar items={summaryItems} />}
 
             {showNoTransactions ? (
               <div className="flex-1 flex items-center justify-center p-8">

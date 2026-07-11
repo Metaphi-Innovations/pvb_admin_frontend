@@ -100,7 +100,7 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
     label: "GST Ledger",
     source: "GST Master",
     metadata: ["gst_input", "gst_output", "gst_payable", "gst_receivable", "gst_duties"],
-    stableCodes: ["1219", "23111"],
+    stableCodes: ["23110", "23111"],
     aliases: ["gst input", "gst input credit", "gst output", "gst payable", "gst receivable"],
   },
   {
@@ -108,7 +108,7 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
     label: "TDS Ledger",
     source: "TDS Master",
     metadata: ["tds_payable", "tds_receivable"],
-    stableCodes: ["1220", "23112"],
+    stableCodes: ["1219", "23112"],
     aliases: ["tds payable", "tds receivable"],
   },
   {

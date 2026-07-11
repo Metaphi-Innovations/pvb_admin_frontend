@@ -15,8 +15,10 @@ export function ReportMoreFilters({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-0.5", className)}>
-      <span className={ACCOUNTS_FILTER_LABEL_CLASS}>More Filters</span>
+    <div className={cn("space-y-0.5 flex-shrink-0", className)}>
+      <span className={cn(ACCOUNTS_FILTER_LABEL_CLASS, "invisible select-none")} aria-hidden>
+        More Filters
+      </span>
       <Popover>
         <PopoverTrigger asChild>
           <button

@@ -110,7 +110,7 @@ export function AccountingReportPage({
             onRemoveSort={col.removeSort}
             columnFilters={col.columnFilters}
             onColumnFilterChange={col.setColumnFilter}
-            getUniqueValues={col.getUniqueValues}
+            getValueCounts={col.getValueCounts}
           />
         </AccountsTableScroll>
       </AccountsListingTableCard>

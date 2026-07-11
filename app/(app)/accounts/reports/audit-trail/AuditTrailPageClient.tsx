@@ -616,7 +616,7 @@ function AuditTrailPageBody({
               })}
             </div>
             <AccountsSummaryBar
-              className="border-t border-border/60 lg:grid-cols-4"
+              className="border-t border-border/60"
               items={[
                 { label: "Total Records", value: String(allRows.length) },
                 { label: "Filtered Results", value: String(columnFilteredRows.length) },

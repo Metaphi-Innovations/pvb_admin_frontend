@@ -64,6 +64,8 @@ export interface CashBookRawTransaction {
   particular: string;
   particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   lineOrder: number;
@@ -79,6 +81,8 @@ export interface CashBookDisplayRow {
   particular: string;
   particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   runningBalance: number;
@@ -113,12 +117,20 @@ export interface CashBookFilters {
 }
 
 export function getCashBookLedgers(): CashBookLedgerOption[] {
-  return getLedgersUnderSubGroupName("Cash-in-Hand").map((l) => ({
-    id: String(l.id),
-    ledgerId: l.id,
-    ledgerName: l.accountName,
-    ledgerCode: l.accountCode,
-  }));
+  return getLedgersUnderSubGroupName("Cash-in-Hand")
+    .map((l) => ({
+      id: String(l.id),
+      ledgerId: l.id,
+      ledgerName: l.accountName,
+      ledgerCode: l.accountCode,
+    }))
+    .sort((a, b) => {
+      const aPetty = a.ledgerName.toLowerCase().includes("office petty");
+      const bPetty = b.ledgerName.toLowerCase().includes("office petty");
+      if (aPetty && !bPetty) return -1;
+      if (!aPetty && bPetty) return 1;
+      return a.ledgerName.localeCompare(b.ledgerName);
+    });
 }
 
 export function getCashBookLedgerById(ledgerId: string): CashBookLedgerOption | null {
@@ -172,6 +184,8 @@ function extractCashTransactions(ledgerId: number): CashBookRawTransaction[] {
           particular: resolveParticular(v, ledgerId, lineOrder),
           particularLedgerId: resolveParticularLedgerId(v, ledgerId, lineOrder),
           narration: v.narration?.trim() || "—",
+          reference: v.referenceNo || "—",
+          status: v.status === "posted" ? "Posted" : v.status,
           receipt: debit,
           payment: credit,
           lineOrder,
@@ -272,6 +286,8 @@ export function buildCashBookStatement(
       particular: t.particular,
       particularLedgerId: t.particularLedgerId,
       narration: t.narration,
+      reference: t.reference,
+      status: t.status,
       receipt: t.receipt,
       payment: t.payment,
       runningBalance: bal.amount,
@@ -304,6 +320,8 @@ export function buildCashBookStatement(
     particular: "Opening Cash Balance",
     particularLedgerId: null,
     narration: "Balance brought forward",
+    reference: "—",
+    status: "—",
     receipt: 0,
     payment: 0,
     runningBalance: periodOpening.amount,

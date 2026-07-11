@@ -8,6 +8,7 @@ import type {
   AccountsColumnFilters,
   AccountsColumnFilterState,
   AccountsColumnFilterType,
+  ColumnValueOption,
 } from "@/lib/accounts/column-filter-types";
 import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { useAccountsColumnFilterContext } from "@/components/accounts/AccountsColumnFilterContext";
@@ -207,6 +208,8 @@ export interface AccountsColumnarTableFilterProps {
   onRemoveSort?: () => void;
   columnFilters?: AccountsColumnFilters;
   onColumnFilterChange?: (key: string, value: AccountsColumnFilterState | undefined) => void;
+  getValueCounts?: (columnKey: string) => ColumnValueOption[];
+  /** @deprecated Use getValueCounts */
   getUniqueValues?: (columnKey: string) => string[];
 }
 
@@ -226,6 +229,7 @@ export function AccountsColumnarTable({
   onRemoveSort,
   columnFilters,
   onColumnFilterChange,
+  getValueCounts,
   getUniqueValues,
 }: {
   columns: AccountsColumnDef[];
@@ -239,6 +243,20 @@ export function AccountsColumnarTable({
   /** Column keys that render as clickable links (e.g. voucher no.) */
   clickableColumnKeys?: string[];
 } & AccountsColumnarTableFilterProps) {
+  const ctx = useAccountsColumnFilterContext();
+  const resolvedSortKey = sortKey ?? ctx?.sortKey ?? "";
+  const resolvedSortDir = sortDir ?? ctx?.sortDir ?? "asc";
+  const resolvedOnSort = onSort ?? ctx?.handleSort;
+  const resolvedOnRemoveSort = onRemoveSort ?? ctx?.removeSort;
+  const resolvedColumnFilters = columnFilters ?? ctx?.columnFilters;
+  const resolvedOnColumnFilterChange =
+    onColumnFilterChange ?? (ctx ? (key: string, v: AccountsColumnFilterState | undefined) => ctx.setColumnFilter(key, v) : undefined);
+  const resolvedValueOptions =
+    getValueCounts ??
+    (getUniqueValues
+      ? (key: string) => getUniqueValues(key).map((value) => ({ value, count: 0 }))
+      : ctx?.getValueCounts);
+
   return (
     <AccountsTable minWidth={minWidth} className={className}>
       <AccountsTableHead>
@@ -249,18 +267,18 @@ export function AccountsColumnarTable({
               label={c.label}
               colKey={c.key}
               align={c.align ?? "left"}
-              sortable={c.sortable !== false && Boolean(onSort)}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={onSort}
-              onRemoveSort={onRemoveSort}
-              filterable={c.filterable !== false && Boolean(onColumnFilterChange)}
+              sortable={c.sortable !== false && Boolean(resolvedOnSort)}
+              sortKey={resolvedSortKey}
+              sortDir={resolvedSortDir}
+              onSort={resolvedOnSort}
+              onRemoveSort={resolvedOnRemoveSort}
+              filterable={c.filterable !== false && Boolean(resolvedOnColumnFilterChange)}
               filterType={c.filterType ?? (c.money ? "amount" : "text")}
-              filterValue={columnFilters?.[c.key]}
+              filterValue={resolvedColumnFilters?.[c.key]}
               onFilterChange={
-                onColumnFilterChange ? (v) => onColumnFilterChange(c.key, v) : undefined
+                resolvedOnColumnFilterChange ? (v) => resolvedOnColumnFilterChange(c.key, v) : undefined
               }
-              uniqueValues={getUniqueValues?.(c.key)}
+              valueOptions={resolvedValueOptions?.(c.key)}
               statusOptions={c.statusOptions}
             />
           ))}
@@ -322,7 +340,6 @@ export interface AccountsRichColumnDef<T> {
   filterable?: boolean;
   filterType?: AccountsColumnFilterType;
   statusOptions?: string[];
-  simpleFilter?: boolean;
   render: (row: T, index: number) => React.ReactNode;
 }
 
@@ -346,7 +363,6 @@ export function AccountsRichTable<T>({
   onRemoveSort,
   columnFilters,
   onColumnFilterChange,
-  getUniqueValues,
   columnFilterConfig,
 }: {
   columns: AccountsRichColumnDef<T>[];
@@ -366,8 +382,7 @@ export function AccountsRichTable<T>({
   const resolvedColumnFilters = columnFilters ?? ctx?.columnFilters;
   const resolvedOnColumnFilterChange =
     onColumnFilterChange ?? (ctx ? (key: string, v: AccountsColumnFilterState | undefined) => ctx.setColumnFilter(key, v) : undefined);
-  const resolvedGetUniqueValues = getUniqueValues ?? ctx?.getUniqueValues;
-  const resolvedSimpleFilter = ctx?.simpleColumnFilters ?? true;
+  const resolvedGetValueCounts = ctx?.getValueCounts;
 
   return (
     <AccountsTable minWidth={minWidth} className={className}>
@@ -407,12 +422,9 @@ export function AccountsRichTable<T>({
                     ? (v) => resolvedOnColumnFilterChange(c.key, v)
                     : undefined
                 }
-                uniqueValues={resolvedGetUniqueValues?.(c.key)}
+                valueOptions={resolvedGetValueCounts?.(c.key)}
                 statusOptions={c.statusOptions ?? columnFilterConfig?.[c.key]?.options}
-                simpleFilter={
-                  c.simpleFilter ??
-                  (columnFilterConfig?.[c.key]?.advancedFilters ? false : resolvedSimpleFilter)
-                }
+                optionLabels={columnFilterConfig?.[c.key]?.optionLabels}
                 className={c.className}
               />
             );

@@ -1,19 +1,25 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsRouteLoading } from "@/components/accounts/AccountsRouteLoading";
 import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "../masters/masters-data";
 import { VoucherListClient } from "./components/VoucherListClient";
-import { VoucherEntryClient } from "./components/VoucherEntryClient";
-import { PaymentVoucherForm } from "./components/PaymentVoucherForm";
-import { ReceiptVoucherForm } from "./components/ReceiptVoucherForm";
-import { ContraVoucherForm } from "./components/ContraVoucherForm";
 import { voucherTypeToUrl, parseVoucherTypeParam } from "./voucher-routes";
+
+const VoucherNewEntry = dynamic(
+  () => import("./VoucherNewEntry").then((m) => ({ default: m.VoucherNewEntry })),
+  {
+    ssr: false,
+    loading: () => <AccountsRouteLoading label="Voucher" />,
+  },
+);
 
 const VOUCHER_DESCRIPTIONS: Record<VoucherTypeCode, string> = {
   journal: "Record debit and credit entries. Total debit must equal total credit.",
@@ -57,19 +63,7 @@ export default function VouchersHubPageClient() {
   const label = VOUCHER_TYPE_LABELS[activeTab];
 
   if (mode === "new") {
-    if (activeTab === "journal") {
-      return <VoucherEntryClient voucherType="journal" onDone={closeNew} />;
-    }
-    if (activeTab === "payment") {
-      return <PaymentVoucherForm onDone={closeNew} />;
-    }
-    if (activeTab === "receipt") {
-      return <ReceiptVoucherForm onDone={closeNew} />;
-    }
-    if (activeTab === "contra") {
-      return <ContraVoucherForm onDone={closeNew} />;
-    }
-    return <VoucherEntryClient voucherType={activeTab} onDone={closeNew} />;
+    return <VoucherNewEntry activeTab={activeTab} onDone={closeNew} />;
   }
 
   return (

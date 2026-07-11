@@ -24,8 +24,6 @@ import {
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
 import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
-import { buildBundledCoaDemoLedgers } from "./coa-demo-bundle";
-import { getBundledDemoTransactions } from "./coa-demo-transactions";
 
 export type CoaLedgerSourceLabel =
   | "Manual"
@@ -204,26 +202,7 @@ function coaListingMovementMapForRange(
   from: string,
   to: string,
 ): Map<number, { totalDebit: number; totalCredit: number }> {
-  const map = ledgerMovementMapForRange(from, to);
-
-  for (const ledger of buildBundledCoaDemoLedgers()) {
-    const rows = getBundledDemoTransactions(ledger.id);
-    let totalDebit = 0;
-    let totalCredit = 0;
-    for (const row of rows) {
-      if (row.date < from || row.date > to) continue;
-      totalDebit += row.debit;
-      totalCredit += row.credit;
-    }
-    if (totalDebit === 0 && totalCredit === 0) continue;
-    const cur = map.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
-    map.set(ledger.id, {
-      totalDebit: cur.totalDebit + totalDebit,
-      totalCredit: cur.totalCredit + totalCredit,
-    });
-  }
-
-  return map;
+  return ledgerMovementMapForRange(from, to);
 }
 
 export interface CoaListingRow {

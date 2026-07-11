@@ -4,6 +4,7 @@ import React, { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { drCrSideFilterValue } from "@/lib/accounts/column-filter-display";
 import { DrCrSideBadge } from "@/components/accounts/DrCrSideBadge";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
 import type { CoaLedgerDetailRow } from "../coa-demo-accounting";
@@ -150,7 +151,7 @@ function CoaLedgerDetailTableBody({
 export function CoaLedgerDetailTable({
   rows,
   footer,
-  emptyLabel = "No transactions for this ledger in the selected period.",
+  emptyLabel = "No transactions found for this ledger.",
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
@@ -162,6 +163,14 @@ export function CoaLedgerDetailTable({
         return particularsLabel(row);
       case "date":
         return row.date;
+      case "runningBalanceType":
+        return drCrSideFilterValue({
+          debit: row.debit,
+          credit: row.credit,
+          runningBalanceType: row.runningBalanceType,
+          runningBalance: row.runningBalance,
+          isBalanceRow: Boolean(row.isOpeningRow),
+        });
       default:
         return (row as unknown as Record<string, unknown>)[key];
     }

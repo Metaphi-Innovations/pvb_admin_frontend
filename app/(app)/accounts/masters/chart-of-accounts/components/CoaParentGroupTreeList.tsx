@@ -11,14 +11,17 @@ import {
   parentGroupNodeHasChildren,
 } from "../chart-of-accounts-data";
 import {
-  COA_SIDEBAR_ROW_CLASS,
+  COA_TREE_CHEVRON_WIDTH_CLASS,
   coaNodeShowsExpandChevron,
   coaSidebarIconSizeClass,
   coaSidebarIndentPx,
   coaSidebarNodeIconClass,
+  coaSidebarRowClass,
   resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
 } from "./coa-tree-visual";
+import { CoaTreeNodeLabel } from "./CoaTreeNodeLabel";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface ParentGroupTreeNodeProps {
   node: ChartOfAccount;
@@ -84,17 +87,20 @@ const ParentGroupTreeNode = memo(function ParentGroupTreeNodeComponent({
   return (
     <div>
       <div
+        data-coa-tree-row
         className={cn(
-          "group flex items-stretch transition-colors duration-100 mx-0 rounded-sm",
+          "group flex w-full min-w-0 items-stretch transition-colors duration-100 mx-0 rounded-sm",
           isPrimaryHead && depth === 0 && !isFirstRoot && "border-t border-border/50 mt-1.5 pt-0.5",
           isSelected ? "bg-brand-50" : isLedger ? "hover:bg-muted/20" : "hover:bg-muted/40",
         )}
-        style={{
-          minHeight: 30,
-          paddingLeft: coaSidebarIndentPx(depth),
-        }}
+        style={{ minHeight: 30 }}
       >
-        <div className="flex gap-0.5 flex-1 min-w-0 items-center pl-0">
+        <div
+          className="shrink-0"
+          style={{ width: coaSidebarIndentPx(depth) }}
+          aria-hidden
+        />
+        <div className="flex flex-1 min-w-0 items-center gap-0.5 pr-0.5">
           <button
             type="button"
             onClick={(e) => {
@@ -102,7 +108,8 @@ const ParentGroupTreeNode = memo(function ParentGroupTreeNodeComponent({
               if (showExpandChevron) onToggle(node.id);
             }}
             className={cn(
-              "flex items-center justify-center flex-shrink-0 rounded transition-colors w-5 h-5 -ml-0.5",
+              "flex items-center justify-center rounded transition-colors h-5",
+              COA_TREE_CHEVRON_WIDTH_CLASS,
               showExpandChevron
                 ? "text-muted-foreground/70 hover:text-foreground"
                 : "opacity-0 pointer-events-none",
@@ -124,9 +131,8 @@ const ParentGroupTreeNode = memo(function ParentGroupTreeNodeComponent({
             aria-selected={isSelectable ? isSelected : undefined}
             data-parent-option-selected={isSelected ? "true" : undefined}
             onClick={handleRowClick}
-            title={node.accountName}
             className={cn(
-              "flex flex-1 min-w-0 text-left items-center gap-1 py-1 pr-2",
+              "flex flex-1 min-w-0 text-left items-center gap-1 py-1 pr-1",
               isLedger
                 ? "cursor-default"
                 : isSelectable
@@ -138,24 +144,22 @@ const ParentGroupTreeNode = memo(function ParentGroupTreeNodeComponent({
           >
             <Icon
               className={cn(
-                "flex-shrink-0",
+                "shrink-0",
                 coaSidebarIconSizeClass(node, records),
                 coaSidebarNodeIconClass(node, visualLevel, isSelected, records),
               )}
               strokeWidth={visualLevel === "primary_head" ? 2.25 : 2}
             />
-            <span
+            <CoaTreeNodeLabel
+              name={node.accountName}
               className={cn(
-                "flex-1 min-w-0 truncate leading-tight",
                 isSelected
                   ? "font-semibold text-brand-800"
-                  : COA_SIDEBAR_ROW_CLASS[visualLevel],
+                  : coaSidebarRowClass(visualLevel),
                 !isSelectable && !isLedger && "text-foreground/80",
                 isLedger && "text-foreground/75",
               )}
-            >
-              {node.accountName}
-            </span>
+            />
             {isSelected && <Check className="w-4 h-4 text-brand-600 shrink-0" />}
           </button>
         </div>
@@ -271,23 +275,25 @@ export function CoaParentGroupTreeList({
   }
 
   return (
-    <div className="py-1 px-0.5 accounts-coa-tree" role="listbox">
-      {roots.map((root, idx) => (
-        <ParentGroupTreeNode
-          key={root.id}
-          node={root}
-          depth={0}
-          isFirstRoot={idx === 0}
-          isLastSibling={idx === roots.length - 1}
-          records={records}
-          expandedIds={expandedIds}
-          selectedId={selectedId}
-          selectableIds={selectableIds}
-          visibleIds={visibleIds}
-          onToggle={toggle}
-          onSelect={onSelect}
-        />
-      ))}
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="py-1 px-0.5 accounts-coa-tree" role="listbox">
+        {roots.map((root, idx) => (
+          <ParentGroupTreeNode
+            key={root.id}
+            node={root}
+            depth={0}
+            isFirstRoot={idx === 0}
+            isLastSibling={idx === roots.length - 1}
+            records={records}
+            expandedIds={expandedIds}
+            selectedId={selectedId}
+            selectableIds={selectableIds}
+            visibleIds={visibleIds}
+            onToggle={toggle}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    </TooltipProvider>
   );
 }

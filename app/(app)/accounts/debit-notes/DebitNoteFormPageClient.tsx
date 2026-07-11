@@ -45,6 +45,9 @@ import {
   type VendorTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 import { Download, Eye, Save, Trash2, Upload } from "lucide-react";
+import { getPurchaseInvoiceById } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
+import { resolveWarehouseFromGrnNo } from "@/lib/accounts/bank-warehouse-mapping";
+import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
 
@@ -91,6 +94,7 @@ export default function DebitNoteFormPageClient({
   const [remarks, setRemarks] = useState("");
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
 
   const [referenceNo, setReferenceNo] = useState("");
   const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<number | null>(null);
@@ -211,6 +215,7 @@ export default function DebitNoteFormPageClient({
     setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
     setReason(rec.reason);
     setRemarks(rec.remarks);
+    setBankAccountId(rec.bankAccountId ?? null);
     setAttachments(rec.attachments ?? []);
     if (fresh) {
       setReferenceNo(rec.referenceNo ?? "");
@@ -247,6 +252,16 @@ export default function DebitNoteFormPageClient({
     return "";
   };
 
+  const warehouseRef = useMemo(() => {
+    if (referencePreview?.sourceGrnNo) {
+      return resolveWarehouseFromGrnNo(referencePreview.sourceGrnNo);
+    }
+    if (sourceInvoiceId) {
+      return getPurchaseInvoiceById(sourceInvoiceId)?.warehouse ?? null;
+    }
+    return null;
+  }, [referencePreview?.sourceGrnNo, sourceInvoiceId]);
+
   const buildInput = (status: NoteWorkflowStatus) => {
     if (isFresh) {
       return {
@@ -275,6 +290,8 @@ export default function DebitNoteFormPageClient({
         attachments,
         status,
         source: "manual" as const,
+        warehouse: warehouseRef ?? undefined,
+        bankAccountId,
       };
     }
 
@@ -302,6 +319,8 @@ export default function DebitNoteFormPageClient({
       source: "purchase_return" as const,
       sourceReturnId: sourceReturnId || undefined,
       sourceReturnNo: sourceReturnNo || undefined,
+      warehouse: warehouseRef ?? undefined,
+      bankAccountId,
     };
   };
 
@@ -499,6 +518,16 @@ export default function DebitNoteFormPageClient({
                   />
                 </div>
               )}
+              {warehouseRef ? (
+                <div className="sm:col-span-2">
+                  <WarehouseMappedBankAccountSelect
+                    warehouseRef={warehouseRef}
+                    value={bankAccountId}
+                    onChange={(id) => setBankAccountId(id)}
+                    label="Bank Account (for payment / print)"
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
 

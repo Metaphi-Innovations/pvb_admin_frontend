@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
 import { VoucherEntryBlock } from "@/components/accounts/voucher-form/VoucherEntryBlock";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import type { VoucherFormEntry } from "@/lib/accounts/voucher-form-model";
@@ -11,6 +12,9 @@ import {
 import type { VoucherFormTypeConfig } from "@/lib/accounts/voucher-form-config";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
+import { isBankAccountLedger } from "@/lib/accounts/bank-coa-utils";
+import { getBankAccountByLedgerId } from "@/lib/accounts/bank-accounts-data";
+import { isBankAccountMappedToWarehouse, resolveWarehouseId } from "@/lib/accounts/bank-warehouse-mapping";
 
 export interface VoucherDualEntryPanelProps {
   entries: VoucherFormEntry[];
@@ -22,6 +26,8 @@ export interface VoucherDualEntryPanelProps {
   /** Payment TDS — shown in voucher entry preview only */
   tdsAmount?: number;
   onQuickAddSuccess?: () => void;
+  /** Limits bank ledgers to accounts mapped to this warehouse. */
+  warehouseRef?: string | number | null;
 }
 
 export function VoucherDualEntryPanel({
@@ -33,9 +39,12 @@ export function VoucherDualEntryPanel({
   onEntriesChange,
   tdsAmount = 0,
   onQuickAddSuccess,
+  warehouseRef,
 }: VoucherDualEntryPanelProps) {
   const debitEntry = getFormEntry(entries, "DEBIT");
   const creditEntry = getFormEntry(entries, "CREDIT");
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
   const debitLedger = debitEntry?.accountId ?? null;
   const creditLedger = creditEntry?.accountId ?? null;
@@ -65,10 +74,54 @@ export function VoucherDualEntryPanel({
     onEntriesChange(next);
   };
 
-  const debitFilter = (ledger: ChartOfAccount) =>
-    config.debitAccountFilter(ledger, coaRecords, creditEntry?.accountId);
-  const creditFilter = (ledger: ChartOfAccount) =>
-    config.creditAccountFilter(ledger, coaRecords, debitEntry?.accountId);
+  const applyWarehouseBankFilter = useCallback(
+    (ledger: ChartOfAccount) => {
+      const warehouseId = resolveWarehouseId(warehouseRef);
+      if (warehouseId == null) return true;
+      if (!isBankAccountLedger(ledger)) return true;
+      const master = getBankAccountByLedgerId(ledger.id);
+      if (!master) return false;
+      return isBankAccountMappedToWarehouse(master.mappedWarehouseIds, warehouseId, master.status);
+    },
+    [warehouseRef],
+  );
+
+  const debitFilter = useCallback(
+    (ledger: ChartOfAccount) => {
+      if (!config.debitAccountFilter(ledger, coaRecords, creditEntry?.accountId)) return false;
+      return applyWarehouseBankFilter(ledger);
+    },
+    [config, coaRecords, creditEntry?.accountId, applyWarehouseBankFilter],
+  );
+  const creditFilter = useCallback(
+    (ledger: ChartOfAccount) => {
+      if (!config.creditAccountFilter(ledger, coaRecords, debitEntry?.accountId)) return false;
+      return applyWarehouseBankFilter(ledger);
+    },
+    [config, coaRecords, debitEntry?.accountId, applyWarehouseBankFilter],
+  );
+
+  useEffect(() => {
+    const warehouseId = resolveWarehouseId(warehouseRef);
+    if (warehouseId == null) return;
+    let next = entriesRef.current;
+    let changed = false;
+    for (const side of ["DEBIT", "CREDIT"] as const) {
+      const entry = getFormEntry(next, side);
+      if (!entry?.accountId) continue;
+      const ledger = coaRecords.find((r) => r.id === entry.accountId);
+      if (!ledger || !isBankAccountLedger(ledger)) continue;
+      const master = getBankAccountByLedgerId(ledger.id);
+      if (
+        !master ||
+        !isBankAccountMappedToWarehouse(master.mappedWarehouseIds, warehouseId, master.status)
+      ) {
+        next = updateFormEntry(next, side, { accountId: null, accountName: "" });
+        changed = true;
+      }
+    }
+    if (changed) onEntriesChange(next);
+  }, [warehouseRef, coaRecords, onEntriesChange]);
 
   const debitBlock = debitEntry ? (
     <VoucherEntryBlock

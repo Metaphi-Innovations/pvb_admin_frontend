@@ -82,6 +82,10 @@ import {
   resolveInvoiceAdditionalExpenses,
   type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
+import {
+  WarehouseMappedBankAccountSelect,
+  getBankAccountPrintDetails,
+} from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -151,6 +155,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [dispatchDate, setDispatchDate] = useState("");
   const [branch, setBranch] = useState("Head Office");
   const [warehouse, setWarehouse] = useState("Central Warehouse");
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState([createEmptyLine()]);
   const [attachments] = useState<InvoiceAttachment[]>([]);
@@ -422,6 +427,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setDispatchDate(dispatch?.dispatchDate ?? "");
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
+    setBankAccountId(rec.bankAccountId ?? null);
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
     setInvoiceType(rec.invoiceType ?? (rec.invoiceNo.startsWith("STI-") ? "stock_transfer" : "sales"));
@@ -623,6 +629,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     dispatchNo: dispatchRef.trim(),
     branch: branch.trim(),
     warehouse: warehouse.trim(),
+    bankAccountId,
     salesperson: salesperson.trim(),
     customerNotes: customerNotes.trim(),
     termsAndConditions: termsAndConditions.trim(),
@@ -812,6 +819,21 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               )}
             </div>
           )}
+          <div className="mt-3 max-w-md">
+            <WarehouseMappedBankAccountSelect
+              warehouseRef={warehouse}
+              value={bankAccountId}
+              onChange={(id) => setBankAccountId(id)}
+              label="Bank Account (for payment / print)"
+            />
+            {bankAccountId != null && getBankAccountPrintDetails(bankAccountId) && (
+              <p className="text-[11px] text-muted-foreground mt-1 font-mono">
+                {getBankAccountPrintDetails(bankAccountId)!.bankName} ·{" "}
+                {getBankAccountPrintDetails(bankAccountId)!.accountNumber} · IFSC{" "}
+                {getBankAccountPrintDetails(bankAccountId)!.ifsc}
+              </p>
+            )}
+          </div>
         </InvoiceFormCard>
 
         {!isStockTransferInvoice && (

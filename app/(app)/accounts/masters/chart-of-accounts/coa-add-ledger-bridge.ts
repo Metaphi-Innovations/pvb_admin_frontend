@@ -15,8 +15,6 @@ import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
 import { requestCoaMasterLinkedForm } from "./coa-master-linked-form-bridge";
 import { requestCoaBankForm } from "./coa-bank-form-bridge";
 
-const CHART_OF_ACCOUNTS_PATH = "/accounts/masters/chart-of-accounts";
-
 type CoaAddLedgerHandlers = {
   addUnderParent: ((parentGroupId: number) => void) | null;
   openGlobal: ((preferredParentId?: number | null) => void) | null;
@@ -27,8 +25,28 @@ let handlers: CoaAddLedgerHandlers = {
   openGlobal: null,
 };
 
+type PendingAddLedger =
+  | { kind: "under"; parentGroupId: number }
+  | { kind: "global"; preferredParentId?: number | null };
+
+let pending: PendingAddLedger | null = null;
+
+function flushPendingAddLedger(): void {
+  if (!pending) return;
+  if (pending.kind === "under" && handlers.addUnderParent) {
+    handlers.addUnderParent(pending.parentGroupId);
+    pending = null;
+    return;
+  }
+  if (pending.kind === "global" && handlers.openGlobal) {
+    handlers.openGlobal(pending.preferredParentId);
+    pending = null;
+  }
+}
+
 export function registerCoaAddLedgerHandlers(next: CoaAddLedgerHandlers): void {
   handlers = next;
+  flushPendingAddLedger();
 }
 
 /** @deprecated Use registerCoaAddLedgerHandlers */
@@ -36,6 +54,7 @@ export function registerCoaAddLedgerHandler(
   handler: ((parentGroupId: number) => void) | null,
 ): void {
   handlers = { ...handlers, addUnderParent: handler };
+  flushPendingAddLedger();
 }
 
 function openSundryDebtorsForm(parentId: number): void {
@@ -110,25 +129,14 @@ export function requestCoaSpecializedLedgerForm(parentId: number): boolean {
   }
 }
 
-function navigateToCoaAddLedger(parentId: number | "global"): void {
-  if (typeof window === "undefined") return;
-  if (typeof parentId === "number") {
-    if (requestCoaSpecializedLedgerForm(parentId)) return;
-  }
-  const url =
-    parentId === "global"
-      ? `${CHART_OF_ACCOUNTS_PATH}?addLedger=global`
-      : `${CHART_OF_ACCOUNTS_PATH}?addLedger=${parentId}`;
-  window.location.assign(url);
-}
-
 export function requestCoaAddLedger(parentGroupId: number): void {
   if (requestCoaSpecializedLedgerForm(parentGroupId)) return;
   if (handlers.addUnderParent) {
     handlers.addUnderParent(parentGroupId);
     return;
   }
-  navigateToCoaAddLedger(parentGroupId);
+  pending = { kind: "under", parentGroupId };
+  flushPendingAddLedger();
 }
 
 export function requestCoaGlobalAddLedger(preferredParentId?: number | null): void {
@@ -137,9 +145,6 @@ export function requestCoaGlobalAddLedger(preferredParentId?: number | null): vo
     handlers.openGlobal(preferredParentId);
     return;
   }
-  if (preferredParentId != null) {
-    navigateToCoaAddLedger(preferredParentId);
-  } else {
-    navigateToCoaAddLedger("global");
-  }
+  pending = { kind: "global", preferredParentId };
+  flushPendingAddLedger();
 }

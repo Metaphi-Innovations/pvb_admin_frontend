@@ -20,6 +20,7 @@ import { AccountsTablePagination } from "@/components/accounts/AccountsTableList
 import {
   AccountsColumnHeader,
   SortTh,
+  StatusBadge,
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
@@ -60,14 +61,14 @@ export function BankBookTable({
   return (
     <>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
-        <AccountsTable minWidth={1080} className="text-xs">
+        <AccountsTable minWidth={1200} className="text-xs">
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <SortTh label="Date" colKey="date" filterType="date" />
-              <SortTh label="Voucher No." colKey="voucherNo" />
               <SortTh label="Voucher Type" colKey="voucherType" />
+              <SortTh label="Voucher No." colKey="voucherNo" />
               <SortTh label="Particular" colKey="particular" />
-              <SortTh label="Narration" colKey="narration" />
+              <SortTh label="Reference" colKey="reference" />
               <SortTh label="Receipt" colKey="receipt" filterType="amount" align="right" />
               <SortTh label="Payment" colKey="payment" filterType="amount" align="right" />
               <AccountsColumnHeader
@@ -77,13 +78,19 @@ export function BankBookTable({
                 filterable={false}
                 align="right"
               />
+              <AccountsColumnHeader
+                label="Status"
+                colKey="status"
+                sortable={false}
+                filterable={false}
+              />
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
             <BankBookTableRow row={openingRow} />
             {transactionRows.length > 0 && columnFilteredRows.length === 0 ? (
               <AccountsTableRow>
-                <AccountsTableCell colSpan={8} className="accounts-table-empty">
+                <AccountsTableCell colSpan={9} className="accounts-table-empty">
                   No records match the column filters.
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -112,6 +119,7 @@ export function BankBookTable({
                   className="text-xs justify-end font-semibold"
                 />
               </AccountsTableCell>
+              <AccountsTableCell className="py-2" />
             </AccountsTableRow>
           </AccountsTableFoot>
         </AccountsTable>
@@ -144,6 +152,7 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
       <AccountsTableCell className="whitespace-nowrap py-2">
         {formatBankBookDate(row.date)}
       </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap py-2">{row.voucherType}</AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap py-2">
         {row.voucherNo === "—" ? (
           <span className="text-muted-foreground">—</span>
@@ -158,7 +167,6 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
           <span className="font-mono text-xs font-semibold text-brand-700">{row.voucherNo}</span>
         )}
       </AccountsTableCell>
-      <AccountsTableCell className="whitespace-nowrap py-2">{row.voucherType}</AccountsTableCell>
       <AccountsTableCell
         className={cn("py-2 max-w-[180px] truncate", isOpening && "text-muted-foreground")}
         title={row.particular}
@@ -175,10 +183,10 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
         )}
       </AccountsTableCell>
       <AccountsTableCell
-        className="py-2 max-w-[220px] truncate text-muted-foreground"
-        title={row.narration}
+        className="py-2 max-w-[160px] truncate font-mono text-xs text-muted-foreground"
+        title={row.reference}
       >
-        {row.narration}
+        {row.reference}
       </AccountsTableCell>
       <MoneyCell amount={row.receipt} dashIfZero className="accounts-table-td py-2" />
       <MoneyCell amount={row.payment} dashIfZero className="accounts-table-td py-2" />
@@ -196,6 +204,13 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
           />
         )}
       </AccountsTableCell>
+      {!isOpening && row.status && row.status !== "—" ? (
+        <AccountsTableCell className="whitespace-nowrap py-2">
+          <StatusBadge status="posted" />
+        </AccountsTableCell>
+      ) : (
+        <AccountsTableCell className="py-2 text-muted-foreground">—</AccountsTableCell>
+      )}
     </AccountsTableRow>
   );
 }

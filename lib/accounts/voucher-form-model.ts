@@ -92,6 +92,8 @@ export interface VoucherFormExtras {
   tdsSectionMasterId?: number | null;
   expenseHeadLedgerId?: number | null;
   expenseHeadLedgerName?: string;
+  /** Warehouse / branch context for bank account mapping on receipt & payment vouchers. */
+  warehouseRef?: string;
 }
 
 let _entryIdSeq = 0;

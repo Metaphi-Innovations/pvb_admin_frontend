@@ -27,6 +27,11 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  AccountsReportBody,
+  AccountsReportKpiCard,
+  AccountsReportKpiGrid,
+} from "@/components/accounts/AccountsReportLayout";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
@@ -44,6 +49,7 @@ import {
   ReportWarehouseMultiFilter,
   ReportMoreFilters,
   ReportFilterSummary,
+  ReportFilterField,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -113,40 +119,6 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
     to: today < fy.endDate ? today : fy.endDate,
     fyId: String(fy.id),
   };
-}
-
-interface SummaryCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  warning?: boolean;
-  isCount?: boolean;
-}
-
-function SummaryCard({ label, value, icon: Icon, warning, isCount }: SummaryCardProps) {
-  const display =
-    typeof value === "number" ? (isCount ? String(value) : formatMoney(value)) : value;
-  return (
-    <div
-      className={cn(
-        "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0",
-        warning && "border-amber-300 bg-amber-50/40",
-      )}
-    >
-      <div
-        className={cn(
-          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-          warning ? "bg-amber-100" : "bg-muted",
-        )}
-      >
-        <Icon className={cn("w-4 h-4", warning ? "text-amber-600" : "text-muted-foreground")} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-bold text-foreground leading-none">{display}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 function RowStatusBadge({ status }: { status: "valid" | "exception" }) {
@@ -381,53 +353,50 @@ export default function HsnSummaryPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <div className="space-y-0.5 min-w-[160px]">
-        <Label className={filterLabelClass}>HSN / SAC</Label>
-        <Input
-          value={hsnCode}
-          onChange={(e) => setHsnCode(e.target.value)}
-          placeholder="Search HSN…"
-          list="hsn-code-options"
-          className={cn(filterControlClass, "mt-0 w-[160px]")}
-        />
-        <datalist id="hsn-code-options">
-          {hsnOptions.map((o) => (
-            <option key={o.code} value={o.code}>
-              {o.description}
-            </option>
-          ))}
-        </datalist>
-      </div>
-      <div className="space-y-0.5 min-w-[110px]">
-        <Label className={filterLabelClass}>GST Rate</Label>
-        <Select value={gstRate} onValueChange={(v) => setGstRate(v as HsnGstRateFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[110px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GST_RATE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
+        <ReportFilterField label="HSN / SAC" minWidthClass="min-w-[180px]">
+          <Input
+            value={hsnCode}
+            onChange={(e) => setHsnCode(e.target.value)}
+            placeholder="Search HSN…"
+            list="hsn-code-options"
+            className={cn(filterControlClass, "mt-0 w-full")}
+          />
+          <datalist id="hsn-code-options">
+            {hsnOptions.map((o) => (
+              <option key={o.code} value={o.code}>
+                {o.description}
+              </option>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-0.5 min-w-[120px]">
-        <Label className={filterLabelClass}>Status</Label>
-        <Select value={status} onValueChange={(v) => setStatus(v as HsnStatusFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+          </datalist>
+        </ReportFilterField>
+        <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
+          <Select value={gstRate} onValueChange={(v) => setGstRate(v as HsnGstRateFilter)}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GST_RATE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
+        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
+          <Select value={status} onValueChange={(v) => setStatus(v as HsnStatusFilter)}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -464,25 +433,25 @@ export default function HsnSummaryPageClient() {
       }
       filters={filterBar}
     >
-      <div className="flex flex-col gap-4 min-h-0 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <SummaryCard label="Total HSN / SAC Codes" value={totals.totalHsnCodes} icon={Barcode} isCount />
-          <SummaryCard label="Total Quantity" value={totals.totalQuantity} icon={Package} isCount />
-          <SummaryCard label="Total Gross Value" value={totals.totalGrossValue} icon={IndianRupee} />
-          <SummaryCard label="Total Sales Return Value" value={totals.totalSalesReturnValue} icon={Layers} />
-          <SummaryCard label="Total Net Taxable Value" value={totals.totalNetTaxableValue} icon={IndianRupee} />
-          <SummaryCard label="Total CGST" value={totals.totalCgst} icon={Scale} />
-          <SummaryCard label="Total SGST" value={totals.totalSgst} icon={Scale} />
-          <SummaryCard label="Total IGST" value={totals.totalIgst} icon={Scale} />
-          <SummaryCard label="Total Cess" value={totals.totalCess} icon={Hash} />
-          <SummaryCard
+      <AccountsReportBody>
+        <AccountsReportKpiGrid>
+          <AccountsReportKpiCard label="Total HSN / SAC Codes" value={totals.totalHsnCodes} icon={Barcode} isCount />
+          <AccountsReportKpiCard label="Total Quantity" value={totals.totalQuantity} icon={Package} isCount />
+          <AccountsReportKpiCard label="Total Gross Value" value={totals.totalGrossValue} icon={IndianRupee} />
+          <AccountsReportKpiCard label="Total Sales Return Value" value={totals.totalSalesReturnValue} icon={Layers} />
+          <AccountsReportKpiCard label="Total Net Taxable Value" value={totals.totalNetTaxableValue} icon={IndianRupee} />
+          <AccountsReportKpiCard label="Total CGST" value={totals.totalCgst} icon={Scale} />
+          <AccountsReportKpiCard label="Total SGST" value={totals.totalSgst} icon={Scale} />
+          <AccountsReportKpiCard label="Total IGST" value={totals.totalIgst} icon={Scale} />
+          <AccountsReportKpiCard label="Total Cess" value={totals.totalCess} icon={Hash} />
+          <AccountsReportKpiCard
             label="Total Exceptions"
             value={totals.totalExceptions}
             icon={AlertTriangle}
             warning={totals.totalExceptions > 0}
             isCount
           />
-        </div>
+        </AccountsReportKpiGrid>
 
         <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
           {!mounted || !datesReady ? (
@@ -505,7 +474,7 @@ export default function HsnSummaryPageClient() {
               )}
             </div>
           ) : (
-            <AccountsTableScroll>
+            <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1900}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
@@ -619,7 +588,7 @@ export default function HsnSummaryPageClient() {
             </AccountsTableScroll>
           )}
         </AccountsListingTableCard>
-      </div>
+      </AccountsReportBody>
 
       <HsnSummaryDetailSheet
         row={viewRow}

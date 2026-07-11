@@ -450,6 +450,9 @@ export default function CollectionTrackingClient() {
 
   const getCellValue = useCallback((row: CollectionFollowUp, key: string) => {
     if (key === "overdueDays") return computeOverdueDays(row);
+    if (key === "status") {
+      return STATUS_OPTIONS.find((s) => s.value === row.status)?.label ?? row.status;
+    }
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -594,7 +597,7 @@ export default function CollectionTrackingClient() {
         followUpDate: { type: "date" },
         nextFollowUpDate: { type: "date" },
         assignedTo: { type: "text" },
-        status: { type: "status", options: STATUS_FILTER_OPTIONS },
+        status: { type: "status" },
         remarks: { type: "text" },
       }}
       defaultSortKey="dueDate"

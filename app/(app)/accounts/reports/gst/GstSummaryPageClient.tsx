@@ -18,6 +18,11 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  AccountsReportBody,
+  AccountsReportKpiCard,
+  AccountsReportKpiGrid,
+} from "@/components/accounts/AccountsReportLayout";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
@@ -89,43 +94,6 @@ interface GstKpiCardProps {
   accent?: boolean;
   warning?: boolean;
   isCount?: boolean;
-}
-
-function GstKpiCard({ label, value, icon: Icon, accent, warning, isCount }: GstKpiCardProps) {
-  const displayValue =
-    typeof value === "number"
-      ? isCount
-        ? String(value)
-        : formatMoney(value)
-      : value;
-  return (
-    <div
-      className={cn(
-        "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0",
-        warning && "border-amber-300 bg-amber-50/40",
-      )}
-    >
-      <div
-        className={cn(
-          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-          warning ? "bg-amber-100" : accent ? "bg-brand-600" : "bg-muted",
-        )}
-      >
-        <Icon
-          className={cn(
-            "w-4 h-4",
-            warning ? "text-amber-600" : accent ? "text-white" : "text-muted-foreground",
-          )}
-        />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-bold text-foreground leading-none truncate">
-          {displayValue}
-        </p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight truncate">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 function buildKpiCards(cards: GstSummaryCards): GstKpiCardProps[] {
@@ -372,12 +340,12 @@ export default function GstSummaryPageClient() {
       }
       filters={filterBar}
     >
-      <div className="flex flex-col gap-4 min-h-0 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <AccountsReportBody>
+        <AccountsReportKpiGrid>
           {kpiCards.map((card) => (
-            <GstKpiCard key={card.label} {...card} />
+            <AccountsReportKpiCard key={card.label} {...card} />
           ))}
-        </div>
+        </AccountsReportKpiGrid>
 
         <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
           {!mounted || !datesReady ? (
@@ -400,26 +368,26 @@ export default function GstSummaryPageClient() {
               )}
             </div>
           ) : (
-            <AccountsTableScroll>
-              <AccountsTable minWidth={860}>
+            <AccountsTableScroll className="flex-1 min-h-0">
+              <AccountsTable minWidth={920}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <AccountsTableHeadCell className="text-xs font-semibold">
+                    <AccountsTableHeadCell className="text-xs font-semibold min-w-[10rem]">
                       Section
                     </AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold min-w-[7rem]">
                       Document Count
                     </AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold min-w-[9rem]">
                       Taxable Value
                     </AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold min-w-[9rem]">
                       Tax Amount
                     </AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right" className="text-xs font-semibold">
+                    <AccountsTableHeadCell align="right" className="text-xs font-semibold min-w-[6rem]">
                       Exceptions
                     </AccountsTableHeadCell>
-                    <AccountsTableHeadCell className="text-xs font-semibold w-28">
+                    <AccountsTableHeadCell className="text-xs font-semibold w-28 min-w-[7rem]">
                       Action
                     </AccountsTableHeadCell>
                   </AccountsTableHeadRow>
@@ -470,7 +438,7 @@ export default function GstSummaryPageClient() {
             </AccountsTableScroll>
           )}
         </AccountsListingTableCard>
-      </div>
+      </AccountsReportBody>
     </AccountsPageShell>
   );
 }
