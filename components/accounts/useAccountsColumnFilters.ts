@@ -20,6 +20,8 @@ export interface UseAccountsColumnFiltersOptions<T> {
   columnConfig?: AccountsColumnFilterConfig;
   defaultSortKey?: string | null;
   defaultSortDir?: "asc" | "desc";
+  /** Value-only column filters without operator dropdowns. */
+  simpleColumnFilters?: boolean;
 }
 
 export function useAccountsColumnFilters<T>({
@@ -28,6 +30,7 @@ export function useAccountsColumnFilters<T>({
   columnConfig = {},
   defaultSortKey = null,
   defaultSortDir = "desc",
+  simpleColumnFilters = true,
 }: UseAccountsColumnFiltersOptions<T>) {
   const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
@@ -90,6 +93,15 @@ export function useAccountsColumnFilters<T>({
     [columnConfig],
   );
 
+  const resolveSimpleFilter = useCallback(
+    (columnKey: string, override?: boolean): boolean => {
+      if (override != null) return override;
+      if (columnConfig[columnKey]?.advancedFilters) return false;
+      return simpleColumnFilters;
+    },
+    [columnConfig, simpleColumnFilters],
+  );
+
   const headerProps = useCallback(
     (
       columnKey: string,
@@ -100,6 +112,7 @@ export function useAccountsColumnFilters<T>({
         filterable?: boolean;
         sortable?: boolean;
         statusOptions?: string[];
+        simpleFilter?: boolean;
       },
     ) => ({
       label,
@@ -116,6 +129,7 @@ export function useAccountsColumnFilters<T>({
       onFilterChange: (v: AccountsColumnFilters[string]) => setColumnFilter(columnKey, v),
       uniqueValues: getUniqueValues(columnKey),
       statusOptions: opts?.statusOptions ?? statusOptionsFor(columnKey),
+      simpleFilter: resolveSimpleFilter(columnKey, opts?.simpleFilter),
     }),
     [
       sortKey,
@@ -127,6 +141,7 @@ export function useAccountsColumnFilters<T>({
       getUniqueValues,
       resolveFilterType,
       statusOptionsFor,
+      resolveSimpleFilter,
     ],
   );
 
@@ -143,6 +158,7 @@ export function useAccountsColumnFilters<T>({
     getUniqueValues,
     resolveFilterType,
     statusOptionsFor: (columnKey: string) => columnConfig[columnKey]?.options ?? [],
+    simpleColumnFilters,
     headerProps,
   };
 }

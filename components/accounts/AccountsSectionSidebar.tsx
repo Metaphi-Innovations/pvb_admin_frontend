@@ -4,6 +4,7 @@ import React, { memo, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ACCOUNTS_NAV_GROUPS,
@@ -20,6 +21,7 @@ import {
 import { AccountsSidebarModuleHeader } from "./AccountsSidebarModuleHeader";
 import { useAccountsSidebar } from "./AccountsSidebarContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useNavigationPendingOptional } from "@/components/navigation/NavigationPendingContext";
 
 /** COA tree — code-split; mounts only when Chart of Accounts section is active. */
 const CoaSidebarNavTree = dynamic(
@@ -54,24 +56,44 @@ const SectionNavLink = memo(function SectionNavLink({
   active: boolean;
   collapsed: boolean;
 }) {
+  const pending = useNavigationPendingOptional();
+  const isPending = pending?.isHrefPending(href) ?? false;
+  const isDisabled = isPending && !active;
+
   const link = (
     <Link
       href={href}
+      scroll={false}
+      prefetch
       aria-current={active ? "page" : undefined}
+      aria-disabled={isDisabled || undefined}
       aria-label={collapsed ? label : undefined}
       title={collapsed ? undefined : label}
+      onClick={(e) => {
+        if (isDisabled) {
+          e.preventDefault();
+          return;
+        }
+        pending?.trackNavigation(href, label);
+      }}
       className={cn(
         ACCOUNTS_SIDEBAR_NAV_ITEM_CLASS,
         active && ACCOUNTS_SIDEBAR_NAV_ITEM_ACTIVE_CLASS,
         collapsed && "is-collapsed",
+        isPending && "is-nav-pending",
+        isDisabled && "pointer-events-none opacity-60",
       )}
     >
-      <ItemIcon
-        className={cn(
-          "w-4 h-4 flex-shrink-0",
-          active ? "text-brand-600" : "text-muted-foreground",
-        )}
-      />
+      {isPending ? (
+        <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin text-brand-600" aria-hidden />
+      ) : (
+        <ItemIcon
+          className={cn(
+            "w-4 h-4 flex-shrink-0",
+            active ? "text-brand-600" : "text-muted-foreground",
+          )}
+        />
+      )}
       <span>{label}</span>
     </Link>
   );

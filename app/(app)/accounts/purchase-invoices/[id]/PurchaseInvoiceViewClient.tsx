@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-utils";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
@@ -135,7 +136,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
             variant="outline"
             size="sm"
             className="h-9 text-sm font-medium gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
-            onClick={() => router.push(`/accounts/debit-notes/new?purchaseInvoiceId=${invoice.id}`)}
+            onClick={() => router.push(`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${invoice.id}`)}
           >
             <FileMinus className="w-4 h-4" />
             Debit Note

@@ -322,6 +322,7 @@ export interface AccountsRichColumnDef<T> {
   filterable?: boolean;
   filterType?: AccountsColumnFilterType;
   statusOptions?: string[];
+  simpleFilter?: boolean;
   render: (row: T, index: number) => React.ReactNode;
 }
 
@@ -335,6 +336,7 @@ export function AccountsRichTable<T>({
   rows,
   getRowKey,
   emptyMessage = "No records found.",
+  emptyAction,
   minWidth,
   className,
   onRowClick,
@@ -351,6 +353,7 @@ export function AccountsRichTable<T>({
   rows: T[];
   getRowKey?: (row: T, index: number) => string | number;
   emptyMessage?: string;
+  emptyAction?: React.ReactNode;
   minWidth?: number;
   className?: string;
   onRowClick?: (row: T) => void;
@@ -364,6 +367,7 @@ export function AccountsRichTable<T>({
   const resolvedOnColumnFilterChange =
     onColumnFilterChange ?? (ctx ? (key: string, v: AccountsColumnFilterState | undefined) => ctx.setColumnFilter(key, v) : undefined);
   const resolvedGetUniqueValues = getUniqueValues ?? ctx?.getUniqueValues;
+  const resolvedSimpleFilter = ctx?.simpleColumnFilters ?? true;
 
   return (
     <AccountsTable minWidth={minWidth} className={className}>
@@ -405,6 +409,10 @@ export function AccountsRichTable<T>({
                 }
                 uniqueValues={resolvedGetUniqueValues?.(c.key)}
                 statusOptions={c.statusOptions ?? columnFilterConfig?.[c.key]?.options}
+                simpleFilter={
+                  c.simpleFilter ??
+                  (columnFilterConfig?.[c.key]?.advancedFilters ? false : resolvedSimpleFilter)
+                }
                 className={c.className}
               />
             );
@@ -415,7 +423,10 @@ export function AccountsRichTable<T>({
         {rows.length === 0 ? (
           <AccountsTableRow>
             <AccountsTableCell colSpan={columns.length} className="accounts-table-empty">
-              {emptyMessage}
+              <div className="flex flex-col items-center gap-1">
+                <span>{emptyMessage}</span>
+                {emptyAction}
+              </div>
             </AccountsTableCell>
           </AccountsTableRow>
         ) : (

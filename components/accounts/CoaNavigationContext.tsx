@@ -241,6 +241,15 @@ export function CoaNavigationProvider({
         router.push(buildTdsPartyWiseReportHref(resolved, records));
         return;
       }
+      if (resolved.nodeLevel === "primary_head" && pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(resolved.id)) next.delete(resolved.id);
+          else next.add(resolved.id);
+          return next;
+        });
+        return;
+      }
       setSelectedId(resolved.id);
       setExpandedIds((prev) => {
         let next = expandAncestorsOf(records, resolved.id, prev);
@@ -255,8 +264,8 @@ export function CoaNavigationProvider({
       const href = `${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
-      } else if (resolved.nodeLevel === "ledger" && isPostableNode(resolved, records)) {
-        router.push(buildGeneralLedgerHref(resolved.id));
+      } else if (resolved.nodeLevel === "ledger") {
+        router.push(href);
       } else {
         router.push(href);
       }
@@ -278,6 +287,16 @@ export function CoaNavigationProvider({
             const node = currentRecords.find((r) => r.id === id);
             if (node) {
               const resolved = resolveCoaTreeSelectionNode(currentRecords, node);
+              if (resolved.nodeLevel === "primary_head") {
+                setSelectedId(null);
+                setExpandedIds((prev) => {
+                  const next = expandAncestorsOf(currentRecords, resolved.id, prev);
+                  next.add(resolved.id);
+                  return next;
+                });
+                router.replace(CHART_OF_ACCOUNTS_HREF, { scroll: false });
+                return;
+              }
               setSelectedId((prev) => (prev === resolved.id ? prev : resolved.id));
               setExpandedIds((prev) => expandAncestorsOf(currentRecords, resolved.id, prev));
               if (resolved.id !== id) {
@@ -291,14 +310,7 @@ export function CoaNavigationProvider({
           }
           return;
         }
-        if (currentRecords.length > 0) {
-          const firstHead = currentRecords
-            .filter((r) => r.nodeLevel === "primary_head")
-            .sort((a, b) => a.accountCode.localeCompare(b.accountCode))[0];
-          if (firstHead) {
-            router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${firstHead.id}`, { scroll: false });
-          }
-        }
+        setSelectedId(null);
         return;
       }
 

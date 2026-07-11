@@ -1,23 +1,37 @@
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
-import { resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
+import { roundMoney } from "@/lib/accounts/money-format";
 import {
-  computeTrialBalanceRows,
-  type TrialBalanceRow,
-} from "@/lib/accounts/ledger-reports";
-import {
-  roundMoney,
-  type BalanceSide,
-} from "@/lib/accounts/money-format";
+  computeTrialBalanceLedgerRows,
+  findTrialBalanceExceptions,
+  getTrialBalanceBranchOptions,
+  getTrialBalanceLedgerGroupOptions,
+  getTrialBalanceLedgerOptions,
+  getTrialBalanceWarehouseOptions,
+  sumTrialBalanceColumns,
+  type ComputedTrialBalanceLedgerRow,
+  type TrialBalanceAmountColumns,
+  type TrialBalanceFilters,
+  type TrialBalanceVoucherException,
+} from "@/lib/accounts/trial-balance-compute";
+
+export type {
+  TrialBalanceFilters,
+  TrialBalanceAmountColumns,
+  ComputedTrialBalanceLedgerRow,
+  TrialBalanceVoucherException,
+};
+export {
+  findTrialBalanceExceptions,
+  getTrialBalanceBranchOptions,
+  getTrialBalanceLedgerGroupOptions,
+  getTrialBalanceLedgerOptions,
+  getTrialBalanceWarehouseOptions,
+};
 
 export type TrialBalanceTab = "summary" | "detailed";
 
-export interface TrialBalanceDisplayRow {
-  ledgerId: number;
-  ledgerCode: string;
-  ledgerName: string;
-  ledgerGroup: string;
-  closingDebit: number;
-  closingCredit: number;
+export interface TrialBalanceFilterParams {
+  search?: string;
 }
 
 export interface TrialBalanceSummary {
@@ -25,180 +39,162 @@ export interface TrialBalanceSummary {
   totalCredit: number;
   periodDebit: number;
   periodCredit: number;
+  openingDebit: number;
+  openingCredit: number;
+  closingDebit: number;
+  closingCredit: number;
   difference: number;
   totalLedgers: number;
   totalGroups: number;
   isBalanced: boolean;
 }
 
-export interface TrialBalanceFilterParams {
-  search?: string;
-}
-
-/** Summary tab — one row per account group (leaf standard group) */
-export interface TrialBalanceSummaryGroupRow {
+/** Group-wise row — account group level */
+export interface TrialBalanceSummaryGroupRow extends TrialBalanceAmountColumns {
   groupId: number;
   particular: string;
-  debit: number;
-  credit: number;
+  primaryHead: string;
   sortOrder: number;
 }
 
-/** Detailed tab — ledger row with full trial balance columns */
-export interface TrialBalanceDetailedLedgerRow {
+/** Detailed ledger row */
+export interface TrialBalanceDetailedLedgerRow extends TrialBalanceAmountColumns {
   ledgerId: number;
   ledgerCode: string;
   ledgerName: string;
   groupKey: string;
   groupName: string;
   groupSortOrder: number;
-  openingAmount: number;
-  openingBalanceType: BalanceSide;
-  debit: number;
-  credit: number;
-  closingAmount: number;
-  closingBalanceType: BalanceSide;
+  primaryHead: string;
+  primaryHeadId: number;
+  primaryHeadSort: number;
 }
 
-export interface TrialBalanceDetailedGroup {
+export interface TrialBalanceDetailedGroup extends TrialBalanceAmountColumns {
   groupKey: string;
   groupName: string;
   sortOrder: number;
+  primaryHead: string;
+  primaryHeadId: number;
+  primaryHeadSort: number;
   ledgers: TrialBalanceDetailedLedgerRow[];
 }
 
-export type TrialBalanceSummarySortKey = "particular" | "debit" | "credit";
+export interface TrialBalancePrimaryHeadSection extends TrialBalanceAmountColumns {
+  primaryHeadId: number;
+  primaryHead: string;
+  sortOrder: number;
+  groups: TrialBalanceDetailedGroup[];
+}
+
+export type TrialBalanceSummarySortKey =
+  | "particular"
+  | "openingDebit"
+  | "debit"
+  | "closingDebit";
 export type TrialBalanceDetailedSortKey =
   | "particular"
-  | "opening"
+  | "openingDebit"
   | "debit"
   | "credit"
-  | "closing"
-  | "balanceType";
+  | "closingDebit";
 
-function resolveLedgerGroup(row: TrialBalanceRow): string {
-  return row.subGroup !== "—" ? row.subGroup : row.accountGroup;
-}
 
-function closingDebitCredit(row: TrialBalanceRow): { debit: number; credit: number } {
-  const amount = roundMoney(row.closing.amount);
-  const isZero = amount === 0;
-  const isDebit = row.closing.balanceType === "Debit";
-  return {
-    debit: isDebit && !isZero ? amount : 0,
-    credit: !isDebit && !isZero ? amount : 0,
-  };
-}
+function buildSummaryFromLedgers(
+  rows: ComputedTrialBalanceLedgerRow[],
+): TrialBalanceSummaryGroupRow[] {
+  const groupMap = new Map<number, TrialBalanceSummaryGroupRow>();
 
-function mapToDisplayRow(
-  row: TrialBalanceRow,
-  codeMap: Map<number, string>,
-): TrialBalanceDisplayRow {
-  const { debit, credit } = closingDebitCredit(row);
-  return {
-    ledgerId: row.ledgerId,
-    ledgerCode: codeMap.get(row.ledgerId) ?? "",
-    ledgerName: row.ledger,
-    ledgerGroup: resolveLedgerGroup(row),
-    closingDebit: debit,
-    closingCredit: credit,
-  };
-}
+  for (const row of rows) {
+    const existing = groupMap.get(row.accountGroupId) ?? {
+      groupId: row.accountGroupId,
+      particular: row.accountGroup,
+      primaryHead: row.primaryHead,
+      sortOrder: row.accountGroupSort,
+      openingDebit: 0,
+      openingCredit: 0,
+      debit: 0,
+      credit: 0,
+      closingDebit: 0,
+      closingCredit: 0,
+    };
+    existing.openingDebit = roundMoney(existing.openingDebit + row.openingDebit);
+    existing.openingCredit = roundMoney(existing.openingCredit + row.openingCredit);
+    existing.debit = roundMoney(existing.debit + row.debit);
+    existing.credit = roundMoney(existing.credit + row.credit);
+    existing.closingDebit = roundMoney(existing.closingDebit + row.closingDebit);
+    existing.closingCredit = roundMoney(existing.closingCredit + row.closingCredit);
+    groupMap.set(row.accountGroupId, existing);
+  }
 
-function buildCodeMap(): Map<number, string> {
-  return new Map(
-    loadChartOfAccounts()
-      .filter((r) => r.nodeLevel === "ledger")
-      .map((r) => [r.id, r.accountCode]),
+  return [...groupMap.values()].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.particular.localeCompare(b.particular),
   );
 }
 
-function resolveSummaryGroup(
-  row: TrialBalanceRow,
-  records: ReturnType<typeof loadChartOfAccounts>,
-): { id: number; name: string; sortOrder: number } | null {
-  const hierarchy = resolveHierarchyPath(records, row.ledgerId);
-  const group =
-    hierarchy.standardGroup ?? hierarchy.accountGroup ?? hierarchy.primaryHead;
-  if (!group) return null;
-  return { id: group.id, name: group.accountName, sortOrder: group.id };
+function mapLedgerRow(row: ComputedTrialBalanceLedgerRow): TrialBalanceDetailedLedgerRow {
+  return {
+    ledgerId: row.ledgerId,
+    ledgerCode: row.ledgerCode,
+    ledgerName: row.ledgerName,
+    groupKey: String(row.accountGroupId),
+    groupName: row.accountGroup,
+    groupSortOrder: row.accountGroupSort,
+    primaryHead: row.primaryHead,
+    primaryHeadId: row.primaryHeadId,
+    primaryHeadSort: row.primaryHeadSort,
+    openingDebit: row.openingDebit,
+    openingCredit: row.openingCredit,
+    debit: row.debit,
+    credit: row.credit,
+    closingDebit: row.closingDebit,
+    closingCredit: row.closingCredit,
+  };
 }
 
-function resolveDetailedGroup(
-  row: TrialBalanceRow,
-  records: ReturnType<typeof loadChartOfAccounts>,
-): { key: string; name: string; sortOrder: number } {
-  const hierarchy = resolveHierarchyPath(records, row.ledgerId);
-  const group = hierarchy.accountGroup ?? hierarchy.primaryHead;
-  if (!group) {
-    return { key: "ungrouped", name: "—", sortOrder: 999_999 };
-  }
-  return { key: String(group.id), name: group.accountName, sortOrder: group.id };
+export function buildTrialBalanceLedgerRows(
+  filters: TrialBalanceFilters,
+): ComputedTrialBalanceLedgerRow[] {
+  return computeTrialBalanceLedgerRows(filters);
 }
 
-export function buildTrialBalanceDisplayRows(): TrialBalanceDisplayRow[] {
-  const raw = computeTrialBalanceRows();
-  const codeMap = buildCodeMap();
-  return raw.map((row) => mapToDisplayRow(row, codeMap));
+export function buildTrialBalanceSummaryRows(
+  filters: TrialBalanceFilters,
+): TrialBalanceSummaryGroupRow[] {
+  return buildSummaryFromLedgers(computeTrialBalanceLedgerRows(filters));
 }
 
-export function buildTrialBalanceSummaryRows(): TrialBalanceSummaryGroupRow[] {
-  const records = loadChartOfAccounts();
-  const raw = computeTrialBalanceRows();
-  const groupMap = new Map<number, TrialBalanceSummaryGroupRow>();
-
-  for (const row of raw) {
-    const group = resolveSummaryGroup(row, records);
-    if (!group) continue;
-
-    const { debit, credit } = closingDebitCredit(row);
-    const existing = groupMap.get(group.id) ?? {
-      groupId: group.id,
-      particular: group.name,
-      debit: 0,
-      credit: 0,
-      sortOrder: group.sortOrder,
-    };
-
-    existing.debit = roundMoney(existing.debit + debit);
-    existing.credit = roundMoney(existing.credit + credit);
-    groupMap.set(group.id, existing);
-  }
-
-  return [...groupMap.values()].sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-export function buildTrialBalanceDetailedGroups(): TrialBalanceDetailedGroup[] {
-  const records = loadChartOfAccounts();
-  const raw = computeTrialBalanceRows();
-  const codeMap = buildCodeMap();
+export function buildTrialBalanceDetailedGroups(
+  filters: TrialBalanceFilters,
+): TrialBalanceDetailedGroup[] {
+  const rows = computeTrialBalanceLedgerRows(filters);
   const groupMap = new Map<string, TrialBalanceDetailedGroup>();
 
-  for (const row of raw) {
-    const group = resolveDetailedGroup(row, records);
-    const ledgerRow: TrialBalanceDetailedLedgerRow = {
-      ledgerId: row.ledgerId,
-      ledgerCode: codeMap.get(row.ledgerId) ?? "",
-      ledgerName: row.ledger,
-      groupKey: group.key,
-      groupName: group.name,
-      groupSortOrder: group.sortOrder,
-      openingAmount: roundMoney(row.opening),
-      openingBalanceType: row.openingBalanceType,
-      debit: roundMoney(row.debit),
-      credit: roundMoney(row.credit),
-      closingAmount: roundMoney(row.closing.amount),
-      closingBalanceType: row.closing.balanceType,
-    };
-
-    const existing = groupMap.get(group.key) ?? {
-      groupKey: group.key,
-      groupName: group.name,
-      sortOrder: group.sortOrder,
+  for (const row of rows) {
+    const key = String(row.accountGroupId);
+    const existing = groupMap.get(key) ?? {
+      groupKey: key,
+      groupName: row.accountGroup,
+      sortOrder: row.accountGroupSort,
+      primaryHead: row.primaryHead,
+      primaryHeadId: row.primaryHeadId,
+      primaryHeadSort: row.primaryHeadSort,
+      openingDebit: 0,
+      openingCredit: 0,
+      debit: 0,
+      credit: 0,
+      closingDebit: 0,
+      closingCredit: 0,
       ledgers: [],
     };
-    existing.ledgers.push(ledgerRow);
-    groupMap.set(group.key, existing);
+    existing.ledgers.push(mapLedgerRow(row));
+    existing.openingDebit = roundMoney(existing.openingDebit + row.openingDebit);
+    existing.openingCredit = roundMoney(existing.openingCredit + row.openingCredit);
+    existing.debit = roundMoney(existing.debit + row.debit);
+    existing.credit = roundMoney(existing.credit + row.credit);
+    existing.closingDebit = roundMoney(existing.closingDebit + row.closingDebit);
+    existing.closingCredit = roundMoney(existing.closingCredit + row.closingCredit);
+    groupMap.set(key, existing);
   }
 
   return [...groupMap.values()]
@@ -206,46 +202,77 @@ export function buildTrialBalanceDetailedGroups(): TrialBalanceDetailedGroup[] {
       ...g,
       ledgers: g.ledgers.sort((a, b) => a.ledgerName.localeCompare(b.ledgerName)),
     }))
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+    .sort(
+      (a, b) =>
+        a.primaryHeadSort - b.primaryHeadSort ||
+        a.sortOrder - b.sortOrder ||
+        a.groupName.localeCompare(b.groupName),
+    );
 }
 
-export function filterTrialBalanceRows(
-  rows: TrialBalanceDisplayRow[],
-  filters: TrialBalanceFilterParams,
-): TrialBalanceDisplayRow[] {
-  const q = (filters.search ?? "").trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter(
-    (row) =>
-      row.ledgerName.toLowerCase().includes(q) ||
-      row.ledgerCode.toLowerCase().includes(q) ||
-      row.ledgerGroup.toLowerCase().includes(q),
-  );
+export function buildTrialBalancePrimaryHeadSections(
+  filters: TrialBalanceFilters,
+): TrialBalancePrimaryHeadSection[] {
+  const groups = buildTrialBalanceDetailedGroups(filters);
+  const sectionMap = new Map<number, TrialBalancePrimaryHeadSection>();
+
+  for (const group of groups) {
+    const existing = sectionMap.get(group.primaryHeadId) ?? {
+      primaryHeadId: group.primaryHeadId,
+      primaryHead: group.primaryHead,
+      sortOrder: group.primaryHeadSort,
+      openingDebit: 0,
+      openingCredit: 0,
+      debit: 0,
+      credit: 0,
+      closingDebit: 0,
+      closingCredit: 0,
+      groups: [],
+    };
+    existing.groups.push(group);
+    existing.openingDebit = roundMoney(existing.openingDebit + group.openingDebit);
+    existing.openingCredit = roundMoney(existing.openingCredit + group.openingCredit);
+    existing.debit = roundMoney(existing.debit + group.debit);
+    existing.credit = roundMoney(existing.credit + group.credit);
+    existing.closingDebit = roundMoney(existing.closingDebit + group.closingDebit);
+    existing.closingCredit = roundMoney(existing.closingCredit + group.closingCredit);
+    sectionMap.set(group.primaryHeadId, existing);
+  }
+
+  return [...sectionMap.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** @deprecated Use buildTrialBalanceLedgerRows(filters) */
+export function buildTrialBalanceDisplayRows() {
+  return buildTrialBalanceLedgerRows({
+    financialYearId: "all",
+    dateFrom: "",
+    dateTo: new Date().toISOString().slice(0, 10),
+    branch: "all",
+    warehouse: "all",
+    ledgerGroupId: "all",
+    ledgerId: "all",
+    showZeroBalance: true,
+  }).map((r) => ({
+    ledgerId: r.ledgerId,
+    ledgerCode: r.ledgerCode,
+    ledgerName: r.ledgerName,
+    ledgerGroup: r.accountGroup,
+    closingDebit: r.closingDebit,
+    closingCredit: r.closingCredit,
+  }));
 }
 
 export function filterTrialBalanceSummaryRows(
   rows: TrialBalanceSummaryGroupRow[],
   filters: TrialBalanceFilterParams,
-  allLedgers: TrialBalanceDisplayRow[],
 ): TrialBalanceSummaryGroupRow[] {
   const q = (filters.search ?? "").trim().toLowerCase();
   if (!q) return rows;
-
-  const matchingGroupNames = new Set(
-    allLedgers
-      .filter(
-        (l) =>
-          l.ledgerName.toLowerCase().includes(q) ||
-          l.ledgerCode.toLowerCase().includes(q) ||
-          l.ledgerGroup.toLowerCase().includes(q),
-      )
-      .map((l) => l.ledgerGroup.toLowerCase()),
-  );
-
   return rows.filter(
     (row) =>
       row.particular.toLowerCase().includes(q) ||
-      matchingGroupNames.has(row.particular.toLowerCase()),
+      row.primaryHead.toLowerCase().includes(q),
   );
 }
 
@@ -258,7 +285,9 @@ export function filterTrialBalanceDetailedGroups(
 
   return groups
     .map((group) => {
-      const groupMatches = group.groupName.toLowerCase().includes(q);
+      const groupMatches =
+        group.groupName.toLowerCase().includes(q) ||
+        group.primaryHead.toLowerCase().includes(q);
       const ledgers = groupMatches
         ? group.ledgers
         : group.ledgers.filter(
@@ -275,193 +304,150 @@ export function filterTrialBalanceDetailedGroups(
 export function computeTrialBalanceSummaryFromDetailedGroups(
   groups: TrialBalanceDetailedGroup[],
 ): TrialBalanceSummary {
-  let totalDebit = 0;
-  let totalCredit = 0;
-  let periodDebit = 0;
-  let periodCredit = 0;
-  let totalLedgers = 0;
+  const ledgerRows = groups.flatMap((g) => g.ledgers);
+  const totals = sumTrialBalanceColumns(ledgerRows);
 
-  for (const group of groups) {
-    for (const l of group.ledgers) {
-      totalLedgers += 1;
-      periodDebit += l.debit;
-      periodCredit += l.credit;
-      if (l.closingBalanceType === "Debit" && l.closingAmount !== 0) {
-        totalDebit += l.closingAmount;
-      } else if (l.closingBalanceType === "Credit" && l.closingAmount !== 0) {
-        totalCredit += l.closingAmount;
-      }
-    }
-  }
-
-  totalDebit = roundMoney(totalDebit);
-  totalCredit = roundMoney(totalCredit);
-  periodDebit = roundMoney(periodDebit);
-  periodCredit = roundMoney(periodCredit);
-  const difference = roundMoney(totalDebit - totalCredit);
+  const difference = roundMoney(totals.closingDebit - totals.closingCredit);
+  const periodDiff = roundMoney(totals.debit - totals.credit);
 
   return {
-    totalDebit,
-    totalCredit,
-    periodDebit,
-    periodCredit,
+    totalDebit: totals.closingDebit,
+    totalCredit: totals.closingCredit,
+    periodDebit: totals.debit,
+    periodCredit: totals.credit,
+    openingDebit: totals.openingDebit,
+    openingCredit: totals.openingCredit,
+    closingDebit: totals.closingDebit,
+    closingCredit: totals.closingCredit,
     difference,
-    totalLedgers,
+    totalLedgers: ledgerRows.length,
     totalGroups: groups.length,
-    isBalanced: difference === 0,
-  };
-}
-
-export function computeTrialBalanceSummary(
-  rows: TrialBalanceDisplayRow[],
-  groupCount?: number,
-): TrialBalanceSummary {
-  const totalDebit = roundMoney(rows.reduce((s, r) => s + r.closingDebit, 0));
-  const totalCredit = roundMoney(rows.reduce((s, r) => s + r.closingCredit, 0));
-  const difference = roundMoney(totalDebit - totalCredit);
-
-  return {
-    totalDebit,
-    totalCredit,
-    periodDebit: totalDebit,
-    periodCredit: totalCredit,
-    difference,
-    totalLedgers: rows.length,
-    totalGroups: groupCount ?? 0,
-    isBalanced: difference === 0,
+    isBalanced: difference === 0 && periodDiff === 0,
   };
 }
 
 export function computeTrialBalanceSummaryFromGroups(
   rows: TrialBalanceSummaryGroupRow[],
-  ledgerRows: TrialBalanceDisplayRow[],
 ): TrialBalanceSummary {
-  const totalDebit = roundMoney(rows.reduce((s, r) => s + r.debit, 0));
-  const totalCredit = roundMoney(rows.reduce((s, r) => s + r.credit, 0));
-  const difference = roundMoney(totalDebit - totalCredit);
+  const totals = sumTrialBalanceColumns(rows);
+  const difference = roundMoney(totals.closingDebit - totals.closingCredit);
+  const periodDiff = roundMoney(totals.debit - totals.credit);
 
   return {
-    totalDebit,
-    totalCredit,
-    periodDebit: totalDebit,
-    periodCredit: totalCredit,
+    totalDebit: totals.closingDebit,
+    totalCredit: totals.closingCredit,
+    periodDebit: totals.debit,
+    periodCredit: totals.credit,
+    openingDebit: totals.openingDebit,
+    openingCredit: totals.openingCredit,
+    closingDebit: totals.closingDebit,
+    closingCredit: totals.closingCredit,
     difference,
-    totalLedgers: ledgerRows.length,
+    totalLedgers: 0,
     totalGroups: rows.length,
-    isBalanced: difference === 0,
+    isBalanced: difference === 0 && periodDiff === 0,
   };
 }
 
-export function sortTrialBalanceSummaryRows(
-  rows: TrialBalanceSummaryGroupRow[],
-  sortKey: TrialBalanceSummarySortKey,
-  sortDir: "asc" | "desc",
-): TrialBalanceSummaryGroupRow[] {
-  const dir = sortDir === "asc" ? 1 : -1;
-  return [...rows].sort((a, b) => {
-    if (sortKey === "particular") {
-      return a.particular.localeCompare(b.particular) * dir;
-    }
-    return (a[sortKey] - b[sortKey]) * dir;
-  });
-}
-
-export function sortTrialBalanceDetailedGroups(
-  groups: TrialBalanceDetailedGroup[],
-  sortKey: TrialBalanceDetailedSortKey,
-  sortDir: "asc" | "desc",
-): TrialBalanceDetailedGroup[] {
-  const dir = sortDir === "asc" ? 1 : -1;
-
-  const compareLedgers = (
-    a: TrialBalanceDetailedLedgerRow,
-    b: TrialBalanceDetailedLedgerRow,
-  ) => {
-    switch (sortKey) {
-      case "particular":
-        return a.ledgerName.localeCompare(b.ledgerName) * dir;
-      case "opening":
-        return (a.openingAmount - b.openingAmount) * dir;
-      case "debit":
-        return (a.debit - b.debit) * dir;
-      case "credit":
-        return (a.credit - b.credit) * dir;
-      case "closing":
-        return (a.closingAmount - b.closingAmount) * dir;
-      case "balanceType":
-        return a.closingBalanceType.localeCompare(b.closingBalanceType) * dir;
-      default:
-        return 0;
-    }
-  };
-
-  if (sortKey === "particular") {
-    return [...groups]
-      .sort((a, b) => a.groupName.localeCompare(b.groupName) * dir)
-      .map((g) => ({
-        ...g,
-        ledgers: [...g.ledgers].sort(compareLedgers),
-      }));
-  }
-
-  const groupSortValue = (group: TrialBalanceDetailedGroup): number | string => {
-    switch (sortKey) {
-      case "balanceType":
-        return group.ledgers[0]?.closingBalanceType ?? "";
-      case "opening":
-        return group.ledgers.reduce((s, l) => s + l.openingAmount, 0);
-      case "debit":
-        return group.ledgers.reduce((s, l) => s + l.debit, 0);
-      case "credit":
-        return group.ledgers.reduce((s, l) => s + l.credit, 0);
-      case "closing":
-        return group.ledgers.reduce((s, l) => s + l.closingAmount, 0);
-      default:
-        return 0;
-    }
-  };
-
-  return [...groups]
-    .map((g) => ({
-      ...g,
-      ledgers: [...g.ledgers].sort(compareLedgers),
-    }))
-    .sort((a, b) => {
-      const aVal = groupSortValue(a);
-      const bVal = groupSortValue(b);
-      if (typeof aVal === "string") {
-        return aVal.localeCompare(String(bVal)) * dir;
-      }
-      return (aVal - (bVal as number)) * dir;
-    });
-}
-
-/** Flat rows for detailed tab pagination */
 export type TrialBalanceDetailedFlatRow =
-  | { type: "group"; groupKey: string; groupName: string; ledgerCount: number }
+  | {
+      type: "primary";
+      primaryHeadId: number;
+      primaryHead: string;
+      amounts: TrialBalanceAmountColumns;
+    }
+  | {
+      type: "group";
+      groupKey: string;
+      groupName: string;
+      primaryHead: string;
+      ledgerCount: number;
+      amounts: TrialBalanceAmountColumns;
+    }
   | { type: "ledger"; ledger: TrialBalanceDetailedLedgerRow };
 
 export function flattenTrialBalanceDetailedGroups(
   groups: TrialBalanceDetailedGroup[],
-  expandedIds: Set<string>,
+  expandedPrimaryIds: Set<number>,
+  expandedGroupIds: Set<string>,
 ): TrialBalanceDetailedFlatRow[] {
   const flat: TrialBalanceDetailedFlatRow[] = [];
+  const sections = new Map<number, TrialBalancePrimaryHeadSection>();
+
   for (const group of groups) {
+    const section = sections.get(group.primaryHeadId) ?? {
+      primaryHeadId: group.primaryHeadId,
+      primaryHead: group.primaryHead,
+      sortOrder: group.primaryHeadSort,
+      openingDebit: 0,
+      openingCredit: 0,
+      debit: 0,
+      credit: 0,
+      closingDebit: 0,
+      closingCredit: 0,
+      groups: [],
+    };
+    section.groups.push(group);
+    section.openingDebit = roundMoney(section.openingDebit + group.openingDebit);
+    section.openingCredit = roundMoney(section.openingCredit + group.openingCredit);
+    section.debit = roundMoney(section.debit + group.debit);
+    section.credit = roundMoney(section.credit + group.credit);
+    section.closingDebit = roundMoney(section.closingDebit + group.closingDebit);
+    section.closingCredit = roundMoney(section.closingCredit + group.closingCredit);
+    sections.set(group.primaryHeadId, section);
+  }
+
+  for (const section of [...sections.values()].sort((a, b) => a.sortOrder - b.sortOrder)) {
     flat.push({
-      type: "group",
-      groupKey: group.groupKey,
-      groupName: group.groupName,
-      ledgerCount: group.ledgers.length,
+      type: "primary",
+      primaryHeadId: section.primaryHeadId,
+      primaryHead: section.primaryHead,
+      amounts: {
+        openingDebit: section.openingDebit,
+        openingCredit: section.openingCredit,
+        debit: section.debit,
+        credit: section.credit,
+        closingDebit: section.closingDebit,
+        closingCredit: section.closingCredit,
+      },
     });
-    if (expandedIds.has(group.groupKey)) {
+
+    if (!expandedPrimaryIds.has(section.primaryHeadId)) continue;
+
+    for (const group of section.groups) {
+      flat.push({
+        type: "group",
+        groupKey: group.groupKey,
+        groupName: group.groupName,
+        primaryHead: group.primaryHead,
+        ledgerCount: group.ledgers.length,
+        amounts: {
+          openingDebit: group.openingDebit,
+          openingCredit: group.openingCredit,
+          debit: group.debit,
+          credit: group.credit,
+          closingDebit: group.closingDebit,
+          closingCredit: group.closingCredit,
+        },
+      });
+
+      if (!expandedGroupIds.has(group.groupKey)) continue;
+
       for (const ledger of group.ledgers) {
         flat.push({ type: "ledger", ledger });
       }
     }
   }
+
   return flat;
 }
 
 export function collectAllDetailedGroupKeys(groups: TrialBalanceDetailedGroup[]): Set<string> {
   return new Set(groups.map((g) => g.groupKey));
 }
+
+export function collectAllPrimaryHeadKeys(groups: TrialBalanceDetailedGroup[]): Set<number> {
+  return new Set(groups.map((g) => g.primaryHeadId));
+}
+
+export { buildGeneralLedgerHref };

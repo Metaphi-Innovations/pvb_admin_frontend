@@ -33,7 +33,6 @@ export const ACCOUNTS_PERMISSIONS = {
 
   // Banking
   BANK_RECONCILE: "accounts.bank.reconcile",
-  FUND_TRANSFER: "accounts.fund_transfer.create",
 
   // Receivables / Payables
   RECEIVABLES_VIEW: "accounts.receivables.view",
@@ -62,7 +61,6 @@ export const ROLE_PERMISSION_PRESETS: Record<string, AccountsPermissionCode[]> =
     ACCOUNTS_PERMISSIONS.RECEIVABLES_VIEW,
     ACCOUNTS_PERMISSIONS.PAYABLES_VIEW,
     ACCOUNTS_PERMISSIONS.BANK_RECONCILE,
-    ACCOUNTS_PERMISSIONS.FUND_TRANSFER,
   ],
   accounts_clerk: [
     ACCOUNTS_PERMISSIONS.COA_VIEW,

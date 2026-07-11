@@ -27,6 +27,7 @@ import {
   toSignedBalance,
 } from "@/lib/accounts/running-balance";
 import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
+import { matchesVoucherTypeFilter } from "@/lib/accounts/report-multi-filter-utils";
 
 export const BANK_BOOK_VOUCHER_TYPES = [
   "Opening Balance",
@@ -68,6 +69,7 @@ export interface BankBookRawTransaction {
   voucherTypeCode: VoucherTypeCode;
   voucherType: BankBookVoucherType;
   particular: string;
+  particularLedgerId: number | null;
   narration: string;
   receipt: number;
   payment: number;
@@ -82,6 +84,7 @@ export interface BankBookDisplayRow {
   voucherNo: string;
   voucherType: BankBookVoucherType;
   particular: string;
+  particularLedgerId: number | null;
   narration: string;
   receipt: number;
   payment: number;
@@ -114,7 +117,7 @@ export interface BankBookFilters {
   dateFrom: string;
   dateTo: string;
   financialYearId: string;
-  voucherType: string;
+  voucherType: string | string[];
   search: string;
 }
 
@@ -196,6 +199,19 @@ function resolveParticular(v: AccountingVoucher, bankLineIndex: number): string 
   return bankLine?.remarks || v.narration || "—";
 }
 
+function resolveParticularLedgerId(v: AccountingVoucher, bankLineIndex: number): number | null {
+  const otherLines = v.lines.filter(
+    (line, index) =>
+      index !== bankLineIndex &&
+      line.ledgerId &&
+      (Number(line.debit) > 0 || Number(line.credit) > 0),
+  );
+  if (otherLines.length === 1 && otherLines[0].ledgerId) {
+    return otherLines[0].ledgerId;
+  }
+  return null;
+}
+
 function matchesSearch(row: BankBookRawTransaction, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -240,6 +256,7 @@ function buildRawTransactions(ledgerId: number): BankBookRawTransaction[] {
           voucherTypeCode: v.voucherType,
           voucherType,
           particular: resolveParticular(v, lineOrder),
+          particularLedgerId: resolveParticularLedgerId(v, lineOrder),
           narration: v.narration || "—",
           receipt: debit,
           payment: credit,
@@ -314,6 +331,7 @@ function buildOpeningRow(
     voucherNo: "—",
     voucherType: "Opening Balance",
     particular: "Balance brought forward",
+    particularLedgerId: null,
     narration: "—",
     receipt: 0,
     payment: 0,
@@ -341,6 +359,7 @@ function toDisplayRows(
       voucherNo: tx.voucherNo,
       voucherType: tx.voucherType,
       particular: tx.particular,
+      particularLedgerId: tx.particularLedgerId,
       narration: tx.narration,
       receipt: tx.receipt,
       payment: tx.payment,
@@ -372,7 +391,7 @@ export function buildBankBookStatement(
   );
 
   const filteredTransactions = periodTransactions.filter((tx) => {
-    if (filters.voucherType !== "all" && tx.voucherType !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, tx.voucherType)) return false;
     if (!matchesSearch(tx, filters.search)) return false;
     return true;
   });

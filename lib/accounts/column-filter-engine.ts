@@ -16,8 +16,26 @@ function normLower(v: unknown): string {
 
 function parseNum(v: unknown): number | null {
   if (v == null || v === "") return null;
-  const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""));
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const cleaned = String(v).replace(/[₹,\s]/g, "").trim();
+  if (!cleaned) return null;
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Parse user-entered amount filter text (commas, currency symbols). */
+export function parseFilterAmountInput(raw: string): number | undefined {
+  const n = parseNum(raw);
+  return n == null ? undefined : n;
+}
+
+function parseBool(v: unknown): boolean | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "boolean") return v;
+  const s = normLower(v);
+  if (["yes", "y", "true", "1", "active"].includes(s)) return true;
+  if (["no", "n", "false", "0", "inactive"].includes(s)) return false;
+  return null;
 }
 
 function isBlank(v: unknown): boolean {
@@ -66,7 +84,7 @@ function matchNumber(cell: unknown, filter: AccountsColumnFilterState): boolean 
 
   switch (op) {
     case "equals":
-      return n === v1;
+      return Math.abs(n - v1) < 0.005;
     case "gt":
       return n > v1;
     case "lt":
@@ -165,6 +183,15 @@ function matchStatus(cell: unknown, filter: AccountsColumnFilterState): boolean 
   );
 }
 
+function matchBoolean(cell: unknown, filter: AccountsColumnFilterState): boolean {
+  if (!filter.selectedValues || filter.selectedValues.length === 0) return true;
+  const sel = filter.selectedValues[0];
+  if (sel === "all") return true;
+  const cellBool = parseBool(cell);
+  if (cellBool == null) return false;
+  return sel === "yes" ? cellBool : !cellBool;
+}
+
 export function isColumnFilterActive(filter: AccountsColumnFilterState | undefined): boolean {
   if (!filter) return false;
   if (filter.selectedValues && filter.selectedValues.length > 0) return true;
@@ -206,7 +233,11 @@ export function applyAccountsColumnFilters<T>(
           ok = matchDate(cell, filter);
           break;
         case "status":
+        case "select":
           ok = matchStatus(cell, filter);
+          break;
+        case "boolean":
+          ok = matchBoolean(cell, filter);
           break;
         default:
           ok = true;

@@ -4,12 +4,16 @@ import React, { useMemo } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CoaExplorerTree } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree";
+import { requestCoaAddLedger } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
+import { requestCoaAddSubGroup } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-group-bridge";
 import { useCoaNavigation } from "./CoaNavigationContext";
+import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { AccountsSidebarModuleHeader } from "./AccountsSidebarModuleHeader";
 import { ACCOUNTS_SIDEBAR_STICKY_HEAD_CLASS } from "@/lib/accounts/accounts-typography";
 import { useAccountsSidebar } from "./AccountsSidebarContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { CoaHierarchyLegend } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaHierarchyLegend";
 import { resolveCoaSidebarIcon, coaSidebarNodeIconClass } from "@/app/(app)/accounts/masters/chart-of-accounts/components/coa-tree-visual";
 
 /** Icon-only primary heads when sidebar is collapsed. */
@@ -79,9 +83,14 @@ export function CoaSidebarNavTree({
     setTreeSearchTerm,
     selectNode,
     toggleExpand,
+    expandAll,
+    collapseAll,
     coaReady,
     highlightedLedgerId,
   } = useCoaNavigation();
+
+  const canCreate = useCanCoa("create");
+  const canEdit = useCanCoa("edit");
 
   const { setCollapsed, toggleCollapsed } = useAccountsSidebar();
 
@@ -146,6 +155,24 @@ export function CoaSidebarNavTree({
             onChange={(e) => setTreeSearchTerm(e.target.value)}
           />
         </div>
+        <div className="flex items-center gap-2 px-3 pb-2">
+          <button
+            type="button"
+            onClick={expandAll}
+            className="text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
+          >
+            Expand All
+          </button>
+          <span className="text-muted-foreground/40 text-[10px]">|</span>
+          <button
+            type="button"
+            onClick={collapseAll}
+            className="text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
+          >
+            Collapse All
+          </button>
+          <CoaHierarchyLegend />
+        </div>
       </div>
 
       <div className="accounts-sidebar-tree-scroll accounts-coa-tree flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-1 py-0.5 pb-2">
@@ -168,10 +195,13 @@ export function CoaSidebarNavTree({
             selectedId={selectedId}
             expandedIds={expandedIds}
             search={treeSearchTerm}
-            canCreate={false}
+            canCreate={canCreate}
+            canEdit={canEdit}
             highlightedLedgerId={highlightedLedgerId}
             onSelect={selectNode}
             onToggle={toggleExpand}
+            onAddLedger={requestCoaAddLedger}
+            onAddSubGroup={requestCoaAddSubGroup}
           />
         )}
       </div>

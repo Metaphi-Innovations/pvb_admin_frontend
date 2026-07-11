@@ -30,6 +30,15 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportSearchFilter,
+  ReportBranchMultiFilter,
+  ReportCustomerMultiFilter,
+  ReportVendorMultiFilter,
+  ReportStatusMultiFilter,
+  ReportVoucherTypeMultiFilter,
+  ReportProductMultiFilter,
+  ReportSalespersonMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   useReportDateRange,
@@ -42,11 +51,20 @@ import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
   AccountsColumnFilterProvider,
-  AccountsColumnHeader,
   SortTh,
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadProducts } from "@/app/(app)/masters/products/product-data";
+import type { ReportFilterSummaryItem } from "@/lib/accounts/report-multi-filter-utils";
+import {
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { exportRegisterToExcel, exportRegisterToPdf } from "../register-shared/register-export";
 import type { RegisterPartyOption, RegisterReportRow } from "../register-shared/register-types";
 import {
@@ -55,14 +73,6 @@ import {
   filterRegisterRows,
   formatRegisterDate,
 } from "../register-shared/register-utils";
-import { buildRegisterPartyOptions } from "../register-shared/register-live-data";
-
-const INVOICE_STATUS_OPTIONS = [
-  { value: "all", label: "All statuses" },
-  { value: "posted", label: "Posted" },
-  { value: "draft", label: "Draft" },
-  { value: "cancelled", label: "Cancelled" },
-];
 
 const GST_RATE_OPTIONS = [
   { value: "all", label: "All rates" },
@@ -71,6 +81,15 @@ const GST_RATE_OPTIONS = [
   { value: "18", label: "18%" },
   { value: "28", label: "28%" },
 ];
+
+const REGISTER_STATUS_OPTIONS = [
+  { value: "posted" as const, label: "Posted" },
+  { value: "draft" as const, label: "Draft" },
+  { value: "cancelled" as const, label: "Cancelled" },
+];
+
+const SALES_VOUCHER_TYPE_OPTIONS = [{ value: "SI", label: "Sales Invoice" }];
+const PURCHASE_VOUCHER_TYPE_OPTIONS = [{ value: "PI", label: "Purchase Invoice" }];
 
 export interface RegisterReportPageConfig {
   mode: "sales" | "purchase";
@@ -82,37 +101,6 @@ export interface RegisterReportPageConfig {
   buildRows: () => RegisterReportRow[];
   viewHref: (row: RegisterReportRow) => string;
   exportFilePrefix: string;
-}
-
-function RegisterPartyFilter({
-  label,
-  value,
-  onChange,
-  parties,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  parties: RegisterPartyOption[];
-}) {
-  return (
-    <div className="space-y-1 min-w-[150px]">
-      <Label className={filterLabelClass}>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "w-[150px]")}>
-          <SelectValue placeholder={`All ${label.toLowerCase()}`} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All</SelectItem>
-          {parties.map((p) => (
-            <SelectItem key={p.id} value={String(p.id)}>
-              {p.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
 }
 
 function RegisterReportTable({
@@ -251,17 +239,30 @@ function RegisterReportBody({
   hasFilters,
   clearFilters,
   exportMeta,
+  filterSummaryItems,
   preset,
   setPreset,
   dateFrom,
   setDateFrom,
   dateTo,
   setDateTo,
-  partyId,
-  setPartyId,
-  partyOptions,
-  invoiceStatus,
-  setInvoiceStatus,
+  branchIds,
+  setBranchIds,
+  partyIds,
+  setPartyIds,
+  customers,
+  vendors,
+  statuses,
+  setStatuses,
+  voucherTypes,
+  setVoucherTypes,
+  productIds,
+  setProductIds,
+  salespersonIds,
+  setSalespersonIds,
+  productOptions,
+  salespeople,
+  moreFiltersActive,
   gstRate,
   setGstRate,
   search,
@@ -272,17 +273,30 @@ function RegisterReportBody({
   hasFilters: boolean;
   clearFilters: () => void;
   exportMeta: Parameters<typeof exportRegisterToExcel>[1];
+  filterSummaryItems: ReportFilterSummaryItem[];
   preset: DateRangePresetId;
   setPreset: (v: DateRangePresetId) => void;
   dateFrom: string;
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  partyId: string;
-  setPartyId: (v: string) => void;
-  partyOptions: RegisterPartyOption[];
-  invoiceStatus: string;
-  setInvoiceStatus: (v: string) => void;
+  branchIds: string[];
+  setBranchIds: (v: string[]) => void;
+  partyIds: string[];
+  setPartyIds: (v: string[]) => void;
+  customers: { id: number; customerName: string; customerCode?: string }[];
+  vendors: { id: number; vendorName: string; vendorCode?: string }[];
+  statuses: string[];
+  setStatuses: (v: string[]) => void;
+  voucherTypes: string[];
+  setVoucherTypes: (v: string[]) => void;
+  productIds: string[];
+  setProductIds: (v: string[]) => void;
+  salespersonIds: string[];
+  setSalespersonIds: (v: string[]) => void;
+  productOptions: { value: string; label: string }[];
+  salespeople: string[];
+  moreFiltersActive: number;
   gstRate: string;
   setGstRate: (v: string) => void;
   search: string;
@@ -297,10 +311,23 @@ function RegisterReportBody({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
+  const isSales = config.mode === "sales";
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search, pageSize]);
+  }, [
+    dateFrom,
+    dateTo,
+    branchIds,
+    partyIds,
+    statuses,
+    voucherTypes,
+    productIds,
+    salespersonIds,
+    gstRate,
+    search,
+    pageSize,
+  ]);
 
   const handleExportExcel = useCallback(async () => {
     if (columnFilteredRows.length === 0 || exporting) return;
@@ -319,71 +346,90 @@ function RegisterReportBody({
     exportRegisterToPdf(rows, exportMeta, totals);
   }, [columnFilteredRows, exportMeta, totals, config, exporting]);
 
+  const voucherTypeOptions = isSales ? SALES_VOUCHER_TYPE_OPTIONS : PURCHASE_VOUCHER_TYPE_OPTIONS;
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb(config.breadcrumbSection, config.title)}
       title={config.title}
       description={config.description}
       filters={
-        <ReportFilterRow
-          end={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              disabled={exporting || columnFilteredRows.length === 0}
+        <>
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportPdf}
+                disabled={exporting || columnFilteredRows.length === 0}
+              />
+            }
+          >
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
             />
-          }
-        >
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <RegisterPartyFilter
-            label={config.partyLabel}
-            value={partyId}
-            onChange={setPartyId}
-            parties={partyOptions}
-          />
-          <div className="space-y-1 min-w-[130px]">
-            <Label className={filterLabelClass}>Invoice Status</Label>
-            <Select value={invoiceStatus} onValueChange={setInvoiceStatus}>
-              <SelectTrigger className={cn(filterControlClass, "w-[130px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INVOICE_STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[110px]">
-            <Label className={filterLabelClass}>GST Rate</Label>
-            <Select value={gstRate} onValueChange={setGstRate}>
-              <SelectTrigger className={cn(filterControlClass, "w-[110px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GST_RATE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Invoice no., party, GSTIN…"
-          />
-        </ReportFilterRow>
+            <ReportBranchMultiFilter values={branchIds} onChange={setBranchIds} />
+            {isSales ? (
+              <ReportCustomerMultiFilter
+                values={partyIds}
+                onChange={setPartyIds}
+                customers={customers}
+              />
+            ) : (
+              <ReportVendorMultiFilter values={partyIds} onChange={setPartyIds} vendors={vendors} />
+            )}
+            <ReportStatusMultiFilter
+              values={statuses}
+              onChange={setStatuses}
+              options={REGISTER_STATUS_OPTIONS}
+              label="Invoice Status"
+            />
+            <ReportVoucherTypeMultiFilter
+              values={voucherTypes}
+              onChange={setVoucherTypes}
+              options={voucherTypeOptions}
+            />
+            <ReportMoreFilters activeCount={moreFiltersActive}>
+              <ReportProductMultiFilter
+                values={productIds}
+                onChange={setProductIds}
+                products={productOptions}
+              />
+              {isSales ? (
+                <ReportSalespersonMultiFilter
+                  values={salespersonIds}
+                  onChange={setSalespersonIds}
+                  salespeople={salespeople}
+                />
+              ) : null}
+            </ReportMoreFilters>
+            <div className="space-y-1 min-w-[110px]">
+              <Label className={filterLabelClass}>GST Rate</Label>
+              <Select value={gstRate} onValueChange={setGstRate}>
+                <SelectTrigger className={cn(filterControlClass, "w-[110px]")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GST_RATE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Invoice no., party, GSTIN…"
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
@@ -422,62 +468,125 @@ function RegisterReportBody({
 
 export function RegisterReportPageClient({ config }: { config: RegisterReportPageConfig }) {
   const mounted = useClientMounted();
+  const isSales = config.mode === "sales";
 
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [partyId, setPartyId] = useState("all");
-  const [invoiceStatus, setInvoiceStatus] = useState("all");
+  const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [partyIds, setPartyIds] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
+  const [productIds, setProductIds] = useState<string[]>([]);
+  const [salespersonIds, setSalespersonIds] = useState<string[]>([]);
   const [gstRate, setGstRate] = useState("all");
   const [search, setSearch] = useState("");
 
-  const sourceRows = useMemo(() => (mounted ? config.buildRows() : []), [mounted, config]);
-
-  const partyOptions = useMemo(
+  const customers = useMemo(() => loadCustomers(), []);
+  const vendors = useMemo(() => loadVendors(), []);
+  const productOptions = useMemo(
     () =>
-      config.partyOptions && config.partyOptions.length > 0
-        ? config.partyOptions
-        : buildRegisterPartyOptions(sourceRows),
-    [config.partyOptions, sourceRows],
+      loadProducts()
+        .filter((p) => p.status === "active")
+        .map((p) => ({ value: p.productName, label: p.productName })),
+    [],
   );
+  const salespeople = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      if (c.salesManName?.trim()) names.add(c.salesManName.trim());
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [customers]);
+
+  const sourceRows = useMemo(() => (mounted ? config.buildRows() : []), [mounted, config]);
 
   const filterParams = useMemo(
     () => ({
       dateFrom,
       dateTo,
       financialYearId: "all",
-      partyId,
-      invoiceStatus,
+      customerIds: isSales ? partyIds : undefined,
+      vendorIds: isSales ? undefined : partyIds,
+      branch: branchIds,
+      statuses,
+      voucherTypes,
+      product: productIds,
+      salespersons: isSales ? salespersonIds : undefined,
       gstRate,
       search,
     }),
-    [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search],
+    [
+      dateFrom,
+      dateTo,
+      isSales,
+      partyIds,
+      branchIds,
+      statuses,
+      voucherTypes,
+      productIds,
+      salespersonIds,
+      gstRate,
+      search,
+    ],
   );
 
   const filteredRows = useMemo(
-    () => filterRegisterRows(sourceRows, filterParams),
-    [sourceRows, filterParams],
+    () => filterRegisterRows(sourceRows, filterParams, config.mode),
+    [sourceRows, filterParams, config.mode],
   );
+
+  const moreFiltersActive = countActiveMoreFilters({
+    product: productIds,
+    salesperson: isSales ? salespersonIds : undefined,
+  });
 
   const hasFilters =
     search.trim() !== "" ||
-    partyId !== "all" ||
-    invoiceStatus !== "all" ||
+    branchIds.length > 0 ||
+    partyIds.length > 0 ||
+    statuses.length > 0 ||
+    voucherTypes.length > 0 ||
+    productIds.length > 0 ||
+    salespersonIds.length > 0 ||
     gstRate !== "all";
 
   const clearFilters = () => {
     setSearch("");
-    setPartyId("all");
-    setInvoiceStatus("all");
+    setBranchIds([]);
+    setPartyIds([]);
+    setStatuses([]);
+    setVoucherTypes([]);
+    setProductIds([]);
+    setSalespersonIds([]);
     setGstRate("all");
   };
 
+  const customerSelectOptions = useMemo(
+    () => customers.map((c) => ({ value: String(c.id), label: c.customerName })),
+    [customers],
+  );
+  const vendorSelectOptions = useMemo(
+    () => vendors.map((v) => ({ value: String(v.id), label: v.vendorName })),
+    [vendors],
+  );
+
   const exportMeta = useMemo(() => {
-    const party =
-      partyId === "all"
-        ? "All"
-        : (partyOptions.find((p) => String(p.id) === partyId)?.name ?? partyId);
+    const partyLabel = formatMultiSelectLabel(
+      partyIds,
+      isSales ? customerSelectOptions : vendorSelectOptions,
+      isSales ? "Customer" : "Supplier",
+      isSales ? "All customers" : "All suppliers",
+    );
     const statusLabel =
-      INVOICE_STATUS_OPTIONS.find((o) => o.value === invoiceStatus)?.label ?? invoiceStatus;
+      statuses.length === 0
+        ? "All statuses"
+        : formatMultiSelectLabel(statuses, REGISTER_STATUS_OPTIONS, "Status");
     const gstLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? gstRate;
+    const branchLabel =
+      branchIds.length === 0
+        ? "All branches"
+        : branchIds.length === 1
+          ? branchIds[0]
+          : `${branchIds.length} branches`;
 
     return {
       reportName: config.title,
@@ -485,7 +594,8 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       dateTo,
       financialYear: "",
       partyLabel: config.partyLabel,
-      partyFilter: party,
+      partyFilter: partyLabel,
+      branchFilter: branchLabel,
       invoiceStatus: statusLabel,
       gstRate: gstLabel,
       search,
@@ -493,14 +603,32 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
   }, [
     config.title,
     config.partyLabel,
-    partyOptions,
+    isSales,
+    customerSelectOptions,
+    vendorSelectOptions,
     dateFrom,
     dateTo,
-    partyId,
-    invoiceStatus,
+    partyIds,
+    branchIds,
+    statuses,
     gstRate,
     search,
   ]);
+
+  const filterSummaryItems = useMemo(
+    () =>
+      [
+        buildBranchFilterSummary(branchIds, () => setBranchIds([])),
+        buildEntityFilterSummary(
+          "party",
+          isSales ? "Customers" : "Suppliers",
+          partyIds,
+          isSales ? customerSelectOptions : vendorSelectOptions,
+          () => setPartyIds([]),
+        ),
+      ].filter((item): item is ReportFilterSummaryItem => item != null),
+    [branchIds, partyIds, isSales, customerSelectOptions, vendorSelectOptions],
+  );
 
   const getCellValue = useCallback(
     (row: RegisterReportRow, key: string) => (row as unknown as Record<string, unknown>)[key],
@@ -535,17 +663,30 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
         hasFilters={hasFilters}
         clearFilters={clearFilters}
         exportMeta={exportMeta}
+        filterSummaryItems={filterSummaryItems}
         preset={preset}
         setPreset={setPreset}
         dateFrom={dateFrom}
         setDateFrom={setDateFrom}
         dateTo={dateTo}
         setDateTo={setDateTo}
-        partyId={partyId}
-        setPartyId={setPartyId}
-        partyOptions={partyOptions}
-        invoiceStatus={invoiceStatus}
-        setInvoiceStatus={setInvoiceStatus}
+        branchIds={branchIds}
+        setBranchIds={setBranchIds}
+        partyIds={partyIds}
+        setPartyIds={setPartyIds}
+        customers={customers}
+        vendors={vendors}
+        statuses={statuses}
+        setStatuses={setStatuses}
+        voucherTypes={voucherTypes}
+        setVoucherTypes={setVoucherTypes}
+        productIds={productIds}
+        setProductIds={setProductIds}
+        salespersonIds={salespersonIds}
+        setSalespersonIds={setSalespersonIds}
+        productOptions={productOptions}
+        salespeople={salespeople}
+        moreFiltersActive={moreFiltersActive}
         gstRate={gstRate}
         setGstRate={setGstRate}
         search={search}

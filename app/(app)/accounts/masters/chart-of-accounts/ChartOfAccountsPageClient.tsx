@@ -16,6 +16,7 @@ import {
   isLandBuildingGroup,
   isSundryCreditorsGroup,
   isSundryDebtorsGroup,
+  isTdsSpecializedGroup,
   resolveCoaAddActionLabel,
   resolveCoaAddLedgerPolicy,
 } from "@/lib/accounts/coa-add-ledger-policy";
@@ -29,6 +30,7 @@ import type { ChartOfAccount } from "../../data";
 import { loadChartOfAccounts } from "../../data";
 import {
   canAddLedgerUnder,
+  canAddSubGroupUnder,
   getAncestorPath,
   isAccountingGroupNode,
 } from "./chart-of-accounts-data";
@@ -38,6 +40,7 @@ import {
   buildCoaListingRows,
   computeCoaLedgerListingSummary,
   computeCoaListingSummary,
+  computeCoaGroupDetailSummary,
 } from "./coa-listing-data";
 import {
   exportCoaLedgerListingToExcel,
@@ -52,13 +55,28 @@ import {
   requestCoaAddLedger,
   requestCoaGlobalAddLedger,
 } from "./coa-add-ledger-bridge";
+import {
+  requestCoaAddSubGroup,
+  requestCoaGlobalAddSubGroup,
+} from "./coa-add-group-bridge";
 import { registerSundryDebtorCustomerFormHandler } from "./coa-sundry-debtor-form-bridge";
 import { registerSundryCreditorVendorFormHandler } from "./coa-sundry-creditor-form-bridge";
 import { registerWarehouseFormHandler } from "./coa-warehouse-form-bridge";
+import { registerTdsLedgerFormHandler } from "./coa-tds-form-bridge";
+import {
+  registerCoaMasterLinkedFormHandler,
+  type CoaMasterLinkedFormKind,
+} from "./coa-master-linked-form-bridge";
+import { AccountsMasterLinkedLedgerForm } from "./components/AccountsMasterLinkedLedgerForm";
+import { registerCoaBankFormHandler } from "./coa-bank-form-bridge";
 import { CoaListingTable } from "./components/CoaListingTable";
 import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
 import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
+import { CoaGroupDetailHeader } from "./components/CoaGroupDetailHeader";
+import { CoaTdsLedgerDetailHeader } from "./components/CoaTdsLedgerDetailHeader";
+import { CoaDrillDownEmptyState } from "./components/CoaDrillDownEmptyState";
+import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
 
 const AccountsSundryDebtorCustomerFormClient = dynamic(
   () => import("./sundry-debtors/new/AccountsSundryDebtorCustomerFormClient"),
@@ -72,6 +90,16 @@ const AccountsSundryCreditorVendorFormClient = dynamic(
 
 const AccountsWarehouseFormClient = dynamic(
   () => import("./land-building/new/AccountsWarehouseFormClient"),
+  { ssr: false },
+);
+
+const AccountsTdsLedgerFormClient = dynamic(
+  () => import("./tds/new/AccountsTdsLedgerFormClient"),
+  { ssr: false },
+);
+
+const BankAccountFormClient = dynamic(
+  () => import("../../banking/bank-accounts/BankAccountFormClient"),
   { ssr: false },
 );
 
@@ -107,14 +135,18 @@ export default function ChartOfAccountsPageClient() {
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [exporting, setExporting] = useState(false);
-  /** Inline Customer Master form under Sundry Debtors (Accounts-only save). */
   const [sundryDebtorFormParentId, setSundryDebtorFormParentId] = useState<number | null>(null);
-  /** Inline Supplier Master form under Sundry Creditors (Accounts-only save). */
   const [sundryCreditorFormParentId, setSundryCreditorFormParentId] = useState<number | null>(null);
-  /** Inline Warehouse Master form under Land & Building (ERP save + COA ledger). */
   const [warehouseFormParentId, setWarehouseFormParentId] = useState<number | null>(null);
+  const [tdsFormParentId, setTdsFormParentId] = useState<number | null>(null);
+  const [masterLinkedForm, setMasterLinkedForm] = useState<{
+    kind: CoaMasterLinkedFormKind;
+    parentGroupId: number;
+  } | null>(null);
+  const [bankFormParentId, setBankFormParentId] = useState<number | null>(null);
 
   const canCreate = useCanCoa("create");
+  const canEdit = useCanCoa("edit");
 
   useEffect(() => {
     registerSundryDebtorCustomerFormHandler((parentGroupId) => {
@@ -126,10 +158,20 @@ export default function ChartOfAccountsPageClient() {
     registerWarehouseFormHandler((parentGroupId) => {
       setWarehouseFormParentId(parentGroupId);
     });
+    registerTdsLedgerFormHandler((parentGroupId) => {
+      setTdsFormParentId(parentGroupId);
+    });
+    registerCoaMasterLinkedFormHandler((kind, parentGroupId) => {
+      setMasterLinkedForm({ kind, parentGroupId });
+    });
+    registerCoaBankFormHandler(setBankFormParentId);
     return () => {
       registerSundryDebtorCustomerFormHandler(null);
       registerSundryCreditorVendorFormHandler(null);
       registerWarehouseFormHandler(null);
+      registerTdsLedgerFormHandler(null);
+      registerCoaMasterLinkedFormHandler(null);
+      registerCoaBankFormHandler(null);
     };
   }, []);
 
@@ -141,6 +183,12 @@ export default function ChartOfAccountsPageClient() {
     !showRoot && selectedNode && isAccountingGroupNode(selectedNode, records),
   );
 
+  const isGroupView = Boolean(
+    !showRoot && selectedNode && selectedNode.nodeLevel === "account_group",
+  );
+
+  const showEmptyState = !showRoot && !selectedNode;
+
   const isGroupingLedgerView = Boolean(
     !showRoot &&
       selectedNode &&
@@ -148,9 +196,25 @@ export default function ChartOfAccountsPageClient() {
       isGroupingLedger(selectedNode, records),
   );
 
+  const isTdsLedgerSummaryView = Boolean(
+    !showRoot &&
+      selectedNode &&
+      selectedNode.nodeLevel === "ledger" &&
+      isTdsCoaNode(selectedNode, records),
+  );
+
+  const tdsLedgerBalance = useMemo(() => {
+    if (!isTdsLedgerSummaryView || !selectedNode) return null;
+    return computeLedgerCurrentBalance(selectedNode);
+  }, [isTdsLedgerSummaryView, selectedNode]);
+
+  const groupDetailSummary = useMemo(() => {
+    if (!isGroupView || !selectedNode || !datesReady) return null;
+    return computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
+  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady]);
   /** Parent whose immediate children are shown in the hierarchy listing table */
   const tableParentId =
-    showRoot || isLedgerStatementView || isAccountingGroupLedgerListing
+    showEmptyState || isLedgerStatementView || isAccountingGroupLedgerListing
       ? null
       : (selectedNode?.id ?? null);
 
@@ -265,7 +329,7 @@ export default function ChartOfAccountsPageClient() {
       ...path.map((node, index) => ({
         label: node.accountName,
         href:
-          index < path.length - 1
+          index < path.length - 1 && node.nodeLevel !== "primary_head"
             ? `${CHART_OF_ACCOUNTS_LIST_PATH}?node=${node.id}`
             : undefined,
       })),
@@ -342,8 +406,25 @@ export default function ChartOfAccountsPageClient() {
     }
   };
 
+  const exportDisabled =
+    exporting ||
+    (isLedgerStatementView
+      ? filteredTransactions.length === 0
+      : isAccountingGroupLedgerListing
+        ? ledgerListingRows.length === 0
+        : listingRows.length === 0);
+
+  const handleNewSubGroup = useCallback(() => {
+    const parentId =
+      selectedNode &&
+      !showRoot &&
+      canAddSubGroupUnder(selectedNode, records)
+        ? selectedNode.id
+        : null;
+    requestCoaGlobalAddSubGroup(parentId);
+  }, [selectedNode, showRoot, records]);
+
   const handleNewLedger = useCallback(() => {
-    // When viewing Sundry Debtors, open the Customer Master form (Accounts-only save).
     if (
       selectedNode &&
       !showRoot &&
@@ -354,7 +435,6 @@ export default function ChartOfAccountsPageClient() {
       return;
     }
 
-    // When viewing Sundry Creditors, open the Supplier Master form (Accounts-only save).
     if (
       selectedNode &&
       !showRoot &&
@@ -365,7 +445,6 @@ export default function ChartOfAccountsPageClient() {
       return;
     }
 
-    // When viewing Land & Building, open the ERP Warehouse Master form.
     if (
       selectedNode &&
       !showRoot &&
@@ -373,6 +452,16 @@ export default function ChartOfAccountsPageClient() {
       isLandBuildingGroup(selectedNode, records)
     ) {
       setWarehouseFormParentId(selectedNode.id);
+      return;
+    }
+
+    if (
+      selectedNode &&
+      !showRoot &&
+      selectedNode.nodeLevel === "account_group" &&
+      isTdsSpecializedGroup(selectedNode, records)
+    ) {
+      setTdsFormParentId(selectedNode.id);
       return;
     }
 
@@ -426,35 +515,39 @@ export default function ChartOfAccountsPageClient() {
     [handlePartyLedgerSaved],
   );
 
+  const handleTdsLedgerSaved = useCallback(
+    (ledgerId: number, parentId: number | null) => {
+      handlePartyLedgerSaved(ledgerId, parentId, () => setTdsFormParentId(null));
+    },
+    [handlePartyLedgerSaved],
+  );
+
   const newLedgerLabel = useMemo(() => {
-    if (
-      selectedNode &&
-      !showRoot &&
-      selectedNode.nodeLevel === "account_group"
-    ) {
+    if (selectedNode && !showRoot && selectedNode.nodeLevel === "account_group") {
       return resolveCoaAddActionLabel(selectedNode, records);
     }
     return "New Ledger";
   }, [selectedNode, showRoot, records]);
 
+  const canShowAddSubGroup =
+    canCreate &&
+    !isLedgerStatementView &&
+    !showEmptyState &&
+    selectedNode?.nodeLevel !== "ledger" &&
+    (selectedNode == null ||
+      showRoot ||
+      canAddSubGroupUnder(selectedNode, records));
+
   const canShowNewLedger =
     canCreate &&
     !isLedgerStatementView &&
+    !showEmptyState &&
     selectedNode?.nodeLevel !== "ledger" &&
     (isAccountingGroupLedgerListing ||
       showRoot ||
       !selectedNode ||
       !resolveCoaAddLedgerPolicy(selectedNode, records).blocked);
 
-  const exportDisabled =
-    exporting ||
-    (isLedgerStatementView
-      ? filteredTransactions.length === 0
-      : isAccountingGroupLedgerListing
-        ? ledgerListingRows.length === 0
-        : listingRows.length === 0);
-
-  // Keep Accounts sidebar; swap only the main panel content for the tabbed Customer form.
   if (sundryDebtorFormParentId != null) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
@@ -491,6 +584,47 @@ export default function ChartOfAccountsPageClient() {
     );
   }
 
+  if (tdsFormParentId != null) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        <AccountsTdsLedgerFormClient
+          parentGroupId={tdsFormParentId}
+          onClose={() => setTdsFormParentId(null)}
+          onSaved={handleTdsLedgerSaved}
+        />
+      </div>
+    );
+  }
+
+  if (masterLinkedForm) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        <AccountsMasterLinkedLedgerForm
+          kind={masterLinkedForm.kind}
+          parentGroupId={masterLinkedForm.parentGroupId}
+          onClose={() => setMasterLinkedForm(null)}
+          onSaved={(ledgerId, parentId) =>
+            handlePartyLedgerSaved(ledgerId, parentId, () => setMasterLinkedForm(null))
+          }
+        />
+      </div>
+    );
+  }
+
+  if (bankFormParentId != null) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        <BankAccountFormClient
+          presetGroupId={bankFormParentId}
+          onClose={() => setBankFormParentId(null)}
+          onSaved={(ledgerId, parentId) =>
+            handlePartyLedgerSaved(ledgerId, parentId, () => setBankFormParentId(null))
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       <AccountsPageShell
@@ -502,6 +636,7 @@ export default function ChartOfAccountsPageClient() {
         className="h-full"
       >
         <div className="flex flex-col flex-1 min-h-0 gap-3">
+          {!showEmptyState && (
           <CoaListingToolbar
             search={contentSearch}
             onSearchChange={setContentSearch}
@@ -523,12 +658,19 @@ export default function ChartOfAccountsPageClient() {
             onPdf={handlePdfExport}
             exportDisabled={exportDisabled}
             showNewLedger={canShowNewLedger}
+            showAddSubGroup={canShowAddSubGroup}
             canCreate={canCreate}
             onNewLedger={canShowNewLedger ? handleNewLedger : undefined}
+            onAddSubGroup={canShowAddSubGroup ? handleNewSubGroup : undefined}
             newLedgerLabel={newLedgerLabel}
           />
+          )}
 
           <AccountsListingTableCard className="flex-1 min-h-0">
+          {showEmptyState ? (
+            <CoaDrillDownEmptyState />
+          ) : (
+            <>
           {isLedgerStatementView && selectedNode && ledgerAccounting && (
             <CoaLedgerDetailHeader
               ledger={selectedNode}
@@ -537,6 +679,18 @@ export default function ChartOfAccountsPageClient() {
               openingSide={ledgerAccounting.openingBalanceType}
               closingAmount={ledgerAccounting.currentBalance}
               closingSide={ledgerAccounting.balanceType}
+              canEdit={canEdit}
+            />
+          )}
+
+          {groupDetailSummary && <CoaGroupDetailHeader summary={groupDetailSummary} />}
+
+          {isTdsLedgerSummaryView && selectedNode && tdsLedgerBalance && (
+            <CoaTdsLedgerDetailHeader
+              ledger={selectedNode}
+              records={records}
+              currentAmount={tdsLedgerBalance.amount}
+              currentSide={tdsLedgerBalance.balanceType}
             />
           )}
 
@@ -587,6 +741,8 @@ export default function ChartOfAccountsPageClient() {
                 isSearchMode={Boolean(contentSearch.trim())}
                 onDrillInto={handleDrillInto}
                 onAddLedger={requestCoaAddLedger}
+                onAddSubGroup={requestCoaAddSubGroup}
+                canEdit={canEdit}
                 emptyMessage={
                   contentSearch.trim()
                     ? "No accounts match your search."
@@ -600,7 +756,9 @@ export default function ChartOfAccountsPageClient() {
 
           <div className="flex-shrink-0 px-4 py-2 border-t border-border bg-muted/20">
             <p className="text-xs text-muted-foreground">
-              {isLedgerStatementView && selectedNode ? (
+              {showEmptyState ? (
+                <>Use the sidebar tree to browse the chart of accounts.</>
+              ) : isLedgerStatementView && selectedNode ? (
                 <>
                   Showing{" "}
                   <span className="font-medium text-foreground">
@@ -653,6 +811,8 @@ export default function ChartOfAccountsPageClient() {
               )}
             </p>
           </div>
+            </>
+          )}
           </AccountsListingTableCard>
         </div>
       </AccountsPageShell>

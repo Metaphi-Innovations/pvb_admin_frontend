@@ -141,7 +141,7 @@ export default function HrClaimsAccountsClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Claims", "Employee Claims")}
       title="Expense / Claims from HR"
-      description="Pending â†’ Claims Payable â†’ Payment Voucher â†’ Paid Claims."
+      description="Pending → Claims Payable → Payment Voucher → Paid Claims."
       filters={
         <ReportFilterRow>
           <ReportDateRangeFilter
@@ -214,7 +214,7 @@ export default function HrClaimsAccountsClient() {
                 <span className="text-muted-foreground">Payment Mode</span><span>{selected.payment?.paymentMode ?? selected.paymentMode ?? "—"}</span>
               </div>
               <Link href={`/accounts/transactions/expenses/${selected.id}`} className="text-brand-600 hover:underline text-xs">
-                Open claim â†’
+                Open claim →
               </Link>
               {tab === "payable" && selected.paidStatus !== "paid" && (
                 <Button

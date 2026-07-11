@@ -338,6 +338,7 @@ export function postSalesInvoice(input: {
   invoiceNo: string;
   customerName: string;
   date: string;
+  grandTotal?: number;
   taxableAmount: number;
   cgst: number;
   sgst: number;
@@ -346,7 +347,11 @@ export function postSalesInvoice(input: {
   gstRatePct?: number;
 }): PostingResult {
   ensureGstAccountingLedgers();
-  const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
+  const taxTotal = roundMoney(input.cgst + input.sgst + input.igst);
+  const total =
+    input.grandTotal != null && input.grandTotal > 0
+      ? roundMoney(input.grandTotal)
+      : roundMoney(input.taxableAmount + taxTotal);
   const lines: PostingLineInput[] = [
     {
       mappingKey: "sales_receivable",

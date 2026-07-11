@@ -1,7 +1,7 @@
 import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Cash Book demo seed — creates voucher-based cash transactions only.
- * Isolated to Cash Book; does not modify bank book or fund transfer modules.
+ * Isolated to Cash Book; does not modify bank book data.
  */
 
 import { loadChartOfAccounts, type ChartOfAccount } from "@/app/(app)/accounts/data";

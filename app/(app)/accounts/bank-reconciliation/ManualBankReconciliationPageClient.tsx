@@ -66,6 +66,7 @@ import {
 } from "@/lib/accounts/manual-bank-reconciliation-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useFY } from "@/lib/fy-store";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { UploadStatementDialog } from "./components/UploadStatementDialog";
 import {
   AccountsColumnFilterProvider,
@@ -552,6 +553,22 @@ export default function ManualBankReconciliationPageClient() {
     setDirty(true);
   };
 
+  const discardDraftEdits = useCallback(() => {
+    const next: Record<string, string> = {};
+    for (const row of gridRows) {
+      next[row.rowKey] = row.bankProcessingDate;
+    }
+    setDraftDates(next);
+    setDirty(false);
+    setInlineError(null);
+  }, [gridRows]);
+
+  const { requestCancel: requestDiscardDraft, discardDialog } = useTransactionFormCancel({
+    listHref: "/accounts/banking/reconciliation",
+    isDirty: dirty,
+    onNavigate: discardDraftEdits,
+  });
+
   const handleSave = async () => {
     if (!coaLedgerId) {
       setToast({ msg: "Please select a bank account.", type: "error" });
@@ -667,6 +684,15 @@ export default function ManualBankReconciliationPageClient() {
             >
               <Upload className="w-4 h-4" />
               Upload Statement
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 text-sm font-medium"
+              disabled={!dirty}
+              onClick={requestDiscardDraft}
+            >
+              Cancel
             </Button>
             <Button
               size="sm"
@@ -850,6 +876,7 @@ export default function ManualBankReconciliationPageClient() {
           {toast.msg}
         </div>
       )}
+      {discardDialog}
     </>
   );
 }

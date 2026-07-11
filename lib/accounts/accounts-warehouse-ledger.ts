@@ -11,6 +11,7 @@ import {
   type ChartOfAccount,
 } from "@/app/(app)/accounts/data";
 import { generateLedgerCode } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import {
   isLandBuildingGroup,
   LAND_BUILDING_GROUP_NAME,
@@ -118,6 +119,10 @@ export function createWarehouseCoaLedger(
   };
 
   saveChartOfAccounts([...records, ledger]);
+  dispatchAccountsDataChanged("ledgers", {
+    operation: "create",
+    recordId: ledger.id,
+  });
 
   upsertErpPartyLink({
     ledgerId,

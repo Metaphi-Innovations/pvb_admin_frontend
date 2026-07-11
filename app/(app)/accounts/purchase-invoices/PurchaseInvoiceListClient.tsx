@@ -25,13 +25,19 @@ import {
 import {
   AccountsTableEmpty,
   AccountsTableListing,
-  AccountsTableToolbar,
+  AccountsTablePagination,
   AccountsListingCountFooter,
+  AccountsListingFilterCard,
 } from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  ReportSearchFilter,
   ReportDateRangeFilter,
+  ReportFilterRow,
+  ReportFilterResetButton,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { resetReportDateRange, accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
 import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
@@ -39,6 +45,8 @@ import {
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-utils";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import {
@@ -78,12 +86,25 @@ function estimatedGrnValue(grn: GrnRecord) {
 
 function PurchaseInvoicesTabTable({
   toolbarRows,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
 }: {
   toolbarRows: PurchaseInvoiceRecord[];
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
 }) {
   const visible = useAccountsFilteredRows(toolbarRows);
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
 
   return (
+    <>
     <AccountsTable minWidth={1480}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
@@ -116,7 +137,7 @@ function PurchaseInvoicesTabTable({
           ) : visible.length === 0 ? (
             <AccountsTableEmpty colSpan={14} message="No records match the column filters." />
           ) : (
-            visible.map((inv) => {
+            pagedRows.map((inv) => {
               const gst = getPurchaseInvoiceGstBreakup(inv);
               const outstandingAmt = Math.max(0, inv.grandTotal - inv.amountPaid);
               return (
@@ -142,7 +163,7 @@ function PurchaseInvoicesTabTable({
                     <AccountsTableActionCell>
                       <AccountsViewAction href={`/accounts/purchase-invoices/${inv.id}`} />
                       <Link
-                        href={`/accounts/debit-notes/new?purchaseInvoiceId=${inv.id}`}
+                        href={`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${inv.id}`}
                         title="Debit Note"
                         className={ACCOUNTS_ACTION_BTN_CLASS}
                       >
@@ -156,6 +177,16 @@ function PurchaseInvoicesTabTable({
           )}
         </AccountsTableBody>
       </AccountsTable>
+      {visible.length > 0 && (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </>
   );
 }
 
@@ -238,6 +269,10 @@ function PurchaseInvoicesTabBody({
   pendingGrns,
   outstanding,
   paidThisMonth,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
 }: {
   filteredInvoices: PurchaseInvoiceRecord[];
   search: string;
@@ -254,6 +289,10 @@ function PurchaseInvoicesTabBody({
   pendingGrns: GrnRecord[];
   outstanding: number;
   paidThisMonth: number;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
 }) {
   const columnFiltered = useAccountsFilteredRows(filteredInvoices);
 
@@ -308,45 +347,63 @@ function PurchaseInvoicesTabBody({
     <AccountsTableListing
       className="purchase-invoice-listing"
       toolbar={
-        <AccountsTableToolbar
-          search={{
-            value: search,
-            onChange: setSearch,
-            placeholder: "Search invoice no., supplier invoice no., supplier, GRN no…",
-          }}
-          filters={
-            <>
-              <ReportDateRangeFilter
-                preset={preset}
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                onPresetChange={setPreset}
-                onDateFromChange={setDateFrom}
-                onDateToChange={setDateTo}
+        <AccountsListingFilterCard>
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={exportCsv}
+                onPdf={exportCsv}
+                disabled={columnFiltered.length === 0}
               />
-              <div className="flex items-center gap-1">
-                {(["all", "paid", "partial", "unpaid"] as PaymentStatus[]).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={cn(
-                      "h-7 px-2.5 text-sm rounded-lg border font-medium transition-colors",
-                      statusFilter === st
-                        ? "bg-brand-600 text-white border-brand-600"
-                        : "border-border text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    {st === "all" ? "All" : PAYMENT_STATUS_LABELS[st]}
-                  </button>
-                ))}
-              </div>
-            </>
-          }
-          onExcel={exportCsv}
-          onPdf={exportCsv}
-          exportDisabled={columnFiltered.length === 0}
-        />
+            }
+          >
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Search invoice no., supplier invoice no., supplier, GRN no…"
+              className="min-w-[200px] flex-1 max-w-md"
+            />
+            <div className="flex items-end gap-1 flex-wrap">
+              {(["all", "paid", "partial", "unpaid"] as PaymentStatus[]).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatusFilter(st)}
+                  className={cn(
+                    "h-7 px-2.5 text-xs rounded-lg border font-medium transition-colors",
+                    statusFilter === st
+                      ? "bg-brand-600 text-white border-brand-600"
+                      : "border-border text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {st === "all" ? "All" : PAYMENT_STATUS_LABELS[st]}
+                </button>
+              ))}
+            </div>
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportFilterResetButton
+              showOnlyWhenActive
+              active={
+                accountsListingFiltersActive(
+                  { search, preset, dateFrom, dateTo, status: statusFilter === "all" ? "" : statusFilter },
+                  { search: "", preset: "this_month", dateFrom: "", dateTo: "", status: "" },
+                )
+              }
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("all");
+                resetReportDateRange(setPreset, setDateFrom, setDateTo, "this_month");
+              }}
+            />
+          </ReportFilterRow>
+        </AccountsListingFilterCard>
       }
       summary={
         <AccountsSummaryBar
@@ -367,7 +424,13 @@ function PurchaseInvoicesTabBody({
         ) : undefined
       }
     >
-      <PurchaseInvoicesTabTable toolbarRows={filteredInvoices} />
+      <PurchaseInvoicesTabTable
+        toolbarRows={filteredInvoices}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
     </AccountsTableListing>
   );
 }
@@ -419,9 +482,12 @@ export default function PurchaseInvoiceListClient() {
   const [tab, setTab] = useState<Tab>("invoices");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PaymentStatus>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const sectionRefresh = useAccountsSectionRefresh("purchase-invoices");
 
-  const invoices = useMemo(() => loadGrnPurchaseInvoices(), []);
+  const invoices = useMemo(() => loadGrnPurchaseInvoices(), [sectionRefresh]);
   const pendingGrns = useMemo(() => getGrnsPendingInvoice(), []);
 
   const filteredInvoices = useMemo(() => {
@@ -551,6 +617,10 @@ export default function PurchaseInvoiceListClient() {
               pendingGrns={pendingGrns}
               outstanding={outstanding}
               paidThisMonth={paidThisMonth}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </AccountsColumnFilterProvider>
         ) : (

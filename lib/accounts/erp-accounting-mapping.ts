@@ -294,7 +294,7 @@ export function getCustomerAccountingSummary(customer: Customer): PartyAccountin
     ledgerCode: ledger?.accountCode ?? "—",
     outstanding: outstandingRow?.outstanding ?? 0,
     coaHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
-    ledgerHref: ledger ? `/accounts/masters/ledgers/${ledger.id}` : "/accounts/masters/ledgers",
+    ledgerHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
     isSystemGenerated: ledger?.isSystemGenerated ?? false,
   };
 }
@@ -314,7 +314,7 @@ export function getVendorAccountingSummary(vendor: Vendor): PartyAccountingSumma
     ledgerCode: ledger?.accountCode ?? "—",
     outstanding: outstandingRow?.outstanding ?? 0,
     coaHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
-    ledgerHref: ledger ? `/accounts/masters/ledgers/${ledger.id}` : "/accounts/masters/ledgers",
+    ledgerHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
     isSystemGenerated: ledger?.isSystemGenerated ?? false,
   };
 }

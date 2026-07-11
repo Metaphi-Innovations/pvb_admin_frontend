@@ -314,7 +314,7 @@ export default function BankAccountsPageClient() {
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts")}
         title="Bank Accounts"
-        description="Company bank ledgers used in Bank Book, fund transfers, vouchers and reconciliation."
+        description="Company bank ledgers used in Bank Book, vouchers and reconciliation."
         hideDescription
         actions={
           <Button

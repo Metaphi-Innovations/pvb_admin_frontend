@@ -4,7 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AgeingBreakpointPanel } from "@/components/accounts/AgeingBreakpointPanel";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import {
+  breakpointsToDraft,
+  DEFAULT_AGEING_BREAKPOINTS,
+  getAgeingBucketLabels,
+  getVisibleAgeingBucketIndices,
+  ageingBucketColumnKey,
+  type AgeingBreakpoints,
+} from "@/lib/accounts/ageing-breakpoints";
 import {
   computeVendorAgeingRows,
   getPayablesFilterOptions,
@@ -36,81 +45,79 @@ import {
   AccountsTableScroll,
   type AccountsRichColumnDef,
 } from "@/components/accounts/AccountsTable";
-import {
-  AccountsTablePagination,
-} from "@/components/accounts/AccountsTableListing";
+import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { cn } from "@/lib/utils";
 
-const COLUMNS: AccountsRichColumnDef<VendorAgeingRow>[] = [
-  {
-    key: "vendorName",
-    label: "Supplier",
-    filterType: "text",
-    render: (r) => (
-      <Link
-        href={`/accounts/payables/outstanding/${r.vendorId}`}
-        className="text-xs font-medium text-brand-700 hover:underline"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {r.vendorName}
-      </Link>
-    ),
-  },
-  {
-    key: "totalOutstanding",
-    label: "Total Outstanding",
-    align: "right",
-    filterType: "amount",
-    render: (r) => (
-      <span className={cn(MONEY_CELL_CLASS, "font-semibold text-foreground")}>
-        {formatMoney(r.totalOutstanding)}
-      </span>
-    ),
-  },
-  {
-    key: "bucket0_30",
-    label: "0-30 Days",
-    align: "right",
-    filterType: "amount",
-    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket0_30)}</span>,
-  },
-  {
-    key: "bucket31_60",
-    label: "31-60 Days",
-    align: "right",
-    filterType: "amount",
-    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket31_60)}</span>,
-  },
-  {
-    key: "bucket61_90",
-    label: "61-90 Days",
-    align: "right",
-    filterType: "amount",
-    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket61_90)}</span>,
-  },
-  {
-    key: "bucket91_120",
-    label: "91-120 Days",
-    align: "right",
-    filterType: "amount",
-    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucket91_120)}</span>,
-  },
-  {
-    key: "bucketAbove120",
-    label: "Above 120 Days",
-    align: "right",
-    filterType: "amount",
-    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.bucketAbove120)}</span>,
-  },
-];
+function AmountCell({ amount }: { amount: number }) {
+  return (
+    <span className={cn("inline-block whitespace-nowrap tabular-nums", MONEY_CELL_CLASS)}>
+      {formatMoney(amount)}
+    </span>
+  );
+}
+
+function buildColumns(
+  bucketLabels: string[],
+  visibleBucketIndices: number[],
+): AccountsRichColumnDef<VendorAgeingRow>[] {
+  const bucketColumns: AccountsRichColumnDef<VendorAgeingRow>[] = visibleBucketIndices.map(
+    (index) => ({
+      key: ageingBucketColumnKey(index),
+      label: bucketLabels[index] ?? "",
+      align: "right" as const,
+      filterType: "amount" as const,
+      render: (r) => <AmountCell amount={r.buckets[index] ?? 0} />,
+    }),
+  );
+
+  return [
+    {
+      key: "vendorName",
+      label: "Supplier",
+      filterType: "text",
+      render: (r) => (
+        <Link
+          href={`/accounts/payables/outstanding/${r.vendorId}`}
+          className="text-xs font-medium text-brand-700 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {r.vendorName}
+        </Link>
+      ),
+    },
+    {
+      key: "totalOutstanding",
+      label: "Total Outstanding",
+      align: "right",
+      filterType: "amount",
+      render: (r) => <AmountCell amount={r.totalOutstanding} />,
+    },
+    ...bucketColumns,
+  ];
+}
+
+function buildColumnConfig(visibleBucketIndices: number[]): Record<string, { type: "text" | "amount" }> {
+  const config: Record<string, { type: "text" | "amount" }> = {
+    vendorName: { type: "text" },
+    totalOutstanding: { type: "amount" },
+  };
+  for (const index of visibleBucketIndices) {
+    config[ageingBucketColumnKey(index)] = { type: "amount" };
+  }
+  return config;
+}
 
 function AgeingExport({
   exportMeta,
+  bucketLabels,
+  visibleBucketIndices,
   exporting,
   onExportingChange,
 }: {
   exportMeta: Parameters<typeof exportSupplierAgeingToExcel>[1];
+  bucketLabels: string[];
+  visibleBucketIndices: number[];
   exporting: boolean;
   onExportingChange: (v: boolean) => void;
 }) {
@@ -119,15 +126,15 @@ function AgeingExport({
   const handleExportExcel = useCallback(async () => {
     onExportingChange(true);
     try {
-      await exportSupplierAgeingToExcel(visible, exportMeta);
+      await exportSupplierAgeingToExcel(visible, exportMeta, bucketLabels, visibleBucketIndices);
     } finally {
       onExportingChange(false);
     }
-  }, [visible, exportMeta, onExportingChange]);
+  }, [visible, exportMeta, bucketLabels, visibleBucketIndices, onExportingChange]);
 
   const handleExportPdf = useCallback(() => {
-    exportSupplierAgeingToPdf(visible, exportMeta);
-  }, [visible, exportMeta]);
+    exportSupplierAgeingToPdf(visible, exportMeta, bucketLabels, visibleBucketIndices);
+  }, [visible, exportMeta, bucketLabels, visibleBucketIndices]);
 
   return (
     <AccountsExportMenu
@@ -139,11 +146,13 @@ function AgeingExport({
 }
 
 function VendorAgeingTable({
+  columns,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
 }: {
+  columns: AccountsRichColumnDef<VendorAgeingRow>[];
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -166,9 +175,9 @@ function VendorAgeingTable({
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
         <AccountsRichTable
-          columns={COLUMNS}
+          columns={columns}
           rows={pagedRows}
-          minWidth={1100}
+          minWidth={900}
           getRowKey={(r) => r.vendorId}
           emptyMessage="No records found."
           onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
@@ -197,6 +206,12 @@ export default function VendorAgeingClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
+  const [appliedBreakpoints, setAppliedBreakpoints] = useState<AgeingBreakpoints>(DEFAULT_AGEING_BREAKPOINTS);
+  const [breakpointDraft, setBreakpointDraft] = useState<string[]>(() =>
+    breakpointsToDraft(DEFAULT_AGEING_BREAKPOINTS),
+  );
+  const [breakpointError, setBreakpointError] = useState<string | null>(null);
+
   const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
@@ -212,14 +227,16 @@ export default function VendorAgeingClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [asOnDate, financialYearId, vendorId, search, pageSize, refreshKey]);
+  }, [asOnDate, financialYearId, vendorId, search, pageSize, appliedBreakpoints, refreshKey]);
 
   const filterOptions = useMemo(() => getPayablesFilterOptions(), [refreshKey]);
 
   const toolbarFiltered = useMemo(() => {
-    let data = computeVendorAgeingRows(asOnDate, {
-      vendorId: vendorId === "all" ? undefined : Number(vendorId),
-    });
+    let data = computeVendorAgeingRows(
+      asOnDate,
+      { vendorId: vendorId === "all" ? undefined : Number(vendorId) },
+      appliedBreakpoints,
+    );
     const q = search.trim().toLowerCase();
     if (q) {
       data = data.filter(
@@ -228,11 +245,35 @@ export default function VendorAgeingClient() {
       );
     }
     return data;
-  }, [asOnDate, vendorId, search, refreshKey]);
+  }, [asOnDate, vendorId, search, refreshKey, appliedBreakpoints]);
 
-  const getCellValue = useCallback(
-    (row: VendorAgeingRow, key: string) => (row as unknown as Record<string, unknown>)[key],
-    [],
+  const bucketLabels = useMemo(
+    () => getAgeingBucketLabels(appliedBreakpoints),
+    [appliedBreakpoints],
+  );
+
+  const visibleBucketIndices = useMemo(
+    () => getVisibleAgeingBucketIndices(toolbarFiltered, appliedBreakpoints.length),
+    [toolbarFiltered, appliedBreakpoints.length],
+  );
+
+  const columns = useMemo(
+    () => buildColumns(bucketLabels, visibleBucketIndices),
+    [bucketLabels, visibleBucketIndices],
+  );
+
+  const getCellValue = useCallback((row: VendorAgeingRow, key: string) => {
+    const bucketMatch = /^bucket-(\d+)$/.exec(key);
+    if (bucketMatch) {
+      const index = Number(bucketMatch[1]);
+      return row.buckets[index] ?? 0;
+    }
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
+
+  const visibleBucketLabels = useMemo(
+    () => visibleBucketIndices.map((i) => bucketLabels[i] ?? ""),
+    [visibleBucketIndices, bucketLabels],
   );
 
   const exportMeta = useMemo(() => {
@@ -251,22 +292,15 @@ export default function VendorAgeingClient() {
       supplier: vendor,
       paymentStatus: "—",
       search,
+      ageingBuckets: visibleBucketLabels.join(" · "),
     };
-  }, [financialYearId, vendorId, search, asOnDate, filterOptions.vendors]);
+  }, [financialYearId, vendorId, search, asOnDate, filterOptions.vendors, visibleBucketLabels]);
 
   return (
     <AccountsColumnFilterProvider
       rows={toolbarFiltered}
       getCellValue={getCellValue}
-      columnConfig={{
-        vendorName: { type: "text" },
-        totalOutstanding: { type: "amount" },
-        bucket0_30: { type: "amount" },
-        bucket31_60: { type: "amount" },
-        bucket61_90: { type: "amount" },
-        bucket91_120: { type: "amount" },
-        bucketAbove120: { type: "amount" },
-      }}
+      columnConfig={buildColumnConfig(visibleBucketIndices)}
       defaultSortKey="totalOutstanding"
       defaultSortDir="desc"
     >
@@ -275,25 +309,37 @@ export default function VendorAgeingClient() {
         title="Supplier Ageing"
         description="Supplier outstanding grouped by ageing buckets as on the selected date."
         filters={
-          <ReportFilterRow
-            end={
-              <AgeingExport
-                exportMeta={exportMeta}
-                exporting={exporting}
-                onExportingChange={setExporting}
-              />
-            }
-          >
-            <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-            <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
-            <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
-            <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search supplier…" />
-          </ReportFilterRow>
+          <div className="space-y-2">
+            <AgeingBreakpointPanel
+              draft={breakpointDraft}
+              onDraftChange={setBreakpointDraft}
+              onApply={setAppliedBreakpoints}
+              error={breakpointError}
+              onErrorChange={setBreakpointError}
+            />
+            <ReportFilterRow
+              end={
+                <AgeingExport
+                  exportMeta={exportMeta}
+                  bucketLabels={bucketLabels}
+                  visibleBucketIndices={visibleBucketIndices}
+                  exporting={exporting}
+                  onExportingChange={setExporting}
+                />
+              }
+            >
+              <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
+              <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+              <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
+              <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search supplier…" />
+            </ReportFilterRow>
+          </div>
         }
         layout="split"
         className="h-full min-h-0"
       >
         <VendorAgeingTable
+          columns={columns}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}

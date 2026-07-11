@@ -19,6 +19,14 @@ import {
 } from "./invoice-additional-expenses";
 import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
+import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
+import {
+	ensureDocumentWorkflow,
+	type AccountsDocumentWorkflow,
+} from "@/lib/accounts/accounts-maker-checker";
+import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
+import { ensureCustomerLedger } from "@/lib/accounts/party-ledger-sync";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
 import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
@@ -26,7 +34,6 @@ import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
-import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
 import { nextInvoiceDocumentNo } from "@/lib/accounts/invoice-type";
 import {
@@ -173,6 +180,9 @@ export interface InvoiceRecord {
 	invoiceStatus: InvoiceStatus;
 	/** Maker-checker workflow from User Management approver mapping */
 	workflow?: AccountsDocumentWorkflow;
+	/** Linked GL voucher after successful posting */
+	postedVoucherId?: number | null;
+	postedVoucherNo?: string | null;
 	paymentStatus: InvoicePaymentStatus;
 	collections: InvoiceCollectionEntry[];
 	attachments: InvoiceAttachment[];
@@ -486,6 +496,170 @@ function pushActivity(
 	];
 }
 
+function buildPostedWorkflow(
+	workflow: AccountsDocumentWorkflow,
+	remarks: string,
+): AccountsDocumentWorkflow {
+	return {
+		...workflow,
+		status: "posted",
+		history: [
+			...workflow.history,
+			{
+				at: new Date().toISOString(),
+				action: "posted",
+				by: ACCOUNTS_CURRENT_USER,
+				byRole: workflow.makerRole,
+				remarks,
+			},
+		],
+	};
+}
+
+function ensureInvoiceCustomerLedgerLink(invoice: InvoiceRecord): InvoiceRecord {
+	if (invoice.customerLedgerId) return invoice;
+
+	const customer = invoice.customerId
+		? loadCustomers().find((c) => c.id === invoice.customerId)
+		: undefined;
+
+	if (customer) {
+		const ledger = syncCustomerLedger(customer);
+		if (ledger) {
+			return {
+				...invoice,
+				customerLedgerId: ledger.id,
+				receivableLedger: ledger.accountName,
+			};
+		}
+	}
+
+	const name = invoice.customerName.trim();
+	if (name) {
+		const ledger = ensureCustomerLedger(name);
+		if (ledger) {
+			return {
+				...invoice,
+				customerLedgerId: ledger.id,
+				receivableLedger: ledger.accountName,
+			};
+		}
+	}
+
+	return invoice;
+}
+
+function reconcileSalesInvoicePostingState(
+	invoices: InvoiceRecord[],
+): { invoices: InvoiceRecord[]; changed: boolean } {
+	let changed = false;
+	const next = invoices.map((inv) => {
+		if (inv.invoiceStatus !== "sent") return inv;
+		if (inv.workflow?.status === "posted" && inv.postedVoucherId) return inv;
+
+		const voucher = findPostedSalesInvoiceVoucher(inv.invoiceNo);
+		if (!voucher) return inv;
+
+		changed = true;
+		const workflow = ensureDocumentWorkflow(inv.workflow);
+		return {
+			...inv,
+			workflow: { ...workflow, status: "posted" as const },
+			postedVoucherId: voucher.id,
+			postedVoucherNo: voucher.voucherNumber,
+		};
+	});
+	return { invoices: next, changed };
+}
+
+/**
+ * Post sales invoice to GL and mark workflow as posted.
+ * Throws when accounting posting fails — caller must roll back the invoice save.
+ */
+export function commitSalesInvoiceAccounting(
+	invoiceId: number,
+	activityDetail?: string,
+): InvoiceRecord {
+	const current = getInvoiceById(invoiceId);
+	if (!current) throw new Error("Invoice not found.");
+	if (current.invoiceStatus === "cancelled") {
+		throw new Error("Cancelled invoice cannot be posted.");
+	}
+
+	const linked = ensureInvoiceCustomerLedgerLink(current);
+	if (linked.customerLedgerId !== current.customerLedgerId) {
+		const all = loadInvoices();
+		const idx = all.findIndex((r) => r.id === invoiceId);
+		if (idx >= 0) {
+			all[idx] = { ...all[idx], ...linked };
+			saveInvoices(all);
+		}
+	}
+
+	const inv = getInvoiceById(invoiceId);
+	if (!inv) throw new Error("Invoice not found.");
+
+	const existingVoucher = findPostedSalesInvoiceVoucher(inv.invoiceNo);
+	const result = existingVoucher
+		? {
+				success: true as const,
+				voucherId: existingVoucher.id,
+				voucherNumber: existingVoucher.voucherNumber,
+			}
+		: maybePostSalesInvoice(inv);
+
+	if (!result?.success) {
+		throw new Error(
+			result?.error ?? "Accounting posting failed. Invoice was not saved.",
+		);
+	}
+
+	const workflow = ensureDocumentWorkflow(inv.workflow);
+	const detail =
+		activityDetail ??
+		`Posted to ledger — ${result.voucherNumber ?? inv.invoiceNo}`;
+
+	const all = loadInvoices();
+	const idx = all.findIndex((r) => r.id === invoiceId);
+	if (idx < 0) throw new Error("Invoice not found.");
+
+	const updated: InvoiceRecord = {
+		...all[idx],
+		invoiceStatus: "sent",
+		workflow: buildPostedWorkflow(workflow, detail),
+		postedVoucherId: result.voucherId ?? existingVoucher?.id ?? null,
+		postedVoucherNo: result.voucherNumber ?? existingVoucher?.voucherNumber ?? null,
+		activity: pushActivity(all[idx], "posted", detail),
+		updatedBy: ACCOUNTS_CURRENT_USER,
+		updatedAt: new Date().toISOString(),
+	};
+
+	all[idx] = updated;
+	saveInvoices(all);
+	invalidateSalesInvoiceCaches();
+	return normalizeInvoice(updated);
+}
+
+function invalidateSalesInvoiceCaches(): void {
+	invalidateAccountsDataCache("invoices");
+	invalidateAccountsDataCache("vouchers");
+	invalidateAccountsDataCache("receivables");
+	invalidateAccountsDataCache("coa");
+}
+
+function postSentInvoiceOrRollback(
+	invoiceId: number,
+	rollback: () => void,
+	activityDetail: string,
+): InvoiceRecord {
+	try {
+		return commitSalesInvoiceAccounting(invoiceId, activityDetail);
+	} catch (e) {
+		rollback();
+		throw e;
+	}
+}
+
 const SEED: InvoiceRecord[] = buildSalesInvoiceSeed();
 
 export function loadInvoices(): InvoiceRecord[] {
@@ -500,11 +674,13 @@ export function loadInvoices(): InvoiceRecord[] {
 		const normalized = mergeNearExpiryDemoSalesInvoice(list.map(normalizeInvoice));
 		const merged = mergeSalesInvoiceSeed(normalized);
 		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(merged);
-		if (changed || version !== String(SALES_INVOICE_SEED_VERSION) || !raw) {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
+		const { invoices: reconciled, changed: postingChanged } =
+			reconcileSalesInvoicePostingState(linked);
+		if (changed || postingChanged || version !== String(SALES_INVOICE_SEED_VERSION) || !raw) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
 			localStorage.setItem(SEED_VERSION_KEY, String(SALES_INVOICE_SEED_VERSION));
 		}
-		return linked;
+		return reconciled;
 	} catch {
 		return mergeSalesInvoiceSeed(SEED).map(normalizeInvoice);
 	}
@@ -516,6 +692,7 @@ export function saveInvoices(records: InvoiceRecord[]): void {
 		STORAGE_KEY,
 		JSON.stringify(records.map(normalizeInvoice)),
 	);
+	invalidateSalesInvoiceCaches();
 }
 
 export function getInvoiceById(id: number): InvoiceRecord | undefined {
@@ -724,7 +901,11 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	saveInvoices([...all, rec]);
 	attachWorkflowOnCreate("sales_invoice", rec.id);
 	if (rec.invoiceStatus === "sent") {
-		maybePostSalesInvoice(rec);
+		return postSentInvoiceOrRollback(
+			rec.id,
+			() => saveInvoices(all),
+			"Invoice created and posted to ledger",
+		);
 	}
 	return rec;
 }
@@ -747,10 +928,15 @@ export function updateInvoice(
 		updatedBy: ACCOUNTS_CURRENT_USER,
 		updatedAt: new Date().toISOString(),
 	});
+	const priorSnapshot = [...all];
 	all[idx] = updated;
 	saveInvoices(all);
 	if (updated.invoiceStatus === "sent") {
-		maybePostSalesInvoice(updated);
+		return postSentInvoiceOrRollback(
+			id,
+			() => saveInvoices(priorSnapshot),
+			"Invoice updated and posted to ledger",
+		);
 	}
 	return updated;
 }
@@ -762,6 +948,7 @@ export function markInvoiceSent(id: number): InvoiceRecord {
 	const cur = all[idx];
 	if (cur.invoiceStatus === "cancelled")
 		throw new Error("Cancelled invoice cannot be sent.");
+	const priorSnapshot = [...all];
 	const updated = normalizeInvoice({
 		...cur,
 		invoiceStatus: "sent",
@@ -771,8 +958,11 @@ export function markInvoiceSent(id: number): InvoiceRecord {
 	});
 	all[idx] = updated;
 	saveInvoices(all);
-	maybePostSalesInvoice(updated);
-	return updated;
+	return postSentInvoiceOrRollback(
+		id,
+		() => saveInvoices(priorSnapshot),
+		"Invoice posted to ledger",
+	);
 }
 
 export function receiveInvoicePayment(

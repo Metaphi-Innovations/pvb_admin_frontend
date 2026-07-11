@@ -26,6 +26,7 @@ import {
 } from "@/lib/accounts/bank-coa-utils";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
 import type { VoucherLine, VoucherTypeCode } from "@/app/(app)/accounts/vouchers/voucher-data";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 
 /** Ledger picker / quick-add context for Receipt & Payment vouchers only */
 export type VoucherLedgerScope =
@@ -481,17 +482,17 @@ export function validateContraVoucherLedgerScopes(
   records = loadChartOfAccounts(),
 ): string | null {
   if (fromLedgerId) {
-    const from = records.find((r) => r.id === fromLedgerId);
-    if (!from) return "Transfer From account is not a valid ledger.";
-    if (!isBankCashLedger(from, records)) {
-      return "Transfer From must be a Bank or Cash ledger only.";
+    const credit = records.find((r) => r.id === fromLedgerId);
+    if (!credit) return "Credit Account is not a valid ledger.";
+    if (!ledgerMatchesReceiptDebitScope(credit, records)) {
+      return "Credit Account must be Bank, Cash-in-Hand, OD, or CC ledger only.";
     }
   }
   if (toLedgerId) {
-    const to = records.find((r) => r.id === toLedgerId);
-    if (!to) return "Transfer To account is not a valid ledger.";
-    if (!isBankCashLedger(to, records)) {
-      return "Transfer To must be a Bank or Cash ledger only.";
+    const debit = records.find((r) => r.id === toLedgerId);
+    if (!debit) return "Debit Account is not a valid ledger.";
+    if (!ledgerMatchesReceiptDebitScope(debit, records)) {
+      return "Debit Account must be Bank, Cash-in-Hand, OD, or CC ledger only.";
     }
   }
   return null;
@@ -610,5 +611,9 @@ export function createVoucherQuickAddLedger(form: LedgerFormValues): ChartOfAcco
   const id = nextId(ledgers);
   const ledger = formToLedger(normalized, id, generateLedgerCode(records), records);
   saveChartOfAccounts([...records, ledger]);
+  dispatchAccountsDataChanged("ledgers", {
+    operation: "create",
+    recordId: ledger.id,
+  });
   return ledger;
 }

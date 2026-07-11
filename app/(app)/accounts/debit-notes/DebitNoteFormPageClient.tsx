@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { SearchableSelect } from "../credit-notes/components/SearchableSelect";
 import { DebitNoteProductTable } from "./components/DebitNoteProductTable";
 import { FreshDebitNoteForm, computeFreshDebitTotals } from "./components/FreshDebitNoteForm";
 import {
   applyReturnQtyToDebitLines,
+  buildReferenceFromPurchaseInvoice,
   buildReferenceFromPurchaseReturn,
   computeDebitTotals,
   createDebitNote,
@@ -31,6 +34,9 @@ import {
   type NoteWorkflowStatus,
 } from "./debit-notes-data";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
@@ -40,21 +46,26 @@ import {
 } from "@/lib/accounts/transaction-master-fetch";
 import { Download, Eye, Save, Trash2, Upload } from "lucide-react";
 
-type FormMode = "fresh" | "return";
+type FormMode = "fresh" | "return" | "purchase_invoice";
 
 export default function DebitNoteFormPageClient({
   debitNoteId,
   returnId,
+  purchaseInvoiceId,
   mode,
 }: {
   debitNoteId?: number;
   returnId?: number;
+  purchaseInvoiceId?: number;
   mode?: FormMode;
 }) {
   const router = useRouter();
+  const { toast, showToast, dismissToast } = useAccountsToast();
   const isEdit = debitNoteId != null;
   const isFresh = !isEdit && mode === "fresh";
   const isReturn = !isEdit && (mode === "return" || returnId != null);
+  const isPurchaseInvoice =
+    !isEdit && (mode === "purchase_invoice" || purchaseInvoiceId != null);
 
   const vendors = useMemo(() => getVendorsForDebitNote(), []);
 
@@ -89,7 +100,7 @@ export default function DebitNoteFormPageClient({
   const [gstPct, setGstPct] = useState("18");
   const [narration, setNarration] = useState("");
 
-  const vendorLocked = isReturn && Boolean(referencePreview);
+  const vendorLocked = (isReturn || isPurchaseInvoice) && Boolean(referencePreview);
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
 
   const onVendorChange = (id: string, fields: VendorTransactionFields | null) => {
@@ -133,6 +144,29 @@ export default function DebitNoteFormPageClient({
     }
   };
 
+  const applyPurchaseInvoicePreview = (preview: DebitReferencePreview, invoiceId: number) => {
+    setReferencePreview(preview);
+    const pre = previewToDebitForm(preview);
+    setSourceInvoiceId(pre.sourceInvoiceId ?? invoiceId);
+    setSourcePoId(pre.sourcePoId ?? null);
+    setSourceReturnId("");
+    setSourceReturnNo("");
+    setSourcePackingNo(preview.sourcePackingNo ?? "");
+    setSourceDispatchNo(preview.sourceDispatchNo ?? "");
+    if (pre.vendorId) {
+      const v = vendors.find((x) => x.id === pre.vendorId);
+      if (v) onVendorChange(String(pre.vendorId), vendorMasterToTransactionFields(v));
+      else setVendorId(String(pre.vendorId));
+    }
+    setOriginalAmount(String(pre.originalAmount ?? ""));
+    setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
+    setReason("Purchase Invoice Adjustment");
+    setRemarks(`Against PI ${preview.sourceInvoiceNo ?? invoiceId}`);
+    if (pre.lineItems?.length) {
+      setLines(pre.lineItems.map((l) => normalizeDebitLine(l)));
+    }
+  };
+
   useEffect(() => {
     if (!isReturn || returnId == null || isEdit) return;
     const pending = getPendingDebitNoteRow(returnId);
@@ -143,6 +177,14 @@ export default function DebitNoteFormPageClient({
       applyPreview(preview, returnId, `PRET-${returnId}`);
     }
   }, [isReturn, returnId, isEdit, vendors]);
+
+  useEffect(() => {
+    if (!isPurchaseInvoice || purchaseInvoiceId == null || isEdit) return;
+    const preview = buildReferenceFromPurchaseInvoice(purchaseInvoiceId);
+    if (preview) {
+      applyPurchaseInvoicePreview(preview, purchaseInvoiceId);
+    }
+  }, [isPurchaseInvoice, purchaseInvoiceId, isEdit, vendors]);
 
   useEffect(() => {
     if (!isEdit || debitNoteId == null) return;
@@ -300,7 +342,7 @@ export default function DebitNoteFormPageClient({
       }
     } else {
       if (!referencePreview) {
-        setError("Purchase return reference is missing.");
+        setError(isPurchaseInvoice ? "Purchase invoice reference is missing." : "Purchase return reference is missing.");
         return false;
       }
       validateDebitNoteLines(lines);
@@ -312,23 +354,27 @@ export default function DebitNoteFormPageClient({
     return true;
   };
 
-  const saveDraft = () => {
+  const saveDraft = (redirect: "view" | "list" = "view") => {
     setError(null);
     try {
       if (!validateForm()) return;
       if (isEdit && debitNoteId != null) {
         updateDebitNote(debitNoteId, buildInput("draft"));
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
+        dispatchAccountsDataChanged("debit-notes");
+        showToast("Debit note saved as draft");
+        router.push(redirect === "list" ? DEBIT_NOTES_LIST_PATH : `${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
         const rec = createDebitNote(buildInput("draft"));
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
+        dispatchAccountsDataChanged("debit-notes");
+        showToast("Debit note saved as draft");
+        router.push(redirect === "list" ? DEBIT_NOTES_LIST_PATH : `${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save debit note.");
     }
   };
 
-  const postNote = () => {
+  const postNote = (redirect: "view" | "list" = "view") => {
     setError(null);
     try {
       if (!validateForm()) return;
@@ -341,7 +387,9 @@ export default function DebitNoteFormPageClient({
       }
       if (id != null) {
         postDebitNoteRecord(id);
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${id}`);
+        dispatchAccountsDataChanged("debit-notes");
+        showToast("Debit note posted successfully");
+        router.push(redirect === "list" ? DEBIT_NOTES_LIST_PATH : `${DEBIT_NOTES_LIST_PATH}/${id}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not post debit note.");
@@ -352,23 +400,82 @@ export default function DebitNoteFormPageClient({
     ? "Edit Debit Note"
     : isFresh
       ? "Create Debit Note"
-      : "Create Debit Note from Purchase Return";
+      : isPurchaseInvoice
+        ? "Create Debit Note from Purchase Invoice"
+        : "Create Debit Note from Purchase Return";
+
+  const [baselineReady, setBaselineReady] = useState(false);
+  useEffect(() => {
+    setBaselineReady(false);
+    const id = window.setTimeout(() => setBaselineReady(true), 350);
+    return () => window.clearTimeout(id);
+  }, [debitNoteId, isFresh, returnId]);
+
+  const formSnapshot = useMemo(
+    () => ({
+      debitNoteDate,
+      vendorId,
+      lines,
+      remarks,
+      reason,
+      referenceNo,
+      taxableAmount,
+      gstApplicable,
+      gstPct,
+      narration,
+      attachments,
+      adjustmentLedgerId,
+    }),
+    [
+      debitNoteDate,
+      vendorId,
+      lines,
+      remarks,
+      reason,
+      referenceNo,
+      taxableAmount,
+      gstApplicable,
+      gstPct,
+      narration,
+      attachments,
+      adjustmentLedgerId,
+    ],
+  );
+  const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
+  const { requestCancel, discardDialog } = useTransactionFormCancel({
+    listHref: DEBIT_NOTES_LIST_PATH,
+    isDirty,
+  });
 
   return (
+    <>
     <AccountsFormLayout
+      onBackClick={requestCancel}
       title={title}
       breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
       code={debitNoteNo || undefined}
       footer={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 text-sm font-medium"
+            onClick={requestCancel}
+          >
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" onClick={saveDraft}>
-            <Save className="w-3.5 h-3.5" /> Save Draft
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => saveDraft("view")}>
+            <Save className="w-3.5 h-3.5" /> Save & View
           </Button>
-          <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => saveDraft("list")}>
+            Save & Back to List
+          </Button>
+          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => postNote("view")}>
             Post Debit Note
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => postNote("list")}>
+            Post & Back to List
           </Button>
         </div>
       }
@@ -384,7 +491,12 @@ export default function DebitNoteFormPageClient({
               {!isFresh && (
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Debit Note Date</Label>
-                  <Input type="date" className="h-9 text-sm" value={debitNoteDate} onChange={(e) => setDebitNoteDate(e.target.value)} />
+                  <AccountsDateInput
+                    value={debitNoteDate}
+                    onChange={setDebitNoteDate}
+                    aria-label="Debit note date"
+                    className="h-9 text-sm"
+                  />
                 </div>
               )}
             </div>
@@ -570,5 +682,8 @@ export default function DebitNoteFormPageClient({
         </div>
       </div>
     </AccountsFormLayout>
+    {discardDialog}
+    <AccountsToast toast={toast} onDismiss={dismissToast} />
+    </>
   );
 }

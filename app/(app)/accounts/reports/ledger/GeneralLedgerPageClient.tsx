@@ -9,13 +9,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
@@ -27,9 +20,15 @@ import {
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportVoucherTypeFilter,
+  ReportVoucherTypeMultiFilter,
+  ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import {
+  buildEntityFilterSummary,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -45,6 +44,7 @@ import {
   exportGeneralLedgerToPdf,
 } from "./general-ledger-export";
 import { GeneralLedgerTable } from "./GeneralLedgerTable";
+import { GeneralLedgerSelect } from "./GeneralLedgerSelect";
 function resolveLedgerFromUrl(urlLedgerId: string): string {
   if (!urlLedgerId) return "";
   const ledgers = getGeneralLedgerLedgers();
@@ -61,7 +61,7 @@ function GeneralLedgerPageContent() {
 
   const [ledgerId, setLedgerId] = useState("");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [voucherType, setVoucherType] = useState("all");
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
   const [dataTick, setDataTick] = useState(0);
@@ -82,18 +82,32 @@ function GeneralLedgerPageContent() {
     const urlLedger = searchParams.get("ledger") ?? "";
     const resolved = resolveLedgerFromUrl(urlLedger);
     if (resolved) setLedgerId(resolved);
-  }, [searchParams, mounted]);
+
+    const urlFrom = searchParams.get("from");
+    const urlTo = searchParams.get("to");
+    if (urlFrom) {
+      setDateFrom(urlFrom);
+      setPreset("custom");
+    }
+    if (urlTo) {
+      setDateTo(urlTo);
+      setPreset("custom");
+    }
+  }, [searchParams, mounted, setDateFrom, setDateTo, setPreset]);
 
   const handleLedgerChange = useCallback(
     (value: string) => {
       setLedgerId(value);
-      if (value) {
-        router.replace(`/accounts/reports/ledger?ledger=${encodeURIComponent(value)}`, { scroll: false });
-      } else {
-        router.replace("/accounts/reports/ledger", { scroll: false });
-      }
+      const params = new URLSearchParams();
+      if (value) params.set("ledger", value);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
+      const qs = params.toString();
+      router.replace(qs ? `/accounts/reports/ledger?${qs}` : "/accounts/reports/ledger", {
+        scroll: false,
+      });
     },
-    [router],
+    [router, dateFrom, dateTo],
   );
 
   const statement = useMemo(() => {
@@ -101,10 +115,10 @@ function GeneralLedgerPageContent() {
     return buildGeneralLedgerStatement(ledgerId, {
       dateFrom,
       dateTo,
-      voucherType,
+      voucherType: voucherTypes,
       search,
     });
-  }, [mounted, ledgerId, dateFrom, dateTo, voucherType, search, dataTick]);
+  }, [mounted, ledgerId, dateFrom, dateTo, voucherTypes, search, dataTick]);
 
   const openingRow = statement?.displayRows[0] ?? null;
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
@@ -179,8 +193,8 @@ function GeneralLedgerPageContent() {
         setDateFrom={setDateFrom}
         dateTo={dateTo}
         setDateTo={setDateTo}
-        voucherType={voucherType}
-        setVoucherType={setVoucherType}
+        voucherTypes={voucherTypes}
+        setVoucherTypes={setVoucherTypes}
         search={search}
         setSearch={setSearch}
       />
@@ -206,8 +220,8 @@ function GeneralLedgerPageBody({
   setDateFrom,
   dateTo,
   setDateTo,
-  voucherType,
-  setVoucherType,
+  voucherTypes,
+  setVoucherTypes,
   search,
   setSearch,
 }: {
@@ -228,12 +242,33 @@ function GeneralLedgerPageBody({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  voucherType: string;
-  setVoucherType: (v: string) => void;
+  voucherTypes: string[];
+  setVoucherTypes: (v: string[]) => void;
   search: string;
   setSearch: (v: string) => void;
 }) {
   const columnFilteredRows = useAccountsFilteredRows(allTransactionRows);
+
+  const voucherTypeOptions = useMemo(
+    () =>
+      (Object.entries(VOUCHER_TYPE_LABELS) as [VoucherTypeCode, string][]).map(([code, label]) => ({
+        value: code,
+        label,
+      })),
+    [],
+  );
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary(
+        "voucherType",
+        "Voucher Types",
+        voucherTypes,
+        voucherTypeOptions,
+        () => setVoucherTypes([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [voucherTypes, voucherTypeOptions]);
 
   const handleExportExcel = async () => {
     if (!statement) return;
@@ -291,7 +326,7 @@ function GeneralLedgerPageBody({
     statement &&
     !statement.hasPeriodTransactions &&
     !search.trim() &&
-    voucherType === "all";
+    voucherTypes.length === 0;
 
   const showNoFilterResults =
     ledgerId &&
@@ -305,61 +340,52 @@ function GeneralLedgerPageBody({
       title="General Ledger"
       description="Complete transaction history for a selected ledger with running balance."
       filters={
-        <ReportFilterRow className="items-end">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-1 min-w-[200px]">
-            <Label className={filterLabelClass}>
-              Ledger <span className="text-red-500">*</span>
-            </Label>
-            <Select value={ledgerId || undefined} onValueChange={handleLedgerChange}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[200px]")}>
-                <SelectValue placeholder="Select ledger…" />
-              </SelectTrigger>
-              <SelectContent>
-                {ledgers.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <ReportVoucherTypeFilter value={voucherType} onChange={setVoucherType} />
-          <div className="space-y-1 min-w-[200px] flex-1">
-            <Label className={filterLabelClass}>Search</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Voucher no., party, GSTIN, narration, reference…"
-                className={cn(filterControlClass, "mt-0 pr-8")}
-                disabled={!ledgerId}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+        <>
+          <ReportFilterRow className="items-end">
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <GeneralLedgerSelect
+              value={ledgerId}
+              ledgers={ledgers}
+              onChange={handleLedgerChange}
+            />
+            <ReportVoucherTypeMultiFilter values={voucherTypes} onChange={setVoucherTypes} />
+            <div className="space-y-1 min-w-[200px] flex-1">
+              <Label className={filterLabelClass}>Search</Label>
+              <div className="relative">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Voucher no., party, GSTIN, narration, reference…"
+                  className={cn(filterControlClass, "mt-0 pr-8")}
+                  disabled={!ledgerId}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-          <AccountsExportMenu
-            onExcel={handleExportExcel}
-            onPdf={handleExportPdf}
-            disabled={!canExport || exporting}
-          />
-        </ReportFilterRow>
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={!canExport || exporting}
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
@@ -374,7 +400,7 @@ function GeneralLedgerPageBody({
                 Please select a Ledger to view transactions.
               </p>
               <p className="text-xs text-muted-foreground">
-                Choose a ledger from the filter above to load its posting history and running balance.
+                Search and select a ledger from the filter above to load its posting history and running balance.
               </p>
             </div>
           </div>
@@ -398,7 +424,7 @@ function GeneralLedgerPageBody({
                     type="button"
                     onClick={() => {
                       setSearch("");
-                      setVoucherType("all");
+                      setVoucherTypes([]);
                     }}
                     className="text-xs text-brand-600 hover:underline"
                   >

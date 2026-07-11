@@ -14,6 +14,7 @@ import {
   type Customer,
 } from "@/app/(app)/masters/customers/customer-data";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
+import { matchesVoucherTypeFilter } from "@/lib/accounts/report-multi-filter-utils";
 import {
   buildPartyLedgerMovements,
   ledgerOpeningBalance,
@@ -83,7 +84,7 @@ export interface CustomerLedgerStatement {
 export interface CustomerLedgerFilters {
   dateFrom: string;
   dateTo: string;
-  voucherType: string;
+  voucherType: string | string[];
   search: string;
 }
 
@@ -317,7 +318,7 @@ export function buildCustomerLedgerStatement(
   );
 
   const filteredTransactions = periodTransactions.filter((t) => {
-    if (filters.voucherType !== "all" && t.voucherTypeCode !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, t.voucherTypeCode)) return false;
     return matchesSearch(t, filters.search);
   });
 
@@ -350,7 +351,7 @@ export function buildCustomerLedgerStatement(
   });
 
   const periodMovement = periodTransactions.filter((t) => {
-    if (filters.voucherType !== "all" && t.voucherTypeCode !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, t.voucherTypeCode)) return false;
     return matchesSearch(t, filters.search);
   });
 

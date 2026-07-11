@@ -1,6 +1,6 @@
 /** Excel-style column filter types — Accounts module only */
 
-export type AccountsColumnFilterType = "text" | "number" | "amount" | "date" | "status";
+export type AccountsColumnFilterType = "text" | "number" | "amount" | "date" | "status" | "select" | "boolean";
 
 export type TextFilterOperator =
   | "contains"
@@ -53,6 +53,8 @@ export interface AccountsColumnFilterMeta {
   options?: string[];
   /** Status labels for display */
   optionLabels?: Record<string, string>;
+  /** When true, use Excel-style operator controls (legacy). Defaults to provider simpleColumnFilters. */
+  advancedFilters?: boolean;
 }
 
 export type AccountsColumnFilterConfig = Record<string, AccountsColumnFilterMeta>;

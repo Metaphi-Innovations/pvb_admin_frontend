@@ -18,6 +18,8 @@ import {
   isBankAccountLedger,
 } from "@/lib/accounts/bank-coa-utils";
 import { upsertErpPartyLink } from "@/lib/accounts/erp-party-links";
+import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import {
   formatBankAccountLabel,
   formatBankAccountMaster,
@@ -278,13 +280,22 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     input.bankGroupCoaId != null
       ? records.find((r) => r.id === input.bankGroupCoaId)
       : undefined;
-  if (!bankGroup?.bankGroupFlag) {
+  const selectedAccountingGroupIsValid =
+    bankGroup?.nodeLevel === "account_group" &&
+    resolveCoaLedgerBehavior(bankGroup, records).kind === "bank";
+  if (!bankGroup?.bankGroupFlag && !selectedAccountingGroupIsValid) {
     bankGroup = findOrCreateBankGroup(input.bankName);
     records = loadChartOfAccounts();
     bankGroup = records.find((r) => r.id === bankGroup!.id) ?? bankGroup;
   }
 
-  if (!bankGroup?.bankGroupFlag) {
+  if (
+    !bankGroup?.bankGroupFlag &&
+    !(
+      bankGroup?.nodeLevel === "account_group" &&
+      resolveCoaLedgerBehavior(bankGroup, records).kind === "bank"
+    )
+  ) {
     throw new Error("Select a valid bank group.");
   }
 
@@ -324,7 +335,7 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     id: nextId(masters),
     coaLedgerId: ledgerRow.id,
     bankGroupCoaId: bankGroup.id,
-    bankName: bankGroup.accountName,
+    bankName: input.bankName.trim(),
     accountNickname: input.accountNickname.trim(),
     accountNumber: input.accountNumber.trim(),
     ifsc: input.ifsc.trim().toUpperCase(),
@@ -358,6 +369,14 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
   });
 
   syncBankLedgerDisplayNames();
+  dispatchAccountsDataChanged("ledgers", {
+    operation: "create",
+    recordId: ledgerRow.id,
+  });
+  dispatchAccountsDataChanged("bank-reconciliation", {
+    operation: "create",
+    recordId: row.id,
+  });
   return row;
 }
 

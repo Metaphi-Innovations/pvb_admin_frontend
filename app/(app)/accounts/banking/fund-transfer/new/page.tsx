@@ -1,7 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const FundTransferFormClient = lazyAccountsPage(() => import("../FundTransferFormClient"));
-
-export default function NewFundTransferPage() {
-  return <FundTransferFormClient />;
+/** New fund transfers are recorded via Contra Voucher. */
+export default function NewFundTransferRedirectPage() {
+  redirect("/accounts/vouchers?tab=contra");
 }

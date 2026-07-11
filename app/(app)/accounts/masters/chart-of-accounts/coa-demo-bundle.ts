@@ -5,10 +5,16 @@
 
 import type { AccountType, ChartOfAccount } from "../../data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { roundMoney } from "@/lib/accounts/money-format";
 import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
 import { COA_DEMO_LEDGER_SEEDS, type CoaDemoLedgerSeed } from "../coa-demo-ledgers";
 
 export const COA_DEMO_SOURCE_MODULE = "coa_demo_bundle";
+
+/** Ledger that absorbs the net opening-balance residual so the books open balanced. */
+export const OPENING_BALANCE_DIFFERENCE_LEDGER = "Difference in Opening Balances";
+const OPENING_BALANCE_DIFFERENCE_LEDGER_ID = 58001;
+const OPENING_BALANCE_DIFFERENCE_PARENT = "Proprietor / Partner / Shareholder Capital";
 
 /** Demo seeds skipped where system statutory ledgers are defined in coa-seed-nodes */
 const SKIP_STATUTORY_DEMO_SUBGROUPS = new Set([
@@ -334,6 +340,53 @@ export function buildBundledCoaDemoLedgers(
   return result;
 }
 
+/**
+ * Append (or refresh) the opening-balance difference ledger so that the sum of
+ * every ledger opening (Debit positive, Credit negative) nets to zero. This keeps
+ * the Trial Balance, Balance Sheet, and General Ledger opening columns balanced
+ * from a single common source without inserting a hidden/hardcoded total plug —
+ * the residual is shown transparently as its own Capital ledger.
+ */
+function withOpeningBalanceDifference(records: ChartOfAccount[]): ChartOfAccount[] {
+  const withoutDiff = records.filter(
+    (r) => r.accountName.trim().toLowerCase() !== OPENING_BALANCE_DIFFERENCE_LEDGER.toLowerCase(),
+  );
+
+  const netSigned = withoutDiff.reduce((sum, r) => {
+    if (r.nodeLevel !== "ledger") return sum;
+    const opening = Number(r.openingBalance) || 0;
+    if (opening === 0) return sum;
+    return sum + (r.balanceType === "Debit" ? opening : -opening);
+  }, 0);
+
+  const residual = roundMoney(netSigned);
+  if (residual === 0) return withoutDiff;
+
+  const parent = withoutDiff.find(
+    (r) =>
+      r.nodeLevel === "account_group" &&
+      r.accountName.trim().toLowerCase() === OPENING_BALANCE_DIFFERENCE_PARENT.toLowerCase(),
+  );
+  if (!parent) return withoutDiff;
+
+  // netSigned > 0 → openings are debit-heavy → balancing entry sits on the Credit side.
+  const diffLedger = makeDemoLedger({
+    id: OPENING_BALANCE_DIFFERENCE_LEDGER_ID,
+    accountCode: "LED-OBD-0001",
+    accountName: OPENING_BALANCE_DIFFERENCE_LEDGER,
+    accountType: "Liability",
+    nodeLevel: "ledger",
+    parentAccountId: parent.id,
+    parentAccount: parent.accountName,
+    status: "active",
+    openingBalance: Math.abs(residual),
+    balanceType: residual > 0 ? "Credit" : "Debit",
+    description: "Auto-balancing residual of imported opening balances",
+  });
+
+  return [...withoutDiff, diffLedger];
+}
+
 /** Merge bundled demo ledgers into a COA list (skip ERP-synced duplicates by parent+name). */
 export function mergeBundledCoaDemoLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
   const bundled = buildBundledCoaDemoLedgers(
@@ -351,6 +404,5 @@ export function mergeBundledCoaDemoLedgers(records: ChartOfAccount[]): ChartOfAc
     return !existingKeys.has(key);
   });
 
-  if (toAdd.length === 0) return records;
-  return [...records, ...toAdd];
+  return withOpeningBalanceDifference(toAdd.length === 0 ? records : [...records, ...toAdd]);
 }

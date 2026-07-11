@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pencil, Plus } from "lucide-react";
@@ -25,13 +25,20 @@ import {
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsTable, AccountsTableHead, AccountsTableHeadRow, AccountsTableBody, AccountsTableRow, AccountsTableCell } from "@/components/accounts/AccountsTable";
-import { AccountsTablePagination, AccountsTableListing, AccountsListingToolbar } from "@/components/accounts/AccountsTableListing";
+import { AccountsTablePagination, AccountsTableListing, AccountsListingFilterCard } from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   ReportSearchFilter,
   ReportDateRangeFilter,
+  ReportFilterRow,
+  ReportFilterResetButton,
   useReportDateRange,
   ACCOUNTS_FILTER_CONTROL_CLASS,
 } from "@/components/accounts/ReportFilters";
+import { resetReportDateRange, accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
+import {
+  AccountsListingTableBodyState,
+} from "@/components/accounts/AccountsListingStates";
 import { INVOICE_TYPE_LABELS } from "@/lib/accounts/invoice-type";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { ACCOUNTS_FILTER_LABEL_CLASS, ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
@@ -48,6 +55,9 @@ import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVouche
 import { cn } from "@/lib/utils";
 import { LedgerImpactPreview, type LedgerImpactLine } from "@/components/accounts/LedgerImpactPreview";
 import { InvoiceTypeBadge } from "@/components/accounts/InvoiceTypeBadge";
+import { parseDocumentsListingFiltersFromSearch } from "@/lib/accounts/documents-listing-filter-query";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import type { AccountsDataScope } from "@/lib/accounts/accounts-data-events";
 
 export interface TransactionRow {
   id: string | number;
@@ -64,6 +74,7 @@ export interface TransactionRow {
   invoiceTotal?: string;
   status: string;
   branch?: string;
+  warehouse?: string;
   /** Sales invoice scheme settlement badge: Settlement Required | Settled | undefined (show —) */
   schemeSettlementLabel?: string | null;
   /** Sales | Stock Transfer */
@@ -98,6 +109,8 @@ export interface TransactionListConfig<T> {
   showInvoiceTypeColumn?: boolean;
   /** Sales invoice listing: source/dispatch columns + invoice date range filter. */
   invoiceListingMode?: boolean;
+  /** When set, listing reloads after matching accounts data-change events. */
+  dataRefreshScope?: AccountsDataScope;
   /** Show CGST / SGST / IGST split amount columns (purchase & sales invoices). */
   gstSplitColumns?: boolean;
 }
@@ -264,18 +277,36 @@ function exportTransactionRows(
 
 export function TransactionListPage<T>({ config }: { config: TransactionListConfig<T> }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const invoiceListingMode = config.invoiceListingMode ?? false;
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange(
-    invoiceListingMode ? "last_month" : "this_month",
+    invoiceListingMode ? "this_year" : "this_month",
   );
   const [search, setSearch] = useState("");
   const [branch, setBranch] = useState("");
+  const [warehouse, setWarehouse] = useState("");
   const [statusTab, setStatusTab] = useState("all");
   const [viewRow, setViewRow] = useState<TransactionRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [postError, setPostError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const sectionRefresh = useAccountsSectionRefresh(config.dataRefreshScope ?? "*");
+
+  useEffect(() => {
+    const parsed = parseDocumentsListingFiltersFromSearch(searchParams.toString());
+    if (parsed.dateFrom) {
+      setDateFrom(parsed.dateFrom);
+      setPreset("custom");
+    }
+    if (parsed.dateTo) {
+      setDateTo(parsed.dateTo);
+      setPreset("custom");
+    }
+    if (parsed.branch) setBranch(parsed.branch);
+    if (parsed.warehouse) setWarehouse(parsed.warehouse);
+  }, [searchParams, setDateFrom, setDateTo, setPreset]);
 
   const allRows = useMemo(
     () => (mounted ? config.loadData().map(config.getRow) : []),
@@ -284,6 +315,10 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   );
 
   const bump = () => setRefreshKey((k) => k + 1);
+
+  useEffect(() => {
+    bump();
+  }, [sectionRefresh]);
 
   const statusTabs = config.statusTabs ?? [
     { id: "all", label: "All" },
@@ -309,7 +344,11 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const toolbarFiltered = useMemo(() => {
     let list = [...allRows];
     if (statusTab !== "all") {
-      list = list.filter((r) => r.status.toLowerCase().replace(/\s+/g, "_") === statusTab);
+      list = list.filter((r) => {
+        const s = r.status.toLowerCase().replace(/\s+/g, "_");
+        if (statusTab === "posted" && (s === "sent" || s === "approved")) return true;
+        return s === statusTab;
+      });
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -328,8 +367,12 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
       const b = branch.toLowerCase();
       list = list.filter((r) => (r.branch ?? "").toLowerCase().includes(b));
     }
+    if (warehouse.trim()) {
+      const w = warehouse.toLowerCase();
+      list = list.filter((r) => (r.warehouse ?? "").toLowerCase().includes(w));
+    }
     return list;
-  }, [allRows, statusTab, search, dateFrom, dateTo, branch]);
+  }, [allRows, statusTab, search, dateFrom, dateTo, branch, warehouse]);
 
   const getCellValue = useCallback(
     (row: TransactionRow, key: string) => transactionGetCellValue(row, key),
@@ -365,7 +408,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
 
   useEffect(() => {
     setPage(1);
-  }, [statusTab, search, dateFrom, dateTo, branch, pageSize]);
+  }, [statusTab, search, dateFrom, dateTo, branch, warehouse, pageSize]);
 
   const rowCanEdit = (r: TransactionRow) =>
     config.editHref &&
@@ -376,6 +419,17 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
 
   const rowCanDelete = (r: TransactionRow) =>
     config.onDelete && (config.canDelete ? config.canDelete(r) : isDraftStatus(r.status));
+
+  const handlePost = (id: string | number) => {
+    if (!config.onPost) return;
+    setPostError(null);
+    try {
+      config.onPost(id);
+      bump();
+    } catch (e) {
+      setPostError(e instanceof Error ? e.message : "Could not post transaction.");
+    }
+  };
 
   const amountColumnCount = showGstSplitColumns ? 5 : showGstColumns ? 3 : 1;
   const colSpan =
@@ -417,6 +471,11 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
         layout="split"
         className="h-full min-h-0"
       >
+        {postError && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
+            {postError}
+          </div>
+        )}
         <AccountsColumnFilterProvider
           rows={toolbarFiltered}
           getCellValue={getCellValue}
@@ -439,6 +498,28 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 onDateToChange={setDateTo}
                 branch={branch}
                 onBranchChange={setBranch}
+                onReset={() => {
+                  setSearch("");
+                  setBranch("");
+                  setWarehouse("");
+                  setStatusTab("all");
+                  resetReportDateRange(
+                    setPreset,
+                    setDateFrom,
+                    setDateTo,
+                    invoiceListingMode ? "this_year" : "this_month",
+                  );
+                }}
+                filtersActive={accountsListingFiltersActive(
+                  { search, preset, dateFrom, dateTo, branch },
+                  {
+                    search: "",
+                    preset: invoiceListingMode ? "this_year" : "this_month",
+                    dateFrom: "",
+                    dateTo: "",
+                    branch: "",
+                  },
+                ) || statusTab !== "all"}
               />
             }
             subheader={
@@ -460,6 +541,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               colSpan={colSpan}
               page={page}
               pageSize={pageSize}
+              totalRecords={allRows.length}
               invoiceListingMode={invoiceListingMode}
               showInvoiceTypeColumn={showInvoiceTypeColumn}
               showSourceColumns={showSourceColumns}
@@ -472,6 +554,19 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               rowCanPost={rowCanPost}
               rowCanDelete={rowCanDelete}
               onViewRow={setViewRow}
+              onPost={handlePost}
+              onClearFilters={() => {
+                setSearch("");
+                setBranch("");
+                setStatusTab("all");
+                resetReportDateRange(
+                  setPreset,
+                  setDateFrom,
+                  setDateTo,
+                  invoiceListingMode ? "this_year" : "this_month",
+                );
+              }}
+              onCreate={config.newHref ? () => router.push(config.newHref!) : undefined}
             />
           </AccountsTableListing>
         </AccountsColumnFilterProvider>
@@ -562,9 +657,8 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 size="sm"
                 className="h-9 text-sm font-medium bg-brand-600 text-white"
                 onClick={() => {
-                  config.onPost!(viewRow.id);
+                  handlePost(viewRow.id);
                   setViewRow(null);
-                  bump();
                 }}
               >
                 Post
@@ -606,6 +700,8 @@ function TransactionListToolbar({
   onDateToChange,
   branch,
   onBranchChange,
+  onReset,
+  filtersActive,
 }: {
   invoiceListingMode: boolean;
   search: string;
@@ -625,41 +721,50 @@ function TransactionListToolbar({
   onDateToChange: (v: string) => void;
   branch: string;
   onBranchChange: (v: string) => void;
+  onReset: () => void;
+  filtersActive: boolean;
 }) {
   const visible = useAccountsFilteredRows<TransactionRow>([]);
 
   return (
-    <AccountsListingToolbar
-      onExcel={() => exportTransactionRows(visible, exportConfig)}
-      onPdf={() => exportTransactionRows(visible, exportConfig)}
-      exportDisabled={visible.length === 0}
-    >
-      <ReportDateRangeFilter
-        preset={preset}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onPresetChange={onPresetChange}
-        onDateFromChange={onDateFromChange}
-        onDateToChange={onDateToChange}
-      />
-      <ReportSearchFilter
-        value={search}
-        onChange={onSearchChange}
-        placeholder={invoiceListingMode ? "Search invoice, source, party…" : "Search number, party…"}
-        className="min-w-[180px] flex-1 max-w-sm"
-      />
-      {!invoiceListingMode && (
-        <div className="space-y-1 min-w-[100px]">
-          <label className={ACCOUNTS_FILTER_LABEL_CLASS}>Branch</label>
-          <Input
-            className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0")}
-            placeholder="Branch"
-            value={branch}
-            onChange={(e) => onBranchChange(e.target.value)}
+    <AccountsListingFilterCard>
+      <ReportFilterRow
+        end={
+          <AccountsExportMenu
+            onExcel={() => exportTransactionRows(visible, exportConfig)}
+            onPdf={() => exportTransactionRows(visible, exportConfig)}
+            disabled={visible.length === 0}
           />
-        </div>
-      )}
-    </AccountsListingToolbar>
+        }
+      >
+        <ReportSearchFilter
+          value={search}
+          onChange={onSearchChange}
+          placeholder={invoiceListingMode ? "Search invoice, source, party…" : "Search number, party…"}
+          className="min-w-[180px] flex-1 max-w-sm"
+        />
+        {!invoiceListingMode && (
+          <div className="space-y-0.5 min-w-[100px]">
+            <label className={ACCOUNTS_FILTER_LABEL_CLASS}>Branch</label>
+            <Input
+              className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0")}
+              placeholder="Branch"
+              value={branch}
+              onChange={(e) => onBranchChange(e.target.value)}
+            />
+          </div>
+        )}
+        <ReportDateRangeFilter
+          preset={preset}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onPresetChange={onPresetChange}
+          onDateFromChange={onDateFromChange}
+          onDateToChange={onDateToChange}
+        />
+        <ReportFilterResetButton onClick={onReset} showOnlyWhenActive active={filtersActive} />
+      </ReportFilterRow>
+    </AccountsListingFilterCard>
   );
 }
 
@@ -699,6 +804,7 @@ function TransactionListTable<T>({
   colSpan,
   page,
   pageSize,
+  totalRecords,
   invoiceListingMode,
   showInvoiceTypeColumn,
   showSourceColumns,
@@ -711,11 +817,15 @@ function TransactionListTable<T>({
   rowCanPost,
   rowCanDelete,
   onViewRow,
+  onPost,
+  onClearFilters,
+  onCreate,
 }: {
   mounted: boolean;
   colSpan: number;
   page: number;
   pageSize: number;
+  totalRecords: number;
   invoiceListingMode: boolean;
   showInvoiceTypeColumn: boolean;
   showSourceColumns: boolean;
@@ -728,6 +838,9 @@ function TransactionListTable<T>({
   rowCanPost: (r: TransactionRow) => boolean | undefined;
   rowCanDelete: (r: TransactionRow) => boolean | undefined;
   onViewRow: (r: TransactionRow) => void;
+  onPost: (id: string | number) => void;
+  onClearFilters?: () => void;
+  onCreate?: () => void;
 }) {
   const router = useRouter();
   const visible = useAccountsFilteredRows<TransactionRow>([]);
@@ -792,29 +905,26 @@ function TransactionListTable<T>({
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
-        {!mounted ? (
-          <AccountsTableRow>
-            <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
-              <p className="text-xs text-muted-foreground">Loading records…</p>
-            </AccountsTableCell>
-          </AccountsTableRow>
-        ) : visible.length === 0 ? (
-          <AccountsTableRow>
-            <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
-              No records found.
-            </AccountsTableCell>
-          </AccountsTableRow>
-        ) : (
-          pagedRows.map((r) => (
+        <AccountsListingTableBodyState
+          colSpan={colSpan}
+          mounted={mounted}
+          totalRecords={totalRecords}
+          filteredRecords={visible.length}
+          entityLabel={config.title.toLowerCase()}
+          onCreate={onCreate}
+          createLabel={`Create ${config.title.replace(/s$/, "")}`}
+          onClearFilters={onClearFilters}
+        >
+          {pagedRows.map((r) => (
             <AccountsTableRow key={r.id}>
               {showInvoiceTypeColumn && (
                 <AccountsTableCell>
                   <InvoiceTypeBadge type={r.invoiceType ?? "sales"} />
                 </AccountsTableCell>
               )}
-              <AccountsTableCell className="text-xs font-medium text-slate-800">
+              <AccountsTableCell className="text-xs font-medium text-foreground">
                 {r.viewHref ? (
-                  <Link href={r.viewHref} className="text-slate-800 hover:text-brand-700 hover:underline">
+                  <Link href={r.viewHref} className="text-foreground hover:text-brand-700 hover:underline">
                     {r.number}
                   </Link>
                 ) : (
@@ -886,10 +996,7 @@ function TransactionListTable<T>({
                       variant="ghost"
                       size="sm"
                       className="h-7 text-sm text-brand-700"
-                      onClick={() => {
-                        config.onPost!(r.id);
-                        bump();
-                      }}
+                      onClick={() => onPost(r.id)}
                     >
                       Post
                     </Button>
@@ -908,8 +1015,8 @@ function TransactionListTable<T>({
                 </AccountsTableActionCell>
               </AccountsTableCell>
             </AccountsTableRow>
-          ))
-        )}
+          ))}
+        </AccountsListingTableBodyState>
       </AccountsTableBody>
     </AccountsTable>
   );

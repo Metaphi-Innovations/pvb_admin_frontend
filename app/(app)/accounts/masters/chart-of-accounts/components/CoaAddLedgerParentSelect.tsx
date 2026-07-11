@@ -1,17 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { ChevronsUpDown, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { ChartOfAccount } from "../../../data";
 import {
   buildLedgerParentOptions,
-  groupLedgerParentOptionsByHead,
+  buildSubGroupParentOptions,
   parentGroupLabel,
-  searchLedgerParentOptions,
-  type LedgerParentOption,
 } from "../chart-of-accounts-data";
+import { CoaParentGroupTreeList } from "./CoaParentGroupTreeList";
 
 interface CoaAddLedgerParentSelectProps {
   records: ChartOfAccount[];
@@ -20,6 +19,8 @@ interface CoaAddLedgerParentSelectProps {
   disabled?: boolean;
   placeholder?: string;
   error?: string | null;
+  /** ledger = leaf groups for ledger creation; subgroup = groups that can hold sub-groups */
+  filterMode?: "ledger" | "subgroup";
 }
 
 const LIST_MAX_HEIGHT = 360;
@@ -29,8 +30,9 @@ export function CoaAddLedgerParentSelect({
   value,
   onChange,
   disabled,
-  placeholder = "Select parent ledger…",
+  placeholder = "Select parent group…",
   error,
+  filterMode = "ledger",
 }: CoaAddLedgerParentSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -38,17 +40,13 @@ export function CoaAddLedgerParentSelect({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const options = useMemo(() => buildLedgerParentOptions(records), [records]);
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return options;
-    return searchLedgerParentOptions(options, search, 500);
-  }, [options, search]);
-
-  const sections = useMemo(
-    () => groupLedgerParentOptionsByHead(filtered),
-    [filtered],
-  );
+  const selectableIds = useMemo(() => {
+    const options =
+      filterMode === "subgroup"
+        ? buildSubGroupParentOptions(records)
+        : buildLedgerParentOptions(records);
+    return new Set(options.map((o) => o.id));
+  }, [records, filterMode]);
 
   const selectedDisplay = value ? parentGroupLabel(records, value) : null;
 
@@ -58,7 +56,7 @@ export function CoaAddLedgerParentSelect({
       '[data-parent-option-selected="true"]',
     );
     selected?.scrollIntoView({ block: "nearest" });
-  }, [open, value, sections]);
+  }, [open, value, search]);
 
   const handleSelect = (id: number) => {
     onChange(id);
@@ -139,76 +137,22 @@ export function CoaAddLedgerParentSelect({
           </div>
           <div
             ref={listRef}
-            role="listbox"
             tabIndex={-1}
-            className="overflow-y-auto overscroll-contain scroll-smooth py-1"
+            className="overflow-y-auto overscroll-contain scroll-smooth"
             style={{ maxHeight: LIST_MAX_HEIGHT }}
             onKeyDown={handleListKeyDown}
           >
-            {sections.length === 0 ? (
-              <p className="px-3 py-6 text-xs text-center text-muted-foreground">
-                No ledger groups found.
-              </p>
-            ) : (
-              sections.map((section) => (
-                <div key={section.headName} className="py-1">
-                  <p className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-navy-700">
-                    {section.headName}
-                  </p>
-                  {section.groups.map((group) => (
-                    <div key={`${section.headName}-${group.groupName}`}>
-                      <p className="px-3 py-1 text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <span className="text-muted-foreground/50">â”œâ”€</span>
-                        {group.groupName}
-                      </p>
-                      {group.items.map((opt) => (
-                        <ParentRow
-                          key={opt.id}
-                          opt={opt}
-                          selected={value === opt.id}
-                          onSelect={handleSelect}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
+            <CoaParentGroupTreeList
+              records={records}
+              selectedId={value}
+              selectableIds={selectableIds}
+              search={search}
+              onSelect={handleSelect}
+            />
           </div>
         </PopoverContent>
       </Popover>
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
-  );
-}
-
-function ParentRow({
-  opt,
-  selected,
-  onSelect,
-}: {
-  opt: LedgerParentOption;
-  selected: boolean;
-  onSelect: (id: number) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={selected}
-      data-parent-option-selected={selected ? "true" : undefined}
-      onClick={() => onSelect(opt.id)}
-      className={cn(
-        "w-full flex items-center gap-2 pl-7 pr-3 py-2 text-left transition-colors outline-none",
-        "hover:bg-brand-50/60 focus-visible:bg-brand-50/60",
-        selected && "bg-brand-50/80",
-      )}
-    >
-      <span className="text-muted-foreground/50 text-xs shrink-0">â”œâ”€</span>
-      <span className="flex-1 min-w-0 text-xs text-foreground truncate">
-        {opt.node.accountName}
-      </span>
-      {selected && <Check className="w-4 h-4 text-brand-600 shrink-0" />}
-    </button>
   );
 }

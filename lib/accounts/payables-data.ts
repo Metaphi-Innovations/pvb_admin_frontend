@@ -21,6 +21,18 @@ import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
+import {
+  DEFAULT_AGEING_BREAKPOINTS,
+  classifyAgeingBucketIndex,
+  effectiveOverdueDays,
+  emptyAgeingBuckets,
+  type AgeingBreakpoints,
+} from "@/lib/accounts/ageing-breakpoints";
+import {
+  matchesMultiFilter,
+  matchesMultiIdFilter,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
 
 const VENDOR_META_KEY = "ds_accounts_payables_vendor_meta_v1";
 
@@ -117,15 +129,26 @@ export interface SupplierInvoiceOutstandingRow {
   status: PayableStatus;
 }
 
+export type VendorAgeingBreakpoints = AgeingBreakpoints;
+
+export const DEFAULT_VENDOR_AGEING_BREAKPOINTS = DEFAULT_AGEING_BREAKPOINTS;
+
+export type { GeneratedAgeingBucket } from "@/lib/accounts/ageing-breakpoints";
+export {
+  generateAgeingBucketsFromBreakpoints,
+  getAgeingBucketLabels as getVendorAgeingBucketLabels,
+  validateAgeingBreakpoints as validateVendorAgeingBreakpoints,
+  classifyAgeingBucketIndex as classifyVendorAgeingBucketIndex,
+  ageingBucketColumnKey as vendorAgeingBucketColumnKey,
+  getVisibleAgeingBucketIndices as getVisibleVendorAgeingBucketIndices,
+} from "@/lib/accounts/ageing-breakpoints";
+
 export interface VendorAgeingRow {
   vendorId: number;
   vendorName: string;
   vendorCode: string;
-  bucket0_30: number;
-  bucket31_60: number;
-  bucket61_90: number;
-  bucket91_120: number;
-  bucketAbove120: number;
+  /** Bucket amounts aligned with generated ageing columns (same order as breakpoints). */
+  buckets: number[];
   totalOutstanding: number;
 }
 
@@ -298,19 +321,6 @@ export function getAgeingBucketLabel(daysOverdue: number, asOfDate: string, dueD
   if (daysOverdue <= 60) return "31–60 Days";
   if (daysOverdue <= 90) return "61–90 Days";
   return "90+ Days";
-}
-
-function bucketKey(
-  daysOverdue: number,
-): keyof Pick<
-  VendorAgeingRow,
-  "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
-> {
-  if (daysOverdue <= 30) return "bucket0_30";
-  if (daysOverdue <= 60) return "bucket31_60";
-  if (daysOverdue <= 90) return "bucket61_90";
-  if (daysOverdue <= 120) return "bucket91_120";
-  return "bucketAbove120";
 }
 
 function vendorStatusFromBills(
@@ -529,25 +539,30 @@ export interface PayablesAgeingFilters {
   branch?: string;
 }
 
-export function computeVendorAgeingSummary(asOfDate = TODAY()) {
-  const rows = computeVendorAgeingRows(asOfDate);
+export function computeVendorAgeingSummary(
+  asOfDate = TODAY(),
+  breakpoints: VendorAgeingBreakpoints = DEFAULT_VENDOR_AGEING_BREAKPOINTS,
+) {
+  const rows = computeVendorAgeingRows(asOfDate, {}, breakpoints);
+  const bucketCount = breakpoints.length;
+  const buckets = Array.from({ length: bucketCount }, (_, i) =>
+    round2(rows.reduce((s, r) => s + (r.buckets[i] ?? 0), 0)),
+  );
   return {
     totalPayables: round2(rows.reduce((s, r) => s + r.totalOutstanding, 0)),
-    bucket0_30: round2(rows.reduce((s, r) => s + r.bucket0_30, 0)),
-    bucket31_60: round2(rows.reduce((s, r) => s + r.bucket31_60, 0)),
-    bucket61_90: round2(rows.reduce((s, r) => s + r.bucket61_90, 0)),
-    bucket91_120: round2(rows.reduce((s, r) => s + r.bucket91_120, 0)),
-    bucketAbove120: round2(rows.reduce((s, r) => s + r.bucketAbove120, 0)),
+    buckets,
   };
 }
 
 export function computeVendorAgeingRows(
   asOfDate = TODAY(),
   filters: PayablesAgeingFilters = {},
+  breakpoints: VendorAgeingBreakpoints = DEFAULT_VENDOR_AGEING_BREAKPOINTS,
 ): VendorAgeingRow[] {
   const vendors = loadVendors();
   const bills = getPostedPurchaseInvoices().filter((b) => getBillOutstanding(b) > 0.009);
   const map = new Map<number, VendorAgeingRow>();
+  const bucketCount = breakpoints.length;
 
   for (const bill of bills) {
     if (!bill.vendorId) continue;
@@ -563,7 +578,8 @@ export function computeVendorAgeingRows(
     const outstanding = getBillOutstanding(bill);
     const dueDate = getPurchaseDueDate(bill.invoiceDate, vendor);
     const daysOverdue = Math.max(0, daysBetween(dueDate, asOfDate));
-    const key = bucketKey(daysOverdue);
+    const effectiveDays = effectiveOverdueDays(daysOverdue, asOfDate, dueDate);
+    const bucketIndex = classifyAgeingBucketIndex(effectiveDays, breakpoints);
 
     const row =
       map.get(vendor.id) ??
@@ -571,20 +587,15 @@ export function computeVendorAgeingRows(
         vendorId: vendor.id,
         vendorName: vendor.vendorName,
         vendorCode: vendor.vendorCode,
-        bucket0_30: 0,
-        bucket31_60: 0,
-        bucket61_90: 0,
-        bucket91_120: 0,
-        bucketAbove120: 0,
+        buckets: emptyAgeingBuckets(bucketCount),
         totalOutstanding: 0,
       } satisfies VendorAgeingRow);
 
-    row[key] = round2(row[key] + outstanding);
+    row.buckets[bucketIndex] = round2(row.buckets[bucketIndex] + outstanding);
     row.totalOutstanding = round2(row.totalOutstanding + outstanding);
     map.set(vendor.id, row);
   }
 
-  // Supplier credit notes in 0–30 bucket
   for (const note of loadVendorCreditNotes().filter((n) => n.status === "approved")) {
     const vendor = vendors.find((v) => v.id === note.vendorId);
     if (!vendor) continue;
@@ -593,21 +604,19 @@ export function computeVendorAgeingRows(
     if (filters.territory && territory !== filters.territory) continue;
     if (filters.branch && vendorBranch(vendor) !== filters.branch) continue;
 
+    const bucketIndex = 0;
+
     const row =
       map.get(vendor.id) ??
       ({
         vendorId: vendor.id,
         vendorName: vendor.vendorName,
         vendorCode: vendor.vendorCode,
-        bucket0_30: 0,
-        bucket31_60: 0,
-        bucket61_90: 0,
-        bucket91_120: 0,
-        bucketAbove120: 0,
+        buckets: emptyAgeingBuckets(bucketCount),
         totalOutstanding: 0,
       } satisfies VendorAgeingRow);
 
-    row.bucket0_30 = round2(row.bucket0_30 + note.amount);
+    row.buckets[bucketIndex] = round2(row.buckets[bucketIndex] + note.amount);
     row.totalOutstanding = round2(row.totalOutstanding + note.amount);
     map.set(vendor.id, row);
   }
@@ -776,8 +785,13 @@ export function applyPaymentAllocation(
 // ── Supplier invoice outstanding (bill-level) ─────────────────────────────────
 
 export interface SupplierInvoiceOutstandingFilters {
+  /** @deprecated use vendorIds */
   vendorId?: number;
+  vendorIds?: string | string[];
+  branch?: string | string[];
+  /** @deprecated use statuses */
   status?: PayableStatus | "all";
+  statuses?: string | string[];
   dateFrom?: string;
   dateTo?: string;
   financialYearId?: number;
@@ -806,13 +820,18 @@ export function computeSupplierInvoiceOutstanding(
     const vendor = vendors.find((v) => v.id === bill.vendorId);
     if (!vendor) continue;
 
-    if (filters.vendorId && bill.vendorId !== filters.vendorId) continue;
+    const vendorIds = filters.vendorIds ?? (filters.vendorId != null ? [String(filters.vendorId)] : []);
+    if (!matchesMultiIdFilter(vendorIds, bill.vendorId)) continue;
+    if (!matchesMultiFilter(filters.branch, vendorBranch(vendor))) continue;
     if (filters.dateFrom && bill.invoiceDate < filters.dateFrom) continue;
     if (filters.dateTo && bill.invoiceDate > filters.dateTo) continue;
     if (!invoiceMatchesFinancialYear(bill.invoiceDate, filters.financialYearId)) continue;
 
     const billRow = buildBillRow(bill, vendor, asOfDate);
-    if (filters.status && filters.status !== "all" && billRow.status !== filters.status) continue;
+    const statusValues = normalizeMultiFilter(
+      filters.statuses ?? (filters.status && filters.status !== "all" ? [filters.status] : []),
+    );
+    if (statusValues.length > 0 && !statusValues.includes(billRow.status)) continue;
 
     if (q) {
       const hay = [

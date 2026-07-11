@@ -163,19 +163,19 @@
   /* Accounts module — compact typography (aligned with voucher entry forms)
    * Page title 18px · section 14px · body/inputs 13px · labels/helper 12px */
   .accounts-page-title {
-    @apply text-lg font-semibold text-[#1F2937] leading-tight;
+    @apply text-lg font-semibold text-foreground leading-tight;
   }
 
   .accounts-page-subtitle {
-    @apply text-xs text-[#6B7280] mt-0.5 leading-snug;
+    @apply text-xs text-muted-foreground mt-0.5 leading-snug;
   }
 
   .accounts-section-heading {
-    @apply text-sm font-semibold text-[#1F2937] leading-none;
+    @apply text-sm font-semibold text-foreground leading-none;
   }
 
   .accounts-card-title {
-    @apply text-sm font-semibold text-[#1F2937] leading-none;
+    @apply text-sm font-semibold text-foreground leading-none;
   }
 
   .accounts-tab {
@@ -183,19 +183,19 @@
   }
 
   .accounts-form-label {
-    @apply text-xs font-medium text-[#6B7280] leading-none;
+    @apply text-xs font-medium text-muted-foreground leading-none;
   }
 
   .accounts-form-input {
-    @apply text-[13px] text-[#1F2937];
+    @apply text-[13px] text-foreground;
   }
 
   .accounts-helper-text {
-    @apply text-xs text-[#6B7280] leading-snug;
+    @apply text-xs text-muted-foreground leading-snug;
   }
 
   .accounts-filter-label {
-    @apply text-xs font-medium text-[#6B7280] leading-none tracking-wide;
+    @apply text-xs font-medium text-muted-foreground leading-none tracking-wide;
   }
 
   .accounts-filter-control {
@@ -206,8 +206,8 @@
     padding-bottom: 0;
     font-size: 13px;
     line-height: 18px;
-    @apply text-[#1F2937] placeholder:text-[13px] placeholder:text-[#6B7280];
-    @apply border border-[#E5E7EB] rounded-md bg-white px-2;
+    @apply text-foreground placeholder:text-[13px] placeholder:text-muted-foreground;
+    @apply border border-border rounded-md bg-background px-2;
   }
 
   /* Radix Select in accounts filters — override default h-10 / text-sm / line-clamp-1 */
@@ -252,11 +252,11 @@
   }
 
   .accounts-breadcrumb {
-    @apply flex items-center flex-wrap gap-1 text-xs text-[#6B7280];
+    @apply flex items-center flex-wrap gap-1 text-xs text-muted-foreground;
   }
 
   .accounts-breadcrumb-current {
-    @apply text-[#1F2937] font-medium;
+    @apply text-foreground font-medium;
   }
 
   .accounts-sidebar-group-label {
@@ -320,11 +320,11 @@
   }
 
   .accounts-summary-label {
-    @apply text-[11px] font-medium text-[#6B7280] leading-none;
+    @apply text-[11px] font-medium text-muted-foreground leading-none;
   }
 
   .accounts-summary-value {
-    @apply text-[13px] font-semibold text-[#1F2937] tabular-nums leading-tight mt-0.5 truncate;
+    @apply text-[13px] font-semibold text-foreground tabular-nums leading-tight mt-0.5 truncate;
   }
 
   .accounts-status-badge {
@@ -347,7 +347,7 @@
   }
 
   .accounts-table-head {
-    background-color: #FFF3E6;
+    @apply bg-brand-50;
   }
 
   .accounts-table-head-row {
@@ -355,9 +355,8 @@
   }
 
   .accounts-table-th {
-    @apply px-2 py-1.5 whitespace-nowrap text-xs font-semibold text-[#1F2937] text-left uppercase tracking-wide;
-    @apply border-b border-[#E5E7EB];
-    background-color: #FFF3E6;
+    @apply px-2 py-1.5 whitespace-nowrap text-xs font-semibold text-foreground text-left uppercase tracking-wide;
+    @apply border-b border-border bg-brand-50;
     box-sizing: border-box;
     vertical-align: middle;
     min-height: 32px;
@@ -368,19 +367,17 @@
   }
 
   .accounts-table-th-sticky {
-    @apply sticky top-0 z-30;
-    background-color: #FFF3E6;
-    box-shadow: 0 1px 0 0 #E5E7EB;
+    @apply sticky top-0 z-30 bg-brand-50;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
   }
 
   .accounts-table-th-sorted {
-    @apply text-brand-700;
-    background-color: #fff3e8;
+    @apply text-brand-700 bg-brand-50/80;
     box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
   }
 
   .accounts-table-th-sticky.accounts-table-th-sorted {
-    background-color: #fff3e8;
+    @apply bg-brand-50/80;
   }
 
   .accounts-table-th-uppercase {
@@ -428,7 +425,7 @@
 
   .accounts-table-body > .accounts-table-row:nth-child(even),
   .accounts-table > tbody > tr:nth-child(even) {
-    @apply bg-[#FAFAFA];
+    @apply bg-muted/20;
   }
 
 
@@ -443,7 +440,7 @@
   }
 
   .accounts-table-td {
-    @apply px-2 py-1.5 text-xs font-normal text-[#1F2937];
+    @apply px-2 py-1.5 text-xs font-normal text-foreground;
     box-sizing: border-box;
     vertical-align: middle;
     min-height: 36px;
@@ -454,7 +451,7 @@
   }
 
   .accounts-table-empty {
-    @apply !h-auto !min-h-0 py-4 text-center text-xs text-slate-500 bg-white;
+    @apply !h-auto !min-h-0 py-4 text-center text-xs text-muted-foreground bg-white;
   }
 
   .accounts-col-narrow {

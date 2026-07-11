@@ -170,7 +170,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                   href="/accounts/banking/reconciliation"
                   className="inline-flex h-8 items-center px-3 text-xs border border-border rounded-lg hover:bg-muted/40 text-brand-700"
                 >
-                  Open Bank Reconciliation â†’
+                  Open Bank Reconciliation →
                 </Link>
               ) : (
                 <p className="text-xs text-muted-foreground">Reconciliation is disabled for this account.</p>

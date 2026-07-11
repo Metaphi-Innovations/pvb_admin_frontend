@@ -155,7 +155,16 @@ function CashBookTableRow({ row }: { row: CashBookDisplayRow }) {
         className={cn("py-2 max-w-[180px] truncate", isOpening && "font-medium")}
         title={row.particular}
       >
-        {row.particular}
+        {row.particularLedgerId && !isOpening ? (
+          <Link
+            href={`/accounts/masters/chart-of-accounts?node=${row.particularLedgerId}`}
+            className="text-xs font-medium text-brand-700 hover:underline truncate block"
+          >
+            {row.particular}
+          </Link>
+        ) : (
+          row.particular
+        )}
       </AccountsTableCell>
       <AccountsTableCell
         className="py-2 max-w-[220px] truncate text-muted-foreground"

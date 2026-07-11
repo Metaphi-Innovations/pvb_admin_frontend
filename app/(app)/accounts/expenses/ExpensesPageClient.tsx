@@ -93,7 +93,7 @@ export default function ExpensesPageClient() {
       <div className="max-w-[1600px] mx-auto space-y-3">
         <PageHeader
           title="Expenses"
-          description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR â†’ TA/DA Claims."
+          description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR → TA/DA Claims."
           icon={Wallet}
           breadcrumbs={EXPENSE_BREADCRUMB}
         />

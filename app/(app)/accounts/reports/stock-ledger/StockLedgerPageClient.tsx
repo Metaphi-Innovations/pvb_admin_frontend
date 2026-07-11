@@ -3,13 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
@@ -21,9 +14,21 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportSearchFilter,
+  ReportProductMultiFilter,
+  ReportWarehouseMultiFilter,
+  ReportStatusMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
+import {
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import {
   AccountsColumnFilterProvider,
   useAccountsColumnFilterContext,
@@ -42,6 +47,7 @@ import {
   formatQty,
   STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS,
   type StockLedgerRow,
+  type StockLedgerTransactionType,
 } from "./stock-ledger-data";
 import {
   exportStockLedgerToCsv,
@@ -50,16 +56,20 @@ import {
 } from "./stock-ledger-export";
 import { StockLedgerTable } from "./StockLedgerTable";
 
+const STOCK_TXN_TYPE_OPTIONS = STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS.filter(
+  (o): o is { value: StockLedgerTransactionType; label: string } => o.value !== "all",
+);
+
 export default function StockLedgerPageClient() {
   const mounted = useClientMounted();
 
   const [preset, setPreset] = useState<DateRangePresetId>("custom");
   const [dateFrom, setDateFrom] = useState(() => demoFinancialYearStart());
   const [dateTo, setDateTo] = useState(() => demoToday());
-  const [productId, setProductId] = useState("all");
-  const [warehouse, setWarehouse] = useState("all");
-  const [batchNo, setBatchNo] = useState("all");
-  const [transactionType, setTransactionType] = useState("all");
+  const [productIds, setProductIds] = useState<string[]>([]);
+  const [warehouses, setWarehouses] = useState<string[]>([]);
+  const [batchNos, setBatchNos] = useState<string[]>([]);
+  const [transactionTypes, setTransactionTypes] = useState<string[]>([]);
   const [documentNo, setDocumentNo] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -68,24 +78,24 @@ export default function StockLedgerPageClient() {
 
   const sourceRows = useMemo(() => (mounted ? buildStockLedgerRows() : []), [mounted]);
 
-  const productOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; code: string }>();
-    for (const row of sourceRows) {
-      if (!map.has(row.productCode)) {
-        map.set(row.productCode, { id: row.productCode, name: row.productName, code: row.productCode });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [sourceRows]);
-
-  const warehouseOptions = useMemo(
-    () => Array.from(new Set(sourceRows.map((r) => r.warehouse))).sort(),
+  const productOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          sourceRows.map((row) => [
+            row.productCode,
+            { value: row.productCode, label: row.productName, searchText: row.productCode },
+          ]),
+        ).values(),
+      ).sort((a, b) => a.label.localeCompare(b.label)),
     [sourceRows],
   );
 
   const batchOptions = useMemo(
     () =>
-      Array.from(new Set(sourceRows.map((r) => r.batchNo).filter((b) => b && b !== "—"))).sort(),
+      Array.from(new Set(sourceRows.map((r) => r.batchNo).filter((b) => b && b !== "—")))
+        .sort()
+        .map((b) => ({ value: b, label: b })),
     [sourceRows],
   );
 
@@ -94,14 +104,14 @@ export default function StockLedgerPageClient() {
       dateFrom,
       dateTo,
       financialYearId: "all",
-      productId,
-      warehouse,
-      batchNo,
-      transactionType,
+      productIds,
+      warehouse: warehouses,
+      batchNos,
+      transactionTypes,
       documentNo,
       search,
     }),
-    [dateFrom, dateTo, productId, warehouse, batchNo, transactionType, documentNo, search],
+    [dateFrom, dateTo, productIds, warehouses, batchNos, transactionTypes, documentNo, search],
   );
 
   const filteredRows = useMemo(
@@ -111,55 +121,91 @@ export default function StockLedgerPageClient() {
 
   const summary = useMemo(() => computeStockLedgerSummary(filteredRows), [filteredRows]);
 
+  const warehouseOptions = useMemo(
+    () => Array.from(new Set(sourceRows.map((r) => r.warehouse))).sort(),
+    [sourceRows],
+  );
+
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, productId, warehouse, batchNo, transactionType, documentNo, search, pageSize]);
+  }, [dateFrom, dateTo, productIds, warehouses, batchNos, transactionTypes, documentNo, search, pageSize]);
+
+  const moreFiltersActiveCount = countActiveMoreFilters({
+    batchNos,
+    transactionTypes,
+    documentNo: documentNo.trim() || undefined,
+  });
 
   const hasFilters =
     search.trim() !== "" ||
     documentNo.trim() !== "" ||
-    productId !== "all" ||
-    warehouse !== "all" ||
-    batchNo !== "all" ||
-    transactionType !== "all";
+    isMultiFilterActive(productIds) ||
+    isMultiFilterActive(warehouses) ||
+    isMultiFilterActive(batchNos) ||
+    isMultiFilterActive(transactionTypes);
 
   const clearFilters = () => {
     setSearch("");
     setDocumentNo("");
-    setProductId("all");
-    setWarehouse("all");
-    setBatchNo("all");
-    setTransactionType("all");
+    setProductIds([]);
+    setWarehouses([]);
+    setBatchNos([]);
+    setTransactionTypes([]);
   };
 
-  const exportMeta = useMemo(() => {
-    const product =
-      productId === "all"
-        ? "All"
-        : (productOptions.find((p) => p.id === productId)?.name ?? productId);
-    const txnLabel =
-      STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS.find((o) => o.value === transactionType)?.label ??
-      transactionType;
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary("product", "Products", productIds, productOptions, () => setProductIds([])),
+      buildEntityFilterSummary(
+        "warehouse",
+        "Warehouses",
+        warehouses,
+        warehouseOptions.map((w) => ({ value: w, label: w })),
+        () => setWarehouses([]),
+      ),
+      buildEntityFilterSummary("batch", "Batches", batchNos, batchOptions, () => setBatchNos([])),
+      buildEntityFilterSummary(
+        "transactionType",
+        "Transaction Types",
+        transactionTypes,
+        STOCK_TXN_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        () => setTransactionTypes([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [productIds, warehouses, batchNos, transactionTypes, productOptions, warehouseOptions, batchOptions]);
 
+  const exportMeta = useMemo(() => {
     return {
       dateFrom,
       dateTo,
       financialYear: "",
-      warehouse: warehouse === "all" ? "All" : warehouse,
-      product,
-      batchNo: batchNo === "all" ? "All" : batchNo,
-      transactionType: txnLabel,
+      warehouse: formatMultiSelectLabel(
+        warehouses,
+        warehouseOptions.map((w) => ({ value: w, label: w })),
+        "Warehouse",
+        "All",
+      ),
+      product: formatMultiSelectLabel(productIds, productOptions, "Product", "All"),
+      batchNo: formatMultiSelectLabel(batchNos, batchOptions, "Batch", "All"),
+      transactionType: formatMultiSelectLabel(
+        transactionTypes,
+        STOCK_TXN_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        "Type",
+        "All",
+      ),
       documentNo: documentNo || "All",
       search,
     };
   }, [
     dateFrom,
     dateTo,
-    warehouse,
-    productId,
+    warehouses,
+    warehouseOptions,
+    productIds,
     productOptions,
-    batchNo,
-    transactionType,
+    batchNos,
+    batchOptions,
+    transactionTypes,
     documentNo,
     search,
   ]);
@@ -235,17 +281,19 @@ export default function StockLedgerPageClient() {
         setDateFrom={setDateFrom}
         dateTo={dateTo}
         setDateTo={setDateTo}
-        productId={productId}
-        setProductId={setProductId}
+        productIds={productIds}
+        setProductIds={setProductIds}
         productOptions={productOptions}
-        warehouse={warehouse}
-        setWarehouse={setWarehouse}
+        warehouses={warehouses}
+        setWarehouses={setWarehouses}
         warehouseOptions={warehouseOptions}
-        batchNo={batchNo}
-        setBatchNo={setBatchNo}
+        batchNos={batchNos}
+        setBatchNos={setBatchNos}
         batchOptions={batchOptions}
-        transactionType={transactionType}
-        setTransactionType={setTransactionType}
+        transactionTypes={transactionTypes}
+        setTransactionTypes={setTransactionTypes}
+        filterSummaryItems={filterSummaryItems}
+        moreFiltersActiveCount={moreFiltersActiveCount}
         documentNo={documentNo}
         setDocumentNo={setDocumentNo}
         search={search}
@@ -274,17 +322,19 @@ function StockLedgerPageBody({
   setDateFrom,
   dateTo,
   setDateTo,
-  productId,
-  setProductId,
+  productIds,
+  setProductIds,
   productOptions,
-  warehouse,
-  setWarehouse,
+  warehouses,
+  setWarehouses,
   warehouseOptions,
-  batchNo,
-  setBatchNo,
+  batchNos,
+  setBatchNos,
   batchOptions,
-  transactionType,
-  setTransactionType,
+  transactionTypes,
+  setTransactionTypes,
+  filterSummaryItems,
+  moreFiltersActiveCount,
   documentNo,
   setDocumentNo,
   search,
@@ -308,17 +358,19 @@ function StockLedgerPageBody({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  productId: string;
-  setProductId: (v: string) => void;
-  productOptions: { id: string; name: string; code: string }[];
-  warehouse: string;
-  setWarehouse: (v: string) => void;
+  productIds: string[];
+  setProductIds: (v: string[]) => void;
+  productOptions: { value: string; label: string; searchText?: string }[];
+  warehouses: string[];
+  setWarehouses: (v: string[]) => void;
   warehouseOptions: string[];
-  batchNo: string;
-  setBatchNo: (v: string) => void;
-  batchOptions: string[];
-  transactionType: string;
-  setTransactionType: (v: string) => void;
+  batchNos: string[];
+  setBatchNos: (v: string[]) => void;
+  batchOptions: { value: string; label: string }[];
+  transactionTypes: string[];
+  setTransactionTypes: (v: string[]) => void;
+  filterSummaryItems: ReportFilterSummaryItem[];
+  moreFiltersActiveCount: number;
   documentNo: string;
   setDocumentNo: (v: string) => void;
   search: string;
@@ -370,104 +422,68 @@ function StockLedgerPageBody({
       title="Stock Ledger"
       description="Complete stock movement history across all products with running balance."
       filters={
-        <ReportFilterRow
-          className="items-end"
-          end={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              onCsv={handleExportCsv}
-              disabled={exporting || columnFilteredRows.length === 0}
+        <>
+          <ReportFilterRow
+            className="items-end"
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportPdf}
+                onCsv={handleExportCsv}
+                disabled={exporting || columnFilteredRows.length === 0}
+              />
+            }
+          >
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
             />
-          }
-        >
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-1 min-w-[150px]">
-            <Label className={filterLabelClass}>Product</Label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger className={cn(filterControlClass, "w-[150px]")}>
-                <SelectValue placeholder="All products" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All products</SelectItem>
-                {productOptions.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[140px]">
-            <Label className={filterLabelClass}>Warehouse</Label>
-            <Select value={warehouse} onValueChange={setWarehouse}>
-              <SelectTrigger className={cn(filterControlClass, "w-[140px]")}>
-                <SelectValue placeholder="All warehouses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All warehouses</SelectItem>
-                {warehouseOptions.map((w) => (
-                  <SelectItem key={w} value={w}>
-                    {w}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[120px]">
-            <Label className={filterLabelClass}>Batch No.</Label>
-            <Select value={batchNo} onValueChange={setBatchNo}>
-              <SelectTrigger className={cn(filterControlClass, "w-[120px]")}>
-                <SelectValue placeholder="All batches" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All batches</SelectItem>
-                {batchOptions.map((b) => (
-                  <SelectItem key={b} value={b}>
-                    {b}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[145px]">
-            <Label className={filterLabelClass}>Transaction Type</Label>
-            <Select value={transactionType} onValueChange={setTransactionType}>
-              <SelectTrigger className={cn(filterControlClass, "w-[145px]")}>
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                {STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[130px]">
-            <Label className={filterLabelClass}>Document No.</Label>
-            <Input
-              value={documentNo}
-              onChange={(e) => setDocumentNo(e.target.value)}
-              placeholder="Document no…"
-              className={cn(filterControlClass, "w-[130px]")}
+            <ReportProductMultiFilter
+              values={productIds}
+              onChange={setProductIds}
+              products={productOptions}
             />
-          </div>
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Product, batch, document…"
-            className="min-w-[160px] max-w-[220px]"
-          />
-        </ReportFilterRow>
+            <ReportWarehouseMultiFilter
+              values={warehouses}
+              onChange={setWarehouses}
+              options={warehouseOptions}
+            />
+            <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+              <ReportProductMultiFilter
+                values={batchNos}
+                onChange={setBatchNos}
+                products={batchOptions}
+                label="Batch No."
+              />
+              <ReportStatusMultiFilter
+                values={transactionTypes}
+                onChange={setTransactionTypes}
+                options={STOCK_TXN_TYPE_OPTIONS}
+                label="Transaction Type"
+              />
+              <div className="space-y-1 min-w-full">
+                <Label className={filterLabelClass}>Document No.</Label>
+                <Input
+                  value={documentNo}
+                  onChange={(e) => setDocumentNo(e.target.value)}
+                  placeholder="Document no…"
+                  className={cn(filterControlClass, "w-full")}
+                />
+              </div>
+            </ReportMoreFilters>
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Product, batch, document…"
+              className="min-w-[160px] max-w-[220px]"
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"

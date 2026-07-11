@@ -124,6 +124,11 @@ export function saveVouchers(list: AccountingVoucher[]) {
   } catch {
     // optional
   }
+  try {
+    window.dispatchEvent(new CustomEvent("ds-accounts-vouchers-updated"));
+  } catch {
+    // optional
+  }
 }
 
 function ensureLedgerMovementIndex(): Map<number, LedgerMovementTotals> {
@@ -1000,10 +1005,10 @@ export function buildContraVoucherLines(input: SimpleContraVoucherInput): Vouche
 }
 
 export function validateContraVoucherForPost(input: SimpleContraVoucherInput): string | null {
-  if (!input.fromLedgerId) return "Transfer From account is required.";
-  if (!input.toLedgerId) return "Transfer To account is required.";
+  if (!input.toLedgerId) return "Debit Account is required.";
+  if (!input.fromLedgerId) return "Credit Account is required.";
   if (input.fromLedgerId === input.toLedgerId) {
-    return "Transfer From and Transfer To must be different accounts.";
+    return "Debit Account and Credit Account must be different.";
   }
   if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
   const scopeErr = validateContraVoucherLedgerScopes(

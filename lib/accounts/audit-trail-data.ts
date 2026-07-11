@@ -4,6 +4,7 @@ import { demoDateAt, demoTimestamp } from "@/lib/accounts/demo-date-utils";
  */
 
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 
 export type AuditTrailCategory = "user_activity" | "voucher_approval" | "edit_delete";
 
@@ -92,7 +93,7 @@ export const AUDIT_TRAIL_MODULE_OPTIONS: { value: string; label: string }[] = [
   { value: "Credit Note", label: "Credit Note" },
   { value: "Debit Note", label: "Debit Note" },
   { value: "Bank Reconciliation", label: "Bank Reconciliation" },
-  { value: "Ledger Master", label: "Ledger Master" },
+  { value: "Chart of Accounts", label: "Chart of Accounts" },
   { value: "Reports", label: "Reports" },
   { value: "Contra Voucher", label: "Contra Voucher" },
 ];
@@ -301,7 +302,7 @@ function buildStaticSeed(): AuditTrailRecord[] {
       user: "Priya Sharma",
       role: "Finance Executive",
       userEmail: "priya.sharma@dharitrisutra.in",
-      module: "Ledger Master",
+      module: "Chart of Accounts",
       moduleCode: "COA",
       reference: "SUNDRY-CRED-042",
       activityType: "View",
@@ -884,7 +885,7 @@ function buildStaticSeed(): AuditTrailRecord[] {
       user: "Rajesh Kumar",
       role: "Accounts Manager",
       userEmail: "rajesh.kumar@dharitrisutra.in",
-      module: "Ledger Master",
+      module: "Chart of Accounts",
       moduleCode: "COA",
       reference: "SUNDRY-DEBT-018",
       activityType: "Update",
@@ -934,7 +935,7 @@ function buildStaticSeed(): AuditTrailRecord[] {
       user: ACCOUNTS_CURRENT_USER,
       role: "System Admin",
       userEmail: "admin@dharitrisutra.in",
-      module: "Ledger Master",
+      module: "Chart of Accounts",
       moduleCode: "COA",
       reference: "BANK-HDFC-001",
       activityType: "Update",
@@ -1109,11 +1110,11 @@ export function filterAuditTrail(
     search?: string;
     dateFrom?: string;
     dateTo?: string;
-    module?: string;
+    module?: string | string[];
     category?: string;
-    user?: string;
-    activityType?: string;
-    status?: string;
+    user?: string | string[];
+    activityType?: string | string[];
+    status?: string | string[];
   },
 ): AuditTrailRecord[] {
   let list = [...records];
@@ -1121,15 +1122,10 @@ export function filterAuditTrail(
   if (opts.category && opts.category !== "all") {
     list = list.filter((r) => r.category === opts.category);
   }
-  if (opts.user && opts.user !== "all") {
-    list = list.filter((r) => r.user === opts.user);
-  }
-  if (opts.activityType && opts.activityType !== "all") {
-    list = list.filter((r) => r.activityType === opts.activityType);
-  }
-  if (opts.status && opts.status !== "all") {
-    list = list.filter((r) => r.status === opts.status);
-  }
+  list = list.filter((r) => matchesMultiFilter(opts.user, r.user));
+  list = list.filter((r) => matchesMultiFilter(opts.activityType, r.activityType));
+  list = list.filter((r) => matchesMultiFilter(opts.status, r.status));
+  list = list.filter((r) => matchesMultiFilter(opts.module, r.module));
   if (opts.search?.trim()) {
     const q = opts.search.toLowerCase();
     list = list.filter(
@@ -1151,9 +1147,6 @@ export function filterAuditTrail(
   }
   if (opts.dateTo) {
     list = list.filter((r) => r.dateTime.slice(0, 10) <= opts.dateTo!);
-  }
-  if (opts.module && opts.module !== "all") {
-    list = list.filter((r) => r.module === opts.module);
   }
 
   return list;

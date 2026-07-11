@@ -6,30 +6,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import {
-  AccountsTable,
-  AccountsTableBody,
-  AccountsTableCell,
-  AccountsTableFoot,
-  AccountsTableHead,
-  AccountsTableHeadRow,
-  AccountsTableRow,
-} from "@/components/accounts/AccountsTable";
-import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
+  ReportFinancialYearFilter,
+  ReportBranchMultiFilter,
+  ReportWarehouseMultiFilter,
+  ReportPartyMultiFilter,
+  ReportLedgerGroupMultiFilter,
+  ReportLedgerMultiFilter,
+  ReportViewTypeFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
-  AccountsColumnFilterProvider,
-  SortTh,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
@@ -38,209 +41,98 @@ import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
   buildPandLStatement,
+  collectPandLGroupIds,
   filterPandLStatement,
-  flattenPandLForExport,
-  type PandLLineItem,
-  type PandLStatement,
+  flattenPandLHorizontalForExport,
+  getPandLActivePartyOptions,
+  getPandLBranchOptions,
+  getPandLLedgerGroupOptions,
+  getPandLLedgerOptions,
+  getPandLWarehouseOptions,
+  resolveFinancialYearLabel,
+  splitPandLHorizontal,
+  type PandLFilters,
+  type PandLViewType,
 } from "./pl-data";
 import { exportPandLToExcel, exportPandLToPdf } from "./pl-export";
+import { ProfitLossHorizontalView } from "./ProfitLossHorizontalView";
 import { useDebouncedValue } from "./pl-hooks";
+import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 
 const PLACEHOLDER_DATE = "2025-04-01";
 const EMPTY_MESSAGE = "No Profit & Loss data available for the selected period.";
 
-function formatPlAmount(amount: number): string {
-  return formatMoney(amount);
+function defaultFyDateRange(): { from: string; to: string; fyId: string } {
+  ensureFinancialYearsCurrent();
+  const activeFyId = getActiveFinancialYearId();
+  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!fy) return { from: PLACEHOLDER_DATE, to: today, fyId: "all" };
+  return {
+    from: fy.startDate,
+    to: today < fy.endDate ? today : fy.endDate,
+    fyId: String(fy.id),
+  };
 }
 
-function PandLRow({ line }: { line: PandLLineItem }) {
-  if (line.kind === "section") {
-    return (
-      <AccountsTableRow className="bg-muted/20">
-        <AccountsTableCell colSpan={2} className="text-xs font-bold text-navy-700 py-2">
-          {line.particular}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  if (line.kind === "total") {
-    return (
-      <AccountsTableRow className="bg-muted/30 border-t border-border">
-        <AccountsTableCell className="font-bold text-foreground text-xs">
-          {line.particular}
-        </AccountsTableCell>
-        <AccountsTableCell align="right" money className={cn("font-bold", MONEY_AMOUNT_CLASS)}>
-          {line.amount != null ? formatPlAmount(line.amount) : "—"}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  if (line.kind === "net") {
-    const isProfit = line.particular === "Net Profit";
-    return (
-      <AccountsTableRow className="bg-brand-50 border-t-2 border-brand-300">
-        <AccountsTableCell className="font-bold text-brand-800 text-xs uppercase tracking-wide">
-          {line.particular}
-        </AccountsTableCell>
-        <AccountsTableCell
-          align="right"
-          money
-          className={cn(
-            "font-bold text-sm",
-            isProfit ? "text-emerald-700" : "text-red-700",
-            MONEY_AMOUNT_CLASS,
-          )}
-        >
-          {line.amount != null ? formatPlAmount(line.amount) : "—"}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  return (
-    <AccountsTableRow>
-      <AccountsTableCell className="text-xs text-foreground pl-4">
-        {line.particular}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-        {line.amount != null ? formatPlAmount(line.amount) : "—"}
-      </AccountsTableCell>
-    </AccountsTableRow>
-  );
-}
-
-function ProfitLossBody({
-  mounted,
-  statement,
-  bodyLines,
-  hasFilters,
-  resetFilters,
-  exportMeta,
-  exporting,
-  setExporting,
-  filterBar,
-}: {
-  mounted: boolean;
-  statement: PandLStatement;
-  bodyLines: PandLLineItem[];
-  hasFilters: boolean;
-  resetFilters: () => void;
-  exportMeta: Parameters<typeof exportPandLToExcel>[1];
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  filterBar: React.ReactNode;
-}) {
-  const columnFilteredBodyLines = useAccountsFilteredRows(bodyLines);
-  const netLine = statement.lines.find((l) => l.kind === "net");
-
-  const exportStatement = useMemo(
-    (): PandLStatement => ({
-      ...statement,
-      lines: netLine ? [...columnFilteredBodyLines, netLine] : columnFilteredBodyLines,
-    }),
-    [statement, columnFilteredBodyLines, netLine],
-  );
-
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      const rows = flattenPandLForExport(exportStatement);
-      await exportPandLToExcel(rows, exportMeta, exportStatement);
-    } finally {
-      setExporting(false);
+function mergeLedgerOptions(
+  getOptions: (ledgerGroupId: string) => { id: number; name: string }[],
+  ledgerGroupIds: string[],
+): { id: number; name: string }[] {
+  if (ledgerGroupIds.length === 0) return getOptions("all");
+  const seen = new Map<number, { id: number; name: string }>();
+  for (const groupId of ledgerGroupIds) {
+    for (const ledger of getOptions(groupId)) {
+      seen.set(ledger.id, ledger);
     }
-  };
-
-  const handleExportPdf = () => {
-    const rows = flattenPandLForExport(exportStatement);
-    exportPandLToPdf(rows, exportMeta, exportStatement);
-  };
-
-  const showTable = mounted && statement.hasData;
-
-  return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", "Profit & Loss")}
-      title="Profit & Loss"
-      description="Income and expense statement for the selected period."
-      hideDescription
-      layout="split"
-      className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || columnFilteredBodyLines.length === 0}
-        />
-      }
-      filters={filterBar}
-    >
-      <AccountsTableListing>
-        {!mounted ? (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            Loading Profit & Loss…
-          </div>
-        ) : !showTable ? (
-          <div className="accounts-table-empty py-4 text-center">
-            {EMPTY_MESSAGE}
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="block mx-auto mt-1 text-brand-600 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : bodyLines.length > 0 && columnFilteredBodyLines.length === 0 ? (
-          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
-            No records match the column filters.
-          </div>
-        ) : (
-          <AccountsTable minWidth={520}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                <SortTh label="Particular" colKey="particular" />
-                <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {columnFilteredBodyLines.map((line) => (
-                <PandLRow key={line.id} line={line} />
-              ))}
-            </AccountsTableBody>
-            {netLine && (
-              <AccountsTableFoot>
-                <PandLRow line={netLine} />
-              </AccountsTableFoot>
-            )}
-          </AccountsTable>
-        )}
-      </AccountsTableListing>
-    </AccountsPageShell>
-  );
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default function ProfitLossPageClient() {
   const mounted = useClientMounted();
 
-  const [preset, setPreset] = useState<DateRangePresetId>("this_month");
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
   const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
   const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
   const [datesReady, setDatesReady] = useState(false);
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [warehouses, setWarehouses] = useState<string[]>([]);
+  const [partyIds, setPartyIds] = useState<string[]>([]);
+  const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
+  const [ledgerIds, setLedgerIds] = useState<string[]>([]);
+  const [viewType, setViewType] = useState<PandLViewType>("summary");
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
   useEffect(() => {
-    const { from, to } = resolveDateRangePreset("this_month");
+    const { from, to, fyId } = defaultFyDateRange();
     setDateFrom(from);
     setDateTo(to);
+    setFinancialYearId(fyId);
     setDatesReady(true);
+  }, []);
+
+  const handleFinancialYearChange = useCallback((fyId: string) => {
+    setFinancialYearId(fyId);
+    if (fyId !== "all") {
+      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (fy) {
+        const today = new Date().toISOString().slice(0, 10);
+        setDateFrom(fy.startDate);
+        setDateTo(today < fy.endDate ? today : fy.endDate);
+        setPreset("custom");
+      }
+    }
+  }, []);
+
+  const handleLedgerGroupChange = useCallback((values: string[]) => {
+    setLedgerGroupIds(values);
+    setLedgerIds([]);
   }, []);
 
   const handlePresetChange = useCallback((value: DateRangePresetId) => {
@@ -252,65 +144,250 @@ export default function ProfitLossPageClient() {
     }
   }, []);
 
+  const plFilters = useMemo((): PandLFilters => ({
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branch: branches,
+    warehouse: warehouses,
+    partyId: partyIds,
+    ledgerGroupId: ledgerGroupIds,
+    ledgerId: ledgerIds,
+    viewType,
+    search: debouncedSearch,
+  }), [
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branches,
+    warehouses,
+    partyIds,
+    ledgerGroupIds,
+    ledgerIds,
+    viewType,
+    debouncedSearch,
+  ]);
+
+  const ledgerGroupOptions = useMemo(
+    () => (mounted ? getPandLLedgerGroupOptions() : []),
+    [mounted, plFilters],
+  );
+  const ledgerOptions = useMemo(
+    () => (mounted ? mergeLedgerOptions(getPandLLedgerOptions, ledgerGroupIds) : []),
+    [mounted, ledgerGroupIds, plFilters],
+  );
+  const branchOptions = useMemo(
+    () => (mounted ? getPandLBranchOptions() : [...REPORT_BRANCH_OPTIONS]),
+    [mounted, plFilters],
+  );
+  const warehouseOptions = useMemo(
+    () => (mounted ? getPandLWarehouseOptions() : []),
+    [mounted, plFilters],
+  );
+  const partyOptions = useMemo(
+    () => (mounted ? getPandLActivePartyOptions() : []),
+    [mounted, plFilters],
+  );
+
+  const warehouseSelectOptions = useMemo(
+    () => warehouseOptions.filter((w) => w !== "all").map((w) => ({ value: w, label: w })),
+    [warehouseOptions],
+  );
+  const ledgerGroupSelectOptions = useMemo(
+    () => ledgerGroupOptions.map((g) => ({ value: String(g.id), label: g.name })),
+    [ledgerGroupOptions],
+  );
+  const ledgerSelectOptions = useMemo(
+    () => ledgerOptions.map((l) => ({ value: String(l.id), label: l.name })),
+    [ledgerOptions],
+  );
+
   const sourceStatement = useMemo(() => {
-    if (!mounted) {
+    if (!mounted || !datesReady) {
       return {
         lines: [],
         totalIncome: 0,
         totalExpenses: 0,
         netProfit: 0,
+        isBalanced: true,
         hasData: false,
       };
     }
-    return buildPandLStatement();
-  }, [mounted, dateFrom, dateTo]);
+    const built = buildPandLStatement(plFilters);
+    return filterPandLStatement(built, { search: debouncedSearch });
+  }, [mounted, datesReady, plFilters, debouncedSearch]);
 
-  const statement = useMemo(
-    () => filterPandLStatement(sourceStatement, { search: debouncedSearch }),
-    [sourceStatement, debouncedSearch],
-  );
+  const exportExpandedIds = useMemo(() => {
+    const { expenses, income } = splitPandLHorizontal(sourceStatement);
+    return new Set([
+      ...collectPandLGroupIds(expenses.tree),
+      ...collectPandLGroupIds(income.tree),
+    ]);
+  }, [sourceStatement]);
 
-  const bodyLines = useMemo(
-    () => statement.lines.filter((l) => l.kind !== "net"),
-    [statement.lines],
-  );
+  const defaultFyRange = useMemo(() => defaultFyDateRange(), []);
 
-  const getCellValue = useCallback(
-    (row: PandLLineItem, key: string) => (row as unknown as Record<string, unknown>)[key],
-    [],
-  );
-
-  const columnConfig = useMemo(
-    () => ({
-      particular: { type: "text" as const },
-      amount: { type: "amount" as const },
-    }),
-    [],
-  );
+  const moreFiltersActiveCount = countActiveMoreFilters({
+    warehouse: warehouses,
+    ledgerGroupId: ledgerGroupIds,
+    ledgerId: ledgerIds,
+  });
 
   const hasFilters =
     Boolean(search.trim()) ||
-    (datesReady && preset !== "this_month");
+    (datesReady &&
+      (preset !== "custom" ||
+        financialYearId !== defaultFyRange.fyId ||
+        isMultiFilterActive(branches) ||
+        isMultiFilterActive(warehouses) ||
+        isMultiFilterActive(partyIds) ||
+        isMultiFilterActive(ledgerGroupIds) ||
+        isMultiFilterActive(ledgerIds) ||
+        viewType !== "summary"));
 
   const resetFilters = useCallback(() => {
     setSearch("");
-    setPreset("this_month");
-    const { from, to } = resolveDateRangePreset("this_month");
+    setPreset("custom");
+    const { from, to, fyId } = defaultFyDateRange();
     setDateFrom(from);
     setDateTo(to);
+    setFinancialYearId(fyId);
+    setBranches([]);
+    setWarehouses([]);
+    setPartyIds([]);
+    setLedgerGroupIds([]);
+    setLedgerIds([]);
+    setViewType("summary");
   }, []);
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: "",
+      financialYear: resolveFinancialYearLabel(financialYearId),
+      branch: branches.length === 0
+        ? "All branches"
+        : formatMultiSelectLabel(
+            branches,
+            branchOptions.map((b) => ({ value: b, label: b })),
+            "Branch",
+          ),
+      warehouse: warehouses.length === 0
+        ? "All warehouses"
+        : formatMultiSelectLabel(warehouses, warehouseSelectOptions, "Warehouse"),
+      party: partyIds.length === 0
+        ? "All parties"
+        : formatMultiSelectLabel(
+            partyIds,
+            partyOptions.map((p) => ({
+              value: p.id,
+              label: p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`,
+            })),
+            "Party",
+          ),
+      viewType: viewType === "summary" ? "Summary" : "Detailed",
     }),
-    [dateFrom, dateTo],
+    [
+      dateFrom,
+      dateTo,
+      financialYearId,
+      branches,
+      branchOptions,
+      warehouses,
+      warehouseSelectOptions,
+      partyIds,
+      partyOptions,
+      viewType,
+    ],
   );
+
+  const drillDownFilters = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      branch: branches[0],
+      warehouse: warehouses[0],
+      partyId: partyIds[0],
+    }),
+    [dateFrom, dateTo, branches, warehouses, partyIds],
+  );
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+      [
+        {
+          id: "period",
+          label: "Period",
+          value: `${dateFrom} to ${dateTo}`,
+        },
+        buildBranchFilterSummary(branches, () => setBranches([])),
+        buildEntityFilterSummary(
+          "party",
+          "Party",
+          partyIds,
+          partyOptions.map((p) => ({
+            value: p.id,
+            label: p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`,
+          })),
+          () => setPartyIds([]),
+        ),
+        buildEntityFilterSummary(
+          "warehouse",
+          "Warehouse",
+          warehouses,
+          warehouseSelectOptions,
+          () => setWarehouses([]),
+        ),
+        buildEntityFilterSummary(
+          "ledgerGroup",
+          "Account Group",
+          ledgerGroupIds,
+          ledgerGroupSelectOptions,
+          () => setLedgerGroupIds([]),
+        ),
+        buildEntityFilterSummary(
+          "ledger",
+          "Ledger",
+          ledgerIds,
+          ledgerSelectOptions,
+          () => setLedgerIds([]),
+        ),
+      ].filter((item): item is ReportFilterSummaryItem => item != null),
+    [
+      dateFrom,
+      dateTo,
+      branches,
+      partyIds,
+      partyOptions,
+      warehouses,
+      warehouseSelectOptions,
+      ledgerGroupIds,
+      ledgerGroupSelectOptions,
+      ledgerIds,
+      ledgerSelectOptions,
+    ],
+  );
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const rows = flattenPandLHorizontalForExport(sourceStatement, exportExpandedIds);
+      await exportPandLToExcel(rows, exportMeta, sourceStatement);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    const rows = flattenPandLHorizontalForExport(sourceStatement, exportExpandedIds);
+    exportPandLToPdf(rows, exportMeta, sourceStatement);
+  };
 
   const filterBar = (
     <ReportFilterRow className="items-end gap-2">
+      <ReportFinancialYearFilter
+        value={financialYearId}
+        onChange={handleFinancialYearChange}
+      />
       <ReportDateRangeFilter
         preset={preset}
         dateFrom={dateFrom}
@@ -319,6 +396,34 @@ export default function ProfitLossPageClient() {
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
       />
+      <ReportBranchMultiFilter
+        values={branches}
+        onChange={setBranches}
+        options={branchOptions}
+      />
+      <ReportPartyMultiFilter
+        values={partyIds}
+        onChange={setPartyIds}
+        parties={partyOptions}
+      />
+      <ReportViewTypeFilter value={viewType} onChange={setViewType} />
+      <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+        <ReportWarehouseMultiFilter
+          values={warehouses}
+          onChange={setWarehouses}
+          options={warehouseOptions}
+        />
+        <ReportLedgerGroupMultiFilter
+          values={ledgerGroupIds}
+          onChange={handleLedgerGroupChange}
+          groups={ledgerGroupOptions}
+        />
+        <ReportLedgerMultiFilter
+          values={ledgerIds}
+          onChange={setLedgerIds}
+          ledgers={ledgerOptions}
+        />
+      </ReportMoreFilters>
       <div className="space-y-0.5 min-w-[180px] flex-1">
         <Label className={filterLabelClass}>Search Particular</Label>
         <div className="relative">
@@ -348,25 +453,52 @@ export default function ProfitLossPageClient() {
     </ReportFilterRow>
   );
 
+  const showTable = mounted && datesReady && sourceStatement.hasData;
+
   return (
-    <AccountsColumnFilterProvider
-      rows={bodyLines}
-      getCellValue={getCellValue}
-      columnConfig={columnConfig}
-      defaultSortKey="particular"
-      defaultSortDir="asc"
+    <AccountsPageShell
+      breadcrumbs={accountsBreadcrumb("Reports", "Profit & Loss")}
+      title="Profit & Loss"
+      description="Income and expense statement for the selected period."
+      hideDescription
+      layout="split"
+      className="h-full min-h-0"
+      actions={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || !mounted || !sourceStatement.hasData}
+        />
+      }
+      filters={filterBar}
     >
-      <ProfitLossBody
-        mounted={mounted}
-        statement={statement}
-        bodyLines={bodyLines}
-        hasFilters={hasFilters}
-        resetFilters={resetFilters}
-        exportMeta={exportMeta}
-        exporting={exporting}
-        setExporting={setExporting}
-        filterBar={filterBar}
-      />
-    </AccountsColumnFilterProvider>
+      <AccountsListingTableCard className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <ReportFilterSummary items={filterSummaryItems} />
+        {!mounted || !datesReady ? (
+          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+            Loading Profit & Loss…
+          </div>
+        ) : !showTable ? (
+          <div className="accounts-table-empty py-4 text-center">
+            {EMPTY_MESSAGE}
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="block mx-auto mt-1 text-brand-600 hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <ProfitLossHorizontalView
+            statement={sourceStatement}
+            drillDownFilters={drillDownFilters}
+            viewType={viewType}
+          />
+        )}
+      </AccountsListingTableCard>
+    </AccountsPageShell>
   );
 }
