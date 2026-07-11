@@ -1,17 +1,12 @@
 /**
  * Party ledger statement — builds transaction lists from linked COA receivable/payable ledgers
- * (posted voucher lines + bundled demo movements), shared by Customer & Supplier Ledger reports.
+ * (posted voucher lines only), shared by Customer & Supplier Ledger reports.
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
-import {
-  getBundledDemoTransactions,
-  isBundledDemoLedger,
-  type CoaDemoTransactionSeed,
-} from "@/app/(app)/accounts/masters/chart-of-accounts/coa-demo-transactions";
 import { collectLedgerRawCoaTransactions } from "@/lib/accounts/coa-accounting-view";
 import { syncCustomerLedger, syncVendorLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { findErpPartyLink } from "@/lib/accounts/erp-party-links";
@@ -30,39 +25,18 @@ export interface PartyLedgerRawMovement {
 }
 
 function mergeLedgerMovements(ledger: ChartOfAccount): PartyLedgerRawMovement[] {
-  const voucherRows = collectLedgerRawCoaTransactions(ledger).map((row) => ({
-    date: row.date,
-    voucherNo: row.voucherNo,
-    voucherType: row.voucherType,
-    particular: row.referenceNo !== "—" ? row.referenceNo : row.voucherType,
-    narration: row.narration,
-    debit: row.debit,
-    credit: row.credit,
-    viewHref: row.viewHref ?? null,
-  }));
-
-  const demoRows = getBundledDemoTransactions(ledger.id).map((seed: CoaDemoTransactionSeed) => ({
-    date: seed.date,
-    voucherNo: seed.voucherNo,
-    voucherType: seed.voucherType,
-    particular: seed.partyName || seed.particulars,
-    narration: seed.particulars,
-    debit: seed.debit,
-    credit: seed.credit,
-    viewHref: null,
-  }));
-
-  if (voucherRows.length === 0) {
-    return sortChronological(demoRows);
-  }
-
-  if (!isBundledDemoLedger(ledger)) {
-    return sortChronological(voucherRows);
-  }
-
-  const voucherNos = new Set(voucherRows.map((r) => r.voucherNo));
-  const supplemental = demoRows.filter((r) => !voucherNos.has(r.voucherNo));
-  return sortChronological([...voucherRows, ...supplemental]);
+  return sortChronological(
+    collectLedgerRawCoaTransactions(ledger).map((row) => ({
+      date: row.date,
+      voucherNo: row.voucherNo,
+      voucherType: row.voucherType,
+      particular: row.referenceNo !== "—" ? row.referenceNo : row.voucherType,
+      narration: row.narration,
+      debit: row.debit,
+      credit: row.credit,
+      viewHref: row.viewHref ?? null,
+    })),
+  );
 }
 
 export function resolveCustomerReceivableLedger(customer: Customer): ChartOfAccount | null {

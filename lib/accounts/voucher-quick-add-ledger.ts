@@ -25,6 +25,7 @@ import {
   isUnderBankAccounts,
 } from "@/lib/accounts/bank-coa-utils";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
+import { isBankAccountMappedToWarehouse, resolveWarehouseId } from "@/lib/accounts/bank-warehouse-mapping";
 import type { VoucherLine, VoucherTypeCode } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 
@@ -208,6 +209,7 @@ function namesIncludeAny(names: string[], terms: string[]): boolean {
 export function ledgerMatchesReceiptDebitScope(
   ledger: ChartOfAccount,
   records = loadChartOfAccounts(),
+  warehouseRef?: string | number | null,
 ): boolean {
   if (!isPostableNode(ledger, records)) return false;
 
@@ -218,12 +220,17 @@ export function ledgerMatchesReceiptDebitScope(
   if (isBankAccountLedger(ledger) && isUnderBankAccounts(ledger, records)) {
     const master = loadBankAccountMasters().find((m) => m.coaLedgerId === ledger.id);
     if (master) {
-      return (
+      const typeOk =
         master.accountType === "Current" ||
         master.accountType === "Savings" ||
         master.accountType === "OD" ||
-        master.accountType === "CC"
-      );
+        master.accountType === "CC";
+      if (!typeOk) return false;
+      const warehouseId = resolveWarehouseId(warehouseRef);
+      if (warehouseId != null) {
+        return isBankAccountMappedToWarehouse(master.mappedWarehouseIds, warehouseId, master.status);
+      }
+      return true;
     }
     return true;
   }
@@ -444,8 +451,9 @@ export function validateReceiptVoucherLedgerScopes(
 export function ledgerMatchesPaymentCreditScope(
   ledger: ChartOfAccount,
   records = loadChartOfAccounts(),
+  warehouseRef?: string | number | null,
 ): boolean {
-  return ledgerMatchesReceiptDebitScope(ledger, records);
+  return ledgerMatchesReceiptDebitScope(ledger, records, warehouseRef);
 }
 
 export function validatePaymentVoucherLedgerScopes(

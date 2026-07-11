@@ -168,10 +168,12 @@ export interface CreditNoteRecord {
   adjustmentLedgerName?: string;
   referenceNo?: string;
   attachmentName?: string;
+  warehouse?: string;
+  bankAccountId?: number | null;
 }
 
 const STORAGE_KEY = "ds_accounts_credit_notes_v2";
-const SEED_VERSION_KEY = "ds_accounts_credit_notes_seed_v2";
+const SEED_VERSION_KEY = "ds_accounts_credit_notes_seed_v3";
 
 export const CREDIT_REASONS = [
   "Sales return",
@@ -753,6 +755,8 @@ export type CreditNoteFormInput = {
   adjustmentLedgerName?: string;
   referenceNo?: string;
   attachmentName?: string;
+  warehouse?: string;
+  bankAccountId?: number | null;
 };
 
 function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
@@ -831,6 +835,8 @@ export function createCreditNote(
     adjustmentLedgerName: normalizedInput.adjustmentLedgerName,
     referenceNo: normalizedInput.referenceNo,
     attachmentName: normalizedInput.attachmentName,
+    warehouse: normalizedInput.warehouse,
+    bankAccountId: normalizedInput.bankAccountId ?? null,
     activity: [{ at: new Date().toISOString(), action: "created", by: ACCOUNTS_CURRENT_USER, detail: "Credit note created" }],
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -891,6 +897,8 @@ export function updateCreditNote(
     adjustmentLedgerName: normalizedInput.adjustmentLedgerName ?? cur.adjustmentLedgerName,
     referenceNo: normalizedInput.referenceNo ?? cur.referenceNo,
     attachmentName: normalizedInput.attachmentName ?? cur.attachmentName,
+    warehouse: normalizedInput.warehouse ?? cur.warehouse,
+    bankAccountId: normalizedInput.bankAccountId ?? cur.bankAccountId ?? null,
     activity: appendActivity(cur.activity, "updated", "Credit note updated"),
     updatedBy: ACCOUNTS_CURRENT_USER,
     updatedAt: new Date().toISOString(),

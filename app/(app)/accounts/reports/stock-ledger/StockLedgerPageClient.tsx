@@ -489,7 +489,7 @@ function StockLedgerPageBody({
       className="h-full min-h-0"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        <AccountsSummaryBar items={summaryItems} className="lg:grid-cols-3 xl:grid-cols-6" />
+        <AccountsSummaryBar items={summaryItems} />
 
         <AccountsTableListing
           footer={

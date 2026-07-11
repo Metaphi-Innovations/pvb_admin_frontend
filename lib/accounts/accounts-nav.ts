@@ -40,11 +40,11 @@ import {
 
   Settings,
 
+  Tags,
+
   ShoppingBag,
 
   ShoppingCart,
-
-  Tags,
 
   TrendingUp,
 
@@ -334,24 +334,6 @@ export const ACCOUNTS_COA_NAV: AccountsNavLink = {
   icon: FolderTree,
 };
 
-export const ACCOUNTS_GST_MASTER_NAV: AccountsNavLink = {
-  label: "GST Master",
-  href: ACCOUNTS_GST_MASTER_HREF,
-  icon: Layers,
-};
-
-export const ACCOUNTS_HSN_MASTER_NAV: AccountsNavLink = {
-  label: "HSN Master",
-  href: ACCOUNTS_HSN_MASTER_HREF,
-  icon: Tags,
-};
-
-export const ACCOUNTS_TDS_MASTER_NAV: AccountsNavLink = {
-  label: "TDS Master",
-  href: ACCOUNTS_TDS_MASTER_HREF,
-  icon: Receipt,
-};
-
 /** Demo accounting menu — Transactions */
 export const ACCOUNTS_TRANSACTIONS_NAV: AccountsNavLink[] = [
   { label: "Pending Invoices", href: "/accounts/sales/pending-tax-invoices", icon: ClipboardList },
@@ -417,7 +399,7 @@ export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
     id: "coa",
     label: "Masters",
     icon: FolderTree,
-    items: [ACCOUNTS_COA_NAV, ACCOUNTS_GST_MASTER_NAV, ACCOUNTS_HSN_MASTER_NAV, ACCOUNTS_TDS_MASTER_NAV],
+    items: [ACCOUNTS_COA_NAV],
   },
   { id: "transactions", label: "Transactions", icon: ArrowLeftRight, items: ACCOUNTS_TRANSACTIONS_NAV },
   { id: "receivables", label: "Receivables", icon: Users, items: ACCOUNTS_RECEIVABLES_NAV },
@@ -659,7 +641,7 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
 
 const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
-  coa: "Chart of Accounts, GST, HSN and TDS masters — browse structure and maintain ledgers.",
+  coa: "Chart of Accounts — browse structure and maintain ledgers.",
   transactions: "Sales, purchase, credit/debit notes, vouchers, and journal entries.",
   receivables: "Customer outstanding, collections and receipt allocation.",
   payables: "Supplier outstanding and payment tracking.",
@@ -674,9 +656,6 @@ const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
 const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Chart of Accounts": "Assets, liabilities, income and expense ledgers",
-  "GST Master": "GST rates, tax types and ledger mapping",
-  "HSN Master": "HSN codes and GST classification",
-  "TDS Master": "TDS sections, rates and COA sync",
 
   "Cost Centers": "Department and cost allocation structure",
 
@@ -749,8 +728,8 @@ const SETUP_LINK_DESCRIPTIONS: Record<string, string> = {
 /** Left / right column order for mega-menu (remaining groups split evenly) */
 const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[]; right: string[] }>> = {
   coa: {
-    left: ["Chart of Accounts", "GST Master", "HSN Master"],
-    right: ["TDS Master"],
+    left: ["Chart of Accounts"],
+    right: [],
   },
   transactions: {
     left: ["Pending Invoices", "Sales Invoice", "Purchase Invoice", "Credit Note", "Debit Note"],

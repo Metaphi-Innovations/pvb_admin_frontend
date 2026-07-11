@@ -1148,6 +1148,24 @@ export function resolveCoaGroupContext(
     };
   }
 
+  if (name === "GST Input" || name === "GST Output") {
+    const gstLedgers = collectDescendantLedgers(records, node.id);
+    const gstLedgerIds = new Set(gstLedgers.map((l) => l.id));
+    const total = sumLedgerBalances(gstLedgers);
+    const isOutput = name === "GST Output";
+    return {
+      kind: isOutput ? "gst_output" : "gst_payable",
+      nodeId: node.id,
+      nodeName: name,
+      totalGstPayable: total,
+      outputGst: isOutput ? total : 0,
+      inputGstCredit: isOutput ? 0 : total,
+      netPayable: total,
+      gstLedgers,
+      postedEntries: collectPostingRows(gstLedgerIds),
+    };
+  }
+
   if (name === "GST Payable" || name === "Duties & Taxes Payable") {
     const gstLedgers = collectDescendantLedgers(records, node.id);
     const gstLedgerIds = new Set(gstLedgers.map((l) => l.id));

@@ -36,6 +36,7 @@ import {
 import { loadInvoices } from "@/app/(app)/accounts/invoices/invoices-data";
 import { appendAuditTrailEntry } from "@/lib/accounts/audit-trail-data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { notifyVoucherPosted } from "@/lib/accounts/voucher-posting-notify";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 
 export interface VoucherAllocationLine {
@@ -292,6 +293,7 @@ export function executeManualVoucherPost(input: ManualVoucherPostInput): Posting
   }
 
   recordVoucherPostingAudit(postedVoucher, input.allocations);
+  notifyVoucherPosted(postedVoucher);
 
   return {
     success: true,

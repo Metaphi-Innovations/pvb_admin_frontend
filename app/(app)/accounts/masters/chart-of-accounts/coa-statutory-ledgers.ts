@@ -14,10 +14,10 @@ export interface CoaStatutoryLedgerSeed {
 }
 
 export const GST_INPUT_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
-  { name: "Input CGST", code: "12191", balanceType: "Debit", gstApplicable: true },
-  { name: "Input SGST", code: "12192", balanceType: "Debit", gstApplicable: true },
-  { name: "Input IGST", code: "12193", balanceType: "Debit", gstApplicable: true },
-  { name: "Input Cess", code: "12194", balanceType: "Debit", gstApplicable: true, optional: true },
+  { name: "Input CGST", code: "231101", balanceType: "Debit", gstApplicable: true },
+  { name: "Input SGST", code: "231102", balanceType: "Debit", gstApplicable: true },
+  { name: "Input IGST", code: "231103", balanceType: "Debit", gstApplicable: true },
+  { name: "Input Cess", code: "231104", balanceType: "Debit", gstApplicable: true, optional: true },
 ];
 
 export const GST_OUTPUT_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [

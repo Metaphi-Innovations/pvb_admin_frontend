@@ -70,13 +70,7 @@ export function GeneralLedgerTable({
                 filterable={false}
                 align="right"
               />
-              <AccountsColumnHeader
-                label="Dr/Cr"
-                colKey="side"
-                sortable={false}
-                filterable={false}
-                align="center"
-              />
+              <AccountsColumnHeader label="Dr/Cr" colKey="side" sortable={false} align="center" />
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>

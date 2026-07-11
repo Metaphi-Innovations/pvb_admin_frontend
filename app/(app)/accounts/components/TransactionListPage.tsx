@@ -40,6 +40,10 @@ import {
   AccountsListingTableBodyState,
 } from "@/components/accounts/AccountsListingStates";
 import { INVOICE_TYPE_LABELS } from "@/lib/accounts/invoice-type";
+import {
+  WORKFLOW_STATUS_LABELS,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { ACCOUNTS_FILTER_LABEL_CLASS, ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
@@ -148,8 +152,10 @@ function transactionGetCellValue(row: TransactionRow, key: string): unknown {
       return row.invoiceTotal ?? row.amount;
     case "amount":
       return row.amount;
-    case "status":
-      return row.status.toLowerCase().replace(/\s+/g, "_");
+    case "status": {
+      const status = resolveWorkflowStatus(undefined, row.status);
+      return WORKFLOW_STATUS_LABELS[status];
+    }
     case "schemeSettlementLabel":
       return row.schemeSettlementLabel ?? "";
     default:

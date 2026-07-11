@@ -1,7 +1,9 @@
 import type { AccountType, ChartOfAccount, CoaNodeLevel, CoaSpecializedGroupType, ErpUsageModule } from "../data";
 import {
   DUTIES_STATUTORY_LEDGERS,
+  GST_INPUT_LEDGER_NAMES,
   GST_INPUT_STATUTORY_LEDGERS,
+  GST_OUTPUT_LEDGER_NAMES,
   GST_OUTPUT_STATUTORY_LEDGERS,
   type CoaStatutoryLedgerSeed,
 } from "./chart-of-accounts/coa-statutory-ledgers";
@@ -86,8 +88,7 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
       { name: "Prepaid Expenses", code: "1216" },
       { name: "Accrued Income", code: "1217" },
       { name: "Other Current Assets", code: "1218" },
-      { name: "GST Input Credit", code: "1219", specializedGroupType: "gst_input", ledgers: GST_INPUT_STATUTORY_LEDGERS },
-      { name: "TDS Receivable", code: "1220", specializedGroupType: "tds_receivable" },
+      { name: "TDS Receivable", code: "1219", specializedGroupType: "tds_receivable" },
     ],
   },
   {
@@ -132,6 +133,7 @@ const LIABILITIES_GROUPS: CoaTreeGroup[] = [
         name: "Duties & Taxes Payable",
         code: "2311",
         children: [
+          { name: "GST Input", code: "23110", specializedGroupType: "gst_input", ledgers: GST_INPUT_STATUTORY_LEDGERS },
           { name: "GST Output", code: "23111", specializedGroupType: "gst_output", ledgers: GST_OUTPUT_STATUTORY_LEDGERS },
           { name: "TDS Payable", code: "23112", specializedGroupType: "tds_payable" },
         ],
@@ -312,14 +314,17 @@ function systemLedgerNode(
   parentName: string,
   ledger: CoaStatutoryLedgerSeed,
 ): ChartOfAccount {
+  const nameLower = name.toLowerCase();
   const usedIn: ErpUsageModule[] =
     ledger.tdsApplicable
       ? ["payments", "procurement", "journal"]
-      : ledger.gstApplicable
-        ? accountType === "Asset"
-          ? ["procurement", "journal"]
-          : ["sales", "journal"]
-        : ["journal"];
+      : GST_INPUT_LEDGER_NAMES.has(nameLower)
+        ? ["procurement", "journal"]
+        : GST_OUTPUT_LEDGER_NAMES.has(nameLower)
+          ? ["sales", "journal"]
+          : ledger.gstApplicable
+            ? ["journal"]
+            : ["journal"];
 
   return buildCoaNode({
     id,
@@ -461,6 +466,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 12;
+export const COA_SYSTEM_REVISION = 14;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

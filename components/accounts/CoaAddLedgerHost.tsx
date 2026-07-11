@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LedgerSheet } from "@/app/(app)/accounts/masters/chart-of-accounts/components/LedgerSheet";
 import {
   DEFAULT_LEDGER_FORM,
   canAddLedgerUnder,
   defaultBalanceTypeForParent,
+  describeInvalidLedgerParentMessage,
   formToLedger,
   generateLedgerCode,
   getAncestorPath,
@@ -35,6 +36,7 @@ export function CoaAddLedgerHost() {
   const {
     records,
     setRecords,
+    selectedId,
     selectNode,
     ensureExpanded,
     setHighlightedLedgerId,
@@ -48,6 +50,7 @@ export function CoaAddLedgerHost() {
   const [formError, setFormError] = useState<string | null>(null);
   const [previewCode, setPreviewCode] = useState("");
   const [parentGroupLocked, setParentGroupLocked] = useState(false);
+  const selectedIdRef = useRef(selectedId);
 
   const closeSheet = useCallback(() => {
     setSheetOpen(false);
@@ -57,9 +60,16 @@ export function CoaAddLedgerHost() {
   }, []);
 
   const openGlobalAdd = useCallback(
-    (preferredParentId?: number | null) => {
-      const parentGroupId = preferredParentId ?? null;
+    (preferredParentId?: number | null, initialError?: string | null) => {
+      const parent =
+        preferredParentId != null
+          ? records.find((r) => r.id === preferredParentId)
+          : undefined;
+      const parentGroupId =
+        parent && canAddLedgerUnder(parent, records) ? preferredParentId! : null;
+
       if (parentGroupId != null && requestCoaSpecializedLedgerForm(parentGroupId)) return;
+
       setForm({
         ...DEFAULT_LEDGER_FORM,
         ...(parentGroupId != null
@@ -70,7 +80,12 @@ export function CoaAddLedgerHost() {
           : {}),
       });
       setPreviewCode(generateLedgerCode(records));
-      setFormError(null);
+      setFormError(
+        initialError ??
+          (parent && parentGroupId == null
+            ? describeInvalidLedgerParentMessage(parent, records)
+            : null),
+      );
       setParentGroupLocked(false);
       setSheetMode("add");
       setActive(null);
@@ -84,7 +99,7 @@ export function CoaAddLedgerHost() {
       const parent = records.find((r) => r.id === parentGroupId);
       if (requestCoaSpecializedLedgerForm(parentGroupId)) return;
       if (!parent || !canAddLedgerUnder(parent, records)) {
-        openGlobalAdd(parentGroupId);
+        openGlobalAdd(null, parent ? describeInvalidLedgerParentMessage(parent, records) : null);
         return;
       }
       setForm({
@@ -130,6 +145,13 @@ export function CoaAddLedgerHost() {
     registerCoaEditLedgerHandler(openEdit);
     return () => registerCoaEditLedgerHandler(null);
   }, [openEdit]);
+
+  /** Close the add/edit drawer when the user navigates via the COA tree. */
+  useEffect(() => {
+    if (selectedIdRef.current === selectedId) return;
+    selectedIdRef.current = selectedId;
+    if (sheetOpen) closeSheet();
+  }, [selectedId, sheetOpen, closeSheet]);
 
   useEffect(() => {
     if (!coaReady || typeof window === "undefined") return;

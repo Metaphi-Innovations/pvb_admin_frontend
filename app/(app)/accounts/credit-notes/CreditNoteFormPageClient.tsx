@@ -56,6 +56,8 @@ import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
+import { getInvoiceById } from "@/app/(app)/accounts/invoices/invoices-data";
+import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 type FormMode = "fresh" | "return" | "scheme";
 
@@ -114,6 +116,7 @@ export default function CreditNoteFormPageClient({
   const [referenceDocType, setReferenceDocType] = useState<CreditReferenceDocType>("sales_invoice");
   const [creditNoteNo, setCreditNoteNo] = useState("");
   const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [customerId, setCustomerId] = useState("");
   const [referenceInvoiceId, setReferenceInvoiceId] = useState("");
   const [referenceReturnId, setReferenceReturnId] = useState("");
@@ -427,6 +430,7 @@ export default function CreditNoteFormPageClient({
       setShipToId(fields.defaultShipToId);
     }
     setRemarks(rec.remarks);
+    setBankAccountId(rec.bankAccountId ?? null);
     setStatus(rec.status);
     if (isDirect) {
       setDirectReason(rec.reason);
@@ -493,6 +497,17 @@ export default function CreditNoteFormPageClient({
     ];
   };
 
+  const warehouseRef = useMemo(() => {
+    const invId =
+      linkedInvoices[0]?.id ??
+      (referenceInvoiceId ? Number(referenceInvoiceId) : null) ??
+      sourceInvoiceId;
+    if (invId && Number.isFinite(invId)) {
+      return getInvoiceById(invId)?.warehouse ?? null;
+    }
+    return null;
+  }, [linkedInvoices, referenceInvoiceId, sourceInvoiceId]);
+
   const resolveSource = (): CreditNoteSource => {
     if (isFresh || noteType === "direct_adjustment") return "manual";
     if (isScheme || schemeSettlementKey) return "payment_discount_scheme";
@@ -543,6 +558,8 @@ export default function CreditNoteFormPageClient({
       adjustmentLedgerName: isDirect ? adjustmentLedgerName || undefined : undefined,
       referenceNo: isDirect ? directRefNo || undefined : undefined,
       attachmentName: isDirect ? attachmentName || undefined : undefined,
+      warehouse: warehouseRef ?? undefined,
+      bankAccountId,
     };
   };
 
@@ -756,6 +773,17 @@ export default function CreditNoteFormPageClient({
                 className="h-9 text-sm"
               />
             </div>
+            {warehouseRef ? (
+              <div className="sm:col-span-2">
+                <WarehouseMappedBankAccountSelect
+                  warehouseRef={warehouseRef}
+                  value={bankAccountId}
+                  onChange={(id) => setBankAccountId(id)}
+                  label="Bank Account (for payment / print)"
+                  disabled={readOnly}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 

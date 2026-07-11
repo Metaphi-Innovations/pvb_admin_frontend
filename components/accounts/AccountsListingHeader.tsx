@@ -33,9 +33,9 @@ export function AccountsListingFilterCard({
 }: AccountsListingFilterCardProps) {
   return (
     <div className={cn(ACCOUNTS_LISTING_FILTER_CARD_CLASS, className)}>
-      {children}
+      <div className="accounts-report-filter-stack">{children}</div>
       {actions ? (
-        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">{actions}</div>
+        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0 self-end">{actions}</div>
       ) : null}
     </div>
   );

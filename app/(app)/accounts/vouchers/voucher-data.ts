@@ -88,6 +88,13 @@ function clearVoucherCaches(): void {
   ledgerMovementIndex = null;
   ledgersWithPostings = null;
   voucherCacheGeneration += 1;
+  try {
+    const { invalidateVoucherListCache } =
+      require("./voucher-list-data") as typeof import("./voucher-list-data");
+    invalidateVoucherListCache();
+  } catch {
+    // optional during module init
+  }
 }
 
 export function getVoucherCacheGeneration(): number {

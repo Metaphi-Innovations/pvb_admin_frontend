@@ -324,7 +324,67 @@
   }
 
   .accounts-summary-value {
-    @apply text-[13px] font-semibold text-foreground tabular-nums leading-tight mt-0.5 truncate;
+    @apply text-[13px] font-semibold text-foreground tabular-nums leading-tight mt-0.5;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .accounts-summary-value::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Accounts report layout — shared responsive standard for all report screens */
+  .accounts-report-body {
+    @apply flex flex-col gap-3 min-h-0 flex-1 w-full;
+  }
+
+  .accounts-report-kpi-grid {
+    display: grid;
+    width: 100%;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.25rem), 1fr));
+  }
+
+  @media (min-width: 1280px) {
+    .accounts-report-kpi-grid {
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 12.5rem), 1fr));
+    }
+  }
+
+  .accounts-report-kpi-card {
+    @apply bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0;
+    min-width: 0;
+  }
+
+  .accounts-report-kpi-value {
+    @apply text-base font-bold text-foreground tabular-nums leading-tight;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    max-width: 100%;
+  }
+
+  .accounts-report-kpi-value::-webkit-scrollbar {
+    display: none;
+  }
+
+  .accounts-report-kpi-label {
+    @apply text-[11px] text-muted-foreground mt-0.5 leading-tight;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .accounts-report-filter-field {
+    @apply flex flex-col gap-0.5 flex-shrink-0;
+  }
+
+  .accounts-report-table-section {
+    @apply flex-1 min-h-0 flex flex-col overflow-hidden;
   }
 
   .accounts-status-badge {
@@ -398,6 +458,10 @@
 
   .accounts-col-filter-popover {
     @apply rounded-lg border border-border bg-white shadow-lg;
+  }
+
+  .accounts-col-filter-popover .accounts-col-filter-value-list {
+    scrollbar-width: thin;
   }
 
   .accounts-table-body {
@@ -479,7 +543,11 @@
     border: 1px solid #E5E7EB;
     border-radius: 12px;
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    @apply flex-shrink-0 flex flex-wrap items-end gap-2 px-2.5 py-2 w-full;
+    @apply flex-shrink-0 flex flex-col gap-2 px-2.5 py-2 w-full min-w-0;
+  }
+
+  .accounts-listing-filter-card > .accounts-report-filter-stack {
+    @apply flex flex-wrap items-end gap-x-2 gap-y-2.5 w-full min-w-0;
   }
 
   .accounts-listing-filter-card [role="combobox"] {
@@ -614,6 +682,17 @@
 
   .accounts-coa-tree {
     font-variant-numeric: tabular-nums;
+  }
+
+  .accounts-coa-tree [data-coa-tree-row] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .accounts-coa-tree [data-coa-tree-label] {
+    flex: 1 1 0%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .accounts-sidebar-header-collapse-btn {

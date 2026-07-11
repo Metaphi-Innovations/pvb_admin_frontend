@@ -17,72 +17,44 @@ export interface DemoBankAccountSpec {
   balanceType?: "Debit" | "Credit";
   defaultForReceipts: boolean;
   defaultForPayments: boolean;
+  reconciliationEnabled?: boolean;
+  /** Warehouse ids this account serves — demo seed only; defaults to all active if omitted. */
+  mappedWarehouseIds?: number[];
 }
 
-export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = [
+/** Primary client-review bank accounts (masked XXXX4582 / XXXX4567 in UI). */
+export const CLIENT_REVIEW_BANK_SPECS: DemoBankAccountSpec[] = [
   {
     bankName: "HDFC Bank",
-    accountNickname: "Dharitri Sutra Agri Pvt Ltd",
-    accountNumber: "50100123456789",
+    accountNickname: "HDFC Current Account",
+    accountNumber: "50100234582",
     ifsc: "HDFC0001234",
-    branchName: "FC Road, Pune",
+    branchName: "Mumbai Main Branch",
     accountType: "Current",
-    openingBalance: 2000000,
+    openingBalance: 500_000,
     openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
-    defaultForReceipts: true,
+    defaultForReceipts: false,
     defaultForPayments: false,
+    reconciliationEnabled: true,
+    mappedWarehouseIds: [1, 6],
   },
   {
     bankName: "ICICI Bank",
-    accountNickname: "Dharitri Sutra Agri Pvt Ltd",
-    accountNumber: "006701234567",
-    ifsc: "ICIC0001234",
-    branchName: "Camp, Pune",
+    accountNickname: "ICICI Collection Account",
+    accountNumber: "00671234567",
+    ifsc: "ICIC0000876",
+    branchName: "Ahmedabad Branch",
     accountType: "Current",
-    openingBalance: 850000,
+    openingBalance: 800_000,
     openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
-    defaultForReceipts: false,
-    defaultForPayments: false,
-  },
-  {
-    bankName: "SBI",
-    accountNickname: "Dharitri Sutra Agri Pvt Ltd",
-    accountNumber: "30012345678",
-    ifsc: "SBIN0001234",
-    branchName: "Shivaji Nagar, Pune",
-    accountType: "Current",
-    openingBalance: 525000,
-    openingBalanceDate: DEMO_OPENING_DATE,
-    balanceType: "Debit",
-    defaultForReceipts: false,
-    defaultForPayments: false,
-  },
-  {
-    bankName: "Axis Bank",
-    accountNickname: "Dharitri Sutra Agri Pvt Ltd",
-    accountNumber: "912010012345678",
-    ifsc: "UTIB0000123",
-    branchName: "Koregaon Park, Pune",
-    accountType: "OD",
-    openingBalance: 375000,
-    openingBalanceDate: DEMO_OPENING_DATE,
-    balanceType: "Debit",
-    defaultForReceipts: false,
+    defaultForReceipts: true,
     defaultForPayments: true,
-  },
-  {
-    bankName: "Kotak Bank",
-    accountNickname: "Dharitri Sutra Agri Pvt Ltd",
-    accountNumber: "9812345678",
-    ifsc: "KKBK0001234",
-    branchName: "Aundh, Pune",
-    accountType: "CC",
-    openingBalance: 220000,
-    openingBalanceDate: DEMO_OPENING_DATE,
-    balanceType: "Debit",
-    defaultForReceipts: false,
-    defaultForPayments: false,
+    reconciliationEnabled: true,
+    mappedWarehouseIds: [5],
   },
 ];
+
+/** @deprecated Use CLIENT_REVIEW_BANK_SPECS — kept for ensureDemoBankCoaStructure callers. */
+export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = CLIENT_REVIEW_BANK_SPECS;

@@ -1,22 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Pencil,
   FileMinus,
   Truck,
-  Calendar,
-  Building2,
-  Hash,
-  User,
-  FileText,
   CheckCircle2,
   Clock,
   AlertCircle,
-  Package,
   Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,10 +17,16 @@ import { Badge } from "@/components/ui/badge";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-utils";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { getPurchaseInvoiceById } from "../purchase-invoices-data";
+import { cn } from "@/lib/utils";
+import {
+  calcPurchaseLineGstSplit,
+  getPurchaseInvoiceById,
+  getPurchaseInvoiceGstBreakup,
+} from "../purchase-invoices-data";
+import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -40,12 +39,28 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-lg border border-border/60 p-4 space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
-      {children}
+    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-border/60">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      </div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
+
+const ITEM_COLUMNS = [
+  "#",
+  "Product",
+  "Description",
+  "Qty",
+  "Unit",
+  "Rate",
+  "Taxable",
+  "CGST",
+  "SGST",
+  "IGST",
+  "Total",
+] as const;
 
 function PaymentBadge({ amountPaid, grandTotal }: { amountPaid: number; grandTotal: number }) {
   if (amountPaid >= grandTotal && grandTotal > 0)
@@ -95,8 +110,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
   }
 
   const outstanding = Math.max(0, invoice.grandTotal - invoice.amountPaid);
-  const cgst = Math.round(invoice.taxAmount / 2);
-  const sgst = invoice.taxAmount - cgst;
+  const gst = getPurchaseInvoiceGstBreakup(invoice);
 
   const impactLines = purchaseInvoiceImpactResolved({
     vendorName: invoice.vendorName,
@@ -107,6 +121,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
 
   return (
     <AccountsPageShell
+      layout="form"
       breadcrumbs={accountsBreadcrumb("Purchase Invoices", invoice.invoiceNo)}
       title={invoice.invoiceNo}
       description={`Supplier Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`}
@@ -144,9 +159,9 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
         </div>
       }
     >
-      <div className="space-y-4 max-w-4xl pb-10">
+      <div className="w-full space-y-4 pb-6">
         {/* Status banner */}
-        <div className="flex items-center justify-between rounded-lg border border-border/60 bg-white px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="rounded-full bg-muted/60 p-2">
               <Receipt className="w-4 h-4 text-muted-foreground" />
@@ -192,43 +207,76 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
               <Field label="Supplier Invoice No" value={invoice.vendorInvoiceNo} />
               <Field label="Invoice Date" value={invoice.invoiceDate} />
               <Field label="Source" value={invoice.source === "po_invoice" ? "GRN-Based" : "Manual Entry"} />
+              <Field label="Warehouse" value={invoice.warehouse} />
+              {(() => {
+                const bank = getBankAccountPrintDetails(invoice.bankAccountId);
+                if (!bank) return null;
+                return (
+                  <>
+                    <Field label="Bank Name" value={bank.bankName} />
+                    <Field label="Account No." value={bank.accountNumber} />
+                    <Field label="IFSC" value={bank.ifsc} />
+                    <Field label="Branch" value={bank.branchName} />
+                  </>
+                );
+              })()}
             </div>
           </Section>
         </div>
 
         {/* Line Items */}
         <Section title="Items Received">
-          <div className="overflow-x-auto">
-            <table className="accounts-table w-full">
+          <div className="-mx-4 -mb-4 overflow-x-auto">
+            <table className="w-full text-xs min-w-[1080px]">
               <thead>
-                <tr className="border-b border-border/60 bg-muted/30">
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">#</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Product</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Description</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Qty</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Unit</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Rate</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">GST %</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Taxable</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Tax Amt</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Total</th>
+                <tr className="bg-muted/40 border-b border-border">
+                  {ITEM_COLUMNS.map((h) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        "px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-foreground whitespace-nowrap",
+                        h === "#" || h === "Product" || h === "Description" || h === "Unit"
+                          ? "text-left"
+                          : "text-right",
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/20">
-                {invoice.lineItems.map((line, i) => (
-                  <tr key={line.id} className="hover:bg-muted/10">
-                    <td className="px-3 py-2.5 text-muted-foreground">{i + 1}</td>
-                    <td className="px-3 py-2.5 font-medium">{line.productName}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{line.description || "—"}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{line.invoiceQty}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{line.unit}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(line.unitPrice)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{line.taxPct}%</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(line.lineAmount)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{formatMoney(line.taxAmount)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{formatMoney(line.lineAmount + line.taxAmount)}</td>
+              <tbody>
+                {invoice.lineItems.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={ITEM_COLUMNS.length}
+                      className="px-4 py-8 text-center text-muted-foreground"
+                    >
+                      No line items on this invoice.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  invoice.lineItems.map((line, i) => {
+                    const split = calcPurchaseLineGstSplit(line, gst.interstate);
+                    return (
+                      <tr key={line.id} className="border-b border-border/60 hover:bg-muted/20">
+                        <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                        <td className="px-3 py-2 font-medium">{line.productName}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{line.description || "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{line.invoiceQty}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{line.unit}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(line.unitPrice)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(split.taxable)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.cgst)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.sgst)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.igst)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                          {formatMoney(split.lineTotal)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -238,11 +286,12 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Section title="Invoice Amounts">
             <div className="space-y-2 text-xs">
-              <AmountRow label="Taxable Amount" value={formatMoney(invoice.subtotal)} />
-              <AmountRow label="CGST" value={formatMoney(cgst)} muted />
-              <AmountRow label="SGST" value={formatMoney(sgst)} muted />
+              <AmountRow label="Taxable Amount" value={formatMoney(gst.taxableValue)} />
+              <AmountRow label="CGST" value={formatMoneyOrDash(gst.cgst)} muted />
+              <AmountRow label="SGST" value={formatMoneyOrDash(gst.sgst)} muted />
+              <AmountRow label="IGST" value={formatMoneyOrDash(gst.igst)} muted />
               <div className="border-t border-border/60 pt-2">
-                <AmountRow label="Grand Total" value={formatMoney(invoice.grandTotal)} bold />
+                <AmountRow label="Grand Total" value={formatMoney(gst.invoiceTotal)} bold />
               </div>
             </div>
           </Section>
@@ -268,8 +317,8 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
 
         {/* Supplier Ledger Impact */}
         <Section title="Supplier Ledger Entry">
-          <div className="rounded-lg bg-muted/30 border border-border/40 overflow-hidden">
-            <table className="accounts-table w-full">
+          <div className="-mx-4 -mb-4 overflow-x-auto">
+            <table className="w-full text-xs min-w-[960px]">
               <thead>
                 <tr className="border-b border-border/30 bg-muted/50">
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Date</th>
@@ -323,7 +372,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
         <LedgerImpactPreview
           title="COA Posting Impact"
           lines={impactLines}
-          className="border border-border/60 rounded-lg"
+          className="border border-border rounded-xl shadow-sm"
         />
 
         {/* Remarks */}

@@ -241,15 +241,6 @@ export function CoaNavigationProvider({
         router.push(buildTdsPartyWiseReportHref(resolved, records));
         return;
       }
-      if (resolved.nodeLevel === "primary_head" && pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
-        setExpandedIds((prev) => {
-          const next = new Set(prev);
-          if (next.has(resolved.id)) next.delete(resolved.id);
-          else next.add(resolved.id);
-          return next;
-        });
-        return;
-      }
       setSelectedId(resolved.id);
       setExpandedIds((prev) => {
         let next = expandAncestorsOf(records, resolved.id, prev);
@@ -287,16 +278,6 @@ export function CoaNavigationProvider({
             const node = currentRecords.find((r) => r.id === id);
             if (node) {
               const resolved = resolveCoaTreeSelectionNode(currentRecords, node);
-              if (resolved.nodeLevel === "primary_head") {
-                setSelectedId(null);
-                setExpandedIds((prev) => {
-                  const next = expandAncestorsOf(currentRecords, resolved.id, prev);
-                  next.add(resolved.id);
-                  return next;
-                });
-                router.replace(CHART_OF_ACCOUNTS_HREF, { scroll: false });
-                return;
-              }
               setSelectedId((prev) => (prev === resolved.id ? prev : resolved.id));
               setExpandedIds((prev) => expandAncestorsOf(currentRecords, resolved.id, prev));
               if (resolved.id !== id) {

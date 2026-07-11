@@ -35,6 +35,7 @@ import {
   getCashBookLedgers,
   type CashBookDisplayRow,
 } from "./cash-book-data";
+import { ensureBankAccountsReady } from "@/lib/accounts/bank-accounts-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { exportCashBookToExcel, exportCashBookToPdf } from "./cash-book-export";
 import { CashBookTable } from "./CashBookTable";
@@ -51,6 +52,7 @@ function CashBookPageContent() {
   const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
+    ensureBankAccountsReady();
     setRefreshKey((k) => k + 1);
   }, [sectionRefresh]);
 
@@ -120,6 +122,8 @@ function CashBookPageContent() {
       voucherType: { type: "text" as const },
       particular: { type: "text" as const },
       narration: { type: "text" as const },
+      reference: { type: "text" as const },
+      status: { type: "text" as const },
       receipt: { type: "amount" as const },
       payment: { type: "amount" as const },
     }),
@@ -343,7 +347,7 @@ function CashBookPageBody({
           </div>
         ) : (
           <>
-            {statement && <AccountsSummaryBar items={summaryItems} className="lg:grid-cols-5" />}
+            {statement && <AccountsSummaryBar items={summaryItems} />}
 
             {showNoTransactions ? (
               <div className="flex-1 flex items-center justify-center p-8">

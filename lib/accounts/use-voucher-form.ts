@@ -68,26 +68,26 @@ export function useVoucherForm({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!mounted) return;
-    if (isNew) {
-      const base = createNewFormModel(voucherType, config.defaultTransactionMode);
-      if (voucherType === "journal") {
-        const activeFy = loadFinancialYears().find((fy) => fy.status === "active");
-        if (activeFy) {
-          base.financialYearId = activeFy.id;
-          base.financialYearName = activeFy.name;
-        }
+    if (!mounted || !isNew) return;
+    const base = createNewFormModel(voucherType, config.defaultTransactionMode);
+    if (voucherType === "journal") {
+      const activeFy = loadFinancialYears().find((fy) => fy.status === "active");
+      if (activeFy) {
+        base.financialYearId = activeFy.id;
+        base.financialYearName = activeFy.name;
       }
-      setModel(base);
-      setExtras({});
-      setAllocations(undefined);
-      setError(null);
-      return;
     }
-    if (!existing) return;
+    setModel(base);
+    setExtras({});
+    setAllocations(undefined);
+    setError(null);
+  }, [mounted, isNew, voucherType, config.defaultTransactionMode]);
+
+  useEffect(() => {
+    if (!mounted || isNew || !existing) return;
     setModel(accountingVoucherToFormModel(existing, coaRecords));
     setError(null);
-  }, [mounted, isNew, existing, voucherType, config.defaultTransactionMode, coaRecords]);
+  }, [mounted, isNew, existing, coaRecords]);
 
   const patchModel = useCallback((patch: Partial<VoucherFormModel>) => {
     setModel((prev) => ({ ...prev, ...patch }));

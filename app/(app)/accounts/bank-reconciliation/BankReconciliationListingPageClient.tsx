@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Upload, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -78,6 +79,7 @@ import {
   BANK_RECON_IMPORT_HISTORY_PATH,
 } from "./reconciliation-utils";
 import { BankReconManualTransactionSheet } from "./components/BankReconManualTransactionSheet";
+import { BankReconSelectAccountDialog } from "./components/BankReconSelectAccountDialog";
 
 const ACCOUNT_TYPE_FILTER_OPTIONS = [
   { value: "all", label: "All Types" },
@@ -89,15 +91,21 @@ const STATUS_FILTER_OPTIONS = BANK_RECON_ACCOUNT_STATUS_OPTIONS.map((s) => ({
   label: s,
 }));
 
-function UploadButton({ accountId }: { accountId?: string }) {
-  const router = useRouter();
+function UploadButton({ onUpload }: { onUpload: (accountId?: string) => void }) {
+  const accounts = getBankReconAccounts();
   return (
     <Button
       type="button"
       size="sm"
       variant="outline"
       className="h-8 text-xs gap-1.5"
-      onClick={() => router.push(bankReconUploadPath(accountId))}
+      onClick={() => {
+        if (accounts.length === 1) {
+          onUpload(accounts[0]!.id);
+        } else {
+          onUpload();
+        }
+      }}
     >
       <Upload className="w-3.5 h-3.5" />
       Upload Statement
@@ -196,12 +204,11 @@ function BankAccountTable({
                 <AccountsTableCell align="right" className="accounts-table-td-sticky">
                   <AccountsTableActionCell variant="multi">
                     <Button
-                      type="button"
+                      asChild
                       size="sm"
                       className="h-7 text-[11px] px-2 bg-brand-600 hover:bg-brand-700 text-white"
-                      onClick={() => onOpenReconciliation(account.id)}
                     >
-                      Open Reconciliation
+                      <Link href={bankReconWorkspacePath(account.id)}>Reconcile</Link>
                     </Button>
                     <AccountsMoreActions contentClassName="w-48">
                       <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
@@ -209,7 +216,7 @@ function BankAccountTable({
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => onOpenReconciliation(account.id)}>
-                        Open Reconciliation
+                        Open Workspace
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onViewBankBook(account.id)}>
                         View Bank Book
@@ -218,7 +225,7 @@ function BankAccountTable({
                         Upload Statement
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onAddManual(account.id)}>
-                        Add Manual Entry
+                        Manual Entry
                       </DropdownMenuItem>
                     </AccountsMoreActions>
                   </AccountsTableActionCell>
@@ -234,6 +241,7 @@ function BankAccountTable({
 
 export default function BankReconciliationListingPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const { selectedFY } = useFY();
 
@@ -247,11 +255,20 @@ export default function BankReconciliationListingPageClient() {
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
   const [manualAccountId, setManualAccountId] = useState<string | undefined>();
+  const [uploadPickerOpen, setUploadPickerOpen] = useState(false);
+  const [manualPickerOpen, setManualPickerOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 400);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("action") === "upload") {
+      setUploadPickerOpen(true);
+      router.replace(RECONCILIATION_LIST_PATH);
+    }
+  }, [searchParams, router]);
 
   const allAccounts = useMemo(() => getBankReconAccounts(), []);
 
@@ -260,8 +277,6 @@ export default function BankReconciliationListingPageClient() {
     return allAccounts.filter((a) => {
       if (accountType !== "all" && a.accountType !== accountType) return false;
       if (filterStatus.length > 0 && !filterStatus.includes(a.status)) return false;
-      if (dateFrom && a.lastReconciledDate && a.lastReconciledDate < dateFrom) return false;
-      if (dateTo && a.lastReconciledDate && a.lastReconciledDate > dateTo) return false;
       if (!q) return true;
       return (
         a.bankName.toLowerCase().includes(q) ||
@@ -270,7 +285,7 @@ export default function BankReconciliationListingPageClient() {
         a.accountType.toLowerCase().includes(q)
       );
     });
-  }, [allAccounts, search, accountType, filterStatus, dateFrom, dateTo]);
+  }, [allAccounts, search, accountType, filterStatus]);
 
   const tableRows = useMemo(
     () =>
@@ -335,15 +350,25 @@ export default function BankReconciliationListingPageClient() {
 
   const handleUploadStatement = useCallback(
     (id?: string) => {
-      router.push(bankReconUploadPath(id));
+      if (id) {
+        router.push(bankReconUploadPath(id));
+        return;
+      }
+      setUploadPickerOpen(true);
     },
     [router],
   );
 
-  const handleAddManual = useCallback((accountId?: string) => {
-    setManualAccountId(accountId);
-    setManualSheetOpen(true);
-  }, []);
+  const handleManualFromListing = useCallback(
+    (accountId?: string) => {
+      if (accountId) {
+        router.push(`${bankReconWorkspacePath(accountId)}?manual=1`);
+        return;
+      }
+      setManualPickerOpen(true);
+    },
+    [router],
+  );
 
   const handleViewBankBook = useCallback(
     (_accountId: string) => {
@@ -398,15 +423,15 @@ export default function BankReconciliationListingPageClient() {
             <History className="w-3.5 h-3.5" />
             Import History
           </Button>
-          <UploadButton />
+          <UploadButton onUpload={handleUploadStatement} />
           <Button
             type="button"
             size="sm"
             className={cn("h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white border-0")}
-            onClick={() => handleAddManual()}
+            onClick={() => handleManualFromListing()}
           >
             <Plus className="w-3.5 h-3.5" />
-            Add Manual Transaction
+            Manual Entry
           </Button>
         </div>
       }
@@ -482,7 +507,7 @@ export default function BankReconciliationListingPageClient() {
                       setFilterStatus(s);
                       setPage(1);
                     }}
-                    initialPreset="this_month"
+                    initialPreset="this_year"
                   />
                 )}
                 <div className="space-y-0.5">
@@ -519,12 +544,30 @@ export default function BankReconciliationListingPageClient() {
             rows={paginatedRows}
             onOpenReconciliation={handleOpenReconciliation}
             onUploadStatement={handleUploadStatement}
-            onAddManual={handleAddManual}
+            onAddManual={handleManualFromListing}
             onViewBankBook={handleViewBankBook}
             loading={loading}
           />
         </AccountsTableListing>
       </AccountsColumnFilterProvider>
+
+      <BankReconSelectAccountDialog
+        open={uploadPickerOpen}
+        onClose={() => setUploadPickerOpen(false)}
+        title="Upload Bank Statement"
+        description="Choose the bank account for this statement import."
+        confirmLabel="Continue"
+        onConfirm={(id) => router.push(bankReconUploadPath(id))}
+      />
+
+      <BankReconSelectAccountDialog
+        open={manualPickerOpen}
+        onClose={() => setManualPickerOpen(false)}
+        title="Manual Bank Entry"
+        description="Choose the bank account for this manual entry."
+        confirmLabel="Continue"
+        onConfirm={(id) => router.push(`${bankReconWorkspacePath(id)}?manual=1`)}
+      />
 
       <BankReconManualTransactionSheet
         open={manualSheetOpen}

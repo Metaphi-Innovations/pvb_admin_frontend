@@ -92,7 +92,7 @@ export function ReportMultiSelect({
     filtered.length > 0 && filtered.every((o) => values.includes(o.value));
 
   return (
-    <div className={cn("space-y-0.5", minWidthClass, className)}>
+    <div className={cn("space-y-0.5 flex-shrink-0", minWidthClass, className)}>
       <span className={ACCOUNTS_FILTER_LABEL_CLASS}>{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

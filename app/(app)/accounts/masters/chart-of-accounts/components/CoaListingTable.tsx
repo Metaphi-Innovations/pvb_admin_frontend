@@ -26,6 +26,7 @@ import {
 } from "../chart-of-accounts-data";
 import type { CoaLedgerListingRow, CoaListingRow } from "../coa-listing-data";
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
+import { CoaHierarchyLevelIcon } from "./CoaLevelBadge";
 import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
 import {
   AccountsColumnFilterProvider,
@@ -275,15 +276,11 @@ function CoaHierarchyTableContent({
                   {node.accountCode}
                 </AccountsTableCell>
                 <AccountsTableCell wrap className="min-w-[200px]">
-                  <div className="flex items-start gap-1 min-w-0">
+                  <div className="flex items-start gap-1.5 min-w-0">
+                    <CoaHierarchyLevelIcon node={node} records={records} className="mt-0.5" />
                     <p
                       className={cn(
                         "flex-1 min-w-0 text-xs leading-snug",
-                        node.nodeLevel === "primary_head"
-                          ? "font-bold text-navy-700"
-                          : isLedger
-                            ? "font-semibold text-foreground"
-                            : "font-semibold text-foreground/90",
                         drillable && "group-hover:text-brand-700",
                       )}
                     >
@@ -470,13 +467,10 @@ function CoaLedgerTableContent({
             return (
               <AccountsTableRow
                 key={ledger.id}
-                className={cn("group", isHighlighted && "is-selected")}
+                className={cn("group cursor-pointer", isHighlighted && "is-selected")}
+                onClick={() => onSelectLedger(ledger)}
               >
-                <AccountsTableCell
-                  wrap
-                  className="min-w-[200px] cursor-pointer"
-                  onClick={() => onSelectLedger(ledger)}
-                >
+                <AccountsTableCell wrap className="min-w-[200px]">
                   <p className="text-xs font-semibold text-foreground leading-snug group-hover:text-brand-700">
                     {ledger.accountName}
                   </p>
@@ -487,41 +481,23 @@ function CoaLedgerTableContent({
                     </p>
                   ) : null}
                 </AccountsTableCell>
-                <AccountsTableCell
-                  className="font-mono text-xs font-semibold text-brand-700 whitespace-nowrap cursor-pointer"
-                  onClick={() => onSelectLedger(ledger)}
-                >
+                <AccountsTableCell className="font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
                   {ledger.accountCode}
                 </AccountsTableCell>
-                <AccountsTableCell
-                  wrap
-                  className="text-xs text-foreground/90 cursor-pointer"
-                  onClick={() => onSelectLedger(ledger)}
-                >
+                <AccountsTableCell wrap className="text-xs text-foreground/90">
                   {row.parentGroupName || "—"}
                 </AccountsTableCell>
-                <AccountsTableCell
-                  className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer"
-                  onClick={() => onSelectLedger(ledger)}
-                >
+                <AccountsTableCell className="text-xs text-muted-foreground whitespace-nowrap">
                   {row.source}
                 </AccountsTableCell>
-                <AccountsTableCell
-                  align="right"
-                  className="cursor-pointer"
-                  onClick={() => onSelectLedger(ledger)}
-                >
+                <AccountsTableCell align="right">
                   {row.openingAmount > 0 ? (
                     <MoneyAmount amount={row.openingAmount} side={row.openingSide} className="text-xs" />
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </AccountsTableCell>
-                <AccountsTableCell
-                  align="right"
-                  className="cursor-pointer"
-                  onClick={() => onSelectLedger(ledger)}
-                >
+                <AccountsTableCell align="right">
                   {row.currentAmount > 0 ? (
                     <MoneyAmount
                       amount={row.currentAmount}
@@ -533,14 +509,10 @@ function CoaLedgerTableContent({
                   )}
                 </AccountsTableCell>
                 <AccountsTableCell align="right">
-                  <button
-                    type="button"
-                    onClick={() => onSelectLedger(ledger)}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50 rounded-md transition-colors"
-                  >
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-brand-700 group-hover:bg-brand-50 rounded-md transition-colors">
                     <BookOpen className="w-3.5 h-3.5" />
                     View Transactions
-                  </button>
+                  </span>
                 </AccountsTableCell>
               </AccountsTableRow>
             );

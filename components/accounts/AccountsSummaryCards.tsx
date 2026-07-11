@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   ACCOUNTS_SUMMARY_LABEL_CLASS,
   ACCOUNTS_SUMMARY_VALUE_CLASS,
+  ACCOUNTS_REPORT_KPI_GRID_CLASS,
 } from "@/lib/accounts/accounts-typography";
 
 export interface AccountsSummaryCardItem {
@@ -19,27 +20,19 @@ export interface AccountsSummaryCardItem {
 export interface AccountsSummaryCardsProps {
   items: AccountsSummaryCardItem[];
   className?: string;
-  /** Grid columns at lg breakpoint — default 5 for COA-style summaries */
+  /** @deprecated Grid is now auto-fill responsive; column count is ignored */
   columns?: 3 | 4 | 5;
 }
 
 export function AccountsSummaryCards({
   items,
   className,
-  columns = 5,
 }: AccountsSummaryCardsProps) {
-  const colClass =
-    columns === 3
-      ? "lg:grid-cols-3"
-      : columns === 4
-        ? "lg:grid-cols-4"
-        : "lg:grid-cols-5";
-
   return (
     <div
       className={cn(
-        "flex-shrink-0 grid grid-cols-2 sm:grid-cols-3 gap-1.5 px-3 py-2 border-b border-[#E5E7EB] bg-white",
-        colClass,
+        "flex-shrink-0 px-3 py-2 border-b border-[#E5E7EB] bg-white",
+        ACCOUNTS_REPORT_KPI_GRID_CLASS,
         className,
       )}
     >
@@ -47,7 +40,7 @@ export function AccountsSummaryCards({
         <div
           key={item.label}
           className={cn(
-            "flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-[#E5E7EB] bg-white min-h-[40px]",
+            "flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-[#E5E7EB] bg-white min-h-[44px] min-w-0",
             item.warn && "border-red-200 bg-red-50/50",
           )}
         >

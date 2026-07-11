@@ -30,7 +30,7 @@ export function SortTh({
   filterType = "text",
   filterValue: filterValueProp,
   onFilterChange: onFilterChangeProp,
-  uniqueValues: uniqueValuesProp,
+  valueOptions: valueOptionsProp,
   statusOptions: statusOptionsProp,
   onRemoveSort: onRemoveSortProp,
   className,
@@ -45,7 +45,7 @@ export function SortTh({
   filterType?: AccountsColumnHeaderProps["filterType"];
   filterValue?: AccountsColumnHeaderProps["filterValue"];
   onFilterChange?: AccountsColumnHeaderProps["onFilterChange"];
-  uniqueValues?: string[];
+  valueOptions?: AccountsColumnHeaderProps["valueOptions"];
   statusOptions?: string[];
   onRemoveSort?: () => void;
   className?: string;
@@ -67,7 +67,7 @@ export function SortTh({
       filterType={filterType}
       filterValue={filterValueProp ?? fromCtx?.filterValue}
       onFilterChange={onFilterChangeProp ?? fromCtx?.onFilterChange}
-      uniqueValues={uniqueValuesProp ?? fromCtx?.uniqueValues}
+      valueOptions={valueOptionsProp ?? fromCtx?.valueOptions}
       statusOptions={statusOptionsProp ?? fromCtx?.statusOptions}
       className={className}
     />
@@ -146,7 +146,18 @@ export function SectionTabs({
           )}
         >
           {t.label}
-          {counts && <span className="ml-1 opacity-70">{counts[t.id] ?? 0}</span>}
+          {counts != null && counts[t.id] != null ? (
+            <span
+              className={cn(
+                "ml-1.5 tabular-nums font-semibold",
+                compact
+                  ? "text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground"
+                  : "opacity-70 text-[11px]",
+              )}
+            >
+              ({counts[t.id]})
+            </span>
+          ) : null}
         </button>
       ))}
     </div>

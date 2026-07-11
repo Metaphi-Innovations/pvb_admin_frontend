@@ -1,6 +1,6 @@
 /**
  * GST ledger resolution and tax component helpers.
- * Ledgers are auto-synced from GST Master under GST Input Credit & Duties & Taxes Payable.
+ * Ledgers are auto-synced from GST Master under Duties & Taxes Payable (GST Input & GST Output).
  */
 
 import {
@@ -11,12 +11,13 @@ import { calcGstLineSplit } from "@/app/(app)/accounts/invoices/invoices-data";
 import type { LedgerMappingKey } from "@/lib/accounts/ledger-mappings";
 import {
   GST_DUTIES_SUBGROUP,
+  GST_INPUT_GROUP,
   GST_INPUT_CREDIT_GROUP,
   resolveGstRateLedger,
   syncGstCoaFromMaster,
 } from "@/lib/accounts/gst-coa-sync";
 
-export { GST_DUTIES_SUBGROUP, GST_INPUT_CREDIT_GROUP };
+export { GST_DUTIES_SUBGROUP, GST_INPUT_GROUP, GST_INPUT_CREDIT_GROUP };
 
 /** @deprecated Legacy generic names — rate-specific ledgers are synced from GST Master */
 export const GST_LEDGER_NAMES = {

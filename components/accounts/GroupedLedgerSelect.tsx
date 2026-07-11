@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -71,6 +71,7 @@ function HierarchyNodeRow({
       <button
         type="button"
         title={node.path}
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => onSelect(node.ledger!)}
         className={cn(
           "w-full flex items-center gap-2 text-left hover:bg-brand-50/80",
@@ -149,12 +150,18 @@ export function GroupedLedgerSelect({
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const ledgerFilterRef = useRef(ledgerFilter);
+  ledgerFilterRef.current = ledgerFilter;
 
   const coaRecords = useCoaRecords();
 
   const tree = useMemo(
-    () => buildCoaHierarchyTree(coaRecords, ledgerFilter),
-    [coaRecords, ledgerFilter],
+    () =>
+      buildCoaHierarchyTree(coaRecords, (ledger) =>
+        ledgerFilterRef.current ? ledgerFilterRef.current(ledger) : true,
+      ),
+    [coaRecords],
   );
 
   useEffect(() => {
@@ -199,11 +206,20 @@ export function GroupedLedgerSelect({
     });
   }, []);
 
-  const handleSelect = (ledger: ChartOfAccount) => {
-    onChange(ledger);
-    setOpen(false);
-    setSearch("");
-  };
+  const handleSelect = useCallback(
+    (ledger: ChartOfAccount) => {
+      onChange(ledger);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const id = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
 
   const handleQuickAddCreated = (ledger: ChartOfAccount) => {
     if (!ledgerFilter || ledgerFilter(ledger)) {
@@ -229,6 +245,7 @@ export function GroupedLedgerSelect({
       )}
       <Popover
       open={open && !disabled}
+      modal={false}
       onOpenChange={(v) => {
         if (!disabled) {
           setOpen(v);
@@ -268,17 +285,27 @@ export function GroupedLedgerSelect({
           contentClassName,
         )}
         align="start"
+        side="bottom"
+        sideOffset={4}
+        collisionPadding={12}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onWheel={(e) => e.stopPropagation()}
       >
         <div className={cn("border-b border-border/60", compact ? "p-1.5" : "p-2")}>
           <Input
+            ref={searchRef}
             placeholder="Search accounts…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className={cn(compact ? "h-7 text-xs" : "h-8 text-[13px]")}
-            autoFocus
           />
         </div>
-        <div className="overflow-y-auto py-0.5" style={{ maxHeight: resolvedListMaxHeight }}>
+        <div
+          className="overflow-y-auto overscroll-contain py-0.5"
+          style={{ maxHeight: resolvedListMaxHeight }}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {filteredTree.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">No accounts found</p>
           ) : (

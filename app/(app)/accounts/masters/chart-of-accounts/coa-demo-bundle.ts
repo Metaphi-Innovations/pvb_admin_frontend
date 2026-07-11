@@ -19,6 +19,7 @@ const OPENING_BALANCE_DIFFERENCE_PARENT = "Proprietor / Partner / Shareholder Ca
 /** Demo seeds skipped where system statutory ledgers are defined in coa-seed-nodes */
 const SKIP_STATUTORY_DEMO_SUBGROUPS = new Set([
   "duties & taxes payable",
+  "gst input",
   "gst input credit",
   "gst output",
   "tds payable",
@@ -86,27 +87,19 @@ const SKIP_OPENING_SUBGROUPS = new Set([
   "Inventory / Stock-in-Hand",
 ]);
 
-/** Sundry debtors — minimum 5 posting ledgers under Trade Receivables */
+/** Sundry debtors — 2 sample posting ledgers under Trade Receivables */
 export const COA_DEMO_DEBTOR_SPECS: Array<{ name: string; openingBalance: number }> = [
   { name: "ABC Agro Distributor", openingBalance: 50000 },
-  { name: "ABC Distributor", openingBalance: 28500 },
-  { name: "Reliance Agri", openingBalance: 47650 },
-  { name: "Balaji CNF Services", openingBalance: 42000 },
-  { name: "Vidarbha Agro Mart", openingBalance: 15000 },
-  { name: "Shree Ganesh Seeds", openingBalance: 12800 },
+  { name: "XYZ Traders", openingBalance: 47650 },
 ];
 
-/** Sundry creditors — minimum 5 posting ledgers */
+/** Sundry creditors — 2 sample posting ledgers */
 export const COA_DEMO_CREDITOR_SPECS: Array<{ name: string; openingBalance: number }> = [
-  { name: "AgroChem Traders", openingBalance: 75000 },
-  { name: "Rallis India Ltd", openingBalance: 43000 },
-  { name: "GreenField Suppliers", openingBalance: 42000 },
+  { name: "Green Seeds Pvt. Ltd.", openingBalance: 42000 },
   { name: "Bharat Fertilizers", openingBalance: 95000 },
-  { name: "Kisan Inputs Pvt Ltd", openingBalance: 31500 },
-  { name: "Crop Care Industries", openingBalance: 54000 },
 ];
 
-/** Bank group + current account posting ledgers */
+/** Bank group + current account posting ledgers (2 banks) */
 export const COA_DEMO_BANK_SPECS: Array<{
   bankName: string;
   accountName: string;
@@ -114,9 +107,6 @@ export const COA_DEMO_BANK_SPECS: Array<{
 }> = [
   { bankName: "HDFC Bank", accountName: "HDFC Current Account", openingBalance: 2000000 },
   { bankName: "ICICI Bank", accountName: "ICICI Current Account", openingBalance: 850000 },
-  { bankName: "SBI", accountName: "SBI Current Account", openingBalance: 525000 },
-  { bankName: "Axis Bank", accountName: "Axis Current Account", openingBalance: 375000 },
-  { bankName: "Kotak Bank", accountName: "Kotak Current Account", openingBalance: 220000 },
 ];
 
 function hashAmount(name: string, base: number, spread = 45000): number {

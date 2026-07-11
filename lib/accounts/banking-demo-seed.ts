@@ -16,6 +16,7 @@ import {
 } from "@/lib/accounts/bank-accounts-data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { scheduleDeferredDemoSeed } from "./deferred-demo-seed";
+import { ensureClientReviewBankingSeed } from "@/lib/accounts/banking-client-review-seed";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 
 import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
@@ -172,10 +173,9 @@ function seedBankBookTransactions(force = false): void {
   if (!hdfc) return;
 
   const abc = findCustomerLedger("ABC Agro");
-  const krishna = findCustomerLedger("Krishna Retail");
-  const greenHarvest = findCustomerLedger("Green Harvest");
-  const agrochem = findVendorLedger("AgroChem");
-  const greenField = findVendorLedger("GreenField");
+  const xyz = findCustomerLedger("XYZ Traders");
+  const bharatFert = findVendorLedger("Bharat Fertilizers");
+  const greenSeeds = findVendorLedger("Green Seeds");
   const bankCharges = findExpenseLedger("Bank Service") ?? findExpenseLedger("HDFC Bank Service");
   const interestIncome = loadChartOfAccounts().find((r) =>
     r.accountName.toLowerCase().includes("bank interest"),
@@ -191,17 +191,17 @@ function seedBankBookTransactions(force = false): void {
     narration: string;
   }> = [
     { bank: hdfc, party: abc, amount: 185000, date: demoDateAt(0), ref: "NEFT-001", no: "RV-0001", narration: "Sales collection — ABC Agro Distributor" },
-    { bank: hdfc, party: krishna, amount: 92000, date: demoDateAt(1), ref: "NEFT-002", no: "RV-0002", narration: "Customer receipt — Krishna Retail Store" },
-    { bank: icici, party: greenHarvest, amount: 145000, date: demoDateAt(2), ref: "NEFT-003", no: "RV-0003", narration: "Sales collection — Green Harvest Agro" },
-    { bank: icici, party: abc, amount: 68000, date: demoDateAt(3), ref: "NEFT-004", no: "RV-0004", narration: "Farmer collection — ABC Agro partial" },
-    { bank: sbi, party: krishna, amount: 54000, date: demoDateAt(4), ref: "NEFT-005", no: "RV-0005", narration: "Cash sales collection deposited" },
-    { bank: hdfc, party: greenHarvest, amount: 210000, date: demoDateAt(5), ref: "NEFT-006", no: "RV-0006", narration: "Sales collection — bulk urea order" },
+    { bank: hdfc, party: xyz, amount: 92000, date: demoDateAt(1), ref: "NEFT-002", no: "RV-0002", narration: "Customer receipt — XYZ Traders" },
+    { bank: icici, party: abc, amount: 145000, date: demoDateAt(2), ref: "NEFT-003", no: "RV-0003", narration: "Sales collection — ABC Agro Distributor" },
+    { bank: icici, party: xyz, amount: 68000, date: demoDateAt(3), ref: "NEFT-004", no: "RV-0004", narration: "Customer receipt — XYZ Traders partial" },
+    { bank: hdfc, party: abc, amount: 54000, date: demoDateAt(4), ref: "NEFT-005", no: "RV-0005", narration: "Cash sales collection deposited" },
+    { bank: hdfc, party: xyz, amount: 210000, date: demoDateAt(5), ref: "NEFT-006", no: "RV-0006", narration: "Sales collection — bulk urea order" },
     { bank: icici, party: abc, amount: 125000, date: demoDateAt(6), ref: "NEFT-007", no: "RV-0007", narration: "Customer receipt against INV-2026-003" },
-    { bank: sbi, party: krishna, amount: 78000, date: demoDateAt(7), ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — Krishna Retail" },
-    { bank: hdfc, party: greenHarvest, amount: 95000, date: demoDateAt(8), ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
-    { bank: icici, party: abc, amount: 156000, date: demoDateAt(9), ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
-    { bank: kotak, party: krishna, amount: 42000, date: demoDateAt(10), ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
-    { bank: hdfc, party: abc, amount: 88000, date: demoDateAt(11), ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
+    { bank: icici, party: xyz, amount: 78000, date: demoDateAt(7), ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — XYZ Traders" },
+    { bank: hdfc, party: abc, amount: 95000, date: demoDateAt(8), ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
+    { bank: icici, party: xyz, amount: 156000, date: demoDateAt(9), ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
+    { bank: hdfc, party: abc, amount: 42000, date: demoDateAt(10), ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
+    { bank: hdfc, party: xyz, amount: 88000, date: demoDateAt(11), ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
   ];
 
   for (const r of receipts) {
@@ -218,16 +218,16 @@ function seedBankBookTransactions(force = false): void {
     no: string;
     narration: string;
   }> = [
-    { bank: hdfc, party: agrochem, amount: 245000, date: demoDateAt(12), ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — AgroChem Traders" },
-    { bank: icici, party: greenField, amount: 118000, date: demoDateAt(13), ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — GreenField Suppliers" },
-    { bank: sbi, party: agrochem, amount: 86000, date: demoDateAt(14), ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
-    { bank: hdfc, party: greenField, amount: 195000, date: demoDateAt(15), ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
-    { bank: axis, party: agrochem, amount: 320000, date: demoDateAt(16), ref: "PAY-005", no: "PV-0005", narration: "Salary disbursement via Axis account" },
-    { bank: icici, party: greenField, amount: 142000, date: demoDateAt(17), ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
-    { bank: hdfc, party: agrochem, amount: 98000, date: demoDateAt(18), ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
-    { bank: sbi, party: greenField, amount: 76000, date: demoDateAt(19), ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
-    { bank: icici, party: agrochem, amount: 210000, date: demoDateAt(20), ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
-    { bank: hdfc, party: greenField, amount: 134000, date: demoDateAt(21), ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
+    { bank: hdfc, party: bharatFert, amount: 245000, date: demoDateAt(12), ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — Bharat Fertilizers" },
+    { bank: icici, party: greenSeeds, amount: 118000, date: demoDateAt(13), ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — Green Seeds Pvt. Ltd." },
+    { bank: hdfc, party: bharatFert, amount: 86000, date: demoDateAt(14), ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
+    { bank: hdfc, party: greenSeeds, amount: 195000, date: demoDateAt(15), ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
+    { bank: icici, party: bharatFert, amount: 320000, date: demoDateAt(16), ref: "PAY-005", no: "PV-0005", narration: "Supplier payment — bulk order" },
+    { bank: icici, party: greenSeeds, amount: 142000, date: demoDateAt(17), ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
+    { bank: hdfc, party: bharatFert, amount: 98000, date: demoDateAt(18), ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
+    { bank: icici, party: greenSeeds, amount: 76000, date: demoDateAt(19), ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
+    { bank: icici, party: bharatFert, amount: 210000, date: demoDateAt(20), ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
+    { bank: hdfc, party: greenSeeds, amount: 134000, date: demoDateAt(21), ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
   ];
 
   for (const p of payments) {
@@ -449,14 +449,7 @@ export function seedBankingDemoData(force = false): void {
 
 export function ensureBankingDemoOnPageLoad(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(VERSION_KEY) === BANKING_DEMO_SEED_VERSION) return;
-
-  ensureDemoBankAccounts();
-  if (loadBankAccountMasters().length === 0) {
-    seedBankingDemoData(true);
-    return;
-  }
-  seedBankingDemoData(true);
+  ensureClientReviewBankingSeed();
 }
 
 /** Non-blocking — use in page mount effects instead of ensureBankingDemoOnPageLoad(). */

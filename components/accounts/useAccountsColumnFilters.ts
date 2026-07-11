@@ -5,11 +5,12 @@ import type {
   AccountsColumnFilterConfig,
   AccountsColumnFilters,
   AccountsColumnFilterType,
+  ColumnValueOption,
 } from "@/lib/accounts/column-filter-types";
 import {
   applyAccountsColumnFilters,
   applyAccountsTopN,
-  collectUniqueColumnValues,
+  collectColumnValueCounts,
   countActiveColumnFilters,
   sortAccountsRows,
 } from "@/lib/accounts/column-filter-engine";
@@ -17,20 +18,20 @@ import {
 export interface UseAccountsColumnFiltersOptions<T> {
   rows: T[];
   getCellValue: (row: T, columnKey: string) => unknown;
+  /** Values shown in Excel-style filter lists and used for text/status/select matching. Defaults to getCellValue. */
+  getFilterValue?: (row: T, columnKey: string) => unknown;
   columnConfig?: AccountsColumnFilterConfig;
   defaultSortKey?: string | null;
   defaultSortDir?: "asc" | "desc";
-  /** Value-only column filters without operator dropdowns. */
-  simpleColumnFilters?: boolean;
 }
 
 export function useAccountsColumnFilters<T>({
   rows,
   getCellValue,
+  getFilterValue,
   columnConfig = {},
   defaultSortKey = null,
   defaultSortDir = "desc",
-  simpleColumnFilters = true,
 }: UseAccountsColumnFiltersOptions<T>) {
   const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
@@ -64,7 +65,7 @@ export function useAccountsColumnFilters<T>({
   }, [defaultSortDir]);
 
   const filteredRows = useMemo(() => {
-    let result = applyAccountsColumnFilters(rows, columnFilters, getCellValue);
+    let result = applyAccountsColumnFilters(rows, columnFilters, getCellValue, getFilterValue);
 
     for (const [key, filter] of Object.entries(columnFilters)) {
       if (filter?.numberOperator === "top10") {
@@ -73,13 +74,14 @@ export function useAccountsColumnFilters<T>({
     }
 
     return sortAccountsRows(result, sortKey, sortDir, getCellValue);
-  }, [rows, columnFilters, sortKey, sortDir, getCellValue]);
+  }, [rows, columnFilters, sortKey, sortDir, getCellValue, getFilterValue]);
 
   const activeFilterCount = useMemo(() => countActiveColumnFilters(columnFilters), [columnFilters]);
 
-  const getUniqueValues = useCallback(
-    (columnKey: string) => collectUniqueColumnValues(rows, columnKey, getCellValue),
-    [rows, getCellValue],
+  const getValueCounts = useCallback(
+    (columnKey: string): ColumnValueOption[] =>
+      collectColumnValueCounts(rows, columnKey, getCellValue, 200, getFilterValue),
+    [rows, getCellValue, getFilterValue],
   );
 
   const resolveFilterType = useCallback(
@@ -93,13 +95,9 @@ export function useAccountsColumnFilters<T>({
     [columnConfig],
   );
 
-  const resolveSimpleFilter = useCallback(
-    (columnKey: string, override?: boolean): boolean => {
-      if (override != null) return override;
-      if (columnConfig[columnKey]?.advancedFilters) return false;
-      return simpleColumnFilters;
-    },
-    [columnConfig, simpleColumnFilters],
+  const optionLabelsFor = useCallback(
+    (columnKey: string) => columnConfig[columnKey]?.optionLabels ?? {},
+    [columnConfig],
   );
 
   const headerProps = useCallback(
@@ -112,7 +110,6 @@ export function useAccountsColumnFilters<T>({
         filterable?: boolean;
         sortable?: boolean;
         statusOptions?: string[];
-        simpleFilter?: boolean;
       },
     ) => ({
       label,
@@ -127,9 +124,9 @@ export function useAccountsColumnFilters<T>({
       filterType: resolveFilterType(columnKey, opts?.filterType),
       filterValue: columnFilters[columnKey],
       onFilterChange: (v: AccountsColumnFilters[string]) => setColumnFilter(columnKey, v),
-      uniqueValues: getUniqueValues(columnKey),
+      valueOptions: getValueCounts(columnKey),
       statusOptions: opts?.statusOptions ?? statusOptionsFor(columnKey),
-      simpleFilter: resolveSimpleFilter(columnKey, opts?.simpleFilter),
+      optionLabels: optionLabelsFor(columnKey),
     }),
     [
       sortKey,
@@ -138,10 +135,10 @@ export function useAccountsColumnFilters<T>({
       removeSort,
       columnFilters,
       setColumnFilter,
-      getUniqueValues,
+      getValueCounts,
       resolveFilterType,
       statusOptionsFor,
-      resolveSimpleFilter,
+      optionLabelsFor,
     ],
   );
 
@@ -155,10 +152,9 @@ export function useAccountsColumnFilters<T>({
     handleSort,
     removeSort,
     filteredRows,
-    getUniqueValues,
+    getValueCounts,
     resolveFilterType,
     statusOptionsFor: (columnKey: string) => columnConfig[columnKey]?.options ?? [],
-    simpleColumnFilters,
     headerProps,
   };
 }

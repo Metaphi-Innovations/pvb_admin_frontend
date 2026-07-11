@@ -27,6 +27,9 @@ import {
 import { VoucherFormHeaderFields } from "@/components/accounts/voucher-form/VoucherFormHeaderFields";
 import { VoucherNarrationSection } from "@/components/accounts/voucher-form/VoucherNarrationSection";
 import { VoucherDualEntryPanel } from "@/components/accounts/voucher-form/VoucherDualEntryPanel";
+import { loadWarehouseMappingOptions } from "@/lib/accounts/bank-warehouse-mapping";
+import { VoucherSelectContent } from "@/components/accounts/voucher-simple-form-ui";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherJournalEntryGrid } from "@/components/accounts/voucher-form/VoucherJournalEntryGrid";
 import { useVoucherForm } from "@/lib/accounts/use-voucher-form";
 import {
@@ -350,6 +353,27 @@ export function StandardVoucherForm({
           </VoucherFormSection>
 
           <VoucherFormSection title={config.detailsSectionTitle}>
+            {config.layout === "dual-simple" && !readOnly && (
+              <div className="mb-3 max-w-sm">
+                <VoucherFormField label="Warehouse / Branch">
+                  <Select
+                    value={extras.warehouseRef ?? ""}
+                    onValueChange={(v) => setExtras((e) => ({ ...e, warehouseRef: v || undefined }))}
+                  >
+                    <SelectTrigger className={VOUCHER_INPUT_CLASS}>
+                      <SelectValue placeholder="Select warehouse for bank accounts…" />
+                    </SelectTrigger>
+                    <VoucherSelectContent>
+                      {loadWarehouseMappingOptions().map((w) => (
+                        <SelectItem key={w.value} value={w.label} className="text-[13px]">
+                          {w.label}
+                        </SelectItem>
+                      ))}
+                    </VoucherSelectContent>
+                  </Select>
+                </VoucherFormField>
+              </div>
+            )}
             {config.layout === "dual-simple" ? (
               <>
                 <VoucherDualEntryPanel
@@ -361,6 +385,7 @@ export function StandardVoucherForm({
                   onEntriesChange={setEntries}
                   tdsAmount={numericTds}
                   onQuickAddSuccess={handleQuickAddSuccess}
+                  warehouseRef={extras.warehouseRef}
                 />
                 {showTdsSection && (deductTds || readOnly) && paymentGrossDebit > 0 && (
                   <div className="rounded-md border border-border/40 bg-muted/15 px-2.5 py-2 space-y-1 max-w-md mt-2">

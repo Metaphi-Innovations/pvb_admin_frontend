@@ -24,6 +24,11 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  AccountsReportBody,
+  AccountsReportKpiCard,
+  AccountsReportKpiGrid,
+} from "@/components/accounts/AccountsReportLayout";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
@@ -41,6 +46,7 @@ import {
   ReportWarehouseMultiFilter,
   ReportMoreFilters,
   ReportFilterSummary,
+  ReportFilterField,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -99,37 +105,6 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
     to: today < fy.endDate ? today : fy.endDate,
     fyId: String(fy.id),
   };
-}
-
-interface SummaryCardProps {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  warning?: boolean;
-}
-
-function SummaryCard({ label, value, icon: Icon, warning }: SummaryCardProps) {
-  return (
-    <div
-      className={cn(
-        "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0",
-        warning && "border-amber-300 bg-amber-50/40",
-      )}
-    >
-      <div
-        className={cn(
-          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-          warning ? "bg-amber-100" : "bg-muted",
-        )}
-      >
-        <Icon className={cn("w-4 h-4", warning ? "text-amber-600" : "text-muted-foreground")} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-bold text-foreground leading-none">{value}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 export default function DocumentsSummaryPageClient() {
@@ -313,24 +288,23 @@ export default function DocumentsSummaryPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <div className="space-y-0.5 min-w-[150px]">
-        <Label className={filterLabelClass}>Document Type</Label>
-        <Select
-          value={documentType}
-          onValueChange={(v) => setDocumentType(v as GstDocumentTypeFilter)}
-        >
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {DOCUMENT_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <ReportFilterField label="Document Type" minWidthClass="min-w-[150px]">
+          <Select
+            value={documentType}
+            onValueChange={(v) => setDocumentType(v as GstDocumentTypeFilter)}
+          >
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DOCUMENT_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -367,23 +341,25 @@ export default function DocumentsSummaryPageClient() {
       }
       filters={filterBar}
     >
-      <div className="flex flex-col gap-4 min-h-0 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <SummaryCard label="Total Sales Invoices" value={totals.totalSalesInvoices} icon={FileText} />
-          <SummaryCard label="Total Credit Notes" value={totals.totalCreditNotes} icon={Receipt} />
-          <SummaryCard label="Total Debit Notes" value={totals.totalDebitNotes} icon={ScrollText} />
-          <SummaryCard
+      <AccountsReportBody>
+        <AccountsReportKpiGrid>
+          <AccountsReportKpiCard label="Total Sales Invoices" value={totals.totalSalesInvoices} icon={FileText} isCount />
+          <AccountsReportKpiCard label="Total Credit Notes" value={totals.totalCreditNotes} icon={Receipt} isCount />
+          <AccountsReportKpiCard label="Total Debit Notes" value={totals.totalDebitNotes} icon={ScrollText} isCount />
+          <AccountsReportKpiCard
             label="Total Documents Generated"
             value={totals.totalDocumentsGenerated}
             icon={FileText}
+            isCount
           />
-          <SummaryCard
+          <AccountsReportKpiCard
             label="Total Cancelled Documents"
             value={totals.totalCancelledDocuments}
             icon={XCircle}
             warning={totals.totalCancelledDocuments > 0}
+            isCount
           />
-        </div>
+        </AccountsReportKpiGrid>
 
         <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
           {!mounted || !datesReady ? (
@@ -406,7 +382,7 @@ export default function DocumentsSummaryPageClient() {
               )}
             </div>
           ) : (
-            <AccountsTableScroll>
+            <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1100}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
@@ -466,7 +442,7 @@ export default function DocumentsSummaryPageClient() {
             </AccountsTableScroll>
           )}
         </AccountsListingTableCard>
-      </div>
+      </AccountsReportBody>
     </AccountsPageShell>
   );
 }

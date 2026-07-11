@@ -31,12 +31,16 @@ import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
+  StatusBadge,
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { maskBankAccountLast4 } from "@/lib/accounts/bank-account-display";
 import {
-  loadBankAccounts,
+  ensureBankAccountsReady,
+  getMappedWarehouseLabels,
+  loadBankAccountMasters,
   type BankAccountMaster,
 } from "@/lib/accounts/bank-accounts-data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
@@ -46,10 +50,19 @@ import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-r
 type BankAccountRow = BankAccountMaster & {
   currentBalance: number;
   balanceType: "Debit" | "Credit";
+  mappedWarehousesLabel: string;
 };
+
+function formatBankReconciledDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${d} ${months[parseInt(m, 10) - 1]} ${y}`;
+}
 
 function exportBankAccountsCsv(rows: BankAccountRow[]) {
   const headers = [
+    "Account Name",
     "Bank Name",
     "Account No.",
     "IFSC",
@@ -57,17 +70,22 @@ function exportBankAccountsCsv(rows: BankAccountRow[]) {
     "Account Type",
     "Opening Balance",
     "Current Balance",
+    "Reconciliation",
+    "Mapped Warehouses",
     "Status",
   ];
   const lines = rows.map((r) =>
     [
+      r.accountNickname,
       r.bankName,
-      r.accountNumber,
+      maskBankAccountLast4(r.accountNumber),
       r.ifsc,
       r.branchName,
       r.accountType,
       r.openingBalance,
       r.currentBalance,
+      r.reconciliationEnabled ? "Yes" : "No",
+      getMappedWarehouseLabels(r).join("; "),
       r.status,
     ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
@@ -156,9 +174,10 @@ function BankAccountsTable({
 
   return (
     <>
-      <AccountsTable minWidth={960}>
+      <AccountsTable minWidth={1280}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
+            <SortTh label="Account Name" colKey="accountNickname" />
             <SortTh label="Bank Name" colKey="bankName" />
             <SortTh label="Account No." colKey="accountNumber" />
             <SortTh label="IFSC" colKey="ifsc" />
@@ -166,6 +185,9 @@ function BankAccountsTable({
             <SortTh label="Account Type" colKey="accountType" />
             <SortTh label="Opening Balance" colKey="openingBalance" filterType="amount" align="right" />
             <SortTh label="Current Balance" colKey="currentBalance" filterType="amount" align="right" />
+            <SortTh label="Reconciliation" colKey="reconciliationEnabled" filterType="text" />
+            <SortTh label="Mapped Warehouses" colKey="mappedWarehousesLabel" filterType="text" />
+            <SortTh label="Status" colKey="status" filterType="text" />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -179,7 +201,7 @@ function BankAccountsTable({
         <AccountsTableBody>
           {visible.length === 0 ? (
             <AccountsTableEmpty
-              colSpan={8}
+              colSpan={12}
               message={
                 search
                   ? "No bank accounts match your search."
@@ -190,9 +212,12 @@ function BankAccountsTable({
           ) : (
             pagedRows.map((account) => (
               <AccountsTableRow key={account.id}>
-                <AccountsTableCell className="font-semibold whitespace-nowrap">{account.bankName}</AccountsTableCell>
+                <AccountsTableCell className="font-semibold whitespace-nowrap">
+                  {account.accountNickname}
+                </AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap">{account.bankName}</AccountsTableCell>
                 <AccountsTableCell mono className="font-semibold text-brand-700 whitespace-nowrap">
-                  {account.accountNumber || "—"}
+                  {account.accountNumber ? maskBankAccountLast4(account.accountNumber) : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell mono className="whitespace-nowrap">{account.ifsc || "—"}</AccountsTableCell>
                 <AccountsTableCell className="whitespace-nowrap">{account.branchName || "—"}</AccountsTableCell>
@@ -202,6 +227,24 @@ function BankAccountsTable({
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="whitespace-nowrap">
                   <MoneyAmount amount={account.currentBalance} side={account.balanceType} className="text-xs" />
+                </AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap text-xs">
+                  {account.reconciliationEnabled ? (
+                    <span className="text-emerald-700 font-medium">Yes</span>
+                  ) : (
+                    <span className="text-muted-foreground">No</span>
+                  )}
+                  {account.lastReconciledDate ? (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {formatBankReconciledDate(account.lastReconciledDate)}
+                    </p>
+                  ) : null}
+                </AccountsTableCell>
+                <AccountsTableCell className="whitespace-normal text-xs max-w-[200px]">
+                  {account.mappedWarehousesLabel || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap">
+                  <StatusBadge status={account.status} />
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <AccountsTableActionCell>
@@ -240,35 +283,36 @@ function BankAccountsTable({
   );
 }
 
+function buildBankAccountRows(): BankAccountRow[] {
+  const accounts = loadBankAccountMasters();
+  const records = loadChartOfAccounts();
+  return accounts.map((account) => {
+    const ledger = records.find((r) => r.id === account.coaLedgerId);
+    const balance = ledger
+      ? computeLedgerCurrentBalance(ledger)
+      : { amount: account.openingBalance, balanceType: account.balanceType };
+    return {
+      ...account,
+      currentBalance: balance.amount,
+      balanceType: balance.balanceType,
+      mappedWarehousesLabel: getMappedWarehouseLabels(account).join(", "),
+    };
+  });
+}
+
 export default function BankAccountsPageClient() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [rows, setRows] = useState<BankAccountRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
   const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
-    setRefreshKey((k) => k + 1);
+    ensureBankAccountsReady();
+    setRows(buildBankAccountRows());
   }, [sectionRefresh]);
-
-  const rows = useMemo((): BankAccountRow[] => {
-    void refreshKey;
-    const accounts = loadBankAccounts();
-    const records = loadChartOfAccounts();
-    return accounts.map((account) => {
-      const ledger = records.find((r) => r.id === account.coaLedgerId);
-      const balance = ledger
-        ? computeLedgerCurrentBalance(ledger)
-        : { amount: account.openingBalance, balanceType: account.balanceType };
-      return {
-        ...account,
-        currentBalance: balance.amount,
-        balanceType: balance.balanceType,
-      };
-    });
-  }, [refreshKey]);
 
   const toolbarFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -285,7 +329,12 @@ export default function BankAccountsPageClient() {
   }, [rows, search]);
 
   const getCellValue = useCallback(
-    (row: BankAccountRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    (row: BankAccountRow, key: string) => {
+      if (key === "reconciliationEnabled") {
+        return row.reconciliationEnabled ? "Yes" : "No";
+      }
+      return (row as unknown as Record<string, unknown>)[key];
+    },
     [],
   );
 
@@ -300,6 +349,7 @@ export default function BankAccountsPageClient() {
       rows={toolbarFiltered}
       getCellValue={getCellValue}
       columnConfig={{
+        accountNickname: { type: "text" },
         bankName: { type: "text" },
         accountNumber: { type: "text" },
         ifsc: { type: "text" },
@@ -307,6 +357,8 @@ export default function BankAccountsPageClient() {
         accountType: { type: "text" },
         openingBalance: { type: "amount" },
         currentBalance: { type: "amount" },
+        reconciliationEnabled: { type: "text" },
+        status: { type: "text" },
       }}
       defaultSortKey="bankName"
       defaultSortDir="asc"

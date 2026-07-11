@@ -17,7 +17,7 @@ export function ReportFilterSummary({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 border-b border-border/60 bg-muted/10 text-[11px]",
+        "flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 border-b border-border/60 bg-muted/10 text-[11px] w-full",
         className,
       )}
     >

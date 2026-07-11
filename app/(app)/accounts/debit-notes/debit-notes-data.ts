@@ -173,10 +173,12 @@ export interface DebitNoteRecord {
   cgstAmount: number;
   sgstAmount: number;
   igstAmount: number;
+  warehouse?: string;
+  bankAccountId?: number | null;
 }
 
 const STORAGE_KEY = "ds_accounts_debit_notes_v3";
-const SEED_VERSION_KEY = "ds_accounts_debit_notes_seed_v3";
+const SEED_VERSION_KEY = "ds_accounts_debit_notes_seed_v4";
 
 function warehouseRefsForPo(poNumber: string): { sourceGrnNo: string; sourceQcNo: string } {
   if (!poNumber) return { sourceGrnNo: "", sourceQcNo: "" };
@@ -823,6 +825,8 @@ export type DebitNoteFormInput = {
   adjustmentLedgerName?: string;
   attachments: DebitNoteAttachment[];
   status: NoteWorkflowStatus;
+  warehouse?: string;
+  bankAccountId?: number | null;
   source?: DebitNoteSource;
   sourceReturnId?: string;
   sourceReturnNo?: string;
@@ -913,6 +917,8 @@ export function createDebitNote(input: DebitNoteFormInput): DebitNoteRecord {
     remarks: input.remarks,
     attachments: input.attachments,
     status: input.status,
+    warehouse: input.warehouse,
+    bankAccountId: input.bankAccountId ?? null,
     activity: [{ at: new Date().toISOString(), action: "created", by: ACCOUNTS_CURRENT_USER, detail: "Debit note created" }],
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -967,6 +973,8 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
     remarks: input.remarks,
     attachments: input.attachments,
     status: input.status,
+    warehouse: input.warehouse ?? cur.warehouse,
+    bankAccountId: input.bankAccountId ?? cur.bankAccountId ?? null,
     activity: appendActivity(cur.activity, "updated", "Debit note updated"),
     updatedBy: ACCOUNTS_CURRENT_USER,
     updatedAt: new Date().toISOString(),

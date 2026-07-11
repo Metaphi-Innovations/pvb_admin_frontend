@@ -25,8 +25,10 @@ import { Banknote } from "lucide-react";
 import type { PaymentMode } from "../../expenses/expense-data";
 import type { InvoiceRecord } from "../invoices-data";
 import { formatINR } from "../invoice-utils";
+import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 const MODES: PaymentMode[] = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
+const BANK_MODES: PaymentMode[] = ["UPI", "Bank Transfer", "Cheque", "Card"];
 
 export function InvoiceReceivePaymentModal({
   open,
@@ -43,10 +45,12 @@ export function InvoiceReceivePaymentModal({
     paymentMode: PaymentMode;
     referenceNo: string;
     remarks: string;
+    bankAccountId?: number | null;
   }) => void;
 }) {
   const [paymentDate, setPaymentDate] = useState("");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Bank Transfer");
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [referenceNo, setReferenceNo] = useState("");
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -61,12 +65,15 @@ export function InvoiceReceivePaymentModal({
       setReferenceNo("");
       setAmount(String(maxPay));
       setRemarks("");
+      setBankAccountId(invoice.bankAccountId ?? null);
       setError(null);
     }
   }, [open, invoice?.id, maxPay]);
 
   const amt = parseFloat(amount) || 0;
-  const valid = paymentDate && amt > 0 && amt <= maxPay;
+  const needsBank = BANK_MODES.includes(paymentMode);
+  const valid =
+    paymentDate && amt > 0 && amt <= maxPay && (!needsBank || bankAccountId != null);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -102,6 +109,15 @@ export function InvoiceReceivePaymentModal({
               </Select>
             </div>
           </div>
+          {needsBank && (
+            <WarehouseMappedBankAccountSelect
+              warehouseRef={invoice?.warehouse}
+              value={bankAccountId}
+              onChange={(id) => setBankAccountId(id)}
+              label="Bank Account"
+              required
+            />
+          )}
           <div className="space-y-1">
             <Label className="text-xs">Reference Number</Label>
             <Input className="h-9 text-sm font-medium" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
@@ -142,6 +158,7 @@ export function InvoiceReceivePaymentModal({
                 paymentMode,
                 referenceNo: referenceNo.trim(),
                 remarks: remarks.trim(),
+                bankAccountId: needsBank ? bankAccountId : null,
               });
               onClose();
             }}

@@ -195,6 +195,8 @@ export interface InvoiceRecord {
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
+	/** Bank account for payment instructions / print */
+	bankAccountId?: number | null;
 	paymentTerms?: string;
 	creditDays?: number;
 	placeOfSupply?: string;
@@ -829,6 +831,7 @@ export type InvoiceFormInput = {
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
+	bankAccountId?: number | null;
 	salesperson?: string;
 	customerNotes?: string;
 	termsAndConditions?: string;

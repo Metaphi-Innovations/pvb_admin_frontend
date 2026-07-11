@@ -28,7 +28,7 @@ export {
   getTrialBalanceWarehouseOptions,
 };
 
-export type TrialBalanceTab = "summary" | "detailed";
+export type TrialBalanceTab = "normal" | "detailed";
 
 export interface TrialBalanceFilterParams {
   search?: string;
@@ -64,6 +64,7 @@ export interface TrialBalanceDetailedLedgerRow extends TrialBalanceAmountColumns
   ledgerName: string;
   groupKey: string;
   groupName: string;
+  standardGroup: string;
   groupSortOrder: number;
   primaryHead: string;
   primaryHeadId: number;
@@ -139,6 +140,7 @@ function mapLedgerRow(row: ComputedTrialBalanceLedgerRow): TrialBalanceDetailedL
     ledgerName: row.ledgerName,
     groupKey: String(row.accountGroupId),
     groupName: row.accountGroup,
+    standardGroup: row.standardGroup,
     groupSortOrder: row.accountGroupSort,
     primaryHead: row.primaryHead,
     primaryHeadId: row.primaryHeadId,
@@ -364,12 +366,21 @@ export type TrialBalanceDetailedFlatRow =
       ledgerCount: number;
       amounts: TrialBalanceAmountColumns;
     }
+  | {
+      type: "subgroup";
+      subgroupKey: string;
+      subgroupName: string;
+      groupKey: string;
+      ledgerCount: number;
+      amounts: TrialBalanceAmountColumns;
+    }
   | { type: "ledger"; ledger: TrialBalanceDetailedLedgerRow };
 
 export function flattenTrialBalanceDetailedGroups(
   groups: TrialBalanceDetailedGroup[],
   expandedPrimaryIds: Set<number>,
   expandedGroupIds: Set<string>,
+  expandedSubgroupIds: Set<string> = new Set(),
 ): TrialBalanceDetailedFlatRow[] {
   const flat: TrialBalanceDetailedFlatRow[] = [];
   const sections = new Map<number, TrialBalancePrimaryHeadSection>();
@@ -433,13 +444,88 @@ export function flattenTrialBalanceDetailedGroups(
 
       if (!expandedGroupIds.has(group.groupKey)) continue;
 
+      const bySubGroup = new Map<string, TrialBalanceDetailedLedgerRow[]>();
       for (const ledger of group.ledgers) {
-        flat.push({ type: "ledger", ledger });
+        const hasSubGroup =
+          ledger.standardGroup.trim().length > 0 &&
+          ledger.standardGroup !== group.groupName;
+        const key = hasSubGroup ? ledger.standardGroup : "__direct__";
+        const list = bySubGroup.get(key) ?? [];
+        list.push(ledger);
+        bySubGroup.set(key, list);
+      }
+
+      const subGroupEntries = [...bySubGroup.entries()].sort(([a], [b]) => {
+        if (a === "__direct__") return 1;
+        if (b === "__direct__") return -1;
+        return a.localeCompare(b);
+      });
+
+      for (const [subKey, ledgers] of subGroupEntries) {
+        const sortedLedgers = [...ledgers].sort((a, b) =>
+          a.ledgerName.localeCompare(b.ledgerName),
+        );
+
+        if (subKey !== "__direct__") {
+          const subKeyId = `${group.groupKey}::${subKey}`;
+          const subAmounts = sortedLedgers.reduce(
+            (acc, l) => ({
+              openingDebit: roundMoney(acc.openingDebit + l.openingDebit),
+              openingCredit: roundMoney(acc.openingCredit + l.openingCredit),
+              debit: roundMoney(acc.debit + l.debit),
+              credit: roundMoney(acc.credit + l.credit),
+              closingDebit: roundMoney(acc.closingDebit + l.closingDebit),
+              closingCredit: roundMoney(acc.closingCredit + l.closingCredit),
+            }),
+            {
+              openingDebit: 0,
+              openingCredit: 0,
+              debit: 0,
+              credit: 0,
+              closingDebit: 0,
+              closingCredit: 0,
+            },
+          );
+          flat.push({
+            type: "subgroup",
+            subgroupKey: subKeyId,
+            subgroupName: subKey,
+            groupKey: group.groupKey,
+            ledgerCount: sortedLedgers.length,
+            amounts: subAmounts,
+          });
+          if (!expandedSubgroupIds.has(subKeyId)) continue;
+        }
+
+        for (const ledger of sortedLedgers) {
+          flat.push({ type: "ledger", ledger });
+        }
       }
     }
   }
 
   return flat;
+}
+
+export function collectAllDetailedSubgroupKeys(
+  groups: TrialBalanceDetailedGroup[],
+): Set<string> {
+  const keys = new Set<string>();
+  for (const group of groups) {
+    const subNames = new Set<string>();
+    for (const ledger of group.ledgers) {
+      if (
+        ledger.standardGroup.trim().length > 0 &&
+        ledger.standardGroup !== group.groupName
+      ) {
+        subNames.add(ledger.standardGroup);
+      }
+    }
+    for (const name of subNames) {
+      keys.add(`${group.groupKey}::${name}`);
+    }
+  }
+  return keys;
 }
 
 export function collectAllDetailedGroupKeys(groups: TrialBalanceDetailedGroup[]): Set<string> {

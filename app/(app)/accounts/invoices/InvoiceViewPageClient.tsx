@@ -26,6 +26,7 @@ import {
 } from "@/lib/accounts/invoice-type";
 import { formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
+import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 function DetailRow({
   label,
@@ -100,6 +101,7 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
   const invoiceType = resolveInvoiceDocumentType(record);
   const gst = getInvoiceGstBreakup(record);
   const interstate = gst.interstate;
+  const bankDetails = getBankAccountPrintDetails(record.bankAccountId);
 
   return (
     <RecordDetailPage
@@ -142,6 +144,15 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
               value={record.shippingAddress || record.billingAddress}
               className="md:col-span-2"
             />
+            <DetailRow label="Warehouse" value={record.warehouse} />
+            {bankDetails ? (
+              <>
+                <DetailRow label="Bank Name" value={bankDetails.bankName} />
+                <DetailRow label="Account No." value={bankDetails.accountNumber} />
+                <DetailRow label="IFSC" value={bankDetails.ifsc} />
+                <DetailRow label="Branch" value={bankDetails.branchName} />
+              </>
+            ) : null}
           </div>
         </div>
 

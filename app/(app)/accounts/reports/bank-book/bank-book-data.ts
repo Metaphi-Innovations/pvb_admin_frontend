@@ -15,6 +15,7 @@ import {
   loadBankAccountMasters,
   type BankAccountMaster,
 } from "@/lib/accounts/bank-accounts-data";
+import { resolveCoaLedgerForBankMaster } from "@/lib/accounts/bank-ledger-resolver";
 import { maskBankAccountLast4 } from "@/lib/accounts/bank-account-display";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
@@ -71,6 +72,8 @@ export interface BankBookRawTransaction {
   particular: string;
   particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   lineOrder: number;
@@ -86,6 +89,8 @@ export interface BankBookDisplayRow {
   particular: string;
   particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   runningBalance: number;
@@ -140,20 +145,32 @@ export function formatBankBookDate(iso: string): string {
 export function getBankBookAccountOptions(): BankBookAccountOption[] {
   return loadBankAccountMasters()
     .filter((m) => m.status === "active")
-    .map((m) => ({
-      ledgerId: m.coaLedgerId,
-      bankName: m.bankName,
-      accountNickname: m.accountNickname,
-      accountNumber: m.accountNumber,
-      maskedAccountNumber: maskBankAccountLast4(m.accountNumber),
-      label: `${m.accountNickname} (${maskBankAccountLast4(m.accountNumber)})`,
-      defaultForReceipts: m.defaultForReceipts,
-    }));
+    .map((m) => {
+      const ledger = resolveCoaLedgerForBankMaster(m);
+      return {
+        ledgerId: ledger?.id ?? m.coaLedgerId,
+        bankName: m.bankName,
+        accountNickname: m.accountNickname,
+        accountNumber: m.accountNumber,
+        maskedAccountNumber: maskBankAccountLast4(m.accountNumber),
+        label: `${m.accountNickname} (${maskBankAccountLast4(m.accountNumber)})`,
+        defaultForReceipts: m.defaultForReceipts,
+      };
+    })
+    .filter((option) => option.ledgerId > 0);
 }
 
 export function getBankBookLedger(ledgerId: number): ChartOfAccount | null {
   const bankLedgers = getLedgersUnderSubGroupName("Bank Accounts");
-  return bankLedgers.find((l) => l.id === ledgerId) ?? null;
+  const direct = bankLedgers.find((l) => l.id === ledgerId);
+  if (direct) return direct;
+
+  const master = getBankAccountByLedgerId(ledgerId) ?? loadBankAccountMasters().find((m) => m.coaLedgerId === ledgerId);
+  if (master) {
+    return resolveCoaLedgerForBankMaster(master);
+  }
+
+  return null;
 }
 
 export function resolveBankBookVoucherType(v: AccountingVoucher): BankBookVoucherType {
@@ -258,6 +275,8 @@ function buildRawTransactions(ledgerId: number): BankBookRawTransaction[] {
           particular: resolveParticular(v, lineOrder),
           particularLedgerId: resolveParticularLedgerId(v, lineOrder),
           narration: v.narration || "—",
+          reference: v.referenceNo || "—",
+          status: v.status === "posted" ? "Posted" : v.status,
           receipt: debit,
           payment: credit,
           lineOrder,
@@ -333,6 +352,8 @@ function buildOpeningRow(
     particular: "Balance brought forward",
     particularLedgerId: null,
     narration: "—",
+    reference: "—",
+    status: "—",
     receipt: 0,
     payment: 0,
     runningBalance: opening.amount,
@@ -361,6 +382,8 @@ function toDisplayRows(
       particular: tx.particular,
       particularLedgerId: tx.particularLedgerId,
       narration: tx.narration,
+      reference: tx.reference,
+      status: tx.status,
       receipt: tx.receipt,
       payment: tx.payment,
       runningBalance: balance.amount,
@@ -377,8 +400,11 @@ export function buildBankBookStatement(
   const ledger = getBankBookLedger(bankLedgerId);
   if (!ledger) return null;
 
-  const master = getBankAccountByLedgerId(bankLedgerId);
-  const allTransactions = buildRawTransactions(bankLedgerId).filter((tx) => {
+  const master =
+    getBankAccountByLedgerId(ledger.id) ??
+    loadBankAccountMasters().find((m) => resolveCoaLedgerForBankMaster(m)?.id === ledger.id);
+
+  const allTransactions = buildRawTransactions(ledger.id).filter((tx) => {
     const voucher = loadVouchers().find((v) => v.id === tx.voucherId);
     if (!voucher) return false;
     return matchesFinancialYear(voucher, filters.financialYearId);

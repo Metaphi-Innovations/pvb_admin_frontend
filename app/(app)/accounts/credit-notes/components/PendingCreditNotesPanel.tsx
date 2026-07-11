@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, SlidersHorizontal, X } from "lucide-react";
+import {
+  AccountsGenerateAction,
+  AccountsTableActionCell,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -12,14 +14,13 @@ import {
   AccountsTableHead,
   AccountsTableHeadRow,
   AccountsTableRow,
-  AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import {
   AccountsListingFilterCard,
-  AccountsListingTableCard,
   AccountsTableEmpty,
+  AccountsTableListing,
+  AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
-import { accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
 import { cn } from "@/lib/utils";
 import {
@@ -36,6 +37,8 @@ import {
   type PendingCreditNoteSourceType,
 } from "../pending-credit-notes-data";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
+import { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
+import { X } from "lucide-react";
 
 const SOURCE_FILTER_OPTIONS: { value: PendingCreditNoteSourceType; label: string }[] = [
   { value: "sales_return", label: "Sales Return" },
@@ -46,27 +49,28 @@ const SOURCE_COLUMN_OPTIONS = ["sales_return", "scheme"];
 
 function PendingCreditNotesTable({
   toolbarFiltered,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
   onGenerate,
 }: {
   toolbarFiltered: PendingCreditNoteRow[];
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
   onGenerate: (row: PendingCreditNoteRow) => void;
 }) {
   const visible = useAccountsFilteredRows(toolbarFiltered);
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
 
   return (
-    <AccountsTableScroll>
-      <AccountsTable className="table-fixed w-full">
-        <colgroup>
-          <col className="w-[10%]" />
-          <col className="w-[14%]" />
-          <col className="w-[10%]" />
-          <col className="w-[12%]" />
-          <col className="w-[11%]" />
-          <col className="w-[9%]" />
-          <col className="w-[11%]" />
-          <col className="w-[8%]" />
-          <col className="w-[15%]" />
-        </colgroup>
+    <>
+      <AccountsTable minWidth={980}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <AccountsColumnHeader
@@ -83,12 +87,12 @@ function PendingCreditNotesTable({
             <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" />
             <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" />
             <AccountsColumnHeader
-              label="Action"
+              label="Actions"
               colKey="_actions"
               sortable={false}
               filterable={false}
               align="right"
-              className={accountsActionColClass("multi")}
+              className={accountsActionColClass("single")}
             />
           </AccountsTableHeadRow>
         </AccountsTableHead>
@@ -96,12 +100,12 @@ function PendingCreditNotesTable({
           {toolbarFiltered.length === 0 ? (
             <AccountsTableEmpty
               colSpan={8}
-              message="No pending credit notes. Sales returns and scheme settlements appear here until a credit note is generated in Accounts."
+              message="No pending credit notes. Sales returns and scheme settlements appear here until a credit note is generated."
             />
           ) : visible.length === 0 ? (
             <AccountsTableEmpty colSpan={8} message="No records match the column filters." />
           ) : (
-            visible.map((row) => (
+            pagedRows.map((row) => (
               <AccountsTableRow key={row.id}>
                 <AccountsTableCell>
                   <span
@@ -112,48 +116,51 @@ function PendingCreditNotesTable({
                         : "bg-purple-50 text-purple-700",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "w-1 h-1 rounded-full flex-shrink-0",
-                        row.sourceType === "sales_return" ? "bg-brand-500" : "bg-purple-500",
-                      )}
-                    />
                     {PENDING_CREDIT_SOURCE_LABELS[row.sourceType]}
                   </span>
                 </AccountsTableCell>
-                <AccountsTableCell className="accounts-col-party font-medium truncate" title={row.customerName}>
+                <AccountsTableCell className="accounts-col-party font-medium truncate text-xs" title={row.customerName}>
                   {row.customerName}
                 </AccountsTableCell>
-                <AccountsTableCell mono className="font-semibold text-brand-700 truncate">
+                <AccountsTableCell mono className="font-semibold text-brand-700 truncate text-xs">
                   {row.referenceNo}
                 </AccountsTableCell>
-                <AccountsTableCell mono className="truncate text-[11px]">
+                <AccountsTableCell mono className="truncate text-xs">
                   {row.linkedInvoiceNos.length ? row.linkedInvoiceNos.join(", ") : "—"}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="tabular-nums">
+                <AccountsTableCell align="right" money className="text-xs tabular-nums">
                   {formatINR(row.eligibleCreditAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="tabular-nums">
+                <AccountsTableCell align="right" money className="text-xs tabular-nums">
                   {formatINR(row.gstAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="font-medium tabular-nums">
+                <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums">
                   {formatINR(row.totalAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
-                  <Button
-                    size="sm"
-                    className="h-7 px-2 text-[11px] bg-brand-600 hover:bg-brand-700 text-white gap-1 whitespace-nowrap"
-                    onClick={() => onGenerate(row)}
-                  >
-                    <Plus className="w-3 h-3" /> Generate
-                  </Button>
+                <AccountsTableCell align="right" className={accountsActionColClass("single")}>
+                  <AccountsTableActionCell variant="single">
+                    <AccountsGenerateAction
+                      title="Generate Credit Note"
+                      onClick={() => onGenerate(row)}
+                    />
+                  </AccountsTableActionCell>
                 </AccountsTableCell>
               </AccountsTableRow>
             ))
           )}
         </AccountsTableBody>
       </AccountsTable>
-    </AccountsTableScroll>
+      {visible.length > 0 ? (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          recordLabel="pending items"
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -162,6 +169,8 @@ export function PendingCreditNotesPanel() {
   const [rows, setRows] = useState<PendingCreditNoteRow[]>([]);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const refresh = useCallback(() => setRows(listPendingCreditNotes()), []);
 
@@ -194,7 +203,7 @@ export function PendingCreditNotesPanel() {
 
   const columnConfig = useMemo(
     () => ({
-      sourceType: { type: "status" as const, options: SOURCE_COLUMN_OPTIONS },
+      sourceType: { type: "text" as const },
       customerName: { type: "text" as const },
       referenceNo: { type: "text" as const },
       linkedInvoices: { type: "text" as const },
@@ -221,40 +230,23 @@ export function PendingCreditNotesPanel() {
     }
   };
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, sourceFilter, pageSize]);
+
   return (
-    <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
-      <AccountsListingFilterCard>
-        <ReportSearchFilter
-          value={search}
-          onChange={setSearch}
-          placeholder="Search reference, customer, invoice, scheme…"
-          className="min-w-[180px] flex-1 max-w-sm"
-        />
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                activeSourceCount > 0
-                  ? "border-brand-400 bg-brand-50 text-brand-700"
-                  : "border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Source
-              {activeSourceCount > 0 && (
-                <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                  {activeSourceCount}
-                </span>
-              )}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-52 p-0">
-            <div className="px-3 py-2.5 border-b border-border">
-              <p className="text-xs font-semibold text-foreground">Filter by Source</p>
-            </div>
-            <div className="px-3 py-2.5 space-y-2">
+    <AccountsTableListing
+      toolbar={
+        <AccountsListingFilterCard>
+          <ReportSearchFilter
+            value={search}
+            onChange={setSearch}
+            placeholder="Search reference, customer, invoice, scheme…"
+            className="min-w-[180px] flex-1 max-w-sm"
+          />
+          <ReportMoreFilters activeCount={activeSourceCount}>
+            <div className="px-1 space-y-2">
+              <p className="text-xs font-semibold text-foreground">Source</p>
               {SOURCE_FILTER_OPTIONS.map((opt) => (
                 <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
                   <input
@@ -267,40 +259,34 @@ export function PendingCreditNotesPanel() {
                 </label>
               ))}
             </div>
-            {sourceFilter !== "all" && (
-              <div className="px-3 py-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setSourceFilter("all")}
-                  className="text-xs text-brand-600 hover:underline"
-                >
-                  Clear filter
-                </button>
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
-        {sourceFilter !== "all" && (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-            {PENDING_CREDIT_SOURCE_LABELS[sourceFilter as PendingCreditNoteSourceType]}
-            <button type="button" onClick={() => setSourceFilter("all")}>
-              <X className="w-3 h-3" />
-            </button>
-          </span>
-        )}
-      </AccountsListingFilterCard>
-
-      <AccountsListingTableCard>
-        <AccountsColumnFilterProvider
-          rows={toolbarFiltered}
-          getCellValue={getCellValue}
-          columnConfig={columnConfig}
-          defaultSortKey="referenceNo"
-          defaultSortDir="asc"
-        >
-          <PendingCreditNotesTable toolbarFiltered={toolbarFiltered} onGenerate={handleGenerate} />
-        </AccountsColumnFilterProvider>
-      </AccountsListingTableCard>
-    </div>
+          </ReportMoreFilters>
+          {sourceFilter !== "all" && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
+              {PENDING_CREDIT_SOURCE_LABELS[sourceFilter as PendingCreditNoteSourceType]}
+              <button type="button" onClick={() => setSourceFilter("all")}>
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+        </AccountsListingFilterCard>
+      }
+    >
+      <AccountsColumnFilterProvider
+        rows={toolbarFiltered}
+        getCellValue={getCellValue}
+        columnConfig={columnConfig}
+        defaultSortKey="referenceNo"
+        defaultSortDir="asc"
+      >
+        <PendingCreditNotesTable
+          toolbarFiltered={toolbarFiltered}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onGenerate={handleGenerate}
+        />
+      </AccountsColumnFilterProvider>
+    </AccountsTableListing>
   );
 }

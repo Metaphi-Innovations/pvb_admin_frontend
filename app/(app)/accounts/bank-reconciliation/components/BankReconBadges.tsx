@@ -11,11 +11,19 @@ import type { ManualReconciliationStatus } from "@/lib/accounts/bank-recon-manua
 
 type BadgeCfg = { bg: string; text: string; dot?: string };
 
-const ACCOUNT_STATUS_CFG: Record<BankReconAccountStatus, BadgeCfg> = {
+const DEFAULT_BADGE_CFG: BadgeCfg = {
+  bg: "bg-slate-100",
+  text: "text-slate-600",
+  dot: "bg-slate-400",
+};
+
+const ACCOUNT_STATUS_CFG: Record<string, BadgeCfg> = {
   Reconciled: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   "Partially Reconciled": { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
   Pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
   "Statement Not Uploaded": { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
+  "Completed with Difference": { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  Reopened: { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-400" },
 };
 
 const SOURCE_CFG: Record<BankReconTransactionSource, BadgeCfg> = {
@@ -44,15 +52,20 @@ const VERIFICATION_STATUS_CFG: Record<BankReconVerificationStatus, BadgeCfg> = {
   "Not Applicable": { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
 };
 
-const RECONCILIATION_STATUS_CFG: Record<ManualReconciliationStatus, BadgeCfg> = {
+const RECONCILIATION_STATUS_CFG: Record<string, BadgeCfg> = {
   Unreconciled: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
   Suggested: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  Pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
   "Partially Reconciled": { bg: "bg-navy-50", text: "text-navy-700", dot: "bg-navy-500" },
   Reconciled: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   "Manually Cleared": { bg: "bg-teal-50", text: "text-teal-700", dot: "bg-teal-500" },
   Excluded: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
   "Pending Review": { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-400" },
 };
+
+function resolveBadgeCfg(map: Record<string, BadgeCfg>, key: string): BadgeCfg {
+  return map[key] ?? DEFAULT_BADGE_CFG;
+}
 
 function StatusPill({ label, cfg }: { label: string; cfg: BadgeCfg }) {
   return (
@@ -69,23 +82,31 @@ function StatusPill({ label, cfg }: { label: string; cfg: BadgeCfg }) {
   );
 }
 
-export function BankReconAccountStatusBadge({ status }: { status: BankReconAccountStatus }) {
-  return <StatusPill label={status} cfg={ACCOUNT_STATUS_CFG[status]} />;
+export function BankReconEntrySourceBadge({ source }: { source: BankReconTransactionSource | string }) {
+  const label = source === "Manual" ? "Manual" : "Bank Statement";
+  const cfg =
+    source === "Manual"
+      ? { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500" }
+      : { bg: "bg-navy-50", text: "text-navy-700", dot: "bg-navy-500" };
+  return <StatusPill label={label} cfg={cfg} />;
+}
+
+export function BankReconAccountStatusBadge({ status }: { status: BankReconAccountStatus | string }) {
+  return <StatusPill label={status} cfg={resolveBadgeCfg(ACCOUNT_STATUS_CFG, status)} />;
 }
 
 export function BankReconSourceBadge({ source }: { source: BankReconTransactionSource }) {
-  return <StatusPill label={source} cfg={SOURCE_CFG[source]} />;
+  return <StatusPill label={source} cfg={resolveBadgeCfg(SOURCE_CFG, source)} />;
 }
 
 export function BankReconMatchStatusBadge({ status }: { status: BankReconMatchStatus }) {
-  return <StatusPill label={status} cfg={MATCH_STATUS_CFG[status]} />;
+  return <StatusPill label={status} cfg={resolveBadgeCfg(MATCH_STATUS_CFG, status)} />;
 }
 
 export function BankReconVerificationStatusBadge({ status }: { status: BankReconVerificationStatus }) {
-  return <StatusPill label={status} cfg={VERIFICATION_STATUS_CFG[status]} />;
+  return <StatusPill label={status} cfg={resolveBadgeCfg(VERIFICATION_STATUS_CFG, status)} />;
 }
 
 export function BankReconReconciliationStatusBadge({ status }: { status: ManualReconciliationStatus | string }) {
-  const cfg = RECONCILIATION_STATUS_CFG[status as ManualReconciliationStatus] ?? RECONCILIATION_STATUS_CFG.Unreconciled;
-  return <StatusPill label={status} cfg={cfg} />;
+  return <StatusPill label={status} cfg={resolveBadgeCfg(RECONCILIATION_STATUS_CFG, status)} />;
 }

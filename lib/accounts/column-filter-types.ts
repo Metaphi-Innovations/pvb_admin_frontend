@@ -27,10 +27,17 @@ export type DateFilterPreset =
   | "lastWeek"
   | "thisMonth"
   | "lastMonth"
+  | "thisFinancialYear"
   | "custom"
   | "before"
   | "after"
   | "between";
+
+/** Distinct column value with occurrence count (Excel-style filter list). */
+export interface ColumnValueOption {
+  value: string;
+  count: number;
+}
 
 export interface AccountsColumnFilterState {
   type: AccountsColumnFilterType;
@@ -53,8 +60,6 @@ export interface AccountsColumnFilterMeta {
   options?: string[];
   /** Status labels for display */
   optionLabels?: Record<string, string>;
-  /** When true, use Excel-style operator controls (legacy). Defaults to provider simpleColumnFilters. */
-  advancedFilters?: boolean;
 }
 
 export type AccountsColumnFilterConfig = Record<string, AccountsColumnFilterMeta>;

@@ -104,6 +104,12 @@ export interface BankReconTransactionRecord {
   updatedOn: string | null;
   cancelReason: string | null;
   possibleDuplicateOverrideReason: string | null;
+  /** Manual entry — party ledger id from COA */
+  partyLedgerId?: number | null;
+  /** Manual entry — Invoice / Advance / On Account */
+  againstType?: string | null;
+  /** Manual entry — JSON { allocations: Record<string, number> } */
+  invoiceMatchingPayload?: string | null;
   /** Step 5 — voucher created from categorization */
   postedVoucherId?: number | null;
   categorizationCategory?: string | null;

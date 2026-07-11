@@ -26,6 +26,7 @@ import { ensureInventoryAccountingLedgers, getCostPriceBySku, resolveSku } from 
 import { ensureGstAccountingLedgers, expandGstPostingLines, type GstRateBreakdown } from "@/lib/accounts/gst-accounting";
 import { ensureTdsAccountingLedgers, resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { notifyVoucherPosted } from "@/lib/accounts/voucher-posting-notify";
 
 export type ErpSourceModule =
   | "procurement"
@@ -117,6 +118,8 @@ export function postVoucher(voucherId: number): PostingResult {
       : v,
   );
   saveVouchers(updated);
+  const posted = updated.find((v) => v.id === voucherId)!;
+  notifyVoucherPosted(posted);
   return {
     success: true,
     voucherId: voucher.id,

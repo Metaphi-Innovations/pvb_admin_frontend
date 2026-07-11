@@ -46,6 +46,7 @@ import {
   type VendorTransactionFields,
   type TransactionProductOption,
 } from "@/lib/accounts/transaction-master-fetch";
+import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 interface LineItem {
   id: string;
@@ -272,6 +273,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
 
   const [lines, setLines] = useState<LineItem[]>(() => [recalcLine(emptyLine())]);
 
@@ -335,6 +337,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
   function handleGrnSelect(grn: GrnRecord) {
     setSelectedGrn(grn);
+    setBankAccountId(null);
     const matchedVendor = vendors.find(
       (v) => v.vendorName.toLowerCase() === grn.vendorName.toLowerCase(),
     );
@@ -362,6 +365,8 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
       const created = createPurchaseFromGrn({
         grnId: selectedGrn.id,
         grnNo: selectedGrn.grnNo,
+        warehouse: selectedGrn.warehouse,
+        bankAccountId,
         vendorId: Number(vendorId),
         vendorInvoiceNo,
         invoiceDate,
@@ -531,6 +536,16 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 <span className="font-medium text-foreground">Warehouse: </span>
                 {selectedGrn.warehouse}
               </span>
+            </div>
+          )}
+          {selectedGrn && (
+            <div className="mt-3 max-w-md">
+              <WarehouseMappedBankAccountSelect
+                warehouseRef={selectedGrn.warehouse}
+                value={bankAccountId}
+                onChange={(id) => setBankAccountId(id)}
+                label="Bank Account (for payment / print)"
+              />
             </div>
           )}
         </Section>

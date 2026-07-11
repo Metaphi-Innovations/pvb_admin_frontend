@@ -27,6 +27,11 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  AccountsReportBody,
+  AccountsReportKpiCard,
+  AccountsReportKpiGrid,
+} from "@/components/accounts/AccountsReportLayout";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
@@ -45,6 +50,7 @@ import {
   ReportWarehouseMultiFilter,
   ReportMoreFilters,
   ReportFilterSummary,
+  ReportFilterField,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -123,40 +129,6 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
     to: today < fy.endDate ? today : fy.endDate,
     fyId: String(fy.id),
   };
-}
-
-interface SummaryCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  warning?: boolean;
-  isCount?: boolean;
-}
-
-function SummaryCard({ label, value, icon: Icon, warning, isCount }: SummaryCardProps) {
-  const display =
-    typeof value === "number" ? (isCount ? String(value) : formatMoney(value)) : value;
-  return (
-    <div
-      className={cn(
-        "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0",
-        warning && "border-amber-300 bg-amber-50/40",
-      )}
-    >
-      <div
-        className={cn(
-          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-          warning ? "bg-amber-100" : "bg-muted",
-        )}
-      >
-        <Icon className={cn("w-4 h-4", warning ? "text-amber-600" : "text-muted-foreground")} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-bold text-foreground leading-none">{display}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{label}</p>
-      </div>
-    </div>
-  );
 }
 
 function NoteStatusBadge({ status }: { status: "valid" | "exception" }) {
@@ -503,63 +475,59 @@ export default function CreditDebitNotesPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <div className="space-y-0.5 min-w-[110px]">
-        <Label className={filterLabelClass}>Note Type</Label>
-        <Select value={noteType} onValueChange={(v) => setNoteType(v as GstNoteTypeFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[110px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {NOTE_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-0.5 min-w-[160px]">
-        <Label className={filterLabelClass}>Section</Label>
-        <Select
-          value={subsection}
-          onValueChange={(v) => setSubsection(v as GstCreditDebitFilters["subsection"])}
-        >
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SUBSECTION_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-0.5 min-w-[140px]">
-        <Label className={filterLabelClass}>Note Number</Label>
-        <Input
-          value={noteNo}
-          onChange={(e) => setNoteNo(e.target.value)}
-          placeholder="Search note…"
-          className={cn(filterControlClass, "mt-0 w-[140px]")}
-        />
-      </div>
-      <div className="space-y-0.5 min-w-[120px]">
-        <Label className={filterLabelClass}>Status</Label>
-        <Select value={status} onValueChange={(v) => setStatus(v as GstNoteStatusFilter)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <ReportFilterField label="Note Type" minWidthClass="min-w-[120px]">
+          <Select value={noteType} onValueChange={(v) => setNoteType(v as GstNoteTypeFilter)}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NOTE_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
+        <ReportFilterField label="Section" minWidthClass="min-w-[160px]">
+          <Select
+            value={subsection}
+            onValueChange={(v) => setSubsection(v as GstCreditDebitFilters["subsection"])}
+          >
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SUBSECTION_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
+        <ReportFilterField label="Note Number" minWidthClass="min-w-[180px]">
+          <Input
+            value={noteNo}
+            onChange={(e) => setNoteNo(e.target.value)}
+            placeholder="Search note…"
+            className={cn(filterControlClass, "mt-0 w-full")}
+          />
+        </ReportFilterField>
+        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
+          <Select value={status} onValueChange={(v) => setStatus(v as GstNoteStatusFilter)}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ReportFilterField>
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -597,34 +565,34 @@ export default function CreditDebitNotesPageClient() {
       }
       filters={filterBar}
     >
-      <div className="flex flex-col gap-4 min-h-0 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <SummaryCard
+      <AccountsReportBody>
+        <AccountsReportKpiGrid>
+          <AccountsReportKpiCard
             label="Total Credit Notes"
             value={totals.totalCreditNotes}
             icon={Receipt}
             isCount
           />
-          <SummaryCard
+          <AccountsReportKpiCard
             label="Total Debit Notes"
             value={totals.totalDebitNotes}
             icon={FileText}
             isCount
           />
-          <SummaryCard
+          <AccountsReportKpiCard
             label="Total Taxable Value"
             value={totals.totalTaxableValue}
             icon={IndianRupee}
           />
-          <SummaryCard label="Total GST" value={totals.totalGst} icon={Scale} />
-          <SummaryCard
+          <AccountsReportKpiCard label="Total GST" value={totals.totalGst} icon={Scale} />
+          <AccountsReportKpiCard
             label="Total Exceptions"
             value={totals.totalExceptions}
             icon={AlertTriangle}
             warning={totals.totalExceptions > 0}
             isCount
           />
-        </div>
+        </AccountsReportKpiGrid>
 
         <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
           {!mounted || !datesReady ? (
@@ -647,7 +615,7 @@ export default function CreditDebitNotesPageClient() {
               )}
             </div>
           ) : (
-            <AccountsTableScroll>
+            <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1800}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
@@ -795,7 +763,7 @@ export default function CreditDebitNotesPageClient() {
             </AccountsTableScroll>
           )}
         </AccountsListingTableCard>
-      </div>
+      </AccountsReportBody>
 
       <CreditDebitNoteDetailSheet
         row={viewRow}

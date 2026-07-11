@@ -94,3 +94,24 @@ export const ACCOUNTS_STATUS_BADGE_CLASS = "accounts-status-badge";
 
 /** Table wrapper — pairs with globals.css `.accounts-table*` rules */
 export const ACCOUNTS_TABLE_CLASS = "accounts-table";
+
+/** Report body — vertical stack below filter card in split-layout reports */
+export const ACCOUNTS_REPORT_BODY_CLASS = "accounts-report-body";
+
+/** Responsive auto-wrap KPI grid for report summary cards */
+export const ACCOUNTS_REPORT_KPI_GRID_CLASS = "accounts-report-kpi-grid";
+
+/** Single KPI card in report grids */
+export const ACCOUNTS_REPORT_KPI_CARD_CLASS = "accounts-report-kpi-card";
+
+/** KPI monetary / count value — no truncation overlap */
+export const ACCOUNTS_REPORT_KPI_VALUE_CLASS = "accounts-report-kpi-value";
+
+/** KPI label under value */
+export const ACCOUNTS_REPORT_KPI_LABEL_CLASS = "accounts-report-kpi-label";
+
+/** Inline filter field (label + control) in report filter rows */
+export const ACCOUNTS_REPORT_FILTER_FIELD_CLASS = "accounts-report-filter-field";
+
+/** Table section card in split-layout reports */
+export const ACCOUNTS_REPORT_TABLE_SECTION_CLASS = "accounts-report-table-section";

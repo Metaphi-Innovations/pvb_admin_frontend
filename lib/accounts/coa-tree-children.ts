@@ -1,5 +1,5 @@
 /**
- * COA tree display — enforces 4 visual levels (Primary Head → Group → Accounting Group → Ledger).
+ * COA tree display — enforces 5 visual levels (Primary Head → … → Sub Ledger).
  * Bank name containers (bankGroupFlag) stay in data for posting but are flattened out of the tree.
  */
 

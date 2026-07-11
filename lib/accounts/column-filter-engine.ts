@@ -1,9 +1,11 @@
 import type {
   AccountsColumnFilterState,
   AccountsColumnFilters,
+  ColumnValueOption,
   DateFilterPreset,
   TextFilterOperator,
 } from "./column-filter-types";
+import { demoFinancialYearStart } from "@/lib/accounts/demo-date-utils";
 
 function normStr(v: unknown): string {
   if (v == null) return "";
@@ -72,6 +74,14 @@ function matchText(cell: unknown, filter: AccountsColumnFilterState): boolean {
 }
 
 function matchNumber(cell: unknown, filter: AccountsColumnFilterState): boolean {
+  if (filter.selectedValues && filter.selectedValues.length > 0) {
+    const raw = normStr(cell);
+    const asNum = parseNum(cell);
+    return filter.selectedValues.some(
+      (v) => normStr(v) === raw || (asNum != null && normStr(v) === String(asNum)),
+    );
+  }
+
   const op = filter.numberOperator ?? "equals";
   const n = parseNum(cell);
 
@@ -138,6 +148,8 @@ function dateRangeForPreset(preset: DateFilterPreset): { from: string; to: strin
       const to = new Date(now.getFullYear(), now.getMonth(), 0);
       return { from: fmt(from), to: fmt(to) };
     }
+    case "thisFinancialYear":
+      return { from: demoFinancialYearStart(now), to: fmt(now) };
     default:
       return null;
   }
@@ -152,6 +164,11 @@ function matchDate(cell: unknown, filter: AccountsColumnFilterState): boolean {
   }
   if (filter.textOperator === "blank") return false;
   if (filter.textOperator === "notBlank") return true;
+
+  if (filter.selectedValues && filter.selectedValues.length > 0) {
+    const cellDate = raw.slice(0, 10);
+    return filter.selectedValues.some((v) => v.slice(0, 10) === cellDate || v === raw);
+  }
 
   const cellDate = raw.slice(0, 10);
   const preset = filter.datePreset ?? "custom";
@@ -208,10 +225,24 @@ export function countActiveColumnFilters(filters: AccountsColumnFilters): number
   return Object.values(filters).filter((f) => isColumnFilterActive(f)).length;
 }
 
+function resolveFilterCell<T>(
+  row: T,
+  columnKey: string,
+  filter: AccountsColumnFilterState,
+  getCellValue: (row: T, columnKey: string) => unknown,
+  getFilterValue?: (row: T, columnKey: string) => unknown,
+): unknown {
+  const usesDisplayValue =
+    filter.type === "text" || filter.type === "status" || filter.type === "select";
+  if (usesDisplayValue && getFilterValue) return getFilterValue(row, columnKey);
+  return getCellValue(row, columnKey);
+}
+
 export function applyAccountsColumnFilters<T>(
   rows: T[],
   filters: AccountsColumnFilters,
   getCellValue: (row: T, columnKey: string) => unknown,
+  getFilterValue?: (row: T, columnKey: string) => unknown,
 ): T[] {
   const active = Object.entries(filters).filter(([, f]) => isColumnFilterActive(f));
   if (active.length === 0) return rows;
@@ -219,7 +250,7 @@ export function applyAccountsColumnFilters<T>(
   return rows.filter((row) => {
     for (const [key, filter] of active) {
       if (!filter) continue;
-      const cell = getCellValue(row, key);
+      const cell = resolveFilterCell(row, key, filter, getCellValue, getFilterValue);
       let ok = true;
       switch (filter.type) {
         case "text":
@@ -268,15 +299,29 @@ export function collectUniqueColumnValues<T>(
   rows: T[],
   columnKey: string,
   getCellValue: (row: T, columnKey: string) => unknown,
-  max = 150,
+  max = 200,
 ): string[] {
-  const set = new Set<string>();
+  return collectColumnValueCounts(rows, columnKey, getCellValue, max).map((o) => o.value);
+}
+
+export function collectColumnValueCounts<T>(
+  rows: T[],
+  columnKey: string,
+  getCellValue: (row: T, columnKey: string) => unknown,
+  max = 200,
+  getFilterValue?: (row: T, columnKey: string) => unknown,
+): ColumnValueOption[] {
+  const read = getFilterValue ?? getCellValue;
+  const counts = new Map<string, number>();
   for (const row of rows) {
-    const v = normStr(getCellValue(row, columnKey));
-    if (v && v !== "—") set.add(v);
-    if (set.size >= max) break;
+    const v = normStr(read(row, columnKey));
+    if (!v || v === "—") continue;
+    counts.set(v, (counts.get(v) ?? 0) + 1);
   }
-  return [...set].sort((a, b) => a.localeCompare(b));
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value))
+    .slice(0, max);
 }
 
 export function sortAccountsRows<T>(

@@ -1,4 +1,9 @@
 import {
+  COA_HIERARCHY_LEVEL_LABELS,
+  COA_MAX_HIERARCHY_MESSAGE,
+  COA_MAX_HIERARCHY_LEVEL,
+} from "@/lib/accounts/coa-hierarchy-constants";
+import {
   canUserCreateAtLevel,
   canUserDeleteGroup,
   canUserDeleteNode,
@@ -155,6 +160,41 @@ export function getAncestorPath(
   return path;
 }
 
+/** 1-based hierarchy depth for a node (path length from root). */
+export function getCoaHierarchyLevel(
+  records: ChartOfAccount[],
+  nodeId: number,
+): number {
+  return getAncestorPath(records, nodeId).length;
+}
+
+export function getCoaHierarchyLevelForNode(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): number {
+  return getCoaHierarchyLevel(records, node.id);
+}
+
+export function getCoaHierarchyLevelLabel(level: number): string {
+  return COA_HIERARCHY_LEVEL_LABELS[level] ?? `Level ${level}`;
+}
+
+/** True when the node sits at Level 5 — no further children may be created. */
+export function isAtCoaMaxHierarchyLevel(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  return getCoaHierarchyLevelForNode(node, records) >= COA_MAX_HIERARCHY_LEVEL;
+}
+
+/** Show the max-depth notice when creation actions are blocked by hierarchy depth. */
+export function showCoaMaxHierarchyMessage(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  return isAtCoaMaxHierarchyLevel(node, records);
+}
+
 let coaPathMapCache: { key: string; map: Map<number, ChartOfAccount> } | null = null;
 
 function coaIdMap(records: ChartOfAccount[]): Map<number, ChartOfAccount> {
@@ -256,20 +296,61 @@ export function isAccountingGroupNode(
   return !hasChildAccountGroups(records, node.id);
 }
 
-/** Sub-groups may be nested without a depth limit under roots or account groups. */
-export function canAddSubGroupUnder(node: ChartOfAccount, _records: ChartOfAccount[]): boolean {
+/**
+ * Sub-groups (L3) may be created under Primary Head (L1) or Account Group (L2) only.
+ * Deeper nesting is blocked to preserve the 5-level hierarchy.
+ */
+export function canAddSubGroupUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
   if (node.nodeLevel === "ledger") return false;
   if (node.nodeLevel !== "primary_head" && node.nodeLevel !== "account_group") return false;
-  return true;
+  const level = getCoaHierarchyLevel(records, node.id);
+  return level <= 2;
 }
 
-/** Ledgers may be created under any account group — never roots or ledgers. */
-export function canAddLedgerUnder(node: ChartOfAccount, _records: ChartOfAccount[]): boolean {
-  return node.nodeLevel === "account_group";
+/**
+ * Ledgers (L4) attach to leaf sub-groups / account groups (L2–L3).
+ * Sub-ledgers (L5) attach only under Level 4 grouping ledgers.
+ */
+export function canAddLedgerUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  const level = getCoaHierarchyLevel(records, node.id);
+  if (level >= COA_MAX_HIERARCHY_LEVEL) return false;
+
+  if (node.nodeLevel === "account_group") {
+    if (hasChildAccountGroups(records, node.id)) return false;
+    return level >= 2 && level <= 3;
+  }
+
+  if (node.nodeLevel === "ledger") {
+    return level === 4;
+  }
+
+  return false;
 }
 
 export const LEDGER_UNDER_LEDGER_ERROR =
-  "A ledger cannot contain another ledger. Please create the ledger under an Accounting Group.";
+  "Sub-ledgers can only be created under a Level 4 ledger (maximum one ledger tier below).";
+
+/** User-facing reason when a node cannot accept a new ledger child. */
+export function describeInvalidLedgerParentMessage(
+  parent: ChartOfAccount,
+  records: ChartOfAccount[],
+): string {
+  if (parent.nodeLevel === "primary_head") {
+    return "Ledgers cannot be created under a Primary Head (e.g. Assets). Add a Sub-Group under this head first, then create the ledger under that group.";
+  }
+  if (getCoaHierarchyLevel(records, parent.id) >= COA_MAX_HIERARCHY_LEVEL) {
+    return COA_MAX_HIERARCHY_MESSAGE;
+  }
+  if (parent.nodeLevel === "account_group" && hasChildAccountGroups(records, parent.id)) {
+    return "Select a leaf sub-group before adding a ledger.";
+  }
+  if (parent.nodeLevel === "ledger") {
+    return LEDGER_UNDER_LEDGER_ERROR;
+  }
+  return "Ledgers must be created under a sub-group (Level 3) or grouping ledger (Level 4).";
+}
+
+export { COA_MAX_HIERARCHY_MESSAGE } from "@/lib/accounts/coa-hierarchy-constants";
 
 export function countChildGroups(records: ChartOfAccount[], nodeId: number): number {
   return getChildGroups(records, nodeId).length;
@@ -490,7 +571,10 @@ export function validateGroupForm(
   const parent = records.find((r) => r.id === form.parentGroupId);
   if (!parent) return "Please select a valid Parent Group.";
   if (!canAddSubGroupUnder(parent, records)) {
-    return "Sub-groups can only be created under a primary root or accounting group.";
+    if (getCoaHierarchyLevel(records, parent.id) >= 3) {
+      return COA_MAX_HIERARCHY_MESSAGE;
+    }
+    return "Sub-groups can only be created under a primary head or account group.";
   }
   if (parent.nodeLevel === "ledger") {
     return "Sub-groups cannot be created under a ledger.";
@@ -577,9 +661,14 @@ export function validateLedgerForm(
   if (!form.parentGroupId) return "Please select a Parent Group.";
   const parent = records.find((r) => r.id === form.parentGroupId);
   if (!parent) return "Please select a valid Parent Group.";
-  if (parent.nodeLevel === "ledger") return LEDGER_UNDER_LEDGER_ERROR;
   if (!canAddLedgerUnder(parent, records)) {
-    return "Ledgers must be created under an Accounting Group.";
+    if (getCoaHierarchyLevel(records, parent.id) >= COA_MAX_HIERARCHY_LEVEL) {
+      return COA_MAX_HIERARCHY_MESSAGE;
+    }
+    if (parent.nodeLevel === "ledger") {
+      return LEDGER_UNDER_LEDGER_ERROR;
+    }
+    return "Ledgers must be created under a sub-group or leaf account group.";
   }
   if (isSundryDebtorsGroup(parent, records)) {
     return "Customer ledgers under Sundry Debtors must be created with the Customer form.";

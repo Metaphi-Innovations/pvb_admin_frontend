@@ -1,19 +1,32 @@
 /**
- * Finance module hierarchy — Chart of Accounts.
+ * Finance module hierarchy — Chart of Accounts (max 5 levels).
  *
- * Primary Head (L1) → Groups (L2+) → Ledger (user-created)
+ * L1 Primary Head → L2 Account Group → L3 Sub Group → L4 Ledger → L5 Sub Ledger
  *
  * Posting rule: voucher entries target posting ledgers only (leaf ledgers with no children).
- * Legacy grouping ledgers (ledgers with children) cannot receive postings.
- * Primary heads are system-defined and locked. Users may create nested account groups and ledgers.
- * New ledgers attach only to leaf account groups — never under another ledger or primary head.
+ * Grouping ledgers (L4 with L5 children) cannot receive postings — consolidated balances roll up.
+ * Primary heads are system-defined and locked. No node may be created below Level 5.
  */
 
 import type { ChartOfAccount, CoaNodeLevel } from "@/app/(app)/accounts/data";
 import { getPostableCoaAccounts, loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 
-/** Ordered levels from top of chart to posting leaf */
+export {
+  COA_MAX_HIERARCHY_LEVEL,
+  COA_HIERARCHY_LEVEL_LABELS,
+  COA_MAX_HIERARCHY_MESSAGE,
+} from "./coa-hierarchy-constants";
+
+export {
+  getCoaHierarchyLevel,
+  getCoaHierarchyLevelForNode,
+  getCoaHierarchyLevelLabel,
+  isAtCoaMaxHierarchyLevel,
+  showCoaMaxHierarchyMessage,
+} from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+
+/** Ordered data-model levels from top of chart to posting leaf */
 export const COA_HIERARCHY_LEVELS: CoaNodeLevel[] = [
   "primary_head",
   "account_group",
@@ -186,7 +199,7 @@ export function validatePostingLedgerId(
   }
   if (!isPostableNode(node, list)) {
     if (isGroupingLedger(node, list)) {
-      return `Ledger "${node.accountName}" is a grouping ledger with child ledgers. Post to a child ledger instead.`;
+      return `Ledger "${node.accountName}" is a Level 4 grouping ledger with sub-ledgers. Post to a sub-ledger instead.`;
     }
     return `Account "${node.accountName}" is inactive and cannot receive postings.`;
   }
