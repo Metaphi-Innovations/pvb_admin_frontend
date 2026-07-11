@@ -31,17 +31,30 @@ import {
   ReportFilterRow,
   ReportFinancialYearFilter,
   ReportSearchFilter,
-  ReportWarehouseFilter,
+  ReportWarehouseMultiFilter,
+  ReportProductMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
-import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { EmptySearch } from "@/components/ui/EmptyState";
-import { StockStatusBadge } from "@/components/ui/EnterpriseTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import { WAREHOUSE_FILTER_OPTIONS } from "@/lib/accounts/inventory-accounting-data";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
+import {
+  buildEntityFilterSummary,
+  formatMultiSelectLabel,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
@@ -50,12 +63,13 @@ import {
   buildStockValuationRows,
   computeStockValuationTotals,
   filterStockValuationRows,
-  formatStockValuationDate,
+  getStockValuationCategoryOptions,
   getStockValuationProductOptions,
-  sortStockValuationRows,
-  STOCK_VALUATION_CATEGORIES,
-  type StockValuationSortKey,
+  getValuationBasisLabel,
+  VALUATION_BASIS_OPTIONS,
+  type StockValuationRow,
   type StockValuationStatusFilter,
+  type ValuationBasis,
 } from "./stock-valuation-data";
 import {
   exportStockValuationToExcel,
@@ -69,62 +83,6 @@ const STOCK_STATUS_OPTIONS: { value: StockValuationStatusFilter; label: string }
   { value: "Near Expiry", label: "Near Expiry" },
   { value: "Expired", label: "Expired" },
 ];
-
-function ReportCategoryFilter({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-1 min-w-[140px]">
-      <Label className={filterLabelClass}>Category</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "w-[140px]")}>
-          <SelectValue placeholder="All categories" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All categories</SelectItem>
-          {STOCK_VALUATION_CATEGORIES.map((c) => (
-            <SelectItem key={c} value={c}>
-              {c}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
-function ReportStockValuationProductFilter({
-  value,
-  onChange,
-  products,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  products: string[];
-}) {
-  return (
-    <div className="space-y-1 min-w-[160px]">
-      <Label className={filterLabelClass}>Product</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "w-[160px]")}>
-          <SelectValue placeholder="All products" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All products</SelectItem>
-          {products.map((p) => (
-            <SelectItem key={p} value={p}>
-              {p}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
 
 function ReportStockStatusFilter({
   value,
@@ -152,24 +110,66 @@ function ReportStockStatusFilter({
   );
 }
 
+function ReportValuationBasisFilter({
+  value,
+  onChange,
+}: {
+  value: ValuationBasis;
+  onChange: (value: ValuationBasis) => void;
+}) {
+  return (
+    <div className="space-y-1 min-w-[160px]">
+      <Label className={filterLabelClass}>Valuation Basis</Label>
+      <Select value={value} onValueChange={(v) => onChange(v as ValuationBasis)}>
+        <SelectTrigger className={cn(filterControlClass, "w-[160px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {VALUATION_BASIS_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export default function StockValuationPageClient() {
   const mounted = useClientMounted();
 
   const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
   const [financialYearId, setFinancialYearId] = useState("all");
-  const [warehouse, setWarehouse] = useState("all");
-  const [category, setCategory] = useState("all");
-  const [product, setProduct] = useState("all");
+  const [valuationBasis, setValuationBasis] = useState<ValuationBasis>("cost_price");
+  const [warehouses, setWarehouses] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [products, setProducts] = useState<string[]>([]);
   const [stockStatus, setStockStatus] = useState<StockValuationStatusFilter>("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<StockValuationSortKey>("product");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
-  const productOptions = useMemo(() => getStockValuationProductOptions(), []);
+  const productOptions = useMemo(
+    () =>
+      mounted
+        ? getStockValuationProductOptions().map((p) => ({ value: p, label: p }))
+        : [],
+    [mounted],
+  );
+  const categoryOptions = useMemo(
+    () =>
+      mounted
+        ? getStockValuationCategoryOptions().map((c) => ({ value: c, label: c }))
+        : [],
+    [mounted],
+  );
+  const warehouseOptions = useMemo(
+    () => WAREHOUSE_FILTER_OPTIONS.filter((w) => w !== "all"),
+    [],
+  );
 
   useEffect(() => {
     const activeFyId = getActiveFinancialYearId();
@@ -177,72 +177,59 @@ export default function StockValuationPageClient() {
     setAsOnDate(defaultAsOnDate());
   }, []);
 
-  const handleSort = useCallback((key: string) => {
-    const k = key as StockValuationSortKey;
-    setSortKey((prev) => {
-      if (prev === k) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setSortDir("asc");
-      return k;
-    });
-  }, []);
-
   const sourceRows = useMemo(() => {
     if (!mounted) return [];
-    return buildStockValuationRows(asOnDate);
-  }, [mounted, asOnDate]);
+    return buildStockValuationRows(asOnDate, valuationBasis, stockStatus);
+  }, [mounted, asOnDate, valuationBasis, stockStatus]);
 
-  const filteredRows = useMemo(() => {
-    const filtered = filterStockValuationRows(sourceRows, {
-      asOnDate,
-      warehouse,
-      category,
-      product,
-      stockStatus,
-      search: debouncedSearch,
-    });
-    return sortStockValuationRows(filtered, sortKey, sortDir);
-  }, [
-    sourceRows,
-    asOnDate,
-    warehouse,
-    category,
-    product,
-    stockStatus,
-    debouncedSearch,
-    sortKey,
-    sortDir,
-  ]);
+  const filteredRows = useMemo(
+    () =>
+      filterStockValuationRows(sourceRows, {
+        asOnDate,
+        warehouse: warehouses,
+        category: categories,
+        product: products,
+        stockStatus,
+        search: debouncedSearch,
+      }),
+    [sourceRows, asOnDate, warehouses, categories, products, stockStatus, debouncedSearch],
+  );
 
-  const totals = useMemo(() => computeStockValuationTotals(filteredRows), [filteredRows]);
+  const getCellValue = useCallback(
+    (row: StockValuationRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
-  useEffect(() => {
-    setPage(1);
-  }, [asOnDate, warehouse, category, product, stockStatus, debouncedSearch, pageSize, sortKey, sortDir]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageSize]);
+  const columnConfig = useMemo(
+    () => ({
+      productCode: { type: "text" as const },
+      productName: { type: "text" as const },
+      warehouse: { type: "text" as const },
+      closingQty: { type: "amount" as const },
+      valuationRate: { type: "amount" as const },
+      totalStockValue: { type: "amount" as const },
+    }),
+    [],
+  );
 
   const activeFyId = mounted ? getActiveFinancialYearId() : null;
 
   const hasFilters =
     Boolean(search.trim()) ||
-    warehouse !== "all" ||
-    category !== "all" ||
-    product !== "all" ||
+    warehouses.length > 0 ||
+    categories.length > 0 ||
+    products.length > 0 ||
     stockStatus !== "all" ||
+    valuationBasis !== "cost_price" ||
     financialYearId !== (activeFyId ? String(activeFyId) : "all");
 
   const clearFilters = useCallback(() => {
     setSearch("");
-    setWarehouse("all");
-    setCategory("all");
-    setProduct("all");
+    setWarehouses([]);
+    setCategories([]);
+    setProducts([]);
     setStockStatus("all");
+    setValuationBasis("cost_price");
     setFinancialYearId(activeFyId ? String(activeFyId) : "all");
     setAsOnDate(defaultAsOnDate());
   }, [activeFyId]);
@@ -253,44 +240,61 @@ export default function StockValuationPageClient() {
       financialYearId === "all"
         ? "All years"
         : (years.find((y) => String(y.id) === financialYearId)?.name ?? financialYearId);
-    const warehouseLabel = warehouse === "all" ? "All warehouses" : warehouse;
-    const categoryLabel = category === "all" ? "All categories" : category;
-    const productLabel = product === "all" ? "All products" : product;
-    const statusLabel =
-      STOCK_STATUS_OPTIONS.find((o) => o.value === stockStatus)?.label ?? stockStatus;
 
     return {
       asOnDate,
       financialYear: fy,
-      warehouse: warehouseLabel,
-      category: categoryLabel,
-      product: productLabel,
-      stockStatus: statusLabel,
+      valuationBasis: getValuationBasisLabel(valuationBasis),
+      warehouse: formatMultiSelectLabel(warehouses, warehouseOptions.map((w) => ({ value: w, label: w })), "Warehouse", "All warehouses"),
+      category: formatMultiSelectLabel(categories, categoryOptions, "Category", "All categories"),
+      product: formatMultiSelectLabel(products, productOptions, "Product", "All products"),
+      stockStatus:
+        STOCK_STATUS_OPTIONS.find((o) => o.value === stockStatus)?.label ?? stockStatus,
       search,
     };
-  }, [asOnDate, financialYearId, warehouse, category, product, stockStatus, search]);
+  }, [
+    asOnDate,
+    financialYearId,
+    valuationBasis,
+    warehouses,
+    categories,
+    products,
+    stockStatus,
+    search,
+    warehouseOptions,
+    categoryOptions,
+    productOptions,
+  ]);
 
-  const handleExportExcel = useCallback(async () => {
-    if (filteredRows.length === 0 || exporting) return;
-    setExporting(true);
-    try {
-      await exportStockValuationToExcel(filteredRows, exportMeta, totals);
-    } finally {
-      setExporting(false);
-    }
-  }, [filteredRows, exportMeta, totals, exporting]);
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary("warehouse", "Warehouses", warehouses, warehouseOptions.map((w) => ({ value: w, label: w })), () => setWarehouses([])),
+      buildEntityFilterSummary("product", "Products", products, productOptions, () => setProducts([])),
+      buildEntityFilterSummary("category", "Categories", categories, categoryOptions, () => setCategories([])),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [warehouses, products, categories, warehouseOptions, productOptions, categoryOptions]);
 
-  const handleExportPdf = useCallback(() => {
-    if (filteredRows.length === 0 || exporting) return;
-    exportStockValuationToPdf(filteredRows, exportMeta, totals);
-  }, [filteredRows, exportMeta, totals, exporting]);
+  const moreFiltersActiveCount = categories.length > 0 ? 1 : 0;
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    asOnDate,
+    valuationBasis,
+    warehouses,
+    categories,
+    products,
+    stockStatus,
+    debouncedSearch,
+    pageSize,
+  ]);
 
   if (!mounted) {
     return (
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
         title="Stock Valuation"
-        description="Financial stock valuation as on date using cost price."
+        description="Financial stock valuation as on date using Pricing Master rates."
       >
         <div className="p-6 text-sm text-muted-foreground">Loading stock valuation…</div>
       </AccountsPageShell>
@@ -298,167 +302,260 @@ export default function StockValuationPageClient() {
   }
 
   return (
+    <AccountsColumnFilterProvider
+      rows={filteredRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="productName"
+      defaultSortDir="asc"
+    >
+      <StockValuationBody
+        filteredRows={filteredRows}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        exportMeta={exportMeta}
+        filterSummaryItems={filterSummaryItems}
+        moreFiltersActiveCount={moreFiltersActiveCount}
+        exporting={exporting}
+        setExporting={setExporting}
+        financialYearId={financialYearId}
+        setFinancialYearId={setFinancialYearId}
+        asOnDate={asOnDate}
+        setAsOnDate={setAsOnDate}
+        valuationBasis={valuationBasis}
+        setValuationBasis={setValuationBasis}
+        warehouses={warehouses}
+        setWarehouses={setWarehouses}
+        warehouseOptions={warehouseOptions}
+        categories={categories}
+        setCategories={setCategories}
+        categoryOptions={categoryOptions}
+        products={products}
+        setProducts={setProducts}
+        productOptions={productOptions}
+        stockStatus={stockStatus}
+        setStockStatus={setStockStatus}
+        search={search}
+        setSearch={setSearch}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function StockValuationBody({
+  filteredRows,
+  hasFilters,
+  clearFilters,
+  exportMeta,
+  filterSummaryItems,
+  moreFiltersActiveCount,
+  exporting,
+  setExporting,
+  financialYearId,
+  setFinancialYearId,
+  asOnDate,
+  setAsOnDate,
+  valuationBasis,
+  setValuationBasis,
+  warehouses,
+  setWarehouses,
+  warehouseOptions,
+  categories,
+  setCategories,
+  categoryOptions,
+  products,
+  setProducts,
+  productOptions,
+  stockStatus,
+  setStockStatus,
+  search,
+  setSearch,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+}: {
+  filteredRows: StockValuationRow[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  exportMeta: StockValuationExportMeta;
+  filterSummaryItems: ReportFilterSummaryItem[];
+  moreFiltersActiveCount: number;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  financialYearId: string;
+  setFinancialYearId: (v: string) => void;
+  asOnDate: string;
+  setAsOnDate: (v: string) => void;
+  valuationBasis: ValuationBasis;
+  setValuationBasis: (v: ValuationBasis) => void;
+  warehouses: string[];
+  setWarehouses: (v: string[]) => void;
+  warehouseOptions: string[];
+  categories: string[];
+  setCategories: (v: string[]) => void;
+  categoryOptions: { value: string; label: string }[];
+  products: string[];
+  setProducts: (v: string[]) => void;
+  productOptions: { value: string; label: string }[];
+  stockStatus: StockValuationStatusFilter;
+  setStockStatus: (v: StockValuationStatusFilter) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(filteredRows);
+  const totals = useMemo(() => computeStockValuationTotals(columnFilteredRows), [columnFilteredRows]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return columnFilteredRows.slice(start, start + pageSize);
+  }, [columnFilteredRows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
+  const handleExportExcel = useCallback(async () => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      await exportStockValuationToExcel(columnFilteredRows, exportMeta, totals);
+    } finally {
+      setExporting(false);
+    }
+  }, [columnFilteredRows, exportMeta, totals, exporting, setExporting]);
+
+  const handleExportPdf = useCallback(() => {
+    if (columnFilteredRows.length === 0 || exporting) return;
+    exportStockValuationToPdf(columnFilteredRows, exportMeta, totals);
+  }, [columnFilteredRows, exportMeta, totals, exporting]);
+
+  const valuationRateLabel = `Valuation Rate (${getValuationBasisLabel(valuationBasis)})`;
+
+  return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
       title="Stock Valuation"
-      description="Read-only financial view of inventory stock value as on date. Valuation uses cost price (CP)."
+      description={`Inventory stock value as on date. Valuation basis: ${getValuationBasisLabel(valuationBasis)}.`}
       filters={
-        <ReportFilterRow
-          end={
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              disabled={exporting || filteredRows.length === 0}
+        <>
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportPdf}
+                disabled={exporting || columnFilteredRows.length === 0}
+              />
+            }
+          >
+            <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
+            <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+            <ReportValuationBasisFilter value={valuationBasis} onChange={setValuationBasis} />
+            <ReportWarehouseMultiFilter
+              values={warehouses}
+              onChange={setWarehouses}
+              options={warehouseOptions}
             />
-          }
-        >
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
-          <ReportWarehouseFilter value={warehouse} onChange={setWarehouse} />
-          <ReportCategoryFilter value={category} onChange={setCategory} />
-          <ReportStockValuationProductFilter
-            value={product}
-            onChange={setProduct}
-            products={productOptions}
-          />
-          <ReportStockStatusFilter value={stockStatus} onChange={setStockStatus} />
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Product, SKU, batch, warehouse…"
-          />
-        </ReportFilterRow>
+            <ReportProductMultiFilter
+              values={products}
+              onChange={setProducts}
+              products={productOptions}
+            />
+            <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+              <ReportProductMultiFilter
+                values={categories}
+                onChange={setCategories}
+                products={categoryOptions}
+                label="Category"
+              />
+            </ReportMoreFilters>
+            <ReportStockStatusFilter value={stockStatus} onChange={setStockStatus} />
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Product, code, warehouse…"
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
     >
       <AccountsTableListing
         footer={
-          filteredRows.length > 0 ? (
+          columnFilteredRows.length > 0 ? (
             <AccountsTablePagination
               page={page}
               pageSize={pageSize}
-              totalRecords={filteredRows.length}
+              totalRecords={columnFilteredRows.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              recordLabel="batch lines"
+              recordLabel="product lines"
             />
           ) : undefined
         }
       >
         {filteredRows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
+        ) : columnFilteredRows.length === 0 ? (
+          <div className="accounts-table-empty py-8 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
         ) : (
           <AccountsTableScroll>
-            <AccountsTable minWidth={1480}>
+            <AccountsTable minWidth={960}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <SortTh
-                    label="Product"
-                    colKey="product"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <AccountsTableHeadCell uppercase>SKU</AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase>UOM</AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase>Pack Size</AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase align="right">
-                    Units Per Pack
-                  </AccountsTableHeadCell>
-                  <AccountsTableHeadCell uppercase>Batch No</AccountsTableHeadCell>
-                  <SortTh
-                    label="Warehouse"
-                    colKey="warehouse"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortTh
-                    label="Available Qty"
-                    colKey="availableQty"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortTh
-                    label="Cost Price (CP)"
-                    colKey="costPrice"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortTh
-                    label="Stock Value"
-                    colKey="stockValue"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <AccountsTableHeadCell uppercase>Manufacturing Date</AccountsTableHeadCell>
-                  <SortTh
-                    label="Expiry Date"
-                    colKey="expiryDate"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <AccountsTableHeadCell uppercase>Stock Status</AccountsTableHeadCell>
+                  <SortTh label="Product Code" colKey="productCode" />
+                  <SortTh label="Product Name" colKey="productName" />
+                  <SortTh label="Warehouse" colKey="warehouse" />
+                  <SortTh label="Closing Quantity" colKey="closingQty" filterType="amount" align="right" />
+                  <SortTh label={valuationRateLabel} colKey="valuationRate" filterType="amount" align="right" />
+                  <SortTh label="Total Stock Value" colKey="totalStockValue" filterType="amount" align="right" />
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
                 {paginatedRows.map((row) => (
                   <AccountsTableRow key={row.id}>
-                    <AccountsTableCell className="text-xs font-medium">{row.product}</AccountsTableCell>
                     <AccountsTableCell mono className="text-brand-700 font-semibold text-xs">
-                      {row.sku}
+                      {row.productCode}
                     </AccountsTableCell>
-                    <AccountsTableCell className="text-xs">{row.uom}</AccountsTableCell>
-                    <AccountsTableCell className="text-xs">{row.packSize}</AccountsTableCell>
-                    <AccountsTableCell align="right" className="text-xs tabular-nums">
-                      {row.unitsPerPack.toLocaleString("en-IN")}
-                    </AccountsTableCell>
-                    <AccountsTableCell mono className="text-xs">
-                      {row.batchNo}
-                    </AccountsTableCell>
+                    <AccountsTableCell className="text-xs font-medium">{row.productName}</AccountsTableCell>
                     <AccountsTableCell className="text-xs">{row.warehouse}</AccountsTableCell>
                     <AccountsTableCell align="right" className="text-xs tabular-nums font-medium">
-                      {row.availableQty.toLocaleString("en-IN")}
+                      {row.closingQty.toLocaleString("en-IN")}
                     </AccountsTableCell>
                     <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-                      {formatMoney(row.costPrice)}
+                      {row.rateMissing ? "—" : formatMoney(row.valuationRate)}
                     </AccountsTableCell>
                     <AccountsTableCell align="right" money className={cn("font-medium", MONEY_AMOUNT_CLASS)}>
-                      {formatMoney(row.stockValue)}
-                    </AccountsTableCell>
-                    <AccountsTableCell className="text-xs whitespace-nowrap">
-                      {formatStockValuationDate(row.mfgDate)}
-                    </AccountsTableCell>
-                    <AccountsTableCell className="text-xs whitespace-nowrap">
-                      {formatStockValuationDate(row.expiryDate)}
-                    </AccountsTableCell>
-                    <AccountsTableCell>
-                      <StockStatusBadge status={row.stockStatus} />
+                      {formatMoney(row.totalStockValue)}
                     </AccountsTableCell>
                   </AccountsTableRow>
                 ))}
               </AccountsTableBody>
               <AccountsTableFoot>
                 <AccountsTableRow>
-                  <AccountsTableCell colSpan={7} className="font-semibold text-xs text-foreground">
+                  <AccountsTableCell colSpan={3} className="font-semibold text-xs text-foreground">
                     Totals
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums">
-                    {totals.totalAvailableQty.toLocaleString("en-IN")}
+                    {totals.totalClosingQty.toLocaleString("en-IN")}
                   </AccountsTableCell>
                   <AccountsTableCell />
                   <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>
                     {formatMoney(totals.totalStockValue)}
                   </AccountsTableCell>
-                  <AccountsTableCell colSpan={3} />
                 </AccountsTableRow>
               </AccountsTableFoot>
             </AccountsTable>

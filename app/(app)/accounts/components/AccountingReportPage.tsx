@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
@@ -8,7 +8,9 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   AccountsColumnarTable,
   AccountsTableScroll,
+  type AccountsColumnDef,
 } from "@/components/accounts/AccountsTable";
+import { useAccountsColumnFilters } from "@/components/accounts/useAccountsColumnFilters";
 
 interface Column {
   key: string;
@@ -17,6 +19,8 @@ interface Column {
   /** @deprecated use money */
   mono?: boolean;
   money?: boolean;
+  filterType?: AccountsColumnDef["filterType"];
+  statusOptions?: string[];
 }
 
 interface AccountingReportPageProps {
@@ -36,9 +40,36 @@ export function AccountingReportPage({
   footer,
   filters,
 }: AccountingReportPageProps) {
+  const tableColumns = useMemo(
+    (): AccountsColumnDef[] =>
+      columns.map((c) => ({
+        key: c.key,
+        label: c.label,
+        align: c.align,
+        money: c.money ?? c.mono,
+        filterType: c.filterType ?? (c.money || c.mono ? "amount" : c.key.toLowerCase().includes("date") ? "date" : "text"),
+        statusOptions: c.statusOptions,
+      })),
+    [columns],
+  );
+
+  const getCellValue = useCallback(
+    (row: Record<string, string | number>, key: string) => row[key],
+    [],
+  );
+
+  const col = useAccountsColumnFilters({
+    rows,
+    getCellValue,
+    defaultSortKey: columns[0]?.key ?? null,
+    defaultSortDir: "asc",
+  });
+
+  const exportRows = col.filteredRows;
+
   const exportCsv = () => {
     const header = columns.map((c) => c.label).join(",") + "\n";
-    const body = rows
+    const body = exportRows
       .map((row) => columns.map((c) => `"${String(row[c.key] ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\n");
     const blob = new Blob([header + body], { type: "text/csv" });
@@ -59,7 +90,7 @@ export function AccountingReportPage({
         <div className="flex flex-wrap items-end gap-2 w-full">
           {filters}
           <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">
-            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={rows.length === 0} />
+            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={exportRows.length === 0} />
           </div>
         </div>
       }
@@ -69,15 +100,17 @@ export function AccountingReportPage({
       <AccountsListingTableCard className="flex-1 min-h-0">
         <AccountsTableScroll>
           <AccountsColumnarTable
-            columns={columns.map((c) => ({
-              key: c.key,
-              label: c.label,
-              align: c.align,
-              money: c.money ?? c.mono,
-            }))}
-            rows={rows}
+            columns={tableColumns}
+            rows={exportRows}
             emptyMessage="No records found."
             footer={footer}
+            sortKey={col.sortKey}
+            sortDir={col.sortDir}
+            onSort={col.handleSort}
+            onRemoveSort={col.removeSort}
+            columnFilters={col.columnFilters}
+            onColumnFilterChange={col.setColumnFilter}
+            getValueCounts={col.getValueCounts}
           />
         </AccountsTableScroll>
       </AccountsListingTableCard>

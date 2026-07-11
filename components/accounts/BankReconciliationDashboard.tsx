@@ -170,8 +170,8 @@ export function BankReconciliationDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Bank Reconciliation</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="accounts-page-title">Bank Reconciliation</h1>
+          <p className="accounts-page-subtitle">
             Manage bank transactions and categorize for accounting
           </p>
         </div>
@@ -252,7 +252,7 @@ export function BankReconciliationDashboard() {
       {/* Bank Accounts Grid */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-foreground">Bank Accounts</h2>
+          <h2 className="accounts-card-title">Bank Accounts</h2>
           <Link href="/accounts/banking/bank-accounts">
             <Button size="sm" variant="ghost" className="h-9 text-sm font-medium">
               View All
@@ -275,7 +275,7 @@ export function BankReconciliationDashboard() {
       {/* Recent Transactions */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-foreground">Recent Transactions</h2>
+          <h2 className="accounts-card-title">Recent Transactions</h2>
           <Link href="/accounts/banking/transactions">
             <Button size="sm" variant="ghost" className="h-9 text-sm font-medium">
               View All

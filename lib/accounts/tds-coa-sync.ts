@@ -130,13 +130,57 @@ function parentGroupForKind(
 }
 
 function ensureTdsPayableGroupStructure(records: ChartOfAccount[]): ChartOfAccount[] {
-  const duties = findAccountGroup(records, TDS_DUTIES_GROUP);
-  const tdsPayable = findAccountGroup(records, TDS_PAYABLE_GROUP);
-  if (!duties || !tdsPayable || tdsPayable.parentAccountId === duties.id) {
-    return records;
+  let next = records;
+  const duties = findAccountGroup(next, TDS_DUTIES_GROUP);
+  if (!duties) return next;
+
+  let tdsPayableGroup = findAccountGroup(next, TDS_PAYABLE_GROUP);
+  const legacyLedger = next.find(
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.accountName === TDS_PAYABLE_GROUP &&
+      r.parentAccountId === duties.id,
+  );
+
+  if (!tdsPayableGroup && legacyLedger) {
+    const groupId = nextId(next);
+    const group: ChartOfAccount = {
+      ...legacyLedger,
+      id: groupId,
+      accountCode: "23112",
+      accountName: TDS_PAYABLE_GROUP,
+      nodeLevel: "account_group",
+      parentAccountId: duties.id,
+      parentAccount: duties.accountName,
+      specializedGroupType: "tds_payable",
+      openingBalance: 0,
+      balanceType: "Credit",
+      description: "System standard group",
+      isSystem: true,
+      isSystemGenerated: undefined,
+      erpSourceModule: undefined,
+      erpSourceId: undefined,
+      alias: "",
+    };
+    next = [...next.filter((r) => r.id !== legacyLedger.id), group];
+    tdsPayableGroup = group;
   }
-  return records.map((r) =>
-    r.id === tdsPayable.id
+
+  if (tdsPayableGroup && !tdsPayableGroup.specializedGroupType) {
+    next = patchLedger(next, tdsPayableGroup.id, { specializedGroupType: "tds_payable" });
+  }
+
+  const receivableGroup = findAccountGroup(next, TDS_RECEIVABLE_GROUP);
+  if (receivableGroup && !receivableGroup.specializedGroupType) {
+    next = patchLedger(next, receivableGroup.id, { specializedGroupType: "tds_receivable" });
+  }
+
+  tdsPayableGroup = findAccountGroup(next, TDS_PAYABLE_GROUP);
+  if (!duties || !tdsPayableGroup || tdsPayableGroup.parentAccountId === duties.id) {
+    return next;
+  }
+  return next.map((r) =>
+    r.id === tdsPayableGroup!.id
       ? {
           ...r,
           parentAccountId: duties.id,

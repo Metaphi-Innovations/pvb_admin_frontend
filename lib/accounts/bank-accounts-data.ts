@@ -18,11 +18,20 @@ import {
   isBankAccountLedger,
 } from "@/lib/accounts/bank-coa-utils";
 import { upsertErpPartyLink } from "@/lib/accounts/erp-party-links";
+import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import {
   formatBankAccountLabel,
   formatBankAccountMaster,
 } from "@/lib/accounts/bank-account-display";
 import { DEMO_BANK_SPECS } from "@/lib/accounts/banking-demo-spec";
+import { ensureClientReviewBankingSeed } from "@/lib/accounts/banking-client-review-seed";
+import {
+  defaultMappedWarehouseIds,
+  filterBankAccountsForWarehouse,
+  normalizeMappedWarehouseIds,
+  warehouseLabelsForIds,
+} from "@/lib/accounts/bank-warehouse-mapping";
 
 export type BankAccountType = "Current" | "Savings" | "OD" | "CC";
 export type ReconciliationStatus = "unreconciled" | "partial" | "reconciled";
@@ -45,6 +54,10 @@ export interface BankAccountMaster {
   defaultForPayments: boolean;
   reconciliationStatus: ReconciliationStatus;
   status: "active" | "inactive";
+  /** Warehouses this bank account serves — many-to-many. */
+  mappedWarehouseIds: number[];
+  /** Last successful reconciliation date (YYYY-MM-DD) — optional demo / recon metadata. */
+  lastReconciledDate?: string;
   createdBy: string;
   updatedBy: string;
 }
@@ -70,6 +83,7 @@ export interface UpdateBankAccountInput {
   defaultForReceipts: boolean;
   defaultForPayments: boolean;
   status?: "active" | "inactive";
+  mappedWarehouseIds?: number[];
 }
 
 export interface CreateBankAccountInput extends UpdateBankAccountInput {
@@ -157,10 +171,26 @@ export function loadBankAccountMasters(): BankAccountMaster[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as BankAccountMaster[];
+    const parsed = JSON.parse(raw) as BankAccountMaster[];
+    return parsed.map(normalizeBankAccountMaster);
   } catch {
     return [];
   }
+}
+
+function normalizeBankAccountMaster(row: BankAccountMaster): BankAccountMaster {
+  return {
+    ...row,
+    mappedWarehouseIds: normalizeMappedWarehouseIds(row.mappedWarehouseIds),
+  };
+}
+
+function assertMappedWarehouses(ids: number[] | undefined | null): number[] {
+  const normalized = normalizeMappedWarehouseIds(ids);
+  if (normalized.length === 0) {
+    throw new Error("Select at least one mapped warehouse.");
+  }
+  return normalized;
 }
 
 export function saveBankAccountMasters(list: BankAccountMaster[]) {
@@ -199,18 +229,24 @@ export function syncBankLedgerDisplayNames(): void {
   if (changed) saveChartOfAccounts(next);
 }
 
-export function listBankAccountSelectOptions(): BankAccountSelectOption[] {
+export function listBankAccountSelectOptions(
+  warehouseRef?: string | number | null,
+): BankAccountSelectOption[] {
   syncBankLedgerDisplayNames();
-  return loadBankAccountMasters()
-    .filter((m) => m.status === "active")
-    .map((m) => ({
-      id: m.id,
-      label: formatBankAccountMaster(m),
-      bankName: m.bankName,
-      accountNickname: m.accountNickname,
-      accountNumber: m.accountNumber,
-      coaLedgerId: m.coaLedgerId,
-    }));
+  const masters = filterBankAccountsForWarehouse(loadBankAccountMasters(), warehouseRef);
+  return masters.map((m) => ({
+    id: m.id,
+    label: formatBankAccountMaster(m),
+    bankName: m.bankName,
+    accountNickname: m.accountNickname,
+    accountNumber: m.accountNumber,
+    coaLedgerId: m.coaLedgerId,
+    mappedWarehouseIds: m.mappedWarehouseIds,
+  }));
+}
+
+export function getMappedWarehouseLabels(master: BankAccountMaster): string[] {
+  return warehouseLabelsForIds(master.mappedWarehouseIds);
 }
 
 export interface BankAccountSelectOption {
@@ -220,6 +256,7 @@ export interface BankAccountSelectOption {
   accountNickname: string;
   accountNumber: string;
   coaLedgerId: number;
+  mappedWarehouseIds?: number[];
 }
 
 export function createBankGroup(bankName: string): ChartOfAccount {
@@ -273,18 +310,29 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     throw new Error("An account with this account number already exists.");
   }
 
+  const mappedWarehouseIds = assertMappedWarehouses(input.mappedWarehouseIds);
+
   let records = loadChartOfAccounts();
   let bankGroup =
     input.bankGroupCoaId != null
       ? records.find((r) => r.id === input.bankGroupCoaId)
       : undefined;
-  if (!bankGroup?.bankGroupFlag) {
+  const selectedAccountingGroupIsValid =
+    bankGroup?.nodeLevel === "account_group" &&
+    resolveCoaLedgerBehavior(bankGroup, records).kind === "bank";
+  if (!bankGroup?.bankGroupFlag && !selectedAccountingGroupIsValid) {
     bankGroup = findOrCreateBankGroup(input.bankName);
     records = loadChartOfAccounts();
     bankGroup = records.find((r) => r.id === bankGroup!.id) ?? bankGroup;
   }
 
-  if (!bankGroup?.bankGroupFlag) {
+  if (
+    !bankGroup?.bankGroupFlag &&
+    !(
+      bankGroup?.nodeLevel === "account_group" &&
+      resolveCoaLedgerBehavior(bankGroup, records).kind === "bank"
+    )
+  ) {
     throw new Error("Select a valid bank group.");
   }
 
@@ -324,7 +372,7 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     id: nextId(masters),
     coaLedgerId: ledgerRow.id,
     bankGroupCoaId: bankGroup.id,
-    bankName: bankGroup.accountName,
+    bankName: input.bankName.trim(),
     accountNickname: input.accountNickname.trim(),
     accountNumber: input.accountNumber.trim(),
     ifsc: input.ifsc.trim().toUpperCase(),
@@ -338,6 +386,7 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     defaultForPayments: input.defaultForPayments,
     reconciliationStatus: "unreconciled",
     status: input.status ?? "active",
+    mappedWarehouseIds,
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
   };
@@ -358,6 +407,14 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
   });
 
   syncBankLedgerDisplayNames();
+  dispatchAccountsDataChanged("ledgers", {
+    operation: "create",
+    recordId: ledgerRow.id,
+  });
+  dispatchAccountsDataChanged("bank-reconciliation", {
+    operation: "create",
+    recordId: row.id,
+  });
   return row;
 }
 
@@ -371,6 +428,8 @@ export function updateBankAccount(id: number, input: UpdateBankAccountInput): Ba
   if (isDuplicateAccountNumber(input.accountNumber, id)) {
     throw new Error("An account with this account number already exists.");
   }
+
+  const mappedWarehouseIds = assertMappedWarehouses(input.mappedWarehouseIds);
 
   const masters = loadBankAccountMasters();
   const index = masters.findIndex((m) => m.id === id);
@@ -416,6 +475,7 @@ export function updateBankAccount(id: number, input: UpdateBankAccountInput): Ba
     defaultForReceipts: input.defaultForReceipts,
     defaultForPayments: input.defaultForPayments,
     status: input.status ?? existing.status,
+    mappedWarehouseIds,
     updatedBy: ACCOUNTS_CURRENT_USER,
   };
 
@@ -517,6 +577,7 @@ export function ensureDemoBankCoaStructure(): void {
       defaultForReceipts: spec.defaultForReceipts,
       defaultForPayments: spec.defaultForPayments,
       status: "active",
+      mappedWarehouseIds: spec.mappedWarehouseIds ?? defaultMappedWarehouseIds(),
     });
   }
   syncBankLedgerDisplayNames();
@@ -549,6 +610,7 @@ export function syncMastersFromCoaLedgers(): void {
       defaultForPayments: false,
       reconciliationStatus: "unreconciled",
       status: ledger.status,
+      mappedWarehouseIds: defaultMappedWarehouseIds(),
       createdBy: ACCOUNTS_CURRENT_USER,
       updatedBy: ACCOUNTS_CURRENT_USER,
     });
@@ -557,9 +619,15 @@ export function syncMastersFromCoaLedgers(): void {
   if (changed) saveBankAccountMasters(masters);
 }
 
-export function loadBankAccounts(): BankAccountMaster[] {
-  ensureDemoBankCoaStructure();
+/** Idempotent bank master + COA sync — call from useEffect / demo seed, not during render. */
+export function ensureBankAccountsReady(): void {
+  ensureClientReviewBankingSeed();
   syncMastersFromCoaLedgers();
+}
+
+/** Ensures demo bank masters exist, then returns the current list. */
+export function loadBankAccounts(): BankAccountMaster[] {
+  ensureBankAccountsReady();
   return loadBankAccountMasters();
 }
 

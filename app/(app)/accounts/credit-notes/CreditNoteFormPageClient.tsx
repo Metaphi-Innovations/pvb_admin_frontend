@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { Save } from "lucide-react";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { SearchableSelect } from "./components/SearchableSelect";
@@ -51,6 +53,11 @@ import { findPendingSchemeSettlement } from "@/lib/accounts/scheme-settlement-da
 import { getPendingCreditNoteRow } from "./pending-credit-notes-data";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
+import { getInvoiceById } from "@/app/(app)/accounts/invoices/invoices-data";
+import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 type FormMode = "fresh" | "return" | "scheme";
 
@@ -74,6 +81,7 @@ export default function CreditNoteFormPageClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast, showToast, dismissToast } = useAccountsToast();
   const isEdit = creditNoteId != null;
   const returnId = returnIdProp ?? searchParams.get("returnId") ?? undefined;
   const schemeKey = schemeKeyProp ?? searchParams.get("schemeKey") ?? undefined;
@@ -108,6 +116,7 @@ export default function CreditNoteFormPageClient({
   const [referenceDocType, setReferenceDocType] = useState<CreditReferenceDocType>("sales_invoice");
   const [creditNoteNo, setCreditNoteNo] = useState("");
   const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [customerId, setCustomerId] = useState("");
   const [referenceInvoiceId, setReferenceInvoiceId] = useState("");
   const [referenceReturnId, setReferenceReturnId] = useState("");
@@ -421,6 +430,7 @@ export default function CreditNoteFormPageClient({
       setShipToId(fields.defaultShipToId);
     }
     setRemarks(rec.remarks);
+    setBankAccountId(rec.bankAccountId ?? null);
     setStatus(rec.status);
     if (isDirect) {
       setDirectReason(rec.reason);
@@ -487,6 +497,17 @@ export default function CreditNoteFormPageClient({
     ];
   };
 
+  const warehouseRef = useMemo(() => {
+    const invId =
+      linkedInvoices[0]?.id ??
+      (referenceInvoiceId ? Number(referenceInvoiceId) : null) ??
+      sourceInvoiceId;
+    if (invId && Number.isFinite(invId)) {
+      return getInvoiceById(invId)?.warehouse ?? null;
+    }
+    return null;
+  }, [linkedInvoices, referenceInvoiceId, sourceInvoiceId]);
+
   const resolveSource = (): CreditNoteSource => {
     if (isFresh || noteType === "direct_adjustment") return "manual";
     if (isScheme || schemeSettlementKey) return "payment_discount_scheme";
@@ -537,6 +558,8 @@ export default function CreditNoteFormPageClient({
       adjustmentLedgerName: isDirect ? adjustmentLedgerName || undefined : undefined,
       referenceNo: isDirect ? directRefNo || undefined : undefined,
       attachmentName: isDirect ? attachmentName || undefined : undefined,
+      warehouse: warehouseRef ?? undefined,
+      bankAccountId,
     };
   };
 
@@ -586,18 +609,16 @@ export default function CreditNoteFormPageClient({
       }
       if (isEdit && creditNoteId != null) {
         updateCreditNote(creditNoteId, buildInput("draft"), { requireAmount: false });
+        dispatchAccountsDataChanged("credit-notes");
+        showToast("Credit note saved as draft");
         router.push(`${CREDIT_NOTES_LIST_PATH}/${creditNoteId}`);
       } else {
         const rec = createCreditNote(buildInput("draft"), { requireAmount: false });
-        // #region agent log
-        fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'db7cdd'},body:JSON.stringify({sessionId:'db7cdd',hypothesisId:'F',location:'CreditNoteFormPageClient.tsx:saveDraft',message:'Draft saved OK',data:{id:rec.id,cnNo:rec.creditNoteNo,isFresh,isReturn,isScheme},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+        dispatchAccountsDataChanged("credit-notes");
+        showToast("Credit note saved as draft");
         router.push(`${CREDIT_NOTES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'db7cdd'},body:JSON.stringify({sessionId:'db7cdd',hypothesisId:'F',location:'CreditNoteFormPageClient.tsx:saveDraft',message:'Draft save failed',data:{error:e instanceof Error?e.message:String(e),isFresh,isReturn,isScheme},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setError(e instanceof Error ? e.message : "Could not save draft.");
     }
   };
@@ -609,10 +630,14 @@ export default function CreditNoteFormPageClient({
       if (isEdit && creditNoteId != null) {
         updateCreditNote(creditNoteId, buildInput("draft"));
         postCreditNote(creditNoteId);
+        dispatchAccountsDataChanged("credit-notes");
+        showToast("Credit note posted successfully");
         router.push(`${CREDIT_NOTES_LIST_PATH}/${creditNoteId}`);
       } else {
         const rec = createCreditNote(buildInput("draft"));
         postCreditNote(rec.id);
+        dispatchAccountsDataChanged("credit-notes");
+        showToast("Credit note posted successfully");
         router.push(`${CREDIT_NOTES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
@@ -641,9 +666,58 @@ export default function CreditNoteFormPageClient({
     adjustmentLedgerName: adjustmentLedgerName || undefined,
   });
 
+  const [baselineReady, setBaselineReady] = useState(false);
+  useEffect(() => {
+    setBaselineReady(false);
+    const id = window.setTimeout(() => setBaselineReady(true), 350);
+    return () => window.clearTimeout(id);
+  }, [creditNoteId, isReturn, isScheme, isFresh, searchParams.toString()]);
+
+  const formSnapshot = useMemo(
+    () => ({
+      noteType,
+      creditNoteDate,
+      customerId,
+      referenceInvoiceId,
+      lines,
+      remarks,
+      linkedInvoices,
+      directReason,
+      directRefNo,
+      directAmount,
+      directGstApplicable,
+      directGstPct,
+      adjustmentLedgerId,
+      schemeSettlementKey,
+    }),
+    [
+      noteType,
+      creditNoteDate,
+      customerId,
+      referenceInvoiceId,
+      lines,
+      remarks,
+      linkedInvoices,
+      directReason,
+      directRefNo,
+      directAmount,
+      directGstApplicable,
+      directGstPct,
+      adjustmentLedgerId,
+      schemeSettlementKey,
+    ],
+  );
+  const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady && !readOnly });
+  const { requestCancel, discardDialog } = useTransactionFormCancel({
+    listHref: CREDIT_NOTES_LIST_PATH,
+    isDirty,
+  });
+
   return (
+    <>
     <AccountsFormLayout
       fullWidth
+      onBackClick={readOnly ? undefined : requestCancel}
       title={formTitle}
       breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
       code={creditNoteNo || undefined}
@@ -654,13 +728,19 @@ export default function CreditNoteFormPageClient({
           </Button>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-medium"
+              onClick={requestCancel}
+            >
               Cancel
             </Button>
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" onClick={saveDraft}>
+            <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5" onClick={saveDraft}>
               <Save className="w-3.5 h-3.5" /> Save Draft
             </Button>
-            <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+            <Button size="sm" className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
               Post Credit Note
             </Button>
           </div>
@@ -685,8 +765,25 @@ export default function CreditNoteFormPageClient({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Credit Note Date</Label>
-              <Input type="date" className="h-9 text-sm" value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} disabled={readOnly} />
+              <AccountsDateInput
+                value={creditNoteDate}
+                onChange={setCreditNoteDate}
+                disabled={readOnly}
+                aria-label="Credit note date"
+                className="h-9 text-sm"
+              />
             </div>
+            {warehouseRef ? (
+              <div className="sm:col-span-2">
+                <WarehouseMappedBankAccountSelect
+                  warehouseRef={warehouseRef}
+                  value={bankAccountId}
+                  onChange={(id) => setBankAccountId(id)}
+                  label="Bank Account (for payment / print)"
+                  disabled={readOnly}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -902,5 +999,8 @@ export default function CreditNoteFormPageClient({
         {error && <p className="px-6 pb-4 text-xs text-red-600">{error}</p>}
       </div>
     </AccountsFormLayout>
+    <AccountsToast toast={toast} onDismiss={dismissToast} />
+    {discardDialog}
+    </>
   );
 }

@@ -66,8 +66,48 @@ import {
 } from "@/lib/accounts/manual-bank-reconciliation-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useFY } from "@/lib/fy-store";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { UploadStatementDialog } from "./components/UploadStatementDialog";
-import { ReconEntryStatusBadge } from "./components/ReconEntryStatusBadge";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
+
+const RECON_STATUS_OPTIONS = ["pending", "reconciled", "unmatched", "difference"];
+
+function reconGetCellValue(row: ManualReconGridRow, key: string): unknown {
+  switch (key) {
+    case "entryDate":
+      return row.entryDate;
+    case "voucherNo":
+      return row.rowSource === "statement" ? row.matchedStatementRef || "" : row.voucherNo;
+    case "partyName":
+      return row.partyName;
+    case "voucherTypeLabel":
+      return row.rowSource === "statement" ? "Bank Stmt" : row.voucherTypeLabel;
+    case "narration":
+      return row.narration;
+    case "debitAmount":
+      return row.debitAmount;
+    case "creditAmount":
+      return row.creditAmount;
+    case "bankName":
+      return row.bankName;
+    case "bankProcessingDate":
+      return row.bankProcessingDate;
+    case "matchedStatementRef":
+      return row.matchedStatementRef || row.suggestedStatementMatch?.statementRef || "";
+    case "differenceAmount":
+      return row.differenceAmount;
+    case "status":
+      return deriveReconStatus(row.bankProcessingDate, row.differenceAmount, row.matchedStatementEntryId);
+    default:
+      return "";
+  }
+}
 
 function SummaryCard({
   label,
@@ -444,11 +484,6 @@ export default function ManualBankReconciliationPageClient() {
     });
   }, [gridRows, draftDates, dateFrom, dateTo, statusFilter, search]);
 
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return visibleRows.slice(start, start + pageSize);
-  }, [visibleRows, page, pageSize]);
-
   const statementLineCount = useMemo(() => {
     if (!bankMasterId) return 0;
     void refreshKey;
@@ -518,6 +553,22 @@ export default function ManualBankReconciliationPageClient() {
     setDirty(true);
   };
 
+  const discardDraftEdits = useCallback(() => {
+    const next: Record<string, string> = {};
+    for (const row of gridRows) {
+      next[row.rowKey] = row.bankProcessingDate;
+    }
+    setDraftDates(next);
+    setDirty(false);
+    setInlineError(null);
+  }, [gridRows]);
+
+  const { requestCancel: requestDiscardDraft, discardDialog } = useTransactionFormCancel({
+    listHref: "/accounts/banking/reconciliation",
+    isDirty: dirty,
+    onNavigate: discardDraftEdits,
+  });
+
   const handleSave = async () => {
     if (!coaLedgerId) {
       setToast({ msg: "Please select a bank account.", type: "error" });
@@ -568,11 +619,11 @@ export default function ManualBankReconciliationPageClient() {
     setToast({ msg: `${result.record.voucherNo} reconciled successfully`, type: "success" });
   };
 
-  const handleExport = async () => {
+  const handleExport = async (rows: ManualReconGridRow[]) => {
     if (!coaLedgerId) return;
     setExporting(true);
     try {
-      await exportManualReconciliationToExcel(visibleRows, summary, {
+      await exportManualReconciliationToExcel(rows, summary, {
         bankAccount: selectedBankLabel,
         dateFrom,
         dateTo,
@@ -587,60 +638,73 @@ export default function ManualBankReconciliationPageClient() {
     setPage(1);
   }, [bankAccountId, dateFrom, dateTo, statusFilter, search, pageSize]);
 
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <AccountsExportMenu onExcel={handleExport} disabled={!coaLedgerId || exporting} />
-      <Button size="sm" variant="outline" className="h-9 text-sm font-medium gap-1.5" onClick={handleLoadDemoEntries}>
-        <FlaskConical className="w-4 h-4" />
-        Load Demo Entries
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-9 text-sm font-medium gap-1.5"
-        disabled={!bankMasterId}
-        onClick={() => setUploadOpen(true)}
-      >
-        <Upload className="w-4 h-4" />
-        Upload Statement
-      </Button>
-      <Button
-        size="sm"
-        className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-        disabled={!coaLedgerId || saving || !dirty}
-        onClick={() => void handleSave()}
-      >
-        <Save className="w-4 h-4" />
-        {saving ? "Saving…" : "Save"}
-      </Button>
-    </div>
+  const getCellValue = useCallback(
+    (row: ManualReconGridRow, key: string) => reconGetCellValue(row, key),
+    [],
   );
-
-  const TABLE_COLS = [
-    { label: "Entry Date", align: "left" as const, className: "w-[100px]" },
-    { label: "Voucher No.", align: "left" as const, className: "w-[100px]" },
-    { label: "Party Name", align: "left" as const, className: "min-w-[160px]" },
-    { label: "Voucher Type", align: "left" as const, className: "w-[90px]" },
-    { label: "Narration", align: "left" as const, className: "min-w-[140px]" },
-    { label: "Debit", align: "right" as const, className: "w-[100px]" },
-    { label: "Credit", align: "right" as const, className: "w-[100px]" },
-    { label: "Bank", align: "left" as const, className: "w-[80px]" },
-    { label: "Bank Date", align: "left" as const, className: "w-[140px]" },
-    { label: "Stmt Ref", align: "left" as const, className: "w-[90px]" },
-    { label: "Diff", align: "right" as const, className: "w-[80px]" },
-    { label: "Status", align: "left" as const, className: "w-[100px]" },
-    { label: "Action", align: "center" as const, className: "w-[80px]" },
-  ];
-  const TH_PAD = "px-4 py-2.5 align-middle";
-  const TD_PAD = "px-4 py-2 align-middle";
 
   return (
     <>
+      <AccountsColumnFilterProvider
+        rows={visibleRows}
+        getCellValue={getCellValue}
+        columnConfig={{
+          entryDate: { type: "date" },
+          voucherNo: { type: "text" },
+          partyName: { type: "text" },
+          voucherTypeLabel: { type: "text" },
+          narration: { type: "text" },
+          debitAmount: { type: "amount" },
+          creditAmount: { type: "amount" },
+          bankName: { type: "text" },
+          bankProcessingDate: { type: "date" },
+          matchedStatementRef: { type: "text" },
+          differenceAmount: { type: "amount" },
+        }}
+        defaultSortKey="entryDate"
+        defaultSortDir="desc"
+      >
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Banking", "Bank Reconciliation")}
         title="Bank Reconciliation"
         description="Manually reconcile book entries against bank statements using processing dates."
-        actions={headerActions}
+        actions={
+          <div className="flex items-center gap-2">
+            <ReconExportMenu onExport={handleExport} disabled={!coaLedgerId || exporting} />
+            <Button size="sm" variant="outline" className="h-9 text-sm font-medium gap-1.5" onClick={handleLoadDemoEntries}>
+              <FlaskConical className="w-4 h-4" />
+              Load Demo Entries
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 text-sm font-medium gap-1.5"
+              disabled={!bankMasterId}
+              onClick={() => setUploadOpen(true)}
+            >
+              <Upload className="w-4 h-4" />
+              Upload Statement
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 text-sm font-medium"
+              disabled={!dirty}
+              onClick={requestDiscardDraft}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              disabled={!coaLedgerId || saving || !dirty}
+              onClick={() => void handleSave()}
+            >
+              <Save className="w-4 h-4" />
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        }
         layout="standard"
         className="space-y-4"
       >
@@ -757,130 +821,19 @@ export default function ManualBankReconciliationPageClient() {
               </div>
             </div>
           ) : (
-            <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="accounts-table w-full" style={{ minWidth: "1200px" }}>
-                  <thead className="sticky top-0 z-[1] bg-muted/40">
-                    <tr className="border-b border-border">
-                      {TABLE_COLS.map((col) => (
-                        <th
-                          key={col.label}
-                          className={cn(
-                            TH_PAD,
-                            "text-xs font-semibold text-foreground whitespace-nowrap bg-muted/40",
-                            col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
-                            col.className,
-                          )}
-                        >
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedRows.map((row) => {
-                      const draftDate = draftDates[row.rowKey] ?? "";
-                      const displayStatus = deriveReconStatus(draftDate, row.differenceAmount, row.matchedStatementEntryId);
-                      const hasSuggestion = !!row.suggestedStatementMatch;
-                      const isStatementRow = row.rowSource === "statement";
-
-                      return (
-                        <tr
-                          key={row.rowKey}
-                          className={cn(
-                            "border-b border-border/60 hover:bg-muted/20 transition-colors",
-                            hasSuggestion && displayStatus === "unmatched" && "bg-brand-50/30",
-                            isStatementRow && "bg-navy-50/20",
-                          )}
-                        >
-                          <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>{formatAccountsDate(row.entryDate)}</td>
-                          <td className={cn(TD_PAD, "text-xs whitespace-nowrap font-mono font-semibold text-brand-700")}>
-                            {isStatementRow ? row.matchedStatementRef || "—" : row.voucherNo}
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs")} title={row.partyName}>
-                            <span className="line-clamp-1">{row.partyName}</span>
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
-                            {isStatementRow ? (
-                              <span className="text-xs font-semibold uppercase tracking-wide text-navy-600">
-                                Bank Stmt
-                              </span>
-                            ) : (
-                              row.voucherTypeLabel
-                            )}
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs")} title={row.narration}>
-                            <span className="line-clamp-1 text-muted-foreground">{row.narration}</span>
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs text-right tabular-nums")}>{formatMoneyOrDash(row.debitAmount)}</td>
-                          <td className={cn(TD_PAD, "text-xs text-right tabular-nums")}>{formatMoneyOrDash(row.creditAmount)}</td>
-                          <td className={cn(TD_PAD, "text-xs whitespace-nowrap text-muted-foreground")}>{row.bankName}</td>
-                          <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
-                            <Input
-                              type="date"
-                              className="h-7 w-full max-w-[130px] text-sm"
-                              value={draftDate}
-                              max={new Date().toISOString().slice(0, 10)}
-                              min={row.entryDate}
-                              onChange={(e) => handleDateChange(row, e.target.value)}
-                            />
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
-                            {row.matchedStatementRef ? (
-                              <span className="font-mono text-muted-foreground">{row.matchedStatementRef}</span>
-                            ) : row.suggestedStatementMatch ? (
-                              <span className="text-brand-600 text-xs font-medium flex items-center gap-0.5">
-                                <Link2 className="w-3 h-3" />
-                                {row.suggestedStatementMatch.matchType === "exact" ? "Exact" : "Suggested"}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs text-right tabular-nums")}>
-                            {row.differenceAmount ? (
-                              <span className="text-amber-700 font-medium">{formatMoney(row.differenceAmount)}</span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs")}>
-                            <ReconEntryStatusBadge status={displayStatus} />
-                          </td>
-                          <td className={cn(TD_PAD, "text-xs text-center")}>
-                            {displayStatus !== "reconciled" ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-2 text-xs text-brand-600 hover:text-brand-700 hover:bg-brand-50"
-                                onClick={() => setReconcileRow(row)}
-                              >
-                                Reconcile
-                              </Button>
-                            ) : (
-                              <span className="text-emerald-600">
-                                <Check className="w-4 h-4 inline" />
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <AccountsTablePagination
+              <ManualReconTable
                 page={page}
                 pageSize={pageSize}
-                totalRecords={visibleRows.length}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
-                recordLabel="entries"
+                draftDates={draftDates}
+                onDateChange={handleDateChange}
+                onReconcileRow={setReconcileRow}
               />
-            </div>
           )}
         </div>
       </AccountsPageShell>
+      </AccountsColumnFilterProvider>
 
       <ReconcileDialog
         open={!!reconcileRow}
@@ -923,6 +876,182 @@ export default function ManualBankReconciliationPageClient() {
           {toast.msg}
         </div>
       )}
+      {discardDialog}
     </>
+  );
+}
+
+function ReconExportMenu({
+  onExport,
+  disabled,
+}: {
+  onExport: (rows: ManualReconGridRow[]) => Promise<void>;
+  disabled: boolean;
+}) {
+  const visible = useAccountsFilteredRows<ManualReconGridRow>([]);
+  return (
+    <AccountsExportMenu
+      onExcel={() => void onExport(visible)}
+      disabled={disabled || visible.length === 0}
+    />
+  );
+}
+
+function ManualReconTable({
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  draftDates,
+  onDateChange,
+  onReconcileRow,
+}: {
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  draftDates: Record<string, string>;
+  onDateChange: (row: ManualReconGridRow, value: string) => void;
+  onReconcileRow: (row: ManualReconGridRow) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<ManualReconGridRow>([]);
+  const TH_PAD = "px-4 py-2.5 align-middle";
+  const TD_PAD = "px-4 py-2 align-middle";
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="accounts-table w-full" style={{ minWidth: "1200px" }}>
+          <thead className="sticky top-0 z-[1] bg-muted/40">
+            <tr className="border-b border-border">
+              <SortTh label="Entry Date" colKey="entryDate" filterType="date" className={cn(TH_PAD, "w-[100px]")} />
+              <SortTh label="Voucher No." colKey="voucherNo" className={cn(TH_PAD, "w-[100px]")} />
+              <SortTh label="Party Name" colKey="partyName" className={cn(TH_PAD, "min-w-[160px]")} />
+              <SortTh label="Voucher Type" colKey="voucherTypeLabel" className={cn(TH_PAD, "w-[90px]")} />
+              <SortTh label="Narration" colKey="narration" filterable={false} className={cn(TH_PAD, "min-w-[140px]")} />
+              <SortTh label="Debit" colKey="debitAmount" filterType="amount" align="right" className={cn(TH_PAD, "w-[100px]")} />
+              <SortTh label="Credit" colKey="creditAmount" filterType="amount" align="right" className={cn(TH_PAD, "w-[100px]")} />
+              <SortTh label="Bank" colKey="bankName" className={cn(TH_PAD, "w-[80px]")} />
+              <SortTh label="Bank Date" colKey="bankProcessingDate" filterType="date" className={cn(TH_PAD, "w-[140px]")} />
+              <SortTh label="Stmt Ref" colKey="matchedStatementRef" className={cn(TH_PAD, "w-[90px]")} />
+              <SortTh label="Diff" colKey="differenceAmount" filterType="amount" align="right" className={cn(TH_PAD, "w-[80px]")} />
+              <AccountsColumnHeader
+                label="Action"
+                colKey="_action"
+                sortable={false}
+                filterable={false}
+                align="center"
+                className={cn(TH_PAD, "w-[80px]")}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.map((row) => {
+              const draftDate = draftDates[row.rowKey] ?? "";
+              const displayStatus = deriveReconStatus(draftDate, row.differenceAmount, row.matchedStatementEntryId);
+              const hasSuggestion = !!row.suggestedStatementMatch;
+              const isStatementRow = row.rowSource === "statement";
+
+              return (
+                <tr
+                  key={row.rowKey}
+                  className={cn(
+                    "border-b border-border/60 hover:bg-muted/20 transition-colors",
+                    hasSuggestion && displayStatus === "unmatched" && "bg-brand-50/30",
+                    isStatementRow && "bg-navy-50/20",
+                  )}
+                >
+                  <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>{formatAccountsDate(row.entryDate)}</td>
+                  <td className={cn(TD_PAD, "text-xs whitespace-nowrap font-mono font-semibold text-brand-700")}>
+                    {isStatementRow ? row.matchedStatementRef || "—" : row.voucherNo}
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs")} title={row.partyName}>
+                    <span className="line-clamp-1">{row.partyName}</span>
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
+                    {isStatementRow ? (
+                      <span className="text-xs font-semibold uppercase tracking-wide text-navy-600">
+                        Bank Stmt
+                      </span>
+                    ) : (
+                      row.voucherTypeLabel
+                    )}
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs")} title={row.narration}>
+                    <span className="line-clamp-1 text-muted-foreground">{row.narration}</span>
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs text-right tabular-nums")}>{formatMoneyOrDash(row.debitAmount)}</td>
+                  <td className={cn(TD_PAD, "text-xs text-right tabular-nums")}>{formatMoneyOrDash(row.creditAmount)}</td>
+                  <td className={cn(TD_PAD, "text-xs whitespace-nowrap text-muted-foreground")}>{row.bankName}</td>
+                  <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
+                    <Input
+                      type="date"
+                      className="h-7 w-full max-w-[130px] text-sm"
+                      value={draftDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      min={row.entryDate}
+                      onChange={(e) => onDateChange(row, e.target.value)}
+                    />
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
+                    {row.matchedStatementRef ? (
+                      <span className="font-mono text-muted-foreground">{row.matchedStatementRef}</span>
+                    ) : row.suggestedStatementMatch ? (
+                      <span className="text-brand-600 text-xs font-medium flex items-center gap-0.5">
+                        <Link2 className="w-3 h-3" />
+                        {row.suggestedStatementMatch.matchType === "exact" ? "Exact" : "Suggested"}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs text-right tabular-nums")}>
+                    {row.differenceAmount ? (
+                      <span className="text-amber-700 font-medium">{formatMoney(row.differenceAmount)}</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className={cn(TD_PAD, "text-xs text-center")}>
+                    {displayStatus !== "reconciled" ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                        onClick={() => onReconcileRow(row)}
+                      >
+                        Reconcile
+                      </Button>
+                    ) : (
+                      <span className="text-emerald-600">
+                        <Check className="w-4 h-4 inline" />
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <AccountsTablePagination
+        page={page}
+        pageSize={pageSize}
+        totalRecords={visible.length}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        recordLabel="entries"
+      />
+    </div>
   );
 }

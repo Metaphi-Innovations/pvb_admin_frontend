@@ -23,7 +23,11 @@ import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,6 +61,8 @@ const ALLOCATION_STATUS_OPTIONS: { value: PaymentAllocationStatus | "all"; label
   { value: "partially_allocated", label: "Partially Allocated" },
   { value: "fully_allocated", label: "Fully Allocated" },
 ];
+
+const STATUS_FILTER_OPTIONS = ["unallocated", "partially_allocated", "fully_allocated"];
 
 function AllocationWorkspace({
   vendorId,
@@ -275,6 +281,177 @@ function AllocationWorkspace({
   );
 }
 
+const COLUMNS: AccountsRichColumnDef<PaymentAllocationVendorRow>[] = [
+  {
+    key: "vendorName",
+    label: "Supplier",
+    filterType: "text",
+    render: (r) => <span className="text-xs font-medium">{r.vendorName}</span>,
+  },
+  {
+    key: "vendorCode",
+    label: "Supplier Code",
+    filterType: "text",
+    render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.vendorCode}</span>,
+  },
+  {
+    key: "totalOutstanding",
+    label: "Total Outstanding",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.totalOutstanding)}</span>,
+  },
+  {
+    key: "totalPaymentAvailable",
+    label: "Payment Available",
+    align: "right",
+    filterType: "amount",
+    render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.totalPaymentAvailable)}</span>,
+  },
+  {
+    key: "unallocatedBalance",
+    label: "Unallocated Balance",
+    align: "right",
+    filterType: "amount",
+    render: (r) => (
+      <span className={cn(MONEY_CELL_CLASS, "font-semibold text-foreground")}>
+        {formatMoney(r.unallocatedBalance)}
+      </span>
+    ),
+  },
+  {
+    key: "action",
+    label: "Action",
+    align: "right",
+    uppercase: false,
+    sortable: false,
+    filterable: false,
+    render: (r) => (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-sm text-brand-700"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        Allocate
+      </Button>
+    ),
+  },
+];
+
+function PaymentAllocationTable({
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  onAllocate,
+}: {
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  onAllocate: (vendorId: number) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<PaymentAllocationVendorRow>([]);
+
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  const columns = useMemo((): AccountsRichColumnDef<PaymentAllocationVendorRow>[] => {
+    return COLUMNS.map((col) =>
+      col.key === "action"
+        ? {
+            ...col,
+            render: (r) => (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-sm text-brand-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAllocate(r.vendorId);
+                }}
+              >
+                Allocate
+              </Button>
+            ),
+          }
+        : col,
+    );
+  }, [onAllocate]);
+
+  return (
+    <>
+      <AccountsTableScroll>
+        <AccountsRichTable
+          columns={columns}
+          rows={pagedRows}
+          minWidth={1000}
+          getRowKey={(r) => r.vendorId}
+          emptyMessage="No suppliers with payment allocation data found."
+          onRowClick={(r) => onAllocate(r.vendorId)}
+        />
+      </AccountsTableScroll>
+      {visible.length > 0 && (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </>
+  );
+}
+
+function PaymentAllocationToolbar({
+  search,
+  onSearchChange,
+  exportMeta,
+  exporting,
+  onExportingChange,
+}: {
+  search: string;
+  onSearchChange: (v: string) => void;
+  exportMeta: Parameters<typeof exportPaymentAllocationToExcel>[1];
+  exporting: boolean;
+  onExportingChange: (v: boolean) => void;
+}) {
+  const visible = useAccountsFilteredRows<PaymentAllocationVendorRow>([]);
+
+  const handleExportExcel = useCallback(async () => {
+    onExportingChange(true);
+    try {
+      await exportPaymentAllocationToExcel(visible, exportMeta);
+    } finally {
+      onExportingChange(false);
+    }
+  }, [visible, exportMeta, onExportingChange]);
+
+  const handleExportPdf = useCallback(() => {
+    exportPaymentAllocationToPdf(visible, exportMeta);
+  }, [visible, exportMeta]);
+
+  return (
+    <AccountsTableToolbar
+      search={{ value: search, onChange: onSearchChange, placeholder: "Search supplier…" }}
+      onExcel={handleExportExcel}
+      onPdf={handleExportPdf}
+      exportDisabled={exporting || visible.length === 0}
+    />
+  );
+}
+
 export default function PaymentAllocationClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -315,7 +492,7 @@ export default function PaymentAllocationClient() {
 
   const filterOptions = useMemo(() => getPayablesFilterOptions(), [refreshKey]);
 
-  const rows = useMemo(() => {
+  const toolbarFiltered = useMemo(() => {
     return computePaymentAllocationVendors(defaultAsOnDate(), {
       vendorId: vendorId === "all" ? undefined : Number(vendorId),
       status: allocationStatus,
@@ -324,10 +501,10 @@ export default function PaymentAllocationClient() {
     });
   }, [financialYearId, vendorId, allocationStatus, search, refreshKey]);
 
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [rows, page, pageSize]);
+  const getCellValue = useCallback(
+    (row: PaymentAllocationVendorRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
   const exportMeta = useMemo(() => {
     const fy =
@@ -348,78 +525,6 @@ export default function PaymentAllocationClient() {
       search,
     };
   }, [financialYearId, vendorId, allocationStatus, search, filterOptions.vendors]);
-
-  const handleExportExcel = useCallback(async () => {
-    setExporting(true);
-    try {
-      await exportPaymentAllocationToExcel(rows, exportMeta);
-    } finally {
-      setExporting(false);
-    }
-  }, [rows, exportMeta]);
-
-  const handleExportPdf = useCallback(() => {
-    exportPaymentAllocationToPdf(rows, exportMeta);
-  }, [rows, exportMeta]);
-
-  const columns = useMemo((): AccountsRichColumnDef<PaymentAllocationVendorRow>[] => [
-    {
-      key: "vendorName",
-      label: "Supplier",
-      render: (r) => <span className="text-xs font-medium">{r.vendorName}</span>,
-    },
-    {
-      key: "vendorCode",
-      label: "Supplier Code",
-      render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.vendorCode}</span>,
-    },
-    {
-      key: "totalOutstanding",
-      label: "Total Outstanding",
-      align: "right",
-      render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.totalOutstanding)}</span>,
-    },
-    {
-      key: "totalPaymentAvailable",
-      label: "Payment Available",
-      align: "right",
-      render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.totalPaymentAvailable)}</span>,
-    },
-    {
-      key: "unallocatedBalance",
-      label: "Unallocated Balance",
-      align: "right",
-      render: (r) => (
-        <span className={cn(MONEY_CELL_CLASS, "font-semibold text-foreground")}>
-          {formatMoney(r.unallocatedBalance)}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (r) => <StatusBadge status={r.status} />,
-    },
-    {
-      key: "action",
-      label: "Action",
-      align: "right",
-      uppercase: false,
-      render: (r) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-sm text-brand-700"
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveVendorId(r.vendorId);
-          }}
-        >
-          Allocate
-        </Button>
-      ),
-    },
-  ], []);
 
   if (activeVendorId && Number.isFinite(activeVendorId)) {
     return (
@@ -446,66 +551,69 @@ export default function PaymentAllocationClient() {
   }
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Payables", "Payment Allocation")}
-      title="Payment Allocation"
-      description="Select a supplier to allocate unallocated payment vouchers against open purchase invoices."
-      filters={
-        <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
-          <div className="space-y-1 min-w-[160px]">
-            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
-              Payment Status
-            </Label>
-            <Select
-              value={allocationStatus}
-              onValueChange={(v) => setAllocationStatus(v as PaymentAllocationStatus | "all")}
-            >
-              <SelectTrigger className="h-9 text-sm font-medium mt-0 w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ALLOCATION_STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </ReportFilterRow>
-      }
-      layout="split"
-      className="h-full min-h-0"
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={{
+        vendorName: { type: "text" },
+        vendorCode: { type: "text" },
+        totalOutstanding: { type: "amount" },
+        totalPaymentAvailable: { type: "amount" },
+        unallocatedBalance: { type: "amount" },
+      }}
+      defaultSortKey="unallocatedBalance"
+      defaultSortDir="desc"
     >
-      <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableToolbar
-          search={{ value: search, onChange: setSearch, placeholder: "Search supplier…" }}
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          exportDisabled={exporting || rows.length === 0}
-        />
-        <AccountsTableScroll>
-          <AccountsRichTable
-            columns={columns}
-            rows={pagedRows}
-            minWidth={1000}
-            getRowKey={(r) => r.vendorId}
-            emptyMessage="No suppliers with payment allocation data found."
-            onRowClick={(r) => setActiveVendorId(r.vendorId)}
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Payables", "Payment Allocation")}
+        title="Payment Allocation"
+        description="Select a supplier to allocate unallocated payment vouchers against open purchase invoices."
+        filters={
+          <ReportFilterRow>
+            <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
+            <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
+            <div className="space-y-1 min-w-[160px]">
+              <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
+                Payment Status
+              </Label>
+              <Select
+                value={allocationStatus}
+                onValueChange={(v) => setAllocationStatus(v as PaymentAllocationStatus | "all")}
+              >
+                <SelectTrigger className="h-9 text-sm font-medium mt-0 w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ALLOCATION_STATUS_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </ReportFilterRow>
+        }
+        layout="split"
+        className="h-full min-h-0"
+      >
+        <div className="flex flex-col flex-1 min-h-0">
+          <PaymentAllocationToolbar
+            search={search}
+            onSearchChange={setSearch}
+            exportMeta={exportMeta}
+            exporting={exporting}
+            onExportingChange={setExporting}
           />
-        </AccountsTableScroll>
-        {rows.length > 0 && (
-          <AccountsTablePagination
+          <PaymentAllocationTable
             page={page}
             pageSize={pageSize}
-            totalRecords={rows.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
+            onAllocate={setActiveVendorId}
           />
-        )}
-      </div>
-    </AccountsPageShell>
+        </div>
+      </AccountsPageShell>
+    </AccountsColumnFilterProvider>
   );
 }

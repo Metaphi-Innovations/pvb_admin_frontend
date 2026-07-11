@@ -6,6 +6,7 @@ import {
   markInvoiceSent,
   saveInvoices,
 } from "@/app/(app)/accounts/invoices/invoices-data";
+import { resolveWorkflowStatus } from "@/lib/accounts/accounts-maker-checker";
 import { salesInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { resolveInvoiceDocumentType } from "@/lib/accounts/invoice-type";
@@ -23,6 +24,7 @@ export default function SalesInvoicesPageClient() {
         description: "Create and post sales tax invoices with ledger impact.",
         showInvoiceTypeColumn: true,
         invoiceListingMode: true,
+        dataRefreshScope: "sales-invoices",
         loadData: loadInvoices,
         newHref: "/accounts/transactions/invoices/new",
         editHref: (id) => `/accounts/transactions/invoices/${id}/edit`,
@@ -32,7 +34,7 @@ export default function SalesInvoicesPageClient() {
           saveInvoices(next);
         },
         canPost: (r) => r.status === "draft",
-        canEdit: (r) => r.status === "draft",
+        canEdit: (r) => r.status === "draft" || r.status === "sent_back",
         canDelete: (r) => r.status === "draft",
         getRow: (inv) => {
           const gst = getInvoiceGstBreakup(inv);
@@ -52,7 +54,9 @@ export default function SalesInvoicesPageClient() {
             sgst: formatted.sgst,
             igst: formatted.igst,
             invoiceTotal: formatted.invoiceTotal,
-            status: inv.invoiceStatus,
+            status: resolveWorkflowStatus(inv.workflow, inv.invoiceStatus),
+            branch: inv.branch,
+            warehouse: inv.warehouse,
             viewHref: `/accounts/transactions/invoices/${inv.id}`,
             viewFields: [
               { label: "Taxable Value", value: formatted.taxableValue },

@@ -1,384 +1,957 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { useRouter } from "next/navigation";
+
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+
 import {
+
   computeInvoiceOutstanding,
-  getReceivableStatusLabel,
+
   type InvoiceOutstandingRow,
+
   type ReceivableStatus,
+
 } from "@/lib/accounts/receivables-data";
+
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
+
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
-import { StatusBadge, SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+
 import {
+
+  AccountsColumnFilterProvider,
+
+  useAccountsColumnFilterContext,
+
+  useAccountsFilteredRows,
+
+} from "@/app/(app)/accounts/components/AccountsUI";
+
+import {
+
   ReportFilterRow,
+
   ReportDateRangeFilter,
-  ReportCustomerFilter,
+
+  ReportCustomerMultiFilter,
+
+  ReportBranchMultiFilter,
+
+  ReportSalespersonMultiFilter,
+
+  ReportStatusMultiFilter,
+
+  ReportMoreFilters,
+
+  ReportFilterSummary,
+
   ReportSearchFilter,
+
+  ReportFilterResetButton,
+
+  ReportAsOnDateFilter,
+
   useReportDateRange,
+
 } from "@/components/accounts/ReportFilters";
+
+import { resetReportDateRange } from "@/lib/accounts/use-accounts-listing-reset";
+
 import {
+
+  buildBranchFilterSummary,
+
+  buildEntityFilterSummary,
+
+  countActiveMoreFilters,
+
+  formatMultiSelectLabel,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
+import { receivableStatusToBadge } from "@/lib/accounts/accounts-status-badges";
+
+import {
+
   AccountsRichTable,
+
   type AccountsRichColumnDef,
+
 } from "@/components/accounts/AccountsTable";
+
 import {
+
   AccountsTablePagination,
+
   AccountsTableListing,
+
 } from "@/components/accounts/AccountsTableListing";
+
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+
 import { cn } from "@/lib/utils";
+
 import {
+
   exportReceivablesToExcel,
+
   exportReceivablesToPdf,
+
   formatExportAmount,
+
   formatExportStatus,
+
 } from "../receivables-export";
 
-type SortKey =
-  | "customerName"
-  | "customerCode"
-  | "invoiceNo"
-  | "invoiceDate"
-  | "dueDate"
-  | "invoiceAmount"
-  | "receivedAmount"
-  | "outstandingAmount"
-  | "overdueDays"
-  | "status";
+const PAYMENT_STATUS_OPTIONS: { value: ReceivableStatus; label: string }[] = [
 
-const PAYMENT_STATUS_OPTIONS: { value: ReceivableStatus | "all"; label: string }[] = [
-  { value: "all", label: "All statuses" },
   { value: "paid", label: "Paid" },
+
   { value: "partially_paid", label: "Partially Received" },
+
   { value: "unpaid", label: "Pending" },
+
   { value: "overdue", label: "Overdue" },
+
 ];
 
 function formatReportDate(value: string): string {
+
   if (!value || value === "—") return "—";
+
   const [y, m, d] = value.slice(0, 10).split("-");
+
   if (!y || !m || !d) return value;
+
   return `${d}-${m}-${y}`;
+
 }
 
 function AmountCell({ amount, className }: { amount: number; className?: string }) {
+
   return (
+
     <span className={cn("inline-block whitespace-nowrap tabular-nums", MONEY_CELL_CLASS, className)}>
+
       ₹{formatMoneyNumber(amount)}
+
     </span>
+
   );
+
 }
 
-export default function CustomerOutstandingClient() {
-  const router = useRouter();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [customerId, setCustomerId] = useState("all");
-  const [paymentStatus, setPaymentStatus] = useState<ReceivableStatus | "all">("all");
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("invoiceDate");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const asOnDate = defaultAsOnDate();
+const COLUMNS: AccountsRichColumnDef<InvoiceOutstandingRow>[] = [
 
-  const sectionRefresh = useAccountsSectionRefresh();
+  {
 
-  useEffect(() => {
-    setPage(1);
-  }, [dateFrom, dateTo, customerId, paymentStatus, search, pageSize]);
+    key: "customerName",
 
-  const customers = useMemo(() => loadCustomers(), []);
+    label: "Customer",
 
-  const rows = useMemo(() => {
-    const data = computeInvoiceOutstanding(asOnDate, {
-      customerId: customerId === "all" ? undefined : Number(customerId),
-      status: paymentStatus,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      search,
-    });
+    filterType: "text",
 
-    const sorted = [...data].sort((a, b) => {
-      const dir = sortDir === "asc" ? 1 : -1;
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-      return String(av).localeCompare(String(bv)) * dir;
-    });
-    return sorted;
-  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, search, sortKey, sortDir, sectionRefresh]);
+    render: (r) => (
 
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [rows, page, pageSize]);
+      <span className="text-xs font-medium leading-snug line-clamp-2" title={r.customerName}>
 
-  const handleSort = (key: string) => {
-    const k = key as SortKey;
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("asc");
-    }
+        {r.customerName}
+
+      </span>
+
+    ),
+
+  },
+
+  {
+
+    key: "customerCode",
+
+    label: "Customer Code",
+
+    filterType: "text",
+
+    render: (r) => (
+
+      <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{r.customerCode}</span>
+
+    ),
+
+  },
+
+  {
+
+    key: "gstin",
+
+    label: "GSTIN",
+
+    filterType: "text",
+
+    sortable: false,
+
+    render: (r) => <span className="text-xs font-mono whitespace-nowrap">{r.gstin}</span>,
+
+  },
+
+  {
+
+    key: "invoiceNo",
+
+    label: "Invoice No.",
+
+    filterType: "text",
+
+    render: (r) => (
+
+      <span className="text-xs font-mono font-semibold text-brand-700 whitespace-nowrap">{r.invoiceNo}</span>
+
+    ),
+
+  },
+
+  {
+
+    key: "invoiceDate",
+
+    label: "Invoice Date",
+
+    filterType: "date",
+
+    render: (r) => (
+
+      <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
+
+        {formatReportDate(r.invoiceDate)}
+
+      </span>
+
+    ),
+
+  },
+
+  {
+
+    key: "dueDate",
+
+    label: "Due Date",
+
+    filterType: "date",
+
+    render: (r) => (
+
+      <span className="text-xs whitespace-nowrap tabular-nums">{formatReportDate(r.dueDate)}</span>
+
+    ),
+
+  },
+
+  {
+
+    key: "invoiceAmount",
+
+    label: "Invoice Amount",
+
+    align: "right",
+
+    filterType: "amount",
+
+    render: (r) => <AmountCell amount={r.invoiceAmount} />,
+
+  },
+
+  {
+
+    key: "receivedAmount",
+
+    label: "Received Amount",
+
+    align: "right",
+
+    filterType: "amount",
+
+    render: (r) => <AmountCell amount={r.receivedAmount} />,
+
+  },
+
+  {
+
+    key: "outstandingAmount",
+
+    label: "Outstanding Amount",
+
+    align: "right",
+
+    filterType: "amount",
+
+    render: (r) => <AmountCell amount={r.outstandingAmount} className="font-semibold" />,
+
+  },
+
+  {
+
+    key: "status",
+
+    label: "Status",
+
+    filterType: "status",
+
+    sortable: false,
+
+    render: (r) => {
+
+      const badge = receivableStatusToBadge(r.status);
+
+      return <StatusBadge status={badge.status} label={badge.label} size="sm" />;
+
+    },
+
+  },
+
+  {
+
+    key: "overdueDays",
+
+    label: "Overdue Days",
+
+    align: "center",
+
+    filterType: "number",
+
+    render: (r) => (
+
+      <span
+
+        className={cn(
+
+          "text-xs tabular-nums",
+
+          r.overdueDays > 0 && r.outstandingAmount > 0 ? "text-red-600 font-semibold" : "text-muted-foreground",
+
+        )}
+
+      >
+
+        {r.outstandingAmount > 0 ? r.overdueDays : "—"}
+
+      </span>
+
+    ),
+
+  },
+
+];
+
+function OutstandingExport({
+
+  exportMeta,
+
+}: {
+
+  exportMeta: {
+
+    reportName: string;
+
+    dateFrom: string;
+
+    dateTo: string;
+
+    customer: string;
+
+    branch: string;
+
+    status: string;
+
+    search: string;
+
   };
 
-  const exportMeta = useMemo(
-    () => ({
-      reportName: "Customer Outstanding",
-      dateFrom,
-      dateTo,
-      customer:
-        customerId === "all"
-          ? "All customers"
-          : customers.find((c) => String(c.id) === customerId)?.customerName ?? "—",
-      status:
-        paymentStatus === "all"
-          ? "All statuses"
-          : PAYMENT_STATUS_OPTIONS.find((o) => o.value === paymentStatus)?.label ?? "—",
-      search,
-    }),
-    [dateFrom, dateTo, customerId, customers, paymentStatus, search],
-  );
+}) {
+
+  const visible = useAccountsFilteredRows<InvoiceOutstandingRow>([]);
 
   const handleExcel = () => {
+
     void exportReceivablesToExcel(
-      rows.map((r) => ({
+
+      visible.map((r) => ({
+
         Customer: r.customerName,
+
         "Customer Code": r.customerCode,
+
         GSTIN: r.gstin,
+
         "Invoice No.": r.invoiceNo,
+
         "Invoice Date": r.invoiceDate,
+
         "Due Date": r.dueDate,
+
         "Invoice Amount": formatExportAmount(r.invoiceAmount),
+
         "Received Amount": formatExportAmount(r.receivedAmount),
+
         "Outstanding Amount": formatExportAmount(r.outstandingAmount),
+
         "Overdue Days": r.outstandingAmount > 0 ? r.overdueDays : 0,
+
         Status: formatExportStatus(r.status),
+
       })),
+
       exportMeta,
+
       "customer_outstanding",
+
     );
+
   };
 
   const handlePdf = () => {
+
     exportReceivablesToPdf(
+
       [
+
         "Customer",
+
         "Code",
+
         "Invoice No.",
+
         "Invoice Date",
+
         "Due Date",
+
         "Invoice Amt",
+
         "Received",
+
         "Outstanding",
+
         "Overdue Days",
+
         "Status",
+
       ],
-      rows.map((r) => [
+
+      visible.map((r) => [
+
         r.customerName,
+
         r.customerCode,
+
         r.invoiceNo,
+
         formatReportDate(r.invoiceDate),
+
         formatReportDate(r.dueDate),
+
         formatExportAmount(r.invoiceAmount),
+
         formatExportAmount(r.receivedAmount),
+
         formatExportAmount(r.outstandingAmount),
+
         String(r.outstandingAmount > 0 ? r.overdueDays : 0),
+
         formatExportStatus(r.status),
+
       ]),
+
       exportMeta,
+
     );
+
   };
 
-  const columns = useMemo((): AccountsRichColumnDef<InvoiceOutstandingRow>[] => {
-    const sortHeader = (
-      key: SortKey,
-      label: string,
-      align: "left" | "right" | "center" = "left",
-    ) => (
-      <SortTh
-        label={label}
-        colKey={key}
-        sortKey={sortKey}
-        sortDir={sortDir}
-        onSort={handleSort}
-        align={align}
-      />
-    );
+  return <AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={visible.length === 0} />;
 
-    return [
-      {
-        key: "customerName",
-        label: "Customer",
-        header: sortHeader("customerName", "Customer"),
-        render: (r) => (
-          <span className="text-xs font-medium leading-snug line-clamp-2" title={r.customerName}>
-            {r.customerName}
-          </span>
-        ),
-      },
-      {
-        key: "customerCode",
-        label: "Customer Code",
-        header: sortHeader("customerCode", "Customer Code"),
-        render: (r) => (
-          <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
-            {r.customerCode}
-          </span>
-        ),
-      },
-      {
-        key: "gstin",
-        label: "GSTIN",
-        render: (r) => <span className="text-xs font-mono whitespace-nowrap">{r.gstin}</span>,
-      },
-      {
-        key: "invoiceNo",
-        label: "Invoice No.",
-        header: sortHeader("invoiceNo", "Invoice No."),
-        render: (r) => (
-          <span className="text-xs font-mono font-semibold text-brand-700 whitespace-nowrap">
-            {r.invoiceNo}
-          </span>
-        ),
-      },
-      {
-        key: "invoiceDate",
-        label: "Invoice Date",
-        header: sortHeader("invoiceDate", "Invoice Date"),
-        render: (r) => (
-          <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
-            {formatReportDate(r.invoiceDate)}
-          </span>
-        ),
-      },
-      {
-        key: "dueDate",
-        label: "Due Date",
-        header: sortHeader("dueDate", "Due Date"),
-        render: (r) => (
-          <span className="text-xs whitespace-nowrap tabular-nums">{formatReportDate(r.dueDate)}</span>
-        ),
-      },
-      {
-        key: "invoiceAmount",
-        label: "Invoice Amount",
-        align: "right",
-        header: sortHeader("invoiceAmount", "Invoice Amount", "right"),
-        render: (r) => <AmountCell amount={r.invoiceAmount} />,
-      },
-      {
-        key: "receivedAmount",
-        label: "Received Amount",
-        align: "right",
-        header: sortHeader("receivedAmount", "Received Amount", "right"),
-        render: (r) => <AmountCell amount={r.receivedAmount} />,
-      },
-      {
-        key: "outstandingAmount",
-        label: "Outstanding Amount",
-        align: "right",
-        header: sortHeader("outstandingAmount", "Outstanding Amount", "right"),
-        render: (r) => <AmountCell amount={r.outstandingAmount} className="font-semibold" />,
-      },
-      {
-        key: "overdueDays",
-        label: "Overdue Days",
-        align: "center",
-        header: sortHeader("overdueDays", "Overdue Days", "center"),
-        render: (r) => (
-          <span
-            className={cn(
-              "text-xs tabular-nums",
-              r.overdueDays > 0 && r.outstandingAmount > 0 ? "text-red-600 font-semibold" : "text-muted-foreground",
-            )}
-          >
-            {r.outstandingAmount > 0 ? r.overdueDays : "—"}
-          </span>
-        ),
-      },
-      {
-        key: "status",
-        label: "Status",
-        header: sortHeader("status", "Status"),
-        render: (r) => <StatusBadge status={r.status} />,
-      },
-    ];
-  }, [sortKey, sortDir]);
+}
+
+function CustomerOutstandingTable({
+
+  page,
+
+  pageSize,
+
+  onPageChange,
+
+  onPageSizeChange,
+
+  emptyMessage,
+
+  hasFilters,
+
+  onClearFilters,
+
+}: {
+
+  page: number;
+
+  pageSize: number;
+
+  onPageChange: (p: number) => void;
+
+  onPageSizeChange: (s: number) => void;
+
+  emptyMessage: string;
+
+  hasFilters: boolean;
+
+  onClearFilters: () => void;
+
+}) {
+
+  const router = useRouter();
+
+  const ctx = useAccountsColumnFilterContext();
+
+  const visible = useAccountsFilteredRows<InvoiceOutstandingRow>([]);
+
+  const pagedRows = useMemo(
+
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+
+    [visible, page, pageSize],
+
+  );
+
+  useEffect(() => {
+
+    onPageChange(1);
+
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding")}
-      title="Customer Outstanding"
-      description="Invoice-wise pending receivables from posted sales invoices."
-      hideDescription
-      filters={
-        <ReportFilterRow
-          end={
-            <AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={rows.length === 0} />
-          }
-        >
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
+
+    <AccountsTableListing
+
+      footer={
+
+        visible.length > 0 ? (
+
+          <AccountsTablePagination
+
+            page={page}
+
+            pageSize={pageSize}
+
+            totalRecords={visible.length}
+
+            onPageChange={onPageChange}
+
+            onPageSizeChange={onPageSizeChange}
+
           />
-          <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
-          <div className="space-y-1 min-w-[150px]">
-            <label className="text-xs font-medium uppercase text-muted-foreground leading-none">
-              Payment Status
-            </label>
-            <select
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as ReceivableStatus | "all")}
-              className="h-7 w-full text-sm mt-0 rounded-md border border-border bg-white px-2"
-            >
-              {PAYMENT_STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search invoice, customer…" />
-        </ReportFilterRow>
+
+        ) : null
+
       }
-      layout="split"
-      className="h-full min-h-0"
+
     >
-      <AccountsTableListing
-        footer={
-          rows.length > 0 ? (
-            <AccountsTablePagination
-              page={page}
-              pageSize={pageSize}
-              totalRecords={rows.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-            />
-          ) : null
+
+      <AccountsRichTable
+
+        columns={COLUMNS}
+
+        rows={pagedRows}
+
+        minWidth={1280}
+
+        getRowKey={(r) => r.invoiceId}
+
+        emptyMessage={emptyMessage}
+
+        emptyAction={
+
+          hasFilters ? (
+
+            <button type="button" className="text-xs text-brand-600 hover:underline mt-1" onClick={onClearFilters}>
+
+              Clear filters
+
+            </button>
+
+          ) : undefined
+
         }
-      >
-        <AccountsRichTable
-          columns={columns}
-          rows={pagedRows}
-          minWidth={1280}
-          getRowKey={(r) => r.invoiceId}
-          emptyMessage="No records found."
-          onRowClick={(r) =>
-            router.push(`/accounts/receivables/outstanding/invoice/${r.invoiceId}`)
-          }
-        />
-      </AccountsTableListing>
-    </AccountsPageShell>
+
+        onRowClick={(r) => router.push(`/accounts/receivables/outstanding/invoice/${r.invoiceId}`)}
+
+      />
+
+    </AccountsTableListing>
+
   );
+
 }
+
+export default function CustomerOutstandingClient() {
+
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+
+  const [branchIds, setBranchIds] = useState<string[]>([]);
+
+  const [customerIds, setCustomerIds] = useState<string[]>([]);
+
+  const [salespersonIds, setSalespersonIds] = useState<string[]>([]);
+
+  const [statuses, setStatuses] = useState<string[]>([]);
+
+  const [search, setSearch] = useState("");
+
+  const [page, setPage] = useState(1);
+
+  const [pageSize, setPageSize] = useState(25);
+
+  const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
+
+  const sectionRefresh = useAccountsSectionRefresh("receivables");
+
+  useEffect(() => {
+
+    setPage(1);
+
+  }, [dateFrom, dateTo, branchIds, customerIds, salespersonIds, statuses, search, pageSize, asOnDate]);
+
+  const customers = useMemo(() => loadCustomers(), []);
+
+  const customerSelectOptions = useMemo(
+
+    () => customers.map((c) => ({ value: String(c.id), label: c.customerName })),
+
+    [customers],
+
+  );
+
+  const salespeople = useMemo(() => {
+
+    const names = new Set<string>();
+
+    for (const c of customers) {
+
+      if (c.salesManName?.trim()) names.add(c.salesManName.trim());
+
+    }
+
+    return [...names].sort((a, b) => a.localeCompare(b));
+
+  }, [customers]);
+
+  const salespersonSelectOptions = useMemo(
+
+    () => salespeople.map((name) => ({ value: name, label: name })),
+
+    [salespeople],
+
+  );
+
+  const moreFiltersActive = countActiveMoreFilters({ status: statuses });
+
+  const toolbarFiltered = useMemo(
+
+    () =>
+
+      computeInvoiceOutstanding(asOnDate, {
+
+        customerIds,
+
+        branch: branchIds,
+
+        salespersons: salespersonIds,
+
+        statuses,
+
+        dateFrom: dateFrom || undefined,
+
+        dateTo: dateTo || undefined,
+
+        search,
+
+      }),
+
+    [asOnDate, branchIds, customerIds, salespersonIds, statuses, dateFrom, dateTo, search, sectionRefresh],
+
+  );
+
+  const hasToolbarFilters =
+
+    search.trim() !== "" ||
+
+    branchIds.length > 0 ||
+
+    customerIds.length > 0 ||
+
+    salespersonIds.length > 0 ||
+
+    statuses.length > 0 ||
+
+    preset !== "this_month";
+
+  const clearToolbarFilters = () => {
+
+    setSearch("");
+
+    setBranchIds([]);
+
+    setCustomerIds([]);
+
+    setSalespersonIds([]);
+
+    setStatuses([]);
+
+    resetReportDateRange(setPreset, setDateFrom, setDateTo, "this_month");
+
+  };
+
+  const emptyMessage = hasToolbarFilters
+
+    ? "No invoices match the selected filters."
+
+    : "No outstanding customer invoices found.";
+
+  const getCellValue = useCallback((row: InvoiceOutstandingRow, key: string) => {
+
+    if (key === "overdueDays") {
+
+      return row.outstandingAmount > 0 ? row.overdueDays : 0;
+
+    }
+
+    if (key === "status") return row.status;
+
+    return (row as unknown as Record<string, unknown>)[key];
+
+  }, []);
+
+  const exportMeta = useMemo(
+
+    () => ({
+
+      reportName: "Customer Outstanding",
+
+      dateFrom,
+
+      dateTo,
+
+      customer: formatMultiSelectLabel(customerIds, customerSelectOptions, "Customer", "All customers"),
+
+      branch:
+
+        branchIds.length === 0
+
+          ? "All branches"
+
+          : branchIds.length === 1
+
+            ? branchIds[0]
+
+            : `${branchIds.length} branches`,
+
+      status:
+
+        statuses.length === 0
+
+          ? "All statuses"
+
+          : formatMultiSelectLabel(statuses, PAYMENT_STATUS_OPTIONS, "Status"),
+
+      search,
+
+    }),
+
+    [dateFrom, dateTo, customerIds, customerSelectOptions, branchIds, statuses, search],
+
+  );
+
+  const filterSummaryItems = useMemo(
+    () =>
+      [
+        buildBranchFilterSummary(branchIds, () => setBranchIds([])),
+        buildEntityFilterSummary(
+          "customer",
+          "Customers",
+          customerIds,
+          customerSelectOptions,
+          () => setCustomerIds([]),
+        ),
+      ].filter((item): item is ReportFilterSummaryItem => item != null),
+    [branchIds, customerIds, customerSelectOptions],
+  );
+
+  return (
+
+    <AccountsColumnFilterProvider
+
+      rows={toolbarFiltered}
+
+      getCellValue={getCellValue}
+
+      columnConfig={{
+
+        customerName: { type: "text" },
+
+        customerCode: { type: "text" },
+
+        gstin: { type: "text" },
+
+        invoiceNo: { type: "text" },
+
+        invoiceDate: { type: "date" },
+
+        dueDate: { type: "date" },
+
+        invoiceAmount: { type: "amount" },
+
+        receivedAmount: { type: "amount" },
+
+        outstandingAmount: { type: "amount" },
+
+        overdueDays: { type: "number" },
+
+        status: { type: "status" },
+
+      }}
+
+      defaultSortKey="invoiceDate"
+
+      defaultSortDir="desc"
+
+    >
+
+      <AccountsPageShell
+
+        breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding")}
+
+        title="Customer Outstanding"
+
+        description="Invoice-wise pending receivables from posted sales invoices."
+
+        hideDescription
+
+        filters={
+
+          <>
+
+            <ReportFilterRow end={<OutstandingExport exportMeta={exportMeta} />}>
+
+              <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search invoice, customer…" />
+
+              <ReportBranchMultiFilter values={branchIds} onChange={setBranchIds} />
+
+              <ReportCustomerMultiFilter
+
+                values={customerIds}
+
+                onChange={setCustomerIds}
+
+                customers={customers}
+
+              />
+
+              <ReportSalespersonMultiFilter
+
+                values={salespersonIds}
+
+                onChange={setSalespersonIds}
+
+                salespeople={salespeople}
+
+              />
+
+              <ReportDateRangeFilter
+
+                preset={preset}
+
+                dateFrom={dateFrom}
+
+                dateTo={dateTo}
+
+                onPresetChange={setPreset}
+
+                onDateFromChange={setDateFrom}
+
+                onDateToChange={setDateTo}
+
+              />
+
+              <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+
+              <ReportMoreFilters activeCount={moreFiltersActive}>
+
+                <ReportStatusMultiFilter
+
+                  values={statuses}
+
+                  onChange={setStatuses}
+
+                  options={PAYMENT_STATUS_OPTIONS}
+
+                  label="Payment Status"
+
+                />
+
+              </ReportMoreFilters>
+
+              <ReportFilterResetButton
+
+                showOnlyWhenActive
+
+                active={hasToolbarFilters}
+
+                onClick={clearToolbarFilters}
+
+              />
+
+            </ReportFilterRow>
+
+            <ReportFilterSummary items={filterSummaryItems} />
+
+          </>
+
+        }
+
+        layout="split"
+
+        className="h-full min-h-0"
+
+      >
+
+        <CustomerOutstandingTable
+
+          page={page}
+
+          pageSize={pageSize}
+
+          onPageChange={setPage}
+
+          onPageSizeChange={setPageSize}
+
+          emptyMessage={emptyMessage}
+
+          hasFilters={hasToolbarFilters}
+
+          onClearFilters={clearToolbarFilters}
+
+        />
+
+      </AccountsPageShell>
+
+    </AccountsColumnFilterProvider>
+
+  );
+
+}
+

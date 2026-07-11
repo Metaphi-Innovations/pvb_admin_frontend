@@ -10,6 +10,7 @@ const bootstrappedSections = new Set<AccountsNavGroupId>();
 const inflightSections = new Set<AccountsNavGroupId>();
 
 export const ACCOUNTS_SECTION_SEEDED_EVENT = "ds-accounts-section-seeded";
+export const ACCOUNTS_VOUCHERS_UPDATED_EVENT = "ds-accounts-vouchers-updated";
 
 export function isAccountsSectionBootstrapped(groupId: AccountsNavGroupId): boolean {
   return bootstrappedSections.has(groupId);
@@ -22,19 +23,24 @@ export function scheduleAccountsSectionSeed(groupId: AccountsNavGroupId): void {
 
   if (isAccountsSectionStored(groupId)) {
     bootstrappedSections.add(groupId);
-    if (typeof window !== "undefined") {
+    const dispatch = () => {
       window.dispatchEvent(
         new CustomEvent(ACCOUNTS_SECTION_SEEDED_EVENT, { detail: { groupId } }),
       );
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(dispatch, { timeout: 500 });
+    } else {
+      window.setTimeout(dispatch, 0);
     }
     return;
   }
 
   const run = () => ensureAccountsSectionData(groupId);
   if (typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(run, { timeout: 4000 });
+    window.requestIdleCallback(run, { timeout: 10000 });
   } else {
-    window.setTimeout(run, 50);
+    window.setTimeout(run, 200);
   }
 }
 
@@ -56,11 +62,7 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
   switch (groupId) {
     case "coa":
       void import("./accounts-demo-seed")
-        .then((m) => {
-          m.seedCoaSectionDemoData();
-          return import("./gst-coa-sync");
-        })
-        .then((m) => m.syncGstCoaFromMaster())
+        .then((m) => m.seedCoaSectionDemoData())
         .then(finish)
         .catch((err) => {
           inflightSections.delete(groupId);

@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Lock } from "lucide-react";
+import React, { useCallback, useEffect, useMemo } from "react";
+import { BookOpen, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -10,18 +10,30 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-import { isStructuralNode } from "@/lib/accounts/coa-hierarchy";
+import { isStructuralNode, isPostableNode } from "@/lib/accounts/coa-hierarchy";
+import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
 import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import type { ChartOfAccount } from "../../../data";
-import { canAddLedgerUnder } from "../chart-of-accounts-data";
+import {
+  canAddLedgerUnder,
+  canAddSubGroupUnder,
+  canDeleteGroup,
+  canEditGroup,
+} from "../chart-of-accounts-data";
 import type { CoaLedgerListingRow, CoaListingRow } from "../coa-listing-data";
-import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
-import { StatusBadge } from "../../../components/AccountsUI";
+import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
+import { CoaHierarchyLevelIcon } from "./CoaLevelBadge";
+import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "../../../components/AccountsUI";
 
 interface CoaHierarchyListingTableProps {
   variant?: "hierarchy";
@@ -32,7 +44,9 @@ interface CoaHierarchyListingTableProps {
   highlightedLedgerId?: number | null;
   isSearchMode?: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: number) => void;
+  onAddSubGroup?: (parentGroupId: number) => void;
+  canEdit?: boolean;
   emptyMessage?: string;
 }
 
@@ -71,14 +85,14 @@ export function CoaListingTable(props: CoaListingTableProps) {
     );
   }
 
-  const { rows, records, canCreate, onAddLedger } = props;
+  const { rows, records, canCreate, canEdit = false, onAddLedger, onAddSubGroup } = props;
 
   if (rows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-6 px-4">
-        <p className="text-xs font-medium text-slate-800">{emptyMessage}</p>
+        <p className="text-xs font-medium text-foreground">{emptyMessage}</p>
         {!isSearchMode && (
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Select a group in the sidebar or clear search to browse accounts.
           </p>
         )}
@@ -87,40 +101,165 @@ export function CoaListingTable(props: CoaListingTableProps) {
   }
 
   return (
+    <CoaHierarchyListingTable
+      rows={rows}
+      records={records}
+      canCreate={canCreate}
+      highlightedLedgerId={highlightedLedgerId}
+      isSearchMode={isSearchMode}
+      onDrillInto={onDrillInto}
+      onAddLedger={onAddLedger}
+      onAddSubGroup={onAddSubGroup}
+      canEdit={canEdit}
+    />
+  );
+}
+
+function CoaHierarchyListingTable({
+  rows,
+  records,
+  canCreate,
+  canEdit = false,
+  highlightedLedgerId,
+  isSearchMode,
+  onDrillInto,
+  onAddLedger,
+  onAddSubGroup,
+}: {
+  rows: CoaListingRow[];
+  records: ChartOfAccount[];
+  canCreate: boolean;
+  canEdit?: boolean;
+  highlightedLedgerId: number | null;
+  isSearchMode: boolean;
+  onDrillInto: (node: ChartOfAccount) => void;
+  onAddLedger?: (parentGroupId: number) => void;
+  onAddSubGroup?: (parentGroupId: number) => void;
+}) {
+  const getCellValue = useCallback((row: CoaListingRow, key: string) => {
+    switch (key) {
+      case "accountCode":
+        return row.node.accountCode;
+      case "accountName":
+        return row.node.accountName;
+      case "parentGroupName":
+        return row.parentGroupName;
+      case "hierarchyPath":
+        return row.hierarchyPath;
+      case "openingAmount":
+        return row.openingAmount;
+      case "periodDebit":
+        return row.periodDebit;
+      case "periodCredit":
+        return row.periodCredit;
+      case "closingAmount":
+        return row.closingAmount;
+      default:
+        return "";
+    }
+  }, []);
+
+  const columnConfig = useMemo(() => {
+    const cfg: Record<string, { type: "text" | "amount" }> = {
+      accountCode: { type: "text" },
+      accountName: { type: "text" },
+      openingAmount: { type: "amount" },
+      periodDebit: { type: "amount" },
+      periodCredit: { type: "amount" },
+      closingAmount: { type: "amount" },
+    };
+    if (isSearchMode) {
+      cfg.parentGroupName = { type: "text" };
+      cfg.hierarchyPath = { type: "text" };
+    }
+    return cfg;
+  }, [isSearchMode]);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="accountCode"
+      defaultSortDir="asc"
+    >
+      <CoaHierarchyTableContent
+        records={records}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        highlightedLedgerId={highlightedLedgerId}
+        isSearchMode={isSearchMode}
+        onDrillInto={onDrillInto}
+        onAddLedger={onAddLedger}
+        onAddSubGroup={onAddSubGroup}
+        minWidth={isSearchMode ? 1080 : 860}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CoaHierarchyTableContent({
+  records,
+  canCreate,
+  highlightedLedgerId,
+  isSearchMode,
+  onDrillInto,
+  onAddLedger,
+  onAddSubGroup,
+  canEdit = false,
+  minWidth,
+}: {
+  records: ChartOfAccount[];
+  canCreate: boolean;
+  canEdit?: boolean;
+  highlightedLedgerId: number | null;
+  isSearchMode: boolean;
+  onDrillInto: (node: ChartOfAccount) => void;
+  onAddLedger?: (parentGroupId: number) => void;
+  onAddSubGroup?: (parentGroupId: number) => void;
+  minWidth: number;
+}) {
+  const visible = useAccountsFilteredRows<CoaListingRow>([]);
+
+  return (
     <AccountsTableScroll>
-      <AccountsTable minWidth={isSearchMode ? 1080 : 860}>
+      <AccountsTable minWidth={minWidth}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            <AccountsTableHeadCell className="w-28">Ledger Code</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[200px]">Ledger Name</AccountsTableHeadCell>
+            <SortTh label="Ledger Code" colKey="accountCode" className="w-28" />
+            <SortTh label="Ledger Name" colKey="accountName" className="min-w-[200px]" />
             {isSearchMode && (
               <>
-                <AccountsTableHeadCell className="min-w-[160px]">Parent Group</AccountsTableHeadCell>
-                <AccountsTableHeadCell className="min-w-[220px]">Hierarchy Path</AccountsTableHeadCell>
+                <SortTh label="Parent Group" colKey="parentGroupName" className="min-w-[160px]" />
+                <SortTh label="Hierarchy Path" colKey="hierarchyPath" className="min-w-[220px]" />
               </>
             )}
-            <AccountsTableHeadCell align="right" className="w-36">
-              Opening Balance
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-28">
-              Debit
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-28">
-              Credit
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-36">
-              Closing Balance
-            </AccountsTableHeadCell>
+            <SortTh label="Opening Balance" colKey="openingAmount" filterType="amount" align="right" className="w-36" />
+            <SortTh label="Debit" colKey="periodDebit" filterType="amount" align="right" className="w-28" />
+            <SortTh label="Credit" colKey="periodCredit" filterType="amount" align="right" className="w-28" />
+            <SortTh label="Closing Balance" colKey="closingAmount" filterType="amount" align="right" className="w-36" />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {rows.map((row) => {
+          {visible.map((row) => {
             const { node } = row;
             const isLedger = node.nodeLevel === "ledger";
             const isSystemLocked = node.isSystem && isStructuralNode(node);
-            const allowAdd =
-              canCreate && canAddLedgerUnder(node, records) && !resolveCoaAddLedgerPolicy(node, records).blocked;
-            const drillable = row.hasChildren;
+            const allowAddSubGroup =
+              canCreate && onAddSubGroup && canAddSubGroupUnder(node, records);
+            const allowAddLedger =
+              canCreate &&
+              onAddLedger &&
+              canAddLedgerUnder(node, records) &&
+              !resolveCoaAddLedgerPolicy(node, records).blocked;
+            const allowEdit = canEdit && canEditGroup(node);
+            const allowDelete = canEdit && canDeleteGroup(node, records);
+            const isPostableLedger =
+              isLedger &&
+              !node.bankGroupFlag &&
+              !isTdsCoaNode(node, records) &&
+              isPostableNode(node, records);
+            const drillable = row.hasChildren || isPostableLedger;
             const isHighlighted = highlightedLedgerId === node.id;
 
             return (
@@ -137,15 +276,11 @@ export function CoaListingTable(props: CoaListingTableProps) {
                   {node.accountCode}
                 </AccountsTableCell>
                 <AccountsTableCell wrap className="min-w-[200px]">
-                  <div className="flex items-start gap-1 min-w-0">
+                  <div className="flex items-start gap-1.5 min-w-0">
+                    <CoaHierarchyLevelIcon node={node} records={records} className="mt-0.5" />
                     <p
                       className={cn(
                         "flex-1 min-w-0 text-xs leading-snug",
-                        node.nodeLevel === "primary_head"
-                          ? "font-bold text-navy-700"
-                          : isLedger
-                            ? "font-semibold text-foreground"
-                            : "font-semibold text-foreground/90",
                         drillable && "group-hover:text-brand-700",
                       )}
                     >
@@ -154,12 +289,20 @@ export function CoaListingTable(props: CoaListingTableProps) {
                         <Lock className="inline w-3 h-3 ml-1 text-muted-foreground/60" />
                       )}
                     </p>
-                    {allowAdd && (
-                      <CoaAddLedgerHoverAction
-                        onClick={() => onAddLedger(node.id)}
+                    {allowAddSubGroup || allowAddLedger || allowEdit || allowDelete ? (
+                      <CoaNodeHoverActions
+                        compact
+                        showAddSubGroup={allowAddSubGroup}
+                        showAddLedger={allowAddLedger}
+                        showEdit={allowEdit}
+                        showDelete={allowDelete}
+                        onAddSubGroup={() => (onAddSubGroup ?? requestCoaAddSubGroup)(node.id)}
+                        onAddLedger={() => onAddLedger!(node.id)}
+                        onEdit={() => requestCoaEditGroup(node.id)}
+                        onDelete={() => requestCoaDeleteGroup(node.id)}
                         className="mt-0.5"
                       />
-                    )}
+                    ) : null}
                   </div>
                 </AccountsTableCell>
                 {isSearchMode && (
@@ -221,9 +364,9 @@ function CoaLedgerListingTableBody({
   if (ledgerRows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-6 px-4">
-        <p className="text-xs font-medium text-slate-800">{emptyMessage}</p>
+        <p className="text-xs font-medium text-foreground">{emptyMessage}</p>
         {!isSearchMode && (
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Add a ledger under this group or clear search to see all ledgers.
           </p>
         )}
@@ -232,27 +375,92 @@ function CoaLedgerListingTableBody({
   }
 
   return (
+    <CoaLedgerListingTableInner
+      ledgerRows={ledgerRows}
+      highlightedLedgerId={highlightedLedgerId}
+      onSelectLedger={onSelectLedger}
+    />
+  );
+}
+
+function CoaLedgerListingTableInner({
+  ledgerRows,
+  highlightedLedgerId,
+  onSelectLedger,
+}: {
+  ledgerRows: CoaLedgerListingRow[];
+  highlightedLedgerId: number | null;
+  onSelectLedger: (ledger: ChartOfAccount) => void;
+}) {
+  const getCellValue = useCallback((row: CoaLedgerListingRow, key: string) => {
+    switch (key) {
+      case "accountName":
+        return row.ledger.accountName;
+      case "accountCode":
+        return row.ledger.accountCode;
+      case "parentGroupName":
+        return row.parentGroupName;
+      case "source":
+        return row.source;
+      case "openingAmount":
+        return row.openingAmount;
+      case "currentAmount":
+        return row.currentAmount;
+      case "status":
+        return row.ledger.status;
+      default:
+        return "";
+    }
+  }, []);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={ledgerRows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        accountName: { type: "text" },
+        accountCode: { type: "text" },
+        parentGroupName: { type: "text" },
+        source: { type: "text" },
+        openingAmount: { type: "amount" },
+        currentAmount: { type: "amount" },
+      }}
+      defaultSortKey="accountName"
+      defaultSortDir="asc"
+    >
+      <CoaLedgerTableContent
+        highlightedLedgerId={highlightedLedgerId}
+        onSelectLedger={onSelectLedger}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function CoaLedgerTableContent({
+  highlightedLedgerId,
+  onSelectLedger,
+}: {
+  highlightedLedgerId: number | null;
+  onSelectLedger: (ledger: ChartOfAccount) => void;
+}) {
+  const visible = useAccountsFilteredRows<CoaLedgerListingRow>([]);
+
+  return (
     <AccountsTableScroll>
-      <AccountsTable minWidth={980}>
+      <AccountsTable minWidth={1100}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            <AccountsTableHeadCell className="min-w-[200px]">Ledger Name</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="w-28">Ledger Code</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[160px]">Parent Group</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[140px]">Source</AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-36">
-              Opening Balance
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" className="w-36">
-              Current Balance
-            </AccountsTableHeadCell>
-            <AccountsTableHeadCell align="center" className="w-24">
-              Status
-            </AccountsTableHeadCell>
+            <SortTh label="Ledger Name" colKey="accountName" className="min-w-[200px]" />
+            <SortTh label="Ledger Code" colKey="accountCode" className="w-28" />
+            <SortTh label="Parent Group" colKey="parentGroupName" className="min-w-[160px]" />
+            <SortTh label="Source" colKey="source" className="min-w-[140px]" />
+            <SortTh label="Opening Balance" colKey="openingAmount" filterType="amount" align="right" className="w-36" />
+            <SortTh label="Current Balance" colKey="currentAmount" filterType="amount" align="right" className="w-36" />
+            <AccountsColumnHeader label="Actions" colKey="actions" sortable={false} align="right" className="w-36" />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {ledgerRows.map((row) => {
+          {visible.map((row) => {
             const { ledger } = row;
             const isHighlighted = highlightedLedgerId === ledger.id;
 
@@ -266,6 +474,12 @@ function CoaLedgerListingTableBody({
                   <p className="text-xs font-semibold text-foreground leading-snug group-hover:text-brand-700">
                     {ledger.accountName}
                   </p>
+                  {row.tdsSection ? (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Sec {row.tdsSection} · {row.tdsRate} · {row.tdsKind}
+                      {row.tdsDeductee ? ` · ${row.tdsDeductee}` : ""}
+                    </p>
+                  ) : null}
                 </AccountsTableCell>
                 <AccountsTableCell className="font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
                   {ledger.accountCode}
@@ -294,8 +508,11 @@ function CoaLedgerListingTableBody({
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </AccountsTableCell>
-                <AccountsTableCell align="center">
-                  <StatusBadge status={ledger.status} />
+                <AccountsTableCell align="right">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-brand-700 group-hover:bg-brand-50 rounded-md transition-colors">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    View Transactions
+                  </span>
                 </AccountsTableCell>
               </AccountsTableRow>
             );

@@ -110,6 +110,7 @@ function financialYearIdForDate(isoDate: string): number {
 export function salesInvoiceToRegisterRow(inv: InvoiceRecord): RegisterReportRow {
   const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
   const taxPcts = inv.lineItems.map((l) => l.taxPct).filter((n) => n > 0);
+  const customer = inv.customerId != null ? loadCustomers().find((c) => c.id === inv.customerId) : undefined;
 
   return {
     id: inv.id,
@@ -119,6 +120,10 @@ export function salesInvoiceToRegisterRow(inv: InvoiceRecord): RegisterReportRow
     partyName: inv.customerName || "—",
     gstin: inv.customerGst || "—",
     state: customerState(inv.customerId, inv.state ?? inv.placeOfSupply),
+    branch: inv.branch?.trim() || customer?.branch?.trim() || "Head Office",
+    salesperson: inv.salesperson?.trim() || customer?.salesManName?.trim() || "",
+    voucherType: "SI",
+    productNames: inv.lineItems.map((l) => l.productName).filter(Boolean),
     taxableValue,
     gstAmount,
     invoiceTotal,
@@ -142,6 +147,8 @@ export function purchaseInvoiceToRegisterRow(rec: PurchaseInvoiceRecord): Regist
         ? ("cancelled" as const)
         : ("posted" as const);
 
+  const vendor = loadVendors().find((v) => v.id === rec.vendorId);
+
   return {
     id: rec.id,
     invoiceDate: rec.invoiceDate.slice(0, 10),
@@ -150,6 +157,9 @@ export function purchaseInvoiceToRegisterRow(rec: PurchaseInvoiceRecord): Regist
     partyName: rec.vendorName || "—",
     gstin: rec.vendorGst || "—",
     state: vendorState(rec.vendorId, rec.vendorGst),
+    branch: vendor?.billingAddress?.city?.trim() || "Head Office",
+    voucherType: "PI",
+    productNames: rec.lineItems.map((l) => l.productName).filter(Boolean),
     taxableValue,
     gstAmount,
     invoiceTotal,

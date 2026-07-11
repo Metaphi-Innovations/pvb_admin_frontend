@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import {
+  ACCOUNTS_PAGE_SUBTITLE_CLASS,
+  ACCOUNTS_PAGE_TITLE_CLASS,
+} from "@/lib/accounts/accounts-typography";
 
 export function AccountsFormLayout({
   title,
@@ -12,6 +16,7 @@ export function AccountsFormLayout({
   children,
   footer,
   fullWidth = false,
+  onBackClick,
 }: {
   title: string;
   breadcrumb: { label: string; href: string }[];
@@ -20,9 +25,16 @@ export function AccountsFormLayout({
   footer?: React.ReactNode;
   /** When true, form uses full content width (Zoho Books-style documents). */
   fullWidth?: boolean;
+  /** When set, overrides default back navigation (e.g. unsaved-changes guard). */
+  onBackClick?: () => void;
 }) {
   const router = useRouter();
   const backHref = breadcrumb[breadcrumb.length - 1]?.href ?? "/accounts";
+
+  const handleBack = () => {
+    if (onBackClick) onBackClick();
+    else router.push(backHref);
+  };
 
   return (
     <div className="min-h-full bg-background flex flex-col -m-3">
@@ -31,14 +43,14 @@ export function AccountsFormLayout({
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
-                onClick={() => router.push(backHref)}
+                onClick={handleBack}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/70 hover:bg-muted/40"
               >
                 <ArrowLeft className="w-4 h-4 text-muted-foreground" />
               </button>
               <div className="min-w-0">
-                <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>{title}</h1>
+                <p className={`${ACCOUNTS_PAGE_SUBTITLE_CLASS} truncate`}>
                   {breadcrumb.map((b, i) => (
                     <span key={b.href}>
                       {i > 0 && <span className="mx-1">/</span>}

@@ -6,33 +6,46 @@ import { AccountsReportShell } from "@/components/accounts/AccountsReportShell";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportBranchFilter,
+  ReportBranchMultiFilter,
+  ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { BRANCH_REPORT_SEED } from "@/lib/accounts/accounts-mock-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import {
+  buildBranchFilterSummary,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 
 export default function BranchWiseReportPage() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [branch, setBranch] = useState("");
+  const [branches, setBranches] = useState<string[]>([]);
 
-  const rows = useMemo(() => {
-    let list = BRANCH_REPORT_SEED;
-    if (branch.trim()) {
-      const b = branch.toLowerCase();
-      list = list.filter((r) => r.branch.toLowerCase().includes(b));
-    }
-    return list.map((r) => ({
-      branch: r.branch,
-      revenue: formatMoney(r.revenue),
-      expenses: formatMoney(r.expenses),
-      profit: formatMoney(r.revenue - r.expenses),
-      receivables: formatMoney(r.receivables),
-      payables: formatMoney(r.payables),
-    }));
-  }, [branch]);
+  const branchOptions = useMemo(
+    () => BRANCH_REPORT_SEED.map((r) => r.branch).sort(),
+    [],
+  );
 
-  const totals = BRANCH_REPORT_SEED.reduce(
+  const filteredSeed = useMemo(() => {
+    if (!isMultiFilterActive(branches)) return BRANCH_REPORT_SEED;
+    return BRANCH_REPORT_SEED.filter((r) => branches.includes(r.branch));
+  }, [branches]);
+
+  const rows = useMemo(
+    () =>
+      filteredSeed.map((r) => ({
+        branch: r.branch,
+        revenue: formatMoney(r.revenue),
+        expenses: formatMoney(r.expenses),
+        profit: formatMoney(r.revenue - r.expenses),
+        receivables: formatMoney(r.receivables),
+        payables: formatMoney(r.payables),
+      })),
+    [filteredSeed],
+  );
+
+  const totals = filteredSeed.reduce(
     (acc, r) => ({
       revenue: acc.revenue + r.revenue,
       expenses: acc.expenses + r.expenses,
@@ -40,28 +53,41 @@ export default function BranchWiseReportPage() {
     { revenue: 0, expenses: 0 },
   );
 
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildBranchFilterSummary(branches, () => setBranches([])),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [branches]);
+
   return (
     <AccountsReportShell
       title="Branch-wise Reports"
       description="Revenue, expenses, receivables and payables by branch."
       kpis={[
-        { label: "Branches", value: String(BRANCH_REPORT_SEED.length), icon: Building2, accent: true },
+        { label: "Branches", value: String(filteredSeed.length), icon: Building2, accent: true },
         { label: "Total Revenue", value: formatMoney(totals.revenue), icon: TrendingUp },
         { label: "Total Expenses", value: formatMoney(totals.expenses), icon: TrendingDown },
         { label: "Net", value: formatMoney(totals.revenue - totals.expenses), icon: IndianRupee },
       ]}
       filters={
-        <ReportFilterRow>
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <ReportBranchFilter value={branch || "all"} onChange={setBranch} />
-        </ReportFilterRow>
+        <>
+          <ReportFilterRow>
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportBranchMultiFilter
+              values={branches}
+              onChange={setBranches}
+              options={branchOptions}
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       columns={[
         { key: "branch", label: "Branch" },

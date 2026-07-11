@@ -17,6 +17,7 @@ import {
 } from "@/lib/accounts/inventory-accounting-data";
 import { loadStockOpeningRows } from "@/lib/accounts/stock-opening-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 
 export type StockLedgerTransactionType =
   | "opening"
@@ -89,10 +90,10 @@ export interface StockLedgerFilterParams {
   dateFrom: string;
   dateTo: string;
   financialYearId: string;
-  productId: string;
-  warehouse: string;
-  batchNo: string;
-  transactionType: string;
+  productIds: string[];
+  warehouse: string[];
+  batchNos: string[];
+  transactionTypes: string | string[];
   documentNo: string;
   search: string;
 }
@@ -498,10 +499,10 @@ export function filterStockLedgerRows(
     if (filters.dateFrom && row.date < filters.dateFrom) return false;
     if (filters.dateTo && row.date > filters.dateTo) return false;
     if (!rowInFinancialYear(row, filters.financialYearId)) return false;
-    if (filters.productId !== "all" && row.productCode !== filters.productId) return false;
-    if (filters.warehouse !== "all" && row.warehouse !== filters.warehouse) return false;
-    if (filters.batchNo !== "all" && row.batchNo !== filters.batchNo) return false;
-    if (filters.transactionType !== "all" && row.transactionType !== filters.transactionType) return false;
+    if (!matchesMultiFilter(filters.productIds, row.productCode)) return false;
+    if (!matchesMultiFilter(filters.warehouse, row.warehouse)) return false;
+    if (!matchesMultiFilter(filters.batchNos, row.batchNo)) return false;
+    if (!matchesMultiFilter(filters.transactionTypes, row.transactionType)) return false;
     if (
       filters.documentNo.trim() &&
       !row.documentNo.toLowerCase().includes(filters.documentNo.trim().toLowerCase())

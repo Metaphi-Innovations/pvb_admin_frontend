@@ -8,7 +8,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { SectionTabs, StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
-import { getBankAccountById } from "@/lib/accounts/bank-accounts-data";
+import { getBankAccountById, getMappedWarehouseLabels } from "@/lib/accounts/bank-accounts-data";
 import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
@@ -129,6 +129,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                 ["Reconciliation Enabled", account.reconciliationEnabled ? "Yes" : "No"],
                 ["Default Receipts", account.defaultForReceipts ? "Yes" : "No"],
                 ["Default Payments", account.defaultForPayments ? "Yes" : "No"],
+                ["Mapped Warehouses", getMappedWarehouseLabels(account).join(", ") || "—"],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-border/40 bg-slate-50/40 px-3 py-2.5">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -170,7 +171,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                   href="/accounts/banking/reconciliation"
                   className="inline-flex h-8 items-center px-3 text-xs border border-border rounded-lg hover:bg-muted/40 text-brand-700"
                 >
-                  Open Bank Reconciliation â†’
+                  Open Bank Reconciliation →
                 </Link>
               ) : (
                 <p className="text-xs text-muted-foreground">Reconciliation is disabled for this account.</p>

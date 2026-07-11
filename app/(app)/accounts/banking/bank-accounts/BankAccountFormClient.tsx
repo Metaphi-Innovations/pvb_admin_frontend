@@ -23,6 +23,8 @@ import {
   updateBankAccount,
   type BankAccountType,
 } from "@/lib/accounts/bank-accounts-data";
+import { defaultMappedWarehouseIds } from "@/lib/accounts/bank-warehouse-mapping";
+import { BankWarehouseMappingSelect } from "@/components/accounts/BankWarehouseMappingSelect";
 
 const ACCOUNT_TYPES: BankAccountType[] = ["Current", "Savings", "OD", "CC"];
 
@@ -39,6 +41,7 @@ interface FormState {
   defaultForReceipts: boolean;
   defaultForPayments: boolean;
   status: "active" | "inactive";
+  mappedWarehouseIds: number[];
 }
 
 const EMPTY_FORM: FormState = {
@@ -54,20 +57,43 @@ const EMPTY_FORM: FormState = {
   defaultForReceipts: false,
   defaultForPayments: false,
   status: "active",
+  mappedWarehouseIds: [],
 };
 
-export default function BankAccountFormClient({ accountId }: { accountId?: number }) {
+export default function BankAccountFormClient({
+  accountId,
+  presetGroupId: presetGroupIdProp,
+  onClose,
+  onSaved,
+}: {
+  accountId?: number;
+  presetGroupId?: number;
+  onClose?: () => void;
+  onSaved?: (ledgerId: number, parentGroupId: number) => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const presetGroupId = searchParams.get("bankGroupId");
+  const presetGroupIdParam = searchParams.get("bankGroupId");
+  const presetGroupId =
+    presetGroupIdProp ??
+    (presetGroupIdParam && Number.isFinite(Number(presetGroupIdParam))
+      ? Number(presetGroupIdParam)
+      : null);
   const isEdit = accountId != null;
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [warehouseError, setWarehouseError] = useState<string | null>(null);
 
   useEffect(() => {
     loadBankAccounts();
-    if (!isEdit || accountId == null) return;
+    if (!isEdit || accountId == null) {
+      setForm((f) => ({
+        ...f,
+        mappedWarehouseIds: f.mappedWarehouseIds.length ? f.mappedWarehouseIds : defaultMappedWarehouseIds(),
+      }));
+      return;
+    }
     const account = getBankAccountById(accountId);
     if (!account) {
       router.replace("/accounts/banking/bank-accounts");
@@ -86,6 +112,7 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       defaultForReceipts: account.defaultForReceipts,
       defaultForPayments: account.defaultForPayments,
       status: account.status,
+      mappedWarehouseIds: account.mappedWarehouseIds,
     });
   }, [isEdit, accountId, router]);
 
@@ -105,12 +132,14 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       defaultForReceipts: form.defaultForReceipts,
       defaultForPayments: form.defaultForPayments,
       status: form.status,
+      mappedWarehouseIds: form.mappedWarehouseIds,
     }),
     [form],
   );
 
   const save = () => {
     setError(null);
+    setWarehouseError(null);
     if (!form.bankName.trim()) {
       setError("Bank name is required.");
       return;
@@ -131,16 +160,24 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       setError("An account with this account number already exists.");
       return;
     }
+    if (form.mappedWarehouseIds.length === 0) {
+      setWarehouseError("Select at least one mapped warehouse.");
+      return;
+    }
     try {
       loadBankAccounts();
       if (isEdit && accountId != null) {
         updateBankAccount(accountId, savePayload);
       } else {
-        createBankAccountWithLedger({
+        const created = createBankAccountWithLedger({
           ...savePayload,
-          bankGroupCoaId: presetGroupId ? Number(presetGroupId) : null,
+          bankGroupCoaId: presetGroupId,
           openingBalanceDate: new Date().toISOString().slice(0, 10),
         });
+        if (onSaved) {
+          onSaved(created.coaLedgerId, created.bankGroupCoaId);
+          return;
+        }
       }
       router.push("/accounts/banking/bank-accounts");
     } catch (e) {
@@ -159,7 +196,7 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       ]}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => (onClose ? onClose() : router.back())}>
             Cancel
           </Button>
           <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white" onClick={save}>
@@ -272,6 +309,14 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
               </SelectContent>
             </Select>
           </div>
+          <BankWarehouseMappingSelect
+            value={form.mappedWarehouseIds}
+            onChange={(mappedWarehouseIds) => {
+              setForm({ ...form, mappedWarehouseIds });
+              setWarehouseError(null);
+            }}
+            error={warehouseError}
+          />
         </div>
         <div className="flex flex-wrap gap-4 pt-2">
           <label className="flex items-center gap-2 text-xs">

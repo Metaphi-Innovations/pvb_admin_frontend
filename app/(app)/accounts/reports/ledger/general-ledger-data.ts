@@ -23,6 +23,10 @@ import {
   ledgerMovementMapForRange,
 } from "@/lib/accounts/ledger-transaction-date-filter";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
+import {
+  isMultiFilterActive,
+  matchesVoucherTypeFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { isLedgerMovementVoucherStatus } from "@/lib/accounts/running-balance";
 import {
   emptyGeneralLedgerEnrichedFields,
@@ -32,7 +36,7 @@ import {
 
 export type GeneralLedgerLedgerType =
   | "Customer"
-  | "Supplier"
+  | "Vendor"
   | "Bank"
   | "Cash"
   | "Sales"
@@ -41,12 +45,13 @@ export type GeneralLedgerLedgerType =
   | "Expense"
   | "Income"
   | "Inventory"
+  | "Employee"
   | "General";
 
 export const GENERAL_LEDGER_TYPE_OPTIONS: { value: string; label: GeneralLedgerLedgerType | "All Types" }[] = [
   { value: "all", label: "All Types" },
   { value: "Customer", label: "Customer" },
-  { value: "Supplier", label: "Supplier" },
+  { value: "Vendor", label: "Vendor" },
   { value: "Bank", label: "Bank" },
   { value: "Cash", label: "Cash" },
   { value: "Sales", label: "Sales" },
@@ -55,6 +60,7 @@ export const GENERAL_LEDGER_TYPE_OPTIONS: { value: string; label: GeneralLedgerL
   { value: "Expense", label: "Expense" },
   { value: "Income", label: "Income" },
   { value: "Inventory", label: "Inventory" },
+  { value: "Employee", label: "Employee" },
   { value: "General", label: "General" },
 ];
 
@@ -63,6 +69,7 @@ export interface GeneralLedgerLedgerOption {
   code: string;
   name: string;
   ledgerType: GeneralLedgerLedgerType;
+  parentGroup: string;
   openingBalance: number;
   openingBalanceType: BalanceSide;
 }
@@ -147,7 +154,7 @@ export interface GeneralLedgerStatement {
 export interface GeneralLedgerFilters {
   dateFrom: string;
   dateTo: string;
-  voucherType: string;
+  voucherType: string | string[];
   search: string;
 }
 
@@ -188,7 +195,7 @@ function voucherMap(): Map<number, AccountingVoucher> {
 
 function mapLedgerType(label: LedgerTypeLabel): GeneralLedgerLedgerType {
   if (label === "Customer") return "Customer";
-  if (label === "Vendor") return "Supplier";
+  if (label === "Vendor") return "Vendor";
   if (label === "Bank") return "Bank";
   if (label === "Cash") return "Cash";
   if (label === "Sales") return "Sales";
@@ -197,7 +204,31 @@ function mapLedgerType(label: LedgerTypeLabel): GeneralLedgerLedgerType {
   if (label === "Inventory") return "Inventory";
   if (label === "Expense") return "Expense";
   if (label === "Income") return "Income";
+  if (label === "Employee Payable") return "Employee";
   return "General";
+}
+
+/** User-facing ledger type label in search dropdowns and summaries. */
+export function formatGeneralLedgerTypeLabel(type: GeneralLedgerLedgerType): string {
+  return type;
+}
+
+export function filterGeneralLedgerLedgers(
+  ledgers: GeneralLedgerLedgerOption[],
+  query: string,
+): GeneralLedgerLedgerOption[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return ledgers;
+  return ledgers.filter((ledger) => {
+    const typeLabel = formatGeneralLedgerTypeLabel(ledger.ledgerType);
+    return [
+      ledger.name,
+      ledger.code,
+      ledger.ledgerType,
+      typeLabel,
+      ledger.parentGroup,
+    ].some((value) => value.toLowerCase().includes(q));
+  });
 }
 
 function resolveLedgerTaxFields(ledger: ChartOfAccount): { gstin: string; pan: string } {
@@ -330,9 +361,8 @@ function matchesSearch(row: EnrichedPeriodRow, query: string): boolean {
   ].some((v) => v.toLowerCase().includes(q));
 }
 
-function matchesVoucherType(row: EnrichedPeriodRow, voucherType: string): boolean {
-  if (voucherType === "all") return true;
-  return row.voucherTypeCode === voucherType;
+function matchesVoucherType(row: EnrichedPeriodRow, voucherType: string | string[]): boolean {
+  return matchesVoucherTypeFilter(voucherType, row.voucherTypeCode);
 }
 
 function getLedgerById(ledgerId: string): ChartOfAccount | null {
@@ -349,6 +379,7 @@ export function getGeneralLedgerLedgers(): GeneralLedgerLedgerOption[] {
       code: ledger.accountCode,
       name: ledger.accountName,
       ledgerType: mapLedgerType(resolveLedgerType(ledger, records)),
+      parentGroup: parentGroupLabel(records, ledger),
       openingBalance: ledger.openingBalance,
       openingBalanceType: ledger.balanceType,
     }))
@@ -455,7 +486,7 @@ export function buildGeneralLedgerStatement(
   );
 
   const hasActiveFilters =
-    filters.voucherType !== "all" || Boolean(filters.search.trim());
+    isMultiFilterActive(filters.voucherType) || Boolean(filters.search.trim());
 
   const filteredTransactions = enrichedPeriod.filter(
     (row) => matchesVoucherType(row, filters.voucherType) && matchesSearch(row, filters.search),

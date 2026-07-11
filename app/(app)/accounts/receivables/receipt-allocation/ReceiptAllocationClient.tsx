@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -10,6 +10,8 @@ import {
   getCustomerReceiptAllocationSummary,
   getOpenInvoicesForCustomer,
   loadReceiptAllocationRecords,
+  type CustomerInvoiceOutstandingRow,
+  type ReceiptAllocationRecord,
   type ReceiptAllocationStatus,
 } from "@/lib/accounts/receivables-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -18,6 +20,12 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportFinancialYearFilter,
@@ -32,7 +40,6 @@ import {
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -56,6 +63,165 @@ function formatReportDate(value: string): string {
   const [y, m, d] = value.slice(0, 10).split("-");
   if (!y || !m || !d) return value;
   return `${d}-${m}-${y}`;
+}
+
+function AvailableReceiptsTable({
+  onSelectCustomer,
+}: {
+  onSelectCustomer: (customerId: string) => void;
+}) {
+  const visible = useAccountsFilteredRows<ReceiptAllocationRecord>([]);
+
+  return (
+    <AccountsTable minWidth={640}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Receipt No." colKey="receiptNo" />
+          <SortTh label="Customer" colKey="customerName" />
+          <SortTh label="Date" colKey="receiptDate" filterType="date" />
+          <SortTh label="Unallocated" colKey="unallocatedAmount" filterType="amount" align="right" />
+          <AccountsColumnHeader label="" colKey="_actions" sortable={false} filterable={false} align="right" />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {visible.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={5} className="accounts-table-empty">
+              No receipts match the filters.
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          visible.map((r) => (
+            <AccountsTableRow key={r.voucherId}>
+              <AccountsTableCell>
+                <span className="font-mono text-xs font-semibold">{r.receiptNo}</span>
+              </AccountsTableCell>
+              <AccountsTableCell>{r.customerName}</AccountsTableCell>
+              <AccountsTableCell>{formatReportDate(r.receiptDate)}</AccountsTableCell>
+              <AccountsTableCell align="right">
+                <span className="tabular-nums">{formatMoney(r.unallocatedAmount)}</span>
+              </AccountsTableCell>
+              <AccountsTableCell align="right">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-sm"
+                  onClick={() => onSelectCustomer(String(r.customerId))}
+                >
+                  Allocate
+                </Button>
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ))
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
+function OpenInvoicesAllocationTable({
+  selected,
+  amounts,
+  activeReceipt,
+  onToggleInvoice,
+  onAmountChange,
+}: {
+  selected: Record<number, boolean>;
+  amounts: Record<number, string>;
+  activeReceipt: { unallocatedAmount: number } | undefined;
+  onToggleInvoice: (invoiceId: number, outstanding: number) => void;
+  onAmountChange: (invoiceId: number, value: string) => void;
+}) {
+  const visible = useAccountsFilteredRows<CustomerInvoiceOutstandingRow>([]);
+
+  const totalAllocation = visible.reduce((s, inv) => {
+    if (!selected[inv.invoiceId]) return s;
+    const v = Number(amounts[inv.invoiceId] || 0);
+    return s + (Number.isFinite(v) ? v : 0);
+  }, 0);
+
+  return (
+    <AccountsTable minWidth={960}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <AccountsColumnHeader label="Select" colKey="_select" sortable={false} filterable={false} align="center" />
+          <SortTh label="Invoice No." colKey="invoiceNo" />
+          <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
+          <SortTh label="Due Date" colKey="dueDate" filterType="date" />
+          <SortTh label="Invoice Amount" colKey="invoiceAmount" filterType="amount" align="right" />
+          <SortTh label="Outstanding" colKey="outstanding" filterType="amount" align="right" />
+          <AccountsColumnHeader
+            label="Allocate Amount"
+            colKey="_allocate"
+            sortable={false}
+            filterable={false}
+            align="right"
+          />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {visible.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={7} className="accounts-table-empty">
+              No open invoices match the column filters.
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          visible.map((inv) => (
+            <AccountsTableRow key={inv.invoiceId}>
+              <AccountsTableCell align="center">
+                <Checkbox
+                  checked={!!selected[inv.invoiceId]}
+                  onCheckedChange={() => onToggleInvoice(inv.invoiceId, inv.outstanding)}
+                  disabled={!activeReceipt}
+                />
+              </AccountsTableCell>
+              <AccountsTableCell>
+                <Link
+                  href={`/accounts/receivables/outstanding/invoice/${inv.invoiceId}`}
+                  className="text-xs font-mono font-semibold text-brand-700 hover:underline"
+                >
+                  {inv.invoiceNo}
+                </Link>
+              </AccountsTableCell>
+              <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
+              <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
+              <AccountsTableCell align="right">
+                <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
+              </AccountsTableCell>
+              <AccountsTableCell align="right">
+                <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
+              </AccountsTableCell>
+              <AccountsTableCell align="right">
+                <AccountsMoneyInput
+                  className="h-9 text-sm font-medium w-28 ml-auto"
+                  disabled={!selected[inv.invoiceId] || !activeReceipt}
+                  value={amounts[inv.invoiceId] ?? ""}
+                  onChange={(v) => onAmountChange(inv.invoiceId, String(v))}
+                />
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ))
+        )}
+      </AccountsTableBody>
+      <AccountsTableFoot>
+        <AccountsTableRow>
+          <AccountsTableCell colSpan={4} className="font-semibold text-xs">
+            Summary
+          </AccountsTableCell>
+          <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums">
+            {formatMoney(visible.reduce((s, i) => s + i.invoiceAmount, 0))}
+          </AccountsTableCell>
+          <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums">
+            {formatMoney(visible.reduce((s, i) => s + i.outstanding, 0))}
+          </AccountsTableCell>
+          <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums text-brand-700">
+            {formatMoney(totalAllocation)}
+          </AccountsTableCell>
+        </AccountsTableRow>
+      </AccountsTableFoot>
+    </AccountsTable>
+  );
 }
 
 export default function ReceiptAllocationClient() {
@@ -117,6 +283,16 @@ export default function ReceiptAllocationClient() {
     }
     return rows;
   }, [allReceipts, customerId, receiptStatus, search, dateFrom, dateTo]);
+
+  const getReceiptCellValue = useCallback(
+    (row: ReceiptAllocationRecord, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
+
+  const getInvoiceCellValue = useCallback(
+    (row: CustomerInvoiceOutstandingRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
   useEffect(() => {
     if (!summary?.unallocatedReceipts.length) {
@@ -273,41 +449,22 @@ export default function ReceiptAllocationClient() {
                   <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                     Available Receipts
                   </p>
-                  <AccountsTableScroll>
-                    <AccountsTable minWidth={640}>
-                      <AccountsTableHead>
-                        <AccountsTableHeadRow>
-                          {["Receipt No.", "Customer", "Date", "Unallocated", ""].map((h) => (
-                            <AccountsTableHeadCell key={h || "act"}>{h}</AccountsTableHeadCell>
-                          ))}
-                        </AccountsTableHeadRow>
-                      </AccountsTableHead>
-                      <AccountsTableBody>
-                        {filteredReceipts.slice(0, 10).map((r) => (
-                          <AccountsTableRow key={r.voucherId}>
-                            <AccountsTableCell>
-                              <span className="font-mono text-xs font-semibold">{r.receiptNo}</span>
-                            </AccountsTableCell>
-                            <AccountsTableCell>{r.customerName}</AccountsTableCell>
-                            <AccountsTableCell>{formatReportDate(r.receiptDate)}</AccountsTableCell>
-                            <AccountsTableCell align="right">
-                              <span className="tabular-nums">{formatMoney(r.unallocatedAmount)}</span>
-                            </AccountsTableCell>
-                            <AccountsTableCell align="right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-sm"
-                                onClick={() => setCustomerId(String(r.customerId))}
-                              >
-                                Allocate
-                              </Button>
-                            </AccountsTableCell>
-                          </AccountsTableRow>
-                        ))}
-                      </AccountsTableBody>
-                    </AccountsTable>
-                  </AccountsTableScroll>
+                  <AccountsColumnFilterProvider
+                    rows={filteredReceipts}
+                    getCellValue={getReceiptCellValue}
+                    columnConfig={{
+                      receiptNo: { type: "text" },
+                      customerName: { type: "text" },
+                      receiptDate: { type: "date" },
+                      unallocatedAmount: { type: "amount" },
+                    }}
+                    defaultSortKey="receiptDate"
+                    defaultSortDir="desc"
+                  >
+                    <AccountsTableScroll>
+                      <AvailableReceiptsTable onSelectCustomer={setCustomerId} />
+                    </AccountsTableScroll>
+                  </AccountsColumnFilterProvider>
                 </div>
               )}
             </div>
@@ -356,99 +513,31 @@ export default function ReceiptAllocationClient() {
               </div>
             )}
 
-            <AccountsTableScroll className="flex-1 min-h-0">
-              <AccountsTable minWidth={960}>
-                <AccountsTableHead>
-                  <AccountsTableHeadRow>
-                    {[
-                      "Select",
-                      "Invoice No.",
-                      "Invoice Date",
-                      "Due Date",
-                      "Invoice Amount",
-                      "Outstanding",
-                      "Allocate Amount",
-                    ].map((h) => (
-                      <AccountsTableHeadCell
-                        key={h}
-                        align={
-                          h === "Invoice Amount" || h === "Outstanding" || h === "Allocate Amount"
-                            ? "right"
-                            : h === "Select"
-                              ? "center"
-                              : "left"
-                        }
-                      >
-                        {h}
-                      </AccountsTableHeadCell>
-                    ))}
-                  </AccountsTableHeadRow>
-                </AccountsTableHead>
-                <AccountsTableBody>
-                  {openInvoices.length === 0 ? (
-                    <AccountsTableRow>
-                      <AccountsTableCell colSpan={7} className="accounts-table-empty">
-                        No open invoices for this customer.
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  ) : (
-                    openInvoices.map((inv) => (
-                      <AccountsTableRow key={inv.invoiceId}>
-                        <AccountsTableCell align="center">
-                          <Checkbox
-                            checked={!!selected[inv.invoiceId]}
-                            onCheckedChange={() => toggleInvoice(inv.invoiceId, inv.outstanding)}
-                            disabled={!activeReceipt}
-                          />
-                        </AccountsTableCell>
-                        <AccountsTableCell>
-                          <Link
-                            href={`/accounts/receivables/outstanding/invoice/${inv.invoiceId}`}
-                            className="text-xs font-mono font-semibold text-brand-700 hover:underline"
-                          >
-                            {inv.invoiceNo}
-                          </Link>
-                        </AccountsTableCell>
-                        <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
-                        <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
-                        <AccountsTableCell align="right">
-                          <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right">
-                          <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right">
-                          <AccountsMoneyInput
-                            className="h-9 text-sm font-medium w-28 ml-auto"
-                            disabled={!selected[inv.invoiceId] || !activeReceipt}
-                            value={amounts[inv.invoiceId] ?? ""}
-                            onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}
-                          />
-                        </AccountsTableCell>
-                      </AccountsTableRow>
-                    ))
-                  )}
-                </AccountsTableBody>
-                {customerId && (
-                  <AccountsTableFoot>
-                    <AccountsTableRow>
-                      <AccountsTableCell colSpan={4} className="font-semibold text-xs">
-                        Summary
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums">
-                        {formatMoney(openInvoices.reduce((s, i) => s + i.invoiceAmount, 0))}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums">
-                        {formatMoney(openInvoices.reduce((s, i) => s + i.outstanding, 0))}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums text-brand-700">
-                        {formatMoney(totalAllocation)}
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  </AccountsTableFoot>
-                )}
-              </AccountsTable>
-            </AccountsTableScroll>
+            <AccountsColumnFilterProvider
+              rows={openInvoices}
+              getCellValue={getInvoiceCellValue}
+              columnConfig={{
+                invoiceNo: { type: "text" },
+                invoiceDate: { type: "date" },
+                dueDate: { type: "date" },
+                invoiceAmount: { type: "amount" },
+                outstanding: { type: "amount" },
+              }}
+              defaultSortKey="dueDate"
+              defaultSortDir="asc"
+            >
+              <AccountsTableScroll className="flex-1 min-h-0">
+                <OpenInvoicesAllocationTable
+                  selected={selected}
+                  amounts={amounts}
+                  activeReceipt={activeReceipt}
+                  onToggleInvoice={toggleInvoice}
+                  onAmountChange={(invoiceId, value) =>
+                    setAmounts((a) => ({ ...a, [invoiceId]: value }))
+                  }
+                />
+              </AccountsTableScroll>
+            </AccountsColumnFilterProvider>
           </>
         )}
       </div>

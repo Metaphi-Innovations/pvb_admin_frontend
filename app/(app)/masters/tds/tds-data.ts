@@ -220,6 +220,7 @@ export function loadTDSMasters(): TDSMaster[] {
 export function saveTDSMasters(data: TDSMaster[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  window.dispatchEvent(new CustomEvent("ds_tds_master_changed"));
 }
 
 export function nextTDSId(list: TDSMaster[]): number {

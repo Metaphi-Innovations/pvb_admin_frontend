@@ -1,5 +1,10 @@
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import {
+  matchesMultiFilter,
+  matchesMultiIdFilter,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
 import type {
   RegisterReportFilterParams,
   RegisterReportRow,
@@ -32,13 +37,27 @@ function rowInFinancialYear(row: RegisterReportRow, financialYearId: string): bo
 export function filterRegisterRows(
   rows: RegisterReportRow[],
   filters: RegisterReportFilterParams,
+  mode: "sales" | "purchase" = "sales",
 ): RegisterReportRow[] {
+  const statuses = normalizeMultiFilter(filters.statuses);
+  const voucherTypes = normalizeMultiFilter(filters.voucherTypes);
+  const products = normalizeMultiFilter(filters.product);
+  const salespersons = normalizeMultiFilter(filters.salespersons);
+  const partyIds = mode === "sales" ? filters.customerIds : filters.vendorIds;
+
   return rows.filter((row) => {
     if (filters.dateFrom && row.invoiceDate < filters.dateFrom) return false;
     if (filters.dateTo && row.invoiceDate > filters.dateTo) return false;
     if (!rowInFinancialYear(row, filters.financialYearId)) return false;
-    if (filters.partyId !== "all" && String(row.partyId) !== filters.partyId) return false;
-    if (filters.invoiceStatus !== "all" && row.invoiceStatus !== filters.invoiceStatus) return false;
+    if (!matchesMultiIdFilter(partyIds, row.partyId)) return false;
+    if (statuses.length > 0 && !statuses.includes(row.invoiceStatus)) return false;
+    if (voucherTypes.length > 0 && !voucherTypes.includes(row.voucherType)) return false;
+    if (!matchesMultiFilter(filters.branch, row.branch)) return false;
+    if (products.length > 0) {
+      const hasProduct = row.productNames.some((name) => products.includes(name));
+      if (!hasProduct) return false;
+    }
+    if (salespersons.length > 0 && !matchesMultiFilter(salespersons, row.salesperson)) return false;
     if (filters.gstRate !== "all" && String(row.gstRate) !== filters.gstRate) return false;
     if (
       !matchesSearch(filters.search, [
@@ -46,6 +65,8 @@ export function filterRegisterRows(
         row.partyName,
         row.gstin,
         row.state,
+        row.branch,
+        ...row.productNames,
       ])
     ) {
       return false;

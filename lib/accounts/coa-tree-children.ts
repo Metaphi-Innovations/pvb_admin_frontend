@@ -1,5 +1,5 @@
 /**
- * COA tree display — enforces 4 visual levels (Primary Head → Group → Accounting Group → Ledger).
+ * COA tree display — enforces 5 visual levels (Primary Head → … → Sub Ledger).
  * Bank name containers (bankGroupFlag) stay in data for posting but are flattened out of the tree.
  */
 
@@ -22,6 +22,23 @@ export function getCoaDisplayPath(
   nodeId: number,
 ): ChartOfAccount[] {
   return getAncestorPath(records, nodeId).filter((n) => !n.bankGroupFlag);
+}
+
+/** Cheap expandability check — avoids allocating the children array until expand. */
+export function coaTreeNodeHasChildren(
+  records: ChartOfAccount[],
+  parentId: number,
+): boolean {
+  const parent = records.find((r) => r.id === parentId);
+  if (!parent) return false;
+
+  if (isBankAccountsSubGroup(parent)) {
+    return getBankGroups(records).some(
+      (group) => getBankAccountLedgersUnderGroup(records, group.id).length > 0,
+    );
+  }
+
+  return getDirectChildren(records, parentId).some((c) => !isBankGroupNode(c));
 }
 
 /** Tree children — bank account ledgers appear directly under Bank Accounts (no 5th level). */

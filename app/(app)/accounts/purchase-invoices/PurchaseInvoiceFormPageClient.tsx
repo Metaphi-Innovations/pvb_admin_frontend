@@ -22,9 +22,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import {
   getVendorsForPurchaseDropdown,
   getGrnsPendingInvoice,
@@ -41,6 +46,7 @@ import {
   type VendorTransactionFields,
   type TransactionProductOption,
 } from "@/lib/accounts/transaction-master-fetch";
+import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 interface LineItem {
   id: string;
@@ -229,6 +235,7 @@ function GrnSelector({
 export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId?: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast, showToast, dismissToast } = useAccountsToast();
   const isEdit = invoiceId != null;
   const preselectedGrnId = searchParams.get("grnId");
 
@@ -266,6 +273,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
 
   const [lines, setLines] = useState<LineItem[]>(() => [recalcLine(emptyLine())]);
 
@@ -329,6 +337,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
   function handleGrnSelect(grn: GrnRecord) {
     setSelectedGrn(grn);
+    setBankAccountId(null);
     const matchedVendor = vendors.find(
       (v) => v.vendorName.toLowerCase() === grn.vendorName.toLowerCase(),
     );
@@ -356,12 +365,16 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
       const created = createPurchaseFromGrn({
         grnId: selectedGrn.id,
         grnNo: selectedGrn.grnNo,
+        warehouse: selectedGrn.warehouse,
+        bankAccountId,
         vendorId: Number(vendorId),
         vendorInvoiceNo,
         invoiceDate,
         remarks,
         lineItems: lines.map(toPurchaseInvoiceLine),
       });
+      dispatchAccountsDataChanged("purchase-invoices");
+      showToast("Purchase invoice created successfully");
       router.push(`/accounts/purchase-invoices/${created.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
@@ -370,11 +383,37 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
     }
   };
 
+  const [baselineReady, setBaselineReady] = useState(false);
+  useEffect(() => {
+    setBaselineReady(false);
+    const id = window.setTimeout(() => setBaselineReady(true), 350);
+    return () => window.clearTimeout(id);
+  }, [selectedGrn?.id, searchParams.toString()]);
+
+  const formSnapshot = useMemo(
+    () => ({
+      selectedGrnId: selectedGrn?.id ?? null,
+      vendorId,
+      invoiceDate,
+      vendorInvoiceNo,
+      dueDate,
+      remarks,
+      lines,
+    }),
+    [selectedGrn?.id, vendorId, invoiceDate, vendorInvoiceNo, dueDate, remarks, lines],
+  );
+  const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady && !isEdit });
+  const { requestCancel, discardDialog } = useTransactionFormCancel({
+    listHref: "/accounts/purchase-invoices",
+    isDirty,
+  });
+
   if (isEdit) return null;
 
   const title = selectedGrn ? `Invoice from ${selectedGrn.grnNo}` : "New Purchase Invoice";
 
   return (
+    <>
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Transactions", "New Purchase Invoice")}
       title={title}
@@ -455,11 +494,11 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label className="text-xs">Invoice Date *</Label>
-              <Input
-                type="date"
-                className="h-9 text-sm font-medium mt-1"
+              <AccountsDateInput
                 value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
+                onChange={setInvoiceDate}
+                aria-label="Invoice date"
+                className="h-9 text-sm font-medium mt-1"
               />
             </div>
             <div>
@@ -473,11 +512,11 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
             </div>
             <div>
               <Label className="text-xs">Due Date</Label>
-              <Input
-                type="date"
-                className="h-9 text-sm font-medium mt-1"
+              <AccountsDateInput
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={setDueDate}
+                aria-label="Due date"
+                className="h-9 text-sm font-medium mt-1"
               />
             </div>
           </div>
@@ -497,6 +536,16 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 <span className="font-medium text-foreground">Warehouse: </span>
                 {selectedGrn.warehouse}
               </span>
+            </div>
+          )}
+          {selectedGrn && (
+            <div className="mt-3 max-w-md">
+              <WarehouseMappedBankAccountSelect
+                warehouseRef={selectedGrn.warehouse}
+                value={bankAccountId}
+                onChange={(id) => setBankAccountId(id)}
+                label="Bank Account (for payment / print)"
+              />
             </div>
           )}
         </Section>
@@ -662,18 +711,19 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
         />
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-2 pt-2">
           <Button
+            type="button"
             variant="outline"
             size="sm"
-            className="h-9 text-sm"
-            onClick={() => router.push("/accounts/purchase-invoices")}
+            className="h-8 text-xs font-medium"
+            onClick={requestCancel}
           >
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-sm bg-brand-600 text-white gap-1.5"
+            className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
             onClick={doSave}
             disabled={saving || !selectedGrn}
           >
@@ -683,10 +733,13 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
         </div>
       </div>
     </AccountsPageShell>
+    <AccountsToast toast={toast} onDismiss={dismissToast} />
+    {discardDialog}
+    </>
   );
 }
 
-// â”€â”€ Tiny helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Tiny helpers ─────────────────────────────────────────────────────────────
 
 function Th({ children, w = "" }: { children?: React.ReactNode; w?: string }) {
   return (

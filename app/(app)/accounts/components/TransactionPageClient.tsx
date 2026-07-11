@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -18,7 +18,13 @@ import {
   postEntryAfterApproval,
   saveAccountTxns,
 } from "../data";
-import { SortTh, StatusBadge, SectionTabs } from "./AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  SectionTabs,
+  useAccountsFilteredRows,
+} from "./AccountsUI";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -34,6 +40,76 @@ export type TransactionPageClientProps = {
   partyLabel: string;
 };
 
+function TransactionTable({
+  title,
+  partyLabel,
+  toolbarRows,
+  onApprove,
+  onPost,
+}: {
+  title: string;
+  partyLabel: string;
+  toolbarRows: AccountTxn[];
+  onApprove: (rec: AccountTxn) => void;
+  onPost: (rec: AccountTxn) => void;
+}) {
+  const visible = useAccountsFilteredRows(toolbarRows);
+
+  return (
+    <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="accounts-table w-full min-w-[980px] text-sm">
+          <thead className="border-b border-border/60">
+            <tr>
+              <SortTh label={`${title} No.`} colKey="number" />
+              <SortTh label="Date" colKey="date" filterType="date" />
+              <SortTh label={partyLabel} colKey="party" />
+              <SortTh label="Reference No." colKey="referenceNo" />
+              <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
+              <SortTh label="Tax" colKey="taxAmount" filterType="amount" align="right" />
+              <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" />
+              <SortTh label="Created By" colKey="createdBy" />
+              <SortTh label="Updated By" colKey="updatedBy" />
+              <AccountsColumnHeader label="" colKey="_actions" sortable={false} filterable={false} />
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r) => (
+              <tr key={r.id} className="accounts-table-row group">
+                <td className="px-3 py-2 text-xs font-mono">{r.number}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{r.date}</td>
+                <td className="px-3 py-2 text-xs">{r.party}</td>
+                <td className="px-3 py-2 text-xs">{r.referenceNo || "—"}</td>
+                <td className="px-3 py-2 text-xs">{r.amount.toFixed(2)}</td>
+                <td className="px-3 py-2 text-xs">{r.taxAmount.toFixed(2)}</td>
+                <td className="px-3 py-2 text-xs font-semibold">{r.totalAmount.toFixed(2)}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
+                <td className="px-3 py-2 text-right">
+                  {r.status === "draft" && (
+                    <Button size="sm" className="h-7 text-sm" onClick={() => onApprove(r)}>
+                      Approve
+                    </Button>
+                  )}
+                  {r.status === "approved" && (
+                    <Button
+                      size="sm"
+                      className="h-7 text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => onPost(r)}
+                    >
+                      Post
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function TransactionPageClient({
   txnType,
   title,
@@ -46,8 +122,6 @@ export default function TransactionPageClient({
   const [records, setRecords] = useState<AccountTxn[]>([]);
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   React.useEffect(() => {
     if (ready) setRecords(allTxns);
@@ -63,7 +137,7 @@ export default function TransactionPageClient({
     return c;
   }, [records]);
 
-  const visible = useMemo(() => {
+  const toolbarRows = useMemo(() => {
     let r = [...records];
     if (tab !== "all") r = r.filter((x) => x.status === tab);
     if (search.trim()) {
@@ -75,12 +149,13 @@ export default function TransactionPageClient({
           x.referenceNo.toLowerCase().includes(q),
       );
     }
-    return r.sort((a, b) => {
-      const av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
-      const bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
-      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-  }, [records, tab, search, sortKey, sortDir]);
+    return r;
+  }, [records, tab, search]);
+
+  const getCellValue = useCallback(
+    (row: AccountTxn, key: string) => (row as unknown as Record<string, unknown>)[key],
+    [],
+  );
 
   const createDraft = () => {
     const all = loadAccountTxns();
@@ -136,26 +211,26 @@ export default function TransactionPageClient({
           ]}
           actions={
             <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                postEntryAfterApproval({
-                  txnType,
-                  approvalStatus: "approved",
-                  sourceModule: "ERP Integration",
-                  sourceRefNo: "AUTO-REF",
-                  party: `Auto ${partyLabel}`,
-                  amount: 1000,
-                  taxAmount: 180,
-                });
-                refresh();
-              }}
-            >
-              Post Approved Entry
-            </Button>
-            <Button onClick={createDraft}>
-              <Plus className="w-4 h-4" /> New Entry
-            </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  postEntryAfterApproval({
+                    txnType,
+                    approvalStatus: "approved",
+                    sourceModule: "ERP Integration",
+                    sourceRefNo: "AUTO-REF",
+                    party: `Auto ${partyLabel}`,
+                    amount: 1000,
+                    taxAmount: 180,
+                  });
+                  refresh();
+                }}
+              >
+                Post Approved Entry
+              </Button>
+              <Button onClick={createDraft}>
+                <Plus className="w-4 h-4" /> New Entry
+              </Button>
             </>
           }
         />
@@ -175,99 +250,31 @@ export default function TransactionPageClient({
         {!ready ? (
           <PageContentSkeleton />
         ) : (
-          <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="accounts-table w-full min-w-[980px] text-sm">
-                <thead className="border-b border-border/60">
-                  <tr>
-                    <SortTh
-                      label={`${title} No.`}
-                      colKey="number"
-                      sortKey={sortKey}
-                      sortDir={sortDir}
-                      onSort={(k) => {
-                        setSortKey(k);
-                        setSortDir(sortDir === "asc" ? "desc" : "asc");
-                      }}
-                    />
-                    <SortTh
-                      label="Date"
-                      colKey="date"
-                      sortKey={sortKey}
-                      sortDir={sortDir}
-                      onSort={(k) => {
-                        setSortKey(k);
-                        setSortDir(sortDir === "asc" ? "desc" : "asc");
-                      }}
-                    />
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      {partyLabel}
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Reference No.
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Amount
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Tax
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Total
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Status
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Created By
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                      Updated By
-                    </th>
-                    <th className="px-3 py-2.5 w-36" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((r) => (
-                    <tr key={r.id} className="accounts-table-row group">
-                      <td className="px-3 py-2 text-xs font-mono">{r.number}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{r.date}</td>
-                      <td className="px-3 py-2 text-xs">{r.party}</td>
-                      <td className="px-3 py-2 text-xs">{r.referenceNo || "—"}</td>
-                      <td className="px-3 py-2 text-xs">{r.amount.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-xs">{r.taxAmount.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-xs font-semibold">{r.totalAmount.toFixed(2)}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
-                      <td className="px-3 py-2 text-right">
-                        {r.status === "draft" && (
-                          <Button
-                            size="sm"
-                            className="h-7 text-sm"
-                            onClick={() => updateStatus(r, "approved")}
-                          >
-                            Approve
-                          </Button>
-                        )}
-                        {r.status === "approved" && (
-                          <Button
-                            size="sm"
-                            className="h-7 text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
-                            onClick={() => updateStatus(r, "posted")}
-                          >
-                            Post
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AccountsColumnFilterProvider
+            rows={toolbarRows}
+            getCellValue={getCellValue}
+            columnConfig={{
+              number: { type: "text" },
+              date: { type: "date" },
+              party: { type: "text" },
+              referenceNo: { type: "text" },
+              amount: { type: "amount" },
+              taxAmount: { type: "amount" },
+              totalAmount: { type: "amount" },
+              createdBy: { type: "text" },
+              updatedBy: { type: "text" },
+            }}
+            defaultSortKey="date"
+            defaultSortDir="desc"
+          >
+            <TransactionTable
+              title={title}
+              partyLabel={partyLabel}
+              toolbarRows={toolbarRows}
+              onApprove={(r) => updateStatus(r, "approved")}
+              onPost={(r) => updateStatus(r, "posted")}
+            />
+          </AccountsColumnFilterProvider>
         )}
       </div>
     </AppLayout>

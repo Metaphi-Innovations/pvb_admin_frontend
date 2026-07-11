@@ -122,6 +122,32 @@ const SEED_GST: GSTMaster[] = [
     updatedBy: "Admin",
     updatedDate: "2026-01-15",
   }),
+  normalizeGst({
+    id: 5,
+    gstId: "GST-0005",
+    gstPercentage: 0,
+    gstName: "Nil Rated",
+    taxType: "Nil Rated",
+    remarks: "Nil-rated supply under GST (0%)",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-16",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-16",
+  }),
+  normalizeGst({
+    id: 6,
+    gstId: "GST-0006",
+    gstPercentage: 0,
+    gstName: "Exempt",
+    taxType: "Exempt",
+    remarks: "Exempt from GST",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-16",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-16",
+  }),
 ];
 
 const STORAGE_KEY = "ds_gst_masters";

@@ -14,6 +14,23 @@ export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity
 
 export type CoaNodeLevel = "primary_head" | "account_group" | "ledger";
 
+/** Stable specialization for group-to-form routing and TDS/GST inheritance. */
+export type CoaSpecializedGroupType =
+  | "tds_payable"
+  | "tds_receivable"
+  | "gst_input"
+  | "gst_output"
+  | "gst_payable"
+  | "gst_receivable"
+  | "gst_duties"
+  | "sundry_debtors"
+  | "sundry_creditors"
+  | "bank_accounts"
+  | "cash_in_hand"
+  | "inventory"
+  | "warehouse"
+  | "employee_payable";
+
 export type ErpUsageModule =
   | "procurement"
   | "sales"
@@ -46,6 +63,8 @@ export interface ChartOfAccount {
   isSystemGenerated?: boolean;
   erpSourceModule?: string;
   erpSourceId?: number;
+  /** Inherited specialization for TDS/GST/party groups — sub-groups inherit from ancestors. */
+  specializedGroupType?: CoaSpecializedGroupType;
   createdBy: string;
   updatedBy: string;
 }
@@ -98,9 +117,11 @@ const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
 
 let coaCache: ChartOfAccount[] | null = null;
+let coaCoreCache: ChartOfAccount[] | null = null;
 
 function clearCoaCache(): void {
   coaCache = null;
+  coaCoreCache = null;
   try {
     const { invalidateCoaPathCache } =
       require("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data") as typeof import("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data");
@@ -118,6 +139,8 @@ const LEGACY_COA_KEYS = [
   "ds_accounts_coa_v8",
   "ds_accounts_coa_v9",
 ];
+
+const LEGACY_COA_META_KEYS = ["ds_gst_coa_sync_v2"];
 
 const COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 
@@ -167,25 +190,6 @@ function isRemovedSeedLedger(record: ChartOfAccount): boolean {
   return REMOVED_SEED_LEDGER_NAMES.has(record.accountName.trim().toLowerCase());
 }
 
-function hasChildAccountGroups(nodes: ChartOfAccount[], parentId: number): boolean {
-  return nodes.some((r) => r.parentAccountId === parentId && r.nodeLevel === "account_group");
-}
-
-function hasChildLedgers(nodes: ChartOfAccount[], parentId: number): boolean {
-  return nodes.some((r) => r.parentAccountId === parentId && r.nodeLevel === "ledger");
-}
-
-/** Leaf standard group or grouping ledger — valid parent for user-created ledgers */
-function canParentHoldLedger(parent: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (parent.nodeLevel === "account_group") {
-    return !hasChildAccountGroups(allNodes, parent.id);
-  }
-  if (parent.nodeLevel === "ledger") {
-    return hasChildLedgers(allNodes, parent.id);
-  }
-  return false;
-}
-
 function migrateLegacyNodeLevel(level: string): CoaNodeLevel {
   if (level === "sub_group") return "account_group";
   if (level === "sub_ledger") return "ledger";
@@ -201,6 +205,8 @@ function normalizeStructuralNode(
     alias: r.alias ?? "",
     parentAccountId: parent.id,
     parentAccount: parent.accountName,
+    accountType: parent.accountType,
+    specializedGroupType: parent.specializedGroupType,
     openingBalance: 0,
     balanceType: parent.balanceType ?? "Debit",
     gstApplicable: false,
@@ -240,6 +246,10 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     nodeLevel: migrateLegacyNodeLevel(r.nodeLevel),
   }));
 
+  const rawUserGroups = migratedStored.filter(
+    (r) => r.nodeLevel === "account_group" && !r.isSystem,
+  );
+
   const rawUserLedgers = migratedStored.filter(
     (r) =>
       r.nodeLevel === "ledger" &&
@@ -247,6 +257,41 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
       !isRemovedSeedLedger(r) &&
       shouldKeepUserLedger(r, migratedStored),
   );
+
+  const userGroups: ChartOfAccount[] = [];
+  const groupById = new Map<number, ChartOfAccount>();
+  let remainingGroups = [...rawUserGroups];
+
+  function resolveStructuralParent(r: ChartOfAccount): ChartOfAccount | undefined {
+    if (r.parentAccountId == null) return undefined;
+    const fromSystem = systemById.get(r.parentAccountId);
+    if (fromSystem) return fromSystem;
+    const fromGroup = groupById.get(r.parentAccountId);
+    if (fromGroup) return fromGroup;
+    const oldParent = migratedStored.find((s) => s.id === r.parentAccountId);
+    if (!oldParent) return undefined;
+    return systemByCode.get(oldParent.accountCode) ?? groupById.get(oldParent.id);
+  }
+
+  while (remainingGroups.length > 0) {
+    const next: ChartOfAccount[] = [];
+    for (const r of remainingGroups) {
+      const parent = resolveStructuralParent(r);
+      if (!parent) {
+        next.push(r);
+        continue;
+      }
+      if (parent.nodeLevel !== "primary_head" && parent.nodeLevel !== "account_group") {
+        next.push(r);
+        continue;
+      }
+      const normalized = normalizeStructuralNode(r, parent);
+      userGroups.push(normalized);
+      groupById.set(normalized.id, normalized);
+    }
+    if (next.length === remainingGroups.length) break;
+    remainingGroups = next;
+  }
 
   const userLedgers: ChartOfAccount[] = [];
   const ledgerById = new Map<number, ChartOfAccount>();
@@ -256,11 +301,17 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     if (r.parentAccountId == null) return undefined;
     const fromSystem = systemById.get(r.parentAccountId);
     if (fromSystem) return fromSystem;
+    const fromGroup = groupById.get(r.parentAccountId);
+    if (fromGroup) return fromGroup;
     const fromLedger = ledgerById.get(r.parentAccountId);
     if (fromLedger) return fromLedger;
     const oldParent = migratedStored.find((s) => s.id === r.parentAccountId);
     if (!oldParent) return undefined;
-    return systemByCode.get(oldParent.accountCode) ?? ledgerById.get(oldParent.id);
+    return (
+      systemByCode.get(oldParent.accountCode) ??
+      groupById.get(oldParent.id) ??
+      ledgerById.get(oldParent.id)
+    );
   }
 
   while (remaining.length > 0) {
@@ -268,10 +319,6 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     for (const r of remaining) {
       const parent = resolveParent(r);
       if (!parent) {
-        next.push(r);
-        continue;
-      }
-      if (parent.nodeLevel === "account_group" && hasChildAccountGroups(mergedSystem, parent.id)) {
         next.push(r);
         continue;
       }
@@ -295,7 +342,7 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   }
 
   return stripMisplacedGstLedgers(
-    mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]),
+    mergeBundledCoaDemoLedgers([...mergedSystem, ...userGroups, ...userLedgers]),
   );
 }
 
@@ -319,14 +366,17 @@ function purgeLegacyCoaStorage() {
   for (const key of LEGACY_COA_KEYS) {
     localStorage.removeItem(key);
   }
+  for (const key of LEGACY_COA_META_KEYS) {
+    localStorage.removeItem(key);
+  }
 }
 
 function coaStorageNeedsReset(stored: ChartOfAccount[]): boolean {
   const meta = readCoaMeta();
   if (!meta || meta.revision !== COA_SYSTEM_REVISION) return true;
-  const systemCount = stored.filter((r) => r.nodeLevel !== "ledger").length;
+  const systemCount = stored.filter((r) => r.isSystem).length;
   if (systemCount !== EXPECTED_SYSTEM_NODE_COUNT) return true;
-  if (stored.some((r) => r.nodeLevel === "ledger" && (r.isSystem || isRemovedSeedLedger(r)))) {
+  if (stored.some((r) => r.nodeLevel === "ledger" && isRemovedSeedLedger(r))) {
     return true;
   }
   return false;
@@ -364,6 +414,8 @@ function save<T>(key: string, list: T[]) {
 
 /** Load COA from storage without GST Master sync (used internally to avoid sync loops). */
 export function loadChartOfAccountsCore(): ChartOfAccount[] {
+  if (coaCoreCache) return coaCoreCache;
+
   if (typeof window !== "undefined") {
     purgeLegacyCoaStorage();
   }
@@ -371,15 +423,25 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
   const raw = getOrSeed(COA_KEY, COA_SEED);
   const stripped = stripMisplacedGstLedgers(raw);
   const needsReset = coaStorageNeedsReset(stripped);
-  const source = needsReset ? [] : stripped;
-  const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
+  // A system revision replaces protected system nodes but must retain user groups
+  // and ledgers. ensureCoaSystemStructure performs that merge by stable IDs/codes.
+  const merged = ensureCoaSystemStructure(stripped.length ? stripped : COA_SEED);
+
+  coaCoreCache = merged;
 
   if (
     typeof window !== "undefined" &&
     (needsReset || merged.length !== raw.length || stripped.length !== raw.length)
   ) {
-    save(COA_KEY, merged);
-    writeCoaMeta();
+    const persist = () => {
+      save(COA_KEY, merged);
+      writeCoaMeta();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(persist, { timeout: 2500 });
+    } else {
+      window.setTimeout(persist, 0);
+    }
   }
 
   return merged;
@@ -387,12 +449,7 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
 
 export const loadChartOfAccounts = (): ChartOfAccount[] => {
   if (coaCache) return coaCache;
-
-  const core = loadChartOfAccountsCore();
-  if (typeof window === "undefined") return core;
-
-  const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
-  coaCache = applyGstCoaSyncOnLoad(core);
+  coaCache = loadChartOfAccountsCore();
   return coaCache;
 };
 

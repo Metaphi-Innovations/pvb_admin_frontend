@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -15,6 +15,7 @@ import { NAV_ITEMS, type NavGroup, type NavItem } from "@/components/navigation/
 import { arrangeAccountsMegaMenuColumns } from "@/lib/accounts/accounts-nav";
 import type { AccountsNavGroupId } from "@/lib/accounts/accounts-nav";
 import { PrefetchLink } from "@/components/navigation/PrefetchLink";
+import { useNavigationPending } from "@/components/navigation/NavigationPendingContext";
 import { ApprovalsButton } from "./ApprovalsButton";
 import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
 
@@ -39,37 +40,46 @@ function isNavHrefActive(pathname: string, search: string, href: string): boolea
 function computeNavActive(pathname: string, search: string, item: NavItem): boolean {
   if (item.href && isNavHrefActive(pathname, search, item.href)) return true;
   if (item.groupedChildren) {
-    return item.groupedChildren.some((g) =>
-      g.children.some((c) => isNavHrefActive(pathname, search, c.href)),
+    return item.groupedChildren.some(
+      (g) =>
+        (g.href != null && isNavHrefActive(pathname, search, g.href)) ||
+        g.children.some((c) => isNavHrefActive(pathname, search, c.href)),
     );
   }
   return item.children?.some((c) => isNavHrefActive(pathname, search, c.href)) ?? false;
 }
 
 function activeGroupIndex(pathname: string, search: string, groups: NavGroup[]): number {
-  const idx = groups.findIndex((g) =>
+  const byChild = groups.findIndex((g) =>
     g.children.some((c) => isNavHrefActive(pathname, search, c.href)),
   );
-  return idx >= 0 ? idx : 0;
+  if (byChild >= 0) return byChild;
+
+  const byGroupHref = groups.findIndex(
+    (g) => g.href != null && isNavHrefActive(pathname, search, g.href),
+  );
+  if (byGroupHref >= 0) return byGroupHref;
+
+  return 0;
 }
 
 function MegaMenuLink({
   child,
   pathname,
   search,
-  onClose,
+  onNavigate,
 }: {
   child: { label: string; href: string; icon?: React.ComponentType<{ className?: string }>; description?: string };
   pathname: string;
   search: string;
-  onClose: () => void;
+  onNavigate: (href: string, e: React.MouseEvent, label?: string) => void;
 }) {
   const childActive = isNavHrefActive(pathname, search, child.href);
   const ChildIcon = child.icon;
   return (
     <PrefetchLink
       href={child.href}
-      onClick={onClose}
+      onClick={(e) => onNavigate(child.href, e, child.label)}
       className={cn(
         "group flex items-start gap-2.5 py-2 px-1 rounded-md transition-colors duration-100 min-w-0",
         childActive ? "bg-brand-50 text-brand-700" : "hover:bg-brand-50/70",
@@ -122,7 +132,7 @@ function HorizontalTabsMegaMenu({
   setHoveredGroup,
   pathname,
   search,
-  onClose,
+  onNavigate,
 }: {
   item: NavItem;
   groupedChildren: NavGroup[];
@@ -130,7 +140,7 @@ function HorizontalTabsMegaMenu({
   setHoveredGroup: (idx: number) => void;
   pathname: string;
   search: string;
-  onClose: () => void;
+  onNavigate: (href: string, e: React.MouseEvent, label?: string) => void;
 }) {
   const activeGroup = groupedChildren[hoveredGroup];
   const activeChildren = activeGroup?.children ?? [];
@@ -151,13 +161,14 @@ function HorizontalTabsMegaMenu({
         <div className="flex gap-0.5 overflow-x-auto px-1.5 py-1 [scrollbar-width:thin]">
           {groupedChildren.map((group, idx) => {
             const isActive = hoveredGroup === idx;
+            const groupHref = group.href ?? group.children[0]?.href;
             return (
-              <button
+              <PrefetchLink
                 key={group.label}
-                type="button"
+                href={groupHref ?? "#"}
+                onClick={(e) => groupHref && onNavigate(groupHref, e, group.label)}
                 onMouseEnter={() => setHoveredGroup(idx)}
                 onFocus={() => setHoveredGroup(idx)}
-                onClick={() => setHoveredGroup(idx)}
                 className={cn(
                   "px-2 py-0.5 rounded text-[12px] font-medium whitespace-nowrap transition-colors outline-none flex-shrink-0",
                   isActive
@@ -166,7 +177,7 @@ function HorizontalTabsMegaMenu({
                 )}
               >
                 {group.label}
-              </button>
+              </PrefetchLink>
             );
           })}
         </div>
@@ -189,7 +200,7 @@ function HorizontalTabsMegaMenu({
                 child={child}
                 pathname={pathname}
                 search={search}
-                onClose={onClose}
+                onNavigate={onNavigate}
               />
             ))}
           </div>
@@ -201,7 +212,7 @@ function HorizontalTabsMegaMenu({
                   child={child}
                   pathname={pathname}
                   search={search}
-                  onClose={onClose}
+                  onNavigate={onNavigate}
                 />
               ))}
             </div>
@@ -402,6 +413,7 @@ const NavDropdown = memo(function NavDropdown({
   search: string;
 }) {
   const router = useRouter();
+  const { navigateTo } = useNavigationPending();
   const [isOpen, setIsOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -415,6 +427,16 @@ const NavDropdown = memo(function NavDropdown({
   const isMasters = item.id === "masters";
   const [hoveredGroup, setHoveredGroup] = useState(0);
   const [panelWidth, setPanelWidth] = useState(760);
+
+  /** Portaled menu unmounts on close before Link navigation — push explicitly with pending state. */
+  const navigateFromMenu = useCallback(
+    (href: string, e: React.MouseEvent, label?: string) => {
+      if (!href || href === "#") return;
+      setIsOpen(false);
+      navigateTo(href, label, e);
+    },
+    [navigateTo],
+  );
 
   const resolveMenuWidth = () => {
     if (isHorizontalTabsMenu) {
@@ -518,7 +540,7 @@ const NavDropdown = memo(function NavDropdown({
           setHoveredGroup={setHoveredGroup}
           pathname={pathname}
           search={search}
-          onClose={() => setIsOpen(false)}
+          onNavigate={navigateFromMenu}
         />
       ) : hasGroups && isSidebarMenu ? (
         <div
@@ -530,7 +552,7 @@ const NavDropdown = memo(function NavDropdown({
           {item.href && !isAccountsMenu && (
             <PrefetchLink
               href={item.href}
-              onClick={() => setIsOpen(false)}
+              onClick={(e) => navigateFromMenu(item.href!, e, item.label)}
               className="flex items-center justify-between mx-2 mt-2 mb-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-brand-700 hover:bg-brand-50 border border-brand-100/80"
             >
               <span>{item.label} overview</span>
@@ -546,13 +568,15 @@ const NavDropdown = memo(function NavDropdown({
             {groupedChildren.map((group, idx) => {
               const GroupIcon = group.icon;
               const isHovered = hoveredGroup === idx;
+              const groupHref = group.href ?? group.children[0]?.href;
               return (
-                <button
+                <PrefetchLink
                   key={group.label}
-                  type="button"
+                  href={groupHref ?? "#"}
+                  onClick={(e) => groupHref && navigateFromMenu(groupHref, e, group.label)}
                   onMouseEnter={() => setHoveredGroup(idx)}
                   className={cn(
-                    "w-full text-left rounded-lg border p-3 transition-all duration-150 outline-none",
+                    "block w-full text-left rounded-lg border p-3 transition-all duration-150 outline-none",
                     isHovered
                       ? "bg-white border-border shadow-sm"
                       : "border-transparent hover:bg-white/70",
@@ -575,7 +599,7 @@ const NavDropdown = memo(function NavDropdown({
                       ) : null}
                     </div>
                   </div>
-                </button>
+                </PrefetchLink>
               );
             })}
           </div>
@@ -611,7 +635,7 @@ const NavDropdown = memo(function NavDropdown({
                           child={child}
                           pathname={pathname}
                           search={search}
-                          onClose={() => setIsOpen(false)}
+                          onNavigate={navigateFromMenu}
                         />
                       ))}
                     </div>
@@ -623,7 +647,7 @@ const NavDropdown = memo(function NavDropdown({
                             child={child}
                             pathname={pathname}
                             search={search}
-                            onClose={() => setIsOpen(false)}
+                            onNavigate={navigateFromMenu}
                           />
                         ))}
                       </div>
@@ -646,7 +670,7 @@ const NavDropdown = memo(function NavDropdown({
                   <PrefetchLink
                     key={child.href}
                     href={child.href}
-                    onClick={() => setIsOpen(false)}
+                    onClick={(e) => navigateFromMenu(child.href, e, child.label)}
                     className={cn(
                       "group flex items-center gap-2.5 py-2 px-1 rounded-md transition-colors duration-100",
                       childActive ? "text-brand-700" : "text-foreground hover:text-brand-700",
@@ -699,7 +723,7 @@ const NavDropdown = memo(function NavDropdown({
                       <PrefetchLink
                         key={child.href}
                         href={child.href}
-                        onClick={() => setIsOpen(false)}
+                        onClick={(e) => navigateFromMenu(child.href, e, child.label)}
                         className={cn(
                           "group flex items-center gap-1.5 px-2 py-[7px] rounded-md transition-colors duration-100 cursor-pointer w-full",
                           childActive ? "bg-brand-50 text-brand-700" : "hover:bg-brand-50",
@@ -739,7 +763,7 @@ const NavDropdown = memo(function NavDropdown({
               <PrefetchLink
                 key={child.href}
                 href={child.href}
-                onClick={() => setIsOpen(false)}
+                onClick={(e) => navigateFromMenu(child.href, e, child.label)}
                 className={cn(
                   "group flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg",
                   "transition-colors duration-100 cursor-pointer w-full",

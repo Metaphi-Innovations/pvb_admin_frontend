@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Eye, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Eye, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -141,6 +141,25 @@ export function AccountsDeleteAction({
       onClick={onClick}
     >
       <Trash2 className={cn(ACCOUNTS_ACTION_ICON_CLASS, "hover:text-red-600")} />
+    </button>
+  );
+}
+
+export function AccountsGenerateAction({
+  title = "Generate",
+  onClick,
+  className,
+  disabled,
+}: ActionButtonProps) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      className={cn(ACCOUNTS_ACTION_BTN_CLASS, className)}
+      onClick={onClick}
+    >
+      <Plus className={cn(ACCOUNTS_ACTION_ICON_CLASS, "text-brand-600")} />
     </button>
   );
 }

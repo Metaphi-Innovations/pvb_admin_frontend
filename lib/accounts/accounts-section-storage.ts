@@ -4,7 +4,7 @@
 
 import type { AccountsNavGroupId } from "./accounts-nav";
 
-export const ACCOUNTS_DEMO_SEED_VERSION = "relative-dates-v4";
+export const ACCOUNTS_DEMO_SEED_VERSION = "clean-coa-v7";
 export const BANKING_DEMO_SEED_VERSION = "relative-dates-v3";
 export const PAYABLES_PAGE_SEED_VERSION = "relative-dates-v3";
 

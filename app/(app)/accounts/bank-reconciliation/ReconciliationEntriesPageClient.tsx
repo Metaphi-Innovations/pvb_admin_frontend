@@ -17,7 +17,6 @@ import {
 import { exportStatementEntriesToExcel } from "./bank-reconciliation-export";
 import { CategorizeEntryPanel } from "./components/CategorizeEntryPanel";
 import { MatchEntryModal } from "./components/MatchEntryModal";
-import { MatchStatusBadge } from "./components/MatchStatusBadge";
 import { formatINR, monthYearLabel, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 import { cn } from "@/lib/utils";
 
@@ -240,15 +239,12 @@ export default function ReconciliationEntriesPageClient({
                 <th className="px-4 py-2.5 text-right text-xs font-semibold text-foreground whitespace-nowrap w-[130px] align-middle">
                   Withdrawals
                 </th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground w-[140px] align-middle">
-                  Status
-                </th>
               </tr>
             </thead>
             <tbody>
               {entries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="accounts-table-empty">
+                  <td colSpan={5} className="accounts-table-empty">
                     No entries match filters.
                   </td>
                 </tr>
@@ -283,9 +279,6 @@ export default function ReconciliationEntriesPageClient({
                       </td>
                       <td className="px-4 py-2 text-xs text-right tabular-nums align-middle font-medium text-red-600">
                         {e.debit > 0 ? formatINR(e.debit) : "—"}
-                      </td>
-                      <td className="px-4 py-2 align-middle">
-                        <MatchStatusBadge status={e.matchStatus} />
                       </td>
                     </tr>
                   );

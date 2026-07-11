@@ -2,14 +2,6 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, History, Pencil, UserCheck } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
@@ -34,11 +26,18 @@ import {
   ReportDateRangeFilter,
   ReportFilterRow,
   ReportSearchFilter,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ReportStatusMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import { SectionTabs, StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import { SectionTabs, AccountsColumnFilterProvider, AccountsColumnHeader, SortTh, useAccountsColumnFilterContext, useAccountsFilteredRows } from "@/app/(app)/accounts/components/AccountsUI";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -63,6 +62,11 @@ const CATEGORY_TABS: { id: CategoryFilter; label: string }[] = [
   { id: "voucher_approval", label: "Voucher Approval Log" },
   { id: "edit_delete", label: "Edit / Delete Log" },
 ];
+
+const AUDIT_MODULE_OPTIONS = AUDIT_TRAIL_MODULE_OPTIONS.filter((o) => o.value !== "all");
+const AUDIT_USER_OPTIONS = AUDIT_TRAIL_USER_OPTIONS.filter((o) => o.value !== "all");
+const AUDIT_ACTIVITY_OPTIONS = AUDIT_TRAIL_ACTIVITY_OPTIONS.filter((o) => o.value !== "all");
+const AUDIT_STATUS_OPTIONS = AUDIT_TRAIL_STATUS_OPTIONS.filter((o) => o.value !== "all");
 
 const CATEGORY_CARDS: {
   id: AuditTrailCategory;
@@ -171,9 +175,6 @@ const AuditTrailRow = memo(function AuditTrailRow({
       <AccountsTableCell className="text-xs max-w-[120px] truncate" title={row.newValue}>
         {row.newValue}
       </AccountsTableCell>
-      <AccountsTableCell>
-        <StatusBadge status={row.status} />
-      </AccountsTableCell>
       <AccountsTableCell className="text-center w-10">
         <button
           type="button"
@@ -189,14 +190,89 @@ const AuditTrailRow = memo(function AuditTrailRow({
   );
 });
 
+function AuditTrailTableBody({
+  mounted,
+  filtered,
+  hasFilters,
+  clearFilters,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  handleView,
+}: {
+  mounted: boolean;
+  filtered: AuditTrailRecord[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  handleView: (row: AuditTrailRecord) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredRows = useAccountsFilteredRows(filtered);
+  const paged = useMemo(
+    () => columnFilteredRows.slice((page - 1) * pageSize, page * pageSize),
+    [columnFilteredRows, page, pageSize],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
+  return (
+    <AccountsTable minWidth={1400}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Date & Time" colKey="dateTime" filterType="date" />
+          <SortTh label="User Name" colKey="user" />
+          <SortTh label="Role" colKey="role" />
+          <SortTh label="Module" colKey="module" />
+          <SortTh label="Voucher / Reference No." colKey="reference" />
+          <SortTh label="Activity Type" colKey="activityType" />
+          <SortTh label="Action Performed" colKey="action" />
+          <SortTh label="Old Value" colKey="oldValue" />
+          <SortTh label="New Value" colKey="newValue" />
+          <AccountsColumnHeader label="View" colKey="_view" sortable={false} filterable={false} align="center" className="w-10" />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {!mounted ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={10} className="accounts-table-empty">
+              Loading…
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : filtered.length === 0 ? (
+          <AccountsTableEmpty
+            colSpan={10}
+            message="No audit records found for the selected filters."
+            onClear={hasFilters ? clearFilters : undefined}
+          />
+        ) : columnFilteredRows.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={10} className="accounts-table-empty">
+              No records match the column filters.
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          paged.map((r) => <AuditTrailRow key={r.id} row={r} onView={handleView} />)
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
 export default function AuditTrailPageClient() {
   const mounted = useClientMounted();
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [search, setSearch] = useState("");
-  const [module, setModule] = useState("all");
-  const [user, setUser] = useState("all");
-  const [activityType, setActivityType] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [modules, setModules] = useState<string[]>([]);
+  const [users, setUsers] = useState<string[]>([]);
+  const [activityTypes, setActivityTypes] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
@@ -215,42 +291,80 @@ export default function AuditTrailPageClient() {
         search,
         dateFrom,
         dateTo,
-        module,
+        module: modules,
         category,
-        user,
-        activityType,
-        status,
+        user: users,
+        activityType: activityTypes,
+        status: statuses,
       }),
-    [allRows, search, dateFrom, dateTo, module, category, user, activityType, status],
+    [allRows, search, dateFrom, dateTo, modules, category, users, activityTypes, statuses],
   );
 
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
+  const moreFiltersActiveCount = countActiveMoreFilters({
+    user: users,
+    activityType: activityTypes,
+    status: statuses,
+  });
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary("module", "Modules", modules, AUDIT_MODULE_OPTIONS, () => setModules([])),
+      buildEntityFilterSummary("user", "Users", users, AUDIT_USER_OPTIONS, () => setUsers([])),
+      buildEntityFilterSummary(
+        "activityType",
+        "Activity Types",
+        activityTypes,
+        AUDIT_ACTIVITY_OPTIONS,
+        () => setActivityTypes([]),
+      ),
+      buildEntityFilterSummary("status", "Statuses", statuses, AUDIT_STATUS_OPTIONS, () => setStatuses([])),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [modules, users, activityTypes, statuses]);
+
+  const getCellValue = useCallback(
+    (row: AuditTrailRecord, key: string) => {
+      if (key === "dateTime") return row.dateTime;
+      return (row as unknown as Record<string, unknown>)[key];
+    },
+    [],
+  );
+
+  const columnConfig = useMemo(
+    () => ({
+      dateTime: { type: "date" as const },
+      user: { type: "text" as const },
+      role: { type: "text" as const },
+      module: { type: "text" as const },
+      reference: { type: "text" as const },
+      activityType: { type: "text" as const },
+      action: { type: "text" as const },
+      oldValue: { type: "text" as const },
+      newValue: { type: "text" as const },
+    }),
+    [],
   );
 
   const hasFilters =
     search.trim() !== "" ||
-    module !== "all" ||
-    user !== "all" ||
-    activityType !== "all" ||
-    status !== "all" ||
+    isMultiFilterActive(modules) ||
+    isMultiFilterActive(users) ||
+    isMultiFilterActive(activityTypes) ||
+    isMultiFilterActive(statuses) ||
     category !== "all";
 
   const clearFilters = useCallback(() => {
     setSearch("");
-    setModule("all");
-    setUser("all");
-    setActivityType("all");
-    setStatus("all");
+    setModules([]);
+    setUsers([]);
+    setActivityTypes([]);
+    setStatuses([]);
     setCategory("all");
   }, []);
 
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, module, category, user, activityType, status, pageSize]);
+  }, [search, dateFrom, dateTo, modules, category, users, activityTypes, statuses, pageSize]);
 
-  const handleExport = useCallback(() => exportAuditTrailCsv(filtered), [filtered]);
   const handleView = useCallback((row: AuditTrailRecord) => setViewRecord(row), []);
 
   const tabCounts = useMemo(
@@ -264,94 +378,188 @@ export default function AuditTrailPageClient() {
   );
 
   return (
+    <AccountsColumnFilterProvider
+      rows={filtered}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="dateTime"
+      defaultSortDir="desc"
+    >
+      <AuditTrailPageBody
+        mounted={mounted}
+        allRows={allRows}
+        filtered={filtered}
+        categoryCounts={categoryCounts}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        tabCounts={tabCounts}
+        category={category}
+        setCategory={setCategory}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        search={search}
+        setSearch={setSearch}
+        modules={modules}
+        setModules={setModules}
+        users={users}
+        setUsers={setUsers}
+        activityTypes={activityTypes}
+        setActivityTypes={setActivityTypes}
+        statuses={statuses}
+        setStatuses={setStatuses}
+        filterSummaryItems={filterSummaryItems}
+        moreFiltersActiveCount={moreFiltersActiveCount}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        handleView={handleView}
+        viewRecord={viewRecord}
+        setViewRecord={setViewRecord}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function AuditTrailPageBody({
+  mounted,
+  allRows,
+  filtered,
+  categoryCounts,
+  hasFilters,
+  clearFilters,
+  tabCounts,
+  category,
+  setCategory,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  search,
+  setSearch,
+  modules,
+  setModules,
+  users,
+  setUsers,
+  activityTypes,
+  setActivityTypes,
+  statuses,
+  setStatuses,
+  filterSummaryItems,
+  moreFiltersActiveCount,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  handleView,
+  viewRecord,
+  setViewRecord,
+}: {
+  mounted: boolean;
+  allRows: AuditTrailRecord[];
+  filtered: AuditTrailRecord[];
+  categoryCounts: ReturnType<typeof countAuditTrailByCategory>;
+  hasFilters: boolean;
+  clearFilters: () => void;
+  tabCounts: Record<string, number>;
+  category: CategoryFilter;
+  setCategory: (v: CategoryFilter) => void;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  modules: string[];
+  setModules: (v: string[]) => void;
+  users: string[];
+  setUsers: (v: string[]) => void;
+  activityTypes: string[];
+  setActivityTypes: (v: string[]) => void;
+  statuses: string[];
+  setStatuses: (v: string[]) => void;
+  filterSummaryItems: ReportFilterSummaryItem[];
+  moreFiltersActiveCount: number;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  handleView: (row: AuditTrailRecord) => void;
+  viewRecord: AuditTrailRecord | null;
+  setViewRecord: (row: AuditTrailRecord | null) => void;
+}) {
+  const columnFilteredRows = useAccountsFilteredRows(filtered);
+  const handleExport = useCallback(
+    () => exportAuditTrailCsv(columnFilteredRows),
+    [columnFilteredRows],
+  );
+
+  return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Audit Trail")}
       title="Audit Trail"
       description="Chronological log of accounting actions, approvals and data changes."
       filters={
-        <ReportFilterRow
-          end={
-            <AccountsExportMenu
-              onExcel={handleExport}
-              onPdf={handleExport}
-              disabled={!mounted || filtered.length === 0}
+        <>
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExport}
+                onPdf={handleExport}
+                disabled={!mounted || columnFilteredRows.length === 0}
+              />
+            }
+          >
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="User, module, reference, action…"
             />
-          }
-        >
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="User, module, reference, action…"
-          />
-          <div className="space-y-0.5 min-w-[130px]">
-            <Label className={filterLabelClass}>User</Label>
-            <Select value={user} onValueChange={setUser}>
-              <SelectTrigger className={cn(filterControlClass, "w-[130px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUDIT_TRAIL_USER_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-0.5 min-w-[140px]">
-            <Label className={filterLabelClass}>Module</Label>
-            <Select value={module} onValueChange={setModule}>
-              <SelectTrigger className={cn(filterControlClass, "w-[140px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUDIT_TRAIL_MODULE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-0.5 min-w-[120px]">
-            <Label className={filterLabelClass}>Activity Type</Label>
-            <Select value={activityType} onValueChange={setActivityType}>
-              <SelectTrigger className={cn(filterControlClass, "w-[120px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUDIT_TRAIL_ACTIVITY_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-0.5 min-w-[120px]">
-            <Label className={filterLabelClass}>Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className={cn(filterControlClass, "w-[120px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUDIT_TRAIL_STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-        </ReportFilterRow>
+            <ReportStatusMultiFilter
+              values={modules}
+              onChange={setModules}
+              options={AUDIT_MODULE_OPTIONS}
+              label="Module"
+            />
+            <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+              <ReportStatusMultiFilter
+                values={users}
+                onChange={setUsers}
+                options={AUDIT_USER_OPTIONS}
+                label="User"
+              />
+              <ReportStatusMultiFilter
+                values={activityTypes}
+                onChange={setActivityTypes}
+                options={AUDIT_ACTIVITY_OPTIONS}
+                label="Activity Type"
+              />
+              <ReportStatusMultiFilter
+                values={statuses}
+                onChange={setStatuses}
+                options={AUDIT_STATUS_OPTIONS}
+                label="Status"
+              />
+            </ReportMoreFilters>
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
@@ -408,10 +616,10 @@ export default function AuditTrailPageClient() {
               })}
             </div>
             <AccountsSummaryBar
-              className="border-t border-border/60 lg:grid-cols-4"
+              className="border-t border-border/60"
               items={[
                 { label: "Total Records", value: String(allRows.length) },
-                { label: "Filtered Results", value: String(filtered.length) },
+                { label: "Filtered Results", value: String(columnFilteredRows.length) },
                 {
                   label: "User Activity",
                   value: String(categoryCounts.user_activity),
@@ -425,11 +633,11 @@ export default function AuditTrailPageClient() {
           </div>
         }
         footer={
-          filtered.length > 0 ? (
+          columnFilteredRows.length > 0 ? (
             <AccountsTablePagination
               page={page}
               pageSize={pageSize}
-              totalRecords={filtered.length}
+              totalRecords={columnFilteredRows.length}
               onPageChange={setPage}
               onPageSizeChange={(size) => {
                 setPageSize(size);
@@ -439,62 +647,17 @@ export default function AuditTrailPageClient() {
           ) : undefined
         }
       >
-        <AccountsTable minWidth={1400}>
-          <AccountsTableHead>
-            <AccountsTableHeadRow>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Date & Time
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                User Name
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Role
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Module
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Voucher / Reference No.
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Activity Type
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Action Performed
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Old Value
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                New Value
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase sticky={false}>
-                Status
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell className="w-10 text-center" uppercase sticky={false}>
-                View
-              </AccountsTableHeadCell>
-            </AccountsTableHeadRow>
-          </AccountsTableHead>
-          <AccountsTableBody>
-            {!mounted ? (
-              <AccountsTableRow>
-                <AccountsTableCell colSpan={11} className="accounts-table-empty">
-                  Loading…
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ) : paged.length === 0 ? (
-              <AccountsTableEmpty
-                colSpan={11}
-                message="No audit records found for the selected filters."
-                onClear={hasFilters ? clearFilters : undefined}
-              />
-            ) : (
-              paged.map((r) => <AuditTrailRow key={r.id} row={r} onView={handleView} />)
-            )}
-          </AccountsTableBody>
-        </AccountsTable>
+        <AuditTrailTableBody
+          mounted={mounted}
+          filtered={filtered}
+          hasFilters={hasFilters}
+          clearFilters={clearFilters}
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          handleView={handleView}
+        />
       </AccountsTableListing>
 
       <AuditTrailDetailSheet

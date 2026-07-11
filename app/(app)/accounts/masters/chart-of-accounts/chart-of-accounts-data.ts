@@ -1,14 +1,26 @@
 import {
+  COA_HIERARCHY_LEVEL_LABELS,
+  COA_MAX_HIERARCHY_MESSAGE,
+  COA_MAX_HIERARCHY_LEVEL,
+} from "@/lib/accounts/coa-hierarchy-constants";
+import {
   canUserCreateAtLevel,
+  canUserDeleteGroup,
   canUserDeleteNode,
+  canUserEditGroup,
   canUserEditNode,
   isStructuralNode as hierarchyIsStructural,
   ledgerHasChildLedgers,
+  resolveHierarchyPath,
 } from "@/lib/accounts/coa-hierarchy";
 import { isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
 import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
 import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
-import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
+import { resolveCoaAddLedgerPolicy, isSundryDebtorsGroup } from "@/lib/accounts/coa-add-ledger-policy";
+import {
+  inheritedSpecializedGroupType,
+  isTdsGroupContext,
+} from "@/lib/accounts/coa-specialized-groups";
 import { getCoaDisplayPath, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import {
   type AccountType,
@@ -107,6 +119,20 @@ export const DEFAULT_LEDGER_FORM: LedgerFormValues = {
   status: "active",
 };
 
+export interface GroupFormValues {
+  groupName: string;
+  description: string;
+  parentGroupId: number | null;
+  status: "active" | "inactive";
+}
+
+export const DEFAULT_GROUP_FORM: GroupFormValues = {
+  groupName: "",
+  description: "",
+  parentGroupId: null,
+  status: "active",
+};
+
 export function accountTypeToPrimaryLabel(type: AccountType): string {
   return PRIMARY_HEAD_OPTIONS.find((o) => o.value === type)?.label ?? type;
 }
@@ -132,6 +158,41 @@ export function getAncestorPath(
       current.parentAccountId != null ? byId.get(current.parentAccountId) : undefined;
   }
   return path;
+}
+
+/** 1-based hierarchy depth for a node (path length from root). */
+export function getCoaHierarchyLevel(
+  records: ChartOfAccount[],
+  nodeId: number,
+): number {
+  return getAncestorPath(records, nodeId).length;
+}
+
+export function getCoaHierarchyLevelForNode(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): number {
+  return getCoaHierarchyLevel(records, node.id);
+}
+
+export function getCoaHierarchyLevelLabel(level: number): string {
+  return COA_HIERARCHY_LEVEL_LABELS[level] ?? `Level ${level}`;
+}
+
+/** True when the node sits at Level 5 — no further children may be created. */
+export function isAtCoaMaxHierarchyLevel(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  return getCoaHierarchyLevelForNode(node, records) >= COA_MAX_HIERARCHY_LEVEL;
+}
+
+/** Show the max-depth notice when creation actions are blocked by hierarchy depth. */
+export function showCoaMaxHierarchyMessage(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  return isAtCoaMaxHierarchyLevel(node, records);
 }
 
 let coaPathMapCache: { key: string; map: Map<number, ChartOfAccount> } | null = null;
@@ -226,7 +287,7 @@ export function isManualLedgerCreationParent(
   return pathNames.some((n) => COA_MANUAL_LEDGER_PARENT_NAMES.has(n));
 }
 
-/** Level 3 — leaf account group (e.g. Bank Accounts, Direct Expenses) where ledgers attach */
+/** Leaf account group — no nested child groups; ledgers attach here */
 export function isAccountingGroupNode(
   node: ChartOfAccount,
   records: ChartOfAccount[],
@@ -235,16 +296,89 @@ export function isAccountingGroupNode(
   return !hasChildAccountGroups(records, node.id);
 }
 
-/** Ledgers may only be created directly under Level 3 Accounting Groups — never under ledgers */
+/**
+ * Sub-groups (L3) may be created under Primary Head (L1) or Account Group (L2) only.
+ * Deeper nesting is blocked to preserve the 5-level hierarchy.
+ */
+export function canAddSubGroupUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (node.nodeLevel === "ledger") return false;
+  if (node.nodeLevel !== "primary_head" && node.nodeLevel !== "account_group") return false;
+  const level = getCoaHierarchyLevel(records, node.id);
+  return level <= 2;
+}
+
+/**
+ * Ledgers (L4) attach to leaf sub-groups / account groups (L2–L3).
+ * Sub-ledgers (L5) attach only under Level 4 grouping ledgers.
+ */
 export function canAddLedgerUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
-  return isAccountingGroupNode(node, records);
+  const level = getCoaHierarchyLevel(records, node.id);
+  if (level >= COA_MAX_HIERARCHY_LEVEL) return false;
+
+  if (node.nodeLevel === "account_group") {
+    if (hasChildAccountGroups(records, node.id)) return false;
+    return level >= 2 && level <= 3;
+  }
+
+  if (node.nodeLevel === "ledger") {
+    return level === 4;
+  }
+
+  return false;
 }
 
 export const LEDGER_UNDER_LEDGER_ERROR =
-  "A ledger cannot contain another ledger. Please create the ledger under an Accounting Group.";
+  "Sub-ledgers can only be created under a Level 4 ledger (maximum one ledger tier below).";
+
+/** User-facing reason when a node cannot accept a new ledger child. */
+export function describeInvalidLedgerParentMessage(
+  parent: ChartOfAccount,
+  records: ChartOfAccount[],
+): string {
+  if (parent.nodeLevel === "primary_head") {
+    return "Ledgers cannot be created under a Primary Head (e.g. Assets). Add a Sub-Group under this head first, then create the ledger under that group.";
+  }
+  if (getCoaHierarchyLevel(records, parent.id) >= COA_MAX_HIERARCHY_LEVEL) {
+    return COA_MAX_HIERARCHY_MESSAGE;
+  }
+  if (parent.nodeLevel === "account_group" && hasChildAccountGroups(records, parent.id)) {
+    return "Select a leaf sub-group before adding a ledger.";
+  }
+  if (parent.nodeLevel === "ledger") {
+    return LEDGER_UNDER_LEDGER_ERROR;
+  }
+  return "Ledgers must be created under a sub-group (Level 3) or grouping ledger (Level 4).";
+}
+
+export { COA_MAX_HIERARCHY_MESSAGE } from "@/lib/accounts/coa-hierarchy-constants";
 
 export function countChildGroups(records: ChartOfAccount[], nodeId: number): number {
   return getChildGroups(records, nodeId).length;
+}
+
+export function getValidSubGroupParents(records: ChartOfAccount[]): ChartOfAccount[] {
+  return records
+    .filter((r) => canAddSubGroupUnder(r, records))
+    .sort((a, b) => {
+      const pathA = getAncestorPath(records, a.id).map((n) => n.accountCode).join("/");
+      const pathB = getAncestorPath(records, b.id).map((n) => n.accountCode).join("/");
+      return pathA.localeCompare(pathB);
+    });
+}
+
+export function buildSubGroupParentOptions(records: ChartOfAccount[]): LedgerParentOption[] {
+  return getValidSubGroupParents(records).map((node) => {
+    const path = getAncestorPath(records, node.id);
+    const names = path.map((n) => n.accountName);
+    const codes = path.map((n) => n.accountCode);
+    return {
+      id: node.id,
+      node,
+      path,
+      breadcrumb: names.join(" › "),
+      searchText: [...names, ...codes].join(" ").toLowerCase(),
+    };
+  });
 }
 
 export function getValidLedgerParents(records: ChartOfAccount[]): ChartOfAccount[] {
@@ -354,6 +488,117 @@ export function generateLedgerCode(records: ChartOfAccount[]): string {
   return `LED-${String(next).padStart(3, "0")}`;
 }
 
+export function generateGroupCode(records: ChartOfAccount[], parentId: number): string {
+  const parent = records.find((r) => r.id === parentId);
+  const prefix = parent?.accountCode?.replace(/\s+/g, "") ?? "GRP";
+  const siblings = records.filter(
+    (r) => r.parentAccountId === parentId && r.nodeLevel === "account_group",
+  );
+  const nums = siblings
+    .map((r) => {
+      const m = r.accountCode.match(/-UG(\d+)$/i);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter((n) => n > 0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `${prefix}-UG${String(next).padStart(2, "0")}`;
+}
+
+/** Accounting nature inherited from the root primary head — read-only in forms */
+export function resolveInheritedAccountType(
+  records: ChartOfAccount[],
+  parentGroupId: number | null,
+): AccountType {
+  if (parentGroupId == null) return "Asset";
+  const { primaryHead } = resolveHierarchyPath(records, parentGroupId);
+  return primaryHead?.accountType ?? records.find((r) => r.id === parentGroupId)?.accountType ?? "Asset";
+}
+
+export function groupToForm(record: ChartOfAccount): GroupFormValues {
+  return {
+    groupName: record.accountName,
+    description: record.description ?? "",
+    parentGroupId: record.parentAccountId,
+    status: record.status,
+  };
+}
+
+export function formToGroup(
+  form: GroupFormValues,
+  id: number,
+  accountCode: string,
+  records: ChartOfAccount[],
+  existing?: ChartOfAccount,
+): ChartOfAccount {
+  const parent = records.find((r) => r.id === form.parentGroupId);
+  const parentName = parent?.accountName ?? "";
+  const accountType = resolveInheritedAccountType(records, form.parentGroupId);
+  const specializedGroupType =
+    existing?.specializedGroupType ??
+    inheritedSpecializedGroupType(records, form.parentGroupId);
+  return {
+    id,
+    accountCode: existing?.accountCode ?? accountCode,
+    accountName: form.groupName.trim(),
+    alias: existing?.alias ?? "",
+    accountType,
+    nodeLevel: "account_group",
+    parentAccountId: form.parentGroupId,
+    parentAccount: parentName,
+    description: form.description.trim(),
+    status: form.status,
+    usedIn: existing?.usedIn ?? [],
+    isSystem: false,
+    openingBalance: 0,
+    balanceType: parent?.balanceType ?? existing?.balanceType ?? "Debit",
+    gstApplicable: false,
+    tdsApplicable: specializedGroupType === "tds_payable" || specializedGroupType === "tds_receivable",
+    costCenterApplicable: false,
+    bankAccountFlag: false,
+    specializedGroupType,
+    createdBy: existing?.createdBy ?? ACCOUNTS_CURRENT_USER,
+    updatedBy: ACCOUNTS_CURRENT_USER,
+  };
+}
+
+export function validateGroupForm(
+  form: GroupFormValues,
+  records: ChartOfAccount[],
+  editingId?: number,
+): string | null {
+  if (!form.groupName.trim()) return "Sub-group name is required.";
+  if (!form.parentGroupId) return "Please select a Parent Group.";
+  const parent = records.find((r) => r.id === form.parentGroupId);
+  if (!parent) return "Please select a valid Parent Group.";
+  if (!canAddSubGroupUnder(parent, records)) {
+    if (getCoaHierarchyLevel(records, parent.id) >= 3) {
+      return COA_MAX_HIERARCHY_MESSAGE;
+    }
+    return "Sub-groups can only be created under a primary head or account group.";
+  }
+  if (parent.nodeLevel === "ledger") {
+    return "Sub-groups cannot be created under a ledger.";
+  }
+  const dup = records.find(
+    (r) =>
+      r.id !== editingId &&
+      r.nodeLevel === "account_group" &&
+      r.parentAccountId === form.parentGroupId &&
+      r.accountName.toLowerCase() === form.groupName.trim().toLowerCase(),
+  );
+  if (dup) return "A sub-group with this name already exists under this parent.";
+  return null;
+}
+
+export function canEditGroup(record: ChartOfAccount): boolean {
+  return canUserEditGroup(record);
+}
+
+export function canDeleteGroup(record: ChartOfAccount, records?: ChartOfAccount[]): boolean {
+  const list = records ?? loadChartOfAccounts();
+  return canUserDeleteGroup(record, list);
+}
+
 export function ledgerToForm(record: ChartOfAccount): LedgerFormValues {
   return {
     ledgerName: record.accountName,
@@ -385,7 +630,10 @@ export function formToLedger(
     accountCode: existing?.accountCode ?? accountCode,
     accountName: form.ledgerName.trim(),
     alias: form.alias.trim(),
-    accountType: parent?.accountType ?? existing?.accountType ?? "Asset",
+    accountType:
+      form.parentGroupId != null
+        ? resolveInheritedAccountType(records, form.parentGroupId)
+        : existing?.accountType ?? "Asset",
     nodeLevel: "ledger",
     parentAccountId: form.parentGroupId,
     parentAccount: parentName,
@@ -413,9 +661,20 @@ export function validateLedgerForm(
   if (!form.parentGroupId) return "Please select a Parent Group.";
   const parent = records.find((r) => r.id === form.parentGroupId);
   if (!parent) return "Please select a valid Parent Group.";
-  if (parent.nodeLevel === "ledger") return LEDGER_UNDER_LEDGER_ERROR;
   if (!canAddLedgerUnder(parent, records)) {
-    return "Ledgers must be created under an Accounting Group (e.g. Bank Accounts, Direct Expenses).";
+    if (getCoaHierarchyLevel(records, parent.id) >= COA_MAX_HIERARCHY_LEVEL) {
+      return COA_MAX_HIERARCHY_MESSAGE;
+    }
+    if (parent.nodeLevel === "ledger") {
+      return LEDGER_UNDER_LEDGER_ERROR;
+    }
+    return "Ledgers must be created under a sub-group or leaf account group.";
+  }
+  if (isSundryDebtorsGroup(parent, records)) {
+    return "Customer ledgers under Sundry Debtors must be created with the Customer form.";
+  }
+  if (isTdsGroupContext(parent, records)) {
+    return "TDS section ledgers must be created with the TDS ledger form.";
   }
   const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
   if (addPolicy.blocked) {
@@ -436,10 +695,12 @@ export function ledgerHasVoucherPostings(ledgerId: number): boolean {
   return voucherLedgerHasPostings(ledgerId);
 }
 
-export function canDeleteLedger(record: ChartOfAccount): boolean {
+export function canDeleteLedger(record: ChartOfAccount, records?: ChartOfAccount[]): boolean {
+  const list = records ?? loadChartOfAccounts();
   if (isGstCoaLedger(record) || isTdsCoaLedger(record)) return false;
-  if (!canUserDeleteNode(record)) return false;
-  if (ledgerHasChildLedgers(record.id, loadChartOfAccounts())) return false;
+  if (isMasterLinkedLedger(record)) return false;
+  if (!canUserDeleteNode(record, list)) return false;
+  if (ledgerHasChildLedgers(record.id, list)) return false;
   if (ledgerHasVoucherPostings(record.id)) return false;
   return true;
 }
@@ -583,4 +844,29 @@ export function getSearchVisibleIds(
     collectDesc(node.id);
   }
   return visible;
+}
+
+/** Full COA tree children for parent-group picker (groups + ledgers; ledgers are display-only). */
+export function getParentGroupTreeChildren(
+  records: ChartOfAccount[],
+  parentId: number,
+): ChartOfAccount[] {
+  return getCoaTreeChildren(records, parentId);
+}
+
+export function parentGroupNodeHasChildren(
+  records: ChartOfAccount[],
+  parentId: number,
+): boolean {
+  const parent = records.find((r) => r.id === parentId);
+  if (!parent) return false;
+  return getParentGroupTreeChildren(records, parentId).length > 0;
+}
+
+/** Search visibility for parent-group tree — same as COA sidebar (includes ledgers). */
+export function getParentGroupSearchVisibleIds(
+  records: ChartOfAccount[],
+  query: string,
+): Set<number> {
+  return getSearchVisibleIds(records, query);
 }

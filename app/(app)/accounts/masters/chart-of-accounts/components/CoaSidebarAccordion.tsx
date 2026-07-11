@@ -4,43 +4,34 @@ import React, { useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartOfAccount } from "../../../data";
-import { getDirectChildren, getSearchVisibleIds, hasChildLedgers } from "../chart-of-accounts-data";
+import { getDirectChildren, getSearchVisibleIds } from "../chart-of-accounts-data";
 import {
-  COA_TREE_ICON_SIZE_CLASS,
-  VISUAL_ICON,
+  COA_SIDEBAR_ROW_CLASS,
+  COA_TREE_CHEVRON_WIDTH_CLASS,
   coaNodeShowsExpandChevron,
-  coaTreeIconClass,
-  VISUAL_ROW_CLASS,
-  ledgerRowExpandable,
+  coaSidebarIconSizeClass,
+  coaSidebarIndentPx,
+  coaSidebarNodeIconClass,
+  resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
-  type CoaVisualLevel,
 } from "./coa-tree-visual";
+import { CoaTreeNodeLabel } from "./CoaTreeNodeLabel";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-const INDENT = 14;
-
-const CHEVRON_BTN =
-  "w-4 h-4 flex-shrink-0 flex items-center justify-center rounded text-muted-foreground hover:text-brand-700 transition-colors outline-none focus:outline-none focus-visible:outline-none";
+const CHEVRON_BTN = cn(
+  "h-5 flex items-center justify-center rounded text-muted-foreground/70 hover:text-foreground transition-colors outline-none focus:outline-none focus-visible:outline-none",
+  COA_TREE_CHEVRON_WIDTH_CLASS,
+);
 
 function hasChildren(records: ChartOfAccount[], nodeId: number): boolean {
   return getDirectChildren(records, nodeId).length > 0;
-}
-
-function navRowClass(visual: CoaVisualLevel, selected: boolean) {
-  return cn(
-    "w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-left leading-snug transition-colors cursor-pointer",
-    VISUAL_ROW_CLASS[visual],
-    "border-l-2 outline-none focus:outline-none focus-visible:outline-none",
-    selected
-      ? "bg-brand-50/80 border-l-brand-500 text-brand-800"
-      : "border-l-transparent hover:bg-muted/30",
-  );
 }
 
 interface NavRowProps {
   node: ChartOfAccount;
   records: ChartOfAccount[];
   selectedId: number | null;
-  indent: number;
+  depth: number;
   onSelect: (node: ChartOfAccount) => void;
   onToggle?: (id: number) => void;
   expanded?: boolean;
@@ -51,47 +42,71 @@ function NavRow({
   node,
   records,
   selectedId,
-  indent,
+  depth,
   onSelect,
   onToggle,
   expanded,
   showChevron,
 }: NavRowProps) {
   const visual = resolveCoaVisualLevel(node, records);
-  const Icon = VISUAL_ICON[visual];
+  const Icon = resolveCoaSidebarIcon(node, visual, records);
   const isSelected = selectedId === node.id;
 
   return (
-    <div className="flex items-center gap-0" style={{ paddingLeft: indent }}>
-      {showChevron ? (
+    <div
+      data-coa-tree-row
+      className={cn(
+        "flex w-full min-w-0 items-stretch rounded-sm transition-colors",
+        isSelected ? "bg-brand-50" : "hover:bg-muted/30",
+      )}
+    >
+      <div
+        className="shrink-0"
+        style={{ width: coaSidebarIndentPx(depth) }}
+        aria-hidden
+      />
+      <div className="flex flex-1 min-w-0 items-center gap-0.5 pr-0.5">
+        {showChevron ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle?.(node.id);
+            }}
+            className={CHEVRON_BTN}
+            aria-label={expanded ? "Collapse" : "Expand"}
+          >
+            <ChevronDown
+              className={cn("w-3.5 h-3.5 transition-transform duration-150", !expanded && "-rotate-90")}
+              strokeWidth={2}
+            />
+          </button>
+        ) : (
+          <span className={COA_TREE_CHEVRON_WIDTH_CLASS} aria-hidden />
+        )}
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle?.(node.id);
-          }}
-          className={CHEVRON_BTN}
-          aria-label={expanded ? "Collapse" : "Expand"}
+          onClick={() => onSelect(node)}
+          className={cn(
+            "flex flex-1 min-w-0 items-center gap-1 py-1 pr-1 text-left leading-snug",
+            COA_SIDEBAR_ROW_CLASS[visual],
+            isSelected && "font-semibold text-brand-800",
+          )}
         >
-          <ChevronDown
-            className={cn("w-4 h-4 transition-transform duration-150", !expanded && "-rotate-90")}
-            strokeWidth={1.75}
+          <Icon
+            className={cn(
+              coaSidebarIconSizeClass(node, records),
+              "shrink-0",
+              coaSidebarNodeIconClass(node, visual, isSelected, records),
+            )}
+            strokeWidth={visual === "primary_head" ? 2 : 1.75}
+          />
+          <CoaTreeNodeLabel
+            name={node.accountName}
+            className={isSelected ? "font-semibold text-brand-800" : undefined}
           />
         </button>
-      ) : (
-        <span className="w-4 flex-shrink-0" aria-hidden />
-      )}
-      <button
-        type="button"
-        onClick={() => onSelect(node)}
-        className={cn(navRowClass(visual, isSelected), "flex-1 min-w-0")}
-      >
-        <Icon
-          className={cn(COA_TREE_ICON_SIZE_CLASS, "flex-shrink-0", coaTreeIconClass(visual, isSelected))}
-          strokeWidth={1.75}
-        />
-        <span className="flex-1 min-w-0 whitespace-normal break-words">{node.accountName}</span>
-      </button>
+      </div>
     </div>
   );
 }
@@ -102,7 +117,7 @@ function TreeChildren({
   selectedId,
   expandedIds,
   visibleIds,
-  baseIndent,
+  depth,
   onSelect,
   onToggle,
 }: {
@@ -111,7 +126,7 @@ function TreeChildren({
   selectedId: number | null;
   expandedIds: Set<number>;
   visibleIds: Set<number> | null;
-  baseIndent: number;
+  depth: number;
   onSelect: (node: ChartOfAccount) => void;
   onToggle: (id: number) => void;
 }) {
@@ -132,7 +147,7 @@ function TreeChildren({
               node={child}
               records={records}
               selectedId={selectedId}
-              indent={baseIndent}
+              depth={depth}
               onSelect={onSelect}
               onToggle={showChevron ? onToggle : undefined}
               expanded={isExpanded}
@@ -145,7 +160,7 @@ function TreeChildren({
                 selectedId={selectedId}
                 expandedIds={expandedIds}
                 visibleIds={visibleIds}
-                baseIndent={baseIndent + INDENT}
+                depth={depth + 1}
                 onSelect={onSelect}
                 onToggle={onToggle}
               />
@@ -200,79 +215,99 @@ export function CoaSidebarAccordion({
   }
 
   return (
-    <div className="space-y-1 px-0.5">
-      {filteredHeads.map((head) => {
-        const isHeadExpanded = expandedIds.has(head.id);
-        const isHeadSelected = selectedId === head.id;
-        const HeadIcon = VISUAL_ICON.primary_head;
-        const groups = getDirectChildren(records, head.id).filter(
-          (c) => !visibleIds || visibleIds.has(c.id),
-        );
-        const headHasChildren = groups.length > 0;
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-1 px-0.5 accounts-coa-tree">
+        {filteredHeads.map((head) => {
+          const isHeadExpanded = expandedIds.has(head.id);
+          const isHeadSelected = selectedId === head.id;
+          const HeadIcon = resolveCoaSidebarIcon(head, "primary_head", records);
+          const groups = getDirectChildren(records, head.id).filter(
+            (c) => !visibleIds || visibleIds.has(c.id),
+          );
+          const headHasChildren = groups.length > 0;
 
-        return (
-          <section
-            key={head.id}
-            className={cn(
-              "rounded-md border border-border/40 overflow-hidden",
-              isHeadExpanded && headHasChildren && "border-border/50",
-            )}
-          >
-            <div className="flex items-center gap-0 px-0.5">
-              {headHasChildren ? (
-                <button
-                  type="button"
-                  onClick={() => onToggle(head.id)}
-                  className={CHEVRON_BTN}
-                  aria-label={isHeadExpanded ? "Collapse section" : "Expand section"}
-                >
-                  <ChevronDown
-                    className={cn(
-                      "w-4 h-4 transition-transform duration-150",
-                      !isHeadExpanded && "-rotate-90",
-                    )}
-                    strokeWidth={1.75}
-                  />
-                </button>
-              ) : (
-                <span className="w-4 flex-shrink-0" aria-hidden />
+          return (
+            <section
+              key={head.id}
+              className={cn(
+                "rounded-md border border-border/40 overflow-hidden",
+                isHeadExpanded && headHasChildren && "border-border/50",
               )}
-              <button
-                type="button"
-                onClick={() => onSelect(head)}
-                className={cn(navRowClass("primary_head", isHeadSelected), "flex-1 min-w-0")}
+            >
+              <div
+                data-coa-tree-row
+                className={cn(
+                  "flex w-full min-w-0 items-stretch px-0.5 transition-colors",
+                  isHeadSelected ? "bg-brand-50" : "hover:bg-muted/30",
+                )}
               >
-                <HeadIcon
-                  className={cn(
-                    COA_TREE_ICON_SIZE_CLASS,
-                    "flex-shrink-0",
-                    coaTreeIconClass("primary_head", isHeadSelected),
+                <div
+                  className="shrink-0"
+                  style={{ width: coaSidebarIndentPx(0) }}
+                  aria-hidden
+                />
+                <div className="flex flex-1 min-w-0 items-center gap-0.5 pr-0.5">
+                  {headHasChildren ? (
+                    <button
+                      type="button"
+                      onClick={() => onToggle(head.id)}
+                      className={CHEVRON_BTN}
+                      aria-label={isHeadExpanded ? "Collapse section" : "Expand section"}
+                    >
+                      <ChevronDown
+                        className={cn(
+                          "w-3.5 h-3.5 transition-transform duration-150",
+                          !isHeadExpanded && "-rotate-90",
+                        )}
+                        strokeWidth={2}
+                      />
+                    </button>
+                  ) : (
+                    <span className={COA_TREE_CHEVRON_WIDTH_CLASS} aria-hidden />
                   )}
-                  strokeWidth={1.75}
-                />
-                <span className="flex-1 whitespace-normal break-words font-semibold">
-                  {head.accountName}
-                </span>
-              </button>
-            </div>
-
-            {isHeadExpanded && headHasChildren && (
-              <div className="border-t border-border/30 px-0.5 pb-1 pt-0.5">
-                <TreeChildren
-                  parentId={head.id}
-                  records={records}
-                  selectedId={selectedId}
-                  expandedIds={expandedIds}
-                  visibleIds={visibleIds}
-                  baseIndent={4}
-                  onSelect={onSelect}
-                  onToggle={onToggle}
-                />
+                  <button
+                    type="button"
+                    onClick={() => onSelect(head)}
+                    className={cn(
+                      "flex flex-1 min-w-0 items-center gap-1 py-1 pr-1 text-left leading-snug",
+                      COA_SIDEBAR_ROW_CLASS.primary_head,
+                      isHeadSelected && "font-semibold text-brand-800",
+                    )}
+                  >
+                    <HeadIcon
+                      className={cn(
+                        coaSidebarIconSizeClass(head, records),
+                        "shrink-0",
+                        coaSidebarNodeIconClass(head, "primary_head", isHeadSelected, records),
+                      )}
+                      strokeWidth={2}
+                    />
+                    <CoaTreeNodeLabel
+                      name={head.accountName}
+                      className={cn("font-semibold", isHeadSelected && "text-brand-800")}
+                    />
+                  </button>
+                </div>
               </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
+
+              {isHeadExpanded && headHasChildren && (
+                <div className="border-t border-border/30 px-0.5 pb-1 pt-0.5">
+                  <TreeChildren
+                    parentId={head.id}
+                    records={records}
+                    selectedId={selectedId}
+                    expandedIds={expandedIds}
+                    visibleIds={visibleIds}
+                    depth={1}
+                    onSelect={onSelect}
+                    onToggle={onToggle}
+                  />
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }

@@ -10,6 +10,7 @@ import {
   VOUCHER_TYPE_LABELS,
 } from "../voucher-data";
 import { voucherTypeToUrl } from "../voucher-routes";
+import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { VoucherEntryClient } from "./VoucherEntryClient";
 import { ReceiptVoucherForm } from "./ReceiptVoucherForm";
 import { PaymentVoucherForm } from "./PaymentVoucherForm";
@@ -50,48 +51,60 @@ export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
 
   if (voucher.voucherType === "receipt") {
     return (
-      <ReceiptVoucherForm
-        voucherId={voucherId}
-        readOnly
-        onDone={handleBack}
-        onEdit={editAction}
-      />
+      <>
+        <ReceiptVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
     );
   }
 
   if (voucher.voucherType === "payment") {
     return (
-      <PaymentVoucherForm
-        voucherId={voucherId}
-        readOnly
-        onDone={handleBack}
-        onEdit={editAction}
-      />
+      <>
+        <PaymentVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
     );
   }
 
   if (voucher.voucherType === "contra") {
     return (
-      <ContraVoucherForm
-        voucherId={voucherId}
-        readOnly
-        onDone={handleBack}
-        onEdit={editAction}
-      />
+      <>
+        <ContraVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
     );
   }
 
   const label = VOUCHER_TYPE_LABELS[voucher.voucherType];
 
   return (
-    <VoucherEntryClient
-      voucherType={voucher.voucherType}
-      voucherId={voucherId}
-      readOnly
-      titleOverride={`View ${label}`}
-      cancelHref={listHref}
-      onDone={handleBack}
-      onEdit={editAction}
-    />
+    <>
+      <VoucherEntryClient
+        voucherType={voucher.voucherType}
+        voucherId={voucherId}
+        readOnly
+        titleOverride={`View ${label}`}
+        cancelHref={listHref}
+        onDone={handleBack}
+        onEdit={editAction}
+      />
+      <VoucherFormToastHost />
+    </>
   );
 }

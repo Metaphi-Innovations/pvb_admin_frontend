@@ -1,10 +1,17 @@
-import { formatBalanceAmount } from "@/lib/accounts/money-format";
+import { formatBalanceAmount, roundMoney } from "@/lib/accounts/money-format";
 import {
   resolveLedgerType,
   type LedgerTypeLabel,
 } from "@/lib/accounts/ledger-detail-utils";
 import type { ChartOfAccount } from "../../data";
-import { getLedgerMovementTotals } from "../../vouchers/voucher-data";
+import {
+  getLedgerMovementTotals,
+  getPostedVouchers,
+} from "../../vouchers/voucher-data";
+import {
+  fromSignedBalance,
+  toSignedBalance,
+} from "@/lib/accounts/running-balance";
 import {
   getAncestorPath,
   getValidLedgerParents,
@@ -96,18 +103,63 @@ export function computeLedgerBalanceBreakdown(ledger: ChartOfAccount): LedgerBal
   };
 }
 
-function signedBalance(amount: number, balanceType: "Debit" | "Credit"): number {
-  return balanceType === "Debit" ? amount : -amount;
+/**
+ * Opening side for signed math.
+ * Trust stored balanceType, but recover common seed mistakes where Liability /
+ * Income / Equity openings were stored as Debit (or Asset / Expense as Credit).
+ */
+function resolveOpeningSide(ledger: ChartOfAccount): "Debit" | "Credit" {
+  const type = ledger.accountType;
+  const stored = ledger.balanceType;
+  const creditNormal =
+    type === "Liability" || type === "Income" || type === "Equity";
+  const debitNormal = type === "Asset" || type === "Expense";
+  if (creditNormal && stored === "Debit" && ledger.openingBalance > 0.005) {
+    return "Credit";
+  }
+  if (debitNormal && stored === "Credit" && ledger.openingBalance > 0.005) {
+    return "Debit";
+  }
+  return stored;
 }
 
-export function computeLedgerCurrentBalance(ledger: ChartOfAccount): LedgerBalance {
-  const { debit, credit } = getLedgerVoucherMovement(ledger.id);
-  const signed =
-    signedBalance(ledger.openingBalance, ledger.balanceType) + debit - credit;
-  if (signed >= 0) {
-    return { amount: signed, balanceType: "Debit" };
+/**
+ * Running ledger balance from opening + posted voucher lines.
+ * When `asOfDate` (YYYY-MM-DD) is set, only movements on or before that date apply.
+ * Side is never hardcoded — Debit if signed ≥ 0, Credit if signed < 0.
+ * Zero balance is returned as amount 0 (UI must omit Dr/Cr).
+ */
+export function computeLedgerBalanceAsOfDate(
+  ledger: ChartOfAccount,
+  asOfDate?: string | null,
+): LedgerBalance {
+  const openingSide = resolveOpeningSide(ledger);
+  let signed = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
+
+  if (!asOfDate) {
+    const { debit, credit } = getLedgerVoucherMovement(ledger.id);
+    signed = signed + roundMoney(debit) - roundMoney(credit);
+  } else {
+    for (const voucher of getPostedVouchers()) {
+      if (voucher.date > asOfDate) continue;
+      for (const line of voucher.lines) {
+        if (line.ledgerId !== ledger.id) continue;
+        signed =
+          signed + (Number(line.debit) || 0) - (Number(line.credit) || 0);
+      }
+    }
   }
-  return { amount: Math.abs(signed), balanceType: "Credit" };
+
+  const bal = fromSignedBalance(roundMoney(signed));
+  if (bal.amount < 0.005) {
+    return { amount: 0, balanceType: bal.balanceType };
+  }
+  return bal;
+}
+
+/** Current ledger balance through all posted vouchers (no date cutoff). */
+export function computeLedgerCurrentBalance(ledger: ChartOfAccount): LedgerBalance {
+  return computeLedgerBalanceAsOfDate(ledger, null);
 }
 
 export function formatLedgerBalance(balance: LedgerBalance): string {

@@ -13,17 +13,22 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   getCustomerOutstandingDetail,
+  type CustomerInvoiceOutstandingRow,
 } from "@/lib/accounts/receivables-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -34,6 +39,83 @@ function formatReportDate(value: string): string {
   const [y, m, d] = value.slice(0, 10).split("-");
   if (!y || !m || !d) return value;
   return `${d}-${m}-${y}`;
+}
+
+function OpenInvoicesTable({
+  rows,
+  onOpenInvoice,
+}: {
+  rows: CustomerInvoiceOutstandingRow[];
+  onOpenInvoice: (invoiceId: number) => void;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+
+  return (
+    <AccountsTableScroll className="flex-1 min-h-0">
+      <AccountsTable minWidth={960}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Invoice No." colKey="invoiceNo" />
+            <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
+            <SortTh label="Invoice Amount" colKey="invoiceAmount" filterType="amount" align="right" />
+            <SortTh label="Received" colKey="paidAmount" filterType="amount" align="right" />
+            <SortTh label="Outstanding" colKey="outstanding" filterType="amount" align="right" />
+            <SortTh label="Due Date" colKey="dueDate" filterType="date" />
+            <AccountsColumnHeader
+              label=""
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="right"
+            />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {visible.length === 0 ? (
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                {rows.length === 0
+                  ? "No open invoices for this customer."
+                  : "No records match the column filters."}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ) : (
+            visible.map((inv) => (
+              <AccountsTableRow
+                key={inv.invoiceId}
+                className="group cursor-pointer"
+                onClick={() => onOpenInvoice(inv.invoiceId)}
+              >
+                <AccountsTableCell>
+                  <span className="text-xs font-mono font-semibold text-brand-700">{inv.invoiceNo}</span>
+                </AccountsTableCell>
+                <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
+                <AccountsTableCell align="right">
+                  <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
+                </AccountsTableCell>
+                <AccountsTableCell align="right">
+                  <span className="tabular-nums">{formatMoney(inv.paidAmount)}</span>
+                </AccountsTableCell>
+                <AccountsTableCell align="right">
+                  <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
+                </AccountsTableCell>
+                <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
+                <AccountsTableCell align="right" className={accountsActionColClass("single")}>
+                  <AccountsTableActionCell variant="single">
+                    <AccountsViewAction
+                      title="View invoice"
+                      href={`/accounts/transactions/invoices/${inv.invoiceId}`}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </AccountsTableActionCell>
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
+    </AccountsTableScroll>
+  );
 }
 
 export default function CustomerOutstandingDetailClient() {
@@ -145,68 +227,22 @@ export default function CustomerOutstandingDetailClient() {
             Open Invoices
           </p>
         </div>
-        <AccountsTableScroll className="flex-1 min-h-0">
-          <AccountsTable minWidth={960}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                {[
-                  "Invoice No.",
-                  "Invoice Date",
-                  "Invoice Amount",
-                  "Received",
-                  "Outstanding",
-                  "Due Date",
-                  "",
-                ].map((h) => (
-                  <AccountsTableHeadCell key={h || "act"} align={h.includes("Amount") || h === "Received" || h === "Outstanding" ? "right" : "left"}>
-                    {h}
-                  </AccountsTableHeadCell>
-                ))}
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {openInvoices.length === 0 ? (
-                <AccountsTableRow>
-                  <AccountsTableCell colSpan={7} className="accounts-table-empty">
-                    No open invoices for this customer.
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ) : (
-                openInvoices.map((inv) => (
-                  <AccountsTableRow
-                    key={inv.invoiceId}
-                    className="group cursor-pointer"
-                    onClick={() => openInvoice(inv.invoiceId)}
-                  >
-                    <AccountsTableCell>
-                      <span className="text-xs font-mono font-semibold text-brand-700">{inv.invoiceNo}</span>
-                    </AccountsTableCell>
-                    <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <span className="tabular-nums">{formatMoney(inv.paidAmount)}</span>
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
-                    </AccountsTableCell>
-                    <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
-                    <AccountsTableCell align="right" className={accountsActionColClass("single")}>
-                      <AccountsTableActionCell variant="single">
-                        <AccountsViewAction
-                          title="View invoice"
-                          href={`/accounts/transactions/invoices/${inv.invoiceId}`}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </AccountsTableActionCell>
-                    </AccountsTableCell>
-                  </AccountsTableRow>
-                ))
-              )}
-            </AccountsTableBody>
-          </AccountsTable>
-        </AccountsTableScroll>
+        <AccountsColumnFilterProvider
+          rows={openInvoices}
+          getCellValue={(row, key) => (row as unknown as Record<string, unknown>)[key]}
+          columnConfig={{
+            invoiceNo: { type: "text" },
+            invoiceDate: { type: "date" },
+            invoiceAmount: { type: "amount" },
+            paidAmount: { type: "amount" },
+            outstanding: { type: "amount" },
+            dueDate: { type: "date" },
+          }}
+          defaultSortKey="dueDate"
+          defaultSortDir="asc"
+        >
+          <OpenInvoicesTable rows={openInvoices} onOpenInvoice={openInvoice} />
+        </AccountsColumnFilterProvider>
       </div>
     </AccountsPageShell>
   );

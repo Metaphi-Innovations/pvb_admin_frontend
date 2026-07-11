@@ -1,3 +1,5 @@
+import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
+
 export type TdsPartyType =
   | "Supplier"
   | "Contractor"
@@ -29,7 +31,8 @@ export interface TdsSummaryLine {
 
 export interface TdsSummaryFilters {
   partyType: string;
-  tdsSection: string;
+  tdsSection: string | string[];
+  partyIds: string | string[];
   search: string;
 }
 
@@ -173,11 +176,23 @@ export const TDS_SECTION_OPTIONS = [
   { value: "192", label: "192 — Salary" },
 ] as const;
 
+export function getTdsPartyOptions(): { value: string; label: string }[] {
+  const seen = new Set<string>();
+  const options: { value: string; label: string }[] = [];
+  for (const row of TDS_SEED_ROWS) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    options.push({ value: row.id, label: row.partyName });
+  }
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function filterRows(filters: TdsSummaryFilters): TdsSummaryRow[] {
   const q = filters.search.trim().toLowerCase();
   return TDS_SEED_ROWS.filter((row) => {
     if (filters.partyType !== "all" && row.partyType !== filters.partyType) return false;
-    if (filters.tdsSection !== "all" && row.tdsSection !== filters.tdsSection) return false;
+    if (!matchesMultiFilter(filters.tdsSection, row.tdsSection)) return false;
+    if (!matchesMultiFilter(filters.partyIds, row.id)) return false;
     if (!q) return true;
     return (
       row.partyName.toLowerCase().includes(q) ||

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import {
   resolveAccountsNavGroupId,
@@ -8,44 +8,44 @@ import {
 } from "@/lib/accounts/accounts-nav";
 import { scheduleAccountsSectionSeed } from "@/lib/accounts/accounts-section-seed";
 
-type AccountsAccordionContextValue = {
-  activeAccountsSection: AccountsNavGroupId | null;
-  toggleAccountsSection: (sectionId: AccountsNavGroupId) => void;
+type AccountsSectionContextValue = {
+  /** Active Accounts section from the current route (top navbar decides; sidebar mirrors it). */
+  activeAccountsSection: AccountsNavGroupId;
 };
 
-const AccountsAccordionContext = createContext<AccountsAccordionContextValue | null>(null);
+const AccountsSectionContext = createContext<AccountsSectionContextValue | null>(null);
 
-/** Accordion state lives above CoaNavigationProvider so COA tree updates cannot reset it. */
+/**
+ * Tracks the active Accounts nav section from the URL and lazily seeds that section’s demo data.
+ * No accordion state — left sidebar always shows only this section.
+ */
 export function AccountsAccordionProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-
-  const [activeAccountsSection, setActiveAccountsSection] = useState<AccountsNavGroupId | null>(
+  const activeAccountsSection = useMemo(
     () => resolveAccountsNavGroupId(pathname),
+    [pathname],
   );
 
-  // Sync accordion + seed only on route navigation — never on manual toggle.
   useEffect(() => {
-    const sectionId = resolveAccountsNavGroupId(pathname);
-    setActiveAccountsSection((prev) => (prev === sectionId ? prev : sectionId));
-    scheduleAccountsSectionSeed(sectionId);
-  }, [pathname]);
-
-  const toggleAccountsSection = useCallback((sectionId: AccountsNavGroupId) => {
-    setActiveAccountsSection((prev) => (prev === sectionId ? null : sectionId));
-  }, []);
+    // Defer seed work until after route paint so navigation stays responsive.
+    const timer = window.setTimeout(() => {
+      scheduleAccountsSectionSeed(activeAccountsSection);
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [activeAccountsSection]);
 
   const value = useMemo(
-    () => ({ activeAccountsSection, toggleAccountsSection }),
-    [activeAccountsSection, toggleAccountsSection],
+    () => ({ activeAccountsSection }),
+    [activeAccountsSection],
   );
 
   return (
-    <AccountsAccordionContext.Provider value={value}>{children}</AccountsAccordionContext.Provider>
+    <AccountsSectionContext.Provider value={value}>{children}</AccountsSectionContext.Provider>
   );
 }
 
-export function useAccountsAccordion(): AccountsAccordionContextValue {
-  const ctx = useContext(AccountsAccordionContext);
+export function useAccountsAccordion(): AccountsSectionContextValue {
+  const ctx = useContext(AccountsSectionContext);
   if (!ctx) {
     throw new Error("useAccountsAccordion must be used within AccountsAccordionProvider");
   }

@@ -5,10 +5,26 @@
 
 import type { AccountType, ChartOfAccount } from "../../data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { roundMoney } from "@/lib/accounts/money-format";
 import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
 import { COA_DEMO_LEDGER_SEEDS, type CoaDemoLedgerSeed } from "../coa-demo-ledgers";
 
 export const COA_DEMO_SOURCE_MODULE = "coa_demo_bundle";
+
+/** Ledger that absorbs the net opening-balance residual so the books open balanced. */
+export const OPENING_BALANCE_DIFFERENCE_LEDGER = "Difference in Opening Balances";
+const OPENING_BALANCE_DIFFERENCE_LEDGER_ID = 58001;
+const OPENING_BALANCE_DIFFERENCE_PARENT = "Proprietor / Partner / Shareholder Capital";
+
+/** Demo seeds skipped where system statutory ledgers are defined in coa-seed-nodes */
+const SKIP_STATUTORY_DEMO_SUBGROUPS = new Set([
+  "duties & taxes payable",
+  "gst input",
+  "gst input credit",
+  "gst output",
+  "tds payable",
+  "gst payable",
+]);
 
 const ASSET_SUBGROUP_BASE: Record<string, number> = {
   "Land & Building": 4200000,
@@ -71,27 +87,19 @@ const SKIP_OPENING_SUBGROUPS = new Set([
   "Inventory / Stock-in-Hand",
 ]);
 
-/** Sundry debtors — minimum 5 posting ledgers under Trade Receivables */
+/** Sundry debtors — 2 sample posting ledgers under Trade Receivables */
 export const COA_DEMO_DEBTOR_SPECS: Array<{ name: string; openingBalance: number }> = [
   { name: "ABC Agro Distributor", openingBalance: 50000 },
-  { name: "ABC Distributor", openingBalance: 28500 },
-  { name: "Reliance Agri", openingBalance: 47650 },
-  { name: "Balaji CNF Services", openingBalance: 42000 },
-  { name: "Vidarbha Agro Mart", openingBalance: 15000 },
-  { name: "Shree Ganesh Seeds", openingBalance: 12800 },
+  { name: "XYZ Traders", openingBalance: 47650 },
 ];
 
-/** Sundry creditors — minimum 5 posting ledgers */
+/** Sundry creditors — 2 sample posting ledgers */
 export const COA_DEMO_CREDITOR_SPECS: Array<{ name: string; openingBalance: number }> = [
-  { name: "AgroChem Traders", openingBalance: 75000 },
-  { name: "Rallis India Ltd", openingBalance: 43000 },
-  { name: "GreenField Suppliers", openingBalance: 42000 },
+  { name: "Green Seeds Pvt. Ltd.", openingBalance: 42000 },
   { name: "Bharat Fertilizers", openingBalance: 95000 },
-  { name: "Kisan Inputs Pvt Ltd", openingBalance: 31500 },
-  { name: "Crop Care Industries", openingBalance: 54000 },
 ];
 
-/** Bank group + current account posting ledgers */
+/** Bank group + current account posting ledgers (2 banks) */
 export const COA_DEMO_BANK_SPECS: Array<{
   bankName: string;
   accountName: string;
@@ -99,9 +107,6 @@ export const COA_DEMO_BANK_SPECS: Array<{
 }> = [
   { bankName: "HDFC Bank", accountName: "HDFC Current Account", openingBalance: 2000000 },
   { bankName: "ICICI Bank", accountName: "ICICI Current Account", openingBalance: 850000 },
-  { bankName: "SBI", accountName: "SBI Current Account", openingBalance: 525000 },
-  { bankName: "Axis Bank", accountName: "Axis Current Account", openingBalance: 375000 },
-  { bankName: "Kotak Bank", accountName: "Kotak Current Account", openingBalance: 220000 },
 ];
 
 function hashAmount(name: string, base: number, spread = 45000): number {
@@ -215,6 +220,9 @@ export function buildBundledCoaDemoLedgers(
   }
 
   for (const entry of COA_DEMO_LEDGER_SEEDS) {
+    if (SKIP_STATUTORY_DEMO_SUBGROUPS.has(entry.subGroup.trim().toLowerCase())) {
+      continue;
+    }
     const parent = subGroupByName.get(entry.subGroup.trim().toLowerCase());
     if (!parent) continue;
 
@@ -322,6 +330,53 @@ export function buildBundledCoaDemoLedgers(
   return result;
 }
 
+/**
+ * Append (or refresh) the opening-balance difference ledger so that the sum of
+ * every ledger opening (Debit positive, Credit negative) nets to zero. This keeps
+ * the Trial Balance, Balance Sheet, and General Ledger opening columns balanced
+ * from a single common source without inserting a hidden/hardcoded total plug —
+ * the residual is shown transparently as its own Capital ledger.
+ */
+function withOpeningBalanceDifference(records: ChartOfAccount[]): ChartOfAccount[] {
+  const withoutDiff = records.filter(
+    (r) => r.accountName.trim().toLowerCase() !== OPENING_BALANCE_DIFFERENCE_LEDGER.toLowerCase(),
+  );
+
+  const netSigned = withoutDiff.reduce((sum, r) => {
+    if (r.nodeLevel !== "ledger") return sum;
+    const opening = Number(r.openingBalance) || 0;
+    if (opening === 0) return sum;
+    return sum + (r.balanceType === "Debit" ? opening : -opening);
+  }, 0);
+
+  const residual = roundMoney(netSigned);
+  if (residual === 0) return withoutDiff;
+
+  const parent = withoutDiff.find(
+    (r) =>
+      r.nodeLevel === "account_group" &&
+      r.accountName.trim().toLowerCase() === OPENING_BALANCE_DIFFERENCE_PARENT.toLowerCase(),
+  );
+  if (!parent) return withoutDiff;
+
+  // netSigned > 0 → openings are debit-heavy → balancing entry sits on the Credit side.
+  const diffLedger = makeDemoLedger({
+    id: OPENING_BALANCE_DIFFERENCE_LEDGER_ID,
+    accountCode: "LED-OBD-0001",
+    accountName: OPENING_BALANCE_DIFFERENCE_LEDGER,
+    accountType: "Liability",
+    nodeLevel: "ledger",
+    parentAccountId: parent.id,
+    parentAccount: parent.accountName,
+    status: "active",
+    openingBalance: Math.abs(residual),
+    balanceType: residual > 0 ? "Credit" : "Debit",
+    description: "Auto-balancing residual of imported opening balances",
+  });
+
+  return [...withoutDiff, diffLedger];
+}
+
 /** Merge bundled demo ledgers into a COA list (skip ERP-synced duplicates by parent+name). */
 export function mergeBundledCoaDemoLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
   const bundled = buildBundledCoaDemoLedgers(
@@ -339,6 +394,5 @@ export function mergeBundledCoaDemoLedgers(records: ChartOfAccount[]): ChartOfAc
     return !existingKeys.has(key);
   });
 
-  if (toAdd.length === 0) return records;
-  return [...records, ...toAdd];
+  return withOpeningBalanceDifference(toAdd.length === 0 ? records : [...records, ...toAdd]);
 }

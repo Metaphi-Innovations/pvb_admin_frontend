@@ -22,7 +22,7 @@ import {
 import { resolveSourceDocumentLink } from "@/lib/accounts/ledger-source-resolver";
 import type { CoaTransactionRow } from "@/lib/accounts/coa-accounting-view";
 import type { GeneralLedgerRow } from "@/lib/accounts/general-ledger-data";
-import type { DayBookEntry } from "@/lib/accounts/day-book-data";
+import type { DayBookVoucherGroup } from "@/lib/accounts/day-book-data";
 import type { TdsPartyWiseRow } from "@/lib/accounts/tds-party-wise-data";
 import type { InventoryMovement } from "@/lib/accounts/inventory-accounting-data";
 import { resolveTdsSourceHref } from "@/lib/accounts/tds-party-wise-data";
@@ -82,7 +82,7 @@ export interface TransactionDetail {
 
 export type TransactionDetailRef =
   | { type: "general_ledger"; row: GeneralLedgerRow | CoaTransactionRow }
-  | { type: "day_book"; entry: DayBookEntry }
+  | { type: "day_book"; entry: DayBookVoucherGroup }
   | { type: "sales_invoice"; id: number }
   | { type: "purchase_invoice"; id: number }
   | { type: "credit_note"; id: number }
@@ -409,13 +409,13 @@ function detailFromInventoryMovement(m: InventoryMovement): TransactionDetail {
   };
 }
 
-function detailFromDayBookEntry(entry: DayBookEntry): TransactionDetail {
+function detailFromDayBookEntry(entry: DayBookVoucherGroup): TransactionDetail {
   switch (entry.voucherType) {
     case "sales_invoice": {
       const inv = loadInvoices().find((i) => i.id === entry.sourceId);
       if (inv) {
         const d = detailFromInvoice(inv);
-        return { ...d, debit: entry.debit, credit: entry.credit };
+        return { ...d, debit: entry.totalDebit, credit: entry.totalCredit };
       }
       break;
     }
@@ -423,7 +423,7 @@ function detailFromDayBookEntry(entry: DayBookEntry): TransactionDetail {
       const inv = loadPurchaseInvoices().find((i) => i.id === entry.sourceId);
       if (inv) {
         const d = detailFromPurchaseInvoice(inv);
-        return { ...d, debit: entry.debit, credit: entry.credit };
+        return { ...d, debit: entry.totalDebit, credit: entry.totalCredit };
       }
       break;
     }
@@ -431,7 +431,7 @@ function detailFromDayBookEntry(entry: DayBookEntry): TransactionDetail {
       const note = loadCreditNotes().find((n) => n.id === entry.sourceId);
       if (note) {
         const d = detailFromCreditNote(note);
-        return { ...d, debit: entry.debit, credit: entry.credit };
+        return { ...d, debit: entry.totalDebit, credit: entry.totalCredit };
       }
       break;
     }
@@ -439,7 +439,7 @@ function detailFromDayBookEntry(entry: DayBookEntry): TransactionDetail {
       const note = loadDebitNotes().find((n) => n.id === entry.sourceId);
       if (note) {
         const d = detailFromDebitNote(note);
-        return { ...d, debit: entry.debit, credit: entry.credit };
+        return { ...d, debit: entry.totalDebit, credit: entry.totalCredit };
       }
       break;
     }
@@ -448,8 +448,8 @@ function detailFromDayBookEntry(entry: DayBookEntry): TransactionDetail {
       if (v) {
         return detailFromVoucher(v, {
           partyName: entry.partyLedger,
-          debit: entry.debit,
-          credit: entry.credit,
+          debit: entry.totalDebit,
+          credit: entry.totalCredit,
         });
       }
     }
@@ -461,9 +461,9 @@ function detailFromDayBookEntry(entry: DayBookEntry): TransactionDetail {
     voucherDate: entry.date,
     status: entry.status,
     partyName: entry.partyLedger,
-    totalAmount: Math.max(entry.debit, entry.credit),
-    debit: entry.debit,
-    credit: entry.credit,
+    totalAmount: Math.max(entry.totalDebit, entry.totalCredit),
+    debit: entry.totalDebit,
+    credit: entry.totalCredit,
     narration: entry.narration,
     createdBy: entry.createdBy,
     attachments: [],

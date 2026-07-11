@@ -1,6 +1,6 @@
 import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
- * Banking module demo seed — bank book (50+), cash book (20+), fund transfers (10).
+ * Banking module demo seed — bank book (50+), cash book (20+).
  * Runs as part of accounts demo seed; idempotent via version key.
  */
 
@@ -14,22 +14,17 @@ import {
   ensureDemoBankCoaStructure,
   loadBankAccountMasters,
 } from "@/lib/accounts/bank-accounts-data";
-import {
-  formatTransferAccountName,
-  saveFundTransferSeed,
-  type FundTransferMode,
-  type FundTransferRecord,
-} from "@/lib/accounts/fund-transfer-data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { scheduleDeferredDemoSeed } from "./deferred-demo-seed";
+import { ensureClientReviewBankingSeed } from "@/lib/accounts/banking-client-review-seed";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 
 import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
 
-export const BANKING_DEMO_SEED_VERSION = "relative-dates-v3";
+export const BANKING_DEMO_SEED_VERSION = "relative-dates-v4";
 const VERSION_KEY = "ds_banking_demo_seed_version";
+const FUND_TRANSFER_STORAGE_KEY = "ds_accounts_fund_transfers_v2";
 const FUND_TRANSFER_SEED_KEY = "ds_fund_transfer_demo_seed_version";
-export const FUND_TRANSFER_DEMO_SEED_VERSION = "relative-dates-v3";
 
 const BANKING_DEMO_VOUCHER_PREFIXES = ["RV-", "PV-", "FT-", "CSH-", "CV-", "JV-000"];
 
@@ -178,10 +173,9 @@ function seedBankBookTransactions(force = false): void {
   if (!hdfc) return;
 
   const abc = findCustomerLedger("ABC Agro");
-  const krishna = findCustomerLedger("Krishna Retail");
-  const greenHarvest = findCustomerLedger("Green Harvest");
-  const agrochem = findVendorLedger("AgroChem");
-  const greenField = findVendorLedger("GreenField");
+  const xyz = findCustomerLedger("XYZ Traders");
+  const bharatFert = findVendorLedger("Bharat Fertilizers");
+  const greenSeeds = findVendorLedger("Green Seeds");
   const bankCharges = findExpenseLedger("Bank Service") ?? findExpenseLedger("HDFC Bank Service");
   const interestIncome = loadChartOfAccounts().find((r) =>
     r.accountName.toLowerCase().includes("bank interest"),
@@ -197,17 +191,17 @@ function seedBankBookTransactions(force = false): void {
     narration: string;
   }> = [
     { bank: hdfc, party: abc, amount: 185000, date: demoDateAt(0), ref: "NEFT-001", no: "RV-0001", narration: "Sales collection — ABC Agro Distributor" },
-    { bank: hdfc, party: krishna, amount: 92000, date: demoDateAt(1), ref: "NEFT-002", no: "RV-0002", narration: "Customer receipt — Krishna Retail Store" },
-    { bank: icici, party: greenHarvest, amount: 145000, date: demoDateAt(2), ref: "NEFT-003", no: "RV-0003", narration: "Sales collection — Green Harvest Agro" },
-    { bank: icici, party: abc, amount: 68000, date: demoDateAt(3), ref: "NEFT-004", no: "RV-0004", narration: "Farmer collection — ABC Agro partial" },
-    { bank: sbi, party: krishna, amount: 54000, date: demoDateAt(4), ref: "NEFT-005", no: "RV-0005", narration: "Cash sales collection deposited" },
-    { bank: hdfc, party: greenHarvest, amount: 210000, date: demoDateAt(5), ref: "NEFT-006", no: "RV-0006", narration: "Sales collection — bulk urea order" },
+    { bank: hdfc, party: xyz, amount: 92000, date: demoDateAt(1), ref: "NEFT-002", no: "RV-0002", narration: "Customer receipt — XYZ Traders" },
+    { bank: icici, party: abc, amount: 145000, date: demoDateAt(2), ref: "NEFT-003", no: "RV-0003", narration: "Sales collection — ABC Agro Distributor" },
+    { bank: icici, party: xyz, amount: 68000, date: demoDateAt(3), ref: "NEFT-004", no: "RV-0004", narration: "Customer receipt — XYZ Traders partial" },
+    { bank: hdfc, party: abc, amount: 54000, date: demoDateAt(4), ref: "NEFT-005", no: "RV-0005", narration: "Cash sales collection deposited" },
+    { bank: hdfc, party: xyz, amount: 210000, date: demoDateAt(5), ref: "NEFT-006", no: "RV-0006", narration: "Sales collection — bulk urea order" },
     { bank: icici, party: abc, amount: 125000, date: demoDateAt(6), ref: "NEFT-007", no: "RV-0007", narration: "Customer receipt against INV-2026-003" },
-    { bank: sbi, party: krishna, amount: 78000, date: demoDateAt(7), ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — Krishna Retail" },
-    { bank: hdfc, party: greenHarvest, amount: 95000, date: demoDateAt(8), ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
-    { bank: icici, party: abc, amount: 156000, date: demoDateAt(9), ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
-    { bank: kotak, party: krishna, amount: 42000, date: demoDateAt(10), ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
-    { bank: hdfc, party: abc, amount: 88000, date: demoDateAt(11), ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
+    { bank: icici, party: xyz, amount: 78000, date: demoDateAt(7), ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — XYZ Traders" },
+    { bank: hdfc, party: abc, amount: 95000, date: demoDateAt(8), ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
+    { bank: icici, party: xyz, amount: 156000, date: demoDateAt(9), ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
+    { bank: hdfc, party: abc, amount: 42000, date: demoDateAt(10), ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
+    { bank: hdfc, party: xyz, amount: 88000, date: demoDateAt(11), ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
   ];
 
   for (const r of receipts) {
@@ -224,16 +218,16 @@ function seedBankBookTransactions(force = false): void {
     no: string;
     narration: string;
   }> = [
-    { bank: hdfc, party: agrochem, amount: 245000, date: demoDateAt(12), ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — AgroChem Traders" },
-    { bank: icici, party: greenField, amount: 118000, date: demoDateAt(13), ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — GreenField Suppliers" },
-    { bank: sbi, party: agrochem, amount: 86000, date: demoDateAt(14), ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
-    { bank: hdfc, party: greenField, amount: 195000, date: demoDateAt(15), ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
-    { bank: axis, party: agrochem, amount: 320000, date: demoDateAt(16), ref: "PAY-005", no: "PV-0005", narration: "Salary disbursement via Axis account" },
-    { bank: icici, party: greenField, amount: 142000, date: demoDateAt(17), ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
-    { bank: hdfc, party: agrochem, amount: 98000, date: demoDateAt(18), ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
-    { bank: sbi, party: greenField, amount: 76000, date: demoDateAt(19), ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
-    { bank: icici, party: agrochem, amount: 210000, date: demoDateAt(20), ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
-    { bank: hdfc, party: greenField, amount: 134000, date: demoDateAt(21), ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
+    { bank: hdfc, party: bharatFert, amount: 245000, date: demoDateAt(12), ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — Bharat Fertilizers" },
+    { bank: icici, party: greenSeeds, amount: 118000, date: demoDateAt(13), ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — Green Seeds Pvt. Ltd." },
+    { bank: hdfc, party: bharatFert, amount: 86000, date: demoDateAt(14), ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
+    { bank: hdfc, party: greenSeeds, amount: 195000, date: demoDateAt(15), ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
+    { bank: icici, party: bharatFert, amount: 320000, date: demoDateAt(16), ref: "PAY-005", no: "PV-0005", narration: "Supplier payment — bulk order" },
+    { bank: icici, party: greenSeeds, amount: 142000, date: demoDateAt(17), ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
+    { bank: hdfc, party: bharatFert, amount: 98000, date: demoDateAt(18), ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
+    { bank: icici, party: greenSeeds, amount: 76000, date: demoDateAt(19), ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
+    { bank: icici, party: bharatFert, amount: 210000, date: demoDateAt(20), ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
+    { bank: hdfc, party: greenSeeds, amount: 134000, date: demoDateAt(21), ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
   ];
 
   for (const p of payments) {
@@ -429,220 +423,10 @@ function seedCashBookTransactions(): void {
   }
 }
 
-function seedFundTransferRecords(): void {
+function clearFundTransferModuleData(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(FUND_TRANSFER_SEED_KEY) === FUND_TRANSFER_DEMO_SEED_VERSION) return;
-
-  const { hdfc, icici, sbi, axis } = getDemoBankLedgers();
-  const pettyCash = findCashLedger("Petty");
-  if (!hdfc || !icici || !sbi || !axis || !pettyCash) return;
-
-  const specs: Array<{
-    mode: FundTransferMode;
-    from: number;
-    to: number;
-    amount: number;
-    date: string;
-    transferNo: string;
-    referenceNo: string;
-    narration: string;
-    status: FundTransferRecord["status"];
-  }> = [
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: icici.id,
-      amount: 100000,
-      date: demoDateAt(55),
-      transferNo: "FT-0001",
-      referenceNo: "NEFT-HDFC-ICICI-0420",
-      narration: "HDFC → ICICI working capital transfer",
-      status: "completed",
-    },
-    {
-      mode: "rtgs",
-      from: icici.id,
-      to: sbi.id,
-      amount: 125000,
-      date: demoDateAt(56),
-      transferNo: "FT-0002",
-      referenceNo: "RTGS-ICICI-SBI-0428",
-      narration: "ICICI → SBI operations funding",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: axis.id,
-      amount: 175000,
-      date: demoDateAt(57),
-      transferNo: "FT-0003",
-      referenceNo: "NEFT-HDFC-AXIS-0508",
-      narration: "HDFC → Axis OD account salary funding",
-      status: "completed",
-    },
-    {
-      mode: "cash_deposit",
-      from: pettyCash.id,
-      to: hdfc.id,
-      amount: 50000,
-      date: demoDateAt(58),
-      transferNo: "FT-0004",
-      referenceNo: "",
-      narration: "Cash deposit to HDFC Bank Current Account",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: sbi.id,
-      to: icici.id,
-      amount: 85000,
-      date: demoDateAt(59),
-      transferNo: "FT-0005",
-      referenceNo: "NEFT-SBI-ICICI-0515",
-      narration: "SBI → ICICI collection sweep",
-      status: "completed",
-    },
-    {
-      mode: "cash_withdrawal",
-      from: icici.id,
-      to: pettyCash.id,
-      amount: 25000,
-      date: demoDateAt(60),
-      transferNo: "FT-0006",
-      referenceNo: "",
-      narration: "Cash withdrawal from ICICI for petty cash replenishment",
-      status: "completed",
-    },
-    {
-      mode: "imps",
-      from: icici.id,
-      to: hdfc.id,
-      amount: 95000,
-      date: demoDateAt(61),
-      transferNo: "FT-0007",
-      referenceNo: "IMPS-ICICI-HDFC-0522",
-      narration: "ICICI → HDFC surplus transfer",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: sbi.id,
-      amount: 110000,
-      date: demoDateAt(62),
-      transferNo: "FT-0008",
-      referenceNo: "NEFT-HDFC-SBI-0601",
-      narration: "HDFC → SBI vendor payment buffer",
-      status: "completed",
-    },
-    {
-      mode: "upi",
-      from: axis.id,
-      to: icici.id,
-      amount: 65000,
-      date: demoDateAt(63),
-      transferNo: "FT-0009",
-      referenceNo: "UPI-AXIS-ICICI-0608",
-      narration: "Axis OD → ICICI quick transfer",
-      status: "completed",
-    },
-    {
-      mode: "cash_deposit",
-      from: pettyCash.id,
-      to: icici.id,
-      amount: 35000,
-      date: demoDateAt(64),
-      transferNo: "FT-0010",
-      referenceNo: "",
-      narration: "Cash deposit to ICICI Bank Current Account",
-      status: "completed",
-    },
-    {
-      mode: "cheque",
-      from: hdfc.id,
-      to: axis.id,
-      amount: 78000,
-      date: demoDateAt(65),
-      transferNo: "FT-0011",
-      referenceNo: "CHQ-784521",
-      narration: "Cheque transfer HDFC → Axis OD account",
-      status: "completed",
-    },
-    {
-      mode: "rtgs",
-      from: sbi.id,
-      to: hdfc.id,
-      amount: 142000,
-      date: demoDateAt(66),
-      transferNo: "FT-0012",
-      referenceNo: "RTGS-SBI-HDFC-0618",
-      narration: "SBI → HDFC end-of-month consolidation",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: icici.id,
-      to: axis.id,
-      amount: 92000,
-      date: demoDateAt(67),
-      transferNo: "FT-0013",
-      referenceNo: "NEFT-ICICI-AXIS-0622",
-      narration: "ICICI → Axis payment account top-up",
-      status: "completed",
-    },
-    {
-      mode: "cash_withdrawal",
-      from: hdfc.id,
-      to: pettyCash.id,
-      amount: 18000,
-      date: demoDateAt(68),
-      transferNo: "FT-0014",
-      referenceNo: "",
-      narration: "ATM cash withdrawal for field collections float",
-      status: "completed",
-    },
-    {
-      mode: "neft",
-      from: hdfc.id,
-      to: icici.id,
-      amount: 45000,
-      date: demoDateAt(69),
-      transferNo: "FT-0015",
-      referenceNo: "NEFT-HDFC-ICICI-0628",
-      narration: "Cancelled transfer — duplicate entry reversed",
-      status: "cancelled",
-    },
-  ];
-
-  const seeded: FundTransferRecord[] = specs.map((s, index) => {
-    const existingVoucher = loadVouchers().find(
-      (v) => v.voucherNumber === s.transferNo || v.referenceNo === s.transferNo,
-    );
-    return {
-      id: index + 1,
-      transferDate: s.date,
-      transferNo: s.transferNo,
-      transferMode: s.mode,
-      fromAccountId: s.from,
-      fromAccountName: formatTransferAccountName(s.from),
-      toAccountId: s.to,
-      toAccountName: formatTransferAccountName(s.to),
-      amount: s.amount,
-      referenceNo: s.referenceNo,
-      narration: s.narration,
-      status: s.status,
-      voucherId: existingVoucher?.id ?? null,
-      financialYearId: 1,
-      createdBy: ACCOUNTS_CURRENT_USER,
-      updatedBy: ACCOUNTS_CURRENT_USER,
-      createdDate: s.date,
-      updatedDate: s.date,
-    };
-  });
-
-  saveFundTransferSeed(seeded);
-  localStorage.setItem(FUND_TRANSFER_SEED_KEY, FUND_TRANSFER_DEMO_SEED_VERSION);
+  localStorage.removeItem(FUND_TRANSFER_STORAGE_KEY);
+  localStorage.removeItem(FUND_TRANSFER_SEED_KEY);
 }
 
 export function seedBankingDemoData(force = false): void {
@@ -650,29 +434,22 @@ export function seedBankingDemoData(force = false): void {
   const stored = localStorage.getItem(VERSION_KEY);
   if (!force && stored === BANKING_DEMO_SEED_VERSION) return;
 
+  clearFundTransferModuleData();
+
   if (force || stored !== BANKING_DEMO_SEED_VERSION) {
     removeBankingDemoVouchers();
-    localStorage.removeItem(FUND_TRANSFER_SEED_KEY);
   }
 
   ensureDemoBankAccounts();
   seedBankBookTransactions(force);
   seedCashBookTransactions();
-  seedFundTransferRecords();
 
   localStorage.setItem(VERSION_KEY, BANKING_DEMO_SEED_VERSION);
 }
 
 export function ensureBankingDemoOnPageLoad(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(VERSION_KEY) === BANKING_DEMO_SEED_VERSION) return;
-
-  ensureDemoBankAccounts();
-  if (loadBankAccountMasters().length === 0) {
-    seedBankingDemoData(true);
-    return;
-  }
-  seedBankingDemoData(true);
+  ensureClientReviewBankingSeed();
 }
 
 /** Non-blocking — use in page mount effects instead of ensureBankingDemoOnPageLoad(). */

@@ -13,6 +13,7 @@
 import React, { Suspense, useEffect } from "react";
 import { FYProvider } from "@/lib/fy-store";
 import { NavRoutePrefetch } from "@/components/navigation/NavRoutePrefetch";
+import { NavigationPendingProvider } from "@/components/navigation/NavigationPendingContext";
 import { NavigationProgress } from "./NavigationProgress";
 import { TopNavbar } from "./TopNavbar";
 import { AppHeader } from "./AppHeader";
@@ -56,9 +57,10 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <FYProvider>
-      <NavRoutePrefetch />
-      <NavigationProgress />
-      <div className="min-h-screen bg-background flex flex-col">
+      <NavigationPendingProvider>
+        <NavRoutePrefetch />
+        <NavigationProgress />
+        <div className="min-h-screen bg-background flex flex-col">
         <Suspense
           fallback={
             <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0" />
@@ -73,6 +75,7 @@ export function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+      </NavigationPendingProvider>
     </FYProvider>
   );
 }

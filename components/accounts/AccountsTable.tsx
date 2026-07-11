@@ -3,6 +3,15 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import type {
+  AccountsColumnFilterConfig,
+  AccountsColumnFilters,
+  AccountsColumnFilterState,
+  AccountsColumnFilterType,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
+import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
+import { useAccountsColumnFilterContext } from "@/components/accounts/AccountsColumnFilterContext";
 
 /** Standard accounts table row heights (px) — keep in sync with globals.css */
 export const ACCOUNTS_TABLE_HEADER_HEIGHT = 36;
@@ -186,6 +195,22 @@ export interface AccountsColumnDef {
   align?: AccountsTableAlign;
   money?: boolean;
   mono?: boolean;
+  sortable?: boolean;
+  filterable?: boolean;
+  filterType?: AccountsColumnFilterType;
+  statusOptions?: string[];
+}
+
+export interface AccountsColumnarTableFilterProps {
+  sortKey?: string;
+  sortDir?: "asc" | "desc";
+  onSort?: (key: string) => void;
+  onRemoveSort?: () => void;
+  columnFilters?: AccountsColumnFilters;
+  onColumnFilterChange?: (key: string, value: AccountsColumnFilterState | undefined) => void;
+  getValueCounts?: (columnKey: string) => ColumnValueOption[];
+  /** @deprecated Use getValueCounts */
+  getUniqueValues?: (columnKey: string) => string[];
 }
 
 export function AccountsColumnarTable({
@@ -198,6 +223,14 @@ export function AccountsColumnarTable({
   onRowClick,
   getRowKey,
   clickableColumnKeys,
+  sortKey,
+  sortDir = "asc",
+  onSort,
+  onRemoveSort,
+  columnFilters,
+  onColumnFilterChange,
+  getValueCounts,
+  getUniqueValues,
 }: {
   columns: AccountsColumnDef[];
   rows: Record<string, string | number>[];
@@ -209,15 +242,45 @@ export function AccountsColumnarTable({
   getRowKey?: (row: Record<string, string | number>, index: number) => string | number;
   /** Column keys that render as clickable links (e.g. voucher no.) */
   clickableColumnKeys?: string[];
-}) {
+} & AccountsColumnarTableFilterProps) {
+  const ctx = useAccountsColumnFilterContext();
+  const resolvedSortKey = sortKey ?? ctx?.sortKey ?? "";
+  const resolvedSortDir = sortDir ?? ctx?.sortDir ?? "asc";
+  const resolvedOnSort = onSort ?? ctx?.handleSort;
+  const resolvedOnRemoveSort = onRemoveSort ?? ctx?.removeSort;
+  const resolvedColumnFilters = columnFilters ?? ctx?.columnFilters;
+  const resolvedOnColumnFilterChange =
+    onColumnFilterChange ?? (ctx ? (key: string, v: AccountsColumnFilterState | undefined) => ctx.setColumnFilter(key, v) : undefined);
+  const resolvedValueOptions =
+    getValueCounts ??
+    (getUniqueValues
+      ? (key: string) => getUniqueValues(key).map((value) => ({ value, count: 0 }))
+      : ctx?.getValueCounts);
+
   return (
     <AccountsTable minWidth={minWidth} className={className}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
           {columns.map((c) => (
-            <AccountsTableHeadCell key={c.key} align={c.align ?? "left"} uppercase>
-              {c.label}
-            </AccountsTableHeadCell>
+            <AccountsColumnHeader
+              key={c.key}
+              label={c.label}
+              colKey={c.key}
+              align={c.align ?? "left"}
+              sortable={c.sortable !== false && Boolean(resolvedOnSort)}
+              sortKey={resolvedSortKey}
+              sortDir={resolvedSortDir}
+              onSort={resolvedOnSort}
+              onRemoveSort={resolvedOnRemoveSort}
+              filterable={c.filterable !== false && Boolean(resolvedOnColumnFilterChange)}
+              filterType={c.filterType ?? (c.money ? "amount" : "text")}
+              filterValue={resolvedColumnFilters?.[c.key]}
+              onFilterChange={
+                resolvedOnColumnFilterChange ? (v) => resolvedOnColumnFilterChange(c.key, v) : undefined
+              }
+              valueOptions={resolvedValueOptions?.(c.key)}
+              statusOptions={c.statusOptions}
+            />
           ))}
         </AccountsTableHeadRow>
       </AccountsTableHead>
@@ -268,12 +331,20 @@ export function AccountsColumnarTable({
 export interface AccountsRichColumnDef<T> {
   key: string;
   label: string;
-  /** Custom header cell — when set, replaces default label */
+  /** Custom header cell — when set, replaces auto filter/sort header */
   header?: React.ReactNode;
   align?: AccountsTableAlign;
   uppercase?: boolean;
   className?: string;
+  sortable?: boolean;
+  filterable?: boolean;
+  filterType?: AccountsColumnFilterType;
+  statusOptions?: string[];
   render: (row: T, index: number) => React.ReactNode;
+}
+
+export interface AccountsRichTableFilterProps extends AccountsColumnarTableFilterProps {
+  columnFilterConfig?: AccountsColumnFilterConfig;
 }
 
 /** Columnar table with custom cell renderers (reports with badges, links, etc.) */
@@ -282,39 +353,92 @@ export function AccountsRichTable<T>({
   rows,
   getRowKey,
   emptyMessage = "No records found.",
+  emptyAction,
   minWidth,
   className,
   onRowClick,
+  sortKey,
+  sortDir = "asc",
+  onSort,
+  onRemoveSort,
+  columnFilters,
+  onColumnFilterChange,
+  columnFilterConfig,
 }: {
   columns: AccountsRichColumnDef<T>[];
   rows: T[];
   getRowKey?: (row: T, index: number) => string | number;
   emptyMessage?: string;
+  emptyAction?: React.ReactNode;
   minWidth?: number;
   className?: string;
   onRowClick?: (row: T) => void;
-}) {
+} & AccountsRichTableFilterProps) {
+  const ctx = useAccountsColumnFilterContext();
+  const resolvedSortKey = sortKey ?? ctx?.sortKey ?? "";
+  const resolvedSortDir = sortDir ?? ctx?.sortDir ?? "asc";
+  const resolvedOnSort = onSort ?? ctx?.handleSort;
+  const resolvedOnRemoveSort = onRemoveSort ?? ctx?.removeSort;
+  const resolvedColumnFilters = columnFilters ?? ctx?.columnFilters;
+  const resolvedOnColumnFilterChange =
+    onColumnFilterChange ?? (ctx ? (key: string, v: AccountsColumnFilterState | undefined) => ctx.setColumnFilter(key, v) : undefined);
+  const resolvedGetValueCounts = ctx?.getValueCounts;
+
   return (
     <AccountsTable minWidth={minWidth} className={className}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          {columns.map((c) => (
-            <AccountsTableHeadCell
-              key={c.key}
-              align={c.align ?? "left"}
-              uppercase={c.uppercase ?? true}
-              className={c.className}
-            >
-              {c.header ?? c.label}
-            </AccountsTableHeadCell>
-          ))}
+          {columns.map((c) => {
+            if (c.header) {
+              return (
+                <AccountsTableHeadCell
+                  key={c.key}
+                  align={c.align ?? "left"}
+                  uppercase={c.uppercase ?? true}
+                  className={c.className}
+                >
+                  {c.header}
+                </AccountsTableHeadCell>
+              );
+            }
+            const filterType =
+              c.filterType ?? columnFilterConfig?.[c.key]?.type ?? (c.key.includes("date") ? "date" : "text");
+            return (
+              <AccountsColumnHeader
+                key={c.key}
+                label={c.label}
+                colKey={c.key}
+                align={c.align ?? "left"}
+                sortable={c.sortable !== false && Boolean(resolvedOnSort)}
+                sortKey={resolvedSortKey}
+                sortDir={resolvedSortDir}
+                onSort={resolvedOnSort}
+                onRemoveSort={resolvedOnRemoveSort}
+                filterable={c.filterable !== false && Boolean(resolvedOnColumnFilterChange)}
+                filterType={filterType}
+                filterValue={resolvedColumnFilters?.[c.key]}
+                onFilterChange={
+                  resolvedOnColumnFilterChange
+                    ? (v) => resolvedOnColumnFilterChange(c.key, v)
+                    : undefined
+                }
+                valueOptions={resolvedGetValueCounts?.(c.key)}
+                statusOptions={c.statusOptions ?? columnFilterConfig?.[c.key]?.options}
+                optionLabels={columnFilterConfig?.[c.key]?.optionLabels}
+                className={c.className}
+              />
+            );
+          })}
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
         {rows.length === 0 ? (
           <AccountsTableRow>
             <AccountsTableCell colSpan={columns.length} className="accounts-table-empty">
-              {emptyMessage}
+              <div className="flex flex-col items-center gap-1">
+                <span>{emptyMessage}</span>
+                {emptyAction}
+              </div>
             </AccountsTableCell>
           </AccountsTableRow>
         ) : (

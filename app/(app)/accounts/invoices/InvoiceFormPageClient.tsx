@@ -57,14 +57,20 @@ import {
   type InvoiceStatus,
 } from "./invoices-data";
 import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
 import { getOrderById } from "@/app/(app)/sales/orders/orders-data";
 import { cn } from "@/lib/utils";
+import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
+import {
+  useTransactionFormCancel,
+} from "@/components/accounts/TransactionFormCancel";
 import {
   customerMasterToTransactionFields,
   type CustomerTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
+import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
 import {
   getCustomerAddressesForSalesOrder,
   getDefaultBillShipAddressIds,
@@ -76,6 +82,10 @@ import {
   resolveInvoiceAdditionalExpenses,
   type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
+import {
+  WarehouseMappedBankAccountSelect,
+  getBankAccountPrintDetails,
+} from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -145,6 +155,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [dispatchDate, setDispatchDate] = useState("");
   const [branch, setBranch] = useState("Head Office");
   const [warehouse, setWarehouse] = useState("Central Warehouse");
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState([createEmptyLine()]);
   const [attachments] = useState<InvoiceAttachment[]>([]);
@@ -152,6 +163,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     DispatchNearExpirySchemeEntry[] | InvoiceNearExpirySchemeSettlement[]
   >([]);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const products = useMemo(
     () => getProductsForInvoice(customerId ? Number(customerId) : undefined),
@@ -294,6 +307,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return;
     }
     applyCustomerTransactionFields(customerMasterToTransactionFields(customer));
+    const ledger = syncCustomerLedger(customer);
+    setCustomerLedgerId(ledger?.id ?? null);
+    if (ledger?.accountName) setReceivableLedger(ledger.accountName);
     if (addressDefaults) {
       setBillToId(addressDefaults.billToId);
       setShipToId(addressDefaults.shipToId);
@@ -411,6 +427,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setDispatchDate(dispatch?.dispatchDate ?? "");
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
+    setBankAccountId(rec.bankAccountId ?? null);
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
     setInvoiceType(rec.invoiceType ?? (rec.invoiceNo.startsWith("STI-") ? "stock_transfer" : "sales"));
@@ -436,6 +453,61 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setLines(rec.lineItems.length ? rec.lineItems : [createEmptyLine()]);
     setSchemeSettlementEntries(rec.nearExpirySchemeSettlements ?? []);
   }, [isEdit, invoiceId, router, customers]);
+
+  const [baselineReady, setBaselineReady] = useState(false);
+  useEffect(() => {
+    setBaselineReady(false);
+    const id = window.setTimeout(() => setBaselineReady(true), 350);
+    return () => window.clearTimeout(id);
+  }, [isEdit, invoiceId, searchParams.toString()]);
+
+  const formSnapshot = useMemo(
+    () => ({
+      customerId,
+      customerName,
+      invoiceDate,
+      dueDate,
+      referenceNo,
+      branch,
+      warehouse,
+      remarks,
+      lines,
+      additionalExpenses,
+      roundOff,
+      invoiceType,
+      selectedDispatchId,
+      customerNotes,
+      termsAndConditions,
+      internalRemarks,
+      salesperson,
+      schemeSettlementEntries,
+    }),
+    [
+      customerId,
+      customerName,
+      invoiceDate,
+      dueDate,
+      referenceNo,
+      branch,
+      warehouse,
+      remarks,
+      lines,
+      additionalExpenses,
+      roundOff,
+      invoiceType,
+      selectedDispatchId,
+      customerNotes,
+      termsAndConditions,
+      internalRemarks,
+      salesperson,
+      schemeSettlementEntries,
+    ],
+  );
+  const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
+  const { requestCancel, discardDialog } = useTransactionFormCancel({
+    listHref: INVOICES_LIST_PATH,
+    isDirty,
+  });
 
   const lineTotals = useMemo(() => calculateInvoiceTotals(lines), [lines]);
 
@@ -557,6 +629,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     dispatchNo: dispatchRef.trim(),
     branch: branch.trim(),
     warehouse: warehouse.trim(),
+    bankAccountId,
     salesperson: salesperson.trim(),
     customerNotes: customerNotes.trim(),
     termsAndConditions: termsAndConditions.trim(),
@@ -587,6 +660,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const submit = (asDraft: boolean) => {
     setError(null);
+    setSuccess(null);
     if (!customerName.trim()) {
       setError(
         isStockTransferInvoice
@@ -608,49 +682,71 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return;
     }
     try {
+      setSaving(true);
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
       if (isEdit && invoiceId != null) {
         updateInvoice(invoiceId, buildInput(status));
+        dispatchAccountsDataChanged("sales-invoices");
+        setSuccess(
+          asDraft
+            ? "Invoice saved as draft."
+            : "Invoice saved and posted to ledger successfully.",
+        );
         router.push(`${INVOICES_LIST_PATH}/${invoiceId}`);
+        router.refresh();
       } else {
         const rec = createInvoice(buildInput(status));
+        dispatchAccountsDataChanged("sales-invoices");
+        setSuccess(
+          asDraft
+            ? "Invoice saved as draft."
+            : "Invoice saved and posted to ledger successfully.",
+        );
         router.push(`${INVOICES_LIST_PATH}/${rec.id}`);
+        router.refresh();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save invoice.");
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
+    <>
     <InvoiceFormLayout
       title={isEdit ? "Edit Sales Invoice" : "Create Sales Invoice"}
       subtitle="Select customer and dispatch to auto-fill invoice details, or create a manual invoice."
       breadcrumb={accountsBreadcrumb("Transactions", isEdit ? "Edit Invoice" : "Create Invoice", INVOICES_LIST_PATH)}
       backHref={INVOICES_LIST_PATH}
+      onBackClick={requestCancel}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button
+            type="button"
             variant="outline"
             size="sm"
-            className={INVOICE_FORM_INPUT_CLASS}
-            onClick={() => router.push(INVOICES_LIST_PATH)}
+            className="h-8 text-xs font-medium"
+            onClick={requestCancel}
           >
             Cancel
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className={INVOICE_FORM_INPUT_CLASS}
+            className="h-8 text-xs font-medium"
             onClick={() => submit(true)}
+            disabled={saving}
           >
             Save Draft
           </Button>
           <Button
             size="sm"
-            className={cn(INVOICE_FORM_INPUT_CLASS, "bg-brand-600 hover:bg-brand-700 text-white border-0")}
+            className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white border-0"
             onClick={() => submit(false)}
+            disabled={saving}
           >
-            Post Invoice
+            {saving ? "Saving…" : "Post Invoice"}
           </Button>
         </div>
       }
@@ -658,6 +754,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
           {error}
+        </div>
+      )}
+      {success && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 font-medium">
+          {success}
         </div>
       )}
 
@@ -718,6 +819,21 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               )}
             </div>
           )}
+          <div className="mt-3 max-w-md">
+            <WarehouseMappedBankAccountSelect
+              warehouseRef={warehouse}
+              value={bankAccountId}
+              onChange={(id) => setBankAccountId(id)}
+              label="Bank Account (for payment / print)"
+            />
+            {bankAccountId != null && getBankAccountPrintDetails(bankAccountId) && (
+              <p className="text-[11px] text-muted-foreground mt-1 font-mono">
+                {getBankAccountPrintDetails(bankAccountId)!.bankName} ·{" "}
+                {getBankAccountPrintDetails(bankAccountId)!.accountNumber} · IFSC{" "}
+                {getBankAccountPrintDetails(bankAccountId)!.ifsc}
+              </p>
+            )}
+          </div>
         </InvoiceFormCard>
 
         {!isStockTransferInvoice && (
@@ -780,7 +896,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </Section>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Invoice Summary</h2>
+          <h2 className="accounts-card-title">Invoice Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4 py-1">
                 <span className="text-muted-foreground">Product Sub Total</span>
@@ -823,5 +939,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </Section>
       </div>
     </InvoiceFormLayout>
+    {discardDialog}
+  </>
   );
 }

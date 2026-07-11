@@ -33,6 +33,7 @@ import {
 import { inferAccountTypeFromPath } from "@/lib/accounts/coa-accounting-view";
 import { CoaParentGroupSelector } from "./CoaParentGroupSelector";
 import { CoaAddLedgerParentSelect } from "./CoaAddLedgerParentSelect";
+import { resolveCoaLedgerBehaviorById } from "@/lib/accounts/coa-ledger-behavior";
 
 type SheetMode = "add" | "edit" | "view";
 
@@ -83,6 +84,14 @@ export function LedgerSheet({
     form.parentGroupId != null
       ? inferAccountTypeFromPath(records, form.parentGroupId)
       : "Asset";
+  const behavior =
+    form.parentGroupId != null
+      ? resolveCoaLedgerBehaviorById(form.parentGroupId, records)
+      : null;
+  const addTitle =
+    behavior && behavior.kind !== "generic"
+      ? `Add ${behavior.label}`
+      : "Add Ledger";
 
   const showGst = ledgerType === "Income" || ledgerType === "Expense" || ledgerType === "Asset";
   const showTds =
@@ -99,7 +108,7 @@ export function LedgerSheet({
             <div className="min-w-0">
               <SheetTitle className="text-base">
                 {mode === "add"
-                  ? "Add Ledger"
+                  ? addTitle
                   : mode === "edit"
                     ? "Edit Ledger"
                     : "Account Details"}
@@ -107,6 +116,8 @@ export function LedgerSheet({
               <SheetDescription className="text-xs mt-0.5">
                 {readOnly
                   ? "View ledger balances and configuration."
+                  : behavior?.source
+                    ? `Source: ${behavior.source}`
                   : parentGroupLocked
                     ? "Create a ledger under the selected Accounting Group."
                     : "Create a ledger under an Accounting Group."}
@@ -147,7 +158,7 @@ export function LedgerSheet({
             <Label className="text-xs">
               Parent Group <span className="text-red-500">*</span>
             </Label>
-            {isCompactAdd && parentGroupLocked && form.parentGroupId ? (
+            {parentGroupLocked && form.parentGroupId ? (
               <>
                 <Input
                   className="h-9 text-sm font-medium bg-muted/30"

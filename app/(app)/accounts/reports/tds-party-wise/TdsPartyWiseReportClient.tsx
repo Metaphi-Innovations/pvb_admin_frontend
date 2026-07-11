@@ -24,7 +24,6 @@ import {
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -34,8 +33,22 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportSearchFilter,
+  ReportTdsSectionMultiFilter,
+  ReportProductMultiFilter,
+  ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import {
+  buildEntityFilterSummary,
+  formatMultiSelectLabel,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -45,6 +58,7 @@ import {
   buildTdsSummaryStatement,
   flattenTdsSummaryForExport,
   formatTdsRate,
+  getTdsPartyOptions,
   TDS_SECTION_OPTIONS,
   type TdsSummaryLine,
   type TdsSummaryRow,
@@ -60,6 +74,30 @@ const PARTY_TYPE_OPTIONS = [
   { value: "Employee", label: "Employee" },
   { value: "Other", label: "Other" },
 ] as const;
+
+const PARTY_TYPE_COLUMN_OPTIONS = PARTY_TYPE_OPTIONS.filter((o) => o.value !== "all").map(
+  (o) => o.value,
+);
+
+function filterTdsDisplayLines(lines: TdsSummaryLine[], visibleDataIds: Set<string>): TdsSummaryLine[] {
+  const visibleSectionIds = new Set<string>();
+  let currentSectionId: string | null = null;
+  for (const line of lines) {
+    if (line.kind === "section") {
+      currentSectionId = line.id;
+      continue;
+    }
+    if (line.kind === "data" && line.row && visibleDataIds.has(line.row.id) && currentSectionId) {
+      visibleSectionIds.add(currentSectionId);
+    }
+  }
+  return lines.filter((line) => {
+    if (line.kind === "total") return false;
+    if (line.kind === "section") return visibleSectionIds.has(line.id);
+    if (line.kind === "data") return Boolean(line.row && visibleDataIds.has(line.row.id));
+    return false;
+  });
+}
 
 function TdsDataRow({ row }: { row: TdsSummaryRow }) {
   return (
@@ -111,85 +149,66 @@ function TdsSummaryTableRow({ line }: { line: TdsSummaryLine }) {
   return null;
 }
 
-export default function TdsPartyWiseReportClient() {
-  const searchParams = useSearchParams();
-  const mounted = useClientMounted();
-
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [partyType, setPartyType] = useState("all");
-  const [tdsSection, setTdsSection] = useState("all");
-  const [search, setSearch] = useState("");
-  const [exporting, setExporting] = useState(false);
-
-  const debouncedSearch = useDebouncedValue(search, 300);
-
-  useEffect(() => {
-    const fromUrl = searchParams.get("section");
-    if (fromUrl) setTdsSection(fromUrl.toUpperCase());
-  }, [searchParams]);
-
-  const partyTypeLabel =
-    PARTY_TYPE_OPTIONS.find((o) => o.value === partyType)?.label ?? "All";
-  const tdsSectionLabel =
-    tdsSection === "all"
-      ? "All Sections"
-      : (TDS_SECTION_OPTIONS.find((o) => o.value === tdsSection)?.label ?? tdsSection);
-
-  const statement = useMemo(
+function TdsPartyWiseBody({
+  mounted,
+  statement,
+  hasFilters,
+  resetFilters,
+  exportMeta,
+  exporting,
+  setExporting,
+  filterBar,
+}: {
+  mounted: boolean;
+  statement: ReturnType<typeof buildTdsSummaryStatement>;
+  hasFilters: boolean;
+  resetFilters: () => void;
+  exportMeta: Parameters<typeof exportTdsSummaryToExcel>[1];
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  filterBar: React.ReactNode;
+}) {
+  const dataRows = useMemo(
     () =>
-      buildTdsSummaryStatement({
-        partyType,
-        tdsSection,
-        search: debouncedSearch,
-      }),
-    [partyType, tdsSection, debouncedSearch],
+      statement.lines
+        .filter((l): l is TdsSummaryLine & { row: TdsSummaryRow } => l.kind === "data" && Boolean(l.row))
+        .map((l) => l.row),
+    [statement.lines],
   );
-
-  const hasFilters =
-    Boolean(search.trim()) ||
-    partyType !== "all" ||
-    tdsSection !== "all";
-
-  const resetFilters = useCallback(() => {
-    setSearch("");
-    setPartyType("all");
-    setTdsSection("all");
-    setPreset("this_year");
-    const { from, to } = resolveDateRangePreset("this_year");
-    setDateFrom(from);
-    setDateTo(to);
-  }, [setPreset, setDateFrom, setDateTo]);
-
-  
-
-  const exportMeta = useMemo(
+  const columnFilteredDataRows = useAccountsFilteredRows(dataRows);
+  const visibleDataIds = useMemo(
+    () => new Set(columnFilteredDataRows.map((r) => r.id)),
+    [columnFilteredDataRows],
+  );
+  const displayLines = useMemo(
+    () => filterTdsDisplayLines(statement.lines, visibleDataIds),
+    [statement.lines, visibleDataIds],
+  );
+  const totals = useMemo(
     () => ({
-      dateFrom,
-      dateTo,
-      financialYear: "",
-      partyType: partyTypeLabel,
-      tdsSection: tdsSectionLabel,
-      search: debouncedSearch,
+      totalGross: columnFilteredDataRows.reduce((s, r) => s + r.grossAmount, 0),
+      totalTds: columnFilteredDataRows.reduce((s, r) => s + r.tdsAmount, 0),
+      totalNet: columnFilteredDataRows.reduce((s, r) => s + r.netPayable, 0),
     }),
-    [dateFrom, dateTo, partyTypeLabel, tdsSectionLabel, debouncedSearch],
+    [columnFilteredDataRows],
   );
 
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const rows = flattenTdsSummaryForExport(statement.lines);
-      await exportTdsSummaryToExcel(rows, exportMeta, statement.totals);
+      const exportLines = [...displayLines, { id: "total-row", kind: "total" as const }];
+      const rows = flattenTdsSummaryForExport(exportLines);
+      await exportTdsSummaryToExcel(rows, exportMeta, totals);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    const rows = flattenTdsSummaryForExport(statement.lines);
-    exportTdsSummaryToPdf(rows, exportMeta, statement.totals);
+    const exportLines = [...displayLines, { id: "total-row", kind: "total" as const }];
+    const rows = flattenTdsSummaryForExport(exportLines);
+    exportTdsSummaryToPdf(rows, exportMeta, totals);
   };
-
-  const dataLines = statement.lines.filter((l) => l.kind === "data");
 
   return (
     <AccountsPageShell
@@ -203,70 +222,10 @@ export default function TdsPartyWiseReportClient() {
         <AccountsExportMenu
           onExcel={handleExportExcel}
           onPdf={handleExportPdf}
-          disabled={exporting || !statement.hasData}
+          disabled={exporting || columnFilteredDataRows.length === 0}
         />
       }
-      filters={
-        <ReportFilterRow className="items-end gap-2">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <div className="space-y-1 min-w-[130px]">
-            <Label className={filterLabelClass}>Party Type</Label>
-            <Select value={partyType} onValueChange={setPartyType}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PARTY_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 min-w-[170px]">
-            <Label className={filterLabelClass}>TDS Section</Label>
-            <Select value={tdsSection} onValueChange={setTdsSection}>
-              <SelectTrigger className={cn(filterControlClass, "mt-0 w-[170px]")}>
-                <SelectValue placeholder="All sections" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">
-                  All Sections
-                </SelectItem>
-                {TDS_SECTION_OPTIONS.map((s) => (
-                  <SelectItem key={s.value} value={s.value} className="text-xs">
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Party, PAN, section…"
-            className="min-w-[180px]"
-          />
-          {hasFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-sm px-2"
-              onClick={resetFilters}
-            >
-              <X className="w-3 h-3 mr-1" /> Reset
-            </Button>
-          )}
-        </ReportFilterRow>
-      }
+      filters={filterBar}
     >
       <AccountsTableListing>
         {!mounted ? (
@@ -286,39 +245,48 @@ export default function TdsPartyWiseReportClient() {
               </button>
             )}
           </div>
+        ) : dataRows.length > 0 && columnFilteredDataRows.length === 0 ? (
+          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
+            No records match the column filters.
+          </div>
         ) : (
           <AccountsTableScroll>
             <AccountsTable minWidth={1000}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <AccountsTableHeadCell>Party Name</AccountsTableHeadCell>
-                  <AccountsTableHeadCell>Party Type</AccountsTableHeadCell>
-                  <AccountsTableHeadCell>PAN</AccountsTableHeadCell>
-                  <AccountsTableHeadCell>TDS Section</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">Gross Amount</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">TDS Rate</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">TDS Amount</AccountsTableHeadCell>
-                  <AccountsTableHeadCell align="right">Net Payable</AccountsTableHeadCell>
+                  <SortTh label="Party Name" colKey="partyName" />
+                  <AccountsColumnHeader
+                    label="Party Type"
+                    colKey="partyType"
+                    filterType="status"
+                    sortable={false}
+                    statusOptions={PARTY_TYPE_COLUMN_OPTIONS}
+                  />
+                  <SortTh label="PAN" colKey="pan" />
+                  <SortTh label="TDS Section" colKey="tdsSection" />
+                  <SortTh label="Gross Amount" colKey="grossAmount" filterType="amount" align="right" />
+                  <SortTh label="TDS Rate" colKey="tdsRate" filterType="amount" align="right" />
+                  <SortTh label="TDS Amount" colKey="tdsAmount" filterType="amount" align="right" />
+                  <SortTh label="Net Payable" colKey="netPayable" filterType="amount" align="right" />
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
-                {statement.lines
-                  .filter((l) => l.kind !== "total")
-                  .map((line) => (
-                    <TdsSummaryTableRow key={line.id} line={line} />
-                  ))}
+                {displayLines.map((line) => (
+                  <TdsSummaryTableRow key={line.id} line={line} />
+                ))}
               </AccountsTableBody>
               <AccountsTableFoot>
                 <AccountsTableRow className="bg-muted/30 border-t-2 border-border">
                   <AccountsTableCell colSpan={4} className="font-bold text-xs text-foreground">
-                    Totals ({dataLines.length} {dataLines.length === 1 ? "entry" : "entries"})
+                    Totals ({columnFilteredDataRows.length}{" "}
+                    {columnFilteredDataRows.length === 1 ? "entry" : "entries"})
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
                     className={cn("font-bold", MONEY_AMOUNT_CLASS)}
                   >
-                    {formatMoney(statement.totals.totalGross)}
+                    {formatMoney(totals.totalGross)}
                   </AccountsTableCell>
                   <AccountsTableCell />
                   <AccountsTableCell
@@ -326,14 +294,14 @@ export default function TdsPartyWiseReportClient() {
                     money
                     className={cn("font-bold", MONEY_AMOUNT_CLASS)}
                   >
-                    {formatMoney(statement.totals.totalTds)}
+                    {formatMoney(totals.totalTds)}
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
                     className={cn("font-bold", MONEY_AMOUNT_CLASS)}
                   >
-                    {formatMoney(statement.totals.totalNet)}
+                    {formatMoney(totals.totalNet)}
                   </AccountsTableCell>
                 </AccountsTableRow>
               </AccountsTableFoot>
@@ -342,5 +310,191 @@ export default function TdsPartyWiseReportClient() {
         )}
       </AccountsTableListing>
     </AccountsPageShell>
+  );
+}
+
+export default function TdsPartyWiseReportClient() {
+  const searchParams = useSearchParams();
+  const mounted = useClientMounted();
+
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
+  const [partyType, setPartyType] = useState("all");
+  const [partyIds, setPartyIds] = useState<string[]>([]);
+  const [tdsSections, setTdsSections] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const partyOptions = useMemo(() => getTdsPartyOptions(), []);
+  const tdsSectionOptions = useMemo(
+    () => TDS_SECTION_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
+    [],
+  );
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("section");
+    if (fromUrl) setTdsSections([fromUrl.toUpperCase()]);
+  }, [searchParams]);
+
+  const partyTypeLabel =
+    PARTY_TYPE_OPTIONS.find((o) => o.value === partyType)?.label ?? "All";
+  const tdsSectionLabel = formatMultiSelectLabel(
+    tdsSections,
+    tdsSectionOptions,
+    "Section",
+    "All Sections",
+  );
+
+  const statement = useMemo(
+    () =>
+      buildTdsSummaryStatement({
+        partyType,
+        tdsSection: tdsSections,
+        partyIds,
+        search: debouncedSearch,
+      }),
+    [partyType, tdsSections, partyIds, debouncedSearch],
+  );
+
+  const dataRows = useMemo(
+    () =>
+      statement.lines
+        .filter((l): l is TdsSummaryLine & { row: TdsSummaryRow } => l.kind === "data" && Boolean(l.row))
+        .map((l) => l.row),
+    [statement.lines],
+  );
+
+  const getCellValue = useCallback(
+    (row: TdsSummaryRow, key: string) => {
+      if (key === "tdsRate") return row.tdsRate;
+      return (row as unknown as Record<string, unknown>)[key];
+    },
+    [],
+  );
+
+  const columnConfig = useMemo(
+    () => ({
+      partyName: { type: "text" as const },
+      partyType: { type: "text" as const },
+      pan: { type: "text" as const },
+      tdsSection: { type: "text" as const },
+      grossAmount: { type: "amount" as const },
+      tdsRate: { type: "amount" as const },
+      tdsAmount: { type: "amount" as const },
+      netPayable: { type: "amount" as const },
+    }),
+    [],
+  );
+
+  const hasFilters =
+    Boolean(search.trim()) ||
+    partyType !== "all" ||
+    partyIds.length > 0 ||
+    tdsSections.length > 0;
+
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setPartyType("all");
+    setPartyIds([]);
+    setTdsSections([]);
+    setPreset("this_year");
+    const { from, to } = resolveDateRangePreset("this_year");
+    setDateFrom(from);
+    setDateTo(to);
+  }, [setPreset, setDateFrom, setDateTo]);
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary("party", "Parties", partyIds, partyOptions, () => setPartyIds([])),
+      buildEntityFilterSummary("tdsSection", "TDS Sections", tdsSections, tdsSectionOptions, () => setTdsSections([])),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [partyIds, tdsSections, partyOptions, tdsSectionOptions]);
+
+  const exportMeta = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      financialYear: "",
+      partyType: partyTypeLabel,
+      tdsSection: tdsSectionLabel,
+      search: debouncedSearch,
+    }),
+    [dateFrom, dateTo, partyTypeLabel, tdsSectionLabel, debouncedSearch],
+  );
+
+  const filterBar = (
+    <>
+      <ReportFilterRow className="items-end gap-2">
+        <ReportDateRangeFilter
+          preset={preset}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onPresetChange={setPreset}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+        />
+        <div className="space-y-1 min-w-[130px]">
+          <Label className={filterLabelClass}>Party Type</Label>
+          <Select value={partyType} onValueChange={setPartyType}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PARTY_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <ReportProductMultiFilter
+          values={partyIds}
+          onChange={setPartyIds}
+          products={partyOptions}
+          label="Party"
+        />
+        <ReportTdsSectionMultiFilter values={tdsSections} onChange={setTdsSections} />
+        <ReportSearchFilter
+          value={search}
+          onChange={setSearch}
+          placeholder="Party, PAN, section…"
+          className="min-w-[180px]"
+        />
+        {hasFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-sm px-2"
+            onClick={resetFilters}
+          >
+            <X className="w-3 h-3 mr-1" /> Reset
+          </Button>
+        )}
+      </ReportFilterRow>
+      <ReportFilterSummary items={filterSummaryItems} />
+    </>
+  );
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={dataRows}
+      getCellValue={getCellValue}
+      columnConfig={columnConfig}
+      defaultSortKey="partyName"
+      defaultSortDir="asc"
+    >
+      <TdsPartyWiseBody
+        mounted={mounted}
+        statement={statement}
+        hasFilters={hasFilters}
+        resetFilters={resetFilters}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        filterBar={filterBar}
+      />
+    </AccountsColumnFilterProvider>
   );
 }

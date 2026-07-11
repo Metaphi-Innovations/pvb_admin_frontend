@@ -40,11 +40,11 @@ import {
 
   Settings,
 
+  Tags,
+
   ShoppingBag,
 
   ShoppingCart,
-
-  Tags,
 
   TrendingUp,
 
@@ -65,6 +65,11 @@ import {
 
 
 export const CHART_OF_ACCOUNTS_HREF = "/accounts/masters/chart-of-accounts";
+/** @deprecated Ledger Master removed — redirects to Chart of Accounts. */
+export const LEDGER_MASTER_HREF = CHART_OF_ACCOUNTS_HREF;
+export const ACCOUNTS_GST_MASTER_HREF = "/accounts/masters/gst";
+export const ACCOUNTS_HSN_MASTER_HREF = "/accounts/masters/hsn";
+export const ACCOUNTS_TDS_MASTER_HREF = "/accounts/masters/tds";
 
 export const ACCOUNTS_HOME_HREF = CHART_OF_ACCOUNTS_HREF;
 
@@ -91,6 +96,16 @@ export interface AccountsNavLink {
 
 
 export type AccountsNavGroupId = "coa" | "transactions" | "receivables" | "payables" | "banking" | "reports";
+
+/** Default landing route when switching Accounts sections from the left sidebar. */
+export const ACCOUNTS_SECTION_LANDING_HREF: Record<AccountsNavGroupId, string> = {
+  coa: CHART_OF_ACCOUNTS_HREF,
+  transactions: VOUCHERS_HUB_HREF,
+  receivables: "/accounts/receivables/outstanding",
+  payables: "/accounts/payables/outstanding",
+  banking: "/accounts/banking/bank-accounts",
+  reports: REPORTS_HOME_HREF,
+};
 
 
 
@@ -284,8 +299,6 @@ export const BANKING_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Cash Book", href: "/accounts/reports/cash-book", icon: Banknote },
 
-  { label: "Fund Transfer", href: "/accounts/banking/fund-transfer", icon: ArrowLeftRight },
-
   { label: "Bank Reconciliation", href: "/accounts/banking/reconciliation", icon: Scale },
 
 ];
@@ -354,7 +367,6 @@ export const ACCOUNTS_BANKING_NAV: AccountsNavLink[] = [
   { label: "Bank Accounts", href: "/accounts/banking/bank-accounts", icon: Landmark },
   { label: "Bank Book", href: "/accounts/reports/bank-book", icon: BookOpen },
   { label: "Cash Book", href: "/accounts/reports/cash-book", icon: Banknote },
-  { label: "Fund Transfer", href: "/accounts/banking/fund-transfer", icon: ArrowLeftRight },
   { label: "Bank Reconciliation", href: "/accounts/banking/reconciliation", icon: Scale },
 ];
 
@@ -366,6 +378,10 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Cash Flow", href: "/accounts/reports/cash-flow", icon: TrendingUp },
   { label: "General Ledger", href: "/accounts/reports/ledger", icon: BookOpen },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: BookMarked },
+  { label: "Receipt Register", href: "/accounts/reports/receipt-register", icon: Receipt },
+  { label: "Payment Register", href: "/accounts/reports/payment-register", icon: Receipt },
+  { label: "Contra Register", href: "/accounts/reports/contra-register", icon: ArrowLeftRight },
+  { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
   { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
   { label: "TDS Summary", href: "/accounts/reports/tds-party-wise", icon: FileText },
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
@@ -374,13 +390,17 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: Package },
   { label: "Customer Ledger", href: "/accounts/reports/customer-ledger", icon: Users },
   { label: "Supplier Ledger", href: "/accounts/reports/supplier-ledger", icon: Truck },
-  { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
   { label: "Stock Ledger", href: "/accounts/reports/stock-ledger", icon: Boxes },
   { label: "Audit Trail", href: "/accounts/reports/audit-trail", icon: History },
 ];
 
 export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
-  { id: "coa", label: "Chart of Accounts", icon: FolderTree, items: [ACCOUNTS_COA_NAV] },
+  {
+    id: "coa",
+    label: "Masters",
+    icon: FolderTree,
+    items: [ACCOUNTS_COA_NAV],
+  },
   { id: "transactions", label: "Transactions", icon: ArrowLeftRight, items: ACCOUNTS_TRANSACTIONS_NAV },
   { id: "receivables", label: "Receivables", icon: Users, items: ACCOUNTS_RECEIVABLES_NAV },
   { id: "payables", label: "Payables", icon: Truck, items: ACCOUNTS_PAYABLES_NAV },
@@ -393,7 +413,7 @@ export const ACCOUNTS_SIDEBAR_GROUPS: AccountsNavGroup[] = ACCOUNTS_NAV_GROUPS.f
   (g) => g.id !== "coa",
 );
 
-export const ACCOUNTS_NAV_ITEMS = [ACCOUNTS_COA_NAV, ...ACCOUNTS_NAV_GROUPS.flatMap((g) => g.items)];
+export const ACCOUNTS_NAV_ITEMS = ACCOUNTS_NAV_GROUPS.flatMap((g) => g.items);
 
 
 
@@ -404,6 +424,7 @@ const ROUTE_GROUP_PREFIXES: { prefix: string; groupId: AccountsNavGroupId }[] = 
   { prefix: "/accounts/masters/ledgers", groupId: "coa" },
   { prefix: "/accounts/masters/gst", groupId: "coa" },
   { prefix: "/accounts/masters/hsn", groupId: "coa" },
+  { prefix: "/accounts/masters/tds", groupId: "coa" },
   { prefix: "/accounts/masters/bank-accounts", groupId: "coa" },
   { prefix: "/accounts/masters/", groupId: "coa" },
   { prefix: "/accounts/settings", groupId: "coa" },
@@ -412,10 +433,13 @@ const ROUTE_GROUP_PREFIXES: { prefix: string; groupId: AccountsNavGroupId }[] = 
   { prefix: "/accounts/sales/", groupId: "transactions" },
   { prefix: "/accounts/purchases/", groupId: "transactions" },
   { prefix: "/accounts/purchase-invoices", groupId: "transactions" },
+  { prefix: "/accounts/claims", groupId: "transactions" },
   { prefix: "/accounts/receivables/", groupId: "receivables" },
   { prefix: "/accounts/payables/", groupId: "payables" },
   { prefix: "/accounts/banking/", groupId: "banking" },
   { prefix: "/accounts/bank-reconciliation", groupId: "banking" },
+  { prefix: "/accounts/reports/bank-book", groupId: "banking" },
+  { prefix: "/accounts/reports/cash-book", groupId: "banking" },
   { prefix: "/accounts/reports/", groupId: "reports" },
   { prefix: "/accounts/dashboard", groupId: "coa" },
 ];
@@ -435,6 +459,21 @@ export function resolveAccountsNavGroupId(pathname: string): AccountsNavGroupId 
   return "coa";
 }
 
+/** Human-readable label for a route or href — used in navigation loading states. */
+export function resolveAccountsNavLabel(hrefOrPath: string): string {
+  const path = hrefOrPath.split("?")[0].split("#")[0];
+  const allItems = ACCOUNTS_NAV_GROUPS.flatMap((g) => g.items);
+  const exact = allItems.find((item) => item.href.split("?")[0] === path);
+  if (exact) return exact.label;
+
+  const prefixMatch = allItems
+    .filter((item) => path.startsWith(item.href.split("?")[0] + "/") || path === item.href.split("?")[0])
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  if (prefixMatch) return prefixMatch.label;
+
+  const segment = path.split("/").filter(Boolean).pop()?.replace(/-/g, " ") ?? "page";
+  return segment.replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 
 export interface BreadcrumbItem {
@@ -471,9 +510,45 @@ export function accountsBreadcrumb(
 
 
 
+/** Tab slug from `/accounts/vouchers?tab=…` nav links (receipt, payment, contra). */
+function getVoucherHubTabFromHref(href: string): string | null {
+  if (!href.startsWith(`${VOUCHERS_HUB_HREF}?`)) return null;
+  return new URLSearchParams(href.split("?")[1] ?? "").get("tab");
+}
+
+function readClientSearchParams(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+}
+
+function isJournalVoucherNavActive(pathname: string, href: string): boolean {
+  if (href !== JOURNAL_VOUCHER_HREF) return false;
+  if (pathname.startsWith("/accounts/vouchers/journal")) return true;
+  if (pathname !== VOUCHERS_HUB_HREF) return false;
+  if (typeof window === "undefined") return false;
+  const tab = readClientSearchParams().get("tab");
+  return tab === "journal" || tab == null || tab === "";
+}
+
+function isVoucherHubTabNavActive(pathname: string, href: string): boolean | null {
+  const tab = getVoucherHubTabFromHref(href);
+  if (tab == null) return null;
+  // Hub tab links must not match dedicated routes like /accounts/vouchers/journal.
+  if (pathname !== VOUCHERS_HUB_HREF) return false;
+  if (typeof window === "undefined") return false;
+  return readClientSearchParams().get("tab") === tab;
+}
+
+
+
 export function isAccountsNavActive(pathname: string, href: string): boolean {
 
   if (pathname === href) return true;
+
+  const hubTabActive = isVoucherHubTabNavActive(pathname, href);
+  if (hubTabActive != null) return hubTabActive;
+
+  if (isJournalVoucherNavActive(pathname, href)) return true;
 
 
 
@@ -485,7 +560,7 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
 
 
-  if (href.includes("?")) {
+  if (href.includes("?") && getVoucherHubTabFromHref(href) == null) {
 
     const [base, query] = href.split("?");
 
@@ -533,12 +608,6 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
 
 
-  if (href === JOURNAL_VOUCHER_HREF && pathname.startsWith("/accounts/vouchers/journal")) {
-
-    return true;
-
-  }
-
   if (href === CHART_OF_ACCOUNTS_HREF && pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) return true;
 
   if (href.startsWith("/accounts/masters/") && matchesNavHref(pathname, hrefBase)) return true;
@@ -572,11 +641,11 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
 
 const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
-  coa: "Assets, liabilities, income and expense ledgers — the sole accounting master.",
+  coa: "Chart of Accounts — browse structure and maintain ledgers.",
   transactions: "Sales, purchase, credit/debit notes, vouchers, and journal entries.",
   receivables: "Customer outstanding, collections and receipt allocation.",
   payables: "Supplier outstanding and payment tracking.",
-  banking: "Company bank accounts, bank book, cash book, fund transfers and reconciliation.",
+  banking: "Company bank accounts, bank book, cash book and reconciliation.",
   reports: "Trial balance, P&L, balance sheet and financial reports.",
 };
 
@@ -676,7 +745,7 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
   },
   banking: {
     left: ["Bank Accounts", "Bank Book", "Cash Book"],
-    right: ["Fund Transfer", "Bank Reconciliation"],
+    right: ["Bank Reconciliation"],
   },
   reports: {
     left: [
@@ -760,6 +829,8 @@ export function accountsMegaMenuGroups() {
     description: GROUP_DESCRIPTIONS[group.id],
 
     icon: group.icon,
+
+    href: ACCOUNTS_SECTION_LANDING_HREF[group.id],
 
     children: group.items.map(({ label, href, icon }) => ({
 

@@ -11,6 +11,7 @@ import { loadDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-dat
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
+import { matchesVoucherTypeFilter } from "@/lib/accounts/report-multi-filter-utils";
 import {
   buildPartyLedgerMovements,
   ledgerOpeningBalance,
@@ -88,7 +89,7 @@ export interface SupplierLedgerStatement {
 export interface SupplierLedgerFilters {
   dateFrom: string;
   dateTo: string;
-  voucherType: string;
+  voucherType: string | string[];
   search: string;
 }
 
@@ -643,7 +644,7 @@ export function buildSupplierLedgerStatement(
   );
 
   const filteredTransactions = periodTransactions.filter((t) => {
-    if (filters.voucherType !== "all" && t.voucherTypeCode !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, t.voucherTypeCode)) return false;
     return matchesSearch(t, filters.search);
   });
 
@@ -670,7 +671,7 @@ export function buildSupplierLedgerStatement(
   });
 
   const periodMovement = periodTransactions.filter((t) => {
-    if (filters.voucherType !== "all" && t.voucherTypeCode !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, t.voucherTypeCode)) return false;
     return matchesSearch(t, filters.search);
   });
 

@@ -1,4 +1,12 @@
-import type { AccountType, ChartOfAccount, CoaNodeLevel } from "../data";
+import type { AccountType, ChartOfAccount, CoaNodeLevel, CoaSpecializedGroupType, ErpUsageModule } from "../data";
+import {
+  DUTIES_STATUTORY_LEDGERS,
+  GST_INPUT_LEDGER_NAMES,
+  GST_INPUT_STATUTORY_LEDGERS,
+  GST_OUTPUT_LEDGER_NAMES,
+  GST_OUTPUT_STATUTORY_LEDGERS,
+  type CoaStatutoryLedgerSeed,
+} from "./chart-of-accounts/coa-statutory-ledgers";
 
 type CoaPartial = Omit<
   ChartOfAccount,
@@ -27,12 +35,17 @@ export function buildCoaNode(partial: CoaPartial): ChartOfAccount {
 interface CoaTreeLeaf {
   name: string;
   code: string;
+  specializedGroupType?: CoaSpecializedGroupType;
+  children?: CoaTreeLeaf[];
+  ledgers?: CoaStatutoryLedgerSeed[];
 }
 
 interface CoaTreeBranch {
   name: string;
   code: string;
+  specializedGroupType?: CoaSpecializedGroupType;
   children?: CoaTreeLeaf[];
+  ledgers?: CoaStatutoryLedgerSeed[];
 }
 
 interface CoaTreeGroup {
@@ -53,7 +66,7 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
     name: "Fixed Assets",
     code: "1100",
     branches: [
-      { name: "Land & Building", code: "1110" },
+      { name: "Land & Building", code: "1110", specializedGroupType: "warehouse" },
       { name: "Plant & Machinery", code: "1111" },
       { name: "Furniture & Fixtures", code: "1112" },
       { name: "Office Equipment", code: "1113" },
@@ -66,17 +79,16 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
     name: "Current Assets",
     code: "1200",
     branches: [
-      { name: "Cash-in-Hand", code: "1210" },
-      { name: "Bank Accounts", code: "1211" },
-      { name: "Trade Receivables / Sundry Debtors", code: "1212" },
-      { name: "Inventory / Stock-in-Hand", code: "1213" },
+      { name: "Cash-in-Hand", code: "1210", specializedGroupType: "cash_in_hand" },
+      { name: "Bank Accounts", code: "1211", specializedGroupType: "bank_accounts" },
+      { name: "Trade Receivables / Sundry Debtors", code: "1212", specializedGroupType: "sundry_debtors" },
+      { name: "Inventory / Stock-in-Hand", code: "1213", specializedGroupType: "inventory" },
       { name: "Loans & Advances Given", code: "1214" },
       { name: "Deposits", code: "1215" },
       { name: "Prepaid Expenses", code: "1216" },
       { name: "Accrued Income", code: "1217" },
       { name: "Other Current Assets", code: "1218" },
-      { name: "GST Input Credit", code: "1219" },
-      { name: "TDS Receivable", code: "1220" },
+      { name: "TDS Receivable", code: "1219", specializedGroupType: "tds_receivable" },
     ],
   },
   {
@@ -116,15 +128,19 @@ const LIABILITIES_GROUPS: CoaTreeGroup[] = [
     name: "Current Liabilities",
     code: "2300",
     branches: [
-      { name: "Trade Payables / Sundry Creditors", code: "2310" },
+      { name: "Trade Payables / Sundry Creditors", code: "2310", specializedGroupType: "sundry_creditors" },
       {
         name: "Duties & Taxes Payable",
         code: "2311",
-        children: [{ name: "TDS Payable", code: "23111" }],
+        children: [
+          { name: "GST Input", code: "23110", specializedGroupType: "gst_input", ledgers: GST_INPUT_STATUTORY_LEDGERS },
+          { name: "GST Output", code: "23111", specializedGroupType: "gst_output", ledgers: GST_OUTPUT_STATUTORY_LEDGERS },
+          { name: "TDS Payable", code: "23112", specializedGroupType: "tds_payable" },
+        ],
+        ledgers: DUTIES_STATUTORY_LEDGERS,
       },
-      { name: "GST Payable", code: "2313" },
       { name: "PF / ESIC Payable", code: "2314" },
-      { name: "Salary Payable", code: "2315" },
+      { name: "Salary Payable", code: "2315", specializedGroupType: "employee_payable" },
       { name: "Expenses Payable", code: "2316" },
       { name: "Advance Received from Customers", code: "2317" },
       { name: "Other Current Liabilities", code: "2318" },
@@ -265,6 +281,7 @@ function systemNode(
   nodeLevel: CoaNodeLevel,
   parentId: number | null,
   parentName: string,
+  specializedGroupType?: CoaSpecializedGroupType,
 ): ChartOfAccount {
   const desc =
     nodeLevel === "primary_head"
@@ -282,9 +299,104 @@ function systemNode(
     status: "active",
     usedIn: [],
     isSystem: true,
+    specializedGroupType,
     createdBy: "System",
     updatedBy: "System",
   });
+}
+
+function systemLedgerNode(
+  id: number,
+  code: string,
+  name: string,
+  accountType: AccountType,
+  parentId: number,
+  parentName: string,
+  ledger: CoaStatutoryLedgerSeed,
+): ChartOfAccount {
+  const nameLower = name.toLowerCase();
+  const usedIn: ErpUsageModule[] =
+    ledger.tdsApplicable
+      ? ["payments", "procurement", "journal"]
+      : GST_INPUT_LEDGER_NAMES.has(nameLower)
+        ? ["procurement", "journal"]
+        : GST_OUTPUT_LEDGER_NAMES.has(nameLower)
+          ? ["sales", "journal"]
+          : ledger.gstApplicable
+            ? ["journal"]
+            : ["journal"];
+
+  return buildCoaNode({
+    id,
+    accountCode: code,
+    accountName: name,
+    accountType,
+    nodeLevel: "ledger",
+    parentAccountId: parentId,
+    parentAccount: parentName,
+    description: "Statutory accounting ledger",
+    status: "active",
+    usedIn,
+    isSystem: true,
+    isSystemGenerated: true,
+    balanceType: ledger.balanceType,
+    gstApplicable: ledger.gstApplicable ?? false,
+    tdsApplicable: ledger.tdsApplicable ?? false,
+    createdBy: "System",
+    updatedBy: "System",
+  });
+}
+
+function appendStatutoryLedgers(
+  nodes: ChartOfAccount[],
+  ledgers: CoaStatutoryLedgerSeed[],
+  parentId: number,
+  parentName: string,
+  accountType: AccountType,
+): void {
+  for (const ledger of ledgers) {
+    nodes.push(
+      systemLedgerNode(
+        allocId(),
+        ledger.code,
+        ledger.name,
+        accountType,
+        parentId,
+        parentName,
+        ledger,
+      ),
+    );
+  }
+}
+
+function buildTreeNodes(
+  nodes: ChartOfAccount[],
+  branches: CoaTreeLeaf[],
+  parentId: number,
+  parentName: string,
+  accountType: AccountType,
+): void {
+  for (const branch of branches) {
+    const branchId = allocId();
+    nodes.push(
+      systemNode(
+        branchId,
+        branch.code,
+        branch.name,
+        accountType,
+        "account_group",
+        parentId,
+        parentName,
+        branch.specializedGroupType,
+      ),
+    );
+    if (branch.children?.length) {
+      buildTreeNodes(nodes, branch.children, branchId, branch.name, accountType);
+    }
+    if (branch.ledgers?.length) {
+      appendStatutoryLedgers(nodes, branch.ledgers, branchId, branch.name, accountType);
+    }
+  }
 }
 
 function buildFlatSubGroups(
@@ -294,9 +406,7 @@ function buildFlatSubGroups(
   parentName: string,
   accountType: AccountType,
 ): void {
-  for (const b of branches) {
-    nodes.push(systemNode(allocId(), b.code, b.name, accountType, "account_group", parentId, parentName));
-  }
+  buildTreeNodes(nodes, branches, parentId, parentName, accountType);
 }
 
 function buildNestedBranches(
@@ -306,15 +416,7 @@ function buildNestedBranches(
   parentName: string,
   accountType: AccountType,
 ): void {
-  for (const branch of branches) {
-    const branchId = allocId();
-    nodes.push(
-      systemNode(branchId, branch.code, branch.name, accountType, "account_group", parentId, parentName),
-    );
-    if (branch.children?.length) {
-      buildFlatSubGroups(nodes, branch.children, branchId, branch.name, accountType);
-    }
-  }
+  buildTreeNodes(nodes, branches, parentId, parentName, accountType);
 }
 
 function buildAccountGroups(
@@ -364,6 +466,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 8;
+export const COA_SYSTEM_REVISION = 14;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

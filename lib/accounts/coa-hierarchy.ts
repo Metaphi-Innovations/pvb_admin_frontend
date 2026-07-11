@@ -1,19 +1,32 @@
 /**
- * Finance module hierarchy — Chart of Accounts.
+ * Finance module hierarchy — Chart of Accounts (max 5 levels).
  *
- * Primary Head (L1) → Fixed Group (L2) → Accounting Group (L3) → Ledger (L4, user-created)
+ * L1 Primary Head → L2 Account Group → L3 Sub Group → L4 Ledger → L5 Sub Ledger
  *
  * Posting rule: voucher entries target posting ledgers only (leaf ledgers with no children).
- * Legacy grouping ledgers (ledgers with children) cannot receive postings.
- * Primary heads and fixed groups are system-defined and locked.
- * New ledgers attach only to Level 3 Accounting Groups — never under another ledger.
+ * Grouping ledgers (L4 with L5 children) cannot receive postings — consolidated balances roll up.
+ * Primary heads are system-defined and locked. No node may be created below Level 5.
  */
 
 import type { ChartOfAccount, CoaNodeLevel } from "@/app/(app)/accounts/data";
 import { getPostableCoaAccounts, loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 
-/** Ordered levels from top of chart to posting leaf */
+export {
+  COA_MAX_HIERARCHY_LEVEL,
+  COA_HIERARCHY_LEVEL_LABELS,
+  COA_MAX_HIERARCHY_MESSAGE,
+} from "./coa-hierarchy-constants";
+
+export {
+  getCoaHierarchyLevel,
+  getCoaHierarchyLevelForNode,
+  getCoaHierarchyLevelLabel,
+  isAtCoaMaxHierarchyLevel,
+  showCoaMaxHierarchyMessage,
+} from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+
+/** Ordered data-model levels from top of chart to posting leaf */
 export const COA_HIERARCHY_LEVELS: CoaNodeLevel[] = [
   "primary_head",
   "account_group",
@@ -93,15 +106,36 @@ export function isSystemLockedNode(node: ChartOfAccount): boolean {
 }
 
 export function canUserCreateAtLevel(level: CoaNodeLevel): boolean {
-  return level === "ledger";
+  return level === "ledger" || level === "account_group";
+}
+
+export function isUserCreatedGroup(node: ChartOfAccount): boolean {
+  return node.nodeLevel === "account_group" && !node.isSystem;
+}
+
+export function canUserEditGroup(node: ChartOfAccount): boolean {
+  return isUserCreatedGroup(node);
+}
+
+export function canUserDeleteGroup(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (!canUserEditGroup(node)) return false;
+  if (records.some((r) => r.parentAccountId === node.id)) return false;
+  return true;
 }
 
 export function canUserEditNode(node: ChartOfAccount): boolean {
+  if (canUserEditGroup(node)) return true;
   if (isSystemLockedNode(node)) return false;
   return isLedgerNode(node) && !node.isSystem;
 }
 
-export function canUserDeleteNode(node: ChartOfAccount): boolean {
+export function canUserDeleteNode(node: ChartOfAccount, records?: ChartOfAccount[]): boolean {
+  if (canUserEditGroup(node)) {
+    return canUserDeleteGroup(node, records ?? loadChartOfAccounts());
+  }
   return canUserEditNode(node);
 }
 
@@ -165,7 +199,7 @@ export function validatePostingLedgerId(
   }
   if (!isPostableNode(node, list)) {
     if (isGroupingLedger(node, list)) {
-      return `Ledger "${node.accountName}" is a grouping ledger with child ledgers. Post to a child ledger instead.`;
+      return `Ledger "${node.accountName}" is a Level 4 grouping ledger with sub-ledgers. Post to a sub-ledger instead.`;
     }
     return `Account "${node.accountName}" is inactive and cannot receive postings.`;
   }
@@ -179,6 +213,25 @@ export function findLedgerById(
   const list = records ?? loadChartOfAccounts();
   const node = list.find((r) => r.id === ledgerId);
   return node && isLedgerNode(node) ? node : null;
+}
+
+/** Resolve a posting ledger by exact account name (for legacy lines saved with name only). */
+export function findPostingLedgerByName(
+  accountName: string,
+  records?: ChartOfAccount[],
+): ChartOfAccount | null {
+  const needle = accountName.trim().toLowerCase();
+  if (!needle) return null;
+  const list = records ?? loadChartOfAccounts();
+  const postable = getActivePostingLedgers(list).find(
+    (l) => l.accountName.trim().toLowerCase() === needle,
+  );
+  if (postable) return postable;
+  return (
+    list.find(
+      (n) => isLedgerNode(n) && n.accountName.trim().toLowerCase() === needle,
+    ) ?? null
+  );
 }
 
 /** Ledgers whose ancestor path includes a standard group with the given name */

@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, History } from "lucide-react";
 import { AccountsMoreActions } from "@/components/accounts/AccountsTableActions";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  StatusBadge,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   loadCollectionFollowUps,
   loadCollectionFollowUpHistory,
@@ -32,6 +39,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -39,16 +50,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportCustomerFilter,
+  ReportCustomerMultiFilter,
+  ReportBranchMultiFilter,
+  ReportStatusMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
   ReportSearchFilter,
+  ReportFilterResetButton,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { resetReportDateRange } from "@/lib/accounts/use-accounts-listing-reset";
+import {
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
+import { StatusBadge as SharedStatusBadge } from "@/components/ui/StatusBadge";
+import { collectionStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import {
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
@@ -58,7 +82,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -78,10 +101,17 @@ const STATUS_OPTIONS: { value: CollectionFollowUpStatus; label: string }[] = [
   { value: "closed", label: "Closed" },
 ];
 
-const COLLECTION_STATUS_FILTER: { value: CollectionFollowUpStatus | "all"; label: string }[] = [
-  { value: "all", label: "All statuses" },
-  ...STATUS_OPTIONS,
-];
+const COLLECTION_STATUS_FILTER_OPTIONS = STATUS_OPTIONS;
+
+const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.map((o) => o.value);
+
+function computeOverdueDays(r: CollectionFollowUp): number {
+  const today = new Date().toISOString().slice(0, 10);
+  if (r.dueDate && r.outstandingAmount > 0 && r.dueDate < today) {
+    return Math.floor((new Date(today).getTime() - new Date(r.dueDate).getTime()) / 86400000);
+  }
+  return 0;
+}
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
@@ -90,14 +120,251 @@ function formatReportDate(value: string): string {
   return `${d}-${m}-${y}`;
 }
 
+function CollectionExport({
+  exportMeta,
+}: {
+  exportMeta: {
+    reportName: string;
+    dateFrom: string;
+    dateTo: string;
+    customer: string;
+    status: string;
+    search: string;
+  };
+}) {
+  const visible = useAccountsFilteredRows<CollectionFollowUp>([]);
+
+  const handleExcel = () => {
+    void exportReceivablesToExcel(
+      visible.map((r) => ({
+        Customer: r.customerName,
+        "Invoice No.": r.invoiceNo || "—",
+        "Outstanding Amount": formatExportAmount(r.outstandingAmount),
+        "Due Date": r.dueDate || "—",
+        "Overdue Days": computeOverdueDays(r),
+        "Last Follow-up": r.followUpDate,
+        "Next Follow-up": r.nextFollowUpDate || "—",
+        "Assigned To": r.assignedTo,
+        Status: STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status,
+        Remarks: r.remarks,
+      })),
+      exportMeta,
+      "collection_tracking",
+    );
+  };
+
+  const handlePdf = () => {
+    exportReceivablesToPdf(
+      [
+        "Customer",
+        "Invoice",
+        "Outstanding",
+        "Due Date",
+        "Last Follow-up",
+        "Next Follow-up",
+        "Assigned To",
+        "Status",
+        "Remarks",
+      ],
+      visible.map((r) => [
+        r.customerName,
+        r.invoiceNo || "—",
+        formatExportAmount(r.outstandingAmount),
+        formatReportDate(r.dueDate),
+        formatReportDate(r.followUpDate),
+        formatReportDate(r.nextFollowUpDate),
+        r.assignedTo,
+        STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status,
+        r.remarks,
+      ]),
+      exportMeta,
+    );
+  };
+
+  return <AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={visible.length === 0} />;
+}
+
+function CollectionTable({
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  onEdit,
+  onHistory,
+  onQuickStatus,
+  emptyMessage,
+  hasFilters,
+  onClearFilters,
+}: {
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+  onEdit: (row: CollectionFollowUp) => void;
+  onHistory: (row: CollectionFollowUp) => void;
+  onQuickStatus: (row: CollectionFollowUp, status: CollectionFollowUpStatus) => void;
+  emptyMessage: string;
+  hasFilters: boolean;
+  onClearFilters: () => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows<CollectionFollowUp>([]);
+
+  const pagedRecords = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <AccountsTableScroll className="flex-1 min-h-0">
+        <AccountsTable minWidth={1280}>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="Customer" colKey="customerName" />
+              <SortTh label="Invoice No." colKey="invoiceNo" />
+              <SortTh label="Outstanding Amount" colKey="outstandingAmount" filterType="amount" align="right" />
+              <SortTh label="Due Date" colKey="dueDate" filterType="date" />
+              <SortTh label="Overdue Days" colKey="overdueDays" filterType="number" align="center" />
+              <SortTh label="Last Follow-up" colKey="followUpDate" filterType="date" />
+              <SortTh label="Next Follow-up" colKey="nextFollowUpDate" filterType="date" />
+              <SortTh label="Status" colKey="status" filterType="status" />
+              <SortTh label="Assigned To" colKey="assignedTo" />
+              <AccountsColumnHeader label="Remarks" colKey="remarks" sortable={false} />
+              <AccountsColumnHeader
+                label=""
+                colKey="_actions"
+                sortable={false}
+                filterable={false}
+                align="right"
+              />
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {visible.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={11} className="accounts-table-empty">
+                  <div className="flex flex-col items-center gap-1">
+                    <span>{emptyMessage}</span>
+                    {hasFilters ? (
+                      <button
+                        type="button"
+                        className="text-xs text-brand-600 hover:underline mt-1"
+                        onClick={onClearFilters}
+                      >
+                        Clear filters
+                      </button>
+                    ) : null}
+                  </div>
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : (
+              pagedRecords.map((r) => {
+                const overdueDays = computeOverdueDays(r);
+                return (
+                  <AccountsTableRow key={r.id} className="group">
+                    <AccountsTableCell>
+                      <Link
+                        href={`/accounts/receivables/outstanding/${r.customerId}`}
+                        className="text-xs font-medium text-brand-700 hover:underline"
+                      >
+                        {r.customerName}
+                      </Link>
+                    </AccountsTableCell>
+                    <AccountsTableCell>
+                      {r.invoiceNo ? (
+                        <Link
+                          href={`/accounts/receivables/outstanding/invoice/${r.invoiceId}`}
+                          className="text-xs font-mono font-semibold text-brand-700 hover:underline"
+                        >
+                          {r.invoiceNo}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right">
+                      <span className="tabular-nums">{formatMoney(r.outstandingAmount)}</span>
+                    </AccountsTableCell>
+                    <AccountsTableCell>{formatReportDate(r.dueDate)}</AccountsTableCell>
+                    <AccountsTableCell align="center">
+                      <span
+                        className={
+                          overdueDays > 0
+                            ? "text-red-600 font-semibold tabular-nums"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {overdueDays > 0 ? overdueDays : "—"}
+                      </span>
+                    </AccountsTableCell>
+                    <AccountsTableCell>{formatReportDate(r.followUpDate)}</AccountsTableCell>
+                    <AccountsTableCell>{formatReportDate(r.nextFollowUpDate)}</AccountsTableCell>
+                    <AccountsTableCell>
+                      {(() => {
+                        const badge = collectionStatusToBadge(r.status);
+                        return <SharedStatusBadge status={badge.status} label={badge.label} size="sm" />;
+                      })()}
+                    </AccountsTableCell>
+                    <AccountsTableCell>{r.assignedTo}</AccountsTableCell>
+                    <AccountsTableCell>
+                      <span className="text-xs max-w-[180px] truncate block" title={r.remarks}>
+                        {r.remarks}
+                      </span>
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right">
+                      <AccountsMoreActions contentClassName="w-52">
+                        <DropdownMenuItem onClick={() => onEdit(r)}>Update Status</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onHistory(r)}>
+                          <History className="w-4 h-4 mr-2" /> View History
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onQuickStatus(r, "promise_to_pay")}>
+                          Mark Promise To Pay
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onQuickStatus(r, "closed")}>
+                          Mark Closed
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/accounts/receivables/outstanding/${r.customerId}`}>
+                            View Customer Outstanding
+                          </Link>
+                        </DropdownMenuItem>
+                      </AccountsMoreActions>
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                );
+              })
+            )}
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableScroll>
+      {visible.length > 0 && (
+        <AccountsTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalRecords={visible.length}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function CollectionTrackingClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [customerId, setCustomerId] = useState("all");
-  const [collectionStatus, setCollectionStatus] = useState("all");
+  const [customerIds, setCustomerIds] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [branchIds, setBranchIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const { toast, showCreated, showUpdated, dismissToast } = useAccountsToast();
 
   const sectionRefresh = useAccountsSectionRefresh();
 
@@ -107,18 +374,50 @@ export default function CollectionTrackingClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, customerId, collectionStatus, search, pageSize]);
+  }, [dateFrom, dateTo, customerIds, statuses, branchIds, search, pageSize]);
 
   const records = useMemo(() => loadCollectionFollowUps(), [refreshKey]);
   const customers = useMemo(() => loadCustomers(), []);
+  const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
   const invoices = useMemo(() => getPostedSalesInvoices(), [sectionRefresh]);
 
-  const filteredRecords = useMemo(() => {
+  const moreFiltersActiveCount = countActiveMoreFilters({ branch: branchIds, status: statuses });
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildEntityFilterSummary(
+        "customer",
+        "Customers",
+        customerIds,
+        customers.map((c) => ({
+          value: String(c.id),
+          label: c.customerName,
+          searchText: c.customerCode,
+        })),
+        () => setCustomerIds([]),
+      ),
+      buildBranchFilterSummary(branchIds, () => setBranchIds([])),
+      buildEntityFilterSummary(
+        "status",
+        "Statuses",
+        statuses,
+        COLLECTION_STATUS_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        () => setStatuses([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [customerIds, customers, branchIds, statuses]);
+
+  const toolbarFiltered = useMemo(() => {
     return records.filter((r) => {
-      if (customerId !== "all" && String(r.customerId) !== customerId) return false;
+      if (customerIds.length > 0 && !customerIds.includes(String(r.customerId))) return false;
+      if (statuses.length > 0 && !statuses.includes(r.status)) return false;
+      if (branchIds.length > 0) {
+        const customer = customerById.get(r.customerId);
+        const branch = customer?.branch?.trim() || customer?.stateName?.trim() || "—";
+        if (!branchIds.includes(branch)) return false;
+      }
       if (dateFrom && r.dueDate && r.dueDate < dateFrom) return false;
       if (dateTo && r.dueDate && r.dueDate > dateTo) return false;
-      if (collectionStatus !== "all" && r.status !== collectionStatus) return false;
       const q = search.trim().toLowerCase();
       if (q) {
         const hay = [r.customerName, r.invoiceNo, r.followUpNo, r.assignedTo, r.remarks]
@@ -128,12 +427,34 @@ export default function CollectionTrackingClient() {
       }
       return true;
     });
-  }, [records, customerId, dateFrom, dateTo, collectionStatus, search]);
+  }, [records, customerIds, branchIds, statuses, customerById, dateFrom, dateTo, search]);
 
-  const pagedRecords = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredRecords.slice(start, start + pageSize);
-  }, [filteredRecords, page, pageSize]);
+  const hasToolbarFilters =
+    search.trim() !== "" ||
+    isMultiFilterActive(customerIds) ||
+    isMultiFilterActive(statuses) ||
+    isMultiFilterActive(branchIds) ||
+    preset !== "this_month";
+
+  const clearToolbarFilters = () => {
+    setSearch("");
+    setCustomerIds([]);
+    setStatuses([]);
+    setBranchIds([]);
+    resetReportDateRange(setPreset, setDateFrom, setDateTo, "this_month");
+  };
+
+  const emptyMessage = hasToolbarFilters
+    ? "No follow-ups match the selected filters."
+    : "No collection follow-ups recorded yet.";
+
+  const getCellValue = useCallback((row: CollectionFollowUp, key: string) => {
+    if (key === "overdueDays") return computeOverdueDays(row);
+    if (key === "status") {
+      return STATUS_OPTIONS.find((s) => s.value === row.status)?.label ?? row.status;
+    }
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -231,79 +552,58 @@ export default function CollectionTrackingClient() {
     }
     setDialogOpen(false);
     setRefreshKey((k) => k + 1);
+    if (editing) showUpdated("Follow-up");
+    else showCreated("Follow-up");
   };
 
   const quickStatus = (row: CollectionFollowUp, status: CollectionFollowUpStatus) => {
     updateCollectionFollowUp(row.id, { status });
     setRefreshKey((k) => k + 1);
+    showUpdated("Follow-up status");
   };
 
-  const exportMeta = {
-    reportName: "Collection Tracking",
-    dateFrom,
-    dateTo,
-    customer:
-      customerId === "all"
-        ? "All customers"
-        : customers.find((c) => String(c.id) === customerId)?.customerName ?? "—",
-    status:
-      collectionStatus === "all"
-        ? "All statuses"
-        : COLLECTION_STATUS_FILTER.find((o) => o.value === collectionStatus)?.label ?? "—",
-    search,
-  };
-
-  const handleExcel = () => {
-    void exportReceivablesToExcel(
-      filteredRecords.map((r) => ({
-        Customer: r.customerName,
-        "Invoice No.": r.invoiceNo || "—",
-        "Outstanding Amount": formatExportAmount(r.outstandingAmount),
-        "Due Date": r.dueDate || "—",
-        "Overdue Days": r.dueDate
-          ? Math.max(0, Math.floor((Date.now() - new Date(r.dueDate).getTime()) / 86400000))
-          : 0,
-        "Last Follow-up": r.followUpDate,
-        "Next Follow-up": r.nextFollowUpDate || "—",
-        "Assigned To": r.assignedTo,
-        Status: STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status,
-        Remarks: r.remarks,
-      })),
-      exportMeta,
-      "collection_tracking",
-    );
-  };
-
-  const handlePdf = () => {
-    exportReceivablesToPdf(
-      [
+  const exportMeta = useMemo(
+    () => ({
+      reportName: "Collection Tracking",
+      dateFrom,
+      dateTo,
+      customer: formatMultiSelectLabel(
+        customerIds,
+        customers.map((c) => ({ value: String(c.id), label: c.customerName })),
         "Customer",
-        "Invoice",
-        "Outstanding",
-        "Due Date",
-        "Last Follow-up",
-        "Next Follow-up",
-        "Assigned To",
+        "All customers",
+      ),
+      status: formatMultiSelectLabel(
+        statuses,
+        COLLECTION_STATUS_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
         "Status",
-        "Remarks",
-      ],
-      filteredRecords.map((r) => [
-        r.customerName,
-        r.invoiceNo || "—",
-        formatExportAmount(r.outstandingAmount),
-        formatReportDate(r.dueDate),
-        formatReportDate(r.followUpDate),
-        formatReportDate(r.nextFollowUpDate),
-        r.assignedTo,
-        STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status,
-        r.remarks,
-      ]),
-      exportMeta,
-    );
-  };
+        "All statuses",
+      ),
+      search,
+    }),
+    [dateFrom, dateTo, customerIds, customers, statuses, search],
+  );
 
   return (
-    <AccountsPageShell
+    <AccountsColumnFilterProvider
+      rows={toolbarFiltered}
+      getCellValue={getCellValue}
+      columnConfig={{
+        customerName: { type: "text" },
+        invoiceNo: { type: "text" },
+        outstandingAmount: { type: "amount" },
+        dueDate: { type: "date" },
+        overdueDays: { type: "number" },
+        followUpDate: { type: "date" },
+        nextFollowUpDate: { type: "date" },
+        assignedTo: { type: "text" },
+        status: { type: "status" },
+        remarks: { type: "text" },
+      }}
+      defaultSortKey="dueDate"
+      defaultSortDir="desc"
+    >
+      <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Receivables", "Collection Tracking")}
       title="Collection Tracking"
       description="Track collection follow-ups for overdue and pending customer invoices."
@@ -313,161 +613,57 @@ export default function CollectionTrackingClient() {
         </Button>
       }
       filters={
-        <ReportFilterRow
-          end={<AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={filteredRecords.length === 0} />}
-        >
-          <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
-          <div className="space-y-1 min-w-[160px]">
-            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
-              Follow-up Status
-            </Label>
-            <select
-              value={collectionStatus}
-              onChange={(e) => setCollectionStatus(e.target.value)}
-              className="h-7 w-full text-sm rounded-md border border-border bg-white px-2"
-            >
-              {COLLECTION_STATUS_FILTER.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search follow-ups…" />
-        </ReportFilterRow>
+        <>
+          <ReportFilterRow end={<CollectionExport exportMeta={exportMeta} />}>
+            <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search follow-ups…" />
+            <ReportCustomerMultiFilter
+              values={customerIds}
+              onChange={setCustomerIds}
+              customers={customers}
+            />
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={setPreset}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+              <ReportBranchMultiFilter values={branchIds} onChange={setBranchIds} />
+              <ReportStatusMultiFilter
+                values={statuses}
+                onChange={setStatuses}
+                options={COLLECTION_STATUS_FILTER_OPTIONS}
+                label="Collection Status"
+              />
+            </ReportMoreFilters>
+            <ReportFilterResetButton
+              showOnlyWhenActive
+              active={hasToolbarFilters}
+              onClick={clearToolbarFilters}
+            />
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
-    >
-      <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableScroll className="flex-1 min-h-0">
-          <AccountsTable minWidth={1280}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                {[
-                  "Customer",
-                  "Invoice No.",
-                  "Outstanding Amount",
-                  "Due Date",
-                  "Overdue Days",
-                  "Last Follow-up",
-                  "Next Follow-up",
-                  "Assigned To",
-                  "Status",
-                  "Remarks",
-                  "",
-                ].map((h) => (
-                  <AccountsTableHeadCell
-                    key={h || "act"}
-                    align={h === "Outstanding Amount" ? "right" : h === "Overdue Days" ? "center" : "left"}
-                  >
-                    {h}
-                  </AccountsTableHeadCell>
-                ))}
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {pagedRecords.length === 0 ? (
-                <AccountsTableRow>
-                  <AccountsTableCell colSpan={11} className="accounts-table-empty">
-                    No records found.
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ) : (
-                pagedRecords.map((r) => {
-                  const today = new Date().toISOString().slice(0, 10);
-                  const overdueDays =
-                    r.dueDate && r.outstandingAmount > 0 && r.dueDate < today
-                      ? Math.floor(
-                          (new Date(today).getTime() - new Date(r.dueDate).getTime()) / 86400000,
-                        )
-                      : 0;
-                  return (
-                    <AccountsTableRow key={r.id} className="group">
-                      <AccountsTableCell>
-                        <Link
-                          href={`/accounts/receivables/outstanding/${r.customerId}`}
-                          className="text-xs font-medium text-brand-700 hover:underline"
-                        >
-                          {r.customerName}
-                        </Link>
-                      </AccountsTableCell>
-                      <AccountsTableCell>
-                        {r.invoiceNo ? (
-                          <Link
-                            href={`/accounts/receivables/outstanding/invoice/${r.invoiceId}`}
-                            className="text-xs font-mono font-semibold text-brand-700 hover:underline"
-                          >
-                            {r.invoiceNo}
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <span className="tabular-nums">{formatMoney(r.outstandingAmount)}</span>
-                      </AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(r.dueDate)}</AccountsTableCell>
-                      <AccountsTableCell align="center">
-                        <span className={overdueDays > 0 ? "text-red-600 font-semibold tabular-nums" : "text-muted-foreground"}>
-                          {overdueDays > 0 ? overdueDays : "—"}
-                        </span>
-                      </AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(r.followUpDate)}</AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(r.nextFollowUpDate)}</AccountsTableCell>
-                      <AccountsTableCell>{r.assignedTo}</AccountsTableCell>
-                      <AccountsTableCell>
-                        <StatusBadge status={r.status} />
-                      </AccountsTableCell>
-                      <AccountsTableCell>
-                        <span className="text-xs max-w-[180px] truncate block" title={r.remarks}>
-                          {r.remarks}
-                        </span>
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <AccountsMoreActions contentClassName="w-52">
-                          <DropdownMenuItem onClick={() => openEdit(r)}>Update Status</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openHistory(r)}>
-                            <History className="w-4 h-4 mr-2" /> View History
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => quickStatus(r, "promise_to_pay")}>
-                            Mark Promise To Pay
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => quickStatus(r, "closed")}>
-                            Mark Closed
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/accounts/receivables/outstanding/${r.customerId}`}>
-                              View Customer Outstanding
-                            </Link>
-                          </DropdownMenuItem>
-                        </AccountsMoreActions>
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  );
-                })
-              )}
-            </AccountsTableBody>
-          </AccountsTable>
-        </AccountsTableScroll>
-        {filteredRecords.length > 0 && (
-          <AccountsTablePagination
-            page={page}
-            pageSize={pageSize}
-            totalRecords={filteredRecords.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        )}
-      </div>
+      >
+        <CollectionTable
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onEdit={openEdit}
+          onHistory={openHistory}
+          onQuickStatus={quickStatus}
+          emptyMessage={emptyMessage}
+          hasFilters={hasToolbarFilters}
+          onClearFilters={clearToolbarFilters}
+        />
+
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -612,5 +808,6 @@ export default function CollectionTrackingClient() {
         </DialogContent>
       </Dialog>
     </AccountsPageShell>
+    </AccountsColumnFilterProvider>
   );
 }

@@ -1,12 +1,13 @@
 "use client";
 
 import React from "react";
-import { Plus } from "lucide-react";
+import { Plus, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingFilterCard } from "@/components/accounts/AccountsListingHeader";
 import {
   ReportDateRangeFilter,
+  ReportFilterRow,
   ReportSearchFilter,
 } from "@/components/accounts/ReportFilters";
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
@@ -27,10 +28,14 @@ interface CoaListingToolbarProps {
   exportDisabled?: boolean;
   canCreate?: boolean;
   onNewLedger?: () => void;
+  showAddSubGroup?: boolean;
+  onAddSubGroup?: () => void;
   searchPlaceholder?: string;
   hideDateRange?: boolean;
   /** When false, the New Ledger action is not rendered at all. */
   showNewLedger?: boolean;
+  /** Override toolbar button label (e.g. Add Warehouse under Land & Building). */
+  newLedgerLabel?: string;
 }
 
 export function CoaListingToolbar({
@@ -47,48 +52,69 @@ export function CoaListingToolbar({
   exportDisabled,
   canCreate,
   onNewLedger,
+  onAddSubGroup,
   searchPlaceholder = "Search accounts…",
   hideDateRange = false,
   showNewLedger = true,
+  showAddSubGroup = false,
+  newLedgerLabel = "New Ledger",
 }: CoaListingToolbarProps) {
+  const hasRowActions =
+    Boolean(showAddSubGroup && canCreate && onAddSubGroup) ||
+    Boolean(showNewLedger && canCreate && onNewLedger);
+
+  const rowEnd = hasRowActions ? (
+      <>
+        {showAddSubGroup && canCreate && onAddSubGroup ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "px-2.5")}
+            onClick={onAddSubGroup}
+          >
+            <FolderPlus className="w-4 h-4" />
+            Add Sub-Group
+          </Button>
+        ) : null}
+        {showNewLedger && canCreate && onNewLedger ? (
+          <Button
+            type="button"
+            size="sm"
+            className={cn(
+              ACCOUNTS_ACTION_BUTTON_CLASS,
+              "bg-brand-600 hover:bg-brand-700 text-white border-0 px-2.5",
+            )}
+            onClick={onNewLedger}
+          >
+            <Plus className="w-4 h-4" />
+            {newLedgerLabel}
+          </Button>
+        ) : null}
+      </>
+    ) : undefined;
+
   return (
-    <AccountsListingFilterCard
-      actions={
-        <>
-          {showNewLedger && canCreate && onNewLedger ? (
-            <Button
-              type="button"
-              size="sm"
-              className={cn(
-                ACCOUNTS_ACTION_BUTTON_CLASS,
-                "bg-[#FF7A00] hover:bg-brand-700 text-white border-0 px-2.5",
-              )}
-              onClick={onNewLedger}
-            >
-              <Plus className="w-4 h-4" />
-              New Ledger
-            </Button>
-          ) : null}
-          <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />
-        </>
-      }
-    >
-      {!hideDateRange && (
-        <ReportDateRangeFilter
-          preset={preset}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onPresetChange={onPresetChange}
-          onDateFromChange={onDateFromChange}
-          onDateToChange={onDateToChange}
+    <AccountsListingFilterCard>
+      <ReportFilterRow end={rowEnd}>
+        {!hideDateRange && (
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={onPresetChange}
+            onDateFromChange={onDateFromChange}
+            onDateToChange={onDateToChange}
+          />
+        )}
+        <ReportSearchFilter
+          value={search}
+          onChange={onSearchChange}
+          placeholder={searchPlaceholder}
+          className="min-w-[140px] w-[200px] max-w-[220px] flex-none shrink-0"
         />
-      )}
-      <ReportSearchFilter
-        value={search}
-        onChange={onSearchChange}
-        placeholder={searchPlaceholder}
-        className="min-w-[180px] flex-1 max-w-sm"
-      />
+        <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />
+      </ReportFilterRow>
     </AccountsListingFilterCard>
   );
 }

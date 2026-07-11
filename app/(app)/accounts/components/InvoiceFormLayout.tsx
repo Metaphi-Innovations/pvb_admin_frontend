@@ -7,32 +7,40 @@ import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ACCOUNTS_FILTER_CONTROL_CLASS } from "@/lib/accounts/accounts-typography";
+import {
+  ACCOUNTS_CARD_TITLE_CLASS,
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FORM_LABEL_CLASS,
+  ACCOUNTS_HELPER_TEXT_CLASS,
+  ACCOUNTS_PAGE_SUBTITLE_CLASS,
+  ACCOUNTS_PAGE_TITLE_CLASS,
+} from "@/lib/accounts/accounts-typography";
 
 /** Shared invoice form field styling — Sales & Purchase transaction invoices */
-export const INVOICE_FORM_LABEL_CLASS = "text-xs font-medium text-slate-600";
+export const INVOICE_FORM_LABEL_CLASS = ACCOUNTS_FORM_LABEL_CLASS;
 export const INVOICE_FORM_INPUT_CLASS = cn(
   ACCOUNTS_FILTER_CONTROL_CLASS,
-  "placeholder:text-sm placeholder:text-slate-400",
+  "placeholder:text-[13px] placeholder:text-muted-foreground",
 );
 export const INVOICE_FORM_READONLY_CLASS = cn(
   INVOICE_FORM_INPUT_CLASS,
-  "bg-slate-50 text-slate-700 cursor-default",
+  "bg-muted/30 text-foreground cursor-default",
 );
-export const INVOICE_FORM_HELPER_CLASS = "text-xs text-slate-500";
+export const INVOICE_FORM_HELPER_CLASS = ACCOUNTS_HELPER_TEXT_CLASS;
 export const INVOICE_FORM_CARD_CLASS =
-  "bg-white rounded-lg border border-slate-200 p-4 h-full";
-export const INVOICE_FORM_CARD_TITLE_CLASS = "text-base font-semibold text-slate-900";
+  "bg-white rounded-lg border border-border p-3 h-full";
+export const INVOICE_FORM_CARD_TITLE_CLASS = cn(ACCOUNTS_CARD_TITLE_CLASS, "text-foreground");
 export const INVOICE_FORM_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
 export const INVOICE_FORM_TABLE_TH_CLASS =
-  "px-2.5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 whitespace-nowrap";
-export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-sm text-slate-800 align-middle";
+  "px-2.5 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap";
+export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-[13px] text-foreground align-middle";
 
 export function InvoiceFormLayout({
   title,
   subtitle,
   breadcrumb,
   backHref,
+  onBackClick,
   actions,
   children,
 }: {
@@ -40,10 +48,17 @@ export function InvoiceFormLayout({
   subtitle?: string;
   breadcrumb: { label: string; href?: string }[];
   backHref: string;
+  /** When set, overrides default back navigation (e.g. unsaved-changes guard). */
+  onBackClick?: () => void;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const router = useRouter();
+
+  const handleBack = () => {
+    if (onBackClick) onBackClick();
+    else router.push(backHref);
+  };
 
   return (
     <div className="min-h-full bg-background flex flex-col -m-3">
@@ -52,14 +67,14 @@ export function InvoiceFormLayout({
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              onClick={() => router.push(backHref)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-muted/40 flex-shrink-0"
+              onClick={handleBack}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-muted/40 flex-shrink-0"
               aria-label="Go back"
             >
-              <ArrowLeft className="w-4 h-4 text-slate-500" />
+              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
             </button>
             <div className="min-w-0">
-              <p className="text-xs text-slate-500 truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {breadcrumb.map((b, i) => (
                   <span key={`${b.label}-${i}`}>
                     {i > 0 && <span className="mx-1">/</span>}
@@ -73,9 +88,9 @@ export function InvoiceFormLayout({
                   </span>
                 ))}
               </p>
-              <h1 className="text-xl font-semibold text-slate-900 leading-tight truncate">{title}</h1>
+              <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "truncate")}>{title}</h1>
               {subtitle ? (
-                <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>
+                <p className={cn(ACCOUNTS_PAGE_SUBTITLE_CLASS, "truncate")}>{subtitle}</p>
               ) : null}
             </div>
           </div>
@@ -221,7 +236,7 @@ export function InvoiceFormItemTable({
   minWidth?: number;
 }) {
   return (
-    <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white">
+    <div className="overflow-x-auto border border-border rounded-lg bg-white">
       <table className="w-full" style={minWidth ? { minWidth } : undefined}>
         {children}
       </table>
@@ -235,7 +250,7 @@ export function InvoiceFormItemTableHead({
   columns: { key: string; label: string; align?: "left" | "right" }[];
 }) {
   return (
-    <thead className="border-b border-slate-200 bg-slate-50">
+    <thead className="border-b border-border bg-muted/30">
       <tr>
         {columns.map((col) => (
           <th

@@ -1,5 +1,6 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
+import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import { buildPurchaseInvoiceSeedRecords } from "./purchase-invoice-seed";
 import {
@@ -81,6 +82,8 @@ export interface PurchaseInvoiceRecord {
   poDate: string;
   grnId: string | null;
   grnNo: string;
+  warehouse?: string;
+  bankAccountId?: number | null;
   source: PurchaseSource;
   lineItems: PurchaseInvoiceLine[];
   additionalCharges: ProcurementAdditionalCharge[];
@@ -176,10 +179,40 @@ export function isGrnPurchaseInvoice(rec: PurchaseInvoiceRecord): boolean {
   return rec.source !== "manual_entry" && Boolean(rec.grnId?.trim() && rec.grnNo?.trim());
 }
 
+function gstinStateCode(gstin?: string): string | null {
+  const normalized = gstin?.trim().toUpperCase();
+  if (!normalized || normalized.length < 2) return null;
+  return normalized.slice(0, 2);
+}
+
+export function isPurchaseInvoiceInterstate(
+  rec: Pick<PurchaseInvoiceRecord, "vendorGst">,
+): boolean {
+  const vendorState = gstinStateCode(rec.vendorGst);
+  const companyState = gstinStateCode(COMPANY_BILLING.gstNumber);
+  if (!vendorState || !companyState) return false;
+  return vendorState !== companyState;
+}
+
+export function calcPurchaseLineGstSplit(
+  line: Pick<PurchaseInvoiceLine, "lineAmount" | "taxAmount">,
+  interstate: boolean,
+) {
+  const { cgst, sgst, igst } = splitInvoiceGst(line.taxAmount, interstate);
+  return {
+    taxable: line.lineAmount,
+    cgst,
+    sgst,
+    igst,
+    lineTotal: Math.round((line.lineAmount + line.taxAmount) * 100) / 100,
+  };
+}
+
 export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord) {
   const taxableValue = rec.subtotal ?? rec.productAmount ?? 0;
-  const { cgst, sgst, igst } = splitInvoiceGst(rec.taxAmount ?? 0, false);
-  return { taxableValue, cgst, sgst, igst };
+  const interstate = isPurchaseInvoiceInterstate(rec);
+  const { cgst, sgst, igst } = splitInvoiceGst(rec.taxAmount ?? 0, interstate);
+  return { taxableValue, cgst, sgst, igst, interstate, invoiceTotal: rec.grandTotal };
 }
 
 export function getPurchaseInvoicePaymentStatus(
@@ -597,6 +630,8 @@ export function lookupPurchaseInvoiceForDebit(invoiceId: number): PurchaseInvoic
 export type GrnPurchaseInput = {
   grnId: string;
   grnNo: string;
+  warehouse?: string;
+  bankAccountId?: number | null;
   vendorId: number;
   vendorInvoiceNo: string;
   invoiceDate: string;
@@ -655,6 +690,8 @@ export function createPurchaseFromGrn(input: GrnPurchaseInput): PurchaseInvoiceR
     poDate: "",
     grnId: input.grnId,
     grnNo: input.grnNo,
+    warehouse: input.warehouse,
+    bankAccountId: input.bankAccountId ?? null,
     source: "po_invoice",
     lineItems: input.lineItems,
     additionalCharges: [],

@@ -1,5 +1,5 @@
-import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
+import { AccountsRouteLoading } from "@/components/accounts/AccountsRouteLoading";
 
-export default function AccountsTransactionsLoading() {
-  return <PageContentSkeleton />;
+export default function TransactionsLoading() {
+  return <AccountsRouteLoading pathnameHint="/accounts/vouchers" />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -23,6 +23,8 @@ interface GroupedLedgerSelectProps {
   value: number | null;
   onChange: (ledger: ChartOfAccount) => void;
   placeholder?: string;
+  /** Shown when value is unset or COA lookup has not resolved yet (e.g. legacy name-only lines). */
+  fallbackLabel?: string;
   label?: string;
   required?: boolean;
   disabled?: boolean;
@@ -33,6 +35,12 @@ interface GroupedLedgerSelectProps {
   quickAddScope?: VoucherLedgerScope;
   /** Show âž• Create New Ledger — default true when not disabled/read-only */
   enableQuickAdd?: boolean;
+  /** Max height of scrollable option list in px */
+  listMaxHeight?: number;
+  /** Compact trigger and dropdown — for dense voucher forms */
+  compact?: boolean;
+  /** Called after a ledger is created via quick-add */
+  onQuickAddSuccess?: (ledger: ChartOfAccount) => void;
 }
 
 function HierarchyNodeRow({
@@ -42,6 +50,7 @@ function HierarchyNodeRow({
   expanded,
   onToggle,
   onSelect,
+  compact = false,
 }: {
   node: CoaHierarchyNode;
   depth: number;
@@ -49,8 +58,9 @@ function HierarchyNodeRow({
   expanded: Set<string>;
   onToggle: (key: string) => void;
   onSelect: (ledger: ChartOfAccount) => void;
+  compact?: boolean;
 }) {
-  const pad = depth * 14 + 8;
+  const pad = depth * (compact ? 12 : 14) + (compact ? 6 : 8);
 
   if (node.kind === "ledger" && node.ledger) {
     const selected = value === node.ledger.id;
@@ -61,9 +71,11 @@ function HierarchyNodeRow({
       <button
         type="button"
         title={node.path}
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => onSelect(node.ledger!)}
         className={cn(
-          "w-full flex items-center gap-2 py-2 text-xs text-left hover:bg-brand-50/80",
+          "w-full flex items-center gap-2 text-left hover:bg-brand-50/80",
+          compact ? "py-1 text-[11px]" : "py-2 text-xs",
           selected && "bg-brand-50 font-medium",
         )}
         style={{ paddingLeft: pad }}
@@ -87,7 +99,10 @@ function HierarchyNodeRow({
         type="button"
         title={node.path}
         onClick={() => onToggle(node.key)}
-        className="w-full flex items-center gap-1.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/30 cursor-default"
+        className={cn(
+          "w-full flex items-center gap-1.5 font-semibold text-muted-foreground hover:bg-muted/30 cursor-default",
+          compact ? "py-1 text-[11px]" : "py-1.5 text-xs",
+        )}
         style={{ paddingLeft: pad }}
       >
         {isOpen ? (
@@ -107,6 +122,7 @@ function HierarchyNodeRow({
             expanded={expanded}
             onToggle={onToggle}
             onSelect={onSelect}
+            compact={compact}
           />
         ))}
     </div>
@@ -117,6 +133,7 @@ export function GroupedLedgerSelect({
   value,
   onChange,
   placeholder = "Select an account",
+  fallbackLabel,
   label,
   required,
   disabled,
@@ -125,17 +142,26 @@ export function GroupedLedgerSelect({
   ledgerFilter,
   quickAddScope,
   enableQuickAdd = true,
+  listMaxHeight = 300,
+  compact = false,
+  onQuickAddSuccess,
 }: GroupedLedgerSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const ledgerFilterRef = useRef(ledgerFilter);
+  ledgerFilterRef.current = ledgerFilter;
 
   const coaRecords = useCoaRecords();
 
   const tree = useMemo(
-    () => buildCoaHierarchyTree(coaRecords, ledgerFilter),
-    [coaRecords, ledgerFilter],
+    () =>
+      buildCoaHierarchyTree(coaRecords, (ledger) =>
+        ledgerFilterRef.current ? ledgerFilterRef.current(ledger) : true,
+      ),
+    [coaRecords],
   );
 
   useEffect(() => {
@@ -154,15 +180,17 @@ export function GroupedLedgerSelect({
   }, [search, filteredTree, expanded]);
 
   const selectedLabel = useMemo(() => {
-    if (!value) return null;
+    if (!value) {
+      return fallbackLabel?.trim() || null;
+    }
     const ledger = coaRecords.find((r) => r.id === value);
-    if (!ledger) return null;
+    if (!ledger) return fallbackLabel?.trim() || null;
     const bankMaster = getBankAccountByLedgerId(ledger.id);
     if (bankMaster) return formatBankAccountMaster(bankMaster);
     return ledger.accountCode
       ? `${ledger.accountCode} · ${ledger.accountName}`
       : ledger.accountName;
-  }, [value, coaRecords]);
+  }, [value, coaRecords, fallbackLabel]);
 
   const selectedPath = useMemo(() => {
     if (!value) return "";
@@ -178,16 +206,26 @@ export function GroupedLedgerSelect({
     });
   }, []);
 
-  const handleSelect = (ledger: ChartOfAccount) => {
-    onChange(ledger);
-    setOpen(false);
-    setSearch("");
-  };
+  const handleSelect = useCallback(
+    (ledger: ChartOfAccount) => {
+      onChange(ledger);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const id = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
 
   const handleQuickAddCreated = (ledger: ChartOfAccount) => {
     if (!ledgerFilter || ledgerFilter(ledger)) {
       onChange(ledger);
     }
+    onQuickAddSuccess?.(ledger);
     setQuickAddOpen(false);
     setOpen(false);
     setSearch("");
@@ -195,8 +233,10 @@ export function GroupedLedgerSelect({
 
   const showQuickAdd = enableQuickAdd && !disabled;
 
+  const resolvedListMaxHeight = compact ? Math.min(listMaxHeight, 220) : listMaxHeight;
+
   return (
-    <div className="space-y-1.5">
+    <div className={cn(compact ? "space-y-1" : "space-y-1.5")}>
       {label && (
         <label className="text-xs font-medium leading-none">
           {label}
@@ -205,6 +245,7 @@ export function GroupedLedgerSelect({
       )}
       <Popover
       open={open && !disabled}
+      modal={false}
       onOpenChange={(v) => {
         if (!disabled) {
           setOpen(v);
@@ -218,7 +259,8 @@ export function GroupedLedgerSelect({
           disabled={disabled}
           title={selectedPath || undefined}
           className={cn(
-            "w-full h-9 px-2.5 text-xs text-left border border-border rounded-md bg-white flex items-center justify-between gap-2",
+            "w-full text-left border border-border rounded-md bg-white flex items-center justify-between gap-2 min-w-0",
+            compact ? "h-8 px-2 text-xs" : "h-9 px-2.5 text-[13px]",
             disabled ? "opacity-60 cursor-not-allowed bg-muted/30" : "hover:bg-muted/20",
             className,
           )}
@@ -231,23 +273,39 @@ export function GroupedLedgerSelect({
           >
             {selectedLabel || placeholder}
           </span>
-          <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className={cn("w-[min(480px,92vw)] p-0", contentClassName)}
+        className={cn(
+          "p-0",
+          compact
+            ? "w-[var(--radix-popover-trigger-width)] max-w-[min(340px,92vw)]"
+            : "w-[min(480px,92vw)]",
+          contentClassName,
+        )}
         align="start"
+        side="bottom"
+        sideOffset={4}
+        collisionPadding={12}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onWheel={(e) => e.stopPropagation()}
       >
-        <div className="p-2 border-b border-border/60">
+        <div className={cn("border-b border-border/60", compact ? "p-1.5" : "p-2")}>
           <Input
+            ref={searchRef}
             placeholder="Search accounts…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 text-sm font-medium"
-            autoFocus
+            className={cn(compact ? "h-7 text-xs" : "h-8 text-[13px]")}
           />
         </div>
-        <div className="max-h-[320px] overflow-y-auto py-1">
+        <div
+          className="overflow-y-auto overscroll-contain py-0.5"
+          style={{ maxHeight: resolvedListMaxHeight }}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {filteredTree.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">No accounts found</p>
           ) : (
@@ -260,6 +318,7 @@ export function GroupedLedgerSelect({
                 expanded={displayExpanded}
                 onToggle={toggleGroup}
                 onSelect={handleSelect}
+                compact={compact}
               />
             ))
           )}
@@ -273,7 +332,10 @@ export function GroupedLedgerSelect({
                 setSearch("");
                 setQuickAddOpen(true);
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+              className={cn(
+                "w-full flex items-center gap-2 px-2.5 font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors",
+                compact ? "py-1.5 text-[11px]" : "py-2 text-xs",
+              )}
             >
               <Plus className="w-4 h-4 shrink-0" />
               Create New Sub Group Ledger

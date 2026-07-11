@@ -12,6 +12,10 @@ export interface RegisterReportRow {
   partyName: string;
   gstin: string;
   state: string;
+  branch: string;
+  salesperson?: string;
+  voucherType: string;
+  productNames: string[];
   taxableValue: number;
   gstAmount: number;
   invoiceTotal: number;
@@ -25,8 +29,13 @@ export interface RegisterReportFilterParams {
   dateFrom: string;
   dateTo: string;
   financialYearId: string;
-  partyId: string;
-  invoiceStatus: string;
+  customerIds?: string[];
+  vendorIds?: string[];
+  branch?: string | string[];
+  statuses?: string[];
+  voucherTypes?: string[];
+  product?: string | string[];
+  salespersons?: string[];
   gstRate: string;
   search: string;
 }

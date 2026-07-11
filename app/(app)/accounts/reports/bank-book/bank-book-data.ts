@@ -15,6 +15,7 @@ import {
   loadBankAccountMasters,
   type BankAccountMaster,
 } from "@/lib/accounts/bank-accounts-data";
+import { resolveCoaLedgerForBankMaster } from "@/lib/accounts/bank-ledger-resolver";
 import { maskBankAccountLast4 } from "@/lib/accounts/bank-account-display";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
@@ -27,6 +28,7 @@ import {
   toSignedBalance,
 } from "@/lib/accounts/running-balance";
 import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
+import { matchesVoucherTypeFilter } from "@/lib/accounts/report-multi-filter-utils";
 
 export const BANK_BOOK_VOUCHER_TYPES = [
   "Opening Balance",
@@ -68,7 +70,10 @@ export interface BankBookRawTransaction {
   voucherTypeCode: VoucherTypeCode;
   voucherType: BankBookVoucherType;
   particular: string;
+  particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   lineOrder: number;
@@ -82,7 +87,10 @@ export interface BankBookDisplayRow {
   voucherNo: string;
   voucherType: BankBookVoucherType;
   particular: string;
+  particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   runningBalance: number;
@@ -114,7 +122,7 @@ export interface BankBookFilters {
   dateFrom: string;
   dateTo: string;
   financialYearId: string;
-  voucherType: string;
+  voucherType: string | string[];
   search: string;
 }
 
@@ -137,20 +145,32 @@ export function formatBankBookDate(iso: string): string {
 export function getBankBookAccountOptions(): BankBookAccountOption[] {
   return loadBankAccountMasters()
     .filter((m) => m.status === "active")
-    .map((m) => ({
-      ledgerId: m.coaLedgerId,
-      bankName: m.bankName,
-      accountNickname: m.accountNickname,
-      accountNumber: m.accountNumber,
-      maskedAccountNumber: maskBankAccountLast4(m.accountNumber),
-      label: `${m.accountNickname} (${maskBankAccountLast4(m.accountNumber)})`,
-      defaultForReceipts: m.defaultForReceipts,
-    }));
+    .map((m) => {
+      const ledger = resolveCoaLedgerForBankMaster(m);
+      return {
+        ledgerId: ledger?.id ?? m.coaLedgerId,
+        bankName: m.bankName,
+        accountNickname: m.accountNickname,
+        accountNumber: m.accountNumber,
+        maskedAccountNumber: maskBankAccountLast4(m.accountNumber),
+        label: `${m.accountNickname} (${maskBankAccountLast4(m.accountNumber)})`,
+        defaultForReceipts: m.defaultForReceipts,
+      };
+    })
+    .filter((option) => option.ledgerId > 0);
 }
 
 export function getBankBookLedger(ledgerId: number): ChartOfAccount | null {
   const bankLedgers = getLedgersUnderSubGroupName("Bank Accounts");
-  return bankLedgers.find((l) => l.id === ledgerId) ?? null;
+  const direct = bankLedgers.find((l) => l.id === ledgerId);
+  if (direct) return direct;
+
+  const master = getBankAccountByLedgerId(ledgerId) ?? loadBankAccountMasters().find((m) => m.coaLedgerId === ledgerId);
+  if (master) {
+    return resolveCoaLedgerForBankMaster(master);
+  }
+
+  return null;
 }
 
 export function resolveBankBookVoucherType(v: AccountingVoucher): BankBookVoucherType {
@@ -194,6 +214,19 @@ function resolveParticular(v: AccountingVoucher, bankLineIndex: number): string 
   }
 
   return bankLine?.remarks || v.narration || "—";
+}
+
+function resolveParticularLedgerId(v: AccountingVoucher, bankLineIndex: number): number | null {
+  const otherLines = v.lines.filter(
+    (line, index) =>
+      index !== bankLineIndex &&
+      line.ledgerId &&
+      (Number(line.debit) > 0 || Number(line.credit) > 0),
+  );
+  if (otherLines.length === 1 && otherLines[0].ledgerId) {
+    return otherLines[0].ledgerId;
+  }
+  return null;
 }
 
 function matchesSearch(row: BankBookRawTransaction, query: string): boolean {
@@ -240,7 +273,10 @@ function buildRawTransactions(ledgerId: number): BankBookRawTransaction[] {
           voucherTypeCode: v.voucherType,
           voucherType,
           particular: resolveParticular(v, lineOrder),
+          particularLedgerId: resolveParticularLedgerId(v, lineOrder),
           narration: v.narration || "—",
+          reference: v.referenceNo || "—",
+          status: v.status === "posted" ? "Posted" : v.status,
           receipt: debit,
           payment: credit,
           lineOrder,
@@ -314,7 +350,10 @@ function buildOpeningRow(
     voucherNo: "—",
     voucherType: "Opening Balance",
     particular: "Balance brought forward",
+    particularLedgerId: null,
     narration: "—",
+    reference: "—",
+    status: "—",
     receipt: 0,
     payment: 0,
     runningBalance: opening.amount,
@@ -341,7 +380,10 @@ function toDisplayRows(
       voucherNo: tx.voucherNo,
       voucherType: tx.voucherType,
       particular: tx.particular,
+      particularLedgerId: tx.particularLedgerId,
       narration: tx.narration,
+      reference: tx.reference,
+      status: tx.status,
       receipt: tx.receipt,
       payment: tx.payment,
       runningBalance: balance.amount,
@@ -358,8 +400,11 @@ export function buildBankBookStatement(
   const ledger = getBankBookLedger(bankLedgerId);
   if (!ledger) return null;
 
-  const master = getBankAccountByLedgerId(bankLedgerId);
-  const allTransactions = buildRawTransactions(bankLedgerId).filter((tx) => {
+  const master =
+    getBankAccountByLedgerId(ledger.id) ??
+    loadBankAccountMasters().find((m) => resolveCoaLedgerForBankMaster(m)?.id === ledger.id);
+
+  const allTransactions = buildRawTransactions(ledger.id).filter((tx) => {
     const voucher = loadVouchers().find((v) => v.id === tx.voucherId);
     if (!voucher) return false;
     return matchesFinancialYear(voucher, filters.financialYearId);
@@ -372,7 +417,7 @@ export function buildBankBookStatement(
   );
 
   const filteredTransactions = periodTransactions.filter((tx) => {
-    if (filters.voucherType !== "all" && tx.voucherType !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, tx.voucherType)) return false;
     if (!matchesSearch(tx, filters.search)) return false;
     return true;
   });

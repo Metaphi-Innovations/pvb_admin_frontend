@@ -26,8 +26,8 @@ export interface AccountsPageShellProps {
   filters?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
-  /** split = full-height table/workbench; standard = form or detail card */
-  layout?: "standard" | "split";
+  /** split = full-height table/workbench; form = centered voucher/detail (no table shell); standard = listing card */
+  layout?: "standard" | "split" | "form";
   className?: string;
   /** Hide description line in compact split layout */
   hideDescription?: boolean;
@@ -47,6 +47,7 @@ export function AccountsPageShell({
   hideDescription,
 }: AccountsPageShellProps) {
   const isSplit = layout === "split";
+  const isForm = layout === "form";
   const isConstrainedHeight = isSplit || className?.includes("h-full");
   const showDescription = !hideDescription && !(isSplit && description.length > 80);
 
@@ -60,13 +61,13 @@ export function AccountsPageShell({
       )}
     >
       <nav aria-label="Breadcrumb" className="flex-shrink-0 leading-none">
-        <ol className={cn(ACCOUNTS_BREADCRUMB_CLASS, isSplit && "gap-0.5")}>
+        <ol className={cn(ACCOUNTS_BREADCRUMB_CLASS, isSplit && "gap-0.5", isForm && "text-xs")}>
           {breadcrumbs.map((crumb, i) => (
             <li key={`${crumb.label}-${i}`} className="flex items-center gap-0.5">
               {i > 0 && (
                 <ChevronRight
                   className={cn(
-                    "text-slate-400",
+                    "text-muted-foreground",
                     isSplit ? "w-2.5 h-2.5" : "w-3 h-3",
                   )}
                 />
@@ -129,6 +130,8 @@ export function AccountsPageShell({
       >
         {isSplit ? (
           children
+        ) : isForm ? (
+          <div className="w-full pb-2">{children}</div>
         ) : (
           <AccountsListingTableCard>
             {children}

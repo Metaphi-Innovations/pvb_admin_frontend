@@ -12,6 +12,11 @@ const CoaAddLedgerHost = dynamic(
   { ssr: false },
 );
 
+const CoaAddGroupHost = dynamic(
+  () => import("./CoaAddGroupHost").then((m) => ({ default: m.CoaAddGroupHost })),
+  { ssr: false },
+);
+
 function routeNeedsCoaData(pathname: string): boolean {
   return (
     pathname.startsWith(CHART_OF_ACCOUNTS_HREF) ||
@@ -22,8 +27,8 @@ function routeNeedsCoaData(pathname: string): boolean {
 }
 
 /**
- * Loads COA navigation context only on COA routes or when the COA sidebar section is open.
- * Keeps banking/reports navigation from downloading or running COA logic.
+ * Mounts COA navigation context only when the COA section is active or a COA/master route needs data.
+ * Transactions / receivables / payables / banking / reports never load the chart tree.
  */
 export function CoaNavigationProviderLazy({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,6 +42,7 @@ export function CoaNavigationProviderLazy({ children }: { children: React.ReactN
     <CoaNavigationProvider initMode={needsFullCoa ? "full" : "tree-only"}>
       {children}
       <CoaAddLedgerHost />
+      <CoaAddGroupHost />
     </CoaNavigationProvider>
   );
 }

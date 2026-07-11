@@ -24,6 +24,10 @@ import { formatReconciliationBankOption } from "@/lib/accounts/bank-account-disp
 import { loadBankAccountsForReconciliation } from "@/lib/accounts/bank-accounts-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import {
+  resolveCustomerIdForLedger,
+  resolveVendorIdForLedger,
+} from "@/lib/accounts/invoice-ledger-match";
 
 export type BankEntryMatchStatus = "unmatched" | "partial" | "matched" | "reconciled" | "ignored";
 export type BankEntryType = "debit" | "credit";
@@ -786,6 +790,21 @@ export function listUnpaidPurchaseInvoicesForVendor(vendorId?: number, vendorNam
     if (vendorName && i.party.toLowerCase() === vendorName.trim().toLowerCase()) return true;
     return false;
   });
+}
+
+/** Outstanding invoices/bills for a party ledger — receipt loads sales, payment loads purchase. */
+export function listOutstandingInvoicesForPartyLedger(
+  ledgerId: number,
+  ledgerName: string,
+  direction: "Deposit" | "Withdrawal",
+): UnpaidInvoiceOption[] {
+  if (direction === "Deposit") {
+    const customerId = resolveCustomerIdForLedger(ledgerId, ledgerName);
+    return listUnpaidSalesInvoicesForCustomer(customerId ?? undefined, ledgerName);
+  }
+
+  const vendorId = resolveVendorIdForLedger(ledgerId, ledgerName);
+  return listUnpaidPurchaseInvoicesForVendor(vendorId ?? undefined, ledgerName);
 }
 
 export function matchModuleLabel(module: MatchModule | "" | string): string {
