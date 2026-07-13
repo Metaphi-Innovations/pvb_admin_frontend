@@ -336,6 +336,17 @@ export const API_ENDPOINTS = {
     PRICING: "/master/product-pricing/dropdown",
   },
   WAREHOUSE: {
+    REORDER_LEVEL: {
+      LIST: "/warehouse/reorder-level/list",
+      CREATE: "/warehouse/reorder-level/",
+      UPDATE: (id: string) => `/warehouse/reorder-level/${id}`,
+      DETAILS: (id: string) => `/warehouse/reorder-level/${id}`,
+      DELETE: (id: string) => `/warehouse/reorder-level/${id}`,
+      FILTER: "/warehouse/reorder-level/filter",
+      SUMMARY: "/warehouse/reorder-level/summary",
+      EXPORT: "/warehouse/reorder-level/export",
+      TOGGLE_STATUS: (id: string) => `/warehouse/reorder-level/toggle-status/${id}`,
+    },
     PACKING_LIST: {
       BATCHES: "/warehouse/packing-list/batches",
       FILTER_DROPDOWN: "/warehouse/packing-list/filter-dropdown",
