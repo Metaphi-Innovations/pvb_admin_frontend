@@ -101,6 +101,7 @@ export interface SalesOrderLineItem {
   quantityType?: "Case" | "Piece";
   caseQuantity?: number;
   pieceQuantity?: number;
+  packSize?: number;
   quantity: number;
   unitPrice: number;
   discount: number;

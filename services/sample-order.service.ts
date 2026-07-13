@@ -70,6 +70,7 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
     quantity: totalQty,
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
+    packSize: unitsPerPacking,
     quantityType: caseQty > 0 ? "Case" : "Piece",
     unitPrice: asNumber(raw.dp_price),
     discount: asNumber(raw.discount_percent),

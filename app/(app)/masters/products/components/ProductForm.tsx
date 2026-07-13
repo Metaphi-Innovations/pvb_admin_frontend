@@ -351,7 +351,7 @@ export function ProductForm({
 	}, [previewNumber, form.netWeightPerPackagingUnit]);
 
 	const handleCategoryChange = (category: string) => {
-		const next = { ...form, category };
+		const next = { ...form, category, categoryId: category };
 		onChange(next);
 		onClearError("category");
 	};
@@ -594,8 +594,11 @@ export function ProductForm({
 					<SelectField
 						label='Segment'
 						required
-						value={form.segmentId ?? ""}
-						onChange={(v) => set("segmentId", v)}
+						value={form.segment || form.segmentId || ""}
+						onChange={(v) => {
+							onChange({ ...form, segment: v, segmentId: v });
+							onClearError("segment");
+						}}
 						options={segmentOptions}
 						placeholder='Select segment…'
 						disabled={readOnly}
@@ -605,7 +608,7 @@ export function ProductForm({
 					<SelectField
 						label='Category'
 						required
-						value={form.categoryId ?? ""}
+						value={form.category || form.categoryId || ""}
 						onChange={handleCategoryChange}
 						options={categoryOptions}
 						placeholder='Select category…'
@@ -616,8 +619,11 @@ export function ProductForm({
 					<SelectField
 						label='Form'
 						required
-						value={form.formId ?? ""}
-						onChange={(v) => set("formId", v)}
+						value={form.form || form.formId || ""}
+						onChange={(v) => {
+							onChange({ ...form, form: v, formId: v });
+							onClearError("form");
+						}}
 						options={formOptions}
 						placeholder='Select form…'
 						disabled={readOnly}
@@ -626,8 +632,11 @@ export function ProductForm({
 
 					<SelectField
 						label='CFU'
-						value={form.cfuId ?? ""}
-						onChange={(v) => set("cfuId", v)}
+						value={form.cfu || form.cfuId || ""}
+						onChange={(v) => {
+							onChange({ ...form, cfu: v, cfuId: v });
+							onClearError("cfu");
+						}}
 						options={cfuOptions}
 						placeholder='Select CFU…'
 						disabled={readOnly}
