@@ -1,19 +1,28 @@
 import { roundMoney } from "@/lib/accounts/money-format";
 import type { BalanceSide } from "@/lib/accounts/money-format";
-import type {
-  TrialBalanceAmountColumns,
-  TrialBalanceDetailedGroup,
-  TrialBalanceDetailedLedgerRow,
-  TrialBalancePrimaryHeadSection,
+import {
+  getLedgerRowsFromDetailedGroups,
+  type TrialBalanceAmountColumns,
+  type TrialBalanceDetailedGroup,
+  type TrialBalanceDetailedLedgerRow,
+  type TrialBalancePrimaryHeadSection,
 } from "./trial-balance-data";
+import { filterValidTrialBalanceLedgerRows } from "./trial-balance-validation";
 
-/** Net balance from split debit/credit columns — display only, no calculation change. */
+/**
+ * Net trial-balance amount + Dr/Cr from separate debit/credit column totals.
+ * Works for ledger rows (one side populated) and parent rows (both sides aggregated).
+ */
 export function netBalanceFromSplit(
   debit: number,
   credit: number,
 ): { amount: number; side: BalanceSide | null } {
-  if (debit > 0) return { amount: roundMoney(debit), side: "Debit" };
-  if (credit > 0) return { amount: roundMoney(credit), side: "Credit" };
+  const d = roundMoney(debit);
+  const c = roundMoney(credit);
+  if (d === 0 && c === 0) return { amount: 0, side: null };
+  const net = roundMoney(d - c);
+  if (net > 0) return { amount: net, side: "Debit" };
+  if (net < 0) return { amount: Math.abs(net), side: "Credit" };
   return { amount: 0, side: null };
 }
 
@@ -90,13 +99,8 @@ function buildPrimarySections(
   return [...sectionMap.values()].sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-function subgroupKey(groupKey: string, subgroupName: string): string {
-  return `${groupKey}::${subgroupName}`;
-}
-
 /**
- * Normal view hierarchy: Primary Head → Group → Sub Group (when nested) → Ledger.
- * Uses closing debit/credit for the two amount columns.
+ * Detailed export hierarchy: Primary Head → Account Group → Sub Group → Ledger.
  */
 export function flattenTrialBalanceNormalRows(
   groups: TrialBalanceDetailedGroup[],
@@ -124,35 +128,17 @@ export function flattenTrialBalanceNormalRows(
         credit: groupClosing.credit,
       });
 
-      const bySubGroup = new Map<string, TrialBalanceDetailedLedgerRow[]>();
-      for (const ledger of group.ledgers) {
-        const hasSubGroup =
-          ledger.standardGroup.trim().length > 0 &&
-          ledger.standardGroup !== group.groupName;
-        const key = hasSubGroup ? ledger.standardGroup : "__direct__";
-        const list = bySubGroup.get(key) ?? [];
-        list.push(ledger);
-        bySubGroup.set(key, list);
-      }
+      for (const subgroup of group.subgroups) {
+        const subClosing = sumClosingAmounts([subgroup]);
+        flat.push({
+          type: "subgroup",
+          subgroupKey: subgroup.subgroupKey,
+          subgroupName: subgroup.subgroupName,
+          debit: subClosing.debit,
+          credit: subClosing.credit,
+        });
 
-      const subGroupEntries = [...bySubGroup.entries()].sort(([a], [b]) => {
-        if (a === "__direct__") return 1;
-        if (b === "__direct__") return -1;
-        return a.localeCompare(b);
-      });
-
-      for (const [subKey, ledgers] of subGroupEntries) {
-        if (subKey !== "__direct__") {
-          const subClosing = sumClosingAmounts(ledgers);
-          flat.push({
-            type: "subgroup",
-            subgroupKey: subgroupKey(group.groupKey, subKey),
-            subgroupName: subKey,
-            debit: subClosing.debit,
-            credit: subClosing.credit,
-          });
-        }
-        for (const ledger of ledgers.sort((a, b) =>
+        for (const ledger of subgroup.ledgers.sort((a, b) =>
           a.ledgerName.localeCompare(b.ledgerName),
         )) {
           flat.push({ type: "ledger", ledger });
@@ -164,16 +150,34 @@ export function flattenTrialBalanceNormalRows(
   return flat;
 }
 
+/** Normal view — flat ledger row only. */
+export type TrialBalanceNormalLedgerRow = Extract<
+  TrialBalanceNormalFlatRow,
+  { type: "ledger" }
+>;
+
+/** Normal view — flat ledger balances only (no group hierarchy). */
+export function flattenTrialBalanceNormalLedgerRows(
+  groups: TrialBalanceDetailedGroup[],
+): TrialBalanceNormalLedgerRow[] {
+  return filterValidTrialBalanceLedgerRows(getLedgerRowsFromDetailedGroups(groups))
+    .sort((a, b) => a.ledgerName.localeCompare(b.ledgerName))
+    .map((ledger) => ({ type: "ledger" as const, ledger }));
+}
+
+import { ACCOUNTS_COA_HIERARCHY_INDENT } from "@/lib/accounts/accounts-coa-hierarchy-ui";
+
 export const TB_NORMAL_INDENT = {
-  primary: "pl-3",
-  group: "pl-6",
-  subgroup: "pl-9",
-  ledger: "pl-12",
+  ledger: "pl-3",
 } as const;
 
+// Detailed view nests via tree-guide rails inside the label, so cells use a
+// small uniform left padding. Voucher rows render custom content (no rails),
+// so they keep an explicit deeper indent to sit under the ledger row.
 export const TB_DETAILED_INDENT = {
-  primary: "pl-3",
-  group: "pl-6",
-  subgroup: "pl-9",
-  ledger: "pl-12",
+  primary: "pl-2",
+  group: "pl-2",
+  subgroup: "pl-2",
+  ledger: "pl-2",
+  voucher: ACCOUNTS_COA_HIERARCHY_INDENT.voucher,
 } as const;

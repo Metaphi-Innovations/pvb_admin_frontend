@@ -607,7 +607,7 @@ export function CoaGroupDrillDownPanel({
             <SummaryField label="Net" value={formatMoney(context.netPayable)} />
           </div>
           <Button asChild size="sm" variant="outline" className="h-9 text-sm font-medium">
-            <Link href="/accounts/reports/gst">GST Summary Report</Link>
+            <Link href="/accounts/reports/gst-summary">GST Summary Report</Link>
           </Button>
         </div>
         <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">

@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
@@ -17,11 +14,10 @@ import {
   ReportPartyMultiFilter,
   ReportLedgerGroupMultiFilter,
   ReportLedgerMultiFilter,
-  ReportViewTypeFilter,
   ReportMoreFilters,
   ReportFilterSummary,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  ReportFromDateFilter,
+  ReportToDateFilter,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
@@ -38,11 +34,8 @@ import {
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { cn } from "@/lib/utils";
 import {
   buildPandLStatement,
-  collectPandLGroupIds,
-  filterPandLStatement,
   flattenPandLHorizontalForExport,
   getPandLActivePartyOptions,
   getPandLBranchOptions,
@@ -50,17 +43,24 @@ import {
   getPandLLedgerOptions,
   getPandLWarehouseOptions,
   resolveFinancialYearLabel,
-  splitPandLHorizontal,
   type PandLFilters,
-  type PandLViewType,
+  type PandLTab,
 } from "./pl-data";
 import { exportPandLToExcel, exportPandLToPdf } from "./pl-export";
 import { ProfitLossHorizontalView } from "./ProfitLossHorizontalView";
-import { useDebouncedValue } from "./pl-hooks";
+import { ProfitLossViewTabs, profitLossViewLabel } from "./ProfitLossViewTabs";
+import { formatPlReportPeriod } from "./pl-display";
+import "../trial-balance/trial-balance-compact.css";
 import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import { ensurePlDemoOnPageLoad } from "@/lib/accounts/pl-demo-seed";
+import { PL_MOCK_PERIOD_FROM } from "@/lib/accounts/pl-traditional-mock";
+import {
+  ACCOUNTS_SECTION_SEEDED_EVENT,
+  ACCOUNTS_VOUCHERS_UPDATED_EVENT,
+} from "@/lib/accounts/accounts-section-seed";
 
-const PLACEHOLDER_DATE = "2025-04-01";
+const PLACEHOLDER_DATE = PL_MOCK_PERIOD_FROM;
 const EMPTY_MESSAGE = "No Profit & Loss data available for the selected period.";
 
 function defaultFyDateRange(): { from: string; to: string; fyId: string } {
@@ -93,6 +93,7 @@ function mergeLedgerOptions(
 export default function ProfitLossPageClient() {
   const mounted = useClientMounted();
 
+  const [activeTab, setActiveTab] = useState<PandLTab>("normal");
   const [preset, setPreset] = useState<DateRangePresetId>("custom");
   const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
   const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
@@ -103,11 +104,23 @@ export default function ProfitLossPageClient() {
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
   const [ledgerIds, setLedgerIds] = useState<string[]>([]);
-  const [viewType, setViewType] = useState<PandLViewType>("summary");
-  const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [dataRevision, setDataRevision] = useState(0);
 
-  const debouncedSearch = useDebouncedValue(search, 300);
+  useEffect(() => {
+    ensurePlDemoOnPageLoad();
+    setDataRevision((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => setDataRevision((n) => n + 1);
+    window.addEventListener(ACCOUNTS_SECTION_SEEDED_EVENT, refresh);
+    window.addEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, refresh);
+    return () => {
+      window.removeEventListener(ACCOUNTS_SECTION_SEEDED_EVENT, refresh);
+      window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, refresh);
+    };
+  }, []);
 
   useEffect(() => {
     const { from, to, fyId } = defaultFyDateRange();
@@ -153,8 +166,8 @@ export default function ProfitLossPageClient() {
     partyId: partyIds,
     ledgerGroupId: ledgerGroupIds,
     ledgerId: ledgerIds,
-    viewType,
-    search: debouncedSearch,
+    viewType: activeTab,
+    search: "",
   }), [
     financialYearId,
     dateFrom,
@@ -164,8 +177,7 @@ export default function ProfitLossPageClient() {
     partyIds,
     ledgerGroupIds,
     ledgerIds,
-    viewType,
-    debouncedSearch,
+    activeTab,
   ]);
 
   const ledgerGroupOptions = useMemo(
@@ -205,36 +217,48 @@ export default function ProfitLossPageClient() {
   const sourceStatement = useMemo(() => {
     if (!mounted || !datesReady) {
       return {
-        lines: [],
+        debitRows: [],
+        creditRows: [],
+        tradingTotal: 0,
+        grossProfit: 0,
+        netProfit: 0,
+        finalDebitTotal: 0,
+        finalCreditTotal: 0,
         totalIncome: 0,
         totalExpenses: 0,
-        netProfit: 0,
         isBalanced: true,
         hasData: false,
       };
     }
     const built = buildPandLStatement(plFilters);
-    return filterPandLStatement(built, { search: debouncedSearch });
-  }, [mounted, datesReady, plFilters, debouncedSearch]);
+    return built;
+  }, [mounted, datesReady, plFilters, dataRevision]);
 
-  const exportExpandedIds = useMemo(() => {
-    const { expenses, income } = splitPandLHorizontal(sourceStatement);
-    return new Set([
-      ...collectPandLGroupIds(expenses.tree),
-      ...collectPandLGroupIds(income.tree),
-    ]);
-  }, [sourceStatement]);
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const rows = flattenPandLHorizontalForExport(sourceStatement);
+      await exportPandLToExcel(rows, exportMeta, sourceStatement);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    const rows = flattenPandLHorizontalForExport(sourceStatement);
+    exportPandLToPdf(rows, exportMeta, sourceStatement);
+  };
 
   const defaultFyRange = useMemo(() => defaultFyDateRange(), []);
 
   const moreFiltersActiveCount = countActiveMoreFilters({
     warehouse: warehouses,
+    partyId: partyIds,
     ledgerGroupId: ledgerGroupIds,
     ledgerId: ledgerIds,
   });
 
   const hasFilters =
-    Boolean(search.trim()) ||
     (datesReady &&
       (preset !== "custom" ||
         financialYearId !== defaultFyRange.fyId ||
@@ -242,11 +266,9 @@ export default function ProfitLossPageClient() {
         isMultiFilterActive(warehouses) ||
         isMultiFilterActive(partyIds) ||
         isMultiFilterActive(ledgerGroupIds) ||
-        isMultiFilterActive(ledgerIds) ||
-        viewType !== "summary"));
+        isMultiFilterActive(ledgerIds)));
 
   const resetFilters = useCallback(() => {
-    setSearch("");
     setPreset("custom");
     const { from, to, fyId } = defaultFyDateRange();
     setDateFrom(from);
@@ -257,7 +279,6 @@ export default function ProfitLossPageClient() {
     setPartyIds([]);
     setLedgerGroupIds([]);
     setLedgerIds([]);
-    setViewType("summary");
   }, []);
 
   const exportMeta = useMemo(
@@ -285,7 +306,7 @@ export default function ProfitLossPageClient() {
             })),
             "Party",
           ),
-      viewType: viewType === "summary" ? "Summary" : "Detailed",
+      viewType: profitLossViewLabel(activeTab),
     }),
     [
       dateFrom,
@@ -297,7 +318,7 @@ export default function ProfitLossPageClient() {
       warehouseSelectOptions,
       partyIds,
       partyOptions,
-      viewType,
+      activeTab,
     ],
   );
 
@@ -314,11 +335,6 @@ export default function ProfitLossPageClient() {
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
       [
-        {
-          id: "period",
-          label: "Period",
-          value: `${dateFrom} to ${dateTo}`,
-        },
         buildBranchFilterSummary(branches, () => setBranches([])),
         buildEntityFilterSummary(
           "party",
@@ -353,8 +369,6 @@ export default function ProfitLossPageClient() {
         ),
       ].filter((item): item is ReportFilterSummaryItem => item != null),
     [
-      dateFrom,
-      dateTo,
       branches,
       partyIds,
       partyOptions,
@@ -367,23 +381,8 @@ export default function ProfitLossPageClient() {
     ],
   );
 
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      const rows = flattenPandLHorizontalForExport(sourceStatement, exportExpandedIds);
-      await exportPandLToExcel(rows, exportMeta, sourceStatement);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportPdf = () => {
-    const rows = flattenPandLHorizontalForExport(sourceStatement, exportExpandedIds);
-    exportPandLToPdf(rows, exportMeta, sourceStatement);
-  };
-
   const filterBar = (
-    <ReportFilterRow className="items-end gap-2">
+    <ReportFilterRow className="items-end gap-x-2 gap-y-2.5">
       <ReportFinancialYearFilter
         value={financialYearId}
         onChange={handleFinancialYearChange}
@@ -395,23 +394,25 @@ export default function ProfitLossPageClient() {
         onPresetChange={handlePresetChange}
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
+        inlineCustomDates={false}
       />
+      <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} />
+      <ReportToDateFilter value={dateTo} onChange={setDateTo} />
       <ReportBranchMultiFilter
         values={branches}
         onChange={setBranches}
         options={branchOptions}
       />
-      <ReportPartyMultiFilter
-        values={partyIds}
-        onChange={setPartyIds}
-        parties={partyOptions}
-      />
-      <ReportViewTypeFilter value={viewType} onChange={setViewType} />
       <ReportMoreFilters activeCount={moreFiltersActiveCount}>
         <ReportWarehouseMultiFilter
           values={warehouses}
           onChange={setWarehouses}
           options={warehouseOptions}
+        />
+        <ReportPartyMultiFilter
+          values={partyIds}
+          onChange={setPartyIds}
+          parties={partyOptions}
         />
         <ReportLedgerGroupMultiFilter
           values={ledgerGroupIds}
@@ -424,27 +425,6 @@ export default function ProfitLossPageClient() {
           ledgers={ledgerOptions}
         />
       </ReportMoreFilters>
-      <div className="space-y-0.5 min-w-[180px] flex-1">
-        <Label className={filterLabelClass}>Search Particular</Label>
-        <div className="relative">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name…"
-            className={cn(filterControlClass, "pr-7")}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
       {hasFilters && (
         <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
           Reset
@@ -463,6 +443,9 @@ export default function ProfitLossPageClient() {
       hideDescription
       layout="split"
       className="h-full min-h-0"
+      subHeader={
+        <ProfitLossViewTabs value={activeTab} onChange={setActiveTab} />
+      }
       actions={
         <AccountsExportMenu
           onExcel={handleExportExcel}
@@ -472,8 +455,16 @@ export default function ProfitLossPageClient() {
       }
       filters={filterBar}
     >
-      <AccountsListingTableCard className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        <ReportFilterSummary items={filterSummaryItems} />
+      <AccountsListingTableCard className="trial-balance-compact flex flex-col flex-1 min-h-0 overflow-hidden">
+        {mounted && datesReady && (
+          <p className="flex-shrink-0 px-3 py-1 border-b border-border/60 text-left text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">Period:</span>{" "}
+            {formatPlReportPeriod(dateFrom, dateTo)}
+          </p>
+        )}
+        {filterSummaryItems.length > 0 && (
+          <ReportFilterSummary items={filterSummaryItems} />
+        )}
         {!mounted || !datesReady ? (
           <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
             Loading Profit & Loss…
@@ -495,7 +486,6 @@ export default function ProfitLossPageClient() {
           <ProfitLossHorizontalView
             statement={sourceStatement}
             drillDownFilters={drillDownFilters}
-            viewType={viewType}
           />
         )}
       </AccountsListingTableCard>

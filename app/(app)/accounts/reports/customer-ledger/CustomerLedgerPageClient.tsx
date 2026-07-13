@@ -1,13 +1,14 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Suspense, useMemo, useState } from "react";
 import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
-import { Users, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Users, FileText } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -19,18 +20,16 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
-  AccountsColumnFilterProvider,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
-import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportVoucherTypeMultiFilter,
+  ReportMoreFilters,
   ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
   buildEntityFilterSummary,
+  countActiveMoreFilters,
   isMultiFilterActive,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
@@ -39,10 +38,10 @@ import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
+  buildCustomerGeneralLedgerHref,
   buildCustomerLedgerStatement,
   CUSTOMER_LEDGER_VOUCHER_TYPE_OPTIONS,
   getCustomerLedgerCustomers,
-  type CustomerLedgerDisplayRow,
 } from "./customer-ledger-data";
 import {
   exportCustomerLedgerToExcel,
@@ -50,6 +49,7 @@ import {
 } from "./customer-ledger-export";
 import { CustomerLedgerTable } from "./CustomerLedgerTable";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import "../trial-balance/trial-balance-compact.css";
 
 function CustomerLedgerPageContent() {
   const mounted = useClientMounted();
@@ -66,12 +66,9 @@ function CustomerLedgerPageContent() {
   const [customerId, setCustomerId] = useState("");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const customers = useMemo(() => getCustomerLedgerCustomers(), []);
-
-  
 
   const statement = useMemo(() => {
     if (!mounted || !customerId) return null;
@@ -79,14 +76,18 @@ function CustomerLedgerPageContent() {
       dateFrom,
       dateTo,
       voucherType: voucherTypes,
-      search,
+      search: "",
     });
-  }, [mounted, customerId, dateFrom, dateTo, voucherTypes, search, ledgerDataTick]);
+  }, [mounted, customerId, dateFrom, dateTo, voucherTypes, ledgerDataTick]);
 
   const voucherTypeOptions = useMemo(
     () => CUSTOMER_LEDGER_VOUCHER_TYPE_OPTIONS.filter((o) => o.value !== "all"),
     [],
   );
+
+  const moreFiltersActiveCount = countActiveMoreFilters({
+    voucherType: voucherTypes,
+  });
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
     [
@@ -104,30 +105,6 @@ function CustomerLedgerPageContent() {
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
   const allTransactionRows = statement?.transactionRows ?? [];
 
-  const getCellValue = useCallback((row: CustomerLedgerDisplayRow, key: string) => {
-    switch (key) {
-      case "voucher":
-        return row.voucherNo;
-      case "type":
-        return row.voucherType;
-      default:
-        return (row as unknown as Record<string, unknown>)[key];
-    }
-  }, []);
-
-  const columnConfig = useMemo(
-    () => ({
-      date: { type: "date" as const },
-      voucher: { type: "text" as const },
-      type: { type: "text" as const },
-      particular: { type: "text" as const },
-      narration: { type: "text" as const },
-      debit: { type: "amount" as const },
-      credit: { type: "amount" as const },
-    }),
-    [],
-  );
-
   const exportMeta = useMemo(
     () => ({
       dateFrom,
@@ -139,99 +116,17 @@ function CustomerLedgerPageContent() {
 
   const canExport = Boolean(statement && customerId);
 
-  return (
-    <AccountsColumnFilterProvider
-      rows={allTransactionRows}
-      getCellValue={getCellValue}
-      columnConfig={columnConfig}
-      defaultSortKey="date"
-      defaultSortDir="asc"
-    >
-      <CustomerLedgerPageBody
-        customerId={customerId}
-        setCustomerId={setCustomerId}
-        customers={customers}
-        statement={statement}
-        allTransactionRows={allTransactionRows}
-        openingRow={openingRow}
-        closingRow={closingRow}
-        exporting={exporting}
-        setExporting={setExporting}
-        exportMeta={exportMeta}
-        canExport={canExport}
-        preset={preset}
-        setPreset={setPreset}
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        voucherTypes={voucherTypes}
-        setVoucherTypes={setVoucherTypes}
-        voucherTypeOptions={voucherTypeOptions}
-        filterSummaryItems={filterSummaryItems}
-        search={search}
-        setSearch={setSearch}
-      />
-    </AccountsColumnFilterProvider>
+  const generalLedgerHref = useMemo(
+    () =>
+      customerId ? buildCustomerGeneralLedgerHref(customerId, { dateFrom, dateTo }) : null,
+    [customerId, dateFrom, dateTo],
   );
-}
-
-function CustomerLedgerPageBody({
-  customerId,
-  setCustomerId,
-  customers,
-  statement,
-  allTransactionRows,
-  openingRow,
-  closingRow,
-  exporting,
-  setExporting,
-  exportMeta,
-  canExport,
-  preset,
-  setPreset,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  voucherTypes,
-  setVoucherTypes,
-  voucherTypeOptions,
-  filterSummaryItems,
-  search,
-  setSearch,
-}: {
-  customerId: string;
-  setCustomerId: (v: string) => void;
-  customers: ReturnType<typeof getCustomerLedgerCustomers>;
-  statement: ReturnType<typeof buildCustomerLedgerStatement> | null;
-  allTransactionRows: CustomerLedgerDisplayRow[];
-  openingRow: CustomerLedgerDisplayRow | null;
-  closingRow: CustomerLedgerDisplayRow | null | undefined;
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
-  canExport: boolean;
-  preset: ReturnType<typeof useReportDateRange>["preset"];
-  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
-  dateFrom: string;
-  setDateFrom: (v: string) => void;
-  dateTo: string;
-  setDateTo: (v: string) => void;
-  voucherTypes: string[];
-  setVoucherTypes: (v: string[]) => void;
-  voucherTypeOptions: { value: string; label: string }[];
-  filterSummaryItems: ReportFilterSummaryItem[];
-  search: string;
-  setSearch: (v: string) => void;
-}) {
-  const columnFilteredRows = useAccountsFilteredRows(allTransactionRows);
 
   const handleExportExcel = async () => {
     if (!statement || !openingRow || !closingRow) return;
     setExporting(true);
     try {
-      const exportRows = [openingRow, ...columnFilteredRows, closingRow];
+      const exportRows = [openingRow, ...allTransactionRows, closingRow];
       await exportCustomerLedgerToExcel(exportRows, statement.summary, exportMeta);
     } finally {
       setExporting(false);
@@ -240,7 +135,7 @@ function CustomerLedgerPageBody({
 
   const handleExportPdf = () => {
     if (!statement || !openingRow || !closingRow) return;
-    const exportRows = [openingRow, ...columnFilteredRows, closingRow];
+    const exportRows = [openingRow, ...allTransactionRows, closingRow];
     exportCustomerLedgerToPdf(exportRows, statement.summary, exportMeta);
   };
 
@@ -275,7 +170,6 @@ function CustomerLedgerPageBody({
     allTransactionRows.length === 0 &&
     statement.summary.openingBalance === 0 &&
     statement.summary.closingBalance === 0 &&
-    !search.trim() &&
     !isMultiFilterActive(voucherTypes);
 
   const showNoFilterResults =
@@ -289,6 +183,25 @@ function CustomerLedgerPageBody({
       breadcrumbs={accountsBreadcrumb("Reports", "Customer Ledger")}
       title="Customer Ledger"
       description="Complete customer-wise transaction history with running balance."
+      layout="split"
+      className="h-full min-h-0 trial-balance-compact"
+      actions={
+        <div className="flex items-center gap-2">
+          {generalLedgerHref ? (
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+              <Link href={generalLedgerHref}>
+                <FileText className="w-3.5 h-3.5" />
+                General Ledger
+              </Link>
+            </Button>
+          ) : null}
+          <AccountsExportMenu
+            onExcel={handleExportExcel}
+            onPdf={handleExportPdf}
+            disabled={!canExport || exporting}
+          />
+        </div>
+      }
       filters={
         <>
           <ReportFilterRow className="items-end">
@@ -320,46 +233,19 @@ function CustomerLedgerPageBody({
                 </SelectContent>
               </Select>
             </div>
-            <ReportVoucherTypeMultiFilter
-              values={voucherTypes}
-              onChange={setVoucherTypes}
-              options={voucherTypeOptions}
-            />
-            <div className="space-y-1 min-w-[200px] flex-1">
-              <Label className={filterLabelClass}>Search</Label>
-              <div className="relative">
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Voucher no., particular, narration, amount…"
-                  className={cn(filterControlClass, "mt-0 pr-8")}
-                  disabled={!customerId}
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label="Clear search"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-            <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              disabled={!canExport || exporting}
-            />
+            <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+              <ReportVoucherTypeMultiFilter
+                values={voucherTypes}
+                onChange={setVoucherTypes}
+                options={voucherTypeOptions}
+              />
+            </ReportMoreFilters>
           </ReportFilterRow>
           {customerId ? <ReportFilterSummary items={filterSummaryItems} /> : null}
         </>
       }
-      layout="split"
-      className="h-full min-h-0"
     >
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col flex-1 min-h-0 financial-report">
         {!customerId ? (
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="text-center space-y-2 max-w-sm">
@@ -383,14 +269,11 @@ function CustomerLedgerPageBody({
               <div className="flex-1 flex items-center justify-center p-8">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground">
-                    No transactions match your search or voucher type filter.
+                    No transactions match the selected voucher type filter.
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setVoucherTypes([]);
-                    }}
+                    onClick={() => setVoucherTypes([])}
                     className="text-xs text-brand-600 hover:underline"
                   >
                     Clear filters

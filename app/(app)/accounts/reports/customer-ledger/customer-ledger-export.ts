@@ -1,16 +1,13 @@
 import { formatMoneyOrDash, formatMoneyWithSide } from "@/lib/accounts/money-format";
 import {
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
   escapeHtml,
-  openReportPrintWindow,
   formatExportAmount,
   type ReportColumnHeader,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
 import type { CustomerLedgerDisplayRow, CustomerLedgerSummary } from "./customer-ledger-data";
 
 export interface CustomerLedgerExportMeta {
@@ -72,7 +69,7 @@ function buildCustomerLedgerBodyHtml(
     )
     .join("");
 
-  const tableHtml = buildStandardReportTableHtml({ columns: COLUMNS, bodyHtml });
+  const tableHtml = buildTabularReportBodyHtml({ columns: COLUMNS, bodyHtml });
 
   const totalsNote = `<p class="report-footer-note">
     Opening: ${formatMoneyWithSide(summary.openingBalance, summary.openingBalanceType)} ·
@@ -90,13 +87,13 @@ export async function exportCustomerLedgerToExcel(
   meta: CustomerLedgerExportMeta,
 ): Promise<void> {
   const safeName = summary.customerCode.replace(/[^\w-]+/g, "_");
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: `Customer Ledger — ${summary.customerName}`,
+    filename: `Customer_Ledger_${safeName}`,
     header: buildHeaderOptions(summary, meta),
     bodyHtml: buildCustomerLedgerBodyHtml(rows, summary),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Customer_Ledger_${safeName}_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportCustomerLedgerToPdf(
@@ -104,11 +101,11 @@ export function exportCustomerLedgerToPdf(
   summary: CustomerLedgerSummary,
   meta: CustomerLedgerExportMeta,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: `Customer Ledger — ${summary.customerName}`,
+    filename: `Customer_Ledger_${summary.customerCode}`,
     header: buildHeaderOptions(summary, meta),
     bodyHtml: buildCustomerLedgerBodyHtml(rows, summary),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }

@@ -67,7 +67,9 @@ export const DEMO_TX_DATE_OFFSETS: readonly number[] = [
 
 /** Pick a distributed demo date by index (wraps around DEMO_TX_DATE_OFFSETS). */
 export function demoDateAt(index: number, ref = new Date()): string {
-  return demoDaysAgo(DEMO_TX_DATE_OFFSETS[index % DEMO_TX_DATE_OFFSETS.length], ref);
+  const len = DEMO_TX_DATE_OFFSETS.length;
+  const modIndex = ((index % len) + len) % len;
+  return demoDaysAgo(DEMO_TX_DATE_OFFSETS[modIndex], ref);
 }
 
 /** ISO timestamp for activity/audit fields on a given date */

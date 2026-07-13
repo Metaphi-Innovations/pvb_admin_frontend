@@ -23,7 +23,14 @@ import {
 } from "@/lib/accounts/ledger-mappings";
 import { loadAccountingSettings } from "@/lib/accounts/accounting-settings-data";
 import { ensureInventoryAccountingLedgers, getCostPriceBySku, resolveSku } from "@/lib/accounts/inventory-accounting-data";
-import { ensureGstAccountingLedgers, expandGstPostingLines, type GstRateBreakdown } from "@/lib/accounts/gst-accounting";
+import {
+  ensureGstAccountingLedgers,
+  expandGstPostingLines,
+  isGstMappingKey,
+  resolveGstLedger,
+  type GstRateBreakdown,
+} from "@/lib/accounts/gst-accounting";
+import { formatGstPostingLedgerDisplayName } from "@/lib/accounts/gst-coa-sync";
 import { ensureTdsAccountingLedgers, resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
 import { roundMoney } from "@/lib/accounts/money-format";
 import { notifyVoucherPosted } from "@/lib/accounts/voucher-posting-notify";
@@ -65,17 +72,36 @@ export interface PostingResult {
 }
 
 function resolveLineToLedgerId(line: PostingLineInput): number | null {
+  return resolveLineToLedger(line).ledgerId;
+}
+
+function resolveLineToLedger(line: PostingLineInput): { ledgerId: number | null; error?: string } {
   ensureGstAccountingLedgers();
-  if (line.ledgerId) return line.ledgerId;
+  if (line.ledgerId) return { ledgerId: line.ledgerId };
+
   if (line.mappingKey) {
-    const ledger = resolveMappingLedger(
-      line.mappingKey,
-      line.partyName ?? "General",
-      { createIfMissing: true, gstRatePct: line.gstRatePct },
-    );
-    return ledger?.id ?? null;
+    if (
+      isGstMappingKey(line.mappingKey) &&
+      line.gstRatePct != null &&
+      line.gstRatePct > 0 &&
+      (line.debit > 0 || line.credit > 0)
+    ) {
+      const ledger = resolveGstLedger(line.mappingKey, line.gstRatePct);
+      if (!ledger) {
+        const label = formatGstPostingLedgerDisplayName(line.mappingKey, line.gstRatePct);
+        return { ledgerId: null, error: `${label} posting ledger is not configured.` };
+      }
+      return { ledgerId: ledger.id };
+    }
+
+    const ledger = resolveMappingLedger(line.mappingKey, line.partyName ?? "General", {
+      createIfMissing: true,
+      gstRatePct: line.gstRatePct,
+    });
+    return { ledgerId: ledger?.id ?? null };
   }
-  return null;
+
+  return { ledgerId: null };
 }
 
 function buildVoucherLines(inputs: PostingLineInput[]): VoucherLine[] {
@@ -179,6 +205,11 @@ export function postFromErpSource(req: ErpPostingRequest): PostingResult {
       voucherNumber: existing.voucherNumber,
       error: "Already posted.",
     };
+  }
+
+  for (const line of req.lines) {
+    const resolved = resolveLineToLedger(line);
+    if (resolved.error) return { success: false, error: resolved.error };
   }
 
   const lines = buildVoucherLines(req.lines);
@@ -331,6 +362,119 @@ export function postPurchaseInvoice(input: {
     voucherType: "purchase",
     date: input.date,
     narration: `Purchase Invoice ${input.invoiceNo} — ${input.vendorName}`,
+    lines,
+  });
+}
+
+/** Accounts: Direct Purchase Invoice → expense/asset ledgers + GST + vendor payable */
+export function postDirectPurchaseInvoice(input: {
+  invoiceId: number;
+  invoiceNo: string;
+  vendorName: string;
+  date: string;
+  expenseLines: Array<{
+    ledgerId: number;
+    ledgerName: string;
+    amount: number;
+    description: string;
+  }>;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  gstBreakdowns?: GstRateBreakdown[];
+  tdsAmount?: number;
+  tdsMasterId?: number | null;
+  tdsLedgerId?: number | null;
+  roundOff?: number;
+}): PostingResult {
+  ensureGstAccountingLedgers();
+  ensureTdsAccountingLedgers();
+  const tds = roundMoney(input.tdsAmount ?? 0);
+  const roundOff = roundMoney(input.roundOff ?? 0);
+  const expenseTotal = roundMoney(
+    input.expenseLines.reduce((s, l) => s + l.amount, 0),
+  );
+  const gstTotal = roundMoney(input.cgst + input.sgst + input.igst);
+  const payableTotal = roundMoney(expenseTotal + gstTotal - tds + roundOff);
+
+  const lines: PostingLineInput[] = input.expenseLines.map((el) => ({
+    ledgerId: el.ledgerId,
+    partyName: el.ledgerName,
+    debit: el.amount,
+    credit: 0,
+    remarks: el.description,
+  }));
+
+  if (input.gstBreakdowns?.length) {
+    lines.push(...expandGstPostingLines(input.gstBreakdowns, "purchase"));
+  } else {
+    if (input.cgst > 0) {
+      lines.push({
+        mappingKey: "purchase_cgst",
+        debit: input.cgst,
+        credit: 0,
+        remarks: "Input CGST (ITC)",
+      });
+    }
+    if (input.sgst > 0) {
+      lines.push({
+        mappingKey: "purchase_sgst",
+        debit: input.sgst,
+        credit: 0,
+        remarks: "Input SGST (ITC)",
+      });
+    }
+    if (input.igst > 0) {
+      lines.push({
+        mappingKey: "purchase_igst",
+        debit: input.igst,
+        credit: 0,
+        remarks: "Input IGST (ITC)",
+      });
+    }
+  }
+
+  if (tds > 0) {
+    const tdsLedger =
+      input.tdsLedgerId ??
+      (input.tdsMasterId != null ? resolveTdsPayableLedger(input.tdsMasterId)?.id : null);
+    if (tdsLedger) {
+      lines.push({
+        ledgerId: tdsLedger,
+        debit: 0,
+        credit: tds,
+        remarks: `TDS Payable — ${input.invoiceNo}`,
+      });
+    }
+  }
+
+  if (roundOff !== 0) {
+    const settings = loadAccountingSettings();
+    if (settings.roundOffLedgerId) {
+      lines.push({
+        ledgerId: settings.roundOffLedgerId,
+        debit: roundOff > 0 ? roundOff : 0,
+        credit: roundOff < 0 ? Math.abs(roundOff) : 0,
+        remarks: "Round off",
+      });
+    }
+  }
+
+  lines.push({
+    mappingKey: "purchase_payable",
+    partyName: input.vendorName,
+    debit: 0,
+    credit: payableTotal,
+    remarks: `Payable — ${input.vendorName}`,
+  });
+
+  return postFromErpSource({
+    sourceModule: "procurement",
+    sourceDocumentId: input.invoiceId,
+    sourceDocumentNo: input.invoiceNo,
+    voucherType: "purchase",
+    date: input.date,
+    narration: `Direct Purchase ${input.invoiceNo} — ${input.vendorName}`,
     lines,
   });
 }

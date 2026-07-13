@@ -6,17 +6,14 @@ import {
 } from "@/lib/accounts/money-format";
 import { resolveDrCrColumnSide } from "@/lib/accounts/running-balance";
 import {
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
   escapeHtml,
-  openReportPrintWindow,
   formatExportAmount,
   type ReportColumnHeader,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
 import type {
   GeneralLedgerDisplayRow,
   GeneralLedgerListingRow,
@@ -31,10 +28,9 @@ export interface GeneralLedgerExportMeta {
 
 const STATEMENT_COLUMNS: ReportColumnHeader[] = [
   { label: "Date" },
-  { label: "Voucher Type" },
-  { label: "Voucher No." },
-  { label: "Reference No." },
   { label: "Particulars" },
+  { label: "Transaction Type" },
+  { label: "Voucher No." },
   { label: "Debit (₹)", align: "right", className: "num" },
   { label: "Credit (₹)", align: "right", className: "num" },
   { label: "Running Balance", align: "right", className: "num" },
@@ -55,19 +51,18 @@ const LISTING_COLUMNS: ReportColumnHeader[] = [
 
 function exportRowFields(r: GeneralLedgerDisplayRow) {
   const isOpening = r.kind === "opening";
-  const isBalanceRow = r.kind === "opening" || r.kind === "closing";
+  const isClosing = r.kind === "closing";
   const drCrSide = resolveDrCrColumnSide({
     debit: r.debit,
     credit: r.credit,
     runningBalanceType: r.runningBalanceType,
-    isBalanceRow,
+    isBalanceRow: isOpening || isClosing,
   });
   return {
     Date: r.date,
-    "Voucher Type": isOpening ? "Opening" : r.voucherType,
-    "Voucher No.": isOpening || !r.voucherNo ? "—" : r.voucherNo,
-    "Reference No.": isOpening || !r.referenceNo ? "—" : r.referenceNo,
-    Particulars: r.particularsNarration,
+    Particulars: r.particulars,
+    "Transaction Type": isOpening ? "Opening" : isClosing ? "—" : r.transactionType || r.voucherType,
+    "Voucher No.": isOpening || isClosing || !r.voucherNo ? "—" : r.voucherNo,
     "Debit (₹)": r.debit || "",
     "Credit (₹)": r.credit || "",
     "Running Balance (₹)": r.runningBalance ? formatMoney(r.runningBalance) : "",
@@ -102,7 +97,8 @@ function buildStatementSummaryStrip(summary: GeneralLedgerSummary): string {
     <div class="summary-strip-item"><label>Total Debit</label><strong>${formatExportAmount(summary.totalDebit)}</strong></div>
     <div class="summary-strip-item"><label>Total Credit</label><strong>${formatExportAmount(summary.totalCredit)}</strong></div>
     <div class="summary-strip-item"><label>Closing Balance</label><strong>${formatBalanceAmount(summary.closingBalance, summary.closingBalanceType)}</strong></div>
-    <div class="summary-strip-item"><label>Current Balance</label><strong>${formatBalanceAmount(summary.currentBalance, summary.currentBalanceType)}</strong></div>
+    <div class="summary-strip-item"><label>Grand Total Debit</label><strong>${formatExportAmount(summary.grandTotalDebit)}</strong></div>
+    <div class="summary-strip-item"><label>Grand Total Credit</label><strong>${formatExportAmount(summary.grandTotalCredit)}</strong></div>
   </div>`;
 }
 
@@ -110,28 +106,42 @@ function buildStatementBodyHtml(
   rows: GeneralLedgerDisplayRow[],
   summary: GeneralLedgerSummary,
 ): string {
-  const exportRows = statementExportRows(rows);
+  const exportRows = rows;
   const bodyHtml = exportRows
     .map((r) => {
       const f = exportRowFields(r);
       return `
-    <tr class="${r.kind === "opening" ? "summary-row" : ""}">
+    <tr class="${r.kind === "opening" || r.kind === "closing" ? "summary-row" : ""}">
       <td>${escapeHtml(f.Date)}</td>
-      <td>${escapeHtml(f["Voucher Type"])}</td>
-      <td class="mono">${escapeHtml(f["Voucher No."])}</td>
-      <td class="mono">${escapeHtml(f["Reference No."])}</td>
       <td>${escapeHtml(f.Particulars)}</td>
+      <td>${escapeHtml(f["Transaction Type"])}</td>
+      <td class="mono">${escapeHtml(f["Voucher No."])}</td>
       <td class="num">${f["Debit (₹)"] ? formatExportAmount(Number(f["Debit (₹)"])) : "—"}</td>
       <td class="num">${f["Credit (₹)"] ? formatExportAmount(Number(f["Credit (₹)"])) : "—"}</td>
-      <td class="num">${escapeHtml(f["Running Balance (₹)"] || "—")}</td>
+      <td class="num">${escapeHtml(formatBalanceAmount(r.runningBalance, r.runningBalanceType))}</td>
       <td class="center">${escapeHtml(f["Dr/Cr"])}</td>
     </tr>`;
     })
     .join("");
 
-  const tableHtml = buildStandardReportTableHtml({
+  const footerHtml = `
+    <tr class="total">
+      <td colspan="4"><strong>Total</strong></td>
+      <td class="num"><strong>${formatExportAmount(summary.totalDebit)}</strong></td>
+      <td class="num"><strong>${formatExportAmount(summary.totalCredit)}</strong></td>
+      <td class="num"><strong>${formatBalanceAmount(summary.closingBalance, summary.closingBalanceType)}</strong></td>
+      <td></td>
+    </tr>
+    <tr class="total">
+      <td colspan="4"><strong>Grand Total</strong></td>
+      <td class="num"><strong>${formatExportAmount(summary.grandTotalDebit)}</strong></td>
+      <td class="num"><strong>${formatExportAmount(summary.grandTotalCredit)}</strong></td>
+      <td colspan="2"></td>
+    </tr>`;
+
+  const tableHtml = buildTabularReportBodyHtml({
     columns: STATEMENT_COLUMNS,
-    bodyHtml,
+    bodyHtml: bodyHtml + footerHtml,
   });
   return buildStatementSummaryStrip(summary) + tableHtml;
 }
@@ -181,7 +191,7 @@ function buildListingBodyHtml(rows: GeneralLedgerListingRow[]): string {
     })
     .join("");
 
-  return buildStandardReportTableHtml({ columns: LISTING_COLUMNS, bodyHtml });
+  return buildTabularReportBodyHtml({ columns: LISTING_COLUMNS, bodyHtml });
 }
 
 export async function exportGeneralLedgerToExcel(
@@ -190,13 +200,13 @@ export async function exportGeneralLedgerToExcel(
   meta: GeneralLedgerExportMeta,
 ): Promise<void> {
   const safeName = summary.ledgerCode.replace(/[^\w-]+/g, "_");
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: `General Ledger — ${summary.ledgerName}`,
+    filename: `General_Ledger_${safeName}`,
     header: buildStatementHeaderOptions(summary, meta),
     bodyHtml: buildStatementBodyHtml(rows, summary),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `General_Ledger_${safeName}_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportGeneralLedgerToPdf(
@@ -204,37 +214,37 @@ export function exportGeneralLedgerToPdf(
   summary: GeneralLedgerSummary,
   meta: GeneralLedgerExportMeta,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: `General Ledger — ${summary.ledgerName}`,
+    filename: `General_Ledger_${summary.ledgerCode}`,
     header: buildStatementHeaderOptions(summary, meta),
     bodyHtml: buildStatementBodyHtml(rows, summary),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }
 
 export async function exportGeneralLedgerListingToExcel(
   rows: GeneralLedgerListingRow[],
   meta: GeneralLedgerExportMeta,
 ): Promise<void> {
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: "General Ledger Listing",
+    filename: "General_Ledger_Listing",
     header: buildListingHeaderOptions(meta, rows.length),
     bodyHtml: buildListingBodyHtml(rows),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `General_Ledger_Listing_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportGeneralLedgerListingToPdf(
   rows: GeneralLedgerListingRow[],
   meta: GeneralLedgerExportMeta,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: "General Ledger Listing",
+    filename: "General_Ledger_Listing",
     header: buildListingHeaderOptions(meta, rows.length),
     bodyHtml: buildListingBodyHtml(rows),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }

@@ -1,16 +1,13 @@
 import { formatMoneyOrDash, formatMoneyWithSide } from "@/lib/accounts/money-format";
 import {
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
   escapeHtml,
-  openReportPrintWindow,
   formatExportAmount,
   type ReportColumnHeader,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
 import type { SupplierLedgerDisplayRow, SupplierLedgerSummary } from "./supplier-ledger-data";
 
 export interface SupplierLedgerExportMeta {
@@ -72,7 +69,7 @@ function buildSupplierLedgerBodyHtml(
     )
     .join("");
 
-  const tableHtml = buildStandardReportTableHtml({ columns: COLUMNS, bodyHtml });
+  const tableHtml = buildTabularReportBodyHtml({ columns: COLUMNS, bodyHtml });
 
   const totalsNote = `<p class="report-footer-note">
     Opening: ${formatMoneyWithSide(summary.openingBalance, summary.openingBalanceType)} ·
@@ -90,13 +87,13 @@ export async function exportSupplierLedgerToExcel(
   meta: SupplierLedgerExportMeta,
 ): Promise<void> {
   const safeName = summary.supplierCode.replace(/[^\w-]+/g, "_");
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: `Supplier Ledger — ${summary.supplierName}`,
+    filename: `Supplier_Ledger_${safeName}`,
     header: buildHeaderOptions(summary, meta),
     bodyHtml: buildSupplierLedgerBodyHtml(rows, summary),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Supplier_Ledger_${safeName}_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportSupplierLedgerToPdf(
@@ -104,11 +101,11 @@ export function exportSupplierLedgerToPdf(
   summary: SupplierLedgerSummary,
   meta: SupplierLedgerExportMeta,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: `Supplier Ledger — ${summary.supplierName}`,
+    filename: `Supplier_Ledger_${summary.supplierCode}`,
     header: buildHeaderOptions(summary, meta),
     bodyHtml: buildSupplierLedgerBodyHtml(rows, summary),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }

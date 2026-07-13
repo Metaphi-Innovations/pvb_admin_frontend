@@ -1,12 +1,5 @@
-/* Purchase Invoice listing — sticky header uses solid background (see globals .accounts-table-th-sticky) */
+/* Purchase Invoice listing — single page scroll; horizontal scroll only on table wrapper */
 .purchase-invoice-listing .accounts-table-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.purchase-invoice-listing .accounts-table-th-sorted,
-.purchase-invoice-listing .accounts-table-th-sticky.accounts-table-th-sorted {
-  background-color: #fff3e8 !important;
+  overflow-x: auto;
+  overflow-y: visible;
 }

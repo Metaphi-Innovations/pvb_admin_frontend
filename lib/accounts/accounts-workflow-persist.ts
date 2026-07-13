@@ -19,7 +19,7 @@ import {
   saveInvoices,
   type InvoiceRecord,
 } from "@/app/(app)/accounts/invoices/invoices-data";
-import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
+import { maybePostPurchaseInvoice, maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import {
   getPurchaseInvoiceById,
   loadPurchaseInvoices,
@@ -68,6 +68,10 @@ function afterPosted(category: AccountsVoucherCategory, documentId: number): voi
     const note = getCreditNoteById(documentId);
     if (note) postCreditNoteAccounting(note);
   }
+  if (category === "purchase_invoice") {
+    const inv = getPurchaseInvoiceById(documentId);
+    if (inv) maybePostPurchaseInvoice(inv);
+  }
 }
 
 function saveInvoiceWorkflow(id: number, workflow: AccountsDocumentWorkflow): void {
@@ -97,6 +101,7 @@ function savePurchaseInvoiceWorkflow(id: number, workflow: AccountsDocumentWorkf
     updatedAt: new Date().toISOString(),
   };
   savePurchaseInvoices(all);
+  if (workflow.status === "posted") afterPosted("purchase_invoice", id);
 }
 
 function saveCreditNoteWorkflow(id: number, workflow: AccountsDocumentWorkflow): void {

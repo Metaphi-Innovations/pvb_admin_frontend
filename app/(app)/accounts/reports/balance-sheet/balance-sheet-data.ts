@@ -31,6 +31,7 @@ export interface BalanceSheetLineItem {
   section?: "liabilities" | "assets";
   parentId?: string;
   ledgerId?: number;
+  ledgerCode?: string;
   sortOrder?: number;
   hierarchyRole?: BalanceSheetHierarchyRole;
   isPlBalance?: boolean;
@@ -71,6 +72,7 @@ export interface BalanceSheetFilterParams {
 
 export interface BalanceSheetDrillDownFilters {
   asOnDate: string;
+  dateFrom?: string;
   branch?: string;
   warehouse?: string;
   partyId?: string;
@@ -82,6 +84,7 @@ interface InternalNode {
   section: "liabilities" | "assets";
   parentId?: string;
   ledgerId?: number;
+  ledgerCode?: string;
   amount: number;
   sortOrder: number;
   isPostableLeaf: boolean;
@@ -172,6 +175,7 @@ function buildInternalNodes(
         isPostableLeaf: true,
         hierarchyRole: resolveHierarchyRole(segment, records, true),
         ledgerId: row.ledgerId,
+        ledgerCode: row.ledgerCode,
         partyId: row.partyId,
         partyKind: row.partyKind,
       });
@@ -199,6 +203,26 @@ function buildInternalNodes(
     }
     for (const [id, node] of [...nodeMap.entries()]) {
       if (node.parentId && !node.isPlBalance) nodeMap.delete(id);
+    }
+  }
+
+  if (!filters.showZeroBalance) {
+    for (const [id, node] of [...nodeMap.entries()]) {
+      if (node.isPostableLeaf && node.amount === 0 && !node.isPlBalance) {
+        nodeMap.delete(id);
+      }
+    }
+    let pruned = true;
+    while (pruned) {
+      pruned = false;
+      for (const [id, node] of [...nodeMap.entries()]) {
+        if (node.isPostableLeaf) continue;
+        const hasChild = [...nodeMap.values()].some((n) => n.parentId === id);
+        if (!hasChild && node.amount === 0 && !node.isPlBalance) {
+          nodeMap.delete(id);
+          pruned = true;
+        }
+      }
     }
   }
 
@@ -235,11 +259,14 @@ function buildInternalNodes(
   return nodeMap;
 }
 
-function internalNodesToLineItems(nodeMap: Map<string, InternalNode>): BalanceSheetLineItem[] {
+function internalNodesToLineItems(
+  nodeMap: Map<string, InternalNode>,
+  showZeroBalance: boolean,
+): BalanceSheetLineItem[] {
   const items: BalanceSheetLineItem[] = [];
 
   for (const node of nodeMap.values()) {
-    if (node.amount === 0) continue;
+    if (!showZeroBalance && node.amount === 0) continue;
     items.push({
       id: node.id,
       particular: node.particular,
@@ -248,6 +275,7 @@ function internalNodesToLineItems(nodeMap: Map<string, InternalNode>): BalanceSh
       section: node.section,
       parentId: node.parentId,
       ledgerId: node.ledgerId,
+      ledgerCode: node.ledgerCode,
       sortOrder: node.sortOrder,
       hierarchyRole: node.hierarchyRole,
       isPlBalance: node.isPlBalance,
@@ -336,7 +364,7 @@ function assembleStatement(
 export function buildBalanceSheetStatement(filters: BalanceSheetFilters): BalanceSheetStatement {
   const computed = computeBalanceSheetLedgerRows(filters);
   const nodeMap = buildInternalNodes(filters, computed.netProfit, computed.ledgers);
-  const lineItems = internalNodesToLineItems(nodeMap);
+  const lineItems = internalNodesToLineItems(nodeMap, filters.showZeroBalance);
   return assembleStatement(lineItems, computed.netProfit, computed.unpostedVoucherCount);
 }
 
@@ -386,20 +414,20 @@ export function splitBalanceSheetHorizontal(statement: BalanceSheetStatement): {
 } {
   return {
     liabilities: {
-      sectionTitle: "Liabilities & Equity",
-      amountColumnLabel: "Credit (₹)",
+      sectionTitle: "Liabilities",
+      amountColumnLabel: "Amount (₹)",
       balanceSide: "Credit",
       tree: buildBalanceSheetSideTree(statement.lines, "liabilities"),
       grandTotal: statement.totalLiabilities,
-      grandTotalLabel: "Total",
+      grandTotalLabel: "Total Liabilities",
     },
     assets: {
       sectionTitle: "Assets",
-      amountColumnLabel: "Debit (₹)",
+      amountColumnLabel: "Amount (₹)",
       balanceSide: "Debit",
       tree: buildBalanceSheetSideTree(statement.lines, "assets"),
       grandTotal: statement.totalAssets,
-      grandTotalLabel: "Total",
+      grandTotalLabel: "Total Assets",
     },
   };
 }
@@ -424,13 +452,21 @@ export function buildBalanceSheetLedgerHref(
 ): string {
   const params = new URLSearchParams();
   params.set("ledger", String(ledgerId));
+  if (filters.dateFrom) params.set("from", filters.dateFrom);
   if (filters.asOnDate) params.set("to", filters.asOnDate);
   if (filters.branch && filters.branch !== "all") params.set("branch", filters.branch);
   if (filters.warehouse && filters.warehouse !== "all") {
     params.set("warehouse", filters.warehouse);
   }
   if (filters.partyId && filters.partyId !== "all") params.set("party", filters.partyId);
+  params.set("source", "balance-sheet");
   return `${GENERAL_LEDGER_HREF}?${params.toString()}`;
+}
+
+function lineMatchesSearch(line: BalanceSheetLineItem, q: string): boolean {
+  if (line.particular.toLowerCase().includes(q)) return true;
+  if (line.ledgerCode?.toLowerCase().includes(q)) return true;
+  return false;
 }
 
 export function buildBalanceSheetPartyHref(
@@ -462,8 +498,7 @@ export function filterBalanceSheetStatement(
     }
     if (line.kind === "total") continue;
 
-    const matches = line.particular.toLowerCase().includes(q);
-    if (!matches) continue;
+    if (!lineMatchesSearch(line, q)) continue;
 
     if (currentSection === "liabilities") liabilityMatches.push(line);
     else if (currentSection === "assets") assetMatches.push(line);
@@ -472,6 +507,7 @@ export function filterBalanceSheetStatement(
   const includeParents = (
     matches: BalanceSheetLineItem[],
     section: "liabilities" | "assets",
+    expandGroupMatches: boolean,
   ): BalanceSheetLineItem[] => {
     const allSectionLines = statement.lines.filter(
       (l) =>
@@ -479,7 +515,21 @@ export function filterBalanceSheetStatement(
         (l.kind === "line" || l.kind === "pl"),
     );
     const byId = new Map(allSectionLines.map((l) => [l.id, l]));
+    const childMap = new Map<string, BalanceSheetLineItem[]>();
+    for (const line of allSectionLines) {
+      if (line.parentId && byId.has(line.parentId)) {
+        if (!childMap.has(line.parentId)) childMap.set(line.parentId, []);
+        childMap.get(line.parentId)!.push(line);
+      }
+    }
     const result = new Map<string, BalanceSheetLineItem>();
+
+    const addWithDescendants = (line: BalanceSheetLineItem) => {
+      result.set(line.id, line);
+      for (const child of childMap.get(line.id) ?? []) {
+        addWithDescendants(child);
+      }
+    };
 
     for (const line of matches) {
       result.set(line.id, line);
@@ -489,14 +539,25 @@ export function filterBalanceSheetStatement(
         result.set(parent.id, parent);
         parentId = parent.parentId;
       }
+      if (expandGroupMatches && isBalanceSheetGroupHeading(line)) {
+        addWithDescendants(line);
+      }
     }
 
     const order = allSectionLines.map((l) => l.id);
     return order.filter((id) => result.has(id)).map((id) => result.get(id)!);
   };
 
-  const liabilityWithParents = includeParents(liabilityMatches, "liabilities");
-  const assetWithParents = includeParents(assetMatches, "assets");
+  const liabilityWithParents = includeParents(
+    liabilityMatches,
+    "liabilities",
+    liabilityMatches.some((l) => isBalanceSheetGroupHeading(l)),
+  );
+  const assetWithParents = includeParents(
+    assetMatches,
+    "assets",
+    assetMatches.some((l) => isBalanceSheetGroupHeading(l)),
+  );
 
   function sumFilteredSideAmounts(lines: BalanceSheetLineItem[]): number {
     const parentIdsInSet = new Set(
@@ -579,15 +640,21 @@ export interface BalanceSheetHorizontalExportRow {
   assetBold?: boolean;
 }
 
+export interface BalanceSheetZippedRow {
+  liability: { item: BalanceSheetLineItem; depth: number; hasChildren: boolean } | null;
+  asset: { item: BalanceSheetLineItem; depth: number; hasChildren: boolean } | null;
+}
+
 export function flattenBalanceSheetSideTree(
   tree: BalanceSheetTreeNode[],
   expandedIds: Set<string>,
-): Array<{ item: BalanceSheetLineItem; depth: number }> {
-  const rows: Array<{ item: BalanceSheetLineItem; depth: number }> = [];
+): Array<{ item: BalanceSheetLineItem; depth: number; hasChildren: boolean }> {
+  const rows: Array<{ item: BalanceSheetLineItem; depth: number; hasChildren: boolean }> = [];
   const walk = (nodes: BalanceSheetTreeNode[]) => {
     for (const node of nodes) {
-      rows.push({ item: node.item, depth: node.depth });
-      if (node.children.length > 0 && expandedIds.has(node.item.id)) {
+      const hasChildren = node.children.length > 0;
+      rows.push({ item: node.item, depth: node.depth, hasChildren });
+      if (hasChildren && expandedIds.has(node.item.id)) {
         walk(node.children);
       }
     }
@@ -660,6 +727,20 @@ export function flattenBalanceSheetHorizontalForExport(
   });
 
   return rows;
+}
+
+export function zipBalanceSheetHorizontalRows(
+  statement: BalanceSheetStatement,
+  expandedIds: Set<string>,
+): BalanceSheetZippedRow[] {
+  const { liabilities, assets } = splitBalanceSheetHorizontal(statement);
+  const leftRows = flattenBalanceSheetSideTree(liabilities.tree, expandedIds);
+  const rightRows = flattenBalanceSheetSideTree(assets.tree, expandedIds);
+  const maxLen = Math.max(leftRows.length, rightRows.length);
+  return Array.from({ length: maxLen }, (_, i) => ({
+    liability: leftRows[i] ?? null,
+    asset: rightRows[i] ?? null,
+  }));
 }
 
 export function flattenBalanceSheetForExport(

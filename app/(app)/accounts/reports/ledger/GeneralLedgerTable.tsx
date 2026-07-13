@@ -1,101 +1,111 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyCell } from "@/components/accounts/MoneyAmount";
-import { balanceSideLabel, formatMoney } from "@/lib/accounts/money-format";
-import { resolveDrCrColumnSide } from "@/lib/accounts/running-balance";
-import {
-  AccountsColumnHeader,
-  SortTh,
-  useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
+import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
+import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
+  AccountsTableFoot,
   AccountsTableHead,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
-import type { GeneralLedgerDisplayRow } from "./general-ledger-data";
-
-function emptyCell(value: string) {
-  return value && value !== "—" ? value : "—";
-}
+import type { GeneralLedgerDisplayRow, GeneralLedgerSummary } from "./general-ledger-data";
 
 export function GeneralLedgerTable({
   openingRow,
   transactionRows,
   closingRow,
+  summary,
+  onVoucherClick,
 }: {
   openingRow: GeneralLedgerDisplayRow;
   transactionRows: GeneralLedgerDisplayRow[];
   closingRow?: GeneralLedgerDisplayRow;
+  summary: GeneralLedgerSummary;
+  onVoucherClick?: (row: GeneralLedgerDisplayRow) => void;
 }) {
-  const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(transactionRows);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
   const paginatedTransactions = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return columnFilteredRows.slice(start, start + pageSize);
-  }, [columnFilteredRows, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir]);
+    return transactionRows.slice(start, start + pageSize);
+  }, [transactionRows, page, pageSize]);
 
   return (
     <>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
-        <AccountsTable minWidth={960} className="text-xs">
+        <AccountsTable minWidth={960} className="text-xs financial-report">
           <AccountsTableHead>
             <AccountsTableHeadRow>
-              <SortTh label="Date" colKey="date" filterType="date" />
-              <SortTh label="Voucher Type" colKey="type" />
-              <SortTh label="Voucher No." colKey="voucher" />
-              <SortTh label="Reference No." colKey="reference" />
-              <SortTh label="Particulars" colKey="particulars" />
-              <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
-              <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
-              <AccountsColumnHeader
-                label="Running Balance"
-                colKey="balance"
-                sortable={false}
-                filterable={false}
-                align="right"
-              />
-              <AccountsColumnHeader label="Dr/Cr" colKey="side" sortable={false} align="center" />
+              <FinancialReportHeadCell>Date</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Particulars</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Transaction Type</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Voucher No.</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="right">Running Balance</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="center" className="w-10">
+                <span className="sr-only">View</span>
+              </FinancialReportHeadCell>
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
             <GeneralLedgerTableRow row={openingRow} />
-            {transactionRows.length > 0 && columnFilteredRows.length === 0 ? (
-              <AccountsTableRow>
-                <AccountsTableCell colSpan={9} className="accounts-table-empty">
-                  No records match the column filters.
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ) : (
-              paginatedTransactions.map((row, i) => (
-                <GeneralLedgerTableRow key={`${row.kind}-${row.date}-${i}`} row={row} />
-              ))
-            )}
+            {paginatedTransactions.map((row, i) => (
+              <GeneralLedgerTableRow
+                key={`${row.kind}-${row.date}-${row.voucherNo}-${i}`}
+                row={row}
+                onVoucherClick={onVoucherClick}
+              />
+            ))}
             {closingRow ? <GeneralLedgerTableRow row={closingRow} /> : null}
           </AccountsTableBody>
+          <AccountsTableFoot>
+            <AccountsTableRow className="bg-muted/20 font-semibold border-t border-border/80">
+              <AccountsTableCell colSpan={4} className="text-xs py-2 font-bold">
+                Total
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className="py-2 font-bold">
+                {formatMoney(summary.totalDebit)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className="py-2 font-bold">
+                {formatMoney(summary.totalCredit)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" className="tabular-nums whitespace-nowrap py-2 text-xs font-bold">
+                {formatBalanceAmount(summary.closingBalance, summary.closingBalanceType)}
+              </AccountsTableCell>
+              <AccountsTableCell />
+            </AccountsTableRow>
+            <AccountsTableRow className="bg-brand-50/30 font-semibold border-t-2 border-foreground/20">
+              <AccountsTableCell colSpan={4} className="text-xs py-2 font-bold">
+                Grand Total
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className="py-2 font-bold">
+                {formatMoney(summary.grandTotalDebit)}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className="py-2 font-bold">
+                {formatMoney(summary.grandTotalCredit)}
+              </AccountsTableCell>
+              <AccountsTableCell colSpan={2} />
+            </AccountsTableRow>
+          </AccountsTableFoot>
         </AccountsTable>
       </AccountsTableScroll>
-      {columnFilteredRows.length > 0 && (
+      {transactionRows.length > 0 && (
         <div className="flex-shrink-0 border-t border-border">
           <AccountsTablePagination
             page={page}
             pageSize={pageSize}
-            totalRecords={columnFilteredRows.length}
+            totalRecords={transactionRows.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             recordLabel="transactions"
@@ -106,45 +116,65 @@ export function GeneralLedgerTable({
   );
 }
 
-function GeneralLedgerTableRow({ row }: { row: GeneralLedgerDisplayRow }) {
+function GeneralLedgerTableRow({
+  row,
+  onVoucherClick,
+}: {
+  row: GeneralLedgerDisplayRow;
+  onVoucherClick?: (row: GeneralLedgerDisplayRow) => void;
+}) {
   const isOpening = row.kind === "opening";
-  const isBalanceRow = row.kind === "opening" || row.kind === "closing";
-  const drCrSide = resolveDrCrColumnSide({
-    debit: row.debit,
-    credit: row.credit,
-    runningBalanceType: row.runningBalanceType,
-    isBalanceRow,
-  });
+  const isClosing = row.kind === "closing";
+  const isBalanceRow = isOpening || isClosing;
+  const canDrill = row.kind === "transaction" && row.voucherId && onVoucherClick;
 
   return (
-    <AccountsTableRow className={cn(isOpening && "bg-muted/20 font-medium")}>
+    <AccountsTableRow
+      className={cn(
+        isOpening && "bg-muted/20 font-medium",
+        isClosing && "bg-brand-50/40 font-medium",
+        canDrill && "cursor-pointer hover:bg-muted/20 group",
+      )}
+      onClick={() => {
+        if (canDrill) onVoucherClick(row);
+      }}
+    >
       <AccountsTableCell className="whitespace-nowrap">{row.date}</AccountsTableCell>
+      <AccountsTableCell
+        className={cn("max-w-[280px] truncate", isBalanceRow && "font-semibold")}
+        title={row.particulars}
+      >
+        {row.particulars}
+      </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
-        {isOpening ? "Opening" : row.voucherType}
+        {isOpening ? "Opening" : isClosing ? "—" : row.transactionType || row.voucherType}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap">
-        {isOpening || !row.voucherNo ? (
+        {isBalanceRow || !row.voucherNo ? (
           <span className="text-muted-foreground">—</span>
         ) : (
           <span className="font-mono text-xs font-semibold text-brand-700">{row.voucherNo}</span>
         )}
       </AccountsTableCell>
-      <AccountsTableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-        {emptyCell(row.referenceNo)}
-      </AccountsTableCell>
-      <AccountsTableCell
-        className={cn("max-w-[280px] truncate", isOpening && "font-semibold text-foreground")}
-        title={row.particularsNarration}
-      >
-        {row.particularsNarration}
-      </AccountsTableCell>
       <MoneyCell amount={row.debit} dashIfZero className="accounts-table-td" />
       <MoneyCell amount={row.credit} dashIfZero className="accounts-table-td" />
       <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-        {formatMoney(row.runningBalance)}
+        {formatBalanceAmount(row.runningBalance, row.runningBalanceType)}
       </AccountsTableCell>
-      <AccountsTableCell align="center" className="whitespace-nowrap text-xs font-semibold">
-        {balanceSideLabel(drCrSide)}
+      <AccountsTableCell align="center" className="w-10">
+        {canDrill ? (
+          <button
+            type="button"
+            className="p-1 rounded-md text-muted-foreground hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onVoucherClick(row);
+            }}
+            aria-label="View voucher details"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+        ) : null}
       </AccountsTableCell>
     </AccountsTableRow>
   );

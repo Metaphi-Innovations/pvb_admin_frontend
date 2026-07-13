@@ -472,7 +472,7 @@ export function getCoaLedgers(): ChartOfAccount[] {
   return loadChartOfAccounts().filter((r) => r.nodeLevel === "ledger");
 }
 
-/** Posting ledgers: active ledgers with no child ledgers (grouping ledgers are excluded) */
+/** Posting ledgers: active leaf ledgers only (no groups or parent grouping ledgers). */
 export function getPostableCoaAccounts(records?: ChartOfAccount[]): ChartOfAccount[] {
   const list = records ?? loadChartOfAccounts();
   const groupingLedgerIds = new Set<number>();
@@ -482,7 +482,10 @@ export function getPostableCoaAccounts(records?: ChartOfAccount[]): ChartOfAccou
     }
   }
   return list.filter(
-    (r) => r.nodeLevel === "ledger" && r.status === "active" && !groupingLedgerIds.has(r.id),
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.status === "active" &&
+      !groupingLedgerIds.has(r.id),
   );
 }
 

@@ -1,16 +1,14 @@
 import { formatMoney, formatMoneyNumber } from "@/lib/accounts/money-format";
 import type { RegisterReportTotals } from "./register-types";
 import {
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
+  buildGrandTotalRowHtml,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
   escapeHtml,
-  openReportPrintWindow,
   type ReportColumnHeader,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
 
 export interface RegisterExportMeta {
   reportName: string;
@@ -89,15 +87,14 @@ function buildRegisterBody(
     )
     .join("");
 
-  const footerHtml = `<tr class="total">
-    <td colspan="5"><strong>Grand Total</strong></td>
-    <td class="num"><strong>${formatMoney(totals.taxableValue)}</strong></td>
-    <td class="num"><strong>${formatMoney(totals.gstAmount)}</strong></td>
-    <td class="num"><strong>${formatMoney(totals.grandTotal)}</strong></td>
-    <td></td>
-  </tr>`;
+  const footerHtml = buildGrandTotalRowHtml({
+    label: "Grand Total",
+    labelColSpan: 5,
+    amounts: [totals.taxableValue, totals.gstAmount, totals.grandTotal],
+    trailingCellsHtml: "<td></td>",
+  });
 
-  const tableHtml = buildStandardReportTableHtml({
+  const tableHtml = buildTabularReportBodyHtml({
     columns: buildColumns(partyHeader),
     bodyHtml,
     footerHtml,
@@ -119,13 +116,13 @@ export async function exportRegisterToExcel(
   totals: RegisterReportTotals,
   filePrefix: string,
 ): Promise<void> {
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: meta.reportName,
+    filename: filePrefix,
     header: buildHeaderOptions(meta),
     bodyHtml: buildRegisterBody(rows, meta, totals),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `${filePrefix}_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportRegisterToPdf(
@@ -133,11 +130,11 @@ export function exportRegisterToPdf(
   meta: RegisterExportMeta,
   totals: RegisterReportTotals,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: meta.reportName,
+    filename: meta.reportName.replace(/\s+/g, "_"),
     header: buildHeaderOptions(meta),
     bodyHtml: buildRegisterBody(rows, meta, totals),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }

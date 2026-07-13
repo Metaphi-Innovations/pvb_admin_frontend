@@ -1,7 +1,5 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const GeneralLedgerPageClient = lazyAccountsPage(() => import("./GeneralLedgerPageClient"));
-
-export default function GeneralLedgerPage() {
-  return <GeneralLedgerPageClient />;
+export default function LegacyGeneralLedgerPage() {
+  redirect("/accounts/reports/general-ledger");
 }

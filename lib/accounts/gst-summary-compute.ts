@@ -1063,24 +1063,24 @@ export function buildGstr1SectionHref(
     const params = new URLSearchParams(qs);
     params.set("subsection", sectionId);
     const query = params.toString();
-    return `/accounts/reports/gst/gstr-1/credit-debit-notes${query ? `?${query}` : ""}`;
+    return `/accounts/reports/gst-summary/gstr1/credit-debit-notes${query ? `?${query}` : ""}`;
   }
   if (sectionId === "nil-rated-exempt") {
-    return `/accounts/reports/gst/gstr-1/nil-rated-exempt${qs ? `?${qs}` : ""}`;
+    return `/accounts/reports/gst-summary/gstr1/nil-rated-exempt${qs ? `?${qs}` : ""}`;
   }
   if (sectionId === "b2b") {
-    return `/accounts/reports/gst/gstr-1/b2b${qs ? `?${qs}` : ""}`;
+    return `/accounts/reports/gst-summary/gstr1/b2b${qs ? `?${qs}` : ""}`;
   }
   if (sectionId === "b2c") {
-    return `/accounts/reports/gst/gstr-1/b2c${qs ? `?${qs}` : ""}`;
+    return `/accounts/reports/gst-summary/gstr1/b2c${qs ? `?${qs}` : ""}`;
   }
   if (sectionId === "hsn-summary") {
-    return `/accounts/reports/gst/gstr-1/hsn-summary${qs ? `?${qs}` : ""}`;
+    return `/accounts/reports/gst-summary/gstr1/hsn-summary${qs ? `?${qs}` : ""}`;
   }
   if (sectionId === "documents-summary") {
-    return `/accounts/reports/gst/gstr-1/documents-summary${qs ? `?${qs}` : ""}`;
+    return `/accounts/reports/gst-summary/gstr1/documents-summary${qs ? `?${qs}` : ""}`;
   }
-  return `/accounts/reports/gst/gstr-1/${sectionId}${qs ? `?${qs}` : ""}`;
+  return `/accounts/reports/gst-summary/gstr1/${sectionId}${qs ? `?${qs}` : ""}`;
 }
 
 export {

@@ -167,10 +167,29 @@ export function hierarchyBreadcrumb(records: ChartOfAccount[], nodeId: number): 
   return resolveHierarchyPath(records, nodeId).path.map((n) => n.accountName).join(" › ");
 }
 
-/** Active COA accounts eligible for voucher posting */
+/** Remove duplicate posting ledgers — first occurrence wins by ID, then by account code. */
+export function dedupeLedgersByIdAndCode(ledgers: ChartOfAccount[]): ChartOfAccount[] {
+  const seenIds = new Set<number>();
+  const seenCodes = new Set<string>();
+  const out: ChartOfAccount[] = [];
+  for (const ledger of ledgers) {
+    if (seenIds.has(ledger.id)) continue;
+    const code = ledger.accountCode?.trim();
+    if (code) {
+      const normalized = code.toUpperCase();
+      if (seenCodes.has(normalized)) continue;
+      seenCodes.add(normalized);
+    }
+    seenIds.add(ledger.id);
+    out.push(ledger);
+  }
+  return out;
+}
+
+/** Active COA accounts eligible for voucher posting (deduped, no grouping nodes). */
 export function getActivePostingLedgers(records?: ChartOfAccount[]): ChartOfAccount[] {
   const list = records ?? loadChartOfAccounts();
-  return getPostableCoaAccounts(list);
+  return dedupeLedgersByIdAndCode(getPostableCoaAccounts(list));
 }
 
 /**

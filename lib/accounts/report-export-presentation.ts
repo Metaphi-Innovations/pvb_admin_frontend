@@ -216,12 +216,38 @@ export function buildTAccountTableHtml(options: {
 </table>`;
 }
 
+const BOLD_EXPORT_ROW_TYPES: ReadonlySet<HierarchyRowType | "title"> = new Set([
+  "title",
+  "primary",
+  "group",
+  "subgroup",
+  "header",
+  "section",
+  "subtotal",
+  "total",
+  "net",
+  "summary",
+]);
+
+function resolveExportSideBold(
+  explicit: boolean | undefined,
+  rowType: HierarchyRowType | "title",
+): boolean {
+  if (explicit != null) return explicit;
+  if (rowType === "line") return false;
+  return BOLD_EXPORT_ROW_TYPES.has(rowType);
+}
+
+function wrapExportBold(content: string, bold: boolean): string {
+  return bold ? `<strong>${content}</strong>` : content;
+}
+
 export function buildTAccountRowHtml(row: TAccountExportRow): string {
   const rowClass = hierarchyRowClass(row.rowType);
   const leftLabel = escapeHtml(indentParticular(row.leftParticular, row.leftIndent));
   const rightLabel = escapeHtml(indentParticular(row.rightParticular, row.rightIndent));
-  const leftBold = row.leftBold ? " bold" : "";
-  const rightBold = row.rightBold ? " bold" : "";
+  const leftBold = resolveExportSideBold(row.leftBold, row.rowType);
+  const rightBold = resolveExportSideBold(row.rightBold, row.rowType);
   const leftAmount = formatExportAmount(row.leftAmount);
   const rightAmount = formatExportAmount(row.rightAmount);
 
@@ -234,11 +260,11 @@ export function buildTAccountRowHtml(row: TAccountExportRow): string {
   }
 
   return `<tr class="${rowClass}">
-    <td class="label${leftBold}">${leftLabel}</td>
-    <td class="num${leftBold}">${leftAmount}</td>
+    <td class="label${leftBold ? " bold" : ""}">${wrapExportBold(leftLabel, leftBold)}</td>
+    <td class="num${leftBold ? " bold" : ""}">${wrapExportBold(leftAmount, leftBold)}</td>
     <td class="divider"></td>
-    <td class="label${rightBold}">${rightLabel}</td>
-    <td class="num${rightBold}">${rightAmount}</td>
+    <td class="label${rightBold ? " bold" : ""}">${wrapExportBold(rightLabel, rightBold)}</td>
+    <td class="num${rightBold ? " bold" : ""}">${wrapExportBold(rightAmount, rightBold)}</td>
   </tr>`;
 }
 
@@ -350,9 +376,10 @@ export function buildReportPrintCss(options?: { landscape?: boolean; compact?: b
       font-size: 9px;
       color: #B85508;
     }
-    td.indent-1 { padding-left: 16px; }
-    td.indent-2 { padding-left: 28px; }
-    td.indent-3 { padding-left: 40px; }
+    td.indent-0, td.label.indent-0 { padding-left: 8px; }
+    td.indent-1, td.label.indent-1 { padding-left: 20px; }
+    td.indent-2, td.label.indent-2 { padding-left: 32px; }
+    td.indent-3, td.label.indent-3 { padding-left: 44px; }
     tr.title td {
       font-weight: 700;
       font-size: 11px;
@@ -485,8 +512,14 @@ export function buildReportExcelCss(): string {
     .report-generated { font-size: 8pt; color: #6b7280; margin-top: 8px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; }
     th, td { border: 1px solid #ccc; padding: 4px 6px; vertical-align: top; }
-    th { background: #FFF3E8; font-weight: bold; color: #1A3A96; }
-    .num { mso-number-format: "\\@"; text-align: right; white-space: nowrap; }
+    th { background: #FFF3E8; font-weight: bold; color: #1A3A96; text-align: left; }
+    th.num, th.right { text-align: right; }
+    th.center { text-align: center; }
+    .num, td.num, td.right { mso-number-format: "\\@"; text-align: right; white-space: nowrap; }
+    td.indent-0, td.label.indent-0 { padding-left: 8px; }
+    td.indent-1, td.label.indent-1 { padding-left: 20px; }
+    td.indent-2, td.label.indent-2 { padding-left: 32px; }
+    td.indent-3, td.label.indent-3 { padding-left: 44px; }
     tr.title td { font-weight: bold; text-align: center; background: #f8fafc; color: #1A3A96; }
     tr.primary td, tr.header td, tr.section td { font-weight: bold; background: #FFF3E8; color: #1A3A96; }
     tr.group td { font-weight: bold; background: #fafafa; }

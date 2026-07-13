@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
@@ -9,6 +9,16 @@ import {
   AccountsTableListing,
   AccountsListingToolbar,
 } from "@/components/accounts/AccountsTableListing";
+import {
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
+  escapeHtml,
+  type ReportColumnHeader,
+  type ReportHeaderOptions,
+} from "@/lib/accounts/report-export-engine";
+import { formatMoney } from "@/lib/accounts/money-format";
+import { useFY } from "@/lib/fy-store";
 import type { LucideIcon } from "lucide-react";
 
 export interface ReportColumn {
@@ -40,6 +50,15 @@ export interface AccountsReportShellProps {
   getRowKey?: (row: Record<string, string | number>, index: number) => string | number;
   clickableColumnKeys?: string[];
   rowActionFooter?: React.ReactNode;
+  /** Optional export period metadata */
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+function formatCellValue(value: string | number | undefined, money?: boolean): string {
+  if (value == null || value === "") return "—";
+  if (money && typeof value === "number") return formatMoney(value);
+  return String(value);
 }
 
 export function AccountsReportShell({
@@ -55,20 +74,73 @@ export function AccountsReportShell({
   getRowKey,
   clickableColumnKeys,
   rowActionFooter,
+  dateFrom,
+  dateTo,
 }: AccountsReportShellProps) {
-  const exportCsv = () => {
-    const header = columns.map((c) => c.label).join(",") + "\n";
-    const body = rows
-      .map((row) => columns.map((c) => `"${String(row[c.key] ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([header + body], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/\s+/g, "-")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const { selectedFY } = useFY();
+  const [exporting, setExporting] = useState(false);
+
+  const buildExportBody = useCallback(() => {
+    const exportColumns: ReportColumnHeader[] = columns.map((c) => ({
+      label: c.label,
+      align: c.align,
+      className: c.align === "right" ? "num" : c.mono ? "mono" : undefined,
+    }));
+
+    const bodyHtml = rows
+      .map((row) => {
+        const cells = columns
+          .map((c) => {
+            const raw = row[c.key];
+            const formatted = formatCellValue(raw, c.money);
+            const alignClass =
+              c.align === "right" ? "num" : c.align === "center" ? "center" : "";
+            const monoClass = c.mono ? "mono" : "";
+            const cls = [alignClass, monoClass].filter(Boolean).join(" ");
+            return `<td${cls ? ` class="${cls}"` : ""}>${escapeHtml(formatted)}</td>`;
+          })
+          .join("");
+        return `<tr>${cells}</tr>`;
+      })
+      .join("");
+
+    return buildTabularReportBodyHtml({ columns: exportColumns, bodyHtml });
+  }, [columns, rows]);
+
+  const buildHeaderOptions = useCallback((): ReportHeaderOptions => {
+    return {
+      reportTitle: title,
+      financialYear: selectedFY.label,
+      ...(dateFrom && dateTo ? { dateFrom, dateTo } : {}),
+    };
+  }, [title, selectedFY.label, dateFrom, dateTo]);
+
+  const handleExportExcel = useCallback(async () => {
+    if (exporting || rows.length === 0) return;
+    setExporting(true);
+    try {
+      await exportAccountsReportToExcel({
+        title,
+        filename: title.replace(/\s+/g, "_"),
+        header: buildHeaderOptions(),
+        bodyHtml: buildExportBody(),
+        landscape: columns.length > 5,
+      });
+    } finally {
+      setExporting(false);
+    }
+  }, [buildExportBody, buildHeaderOptions, columns.length, exporting, rows.length, title]);
+
+  const handleExportPdf = useCallback(() => {
+    if (rows.length === 0) return;
+    exportAccountsReportToPdf({
+      title,
+      filename: title.replace(/\s+/g, "_"),
+      header: buildHeaderOptions(),
+      bodyHtml: buildExportBody(),
+      landscape: columns.length > 5,
+    });
+  }, [buildExportBody, buildHeaderOptions, columns.length, rows.length, title]);
 
   return (
     <AccountsPageShell
@@ -82,9 +154,9 @@ export function AccountsReportShell({
       <AccountsTableListing
         toolbar={
           <AccountsListingToolbar
-            onExcel={exportCsv}
-            onPdf={exportCsv}
-            exportDisabled={rows.length === 0}
+            onExcel={handleExportExcel}
+            onPdf={handleExportPdf}
+            exportDisabled={rows.length === 0 || exporting}
           >
             {filters}
           </AccountsListingToolbar>

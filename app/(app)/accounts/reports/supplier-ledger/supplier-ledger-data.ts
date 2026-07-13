@@ -17,6 +17,7 @@ import {
   ledgerOpeningBalance,
   resolveVendorPayableLedger,
 } from "@/lib/accounts/party-ledger-statement";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 
 export type SupplierLedgerVoucherTypeCode =
   | "opening"
@@ -529,6 +530,23 @@ export function getSupplierLedgerSuppliers(): SupplierLedgerSupplierOption[] {
 
 export function getSupplierLedgerSupplierById(id: string): SupplierLedgerSupplierOption | null {
   return getSupplierLedgerSuppliers().find((s) => s.id === id) ?? null;
+}
+
+export function buildSupplierGeneralLedgerHref(
+  supplierId: string,
+  filters: { dateFrom: string; dateTo: string },
+): string | null {
+  const vendor = loadVendors().find((v) => String(v.id) === supplierId && v.status === "active");
+  if (!vendor) return null;
+  const ledger = resolveVendorPayableLedger(vendor);
+  if (!ledger) return null;
+  return buildGeneralLedgerHref({
+    ledgerId: ledger.id,
+    fromDate: filters.dateFrom,
+    toDate: filters.dateTo,
+    source: "supplier-ledger",
+    partyId: supplierId,
+  });
 }
 
 function matchesSearch(row: SupplierLedgerRawTransaction, query: string): boolean {

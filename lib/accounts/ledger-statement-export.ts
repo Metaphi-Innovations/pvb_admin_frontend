@@ -1,17 +1,14 @@
 import type { CoaTransactionRow } from "@/lib/accounts/coa-accounting-view";
 import { formatMoneyWithSide } from "@/lib/accounts/money-format";
 import {
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
-  escapeHtml,
-  openReportPrintWindow,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
   formatExportAmount,
   type ReportColumnHeader,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
+import { escapeHtml } from "@/lib/accounts/report-export-presentation";
 
 export interface LedgerStatementExportMeta {
   ledgerName: string;
@@ -79,12 +76,12 @@ function buildLedgerStatementBodyHtml(
 
   const footerHtml = `<tr class="total">
     <td colspan="5"></td>
-    <td class="num"><strong>Total Debit</strong><br />${formatExportAmount(meta.totalDebit)}</td>
-    <td class="num"><strong>Total Credit</strong><br />${formatExportAmount(meta.totalCredit)}</td>
-    <td class="num"><strong>Closing Balance</strong><br />${escapeHtml(formatMoneyWithSide(meta.closingBalance, meta.closingBalanceType))}</td>
+    <td class="num bold"><strong>Total Debit</strong><br />${formatExportAmount(meta.totalDebit)}</td>
+    <td class="num bold"><strong>Total Credit</strong><br />${formatExportAmount(meta.totalCredit)}</td>
+    <td class="num bold"><strong>Closing Balance</strong><br />${escapeHtml(formatMoneyWithSide(meta.closingBalance, meta.closingBalanceType))}</td>
   </tr>`;
 
-  return buildStandardReportTableHtml({ columns: COLUMNS, bodyHtml, footerHtml });
+  return buildTabularReportBodyHtml({ columns: COLUMNS, bodyHtml, footerHtml });
 }
 
 export async function exportLedgerStatementToExcel(
@@ -92,24 +89,24 @@ export async function exportLedgerStatementToExcel(
   meta: LedgerStatementExportMeta,
 ): Promise<void> {
   const safeName = meta.ledgerCode.replace(/[^\w-]+/g, "_");
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: `Ledger Statement — ${meta.ledgerName}`,
+    filename: `Ledger_${safeName}`,
     header: buildHeaderOptions(meta),
     bodyHtml: buildLedgerStatementBodyHtml(rows, meta),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Ledger_${safeName}_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportLedgerStatementToPdf(
   rows: CoaTransactionRow[],
   meta: LedgerStatementExportMeta,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: `Ledger Statement — ${meta.ledgerName}`,
+    filename: `Ledger_${meta.ledgerCode}`,
     header: buildHeaderOptions(meta),
     bodyHtml: buildLedgerStatementBodyHtml(rows, meta),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }
