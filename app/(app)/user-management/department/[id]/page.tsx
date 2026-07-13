@@ -101,7 +101,6 @@ export default function DepartmentViewPage() {
             title: "Last updated",
             subtitle: dept.updatedBy,
             date: dept.updatedDate,
-            date: dept.updatedDate,
           },
         ],
       }}

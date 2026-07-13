@@ -32,6 +32,7 @@ export function mapBackendRecordToFrontend(item: any): QcRecord {
     status: "completed",
     sourceType: item.sourceType === "stock_transfer" ? "stock_transfer" : "purchase",
     items: item.items || [],
+    isEditable: item.isEditable ?? false,
   };
 }
 
@@ -96,6 +97,7 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
     sourceType: qc.grn?.source_type === "STOCK_TRANSFER" ? "stock_transfer" : "purchase",
     items: qcItems,
     qcRemarks: qc.remarks || "",
+    isEditable: qc.isEditable ?? false,
   };
 }
 
@@ -221,6 +223,11 @@ export const QcService = {
 
   async create(payload: { grnId: string; qcDate: string; remarks?: string; items: any[] }): Promise<any> {
     const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.QC.CREATE, payload);
+    return response.data;
+  },
+
+  async update(id: string, payload: { grnId: string; qcDate: string; remarks?: string; items: any[] }): Promise<any> {
+    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.QC.UPDATE(id), payload);
     return response.data;
   },
   

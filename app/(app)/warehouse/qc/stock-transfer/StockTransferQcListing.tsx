@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, ClipboardCheck } from "lucide-react";
+import { Eye, ClipboardCheck, Edit3 } from "lucide-react";
 import { getQcRecords } from "../mock-data";
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { QcRecord, QcStatus } from "../types";
 import { GrnRecord } from "@/app/(app)/warehouse/grn/types";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
@@ -29,6 +29,7 @@ type QcStockTransferLineRow = {
   expiryDate: string;
   receivedQty: number;
   status: QcStatus;
+  isEditable: boolean;
 };
 
 const QC_STATUS_CONFIG: Record<QcStatus, { bg: string; label: string }> = {
@@ -59,6 +60,7 @@ function flattenStockTransferQcRows(qcs: QcRecord[], grns: GrnRecord[]): QcStock
           expiryDate: batch?.expDate ?? "—",
           receivedQty: item.receivedQty,
           status: qc.status,
+          isEditable: qc.isEditable ?? false,
         };
       }),
     );
@@ -66,6 +68,8 @@ function flattenStockTransferQcRows(qcs: QcRecord[], grns: GrnRecord[]): QcStock
 
 export function StockTransferQcListing() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
   const [qcList, setQcList] = useState<QcRecord[]>([]);
   const [grnList, setGrnList] = useState<GrnRecord[]>([]);
   const [activeTab, setActiveTab] = useState<QcTab>("pending");
@@ -89,13 +93,20 @@ export function StockTransferQcListing() {
   useEffect(() => {
     if (activeTab !== "completed") return;
 
-    QcService.list({ page: 1, page_size: 100 }).then((res) => {
+    const filters: any = {};
+    if (destinationWarehouse && destinationWarehouse !== "All") {
+      filters.grn = filters.grn || {};
+      filters.grn.warehouse = filters.grn.warehouse || {};
+      filters.grn.warehouse.warehouse_name = destinationWarehouse;
+    }
+
+    QcService.list({ page: 1, page_size: 100, filters }).then((res) => {
       const stockTransferOnly = res.data.filter((q) => getQcSourceType(q) === "stock_transfer");
       setApiQcList(stockTransferOnly);
     }).catch((err) => {
       console.error("Failed to fetch completed stock transfers:", err);
     });
-  }, [activeTab]);
+  }, [activeTab, destinationWarehouse]);
 
   const stockTransferLineRows = useMemo(() => {
     const listToFlatten = activeTab === "pending" ? qcList : apiQcList;
@@ -106,6 +117,12 @@ export function StockTransferQcListing() {
     let result = [...stockTransferLineRows];
 
     result = result.filter((item) => item.status === activeTab);
+
+    if (destinationWarehouse && destinationWarehouse !== "All") {
+      result = result.filter(
+        (item) => item.toWarehouse.toLowerCase() === destinationWarehouse.toLowerCase()
+      );
+    }
 
     const search = qcFilters.search as string | undefined;
     if (search) {
@@ -130,7 +147,7 @@ export function StockTransferQcListing() {
     }
 
     return result;
-  }, [stockTransferLineRows, qcFilters, qcSort, activeTab]);
+  }, [stockTransferLineRows, qcFilters, qcSort, activeTab, destinationWarehouse]);
 
   const paginatedStockTransfer = useMemo(() => {
     const start = (qcPage - 1) * qcPageSize;
@@ -225,11 +242,26 @@ export function StockTransferQcListing() {
 
   const stockTransferActions: ActionItemConfig<QcStockTransferLineRow>[] = [
     {
+      label: "View Details",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => router.push(`/warehouse/qc/view/${row.qcId}`),
+      hide: (row) => row.status === "pending",
+    },
+    {
       label: "Perform QC",
       action: "inspect",
       icon: ClipboardCheck,
-      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.qcId}`),
+      onClick: (row) => router.push(`/warehouse/qc/create?grnId=${row.qcId}`),
       hide: (row) => row.status !== "pending",
+    },
+    {
+      label: "Edit QC",
+      action: "edit",
+      icon: Edit3,
+      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.qcId}&edit=true`),
+      hide: (row) => row.status === "pending",
+      disabled: (row) => !row.isEditable,
     },
   ];
 

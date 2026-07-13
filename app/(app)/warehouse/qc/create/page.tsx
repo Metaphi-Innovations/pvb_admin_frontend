@@ -74,7 +74,8 @@ function CreateQcForm() {
           return;
         }
 
-        if (qc.status === "completed") {
+        const editParam = searchParams.get("edit") === "true";
+        if (qc.status === "completed" && !editParam) {
           router.replace(`/warehouse/qc/view/${qc.id}`);
           return;
         }
@@ -104,7 +105,28 @@ function CreateQcForm() {
         setIsStockTransfer(stMode);
         setSourceType(stMode ? "stock_transfer" : "purchase_order");
         setQcRemarks(qc.qcRemarks ?? "");
-        setItems(qc.items.map((it) => ({ ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 })));
+        
+        setItems(qc.items.map((it) => {
+          if (editParam) {
+            const unitPerPacking = it.unitPerPacking || 10;
+            const acceptedQty = it.acceptedQty || 0;
+            const rejectedQty = it.rejectedQty || 0;
+            const holdQty = it.holdQty || 0;
+            return {
+              ...it,
+              acceptedQty,
+              acceptedCases: it.acceptedCases ?? Math.floor(acceptedQty / unitPerPacking),
+              acceptedLooseQty: it.acceptedLooseQty ?? (acceptedQty % unitPerPacking),
+              rejectedQty,
+              rejectedCases: it.rejectedCases ?? Math.floor(rejectedQty / unitPerPacking),
+              rejectedLooseQty: it.rejectedLooseQty ?? (rejectedQty % unitPerPacking),
+              holdQty,
+              holdCases: it.holdCases ?? Math.floor(holdQty / unitPerPacking),
+              holdLooseQty: it.holdLooseQty ?? (holdQty % unitPerPacking),
+            };
+          }
+          return { ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 };
+        }));
       } catch (err) {
         console.error("Failed to load QC or GRN details:", err);
         setLoadError("QC record not found. Open inspection from the QC listing.");
@@ -112,7 +134,7 @@ function CreateQcForm() {
     };
 
     loadRecord();
-  }, [qcIdParam, grnIdParam, router]);
+  }, [qcIdParam, grnIdParam, router, searchParams]);
 
   const handleQtyChange = (
     idx: number,
@@ -214,13 +236,18 @@ function CreateQcForm() {
         })),
       };
 
-      await QcService.create(payload);
-
-      alert(
-        isStockTransfer
-          ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
-          : "QC completed — stock moved to Available / Rejected.",
-      );
+      const editParam = searchParams.get("edit") === "true";
+      if (editParam) {
+        await QcService.update(qcRecordId, payload);
+        alert("QC Record updated successfully.");
+      } else {
+        await QcService.create(payload);
+        alert(
+          isStockTransfer
+            ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
+            : "QC completed — stock moved to Available / Rejected.",
+        );
+      }
       router.push("/warehouse/qc");
     } catch (err: any) {
       console.error("Failed to submit QC Record:", err);
@@ -318,11 +345,11 @@ function CreateQcForm() {
                 <tr className="bg-muted/40 border-b border-border">
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-36">Batch No.</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Received</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-24">Accepted</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-24">Rejected</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-32">Received</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-36">Accepted</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-36">Rejected</th>
                   {isStockTransfer && (
-                    <th className="px-4 py-2 text-center text-[11px] font-semibold text-amber-800 w-24">Hold</th>
+                    <th className="px-4 py-2 text-center text-[11px] font-semibold text-amber-800 w-36">Hold</th>
                   )}
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Remarks</th>
                 </tr>
@@ -340,7 +367,12 @@ function CreateQcForm() {
                         <span className="block text-[10px] font-mono text-muted-foreground">{item.productCode}</span>
                       </td>
                       <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{item.batchNumber}</td>
-                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground">{item.receivedQty}</td>
+                      <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
+                        <div className="font-semibold text-foreground">
+                          {item.receivedCases ?? Math.floor(item.receivedQty / (item.unitPerPacking || 10))} Cs / {item.receivedLooseQty ?? (item.receivedQty % (item.unitPerPacking || 10))} Ls
+                        </div>
+                        <div className="text-[10px] text-muted-foreground/80">Total: {item.receivedQty}</div>
+                      </td>
                       <td className="px-4 py-2 text-xs">
                         <div className="flex gap-1 mb-1">
                           <Input
