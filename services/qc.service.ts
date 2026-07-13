@@ -10,11 +10,22 @@ export interface QcListParams {
   filters?: Record<string, any>;
 }
 
+import { GrnSourceFilter } from "@/lib/warehouse/grn-source";
+
 export interface QcListResponse {
   success: boolean;
   data: any[];
   totalRecords: number;
 }
+
+const mapSourceType = (type: string | null | undefined): GrnSourceFilter => {
+  if (!type) return "purchase";
+  const upper = type.toUpperCase();
+  if (upper === "STOCK_TRANSFER") return "stock_transfer";
+  if (upper === "SALES_RETURN") return "sales_return";
+  if (upper === "SAMPLE_RETURN") return "sample_return";
+  return "purchase";
+};
 
 export function mapBackendRecordToFrontend(item: any): QcRecord {
   return {
@@ -30,7 +41,7 @@ export function mapBackendRecordToFrontend(item: any): QcRecord {
     totalRejectedQty: item.rejectedQty || 0,
     totalHoldQty: 0,
     status: "completed",
-    sourceType: item.sourceType === "stock_transfer" ? "stock_transfer" : "purchase",
+    sourceType: mapSourceType(item.sourceType),
     items: item.items || [],
     isEditable: item.isEditable ?? false,
   };
@@ -52,7 +63,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
     totalRejectedQty: 0,
     totalHoldQty: 0,
     status: "pending",
-    sourceType: grn.source_type === "STOCK_TRANSFER" ? "stock_transfer" : "purchase",
+    sourceType: mapSourceType(grn.source_type),
     items: [],
   };
 }
@@ -94,7 +105,7 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
     totalRejectedQty: totalRejected,
     totalHoldQty: 0,
     status: "completed",
-    sourceType: qc.grn?.source_type === "STOCK_TRANSFER" ? "stock_transfer" : "purchase",
+    sourceType: mapSourceType(qc.source_type || qc.grn?.source_type),
     items: qcItems,
     qcRemarks: qc.remarks || "",
     isEditable: qc.isEditable ?? false,
@@ -138,7 +149,7 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
     totalRejectedQty: 0,
     totalHoldQty: 0,
     status: "pending",
-    sourceType: grn.source_type === "STOCK_TRANSFER" ? "stock_transfer" : "purchase",
+    sourceType: mapSourceType(grn.source_type),
     items: qcItems,
   };
 }

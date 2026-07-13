@@ -85,6 +85,7 @@ export function PurchaseQcListing() {
 
   useEffect(() => {
     setQcPage(1);
+    setApiQcList([]);
     loadedFiltersRef.current.clear();
     setQcNoOptions([]);
     setGrnNoOptions([]);
@@ -110,6 +111,7 @@ export function PurchaseQcListing() {
         }
 
         const filters: any = {};
+        filters.source_type = "PURCHASE_ORDER";
         if (destinationWarehouse && destinationWarehouse !== "All") {
           if (activeTab === "pending") {
             filters.warehouse = filters.warehouse || {};

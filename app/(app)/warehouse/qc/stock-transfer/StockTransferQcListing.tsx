@@ -82,7 +82,6 @@ export function StockTransferQcListing() {
   const [apiQcList, setApiQcList] = useState<QcRecord[]>([]);
 
   useEffect(() => {
-    setQcList(getQcRecords());
     setGrnList(getGrnRecords());
   }, []);
 
@@ -91,27 +90,41 @@ export function StockTransferQcListing() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== "completed") return;
+    const fetchQcs = async () => {
+      try {
+        const filters: any = {};
+        filters.source_type = "STOCK_TRANSFER";
+        if (destinationWarehouse && destinationWarehouse !== "All") {
+          if (activeTab === "pending") {
+            filters.warehouse = filters.warehouse || {};
+            filters.warehouse.warehouse_name = destinationWarehouse;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.warehouse = filters.grn.warehouse || {};
+            filters.grn.warehouse.warehouse_name = destinationWarehouse;
+          }
+        }
 
-    const filters: any = {};
-    if (destinationWarehouse && destinationWarehouse !== "All") {
-      filters.grn = filters.grn || {};
-      filters.grn.warehouse = filters.grn.warehouse || {};
-      filters.grn.warehouse.warehouse_name = destinationWarehouse;
-    }
+        const fetchMethod = activeTab === "pending" ? QcService.listPending : QcService.list;
+        const res = await fetchMethod({
+          page: 1,
+          page_size: 100,
+          filters,
+        });
 
-    QcService.list({ page: 1, page_size: 100, filters }).then((res) => {
-      const stockTransferOnly = res.data.filter((q) => getQcSourceType(q) === "stock_transfer");
-      setApiQcList(stockTransferOnly);
-    }).catch((err) => {
-      console.error("Failed to fetch completed stock transfers:", err);
-    });
+        setApiQcList(res.data);
+      } catch (err) {
+        console.error("Failed to fetch stock transfer QCs:", err);
+      }
+    };
+
+    fetchQcs();
   }, [activeTab, destinationWarehouse]);
 
   const stockTransferLineRows = useMemo(() => {
-    const listToFlatten = activeTab === "pending" ? qcList : apiQcList;
+    const listToFlatten = apiQcList;
     return flattenStockTransferQcRows(listToFlatten, grnList);
-  }, [qcList, apiQcList, grnList, activeTab]);
+  }, [apiQcList, grnList]);
 
   const processedStockTransferRows = useMemo(() => {
     let result = [...stockTransferLineRows];

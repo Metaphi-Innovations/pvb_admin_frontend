@@ -41,12 +41,11 @@ export function SalesReturnQcListing() {
 
   useEffect(() => {
     setQcPage(1);
+    setApiQcList([]);
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== "completed") return;
-
-    const fetchCompletedQcs = async () => {
+    const fetchQcs = async () => {
       setIsLoading(true);
       try {
         let ordering = undefined;
@@ -63,22 +62,37 @@ export function SalesReturnQcListing() {
         }
 
         const filters: any = {};
+        filters.source_type = "SALES_RETURN";
         if (destinationWarehouse && destinationWarehouse !== "All") {
-          filters.grn = filters.grn || {};
-          filters.grn.warehouse = filters.grn.warehouse || {};
-          filters.grn.warehouse.warehouse_name = destinationWarehouse;
+          if (activeTab === "pending") {
+            filters.warehouse = filters.warehouse || {};
+            filters.warehouse.warehouse_name = destinationWarehouse;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.warehouse = filters.grn.warehouse || {};
+            filters.grn.warehouse.warehouse_name = destinationWarehouse;
+          }
         }
         if (qcFilters.qcNo) {
           filters.qcNumber = qcFilters.qcNo;
         }
         if (qcFilters.grnNo) {
-          filters.grn = filters.grn || {};
-          filters.grn.grnNumber = qcFilters.grnNo;
+          if (activeTab === "pending") {
+            filters.grnNumber = qcFilters.grnNo;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.grnNumber = qcFilters.grnNo;
+          }
         }
         if (qcFilters.vendorName) {
-          filters.grn = filters.grn || {};
-          filters.grn.supplier = filters.grn.supplier || {};
-          filters.grn.supplier.supplier_name = qcFilters.vendorName;
+          if (activeTab === "pending") {
+            filters.supplier = filters.supplier || {};
+            filters.supplier.supplier_name = qcFilters.vendorName;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.supplier = filters.grn.supplier || {};
+            filters.grn.supplier.supplier_name = qcFilters.vendorName;
+          }
         }
         if (qcFilters.inspectionDate) {
           const range = qcFilters.inspectionDate as { fromDate: string; toDate: string };
@@ -91,7 +105,8 @@ export function SalesReturnQcListing() {
           }
         }
 
-        const res = await QcService.list({
+        const fetchMethod = activeTab === "pending" ? QcService.listPending : QcService.list;
+        const res = await fetchMethod({
           page: qcPage,
           page_size: qcPageSize,
           search: (qcFilters.search as string) || undefined,
@@ -103,13 +118,13 @@ export function SalesReturnQcListing() {
         setApiQcList(salesReturnOnly);
         setApiTotal(res.totalRecords);
       } catch (err) {
-        console.error("Error loading completed QCs:", err);
+        console.error("Error loading QCs:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchCompletedQcs();
+    fetchQcs();
   }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort, destinationWarehouse]);
 
   const salesReturnQcs = useMemo(
@@ -174,8 +189,8 @@ export function SalesReturnQcListing() {
     return processedSalesReturnQcs.slice(start, start + qcPageSize);
   }, [processedSalesReturnQcs, qcPage, qcPageSize]);
 
-  const displayedData = activeTab === "pending" ? paginatedSalesReturn : apiQcList;
-  const displayedTotal = activeTab === "pending" ? processedSalesReturnQcs.length : apiTotal;
+  const displayedData = apiQcList;
+  const displayedTotal = apiTotal;
 
   const salesReturnColumns: ColumnConfig<QcSalesReturnRow>[] = [
     {
