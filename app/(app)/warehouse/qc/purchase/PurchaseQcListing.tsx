@@ -9,6 +9,7 @@ import { QcRecord, QcStatus } from "../types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
+import { QcService } from "@/services/qc.service";
 
 type QcTab = "pending" | "completed";
 type QcPurchaseRow = QcRecord;
@@ -28,69 +29,148 @@ export function PurchaseQcListing() {
   const [qcPage, setQcPage] = useState(1);
   const [qcPageSize, setQcPageSize] = useState(10);
 
+  const [apiQcList, setApiQcList] = useState<QcRecord[]>([]);
+  const [apiTotal, setApiTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [qcNoOptions, setQcNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [grnNoOptions, setGrnNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [poNoOptions, setPoNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [vendorNameOptions, setVendorNameOptions] = useState<{ label: string; value: string }[]>([]);
+  const loadedFiltersRef = React.useRef<Set<string>>(new Set());
+
+  const handleOpenFilter = async (columnKey: string) => {
+    if (loadedFiltersRef.current.has(columnKey)) return;
+    loadedFiltersRef.current.add(columnKey);
+    try {
+      if (columnKey === "qcNo") {
+        const data = await QcService.getFilterDropdown("qcNumber");
+        setQcNoOptions(data.map((item: any) => ({ label: item.qcNumber, value: item.qcNumber })));
+      } else if (columnKey === "grnNo") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown("grnNumber");
+          setGrnNoOptions(data.map((item: any) => ({ label: item.grnNumber, value: item.grnNumber })));
+        } else {
+          const data = await QcService.getFilterDropdown("grn__grnNumber");
+          setGrnNoOptions(data.map((item: any) => ({ label: item.grn__grnNumber, value: item.grn__grnNumber })));
+        }
+      } else if (columnKey === "poNumber") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown("po_no");
+          setPoNoOptions(data.map((item: any) => ({ label: item.po_no, value: item.po_no })));
+        } else {
+          const data = await QcService.getFilterDropdown("poNumber");
+          setPoNoOptions(data.map((item: any) => ({ label: item.poNumber, value: item.poNumber })));
+        }
+      } else if (columnKey === "vendorName") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown("supplier__supplier_name");
+          setVendorNameOptions(data.map((item: any) => ({ label: item.supplier__supplier_name, value: item.supplier__supplier_name })));
+        } else {
+          const data = await QcService.getFilterDropdown("grn__supplier__supplier_name");
+          setVendorNameOptions(data.map((item: any) => ({ label: item.grn__supplier__supplier_name, value: item.grn__supplier__supplier_name })));
+        }
+      }
+    } catch (err) {
+      console.error(`Error loading filter options for ${columnKey}:`, err);
+      loadedFiltersRef.current.delete(columnKey);
+    }
+  };
+
   useEffect(() => {
     setQcList(getQcRecords());
   }, []);
 
   useEffect(() => {
     setQcPage(1);
+    loadedFiltersRef.current.clear();
+    setQcNoOptions([]);
+    setGrnNoOptions([]);
+    setPoNoOptions([]);
+    setVendorNameOptions([]);
   }, [activeTab]);
 
-  const purchaseQcs = useMemo(
-    () => qcList.filter((q) => getQcSourceType(q) === "purchase"),
-    [qcList],
-  );
-
-  const processedPurchaseQcs = useMemo(() => {
-    let result = [...purchaseQcs];
-
-    result = result.filter((item) => item.status === activeTab);
-
-    Object.keys(qcFilters).forEach((key) => {
-      const val = qcFilters[key];
-      if (!val) return;
-
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(
-          (item) =>
-            item.qcNo.toLowerCase().includes(q) ||
-            item.grnNo.toLowerCase().includes(q) ||
-            (item.poNumber ?? "").toLowerCase().includes(q) ||
-            item.vendorName.toLowerCase().includes(q) ||
-            item.warehouse.toLowerCase().includes(q),
-        );
-      } else if (key === "qcNo" || key === "grnNo" || key === "vendorName") {
-        const q = (val as string).toLowerCase();
-        result = result.filter((item) => String(item[key as keyof QcRecord]).toLowerCase().includes(q));
-      } else if (key === "status") {
-        const selected = val as string[];
-        result = result.filter((item) => selected.includes(String(item.status)));
-      } else if (key === "inspectionDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) {
-          result = result.filter((item) => item.inspectionDate && item.inspectionDate >= range.fromDate);
+  useEffect(() => {
+    const fetchQcs = async () => {
+      setIsLoading(true);
+      try {
+        let ordering = undefined;
+        if (qcSort.key && qcSort.direction !== "none") {
+          const mapping: Record<string, string> = {
+            qcNo: "qcNumber",
+            grnNo: "grn__grnNumber",
+            inspectionDate: "qcDate",
+            vendorName: "grn__supplier__supplier_name",
+            warehouse: "grn__warehouse__warehouse_name",
+          };
+          const baseKey = mapping[qcSort.key] || qcSort.key;
+          ordering = qcSort.direction === "desc" ? `-${baseKey}` : baseKey;
         }
-        if (range.toDate) {
-          result = result.filter((item) => item.inspectionDate && item.inspectionDate <= range.toDate);
+
+        const filters: any = {};
+        if (qcFilters.qcNo) {
+          filters.qcNumber = qcFilters.qcNo;
         }
+        if (qcFilters.grnNo) {
+          if (activeTab === "pending") {
+            filters.grnNumber = qcFilters.grnNo;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.grnNumber = qcFilters.grnNo;
+          }
+        }
+        if (qcFilters.poNumber) {
+          filters.poNumber = qcFilters.poNumber;
+        }
+        if (qcFilters.vendorName) {
+          if (activeTab === "pending") {
+            filters.supplier = filters.supplier || {};
+            filters.supplier.supplier_name = qcFilters.vendorName;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.supplier = filters.grn.supplier || {};
+            filters.grn.supplier.supplier_name = qcFilters.vendorName;
+          }
+        }
+        if (qcFilters.inspectionDate) {
+          const range = qcFilters.inspectionDate as { fromDate: string; toDate: string };
+          if (range.fromDate || range.toDate) {
+            filters.range = filters.range || {};
+            filters.range.qcDate = {
+              from: range.fromDate || undefined,
+              to: range.toDate || undefined,
+            };
+          }
+        }
+
+        const fetchMethod = activeTab === "pending" ? QcService.listPending : QcService.list;
+        const res = await fetchMethod({
+          page: qcPage,
+          page_size: qcPageSize,
+          search: (qcFilters.search as string) || undefined,
+          ordering,
+          filters,
+        });
+
+        const purchaseOnly = res.data.filter((q) => getQcSourceType(q) === "purchase");
+        setApiQcList(purchaseOnly);
+        setApiTotal(res.totalRecords);
+      } catch (err) {
+        console.error("Error loading QCs:", err);
+      } finally {
+        setIsLoading(false);
       }
-    });
+    };
 
-    if (qcSort.key && qcSort.direction !== "none") {
-      result.sort((a, b) => {
-        const valA = String(a[qcSort.key as keyof QcRecord] || "");
-        const valB = String(b[qcSort.key as keyof QcRecord] || "");
-        return qcSort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      });
-    }
-    return result;
-  }, [purchaseQcs, qcFilters, qcSort, activeTab]);
+    fetchQcs();
+  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort]);
 
-  const paginatedPurchase = useMemo(() => {
-    const start = (qcPage - 1) * qcPageSize;
-    return processedPurchaseQcs.slice(start, start + qcPageSize);
-  }, [processedPurchaseQcs, qcPage, qcPageSize]);
+  const displayedData = useMemo(() => {
+    if (!qcFilters.status) return apiQcList;
+    return apiQcList.filter((row) => row.status === qcFilters.status);
+  }, [apiQcList, qcFilters.status]);
+
+  const displayedTotal = apiTotal;
 
   const purchaseColumns: ColumnConfig<QcPurchaseRow>[] = [
     {
@@ -98,10 +178,11 @@ export function PurchaseQcListing() {
       header: "QC No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: qcNoOptions,
       width: "130px",
       render: (_val, row) => (
-        <Link href={`/warehouse/qc/view/${row.id}`} className="block group/name">
+        <Link href={row.status === "pending" ? `/warehouse/qc/create?grnId=${row.id}` : `/warehouse/qc/view/${row.id}`} className="block group/name">
           <span className="font-mono text-xs font-semibold text-brand-700 group-hover/name:text-brand-800">
             {row.qcNo}
           </span>
@@ -113,7 +194,8 @@ export function PurchaseQcListing() {
       header: "GRN No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: grnNoOptions,
       width: "130px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.grnNo}</span>,
     },
@@ -122,7 +204,8 @@ export function PurchaseQcListing() {
       header: "PO No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: poNoOptions,
       width: "120px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.poNumber || "—"}</span>,
     },
@@ -131,7 +214,8 @@ export function PurchaseQcListing() {
       header: "Supplier",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: vendorNameOptions,
       width: "150px",
       render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
     },
@@ -169,6 +253,12 @@ export function PurchaseQcListing() {
       key: "status",
       header: "Status",
       sortable: true,
+      filterable: false,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Pending", value: "pending" },
+        { label: "Completed", value: "completed" },
+      ],
       width: "130px",
       render: (val: QcStatus) => {
         const cfg = QC_STATUS_CONFIG[val] ?? {
@@ -189,13 +279,13 @@ export function PurchaseQcListing() {
       label: "View Details",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/warehouse/qc/view/${row.id}`),
+      onClick: (row) => router.push(row.status === "pending" ? `/warehouse/qc/create?grnId=${row.id}` : `/warehouse/qc/view/${row.id}`),
     },
     {
       label: "Perform QC",
       action: "inspect",
       icon: ClipboardCheck,
-      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.id}`),
+      onClick: (row) => router.push(row.status === "pending" ? `/warehouse/qc/create?grnId=${row.id}` : `/warehouse/qc/create?qcId=${row.id}`),
       hide: (row) => row.status !== "pending",
     },
   ];
@@ -221,10 +311,10 @@ export function PurchaseQcListing() {
       </div>
 
       <MasterListing<QcPurchaseRow>
-        data={paginatedPurchase}
+        data={displayedData}
         columns={purchaseColumns}
         actions={purchaseActions}
-        totalRecords={processedPurchaseQcs.length}
+        totalRecords={displayedTotal}
         page={qcPage}
         pageSize={qcPageSize}
         onPageChange={setQcPage}
@@ -233,6 +323,7 @@ export function PurchaseQcListing() {
         onFilterChange={setQcFilters}
         currentSort={qcSort}
         onSortChange={setQcSort}
+        onOpenFilter={handleOpenFilter}
         searchPlaceholder="Search QC or GRN..."
       />
     </div>

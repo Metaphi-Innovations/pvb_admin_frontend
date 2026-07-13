@@ -11,6 +11,7 @@ import { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
+import { QcService } from "@/services/qc.service";
 
 type QcTab = "pending" | "completed";
 
@@ -74,6 +75,8 @@ export function StockTransferQcListing() {
   const [qcPage, setQcPage] = useState(1);
   const [qcPageSize, setQcPageSize] = useState(10);
 
+  const [apiQcList, setApiQcList] = useState<QcRecord[]>([]);
+
   useEffect(() => {
     setQcList(getQcRecords());
     setGrnList(getGrnRecords());
@@ -83,10 +86,21 @@ export function StockTransferQcListing() {
     setQcPage(1);
   }, [activeTab]);
 
-  const stockTransferLineRows = useMemo(
-    () => flattenStockTransferQcRows(qcList, grnList),
-    [qcList, grnList],
-  );
+  useEffect(() => {
+    if (activeTab !== "completed") return;
+
+    QcService.list({ page: 1, page_size: 100 }).then((res) => {
+      const stockTransferOnly = res.data.filter((q) => getQcSourceType(q) === "stock_transfer");
+      setApiQcList(stockTransferOnly);
+    }).catch((err) => {
+      console.error("Failed to fetch completed stock transfers:", err);
+    });
+  }, [activeTab]);
+
+  const stockTransferLineRows = useMemo(() => {
+    const listToFlatten = activeTab === "pending" ? qcList : apiQcList;
+    return flattenStockTransferQcRows(listToFlatten, grnList);
+  }, [qcList, apiQcList, grnList, activeTab]);
 
   const processedStockTransferRows = useMemo(() => {
     let result = [...stockTransferLineRows];

@@ -5,7 +5,7 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import { Calendar, FileText, CheckCircle2, AlertTriangle, XCircle, ClipboardCheck, Building2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getQcById } from "../../mock-data";
+import { QcService } from "@/services/qc.service";
 import { QcRecord } from "../../types";
 
 const STATUS_CONFIG = {
@@ -18,10 +18,15 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
   const [qc, setQc] = useState<QcRecord | null>(null);
 
   useEffect(() => {
-    const record = getQcById(params.id);
-    if (record) {
-      setQc(record);
-    }
+    QcService.get(params.id)
+      .then((record) => {
+        if (record) {
+          setQc(record);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load QC Record:", err);
+      });
   }, [params.id]);
 
   const acceptedStock = useMemo(() => {
