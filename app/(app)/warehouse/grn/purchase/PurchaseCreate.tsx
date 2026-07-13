@@ -754,9 +754,9 @@ export function PurchaseCreate() {
                     <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
                       Cases
                     </th>
-                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
+                    {/* <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
                       Loose Qty
-                    </th>
+                    </th> */}
                     <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
                       Total Base Qty
                     </th>
@@ -790,7 +790,7 @@ export function PurchaseCreate() {
                             )}
                           />
                         </td>
-                        <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
+                        {/* <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
                           <Input
                             type="number"
                             min={0}
@@ -804,7 +804,7 @@ export function PurchaseCreate() {
                               "bg-white focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400 border-border text-brand-700",
                             )}
                           />
-                        </td>
+                        </td> */}
                         <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
                           <div className="space-y-1">
                             <Input
