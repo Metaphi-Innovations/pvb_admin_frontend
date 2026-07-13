@@ -8,6 +8,10 @@ import {
 } from "@/services/grn.service";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 import { purchaseOrderKeys } from "@/lib/procurement/purchase-order-query-keys";
+import {
+  salesReturnKeys,
+  sampleReturnKeys,
+} from "@/hooks/sales/use-return-documents";
 
 export function useGrnPreviewNumber(enabled = true) {
   return useQuery({
@@ -38,6 +42,8 @@ export function useCreateGrn() {
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: grnKeys.previewNumber() }),
         queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
+        queryClient.invalidateQueries({ queryKey: salesReturnKeys.all }),
+        queryClient.invalidateQueries({ queryKey: sampleReturnKeys.all }),
         createdId
           ? queryClient.invalidateQueries({ queryKey: grnKeys.detail(createdId) })
           : Promise.resolve(),
@@ -57,6 +63,8 @@ export function useUpdateGrn() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
+        queryClient.invalidateQueries({ queryKey: salesReturnKeys.all }),
+        queryClient.invalidateQueries({ queryKey: sampleReturnKeys.all }),
         queryClient.invalidateQueries({ queryKey: grnKeys.detail(updatedId) }),
       ]);
     },

@@ -1,20 +1,41 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { Calendar, Building, AlertCircle, ClipboardCheck, FileText, CheckCircle2, Clock, User, Reply } from "lucide-react";
+import {
+  Calendar,
+  Building,
+  AlertCircle,
+  ClipboardCheck,
+  FileText,
+  CheckCircle2,
+  Clock,
+  User,
+  Reply,
+  Pencil,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getGrnById } from "../shared/mock-data";
-import { GrnRecord } from "../shared/types";
-import { getQcByGrnNo } from "@/app/(app)/warehouse/qc/mock-data";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
 import { cn } from "@/lib/utils";
+import { useGrn } from "@/hooks/warehouse/use-grn";
 
 const STATUS_CONFIG = {
-  pending_qc: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC", variant: "draft" as const },
-  qc_in_progress: { bg: "bg-navy-50 text-navy-700 border-navy-200", label: "QC In Progress", variant: "neutral" as const },
-  qc_completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed", variant: "active" as const },
+  pending_qc: {
+    bg: "bg-amber-50 text-amber-700 border-amber-200",
+    label: "Pending QC",
+    variant: "draft" as const,
+  },
+  qc_in_progress: {
+    bg: "bg-navy-50 text-navy-700 border-navy-200",
+    label: "QC In Progress",
+    variant: "neutral" as const,
+  },
+  qc_completed: {
+    bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    label: "QC Completed",
+    variant: "active" as const,
+  },
 };
 
 function DocumentStatusRow({
@@ -46,16 +67,25 @@ function DocumentStatusRow({
 
 export function SampleReturnView({ id }: { id: string }) {
   const router = useRouter();
-  const [grn, setGrn] = useState<GrnRecord | null>(null);
+  const { data: grn, isLoading, isError, error } = useGrn(id);
 
-  useEffect(() => {
-    const record = getGrnById(id);
-    if (record) {
-      setGrn(record);
-    }
-  }, [id]);
+  if (isLoading) {
+    return (
+      <RecordDetailPage
+        listHref="/warehouse/grn/sample-return"
+        listLabel="GRN"
+        recordName="Loading…"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="max-w-[800px] mx-auto text-center py-12">
+          <p className="text-xs text-muted-foreground">Loading GRN details…</p>
+        </div>
+      </RecordDetailPage>
+    );
+  }
 
-  if (!grn) {
+  if (isError || !grn) {
     return (
       <RecordDetailPage
         listHref="/warehouse/grn/sample-return"
@@ -67,8 +97,16 @@ export function SampleReturnView({ id }: { id: string }) {
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">GRN Record Not Found</h1>
-          <p className="text-xs text-muted-foreground">The GRN ID you requested does not exist or has been removed.</p>
-          <Button variant="outline" size="sm" onClick={() => router.push("/warehouse/grn/sample-return")}>
+          <p className="text-xs text-muted-foreground">
+            {error instanceof Error
+              ? error.message
+              : "The GRN ID you requested does not exist or has been removed."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/warehouse/grn/sample-return")}
+          >
             Go Back
           </Button>
         </div>
@@ -84,11 +122,9 @@ export function SampleReturnView({ id }: { id: string }) {
 
   const totalReceived = grn.items.reduce((sum, it) => sum + it.receivedQty, 0);
   const totalOrdered = grn.items.reduce((sum, it) => sum + (it.orderedQty || 0), 0);
-  const linkedQc = getQcByGrnNo(grn.grnNo);
-  const canStartQc = grn.status === "pending_qc" && linkedQc?.status === "pending";
-  const qcInspectHref = linkedQc
-    ? `/warehouse/qc/create?qcId=${linkedQc.id}`
-    : `/warehouse/qc/create?grnId=${grn.id}`;
+  const canStartQc = grn.status !== "qc_completed";
+  const canEdit = grn.status !== "qc_completed";
+  const customerName = grn.customerName || grn.vendorName || "—";
 
   return (
     <RecordDetailPage
@@ -99,22 +135,24 @@ export function SampleReturnView({ id }: { id: string }) {
       statusLabel={statusCfg.label}
       statusVariant={statusCfg.variant}
       metaItems={[
-        { icon: User, label: `Customer: ${grn.customerName || grn.vendorName || "—"}` },
+        { icon: User, label: `Customer: ${customerName}` },
         { icon: Building, label: `Warehouse: ${grn.warehouse || "—"}` },
         { icon: Calendar, label: grn.grnDate },
       ]}
+      onEdit={canEdit ? () => router.push(`/warehouse/grn/sample-return/${id}/edit`) : undefined}
+      editLabel="Edit GRN"
       secondaryAction={
         canStartQc
           ? {
               label: "Perform QC Check",
-              onClick: () => router.push(qcInspectHref),
+              onClick: () => router.push(`/warehouse/qc/create?grnId=${id}`),
             }
           : undefined
       }
       sidebar={{
         summary: [
           { label: "Sample Return No.", value: grn.sampleReturnNo || "—", highlight: true },
-          { label: "Customer", value: grn.customerName || grn.vendorName || "—" },
+          { label: "Customer", value: customerName },
           { label: "Warehouse", value: grn.warehouse || "—" },
           { label: "GRN Date", value: grn.grnDate || "—" },
           { label: "Items Received", value: grn.items.length },
@@ -122,20 +160,31 @@ export function SampleReturnView({ id }: { id: string }) {
           { label: "Total Received", value: totalReceived },
           { label: "Batches", value: grn.batches.length },
         ],
-        quickActions: canStartQc
-          ? [
-              {
-                label: "Perform QC Check",
-                icon: ClipboardCheck,
-                variant: "primary" as const,
-                onClick: () => router.push(qcInspectHref),
-              },
-            ]
-          : [],
+        quickActions: [
+          ...(canEdit
+            ? [
+                {
+                  label: "Edit GRN",
+                  icon: Pencil,
+                  variant: "outline" as const,
+                  onClick: () => router.push(`/warehouse/grn/sample-return/${id}/edit`),
+                },
+              ]
+            : []),
+          ...(canStartQc
+            ? [
+                {
+                  label: "Perform QC Check",
+                  icon: ClipboardCheck,
+                  variant: "primary" as const,
+                  onClick: () => router.push(`/warehouse/qc/create?grnId=${id}`),
+                },
+              ]
+            : []),
+        ],
       }}
     >
       <div className="w-full space-y-6">
-        {/* Document Status */}
         <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-3">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-2">
             <FileText className="w-4 h-4 text-brand-600" />
@@ -145,15 +194,15 @@ export function SampleReturnView({ id }: { id: string }) {
             Read-only tracking for sample return receipt and quality control verification.
           </p>
           <div className="rounded-lg border border-border bg-muted/10 px-3">
-            <DocumentStatusRow
-              label="Sample Return Request"
-              value="Created"
-              done={true}
-            />
+            <DocumentStatusRow label="Sample Return Request" value="Created" done={true} />
             <DocumentStatusRow
               label="Physical Return Inward"
-              value={grn.receiptStatus === "received" ? "Fully Received" : "Partially Received"}
-              done={grn.receiptStatus === "received"}
+              value={
+                totalReceived >= totalOrdered && totalOrdered > 0
+                  ? "Fully Received"
+                  : "Partially Received"
+              }
+              done={totalReceived >= totalOrdered && totalOrdered > 0}
             />
             <DocumentStatusRow
               label="QC Verification Status"
@@ -166,13 +215,16 @@ export function SampleReturnView({ id }: { id: string }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: "Sample Return No.", val: grn.sampleReturnNo || "—", icon: Reply },
-            { label: "Customer", val: grn.customerName || grn.vendorName || "—", icon: User },
+            { label: "Customer", val: customerName, icon: User },
             { label: "Warehouse", val: grn.warehouse || "—", icon: Building },
             { label: "Receipt Date", val: grn.grnDate, icon: Calendar },
           ].map((card, idx) => {
             const Icon = card.icon;
             return (
-              <div key={idx} className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-xs">
+              <div
+                key={idx}
+                className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-xs"
+              >
                 <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                   <Icon className="w-4 h-4 text-muted-foreground" />
                 </div>
@@ -180,7 +232,9 @@ export function SampleReturnView({ id }: { id: string }) {
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider leading-none">
                     {card.label}
                   </p>
-                  <p className="text-xs font-bold text-foreground mt-1 truncate max-w-[140px]">{card.val}</p>
+                  <p className="text-xs font-bold text-foreground mt-1 truncate max-w-[140px]">
+                    {card.val}
+                  </p>
                 </div>
               </div>
             );
@@ -188,30 +242,46 @@ export function SampleReturnView({ id }: { id: string }) {
         </div>
 
         <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
-          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Items Received</h3>
+          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
+            Items Received
+          </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Product</th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SKU</th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Returned Qty</th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Received Qty</th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Unit</th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Product
+                  </th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    SKU
+                  </th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
+                    Returned Qty
+                  </th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
+                    Received Qty
+                  </th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Unit
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {grn.items.map((item, idx) => {
-                  return (
-                    <tr key={idx} className="hover:bg-muted/10">
-                      <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
-                      <td className="p-2 text-xs font-mono text-muted-foreground">{item.productCode}</td>
-                      <td className="p-2 text-xs text-right tabular-nums">{(item.orderedQty || 0).toLocaleString()}</td>
-                      <td className="p-2 text-xs font-semibold text-right tabular-nums text-brand-600">{item.receivedQty.toLocaleString()}</td>
-                      <td className="p-2 text-xs text-muted-foreground">{item.unit || "Unit"}</td>
-                    </tr>
-                  );
-                })}
+                {grn.items.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-muted/10">
+                    <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
+                    <td className="p-2 text-xs font-mono text-muted-foreground">
+                      {item.productCode}
+                    </td>
+                    <td className="p-2 text-xs text-right tabular-nums">
+                      {(item.orderedQty || 0).toLocaleString()}
+                    </td>
+                    <td className="p-2 text-xs font-semibold text-right tabular-nums text-brand-600">
+                      {item.receivedQty.toLocaleString()}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">{item.unit || "Unit"}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -219,15 +289,21 @@ export function SampleReturnView({ id }: { id: string }) {
 
         {grn.batches.length > 0 && (
           <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
-            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Batch Details</h3>
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
+              Batch Details
+            </h3>
             <BatchDetailsReadOnlyTable batches={grn.batches} />
           </div>
         )}
 
         {grn.receiptRemarks && (
           <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-2">
-            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Receipt Remarks</h3>
-            <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 border border-border/50">{grn.receiptRemarks}</p>
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
+              Receipt Remarks
+            </h3>
+            <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 border border-border/50">
+              {grn.receiptRemarks}
+            </p>
           </div>
         )}
       </div>

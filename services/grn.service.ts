@@ -254,13 +254,31 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
 
   const primaryInvoice = asRecord(invoicesRaw[0]);
 
+  const salesReturn = asRecord(raw.sales_return ?? raw.salesReturn);
+  const sampleReturn = asRecord(raw.sample_return ?? raw.sampleReturn);
+  const salesReturnNo =
+    asString(raw.salesReturnNo) ||
+    asString(raw.sales_return_no) ||
+    asString(salesReturn.return_number) ||
+    "";
+  const sampleReturnNo =
+    asString(raw.sampleReturnNo) ||
+    asString(raw.sample_return_no) ||
+    asString(sampleReturn.return_no) ||
+    "";
+  const customerName =
+    asString(raw.customerName) ||
+    asString(raw.customer_name) ||
+    asString(asRecord(raw.customer).customer_name) ||
+    "";
+
   return {
     id: asString(raw.id),
     grnNo: asString(raw.grnNumber),
     poNumber,
     sourceId: sourceId || undefined,
     supplierId: supplierId || undefined,
-    vendorName,
+    vendorName: vendorName || customerName,
     warehouse: warehouseName,
     warehouseId: asNumber(warehouse.sr_no) || undefined,
     warehouseUuid: warehouseUuid || undefined,
@@ -280,6 +298,10 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
     sourceType: mapSourceType(asString(raw.source_type)),
+    salesReturnNo: salesReturnNo || undefined,
+    sampleReturnNo: sampleReturnNo || undefined,
+    customerName: customerName || undefined,
+    receiptRemarks: asString(raw.remarks) || undefined,
   };
 }
 

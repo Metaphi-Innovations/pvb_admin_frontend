@@ -68,6 +68,11 @@ function asDateOnly(value: unknown): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
 function firstFilterValue(value: unknown): string {
   if (Array.isArray(value)) return asString(value[0]).trim();
   return asString(value).trim();
@@ -155,9 +160,24 @@ function mapListItem(
     fromWarehouse: tabContext.sourceType === "STOCK_TRANSFER" ? supplierName || "—" : undefined,
     toWarehouse: tabContext.sourceType === "STOCK_TRANSFER" ? warehouseName : undefined,
     dispatchDate: tabContext.sourceType === "STOCK_TRANSFER" ? asDateOnly(raw.grnDate) : undefined,
-    salesReturnNo: tabContext.sourceType === "SALES_RETURN" ? "" : undefined,
-    sampleReturnNo: tabContext.sourceType === "SAMPLE_RETURN" ? "" : undefined,
-    customerName: "",
+    salesReturnNo:
+      tabContext.sourceType === "SALES_RETURN"
+        ? asString(raw.salesReturnNo) ||
+          asString(raw.sales_return_no) ||
+          asString(asRecord(raw.sales_return).return_number) ||
+          ""
+        : undefined,
+    sampleReturnNo:
+      tabContext.sourceType === "SAMPLE_RETURN"
+        ? asString(raw.sampleReturnNo) ||
+          asString(raw.sample_return_no) ||
+          asString(asRecord(raw.sample_return).return_no) ||
+          ""
+        : undefined,
+    customerName:
+      asString(raw.customerName) ||
+      asString(raw.customer_name) ||
+      "",
     receivedQty,
     acceptedQty,
     rejectedQty,
@@ -239,7 +259,8 @@ export function buildGrnApiFilters(
   }
 
   if (destinationWarehouse && destinationWarehouse !== "All") {
-    apiFilters.warehouse = { warehouse_name: destinationWarehouse };
+    // Layout stores warehouse_id from master dropdown API
+    apiFilters.warehouseId = destinationWarehouse;
   }
 
   const columnStatus = firstFilterValue(filters.status);

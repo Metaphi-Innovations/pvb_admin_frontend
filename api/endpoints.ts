@@ -278,6 +278,20 @@ export const API_ENDPOINTS = {
       UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
     },
+    SALES_RETURN: {
+      LIST: "/sales/sales-return/list",
+      DROPDOWN: "/sales/sales-return/dropdown",
+      FILTER: "/sales/sales-return/filter",
+      CREATE: "/sales/sales-return/create",
+      DETAILS: (id: string) => `/sales/sales-return/${id}`,
+    },
+    SAMPLE_RETURN: {
+      LIST: "/sales/sample-return/list",
+      DROPDOWN: "/sales/sample-return/dropdown",
+      FILTER: "/sales/sample-return/filter",
+      CREATE: "/sales/sample-return/create",
+      DETAILS: (id: string) => `/sales/sample-return/${id}`,
+    },
   },
   USER_MANAGEMENT: {
     USER: {
