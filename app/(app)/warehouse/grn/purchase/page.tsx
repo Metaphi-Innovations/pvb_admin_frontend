@@ -57,6 +57,15 @@ export default function PurchaseListingRoutePage() {
         ),
       },
       {
+        key: "grnDate",
+        header: "GRN Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "140px",
+        render: (_val, row) => <span className="text-xs text-foreground">{row.grnDate}</span>,
+      },
+      {
         key: "poNumber",
         header: "PO No.",
         sortable: true,
@@ -102,30 +111,31 @@ export default function PurchaseListingRoutePage() {
           </span>
         ),
       },
-      {
-        key: "acceptedQty",
-        header: "Accepted Qty",
-        sortable: true,
-        align: "right",
-        width: "110px",
-        render: (val) => (
-          <span className="text-xs font-medium tabular-nums text-emerald-600">
-            {val != null ? val.toLocaleString() : "—"}
-          </span>
-        ),
-      },
-      {
-        key: "rejectedQty",
-        header: "Rejected Qty",
-        sortable: true,
-        align: "right",
-        width: "110px",
-        render: (val) => (
-          <span className="text-xs font-medium tabular-nums text-red-600">
-            {val != null ? val.toLocaleString() : "—"}
-          </span>
-        ),
-      },
+      // {
+      //   key: "acceptedQty",
+      //   header: "Accepted Qty",
+      //   sortable: true,
+      //   align: "right",
+      //   width: "110px",
+      //   render: (val) => (
+      //     <span className="text-xs font-medium tabular-nums text-emerald-600">
+      //       {val != null ? val.toLocaleString() : "—"}
+      //     </span>
+      //   ),
+      // },
+      // {
+      //   key: "rejectedQty",
+      //   header: "Rejected Qty",
+      //   sortable: true,
+      //   align: "right",
+      //   width: "110px",
+      //   render: (val) => (
+      //     <span className="text-xs font-medium tabular-nums text-red-600">
+      //       {val != null ? val.toLocaleString() : "—"}
+      //     </span>
+      //   ),
+      // },
+      
       {
         key: "status",
         header: "Status",
