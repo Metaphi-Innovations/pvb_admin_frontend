@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2 } from "lucide-react";
+import { Eye, FileCheck2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
@@ -24,7 +24,7 @@ export function SampleReturnListing({ destinationWarehouse }: SampleReturnListin
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const { items, total, loading } = useGrnListData({
+  const { items, total, loading, error } = useGrnListData({
     tabContext: SAMPLE_RETURN_TAB_CONTEXT,
     filters,
     sort,
@@ -121,6 +121,13 @@ export function SampleReturnListing({ destinationWarehouse }: SampleReturnListin
       onClick: (row) => router.push(`/warehouse/grn/sample-return/${row.id}`),
     },
     {
+      label: "Edit GRN",
+      action: "edit",
+      icon: Pencil,
+      onClick: (row) => router.push(`/warehouse/grn/sample-return/${row.id}/edit`),
+      hide: (row) => row.status === "qc_completed",
+    },
+    {
       label: "Perform QC",
       action: "qc",
       icon: FileCheck2,
@@ -137,6 +144,11 @@ export function SampleReturnListing({ destinationWarehouse }: SampleReturnListin
 
   return (
     <div className="space-y-3">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
       <MasterListing<GrnListItem>
         columns={columns}
         data={items}
