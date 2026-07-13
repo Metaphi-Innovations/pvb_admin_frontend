@@ -24,7 +24,7 @@ jobs:
                     --exclude='.git' \
                     --exclude='node_modules' \
                     --exclude='.env' \
-                    ./ /var/www/pvb.dev.metaphi.in/  
+                    ./ /var/www/pvb.dev.metaphi.in/ /var/www/pvb.dev1.metaphi.in/  
       - name: Install dependencies
         working-directory: /var/www/pvb.dev.metaphi.in
         run: npm i && npm run build
