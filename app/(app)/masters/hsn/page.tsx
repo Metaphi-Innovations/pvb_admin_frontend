@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
 	Dialog,
@@ -25,7 +26,7 @@ import {
 	type HSNMaster,
 	type HSNForm,
 	DEFAULT_HSN_FORM,
-	formatHsnDisplayCode,
+	sanitizeHsnCodeInput,
 	validateHsnApiForm,
 } from "./hsn-data";
 import {
@@ -56,7 +57,6 @@ import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import {
 	ColumnConfig,
-	FilterState,
 	SortState,
 	ActionItemConfig,
 } from "@/components/listing/types";
@@ -67,7 +67,7 @@ import {
 	isActiveStatus,
 } from "@/components/listing";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import type { MasterStatus } from "@/lib/masters/common";
+import { sortStateToOrdering } from "@/services/hsn-list.service";
 
 type StatusTab = "all" | "active" | "inactive";
 const HSN_TAB_KEY = "hsn-list-status-tab";
@@ -113,6 +113,7 @@ function formatGstRate(pct: number): string {
 function toHsnRow(item: {
 	id: number;
 	hsnUuid: string;
+	hsnCode: string;
 	hsnDescription: string;
 	gstId: string;
 	gstPercentage: number;
@@ -126,7 +127,7 @@ function toHsnRow(item: {
 		id: item.id,
 		hsnUuid: item.hsnUuid,
 		gstId: item.gstId,
-		hsnCode: formatHsnDisplayCode(item.id),
+		hsnCode: item.hsnCode || "",
 		hsnDescription: item.hsnDescription,
 		gstRate: formatGstRate(item.gstPercentage),
 		status: item.status,
@@ -171,6 +172,10 @@ export default function HSNPage() {
 		() => resolveListStatus(appliedFilters, statusTab),
 		[appliedFilters, statusTab],
 	);
+	const ordering = useMemo(
+		() => sortStateToOrdering(sort.key, sort.direction),
+		[sort.key, sort.direction],
+	);
 
 	const listParams = useMemo<MasterListKeyParams>(
 		() => ({
@@ -179,9 +184,9 @@ export default function HSNPage() {
 			search: appliedSearch,
 			status: listStatus,
 			apiFilters,
-			ordering: "",
+			ordering,
 		}),
-		[page, pageSize, appliedSearch, listStatus, apiFilters],
+		[page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
 	);
 
 	const listQuery = useHsnList(listParams);
@@ -192,7 +197,7 @@ export default function HSNPage() {
 	const toggleStatusMutation = useToggleHsnStatus();
 	const exportMutation = useExportHsn();
 
-	const hsnCodeOptionsQuery = useHsnFilterDropdown("id", { enabled: isFilterOpen("hsnCode") });
+	const hsnCodeOptionsQuery = useHsnFilterDropdown("hsnCode", { enabled: isFilterOpen("hsnCode") });
 	const hsnDescriptionOptionsQuery = useHsnFilterDropdown("hsnDescription", {
 		enabled: isFilterOpen("hsnDescription"),
 	});
@@ -335,6 +340,7 @@ export default function HSNPage() {
 			gstOptions.find((g) => formatGstRate(g.gstPercentage) === record.gstRate)?.id ||
 			"";
 		return {
+			hsnCode: record.hsnCode,
 			hsnDescription: record.hsnDescription,
 			gstId: matched,
 		};
@@ -383,7 +389,7 @@ export default function HSNPage() {
 	const columns: ColumnConfig<HSNMaster>[] = [
 		{
 			key: "hsnCode",
-			header: "HSN Ref",
+			header: "HSN Code",
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
@@ -395,7 +401,7 @@ export default function HSNPage() {
 					onClick={() => openView(row)}
 					className="font-mono text-xs font-semibold text-brand-700 hover:underline"
 				>
-					{row.hsnCode}
+					{row.hsnCode || "—"}
 				</button>
 			),
 		},
@@ -477,17 +483,7 @@ export default function HSNPage() {
 		},
 	];
 
-	const displayRecords = useMemo(() => {
-		if (!sort.key || sort.direction === "none") return records;
-		return [...records].sort((a, b) => {
-			const aVal = String(a[sort.key as keyof HSNMaster] ?? "").toLowerCase();
-			const bVal = String(b[sort.key as keyof HSNMaster] ?? "").toLowerCase();
-			const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-			return sort.direction === "asc" ? cmp : -cmp;
-		});
-	}, [records, sort]);
-
-		useEffect(() => {
+	useEffect(() => {
 		setPage(1);
 	}, [appliedSearch, apiFilters, pageSize, statusTab]);
 
@@ -496,7 +492,11 @@ export default function HSNPage() {
 	}, [sort.key, sort.direction]);
 
 	const persist = () => {
-		const fieldErrors = validateHsnApiForm(form);
+		const normalizedForm = {
+			...form,
+			hsnCode: sanitizeHsnCodeInput(form.hsnCode),
+		};
+		const fieldErrors = validateHsnApiForm(normalizedForm);
 		setErrors(fieldErrors);
 		if (Object.keys(fieldErrors).length > 0) return;
 
@@ -504,8 +504,9 @@ export default function HSNPage() {
 			setFormError(null);
 			createMutation.mutate(
 				{
-					hsnDescription: form.hsnDescription,
-					gstId: form.gstId,
+					hsnCode: normalizedForm.hsnCode,
+					hsnDescription: normalizedForm.hsnDescription,
+					gstId: normalizedForm.gstId,
 				},
 				{
 					onSuccess: () => {
@@ -531,8 +532,9 @@ export default function HSNPage() {
 			{
 				id: active.hsnUuid,
 				payload: {
-					hsnDescription: form.hsnDescription,
-					gstId: form.gstId,
+					hsnCode: normalizedForm.hsnCode,
+					hsnDescription: normalizedForm.hsnDescription,
+					gstId: normalizedForm.gstId,
 				},
 			},
 			{
@@ -553,6 +555,7 @@ export default function HSNPage() {
 				search: appliedSearch,
 				status: listStatus,
 				apiFilters,
+				ordering,
 			},
 			{
 				onSuccess: () => {
@@ -573,11 +576,11 @@ export default function HSNPage() {
 
 	const viewDrawer = active
 		? {
-				title: active.hsnCode,
+				title: active.hsnCode || "HSN",
 				subtitle: "Government HSN classification",
 				status: active.status,
 				basicInfo: [
-					{ label: "HSN Ref", value: active.hsnCode, mono: true },
+					{ label: "HSN Code", value: active.hsnCode || "—", mono: true },
 					{ label: "GST Rate", value: active.gstRate },
 					{ label: "Description", value: active.hsnDescription },
 				],
@@ -620,7 +623,7 @@ export default function HSNPage() {
 
 			<MasterListing<HSNMaster>
 				columns={columns}
-				data={displayRecords}
+				data={records}
 				loading={loading}
 				totalRecords={totalRecords}
 				page={page}
@@ -637,7 +640,7 @@ export default function HSNPage() {
 				addLabel="Add HSN"
 				onExport={handleExport}
 				emptyMessage="HSN records"
-				searchPlaceholder="Search HSN description..."
+				searchPlaceholder="Search HSN code or description..."
 				currentFilters={filters}
 				currentSort={sort}
 				onOpenFilter={handleOpenFilter}
@@ -657,12 +660,23 @@ export default function HSNPage() {
 				formContent={
 					sheetMode !== "view" ? (
 						<MasterFormGrid>
-							<MasterField
-								label="GST Rate"
-								required
-								error={errors.gstId}
-								className="sm:col-span-2"
-							>
+							<MasterField label="HSN Code" required error={errors.hsnCode}>
+								<Input
+									className={cn(compactInput(), "font-mono")}
+									value={form.hsnCode}
+									onChange={(e) =>
+										setForm((prev) => ({
+											...prev,
+											hsnCode: sanitizeHsnCodeInput(e.target.value),
+										}))
+									}
+									placeholder="e.g. 31021010"
+									maxLength={8}
+									disabled={saving}
+								/>
+							</MasterField>
+
+							<MasterField label="GST Rate" required error={errors.gstId}>
 								{gstError ? (
 									<p className="text-[11px] text-red-500">{gstError}</p>
 								) : null}

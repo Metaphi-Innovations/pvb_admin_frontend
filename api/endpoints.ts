@@ -165,6 +165,7 @@ export const API_ENDPOINTS = {
     },
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",
+      FILTER_DROPDOWN: "/master/warehouse/filter-dropdown",
       LIST: "/master/warehouse/list",
       CREATE: "/master/warehouse/create",
       UPDATE: (id: string) => `/master/warehouse/update/${id}`,
@@ -350,6 +351,19 @@ export const API_ENDPOINTS = {
     PRICING: "/master/product-pricing/dropdown",
   },
   WAREHOUSE: {
+    STOCK_OVERVIEW: {
+      SUMMARY: "/warehouse/stock-overview/summary",
+      FILTER: "/warehouse/stock-overview/filter",
+      INVENTORY_LIST: "/warehouse/stock-overview/inventory/list",
+      INVENTORY_DETAILS: (id: string) => `/warehouse/stock-overview/inventory/${id}`,
+      REJECTED_LIST: "/warehouse/stock-overview/rejected/list",
+      REJECTED_DETAILS: (id: string) => `/warehouse/stock-overview/rejected/${id}`,
+      SALES_RETURN_LIST: "/warehouse/stock-overview/sales-return-stock/list",
+      SAMPLE_RETURN_LIST: "/warehouse/stock-overview/sample-return-stock/list",
+      DAILY_LOG_LIST: "/warehouse/stock-overview/daily-log/list",
+      DAILY_LOG_EXPORT: "/warehouse/stock-overview/daily-log/export",
+      DAILY_LOG_SUMMARY: "/warehouse/stock-overview/daily-log/summary",
+    },
     REORDER_LEVEL: {
       LIST: "/warehouse/reorder-level/list",
       CREATE: "/warehouse/reorder-level/",

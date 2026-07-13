@@ -1,151 +1,188 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
-import { SalesReturnStockRecord } from "../types";
+import { ColumnConfig } from "@/components/listing/types";
+import { SALES_RETURN_STOCK_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
+import { ProductDropdownService } from "@/services/product-dropdown.service";
 import {
-  PRODUCT_OPTIONS,
-  WAREHOUSE_OPTIONS,
-  SALES_RETURN_STOCK_STATUS_OPTIONS,
-  STATUS_BADGE_CONFIG,
-} from "../constants";
+  ReturnStockListRow,
+  StockOverviewApi,
+  toStockOrdering,
+} from "../services/stock-overview-api";
 
 interface SalesReturnStockListingProps {
-  records: SalesReturnStockRecord[];
+  warehouseId?: string;
+  onFiltersApplied?: () => void;
 }
 
-export function SalesReturnStockListing({ records }: SalesReturnStockListingProps) {
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  return String(value).slice(0, 10);
+}
 
-  const processed = useMemo(() => {
-    let result = [...records];
-    Object.keys(filters).forEach((key) => {
-      const val = filters[key];
-      if (!val) return;
+export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: SalesReturnStockListingProps) {
+  const {
+    draftFilters,
+    appliedFilters,
+    sort,
+    setSort,
+    page,
+    setPage,
+    pageSize,
+    handlePageSizeChange,
+    handleFilterChange,
+    listNonce,
+  } = useStockOverviewListFilters();
+  const [records, setRecords] = useState<ReturnStockListRow[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
+  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
 
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(
-          (item) =>
-            item.product.toLowerCase().includes(q) ||
-            item.warehouse.toLowerCase().includes(q) ||
-            item.batchNumber.toLowerCase().includes(q) ||
-            item.salesReturnNo.toLowerCase().includes(q) ||
-            item.customer.toLowerCase().includes(q),
-        );
-      } else if (key === "batchNumber" || key === "salesReturnNo") {
-        const q = (val as string).toLowerCase();
-        result = result.filter((item) =>
-          String(item[key as keyof SalesReturnStockRecord]).toLowerCase().includes(q),
-        );
-      } else if (key === "product" || key === "warehouse" || key === "status") {
-        const selected = val as string[];
-        result = result.filter((item) => selected.includes(String(item[key as keyof SalesReturnStockRecord])));
-      } else if (key === "returnDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter((item) => item.returnDate >= range.fromDate);
-        if (range.toDate) result = result.filter((item) => item.returnDate <= range.toDate);
-      }
-    });
+  useEffect(() => {
+    setPage(1);
+  }, [warehouseId, setPage]);
 
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        if (sort.key === "availableQuantity") {
-          return sort.direction === "asc"
-            ? a.availableQuantity - b.availableQuantity
-            : b.availableQuantity - a.availableQuantity;
-        }
-        const valA = String(a[sort.key as keyof SalesReturnStockRecord] || "");
-        const valB = String(b[sort.key as keyof SalesReturnStockRecord] || "");
-        return sort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    StockOverviewApi.listSalesReturn({
+      page,
+      page_size: pageSize,
+      search: String(appliedFilters.search ?? ""),
+      ordering: toStockOrdering(sort.key, sort.direction),
+      warehouse_id: warehouseId,
+      filters: appliedFilters,
+      signal: controller.signal,
+    })
+      .then((result) => {
+        setRecords(result.items);
+        setTotalRecords(result.total);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(StockOverviewApi.getErrorMessage(err, "Failed to load sales return stock."));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
+    return () => controller.abort();
+  }, [page, pageSize, sort.key, sort.direction, appliedFilters, warehouseId, listNonce]);
+
+  const onFilterChange = (next: typeof draftFilters) => {
+    handleFilterChange(next);
+    onFiltersApplied?.();
+  };
+
+  const handleOpenFilter = (columnKey: string) => {
+    if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
+
+    if (columnKey === "product_name") {
+      setLoadingFilters((prev) => new Set(prev).add(columnKey));
+      ProductDropdownService.dropdown()
+        .then((items) => {
+          const options = items
+            .map((p) => ({ label: p.product_name, value: p.product_name }))
+            .filter((o) => o.value);
+          setFilterOptions((prev) => ({ ...prev, product_name: options }));
+        })
+        .finally(() => {
+          setLoadingFilters((prev) => {
+            const next = new Set(prev);
+            next.delete(columnKey);
+            return next;
+          });
+        });
+      return;
     }
-    return result;
-  }, [records, filters, sort]);
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return processed.slice(start, start + pageSize);
-  }, [processed, page, pageSize]);
+    const keyMap: Record<string, string> = {
+      warehouse_name: "sales_order_return__warehouse__warehouse_name",
+      customer_name: "sales_order_return__customer__customer_name",
+      batch_no: "batch_code",
+    };
+    const field = keyMap[columnKey];
+    if (!field) return;
 
-  const columns: ColumnConfig<SalesReturnStockRecord>[] = [
+    setLoadingFilters((prev) => new Set(prev).add(columnKey));
+    StockOverviewApi.filterDropdown("sales_return", field)
+      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
+      .finally(() => {
+        setLoadingFilters((prev) => {
+          const next = new Set(prev);
+          next.delete(columnKey);
+          return next;
+        });
+      });
+  };
+
+  const columns: ColumnConfig<ReturnStockListRow>[] = [
     {
-      key: "salesReturnNo",
+      key: "return_no",
       header: "Sales Return No.",
       sortable: true,
-      filterable: true,
-      filterType: "text",
       width: "140px",
-      render: (_val, row) => (
-        <span className="font-mono text-xs font-semibold text-brand-700">{row.salesReturnNo}</span>
-      ),
+      render: (val) => <span className="font-mono text-xs font-semibold">{val}</span>,
     },
     {
-      key: "product",
+      key: "product_name",
       header: "Product",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: PRODUCT_OPTIONS,
-      render: (_val, row) => <span className="text-xs font-semibold text-foreground">{row.product}</span>,
+      filterOptions: filterOptions.product_name || [],
     },
     {
-      key: "customer",
+      key: "customer_name",
       header: "Customer",
       sortable: true,
       filterable: true,
-      filterType: "text",
-      render: (_val, row) => <span className="text-xs text-foreground">{row.customer}</span>,
+      filterType: "dropdown",
+      filterOptions: filterOptions.customer_name || [],
     },
     {
-      key: "warehouse",
+      key: "warehouse_name",
       header: "Warehouse",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: WAREHOUSE_OPTIONS,
-      render: (_val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
+      filterOptions: filterOptions.warehouse_name || [],
     },
     {
-      key: "batchNumber",
-      header: "Batch No.",
+      key: "batch_no",
+      header: "Batch No",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: filterOptions.batch_no || [],
       width: "130px",
-      render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.batchNumber}</span>,
+      render: (val) => <span className="font-mono text-xs">{val}</span>,
     },
     {
-      key: "availableQuantity",
+      key: "available_qty",
       header: "Available Qty",
       sortable: true,
       align: "right",
       width: "110px",
-      render: (val) => (
-        <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? val.toLocaleString() : "—"}
-        </span>
-      ),
+      render: (val) => <span className="text-xs font-medium tabular-nums">{Number(val).toLocaleString()}</span>,
     },
     {
-      key: "returnDate",
+      key: "return_date",
       header: "Return Date",
       sortable: true,
-      filterable: true,
-      filterType: "date",
       width: "120px",
-      render: (_val, row) => <span className="text-xs text-foreground">{row.returnDate}</span>,
+      render: (val) => <span className="text-xs">{formatDate(val as string | null)}</span>,
     },
     {
-      key: "expiryDate",
+      key: "expiry_date",
       header: "Expiry Date",
       sortable: true,
       width: "120px",
-      render: (_val, row) => <span className="text-xs text-foreground">{row.expiryDate}</span>,
+      render: (val) => <span className="text-xs">{formatDate(val as string | null)}</span>,
     },
     {
       key: "status",
@@ -167,18 +204,25 @@ export function SalesReturnStockListing({ records }: SalesReturnStockListingProp
   ];
 
   return (
-    <MasterListing<SalesReturnStockRecord>
-      columns={columns}
-      data={paginated}
-      totalRecords={processed.length}
-      page={page}
-      pageSize={pageSize}
-      onPageChange={setPage}
-      onPageSizeChange={setPageSize}
-      onSortChange={setSort}
-      onFilterChange={setFilters}
-      emptyMessage="sales return stock"
-      searchPlaceholder="Search sales return stock..."
-    />
+    <div className="space-y-2">
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <MasterListing<ReturnStockListRow>
+        columns={columns}
+        data={records}
+        loading={loading}
+        totalRecords={totalRecords}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
+        onSortChange={setSort}
+        onFilterChange={onFilterChange}
+        emptyMessage=""
+        searchPlaceholder="Search product, batch or return no..."
+        currentFilters={draftFilters}
+        currentSort={sort}
+        onOpenFilter={handleOpenFilter}
+      />
+    </div>
   );
 }

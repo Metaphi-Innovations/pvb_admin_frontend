@@ -219,6 +219,9 @@ export const masterKeys = {
     details: () => [...masterKeys.warehouses.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.warehouses.details(), id] as const,
     dropdown: () => [...masterKeys.warehouses.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.warehouses.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.warehouses.filterDropdowns(), fieldName] as const,
     previewNumber: () => [...masterKeys.warehouses.all(), "preview-number"] as const,
     export: () => [...masterKeys.warehouses.all(), "export"] as const,
   },

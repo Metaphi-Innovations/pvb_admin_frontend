@@ -14,6 +14,7 @@ export interface HsnListParams {
 export interface HsnListRecord {
   id: number;
   hsnUuid: string;
+  hsnCode: string;
   hsnDescription: string;
   gstId: string;
   gstPercentage: number;
@@ -43,12 +44,33 @@ export interface HsnFilterOption {
 }
 
 export type HsnFilterField =
-  | "id"
+  | "hsnCode"
   | "hsnDescription"
   | "gstPercentage"
   | "is_active"
   | "created_by_user__username"
   | "updated_by_user__username";
+
+const SORT_KEY_TO_ORDERING: Record<string, string> = {
+  hsnCode: "hsnCode",
+  hsnDescription: "hsnDescription",
+  gstRate: "gst__gstPercentage",
+  status: "is_active",
+  createdBy: "created_by_user__username",
+  updatedBy: "updated_by_user__username",
+  createdDate: "created_at",
+  updatedDate: "updated_at",
+};
+
+export function sortStateToOrdering(
+  key: string,
+  direction: "asc" | "desc" | "none",
+): string {
+  if (!key || direction === "none") return "";
+  const field = SORT_KEY_TO_ORDERING[key];
+  if (!field) return "";
+  return direction === "desc" ? `-${field}` : field;
+}
 
 function mapFilterOptions(data: unknown[], fieldName: HsnFilterField): HsnFilterOption[] {
   const options: HsnFilterOption[] = [];
@@ -84,16 +106,6 @@ function mapFilterOptions(data: unknown[], fieldName: HsnFilterField): HsnFilter
       continue;
     }
 
-    if (fieldName === "id") {
-      const srNo = Number(record.sr_no);
-      const label =
-        Number.isFinite(srNo) && srNo > 0
-          ? `HSN-${String(srNo).padStart(4, "0")}`
-          : value;
-      options.push({ label, value });
-      continue;
-    }
-
     options.push({ label: value, value });
   }
 
@@ -101,11 +113,13 @@ function mapFilterOptions(data: unknown[], fieldName: HsnFilterField): HsnFilter
 }
 
 export interface HsnCreatePayload {
+  hsnCode: string;
   hsnDescription: string;
   gstId: string;
 }
 
 export interface HsnUpdatePayload {
+  hsnCode: string;
   hsnDescription: string;
   gstId: string;
 }
@@ -114,6 +128,7 @@ export interface HsnExportParams {
   search: string;
   status: "all" | "active" | "inactive";
   apiFilters?: Record<string, unknown>;
+  ordering?: string;
 }
 
 function asString(value: unknown): string {
@@ -127,7 +142,6 @@ function toStatus(value: unknown): "active" | "inactive" {
 function toDisplayName(user: unknown): string {
   if (!user || typeof user !== "object") return "";
   const record = user as Record<string, unknown>;
-  // Prefer username so list display matches API audit filters (exact username match).
   const username = asString(record.username).trim();
   if (username) return username;
   const first = asString(record.first_name).trim();
@@ -161,6 +175,7 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): HsnListRe
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     hsnUuid: asString(raw.id),
+    hsnCode: asString(raw.hsnCode ?? raw.hsn_code),
     hsnDescription: asString(raw.hsnDescription),
     gstId: gst.gstId,
     gstPercentage: gst.gstPercentage,
@@ -178,6 +193,7 @@ function mapDetail(raw: Record<string, unknown>): HsnListRecord {
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
     hsnUuid: asString(raw.id),
+    hsnCode: asString(raw.hsnCode ?? raw.hsn_code),
     hsnDescription: asString(raw.hsnDescription),
     gstId: gst.gstId,
     gstPercentage: gst.gstPercentage,
@@ -229,6 +245,7 @@ export const HsnListService = {
 
   async create(payload: HsnCreatePayload): Promise<void> {
     const response = await axiosInstance.post(API_ENDPOINTS.MASTER.HSN.CREATE, {
+      hsnCode: payload.hsnCode.trim(),
       hsnDescription: payload.hsnDescription.trim(),
       gstId: payload.gstId,
     });
@@ -241,6 +258,7 @@ export const HsnListService = {
 
   async update(id: string, payload: HsnUpdatePayload): Promise<void> {
     const response = await axiosInstance.put(API_ENDPOINTS.MASTER.HSN.UPDATE(id), {
+      hsnCode: payload.hsnCode.trim(),
       hsnDescription: payload.hsnDescription.trim(),
       gstId: payload.gstId,
     });
@@ -279,8 +297,9 @@ export const HsnListService = {
   },
 
   async export(params: HsnExportParams): Promise<void> {
+    const ordering = encodeURIComponent(params.ordering ?? "");
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.HSN.EXPORT}?search=${encodeURIComponent(params.search)}`,
+      `${API_ENDPOINTS.MASTER.HSN.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
       { filters: params.apiFilters ?? {} },
       { responseType: "blob" },
     );
@@ -310,7 +329,7 @@ export const HsnListService = {
       const gst = item.gst as Record<string, unknown> | undefined;
       return {
         id: asString(item.id),
-        hsnCode: asString(item.hsn_code ?? item.hsnCode ?? `HSN-${String(item.sr_no || item.id).padStart(4, "0")}`),
+        hsnCode: asString(item.hsnCode ?? item.hsn_code),
         hsnDescription: asString(item.hsnDescription ?? item.hsn_description),
         gstRate: gst ? `${asString(gst.gstPercentage)}%` : "",
         gstId: asString(item.gstId ?? item.gst_id),

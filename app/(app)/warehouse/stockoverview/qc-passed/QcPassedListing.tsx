@@ -1,122 +1,163 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, CheckCircle2 } from "lucide-react";
+import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
+import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { QcPassedStockRecord } from "../types";
+import { QC_PASSED_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
+import { ProductDropdownService } from "@/services/product-dropdown.service";
 import {
-  PRODUCT_OPTIONS,
-  WAREHOUSE_OPTIONS,
-  QC_PASSED_STATUS_OPTIONS,
-  STATUS_BADGE_CONFIG
-} from "../constants";
-import { enrichStockRecord } from "@/lib/accounts/inventory-accounting-data";
-import { formatMoney } from "@/lib/accounts/money-format";
-
-const CP_MISSING_MSG = "CP missing in Pricing Master.";
-
-type QcPassedDisplayRow = QcPassedStockRecord & {
-  sku: string;
-  uom: string;
-  costPrice: number;
-  cpMissing: boolean;
-  stockValue: number;
-};
+  InventoryListRow,
+  StockOverviewApi,
+  toStockOrdering,
+} from "../services/stock-overview-api";
 
 interface QcPassedListingProps {
-  qcPassedForWarehouse: QcPassedStockRecord[];
+  warehouseId?: string;
+  onFiltersApplied?: () => void;
 }
 
-export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) {
+export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListingProps) {
   const router = useRouter();
+  const {
+    draftFilters,
+    appliedFilters,
+    sort,
+    setSort,
+    page,
+    setPage,
+    pageSize,
+    handlePageSizeChange,
+    handleFilterChange,
+    listNonce,
+  } = useStockOverviewListFilters();
+  const [records, setRecords] = useState<InventoryListRow[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
+  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
+  const [productLookups, setProductLookups] = useState<{
+    sku: Array<{ label: string; value: string }>;
+    uom: Array<{ label: string; value: string }>;
+  }>({ sku: [], uom: [] });
 
-  // Filtering / Sorting / Pagination States
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  useEffect(() => {
+    setPage(1);
+  }, [warehouseId, setPage]);
 
-  // Filter & Sort
-  const enrichedRows = useMemo<QcPassedDisplayRow[]>(
-    () =>
-      qcPassedForWarehouse.map((item) => {
-        const val = enrichStockRecord(item);
-        return {
-          ...item,
-          sku: val.sku,
-          uom: val.uom,
-          costPrice: val.costPrice,
-          cpMissing: val.cpMissing,
-          stockValue: val.stockValue,
-        };
-      }),
-    [qcPassedForWarehouse],
-  );
+  useEffect(() => {
+    let mounted = true;
+    ProductDropdownService.dropdown()
+      .then((products) => {
+        if (!mounted) return;
+        const skuSeen = new Set<string>();
+        const uomSeen = new Set<string>();
+        const sku: Array<{ label: string; value: string }> = [];
+        const uom: Array<{ label: string; value: string }> = [];
 
-  const processed = useMemo(() => {
-    let result = [...enrichedRows];
-    Object.keys(filters).forEach((key) => {
-      const val = filters[key];
-      if (!val) return;
-
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(item =>
-          item.product.toLowerCase().includes(q) ||
-          item.warehouse.toLowerCase().includes(q) ||
-          item.batchNumber.toLowerCase().includes(q)
-        );
-      } else if (key === "batchNumber") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(item => item.batchNumber.toLowerCase().includes(q));
-      } else if (key === "product" || key === "warehouse" || key === "status") {
-        const selected = val as string[];
-        result = result.filter(item => selected.includes(String(item[key as keyof QcPassedStockRecord])));
-      } else if (key === "manufacturingDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter(item => item.manufacturingDate >= range.fromDate);
-        if (range.toDate) result = result.filter(item => item.manufacturingDate <= range.toDate);
-      } else if (key === "expiryDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter(item => item.expiryDate >= range.fromDate);
-        if (range.toDate) result = result.filter(item => item.expiryDate <= range.toDate);
-      }
-    });
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        if (sort.key === "availableQuantity" || sort.key === "costPrice" || sort.key === "stockValue") {
-          const valA = a[sort.key as keyof QcPassedDisplayRow] as number;
-          const valB = b[sort.key as keyof QcPassedDisplayRow] as number;
-          return sort.direction === "asc" ? valA - valB : valB - valA;
+        for (const p of products) {
+          const skuVal = String(p.sku ?? "").trim();
+          if (skuVal && !skuSeen.has(skuVal)) {
+            skuSeen.add(skuVal);
+            sku.push({ label: skuVal, value: skuVal });
+          }
+          const uomVal = String(p.unit ?? "").trim();
+          if (uomVal && !uomSeen.has(uomVal)) {
+            uomSeen.add(uomVal);
+            uom.push({ label: uomVal, value: uomVal });
+          }
         }
-        const valA = String(a[sort.key as keyof QcPassedStockRecord] || "");
-        const valB = String(b[sort.key as keyof QcPassedStockRecord] || "");
-        return sort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
+
+        setProductLookups({
+          sku: sku.sort((a, b) => a.label.localeCompare(b.label)),
+          uom: uom.sort((a, b) => a.label.localeCompare(b.label)),
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    StockOverviewApi.listInventory({
+      page,
+      page_size: pageSize,
+      search: String(appliedFilters.search ?? ""),
+      ordering: toStockOrdering(sort.key, sort.direction),
+      warehouse_id: warehouseId,
+      filters: appliedFilters,
+      signal: controller.signal,
+    })
+      .then((result) => {
+        setRecords(result.items);
+        setTotalRecords(result.total);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(StockOverviewApi.getErrorMessage(err, "Failed to load inventory."));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
+    return () => controller.abort();
+  }, [page, pageSize, sort.key, sort.direction, appliedFilters, warehouseId, listNonce]);
+
+  const onFilterChange = (next: typeof draftFilters) => {
+    handleFilterChange(next);
+    onFiltersApplied?.();
+  };
+
+  const handleOpenFilter = (columnKey: string) => {
+    if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
+
+    if (columnKey === "sku") {
+      setFilterOptions((prev) => ({ ...prev, sku: productLookups.sku }));
+      return;
     }
-    return result;
-  }, [enrichedRows, filters, sort]);
+    if (columnKey === "uom") {
+      setFilterOptions((prev) => ({ ...prev, uom: productLookups.uom }));
+      return;
+    }
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return processed.slice(start, start + pageSize);
-  }, [processed, page, pageSize]);
+    const keyMap: Record<string, string> = {
+      product_name: "inventory_detail__product__product_name",
+      warehouse_name: "inventory_detail__warehouse__warehouse_name",
+      batch_no: "batch_no",
+    };
+    const field = keyMap[columnKey];
+    if (!field) return;
 
-  const columns: ColumnConfig<QcPassedDisplayRow>[] = [
+    setLoadingFilters((prev) => new Set(prev).add(columnKey));
+    StockOverviewApi.filterDropdown("inventory", field)
+      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
+      .finally(() => {
+        setLoadingFilters((prev) => {
+          const next = new Set(prev);
+          next.delete(columnKey);
+          return next;
+        });
+      });
+  };
+
+  const columns: ColumnConfig<InventoryListRow>[] = [
     {
-      key: "product",
+      key: "product_name",
       header: "Product",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: PRODUCT_OPTIONS,
-      render: (val, row) => (
+      filterOptions: filterOptions.product_name || [],
+      render: (_val, row) => (
         <Link href={`/warehouse/stockoverview/view/${row.id}`} className="block group/name">
-          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product}</span>
+          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product_name}</span>
         </Link>
       ),
     },
@@ -125,68 +166,95 @@ export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) 
       header: "SKU",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: filterOptions.sku || productLookups.sku,
       width: "120px",
-      render: (val, row) => <span className="font-mono text-xs text-foreground">{row.sku}</span>,
+      render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
     },
     {
       key: "uom",
       header: "UOM",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.uom || productLookups.uom,
       width: "72px",
-      render: (val, row) => <span className="text-xs text-foreground">{row.uom || "—"}</span>,
+      render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
     {
-      key: "availableQuantity",
+      key: "available_qty",
       header: "Available Qty",
       sortable: true,
-      filterable: true,
-      filterType: "text",
       align: "right",
       width: "110px",
-      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
-    },
-    {
-      key: "costPrice",
-      header: "CP",
-      sortable: true,
-      align: "right",
-      width: "100px",
-      render: (_val, row) => (
-        <span className={`text-xs tabular-nums ${row.cpMissing ? "text-amber-700 text-[10px]" : "text-foreground"}`}>
-          {row.cpMissing ? CP_MISSING_MSG : formatMoney(row.costPrice)}
+      render: (val) => (
+        <span className="text-xs font-medium tabular-nums text-foreground">
+          {val != null ? Number(val).toLocaleString() : "—"}
         </span>
       ),
     },
     {
-      key: "stockValue",
+      key: "reserved_qty",
+      header: "Reserved Qty",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (val) => (
+        <span className="text-xs font-medium tabular-nums text-foreground">
+          {val != null ? Number(val).toLocaleString() : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "cp",
+      header: "CP",
+      sortable: true,
+      align: "right",
+      width: "120px",
+      render: (val) => {
+        const text = String(val ?? "");
+        const missing = text.toLowerCase().includes("missing");
+        return (
+          <span className={`text-xs tabular-nums ${missing ? "text-amber-700 text-[10px]" : "text-foreground"}`}>
+            {text || "—"}
+          </span>
+        );
+      },
+    },
+    {
+      key: "stock_value",
       header: "Stock Value",
       sortable: true,
       align: "right",
       width: "120px",
-      render: (_val, row) => (
-        <span className={`text-xs font-medium tabular-nums ${row.cpMissing && row.availableQuantity > 0 ? "text-amber-700 text-[10px]" : "text-foreground"}`}>
-          {row.cpMissing && row.availableQuantity > 0 ? CP_MISSING_MSG : formatMoney(row.stockValue)}
-        </span>
-      ),
+      render: (val) => {
+        const text = String(val ?? "");
+        const missing = text.toLowerCase().includes("missing");
+        return (
+          <span className={`text-xs font-medium tabular-nums ${missing ? "text-amber-700 text-[10px]" : "text-foreground"}`}>
+            {text || "—"}
+          </span>
+        );
+      },
     },
     {
-      key: "warehouse",
+      key: "warehouse_name",
       header: "Warehouse",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: WAREHOUSE_OPTIONS,
-      render: (val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
+      filterOptions: filterOptions.warehouse_name || [],
+      render: (val) => <span className="text-xs text-foreground">{val}</span>,
     },
     {
-      key: "batchNumber",
+      key: "batch_no",
       header: "Batch No",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: filterOptions.batch_no || [],
       width: "130px",
-      render: (val, row) => <span className="font-mono text-xs text-foreground">{row.batchNumber}</span>,
+      render: (val) => <span className="font-mono text-xs text-foreground">{val}</span>,
     },
     {
       key: "status",
@@ -207,7 +275,7 @@ export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) 
     },
   ];
 
-  const actions: ActionItemConfig<QcPassedDisplayRow>[] = [
+  const actions: ActionItemConfig<InventoryListRow>[] = [
     {
       label: "View Details",
       action: "view",
@@ -217,23 +285,25 @@ export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) 
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center">
-        {/* <h2 className="text-sm font-semibold text-foreground">QC Passed Available Inventory</h2> */}
-      </div>
-      <MasterListing<QcPassedDisplayRow>
+    <div className="space-y-2">
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <MasterListing<InventoryListRow>
         columns={columns}
-        data={paginated}
-        totalRecords={processed.length}
+        data={records}
+        loading={loading}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
-        onPageSizeChange={setPageSize}
+        onPageSizeChange={handlePageSizeChange}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={onFilterChange}
         actions={actions}
         emptyMessage=""
-        searchPlaceholder="Search QC Passed..."
+        searchPlaceholder="Search product or batch..."
+        currentFilters={draftFilters}
+        currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
     </div>
   );
