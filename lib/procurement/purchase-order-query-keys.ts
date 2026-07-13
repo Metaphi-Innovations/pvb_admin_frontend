@@ -16,6 +16,11 @@ export const purchaseOrderKeys = {
   filterDropdowns: () => [...purchaseOrderKeys.all, "filter-dropdown"] as const,
   filterDropdown: (fieldName: string) =>
     [...purchaseOrderKeys.filterDropdowns(), fieldName] as const,
+  supplierDropdown: () => [...purchaseOrderKeys.all, "supplier-dropdown"] as const,
+  warehouseDropdown: (supplierId: string) =>
+    [...purchaseOrderKeys.all, "warehouse-dropdown", supplierId] as const,
+  dropdown: (filters: { supplier_id?: string; warehouse_id?: string }) =>
+    [...purchaseOrderKeys.all, "dropdown", filters] as const,
   details: () => [...purchaseOrderKeys.all, "detail"] as const,
   detail: (id: string) => [...purchaseOrderKeys.details(), id] as const,
 } as const;

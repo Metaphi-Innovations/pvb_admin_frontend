@@ -77,6 +77,40 @@ export function usePurchaseOrderPreviewNumber(enabled = true) {
   });
 }
 
+export function usePurchaseOrderSupplierDropdown(enabled = true) {
+  return useQuery({
+    queryKey: purchaseOrderKeys.supplierDropdown(),
+    queryFn: ({ signal }) => PurchaseOrderService.getSupplierDropdown(signal),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function usePurchaseOrderWarehouseDropdown(
+  supplierId: string | null | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: purchaseOrderKeys.warehouseDropdown(supplierId ?? ""),
+    queryFn: ({ signal }) =>
+      PurchaseOrderService.getWarehouseDropdown(supplierId!, signal),
+    enabled: Boolean(supplierId) && enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function usePurchaseOrderDropdown(
+  filters: { supplier_id?: string; warehouse_id?: string } = {},
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: purchaseOrderKeys.dropdown(filters),
+    queryFn: ({ signal }) => PurchaseOrderService.getDropdown(filters, signal),
+    enabled: enabled && Boolean(filters.supplier_id),
+    staleTime: 30_000,
+  });
+}
+
 async function invalidatePoQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   id?: string,
