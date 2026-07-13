@@ -2,9 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { PurchaseOrderForm, poToFormValues, type POFormValues } from "../../components/PurchaseOrderForm";
+import {
+  PurchaseOrderForm,
+  poToFormValues,
+  validatePOForm,
+  focusFirstPOError,
+  type POFormValues,
+  type POFormErrors,
+} from "../../components/PurchaseOrderForm";
 import { POFormLayout } from "../../components/POFormLayout";
 import { POFormFooter } from "../../components/POFormFooter";
+import { POFormPageSkeleton } from "../../components/POSkeletons";
 import { usePurchaseOrder, useUpdatePurchaseOrder } from "@/hooks/procurement";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
@@ -18,12 +26,17 @@ export default function EditPOPage() {
   const updateMutation = useUpdatePurchaseOrder();
   const [form, setForm] = useState<POFormValues | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<POFormErrors>({});
 
   const po = detailQuery.data;
 
   useEffect(() => {
     if (!po) return;
-    if (!EDITABLE_STATUSES.includes(po.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (
+      !EDITABLE_STATUSES.includes(
+        po.status as (typeof EDITABLE_STATUSES)[number],
+      )
+    ) {
       router.replace(`/procurement/purchase-orders/${id}`);
       return;
     }
@@ -31,12 +44,16 @@ export default function EditPOPage() {
   }, [po, id, router]);
 
   const canEdit = useMemo(
-    () => !!po && EDITABLE_STATUSES.includes(po.status as (typeof EDITABLE_STATUSES)[number]),
+    () =>
+      !!po &&
+      EDITABLE_STATUSES.includes(
+        po.status as (typeof EDITABLE_STATUSES)[number],
+      ),
     [po],
   );
 
   if (detailQuery.isLoading || !form || !po) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+    return <POFormPageSkeleton />;
   }
 
   if (detailQuery.isError) {
@@ -49,23 +66,45 @@ export default function EditPOPage() {
 
   if (!canEdit) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">This purchase order cannot be edited.</div>
+      <div className="p-8 text-sm text-muted-foreground">
+        This purchase order cannot be edited.
+      </div>
     );
   }
 
+  const handleFormChange = (next: POFormValues) => {
+    setForm(next);
+    if (Object.keys(errors).length > 0) setErrors({});
+  };
+
   const save = (submit = false) => {
     setError(null);
+    if (submit) {
+      const validationErrors = validatePOForm(form);
+      setErrors(validationErrors);
+      if (Object.keys(validationErrors).length > 0) {
+        setError("Please fix the required fields before submitting.");
+        requestAnimationFrame(() => focusFirstPOError(validationErrors));
+        return;
+      }
+    } else {
+      setErrors({});
+    }
     updateMutation.mutate(
       {
         id: po.id,
         form,
         poNumber: po.poNumber,
-        status: submit ? "approved" : po.status === "rejected" ? "draft" : po.status,
+        status: submit
+          ? "approved"
+          : po.status === "rejected"
+            ? "draft"
+            : po.status,
       },
       {
         onSuccess: () => {
           router.push(
-            `/procurement/purchase-orders/${po.id}?toast=${submit ? "po-submitted" : "po-saved"}`,
+            `/procurement/purchase-orders?toast=${submit ? "po-submitted" : "po-saved"}`,
           );
         },
         onError: (err) => {
@@ -80,11 +119,11 @@ export default function EditPOPage() {
       mode="edit"
       poNumber={po.poNumber}
       status={po.status}
-      backHref={`/procurement/purchase-orders/${id}`}
+      backHref="/procurement/purchase-orders"
       onSave={() => save(false)}
       footer={
         <POFormFooter
-          onCancel={() => router.push(`/procurement/purchase-orders/${id}`)}
+          onCancel={() => router.push("/procurement/purchase-orders")}
           onSaveDraft={() => save(false)}
           onSubmit={() => save(true)}
           showSubmit={["draft", "rejected"].includes(po.status)}
@@ -96,10 +135,11 @@ export default function EditPOPage() {
       {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
       <PurchaseOrderForm
         form={form}
-        onChange={setForm}
+        onChange={handleFormChange}
         poNumber={po.poNumber}
         status={po.status}
         submittedDate={po.updatedDate}
+        errors={errors}
       />
     </POFormLayout>
   );

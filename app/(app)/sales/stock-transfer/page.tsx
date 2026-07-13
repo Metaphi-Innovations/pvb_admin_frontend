@@ -35,17 +35,21 @@ import type { ColumnConfig, FilterState, SortState } from "@/components/listing/
 import {
   type StockTransfer,
   type TransferStatus,
-  loadTransfers,
   formatTransferStatus,
   canEditTransfer,
   canCancelTransfer,
   canDownloadNote,
   canGeneratePackingList,
-  approveStockTransfer,
-  rejectStockTransfer,
 } from "./stock-transfer-data";
-import { downloadTransferNote, printTransferPackingList } from "./transfer-note-document";
+import { printTransferPackingList } from "./transfer-note-document";
 import CancelTransferDialog from "./components/CancelTransferDialog";
+import {
+  useStockTransfers,
+  useCancelStockTransfer,
+  useStockTransferFilterOptions,
+  useStockTransferSummary,
+} from "@/hooks/sales/use-stock-transfers";
+import { StockTransferService } from "@/services/stock-transfer.service";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -82,7 +86,6 @@ function StatusPill({ status }: { status: string }) {
 export default function StockTransferPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "transferDate", direction: "desc" });
@@ -90,12 +93,6 @@ export default function StockTransferPage() {
   const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelTransfer, setCancelTransfer] = useState<StockTransfer | null>(null);
-
-  const refreshTransfers = () => setTransfers(loadTransfers());
-
-  useEffect(() => {
-    refreshTransfers();
-  }, []);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -114,124 +111,166 @@ export default function StockTransferPage() {
     setPage(1);
   }, [activeTab, filters, pageSize]);
 
-  const filtered = useMemo(() => {
-    let d = transfers;
-    if (activeTab !== "all") {
-      d = d.filter((t) => {
-        if (activeTab === "pending") return t.status === "pending" || t.status === "pending_approval";
-        if (activeTab === "approved") return t.status === "approved" || t.status === "confirmed";
-        return t.status === activeTab;
-      });
+  // Construct ordering query param
+  const ordering = useMemo(() => {
+    if (!sort.key || sort.direction === "none") return undefined;
+    const direction = sort.direction === "desc" ? "-" : "";
+    const keyMap: Record<string, string> = {
+      transferNumber: "transfer_no",
+      transferDate: "transfer_date",
+      sourceWarehouseName: "from_warehouse__warehouse_name",
+      targetWarehouseName: "to_warehouse__warehouse_name",
+      totalItems: "total_products",
+      totalQuantity: "total_quantity",
+      status: "status",
+      createdBy: "created_at",
+    };
+    const key = keyMap[sort.key] || sort.key;
+    return `${direction}${key}`;
+  }, [sort]);
+
+  // Construct filters payload
+  const apiFilters = useMemo(() => {
+    const f: Record<string, any> = {};
+    if (activeTab && activeTab !== "all") {
+      if (activeTab === "pending") {
+        f.status = "SUBMITTED";
+      } else if (activeTab === "approved") {
+        f.status = "APPROVED";
+      } else if (activeTab === "rejected") {
+        f.status = "CANCELLED";
+      } else {
+        f.status = activeTab.toUpperCase();
+      }
     }
-
-    const searchVal = filters.search as string;
-    if (searchVal?.trim()) {
-      const q = searchVal.toLowerCase();
-      d = d.filter(
-        (t) =>
-          t.transferNumber.toLowerCase().includes(q) ||
-          t.sourceWarehouseName.toLowerCase().includes(q) ||
-          t.targetWarehouseName.toLowerCase().includes(q) ||
-          t.createdBy.toLowerCase().includes(q)
-      );
+    if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
+      f.status = filters.status.map(s => s === "pending" ? "SUBMITTED" : s === "approved" ? "APPROVED" : s.toUpperCase());
     }
-
-    const numberVal = filters.transferNumber as string;
-    if (numberVal?.trim()) {
-      d = d.filter((t) => t.transferNumber.toLowerCase().includes(numberVal.toLowerCase()));
+    if (filters.sourceWarehouseName && Array.isArray(filters.sourceWarehouseName) && filters.sourceWarehouseName.length > 0) {
+      f.from_warehouse = { warehouse_name: filters.sourceWarehouseName };
     }
-
-    const sourceVal = filters.sourceWarehouseName as string[];
-    if (sourceVal && sourceVal.length > 0) {
-      d = d.filter((t) => sourceVal.includes(t.sourceWarehouseName));
+    if (filters.targetWarehouseName && Array.isArray(filters.targetWarehouseName) && filters.targetWarehouseName.length > 0) {
+      f.to_warehouse = { warehouse_name: filters.targetWarehouseName };
     }
-
-    const targetVal = filters.targetWarehouseName as string[];
-    if (targetVal && targetVal.length > 0) {
-      d = d.filter((t) => targetVal.includes(t.targetWarehouseName));
+    if (filters.transferNumber) {
+      f.transfer_no = filters.transferNumber;
     }
+    return f;
+  }, [activeTab, filters]);
 
-    const statusVal = filters.status as string[];
-    if (statusVal && statusVal.length > 0) {
-      d = d.filter((t) => statusVal.includes(t.status));
-    }
+  const searchVal = (filters.search as string) || "";
 
-    if (sort.key && sort.direction !== "none") {
-      d = [...d].sort((a, b) => {
-        const av = (a as unknown as Record<string, unknown>)[sort.key];
-        const bv = (b as unknown as Record<string, unknown>)[sort.key];
-        const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true });
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-    return d;
-  }, [transfers, activeTab, filters, sort]);
+  // Queries
+  const { data: listData, isLoading, refetch } = useStockTransfers({
+    page,
+    pageSize,
+    search: searchVal,
+    ordering,
+    apiFilters,
+  });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const transfers = listData?.items || [];
+  const totalRecords = listData?.total || 0;
 
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
 
-  const paginated = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
+
+  // Summary/Counts Query
+  const { data: summaryData } = useStockTransferSummary();
 
   const kpi = {
-    total: transfers.length,
-    draft: transfers.filter((t) => t.status === "draft").length,
-    pending: transfers.filter((t) => t.status === "pending" || t.status === "pending_approval").length,
-    approved: transfers.filter((t) => t.status === "approved" || t.status === "confirmed").length,
-    rejected: transfers.filter((t) => t.status === "rejected").length,
-    cancelled: transfers.filter((t) => t.status === "cancelled").length,
-    totalAmount: transfers.reduce((sum, t) => sum + (t.totalAmount || 0), 0),
-    totalQuantity: transfers.reduce((sum, t) => sum + (t.totalQuantity || 0), 0),
+    total: summaryData?.total ?? 0,
+    draft: summaryData?.draft ?? 0,
+    pending: summaryData?.pending ?? 0,
+    approved: summaryData?.approved ?? 0,
+    rejected: summaryData?.rejected ?? 0,
+  };
+
+  const filterStatus = useMemo(() => {
+    if (activeTab === "all") return undefined;
+    if (activeTab === "draft") return "DRAFT";
+    if (activeTab === "pending") return "SUBMITTED";
+    if (activeTab === "approved") return "APPROVED";
+    if (activeTab === "rejected") return "CANCELLED";
+    return activeTab.toUpperCase();
+  }, [activeTab]);
+
+  const { data: sourceWhFilterRaw } = useStockTransferFilterOptions("from_warehouse__warehouse_name", filterStatus);
+  const { data: targetWhFilterRaw } = useStockTransferFilterOptions("to_warehouse__warehouse_name", filterStatus);
+  const { data: transferNoFilterRaw } = useStockTransferFilterOptions("transfer_no", filterStatus);
+
+  const sourceWarehouseOptions = useMemo(() => {
+    return (sourceWhFilterRaw || []).map((item: any) => ({
+      label: item.from_warehouse__warehouse_name,
+      value: item.from_warehouse__warehouse_name,
+    }));
+  }, [sourceWhFilterRaw]);
+
+  const targetWarehouseOptions = useMemo(() => {
+    return (targetWhFilterRaw || []).map((item: any) => ({
+      label: item.to_warehouse__warehouse_name,
+      value: item.to_warehouse__warehouse_name,
+    }));
+  }, [targetWhFilterRaw]);
+
+  const transferNoOptions = useMemo(() => {
+    return (transferNoFilterRaw || []).map((item: any) => ({
+      label: item.transfer_no,
+      value: item.transfer_no,
+    }));
+  }, [transferNoFilterRaw]);
+
+  const cancelMutation = useCancelStockTransfer();
+
+  const handleCancelConfirm = async (reason: string) => {
+    if (!cancelTransfer) return;
+    await cancelMutation.mutateAsync({ id: cancelTransfer.id as any, remarks: reason });
+    setToast({ msg: "Stock transfer cancelled successfully.", type: "success" });
+    refetch();
+  };
+
+  const handleDownloadNote = async (row: StockTransfer) => {
+    try {
+      const blob = await StockTransferService.downloadNote(row.id as any);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stock-transfer-${row.transferNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setToast({ msg: "Stock transfer note downloaded.", type: "success" });
+    } catch (err: any) {
+      setToast({ msg: err.message || "Failed to download note.", type: "error" });
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const csvContent = await StockTransferService.export({
+        search: searchVal,
+        ordering,
+        apiFilters,
+      });
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stock-transfers.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setToast({ msg: "Export completed successfully.", type: "success" });
+    } catch (err: any) {
+      setToast({ msg: err.message || "Failed to export data.", type: "error" });
+    }
   };
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    setFilters({});
     setPage(1);
     router.replace(`/sales/stock-transfer?tab=${tab}`, { scroll: false });
   };
-
-  const sourceWarehouseOptions = useMemo(() => {
-    return Array.from(new Set(transfers.map((t) => t.sourceWarehouseName)))
-      .filter(Boolean)
-      .map((name) => ({ label: name, value: name }));
-  }, [transfers]);
-
-  const targetWarehouseOptions = useMemo(() => {
-    return Array.from(new Set(transfers.map((t) => t.targetWarehouseName)))
-      .filter(Boolean)
-      .map((name) => ({ label: name, value: name }));
-  }, [transfers]);
-  const handleCancelSuccess = (updatedTransfer: StockTransfer) => {
-    setTransfers((prev) => prev.map((t) => (t.id === updatedTransfer.id ? updatedTransfer : t)));
-    setToast({ msg: "Stock transfer cancelled successfully.", type: "success" });
-  };
-
-  const handleApprove = (id: number) => {
-    const res = approveStockTransfer(id);
-    if ("error" in res) {
-      setToast({ msg: res.error, type: "error" });
-    } else {
-      setToast({ msg: "Stock transfer approved successfully.", type: "success" });
-      refreshTransfers();
-    }
-  };
-
-  const handleReject = (id: number) => {
-    const res = rejectStockTransfer(id);
-    if ("error" in res) {
-      setToast({ msg: res.error, type: "error" });
-    } else {
-      setToast({ msg: "Stock transfer rejected successfully.", type: "success" });
-      refreshTransfers();
-    }
-  };
-
-
 
   const columns: ColumnConfig<StockTransfer>[] = [
     {
@@ -239,7 +278,8 @@ export default function StockTransferPage() {
       header: "Transfer No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: transferNoOptions,
       render: (val, row) => (
         <span className="font-mono text-xs font-semibold text-brand-700">{row.transferNumber}</span>
       )
@@ -302,7 +342,7 @@ export default function StockTransferPage() {
       key: "status",
       header: "Status",
       sortable: true,
-      filterable: true,
+      filterable: activeTab === "all",
       filterType: "dropdown",
       filterOptions: [
         { label: "Draft", value: "draft" },
@@ -359,7 +399,7 @@ export default function StockTransferPage() {
             <button
               type="button"
               disabled={!canDownloadNote(row)}
-              onClick={() => downloadTransferNote(row)}
+              onClick={() => handleDownloadNote(row)}
               className={cn(
                 "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                 !canDownloadNote(row) ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -427,7 +467,7 @@ export default function StockTransferPage() {
         { value: "draft", label: `Draft (${kpi.draft})` },
         { value: "pending", label: `Pending (${kpi.pending})` },
         { value: "approved", label: `Approved (${kpi.approved})` },
-        { value: "rejected", label: `Rejected (${kpi.rejected})` },
+        { value: "rejected", label: `Cancelled (${kpi.rejected})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}
@@ -435,33 +475,30 @@ export default function StockTransferPage() {
       <div>
         <MasterListing<StockTransfer>
           columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
+          data={transfers}
+          totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
           onFilterChange={setFilters}
-          emptyMessage=""
+          emptyMessage={isLoading ? "Loading transfers..." : "transfers"}
           searchPlaceholder="Search transfers, warehouses…"
           currentFilters={filters}
           currentSort={sort}
           onAdd={() => router.push("/sales/stock-transfer/new")}
           addLabel="New Transfer"
-          onExport={() => console.log("Exporting stock transfers...")}
+          onExport={handleExport}
         />
       </div>
-
-
 
       <CancelTransferDialog
         transfer={cancelTransfer}
         open={!!cancelTransfer}
         onClose={() => setCancelTransfer(null)}
-        onSuccess={(updatedTransfer) => {
-          handleCancelSuccess(updatedTransfer);
-        }}
+        onConfirm={handleCancelConfirm}
+        isLoading={cancelMutation.isPending}
       />
 
       {toast && (
@@ -478,11 +515,3 @@ export default function StockTransferPage() {
     </ListingContainer>
   );
 }
-
-
-
-
-
-
-
-

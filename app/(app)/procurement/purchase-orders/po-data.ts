@@ -1,5 +1,5 @@
 import { PROCUREMENT_APPROVAL, CURRENT_USER, COMPANY_BILLING } from "@/lib/procurement/config";
-import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/procurement/utils";
+import { amountInWords, calcLineAmounts, nextId, round2, todayStr, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { POShortCloseInfo } from "./po-qty";
 import type { PackagingUom, ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
@@ -185,6 +185,25 @@ function gstSplitFromProduct(productId: number): { cgstPct: number; sgstPct: num
   const gst = parseGstRate(findProductRef(productId)?.gstRate);
   if (gst <= 0) return { cgstPct: 0, sgstPct: 0, igstPct: 0 };
   return { cgstPct: gst / 2, sgstPct: gst / 2, igstPct: 0 };
+}
+
+export function getLineTotalGstPct(line: POLineItem): number {
+  const fromRates = (line.cgstPct ?? 0) + (line.sgstPct ?? 0) + (line.igstPct ?? 0);
+  if (fromRates > 0.001) return fromRates;
+  const localId = asLocalProductId(line.productId);
+  if (!localId) return 0;
+  return parseGstRate(findProductRef(localId)?.gstRate);
+}
+
+export function applyTaxSupplyToPOLines(
+  lines: POLineItem[],
+  taxSupplyType: TaxSupplyType,
+): POLineItem[] {
+  return lines.map((line) => {
+    const totalGst = getLineTotalGstPct(line);
+    if (totalGst <= 0) return line;
+    return { ...line, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
+  });
 }
 
 function asLocalProductId(productId: unknown): number | null {

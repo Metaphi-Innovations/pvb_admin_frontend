@@ -27,7 +27,6 @@ import {
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface ReadyPackingListingProps {
-  ordersForWarehouse: any[]; // Kept for prop-type compatibility, but ignored in favor of real API calls
   sourceFilter: PackingSourceTab;
 }
 
@@ -99,13 +98,14 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
     if (!mapping) return;
     loadedFiltersRef.current.add(columnKey);
     try {
-      const options = await PackingListService.getFilterDropdown(mapping.field);
+      const apiSourceType = sourceFilter === "sales" ? "normal_sales" : sourceFilter;
+      const options = await PackingListService.getFilterDropdown(mapping.field, apiSourceType);
       mapping.setter(options);
     } catch (err) {
       console.error(`Error loading filter options for ${columnKey}:`, err);
       loadedFiltersRef.current.delete(columnKey);
     }
-  }, [FILTER_FIELD_MAP]);
+  }, [FILTER_FIELD_MAP, sourceFilter]);
 
   // Fetch list data from backend
   useEffect(() => {
@@ -169,12 +169,17 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
         filterOptions: packingNoOptions,
         width: "140px",
         render: (_: unknown, row: PackingListListItem) => (
-          <Link
-            href={`/warehouse/packing/create/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.packingNumber}
-          </Link>
+          <div className="flex flex-col">
+            <Link
+              href={`/warehouse/packing/create/${row.id}`}
+              className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+            >
+              {row.sourceDocumentNo || row.packingNumber}
+            </Link>
+            {row.sourceDocumentNo && (
+              <span className="text-[10px] text-muted-foreground font-mono">{row.packingNumber}</span>
+            )}
+          </div>
         ),
       },
       {
@@ -184,17 +189,22 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
             ? "Issued To Employee"
             : sourceFilter === "purchase_return"
               ? "Supplier"
-              : "Customer / Issued To",
+              : sourceFilter === "stock_transfer"
+                ? "Target Warehouse"
+                : "Customer / Issued To",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: customerOptions,
         width: "180px",
-        render: (_: unknown, row: PackingListListItem) => (
-          <div className="min-w-0">
-            <span className="text-xs text-foreground font-semibold block truncate">{row.customerName}</span>
-          </div>
-        ),
+        render: (_: unknown, row: PackingListListItem) => {
+          const label = sourceFilter === "stock_transfer" ? (row.targetWarehouse || row.customerName) : row.customerName;
+          return (
+            <div className="min-w-0">
+              <span className="text-xs text-foreground font-semibold block truncate">{label}</span>
+            </div>
+          );
+        },
       },
       {
         key: "warehouse",
@@ -206,7 +216,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
         width: "160px",
         render: (_: unknown, row: PackingListListItem) => (
           <span className="text-xs text-foreground">
-            {row.warehouseName}
+            {sourceFilter === "stock_transfer" ? (row.sourceWarehouse || row.warehouseName) : row.warehouseName}
           </span>
         ),
       },
@@ -293,6 +303,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
       action: "create_packing",
       icon: PlusCircle,
       onClick: (row) => router.push(`/warehouse/packing/create/${row.id}`),
+      disabled: (row) => row.status === "Fully Packed",
     },
   ];
 

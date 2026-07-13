@@ -8,6 +8,7 @@ import {
   type CustomerTypeFilterField,
   type CustomerTypeListParams,
   type CustomerTypeUpdatePayload,
+  type CustomerTypeDropdownItem,
 } from "@/services/customer-type-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
@@ -96,5 +97,13 @@ export function useCustomerTypeFilterDropdown(
       CustomerTypeListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
     enabled: options?.enabled ?? true,
+  });
+}
+
+export function useCustomerTypeDropdown() {
+  return useQuery<CustomerTypeDropdownItem[]>({
+    queryKey: masterKeys.customerTypes.all(),
+    queryFn: () => CustomerTypeListService.dropdown(),
+    staleTime: 30_000,
   });
 }

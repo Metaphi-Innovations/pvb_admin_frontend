@@ -1,41 +1,60 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import {
-  CheckCircle2, Pencil, ShieldAlert, Activity, Layers, BarChart2
+  CheckCircle2, ShieldAlert, Activity, Layers, BarChart2
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 
-import { ReorderLevel } from "./types";
-import { getReordersByWarehouse, getAllReorders, generateStats } from "./services";
-import { WAREHOUSE_OPTIONS } from "./constants";
+import { ReorderSummary } from "./types";
+import { ReorderLevelService } from "./services";
 
 import { WarehouseWiseListing } from "./warehouse-wise/WarehouseWiseListing";
 import { ProductOverviewListing } from "./product-overview/ProductOverviewListing";
 
 export default function ReorderLevelPage() {
-  const router = useRouter();
-
   const [activeTab, setActiveTab] = useState("warehouse-wise");
-  const [selectedWarehouse, setSelectedWarehouse] = useState("Central Warehouse");
-  const [allRecords, setAllRecords] = useState<ReorderLevel[]>([]);
-  const [warehouseRecords, setWarehouseRecords] = useState<ReorderLevel[]>([]);
-
-  const reload = useCallback(() => {
-    setAllRecords(getAllReorders());
-    setWarehouseRecords(getReordersByWarehouse(selectedWarehouse));
-  }, [selectedWarehouse]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState("All");
+  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([
+    { value: "All", label: "All Warehouses" },
+  ]);
+  const [summary, setSummary] = useState<ReorderSummary>({ total: 0, inStock: 0, lowStock: 0 });
 
   useEffect(() => {
-    reload();
-  }, [reload]);
+    let mounted = true;
+    ReorderLevelService.warehouseDropdown()
+      .then((items) => {
+        if (!mounted) return;
+        setWarehouseOptions([{ value: "All", label: "All Warehouses" }, ...items]);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const stats = useMemo(() => generateStats(allRecords), [allRecords]);
+  useEffect(() => {
+    let active = true;
+    const isOverview = activeTab === "product-overview";
+    ReorderLevelService.summary({
+      reorder_type: isOverview ? "OVERALL" : "WAREHOUSE",
+      warehouse_id: isOverview || selectedWarehouse === "All" ? undefined : selectedWarehouse,
+    })
+      .then((data) => {
+        if (!active) return;
+        setSummary(data);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSummary({ total: 0, inStock: 0, lowStock: 0 });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedWarehouse, activeTab]);
 
   return (
     <ListingContainer
@@ -43,9 +62,9 @@ export default function ReorderLevelPage() {
       titleIcon={Activity}
       metrics={
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <MiniKPICard label="Total Configured" value={stats.totalConfigured} icon={Layers} accent={true} />
-          <MiniKPICard label="In Stock" value={stats.inStock} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Low Stock" value={stats.lowStock} icon={ShieldAlert} accent={false} />
+          <MiniKPICard label="Total Configured" value={summary.total} icon={Layers} accent={true} />
+          <MiniKPICard label="In Stock" value={summary.inStock} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Low Stock" value={summary.lowStock} icon={ShieldAlert} accent={false} />
         </div>
       }
       tabs={[
@@ -59,7 +78,7 @@ export default function ReorderLevelPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Warehouse:</span>
             <AutocompleteSelect
-              options={WAREHOUSE_OPTIONS}
+              options={warehouseOptions}
               value={selectedWarehouse}
               onChange={setSelectedWarehouse}
               placeholder="Select warehouse..."
@@ -70,18 +89,14 @@ export default function ReorderLevelPage() {
         ) : null
       }
     >
-      {/* TAB 1: Warehouse Wise */}
       <TabsContent value="warehouse-wise" className="mt-0 outline-none">
-        <WarehouseWiseListing 
-          warehouseRecords={warehouseRecords} 
-          selectedWarehouse={selectedWarehouse} 
-          reload={reload} 
+        <WarehouseWiseListing
+          selectedWarehouseId={selectedWarehouse === "All" ? undefined : selectedWarehouse}
         />
       </TabsContent>
 
-      {/* TAB 2: Product Overview */}
       <TabsContent value="product-overview" className="mt-0 outline-none">
-        <ProductOverviewListing allRecords={allRecords} />
+        <ProductOverviewListing />
       </TabsContent>
     </ListingContainer>
   );

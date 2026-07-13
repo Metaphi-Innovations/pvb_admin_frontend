@@ -10,10 +10,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, AlertCircle, Search } from "lucide-react";
-import {
-  loadWarehouses,
-  type WarehouseMaster,
-} from "@/app/(app)/masters/warehouse/warehouse-data";
 import TransferProductLinesEditor from "./TransferProductLinesEditor";
 import AdditionalExpensesEditor from "@/app/(app)/sales/orders/components/AdditionalExpensesEditor";
 import {
@@ -24,8 +20,15 @@ import {
   type ProductCatalogItem,
   calculateOrderTotalsSummary,
 } from "@/app/(app)/sales/orders/orders-data";
+import { useStockTransferDropdowns } from "@/hooks/sales/use-stock-transfers";
 
-function SearchableDropdown<T extends { id: number }>({
+interface WarehouseMaster {
+  id: number | string;
+  warehouseCode: string;
+  warehouseName: string;
+}
+
+function SearchableDropdown<T extends { id: number | string }>({
   label,
   required,
   value,
@@ -37,8 +40,8 @@ function SearchableDropdown<T extends { id: number }>({
 }: {
   label: string;
   required?: boolean;
-  value: number | null;
-  onChange: (id: number) => void;
+  value: number | string | null;
+  onChange: (id: any) => void;
   options: T[];
   placeholder: string;
   error?: string;
@@ -194,6 +197,8 @@ function StatusSelect({
   );
 }
 
+
+
 interface StockTransferFormProps {
   mode: "add" | "edit";
   transferNumber: string;
@@ -220,9 +225,24 @@ export default function StockTransferForm({
   showStatus = false,
   auditInfo,
 }: StockTransferFormProps) {
+  const { data: dropdownData } = useStockTransferDropdowns();
+
   const warehouses = useMemo(() => {
-    return loadWarehouses().filter((w) => w.status === "active");
-  }, []);
+    if (!dropdownData?.warehouses) return [];
+    return dropdownData.warehouses.map((w: any) => ({
+      id: w.warehouse_id,
+      warehouseCode: w.warehouse_code || `WH-${String(w.sr_no || "").padStart(4, "0")}`,
+      warehouseName: w.warehouse_name,
+    }));
+  }, [dropdownData]);
+
+  const users = useMemo(() => {
+    if (!dropdownData?.users) return [];
+    return dropdownData.users.map((u: any) => ({
+      id: u.user_id,
+      name: `${u.first_name || ""} ${u.last_name || ""}`.trim() || u.username,
+    }));
+  }, [dropdownData]);
 
   const set = <K extends keyof StockTransferFormValues>(
     key: K,
@@ -315,12 +335,15 @@ export default function StockTransferForm({
         </div>
 
         <div className="space-y-1 col-span-1 md:col-span-2">
-          <Label className="text-xs font-medium">Requested By</Label>
-          <Input
+          <SearchableDropdown<any>
+            label="Requested By"
+            required
             value={form.requestedBy}
-            onChange={(e) => set("requestedBy", e.target.value)}
-            placeholder="Employee / user name"
-            className="h-8 text-xs rounded-lg"
+            onChange={(id) => set("requestedBy", id)}
+            options={users}
+            placeholder="Select requester…"
+            error={errors.requestedBy}
+            getLabel={(u) => u.name}
           />
         </div>
 
@@ -380,6 +403,7 @@ export default function StockTransferForm({
         targetWarehouseId={form.targetWarehouseId}
         onChange={(lines) => set("lineItems", lines)}
         error={errors.lineItems}
+        errors={errors}
       />
 
       <AdditionalExpensesEditor

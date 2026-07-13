@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,29 +13,28 @@ import {
 } from "lucide-react";
 import {
   type SalesOrder,
-  attachPackingListToOrder,
   hydrateOrderLineItems,
-  getOrderById,
 } from "../../../orders-data";
 import {
-  type PackingList,
   type PackingListLine,
-  getActiveWarehousesForPacking,
-  buildAllPackingListLines,
-  createPackingList,
-  savePackingList,
-  validatePackingListLines,
+  getProductPackingConfig,
   CartonAllocation,
   InventoryType,
 } from "../../../packing-list-data";
+import {
+  useSalesOrder,
+  useWarehousesDropdown,
+  useCreatePackingList,
+} from "@/hooks/sales/use-sales-orders";
+import { SalesOrderService } from "@/services/sales-order.service";
 
 export default function NewPackingListPage() {
   const params = useParams();
   const router = useRouter();
-  const orderId = Number(params.id);
+  const orderId = params.id as string;
 
   const [order, setOrder] = useState<SalesOrder | null>(null);
-  const [warehouseId, setWarehouseId] = useState<number | null>(null);
+  const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [warehouseCode, setWarehouseCode] = useState("");
   const [warehouseName, setWarehouseName] = useState("");
   const [lines, setLines] = useState<PackingListLine[]>([]);
@@ -43,44 +42,134 @@ export default function NewPackingListPage() {
   const [whOpen, setWhOpen] = useState(false);
   const [checkedAllocations, setCheckedAllocations] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [loadingBatches, setLoadingBatches] = useState(false);
 
-  const warehouses = getActiveWarehousesForPacking();
+  const { data: loadedOrder, isLoading: loadingOrder } = useSalesOrder(orderId);
+  const { data: warehouseData } = useWarehousesDropdown();
+  const createPackingListMutation = useCreatePackingList();
+
+  const warehouses = useMemo(() => {
+    if (!warehouseData) return [];
+    return warehouseData.map((w: any) => ({
+      id: w.warehouse_id,
+      warehouseCode: w.warehouse_code || `WH-${String(w.sr_no).padStart(4, "0")}`,
+      warehouseName: w.warehouse_name,
+    }));
+  }, [warehouseData]);
 
   useEffect(() => {
-    const o = getOrderById(orderId);
-    if (o) {
-      setOrder(hydrateOrderLineItems(o));
+    if (loadedOrder) {
+      setOrder(hydrateOrderLineItems(loadedOrder));
     }
-  }, [orderId]);
+  }, [loadedOrder]);
 
+  // Auto-select warehouse when order and warehouse list are loaded
   useEffect(() => {
-    if (!order || !warehouseCode) {
+    if (order?.warehouseId && warehouses.length > 0) {
+      const match = warehouses.find(w => w.id === order.warehouseId);
+      if (match) {
+        setWarehouseId(match.id);
+        setWarehouseCode(match.warehouseCode);
+        setWarehouseName(match.warehouseName);
+      }
+    }
+  }, [order, warehouses]);
+
+  // Fetch live batches from backend when order and warehouse are selected
+  useEffect(() => {
+    if (!order || !warehouseId) {
       setLines([]);
       setCheckedAllocations({});
       setExpandedSections({});
       return;
     }
-    const allLines = buildAllPackingListLines(order, warehouseCode);
-    setLines(allLines);
 
-    const initialChecked: Record<string, boolean> = {};
-    const initialExpanded: Record<string, boolean> = {};
-    for (const line of allLines) {
-      initialExpanded[line.lineItemId] = true;
-      for (const alloc of line.allocations) {
-        if (alloc.allocatedBaseQty > 0) {
-          initialChecked[`${line.lineItemId}-${alloc.cartonId}`] = true;
+    const fetchAllBatches = async () => {
+      setLoadingBatches(true);
+      setError("");
+      try {
+        const packingLines: PackingListLine[] = [];
+        const initialChecked: Record<string, boolean> = {};
+        const initialExpanded: Record<string, boolean> = {};
+
+        for (const line of order.lineItems) {
+          if (!line.productId || line.quantity <= 0) continue;
+
+          // Fetch available inventory batches from the backend
+          const batches = await SalesOrderService.getBatches(line.productId, warehouseId);
+
+          const config = getProductPackingConfig(Number(line.productId)) || {
+            packingUnit: "Unit",
+            baseUnit: "Unit",
+            unitsPerPackingUnit: 1,
+          };
+
+          let remaining = line.quantity;
+
+          const allocations = batches.map((b: any) => {
+            const availQty = Number(b.available_qty || 0);
+            const unitsPerPacking = config.unitsPerPackingUnit;
+
+            const takeBase = Math.min(remaining, availQty);
+            const takePacking = Math.floor(takeBase / unitsPerPacking);
+            const autoBase = takePacking * unitsPerPacking;
+
+            if (autoBase > 0) {
+              initialChecked[`${line.id}-${b.available_inventory_id}`] = true;
+              remaining -= autoBase;
+            }
+
+            return {
+              cartonId: b.available_inventory_id,
+              batchNumber: b.batch_code || "N/A",
+              expiryDate: b.expiry_date || "N/A",
+              cartonNumber: b.batch_code || "N/A",
+              packingUnit: config.packingUnit,
+              baseUnit: config.baseUnit,
+              unitsPerPackingUnit: unitsPerPacking,
+              availablePackingQty: Math.floor(availQty / unitsPerPacking),
+              availableBaseQty: availQty,
+              inventoryType: "original" as InventoryType,
+              suggestedPackingQty: takePacking,
+              suggestedBaseQty: autoBase,
+              allocatedPackingQty: takePacking,
+              allocatedBaseQty: autoBase,
+            };
+          });
+
+          initialExpanded[line.id] = true;
+
+          packingLines.push({
+            lineItemId: line.id,
+            productId: Number(line.productId),
+            productCode: line.productCode || "",
+            productName: line.productName || "",
+            packingUnit: config.packingUnit,
+            baseUnit: config.baseUnit,
+            unitsPerPackingUnit: config.unitsPerPackingUnit,
+            orderedBaseQty: line.quantity,
+            hasPackingConfig: true,
+            allocations,
+          });
         }
+
+        setLines(packingLines);
+        setCheckedAllocations(initialChecked);
+        setExpandedSections(initialExpanded);
+      } catch (err: any) {
+        console.error("Error fetching batches", err);
+        setError("Failed to load inventory batches for the selected warehouse.");
+      } finally {
+        setLoadingBatches(false);
       }
-    }
-    setCheckedAllocations(initialChecked);
-    setExpandedSections(initialExpanded);
-    setError("");
-  }, [order, warehouseCode]);
+    };
 
-  if (!order) return <div className="p-8">Order not found.</div>;
+    fetchAllBatches();
+  }, [order, warehouseId]);
 
-  const selectWarehouse = (id: number, code: string, name: string) => {
+  if (loadingOrder || !order) return <div className="p-8">Loading order…</div>;
+
+  const selectWarehouse = (id: string, code: string, name: string) => {
     setWarehouseId(id);
     setWarehouseCode(code);
     setWarehouseName(name);
@@ -167,7 +256,9 @@ export default function NewPackingListPage() {
       return;
     }
 
-    // Validation
+    const productsToSubmit: any[] = [];
+
+    // Validation & build submit products array
     for (const line of lines) {
       let productSelectedTotal = 0;
       for (const alloc of line.allocations) {
@@ -182,6 +273,13 @@ export default function NewPackingListPage() {
             return;
           }
           productSelectedTotal += alloc.allocatedBaseQty;
+
+          productsToSubmit.push({
+            source_item_id: line.lineItemId,
+            batch_code: alloc.batchNumber,
+            order_qty: alloc.allocatedBaseQty,
+            available_inventory_id: alloc.cartonId,
+          });
         }
       }
       if (productSelectedTotal > line.orderedBaseQty) {
@@ -190,34 +288,28 @@ export default function NewPackingListPage() {
       }
     }
 
-    const finalLines = lines.map(line => ({
-      ...line,
-      allocations: line.allocations.filter(alloc => checkedAllocations[`${line.lineItemId}-${alloc.cartonId}`])
-    }));
-
-    const validationError = validatePackingListLines(finalLines, warehouseCode);
-    if (validationError) {
-      setError(validationError);
+    if (productsToSubmit.length === 0) {
+      setError("At least one product and batch must be allocated for packing.");
       return;
     }
 
-    const list = createPackingList(order, finalLines, warehouseId, warehouseCode, warehouseName);
-    savePackingList(list);
-
-    const attachResult = attachPackingListToOrder(
-      order.id,
-      list.id,
-      list.packingListNumber,
-      warehouseId,
-      warehouseName,
-      list.status,
+    createPackingListMutation.mutate(
+      {
+        source_type: "normal_sales",
+        source_id: order.id as unknown as string,
+        warehouse_id: warehouseId as string,
+        remarks: "Generate packing list from UI",
+        products: productsToSubmit,
+      },
+      {
+        onSuccess: () => {
+          router.push(`/sales/orders`);
+        },
+        onError: (err: any) => {
+          setError(err.response?.data?.message || "Failed to generate packing list.");
+        },
+      }
     );
-    if ("error" in attachResult) {
-      setError(attachResult.error);
-      return;
-    }
-
-    router.push(`/sales/orders`);
   };
 
   const formatInventoryType = (type: InventoryType) => {
@@ -284,10 +376,11 @@ export default function NewPackingListPage() {
               </PopoverContent>
             </Popover>
           </div>
-
         </div>
 
-        {warehouseCode && lines.map(line => {
+        {loadingBatches && <p className="text-xs text-muted-foreground">Loading available batches…</p>}
+
+        {!loadingBatches && warehouseCode && lines.map(line => {
           const visibleAllocations = line.allocations;
 
           if (visibleAllocations.length === 0) return null;
@@ -297,7 +390,6 @@ export default function NewPackingListPage() {
             return sum + (isChecked ? a.allocatedBaseQty : 0);
           }, 0);
           const insufficient = allocated < line.orderedBaseQty;
-
           const isExpanded = !!expandedSections[line.lineItemId];
           const selectedCount = line.allocations.filter(a => !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`]).length;
 
@@ -429,9 +521,9 @@ export default function NewPackingListPage() {
           <Button
             className="gap-2 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
-            disabled={!warehouseCode}
+            disabled={!warehouseCode || createPackingListMutation.isPending}
           >
-            <Save className="w-4 h-4" /> Save Packing List
+            <Save className="w-4 h-4" /> {createPackingListMutation.isPending ? "Generating..." : "Save Packing List"}
           </Button>
         </div>
       </div>

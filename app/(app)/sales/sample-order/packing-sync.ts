@@ -5,6 +5,7 @@ import {
   saveOrders,
   todayStr,
   type SalesOrder,
+  type SalesOrderLineItem,
 } from "./orders-data";
 
 const PACKING_READY_STATUSES = ["approved", "confirmed", "packed"] as const;
@@ -22,7 +23,8 @@ export function getSampleOrderIdFromPackingRecord(packing: PackingRecord): numbe
   }
   if (packing.sourceDocumentType === "Sample Order") {
     const order = loadOrders().find((o) => o.soNumber === packing.salesOrderNo);
-    return order?.id ?? null;
+    const oid = order?.id;
+    return oid !== undefined ? (typeof oid === "number" ? oid : parseInt(String(oid), 10) || null) : null;
   }
   return null;
 }
@@ -33,7 +35,7 @@ export function getSampleOrderByDocumentNo(documentNo: string): SalesOrder | und
 }
 
 export function getSampleOrdersForPacking(): SalesOrder[] {
-  return loadOrders().filter((order) => {
+  return loadOrders().filter((order: SalesOrder) => {
     if (!PACKING_READY_STATUSES.includes(order.status as (typeof PACKING_READY_STATUSES)[number])) {
       return false;
     }
@@ -41,13 +43,13 @@ export function getSampleOrdersForPacking(): SalesOrder[] {
     if (order.packingStatus === "packed" || order.packingStatus === "partially_packed") {
       return false;
     }
-    return hydrateOrderLineItems(order).lineItems.some((l) => l.productId && l.quantity > 0);
+    return hydrateOrderLineItems(order).lineItems.some((l: SalesOrderLineItem) => l.productId && l.quantity > 0);
   });
 }
 
 export function mapSampleOrderToPackingRecord(order: SalesOrder): SalesOrderRecord {
   const hydrated = hydrateOrderLineItems(order);
-  const totalQuantity = hydrated.lineItems.reduce((sum, line) => sum + (line.quantity || 0), 0);
+  const totalQuantity = hydrated.lineItems.reduce((sum: number, line: SalesOrderLineItem) => sum + (line.quantity || 0), 0);
 
   return {
     id: `sm-${order.id}`,
@@ -64,13 +66,15 @@ export function mapSampleOrderToPackingRecord(order: SalesOrder): SalesOrderReco
     status: order.packingStatus === "generated" ? "Packing In Progress" : "Ready For Packing",
     warehouse: order.warehouseName || "Central Warehouse",
     products: hydrated.lineItems
-      .filter((l) => l.productId)
-      .map((line) => ({
+      .filter((l: SalesOrderLineItem) => l.productId)
+      .map((line: SalesOrderLineItem) => ({
         product: line.productName,
         sku: line.productCode,
         orderedQty: line.quantity,
         packedQty: 0,
         pendingQty: line.quantity,
+        ordered_cases: 0,
+        pending_cases: 0,
       })),
     sourceDocumentType: "Sample Order",
     sourceDocumentNo: order.soNumber,
@@ -89,7 +93,7 @@ export function updateSampleOrderAfterWarehousePacking(
   packedBy: string = "Admin",
 ): SalesOrder | null {
   const orders = loadOrders();
-  const index = orders.findIndex((o) => o.id === orderId);
+  const index = orders.findIndex((o: SalesOrder) => o.id === orderId);
   if (index === -1) return null;
 
   if (isDraft) return hydrateOrderLineItems(orders[index]);

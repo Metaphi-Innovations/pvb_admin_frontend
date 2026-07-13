@@ -48,7 +48,8 @@ export function useProductDropdown() {
 export function useCreateProduct() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: ProductCreatePayload) => ProductListService.create(payload),
+    mutationFn: ({ payload, images }: { payload: ProductCreatePayload; images: File[] }) =>
+      ProductListService.create(payload, images),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: masterKeys.products.lists() });
     },
@@ -58,8 +59,15 @@ export function useCreateProduct() {
 export function useUpdateProduct() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ProductUpdatePayload }) =>
-      ProductListService.update(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+      images,
+    }: {
+      id: string;
+      payload: ProductUpdatePayload;
+      images: File[];
+    }) => ProductListService.update(id, payload, images),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: masterKeys.products.lists() }),
@@ -90,5 +98,12 @@ export function useToggleProductStatus() {
 export function useExportProducts() {
   return useMutation({
     mutationFn: (params: ProductExportParams) => ProductListService.export(params),
+  });
+}
+
+export function useProductPreviewNumber() {
+  return useQuery({
+    queryKey: ["product-preview-number"],
+    queryFn: () => ProductListService.previewNumber(),
   });
 }

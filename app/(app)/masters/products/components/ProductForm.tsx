@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	AlertCircle,
 	Eye,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { loadHSNMasters } from "../../hsn/hsn-data";
+// import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
 	type ProductImage,
@@ -38,23 +38,23 @@ import {
 	getMouFromUnit,
 	isAllowedProductImageFile,
 	isValidProductUrl,
-	loadActiveCategoryOptions,
+	// loadActiveCategoryOptions,
 	loadActiveCfuOptions,
 	loadActiveFormOptions,
-	loadActiveSegmentOptions,
-	loadActiveSupplierOptions,
-	loadProducts,
-	generateProductCode,
+	// loadActiveSegmentOptions,
+	// loadActiveSupplierOptions,
+	// loadProducts,
+	// generateProductCode,
 	normalizeProductUnit,
 	resolveProductCodeForSave,
 	resolveProductTaxFromHsn,
-	resolveSupplierCode,
+	// resolveSupplierCode,
 	todayStr,
 } from "../product-data";
 import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { ListingStatusToggle } from "@/components/listing";
-import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown } from "@/hooks/masters";
+import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown, useCfuDropdown, useFormulationDropdown } from "@/hooks/masters";
 
 export interface ProductFormValues {
 	productCode: string;
@@ -63,9 +63,14 @@ export interface ProductFormValues {
 	productName: string;
 	scientificName: string;
 	segment: string;
+	segmentId?: string;
 	category: string;
+	categoryId?: string;
+	subCategory?: string;
 	form: string;
+	formId?: string;
 	cfu: string;
+	cfuId?: string;
 	authority: string;
 	sku: string;
 	hsnCode: string;
@@ -140,9 +145,13 @@ export function productToFormValues(product: Product): ProductFormValues {
 		productName: product.productName,
 		scientificName: product.scientificName ?? "",
 		segment: product.segment,
+		segmentId: product.segmentId,
 		category: product.category,
+		categoryId: product.categoryId,
 		form: product.form ?? product.formulation ?? "",
+		formId: product.formId,
 		cfu: product.cfu ?? "",
+		cfuId: product.cfuId,
 		authority: product.authority ?? "",
 		sku: product.sku ?? "",
 		hsnCode: product.hsnCode,
@@ -255,6 +264,7 @@ function applyPackagingCalculations(values: ProductFormValues): ProductFormValue
 	return next;
 }
 
+
 export function ProductForm({
 	form,
 	onChange,
@@ -262,6 +272,7 @@ export function ProductForm({
 	onClearError,
 	productImages = [],
 	productUrls = [],
+	previewNumber,
 	onImageAdd,
 	onImageRemove,
 	onUrlAdd,
@@ -277,29 +288,70 @@ export function ProductForm({
 	productUrls?: ProductUrl[];
 	onImageAdd?: (items: ProductImage[]) => void;
 	onImageRemove?: (id: string) => void;
+	previewNumber?: string;
 	onUrlAdd?: (item: ProductUrl) => void;
 	onUrlRemove?: (id: string) => void;
 	readOnly?: boolean;
 	isNew?: boolean;
 }) {
+
+	const computeProductCode = (netWeight: string, apiCode?: string) => {
+		// console.log("netWeight", netWeight);
+		// console.log("apiCode", apiCode);
+		const weightNum = parseFloat(netWeight) * 1000;
+		if (isNaN(weightNum) || !apiCode) return apiCode ?? "";
+
+		const match = apiCode.match(/^(.*?)(\d+)$/);
+		if (!match) return apiCode;
+
+		const [, prefix, numericPart] = match;
+
+		const lastDigit = Number(numericPart.slice(-1));
+		const nextDigit = lastDigit + 1;
+
+		const newNumber = `${weightNum}${nextDigit}`;
+
+		return `${prefix}${newNumber}`;
+	};
+
 	const set = <K extends keyof ProductFormValues>(
 		key: K,
 		value: ProductFormValues[K],
 	) => {
 		let next = { ...form, [key]: value } as ProductFormValues;
+
 		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
 			next = applyPackagingCalculations(next);
+
+			if (isNew && previewNumber && next.netWeightPerPackagingUnit) {
+				next.productCode = computeProductCode(
+					next.netWeightPerPackagingUnit,
+					previewNumber
+				);
+				onClearError("productCode");
+			}
 		}
+
 		onChange(next);
 		onClearError(key);
 	};
 
+	useEffect(() => {
+		if (isNew && previewNumber && form.netWeightPerPackagingUnit) {
+			const generated = computeProductCode(
+				form.netWeightPerPackagingUnit,
+				previewNumber
+			);
+
+			if (generated && generated !== form.productCode) {
+				onChange({ ...form, productCode: generated });
+				onClearError("productCode");
+			}
+		}
+	}, [previewNumber, form.netWeightPerPackagingUnit]);
+
 	const handleCategoryChange = (category: string) => {
 		const next = { ...form, category };
-		if (isNew && category) {
-			next.productCode = generateProductCode(category, loadProducts());
-			onClearError("productCode");
-		}
 		onChange(next);
 		onClearError("category");
 	};
@@ -319,19 +371,28 @@ export function ProductForm({
 	const { data: segmentsData } = useSegmentsDropdown();
 	const { data: hsnData } = useHsnDropdown();
 	const { data: suppliersData } = useSuppliersDropdown();
+	const { data: cfuData } = useCfuDropdown();
+	const { data: formulationData } = useFormulationDropdown();
 
 	const segmentOptions = useMemo(() => {
 		if (!segmentsData) return [];
-		return segmentsData.map((s) => ({ value: s.segmentName, label: s.segmentName }));
+		return segmentsData.map((s) => ({ value: s.id, label: s.segmentName }));
 	}, [segmentsData]);
 
 	const categoryOptions = useMemo(() => {
 		if (!categoriesData) return [];
-		return categoriesData.map((c) => ({ value: c.categoryName, label: c.categoryName }));
+		return categoriesData.map((c) => ({ value: c.id, label: c.categoryName }));
 	}, [categoriesData]);
 
-	const formOptions = useMemo(() => loadActiveFormOptions(), []);
-	const cfuOptions = useMemo(() => loadActiveCfuOptions(), []);
+	const cfuOptions = useMemo(() => {
+		if (!cfuData) return [];
+		return cfuData.map((c) => ({ value: c.id, label: c.cfuName }));
+	}, [cfuData]);
+
+	const formOptions = useMemo(() => {
+		if (!formulationData) return [];
+		return formulationData.map((f) => ({ value: f.id, label: f.label }));
+	}, [formulationData]);
 
 	const supplierOptions = useMemo(() => {
 		if (!suppliersData) return [];
@@ -446,7 +507,7 @@ export function ProductForm({
 		<div className='w-full space-y-4'>
 			{/* Basic & classification */}
 			<div>
-				<SectionHead label='Product Inform2323232ation' />
+				<SectionHead label='Product Information' />
 				<div className={formGrid}>
 					<div className='space-y-1 md:col-span-1'>
 						<Label className='text-xs font-medium'>
@@ -457,13 +518,13 @@ export function ProductForm({
 							onChange={(e) =>
 								set("productCode", e.target.value.toUpperCase())
 							}
-							placeholder='Auto-generated from category — editable'
+							placeholder='Auto-generated'
 							className={cn("font-mono", inputCls("productCode"))}
-							disabled={readOnly}
+							disabled={true}
 						/>
-						<p className='text-[10px] text-muted-foreground leading-snug'>
-							Auto-filled when category is selected. You can edit if needed.
-						</p>
+						{/* <p className='text-[10px] text-muted-foreground leading-snug'>
+							Auto-filled.
+						</p> */}
 						<FieldError msg={errors.productCode} />
 					</div>
 
@@ -533,8 +594,8 @@ export function ProductForm({
 					<SelectField
 						label='Segment'
 						required
-						value={form.segment}
-						onChange={(v) => set("segment", v)}
+						value={form.segmentId ?? ""}
+						onChange={(v) => set("segmentId", v)}
 						options={segmentOptions}
 						placeholder='Select segment…'
 						disabled={readOnly}
@@ -544,7 +605,7 @@ export function ProductForm({
 					<SelectField
 						label='Category'
 						required
-						value={form.category}
+						value={form.categoryId ?? ""}
 						onChange={handleCategoryChange}
 						options={categoryOptions}
 						placeholder='Select category…'
@@ -555,8 +616,8 @@ export function ProductForm({
 					<SelectField
 						label='Form'
 						required
-						value={form.form}
-						onChange={(v) => set("form", v)}
+						value={form.formId ?? ""}
+						onChange={(v) => set("formId", v)}
 						options={formOptions}
 						placeholder='Select form…'
 						disabled={readOnly}
@@ -565,8 +626,8 @@ export function ProductForm({
 
 					<SelectField
 						label='CFU'
-						value={form.cfu}
-						onChange={(v) => set("cfu", v)}
+						value={form.cfuId ?? ""}
+						onChange={(v) => set("cfuId", v)}
 						options={cfuOptions}
 						placeholder='Select CFU…'
 						disabled={readOnly}

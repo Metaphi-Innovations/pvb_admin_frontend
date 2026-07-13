@@ -34,7 +34,7 @@ export interface POFollowUpEntry {
 export interface POFollowUpSummary {
   totalFollowUps: number;
   lastFollowUpAt: string | null;
-  lastSpokeWith: string | null;
+  nextFollowUpAt: string | null;
   availability: POFollowUpAvailability;
 }
 
@@ -173,7 +173,7 @@ export function getPOFollowUpSummary(poId: string | number): POFollowUpSummary {
   return {
     totalFollowUps: entries.length,
     lastFollowUpAt: latest?.followUpAt ?? null,
-    lastSpokeWith: latest?.spokeWith ?? null,
+    nextFollowUpAt: latest?.nextFollowUpAt ?? null,
     availability: entries.length > 0 ? "followup_available" : "no_followup",
   };
 }

@@ -9,6 +9,12 @@ export const API_ENDPOINTS = {
     VERIFY_OTP: "/user-management/auth/verify-otp",
     RESET_PASSWORD: "/user-management/auth/reset-password",
   },
+  COMMON: {
+    PINCODE: {
+      LIST: "/user-management/pincode/list",
+      VIEW: (pincode: string) => `/user-management/pincode/code/${pincode}`,
+    },
+  },
   MASTER: {
     CATEGORY: {
       LIST: "/master/category/list",
@@ -37,6 +43,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/customer-type/update-status/${id}`,
       VIEW: (id: string) => `/master/customer-type/${id}`,
       EXPORT: "/master/customer-type/export",
+      DROPDOWN: "/master/customer-type/dropdown",
       FILTER_DROPDOWN: "/master/customer-type/filter-dropdown",
     },
     GST: {
@@ -110,7 +117,7 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/segment/export",
       PREVIEW_NUMBER: "/master/segment/preview-number",
       FILTER_DROPDOWN: "/master/segment/filter-dropdown",
-      DROPDOWN: "/master/segment/filter-dropdown",
+      DROPDOWN: "/master/segment/dropdown",
     },
     TDS: {
       LIST: "/master/tds/list",
@@ -151,9 +158,20 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/product/export",
       PREVIEW_NUMBER: "/master/product/preview-number",
       DROPDOWN: "/master/product/dropdown",
+      PRICING: "/master/product/pricing",
+    },
+    PRICING: {
+      DROPDOWN: "/master/product-pricing/dropdown",
     },
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",
+      LIST: "/master/warehouse/list",
+      CREATE: "/master/warehouse/create",
+      UPDATE: (id: string) => `/master/warehouse/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/warehouse/update-status/${id}`,
+      VIEW: (id: string) => `/master/warehouse/details/${id}`,
+      EXPORT: "/master/warehouse/export",
+      PREVIEW_NUMBER: "/master/warehouse/preview-number",
     },
     SUPPLIER: {
       LIST: "/master/supplier/list",
@@ -165,7 +183,27 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/master/supplier/preview-number",
       DROPDOWN: "/master/supplier/dropdown",
       DETAILS: (id: string) => `/master/supplier/details/${id}`,
-    }
+    },
+    CUSTOMER: {
+      LIST: "/master/customer/list",
+      CREATE: "/master/customer/create",
+      UPDATE: (id: string) => `/master/customer/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/customer/update-status/${id}`,
+      VIEW: (id: string) => `/master/customer/${id}`,
+      EXPORT: "/master/customer/export",
+      PREVIEW_NUMBER: "/master/customer/preview-number",
+      DROPDOWN: "/master/customer/dropdown",
+      CFDROPDOWN: "/master/customer/cf-customer-dropdown"
+    },
+    SUPPLIER_TYPE: {
+      LIST: "/master/supplier-type/list",
+      CREATE: "/master/supplier-type/create",
+      UPDATE: (id: string) => `/master/supplier-type/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/supplier-type/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/supplier-type/details/${id}`,
+      EXPORT: "/master/supplier-type/export",
+      DROPDOWN: "/master/supplier-type/dropdown",
+    },
   },
   PROCUREMENT: {
     PURCHASE_ORDER: {
@@ -186,6 +224,16 @@ export const API_ENDPOINTS = {
       APPROVE: "/procurement/purchase-order/approve",
       REJECT: "/procurement/purchase-order/reject",
     },
+    PURCHASE_RETURN: {
+      LIST: "/procurement/purchase-order-return/list",
+      EXPORT: "/procurement/purchase-order-return/export",
+      PREVIEW_NUMBER: "/procurement/purchase-order-return/preview-number",
+      ELIGIBLE_ITEMS: "/procurement/purchase-order-return/eligible-items",
+      FILTER_DROPDOWN: "/procurement/purchase-order-return/filter-dropdown",
+      CREATE: "/procurement/purchase-order-return/create",
+      UPDATE: (id: string) => `/procurement/purchase-order-return/update/${id}`,
+      DETAILS: (id: string) => `/procurement/purchase-order-return/details/${id}`,
+    },
   },
   SALES: {
     SALES_ORDER: {
@@ -199,6 +247,33 @@ export const API_ENDPOINTS = {
       APPROVE_REJECT: (id: string) => `/sales/sales-order/${id}/approve-reject`,
       CANCEL: (id: string) => `/sales/sales-order/${id}/cancel`,
       SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
+      DOWNLOAD_PI: (id: string) => `/sales/sales-order/${id}/download-pi`,
+    },
+    STOCK_TRANSFER: {
+      SUMMARY: "/sales/stock-transfer/summary",
+      NEXT_NUMBER: "/sales/stock-transfer/next-number",
+      DROPDOWN: "/sales/stock-transfer/dropdown",
+      FILTER: "/sales/stock-transfer/filter",
+      BATCHES: "/sales/stock-transfer/batches",
+      LIST: "/sales/stock-transfer/list",
+      EXPORT: "/sales/stock-transfer/export",
+      CREATE: "/sales/stock-transfer/create",
+      DETAILS: (id: string) => `/sales/stock-transfer/${id}`,
+      UPDATE: (id: string) => `/sales/stock-transfer/update/${id}`,
+      UPDATE_STATUS: (id: string) => `/sales/stock-transfer/${id}/status`,
+      DOWNLOAD_NOTE: (id: string) => `/sales/stock-transfer/${id}/download-note`,
+    },
+    SAMPLE_ORDER: {
+      NEXT_NUMBER: "/sales/sample-order/next-number",
+      DROPDOWN: "/sales/sample-order/dropdown",
+      FILTER: "/sales/sample-order/filter",
+      LIST: "/sales/sample-order/list",
+      CREATE: "/sales/sample-order/create",
+      EXPORT: "/sales/sample-order/export",
+      DETAILS: (id: string) => `/sales/sample-order/${id}`,
+      UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
+      UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
+      DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
     },
   },
   USER_MANAGEMENT: {
@@ -258,6 +333,17 @@ export const API_ENDPOINTS = {
     PRICING: "/master/product-pricing/dropdown",
   },
   WAREHOUSE: {
+    REORDER_LEVEL: {
+      LIST: "/warehouse/reorder-level/list",
+      CREATE: "/warehouse/reorder-level/",
+      UPDATE: (id: string) => `/warehouse/reorder-level/${id}`,
+      DETAILS: (id: string) => `/warehouse/reorder-level/${id}`,
+      DELETE: (id: string) => `/warehouse/reorder-level/${id}`,
+      FILTER: "/warehouse/reorder-level/filter",
+      SUMMARY: "/warehouse/reorder-level/summary",
+      EXPORT: "/warehouse/reorder-level/export",
+      TOGGLE_STATUS: (id: string) => `/warehouse/reorder-level/toggle-status/${id}`,
+    },
     PACKING_LIST: {
       BATCHES: "/warehouse/packing-list/batches",
       FILTER_DROPDOWN: "/warehouse/packing-list/filter-dropdown",
@@ -265,6 +351,14 @@ export const API_ENDPOINTS = {
       CREATE: "/warehouse/packing-list/create",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
+    },
+    DISPATCH: {
+      PREVIEW_NUMBER: "/warehouse/dispatch/preview-number",
+      LIST: "/warehouse/dispatch/list",
+      FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
+      CREATE: "/warehouse/dispatch/create",
+      DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
+      REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",

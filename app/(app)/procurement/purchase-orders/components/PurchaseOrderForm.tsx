@@ -33,7 +33,7 @@ import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
 import { axiosInstance } from "@/api/axios";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
-import { enrichPOLineItem, recalcPO } from "../po-data";
+import { applyTaxSupplyToPOLines, enrichPOLineItem, recalcPO } from "../po-data";
 import {
 	findPOAddressById,
 	getDefaultPOBillShipIds,
@@ -65,6 +65,58 @@ const INDIAN_STATES = [
 	"Kerala",
 	"Andhra Pradesh",
 ];
+
+export type POFormErrors = Partial<
+	Record<"supplierId" | "warehouseId" | "poDate" | "lines", string>
+>;
+
+function isSupplierSelected(supplierId: POFormValues["supplierId"]): boolean {
+	if (supplierId === null || supplierId === undefined) return false;
+	if (supplierId === 0 || supplierId === "0" || supplierId === "") return false;
+	return true;
+}
+
+function getValidPOLines(lines: POLineItem[]) {
+	return lines.filter(
+		(l) => l.productId && l.productId !== 0 && l.productId !== "0",
+	);
+}
+
+export function validatePOForm(form: POFormValues): POFormErrors {
+	const e: POFormErrors = {};
+	if (!isSupplierSelected(form.supplierId)) {
+		e.supplierId = "Supplier is required";
+	}
+	if (!form.warehouseId) {
+		e.warehouseId = "Warehouse is required";
+	}
+	if (!form.poDate?.trim()) {
+		e.poDate = "PO date is required";
+	}
+	const validLines = getValidPOLines(form.lines);
+	if (validLines.length === 0) {
+		e.lines = "At least one product is required";
+	} else if (validLines.some((l) => (l.orderedQtyPack ?? 0) <= 0)) {
+		e.lines = "Each line must have a quantity greater than zero";
+	}
+	return e;
+}
+
+const PO_ERROR_FIELD_ORDER = ["supplierId", "poDate", "warehouseId", "lines"] as const;
+
+export function focusFirstPOError(errors: POFormErrors) {
+	for (const key of PO_ERROR_FIELD_ORDER) {
+		if (!errors[key]) continue;
+		const el = document.getElementById(`po-field-${key}`);
+		if (!el) continue;
+		el.scrollIntoView({ behavior: "smooth", block: "center" });
+		const focusable = el.querySelector<HTMLElement>("button, input, textarea, select");
+		if (focusable) {
+			focusable.focus({ preventScroll: true });
+		}
+		break;
+	}
+}
 
 export type POFormValues = Omit<
 	PurchaseOrder,
@@ -121,12 +173,12 @@ export function emptyPOLine(): POLineItem {
 
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
-	const supplier = getActiveSuppliers()[0];
+	const supplier = null;
 
 	const lines =
 		pr?.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, supplier?.id);
+			const cp = resolvePurchaseCostPrice(l.productId, undefined);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
 			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
@@ -159,14 +211,14 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
-		supplierId: supplier?.id ?? 0,
-		supplierName: supplier?.supplierName ?? "",
-		supplierType: supplier?.supplierType ?? "",
-		supplierContactPerson: supplier?.contactPerson ?? "",
-		supplierMobile: supplier?.mobile || supplier?.phone || "",
+		supplierId: "",
+		supplierName: "",
+		supplierType: "",
+		supplierContactPerson: "",
+		supplierMobile: "",
 		supplierMobileCountry: "+91",
-		supplierEmail: supplier?.email ?? "",
-		supplierGstin: supplier?.gstNumber ?? "",
+		supplierEmail: "",
+		supplierGstin: "",
 		referenceNumber: "",
 		currency: "INR",
 		paymentType: "Credit",
@@ -289,6 +341,7 @@ export function PurchaseOrderForm({
 	poNumber = "",
 	status,
 	submittedDate,
+	errors = {},
 }: {
 	form: POFormValues;
 	onChange: (f: POFormValues) => void;
@@ -296,6 +349,7 @@ export function PurchaseOrderForm({
 	readOnly?: boolean;
 	status?: string;
 	submittedDate?: string;
+	errors?: POFormErrors;
 }) {
 	const fileRef = useRef<HTMLInputElement>(null);
 
@@ -565,20 +619,18 @@ export function PurchaseOrderForm({
 	}, [form.supplierId, form.warehouseId, billToAddresses.length, shipToAddresses.length]);
 
 	useEffect(() => {
-		if (!form.supplierId || form.lines.length === 0) return;
-		const needsUpdate = form.lines.some((l) =>
-			lineNeedsTaxSupplyUpdate(l.cgstPct, l.sgstPct, l.igstPct, taxSupplyType),
+		if (form.lines.length === 0) return;
+		const nextLines = applyTaxSupplyToPOLines(form.lines, taxSupplyType);
+		const changed = nextLines.some(
+			(line, index) =>
+				line.cgstPct !== form.lines[index]?.cgstPct ||
+				line.sgstPct !== form.lines[index]?.sgstPct ||
+				line.igstPct !== form.lines[index]?.igstPct,
 		);
-		if (!needsUpdate) return;
-		onChange({
-			...form,
-			lines: form.lines.map((l) => {
-				const totalGst = l.cgstPct + l.sgstPct + l.igstPct;
-				return { ...l, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
-			}),
-		});
+		if (!changed) return;
+		onChange({ ...form, lines: nextLines });
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
-	}, [taxSupplyType, form.supplierId]);
+	}, [taxSupplyType, form.warehouseId, selectedSupplier?.state, form.state]);
 
 	useEffect(() => {
 		if (!form.additionalCharges?.length) return;
@@ -597,51 +649,58 @@ export function PurchaseOrderForm({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
 	}, [taxSupplyType]);
 
-	const getUpdatedLinesForState = async (state: string, currentLines: POLineItem[]) => {
+	const getUpdatedLinesForState = async (
+		state: string,
+		currentLines: POLineItem[],
+		supplyType: TaxSupplyType = taxSupplyType,
+	) => {
 		const targetState = selectedSupplier?.state || state;
-		if (currentLines.length === 0 || !targetState) return currentLines;
-		try {
-			const pricingPromises = currentLines.map(async (line) => {
-				try {
-					const res = await axiosInstance.post("/master/product/pricing", {
-						product_id: line.productId,
-						state_name: targetState,
-					});
-					if (res.data?.success && res.data?.data) {
+		let lines = currentLines;
+		if (currentLines.length > 0 && targetState) {
+			try {
+				const pricingPromises = currentLines.map(async (line) => {
+					try {
+						const res = await axiosInstance.post("/master/product/pricing", {
+							product_id: line.productId,
+							state_name: targetState,
+						});
+						if (res.data?.success && res.data?.data) {
+							return {
+								productId: line.productId,
+								cost_price: res.data.data.cost_price,
+								success: true,
+							};
+						}
+					} catch (err) {
+						console.error(`Failed to fetch pricing for state ${state}:`, err);
+					}
+					return { productId: line.productId, success: false };
+				});
+
+				const resolvedPricings = await Promise.all(pricingPromises);
+				const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
+
+				lines = currentLines.map((line) => {
+					const apiPricing = pricingMap.get(line.productId);
+					if (apiPricing && apiPricing.success) {
 						return {
-							productId: line.productId,
-							cost_price: res.data.data.cost_price,
-							success: true,
+							...line,
+							unitPrice: apiPricing.cost_price,
+							cpSource: "pricing_master" as const,
 						};
 					}
-				} catch (err) {
-					console.error(`Failed to fetch pricing for state ${state}:`, err);
-				}
-				return { productId: line.productId, success: false };
-			});
-
-			const resolvedPricings = await Promise.all(pricingPromises);
-			const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
-
-			return currentLines.map((line) => {
-				const apiPricing = pricingMap.get(line.productId);
-				if (apiPricing && apiPricing.success) {
-					return {
-						...line,
-						unitPrice: apiPricing.cost_price,
-						cpSource: "pricing_master" as const,
-					};
-				}
-				return line;
-			});
-		} catch (err) {
-			console.error("Failed to update line items pricing:", err);
-			return currentLines;
+					return line;
+				});
+			} catch (err) {
+				console.error("Failed to update line items pricing:", err);
+			}
 		}
+		return applyTaxSupplyToPOLines(lines, supplyType);
 	};
 
 	const onStateChange = async (state: string) => {
-		const updatedLines = await getUpdatedLinesForState(state, form.lines);
+		const nextTaxSupplyType = resolveTaxSupplyType(state, selectedSupplier?.state ?? "");
+		const updatedLines = await getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
 		patch({
 			state,
 			warehouseId: null,
@@ -700,7 +759,8 @@ export function PurchaseOrderForm({
 		const addressStr = wh ? [wh.address, wh.address_1].filter(Boolean).join(", ") : "";
 		const primaryContact = wh?.contacts?.find((c) => c.is_primary) ?? wh?.contacts?.[0];
 		const nextState = wh?.state || form.state || "";
-		const updatedLines = await getUpdatedLinesForState(nextState, form.lines);
+		const nextTaxSupplyType = resolveTaxSupplyType(nextState, selectedSupplier?.state ?? "");
+		const updatedLines = await getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
 
 		patch({
 			warehouseId: wh ? wh.warehouse_id : null,
@@ -779,6 +839,12 @@ export function PurchaseOrderForm({
 				shipToAddresses,
 				localWarehouseId,
 			);
+			const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
+			const nextTaxSupplyType = resolveTaxSupplyType(warehouseState, localMock.state ?? "");
+			const updatedLines =
+				form.lines.length > 0
+					? applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType)
+					: form.lines;
 			patch({
 				supplierId: localMock.id,
 				supplierName: localMock.supplierName,
@@ -789,6 +855,7 @@ export function PurchaseOrderForm({
 				supplierGstin: localMock.gstNumber || "",
 				billToAddressId: form.billToAddressId || defaults.billToAddressId,
 				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
+				lines: updatedLines,
 			});
 			return;
 		}
@@ -810,6 +877,12 @@ export function PurchaseOrderForm({
 				shipToAddresses,
 				localWarehouseId,
 			);
+			const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
+			const nextTaxSupplyType = resolveTaxSupplyType(warehouseState, s.state || "");
+			const updatedLines =
+				form.lines.length > 0
+					? applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType)
+					: form.lines;
 			patch({
 				supplierId: s.supplier_id,
 				supplierName: s.supplier_name,
@@ -820,6 +893,7 @@ export function PurchaseOrderForm({
 				supplierGstin: s.gstin_number || "",
 				billToAddressId: form.billToAddressId || defaults.billToAddressId,
 				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
+				lines: updatedLines,
 			});
 		} catch (err) {
 			console.error("Failed to fetch supplier details:", err);
@@ -867,6 +941,8 @@ export function PurchaseOrderForm({
 
 				{!readOnly && (
 					<div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+						<span className="font-medium text-foreground">Direct Purchase Order</span>
+						{/* Phase 1: PO type selector disabled — direct PO only for now
 						<label className="flex items-center gap-2 cursor-pointer font-medium text-foreground">
 							<input
 								type="radio"
@@ -883,6 +959,7 @@ export function PurchaseOrderForm({
 							/>
 							Direct Purchase Order
 						</label>
+						*/}
 					</div>
 				)}
 
@@ -916,8 +993,10 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div> */}
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Supplier</Label>
+						<div id="po-field-supplierId" className="space-y-1">
+							<Label className="text-xs font-medium">
+								Supplier <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.supplierName} />
 							) : (
@@ -927,16 +1006,22 @@ export function PurchaseOrderForm({
 									onChange={selectSupplier}
 									placeholder="Select supplier..."
 									searchPlaceholder="Search supplier..."
+									error={!!errors.supplierId}
 									className="h-8 rounded-lg text-xs"
 								/>
+							)}
+							{errors.supplierId && (
+								<p className="text-[11px] text-red-500">{errors.supplierId}</p>
 							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Supplier Type</Label>
 							<ReadOnlyField value={form.supplierType} />
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">PO Date</Label>
+						<div id="po-field-poDate" className="space-y-1">
+							<Label className="text-xs font-medium">
+								PO Date <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={formatDisplayDate(form.poDate)} />
 							) : (
@@ -944,8 +1029,11 @@ export function PurchaseOrderForm({
 									type="date"
 									value={form.poDate}
 									onChange={(e) => patch({ poDate: e.target.value })}
-									className={inputCls}
+									className={cn(inputCls, errors.poDate && "border-red-400")}
 								/>
+							)}
+							{errors.poDate && (
+								<p className="text-[11px] text-red-500">{errors.poDate}</p>
 							)}
 						</div>
 						<div className="space-y-1">
@@ -963,9 +1051,7 @@ export function PurchaseOrderForm({
 						</div>
 						
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">
-								Payment Type <span className="text-red-500">*</span>
-							</Label>
+							<Label className="text-xs font-medium">Payment Type</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.paymentType} />
 							) : (
@@ -984,9 +1070,7 @@ export function PurchaseOrderForm({
 							)}
 						</div>
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">
-								Credit Days <span className="text-red-500">*</span>
-							</Label>
+							<Label className="text-xs font-medium">Credit Days</Label>
 							{readOnly ? (
 								<ReadOnlyField value={String(form.creditDays ?? "")} />
 							) : (
@@ -1018,8 +1102,10 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Warehouse</Label>
+						<div id="po-field-warehouseId" className="space-y-1">
+							<Label className="text-xs font-medium">
+								Warehouse <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.warehouseName} />
 							) : (
@@ -1028,8 +1114,12 @@ export function PurchaseOrderForm({
 									value={form.warehouseId ? String(form.warehouseId) : ""}
 									onChange={(v) => onWarehouseChange(String(v))}
 									placeholder="Select warehouse"
+									error={!!errors.warehouseId}
 									className={inputCls}
 								/>
+							)}
+							{errors.warehouseId && (
+								<p className="text-[11px] text-red-500">{errors.warehouseId}</p>
 							)}
 						</div>
 					</div>
@@ -1061,6 +1151,7 @@ export function PurchaseOrderForm({
 					linkedPr={linkedPr}
 					taxSupplyType={taxSupplyType}
 					supplierState={selectedSupplier?.state}
+					linesError={errors.lines}
 				/>
 
 				<div className="border-t border-border/60 pt-4">
@@ -1127,7 +1218,19 @@ export function PurchaseOrderForm({
 												key={a.uid}
 												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
 											>
-												<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												{a.url ? (
+													<a
+														href={a.url}
+														target="_blank"
+														rel="noreferrer"
+														className="min-w-0 flex-1 truncate text-foreground hover:text-brand-700 hover:underline"
+														title={a.name}
+													>
+														{a.name}
+													</a>
+												) : (
+													<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												)}
 												{!readOnly && (
 													<button
 														type="button"

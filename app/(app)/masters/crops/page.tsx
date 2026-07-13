@@ -216,10 +216,10 @@ export default function CropMasterPage() {
   const loading = listQuery.isFetching;
   const listError = listQuery.isError
     ? getMasterListErrorMessage(listQuery.error, {
-        resource: "crops",
-        notFoundMessage: "Crop list endpoint not found.",
-        serverMessage: "Server error while loading crops.",
-      })
+      resource: "crops",
+      notFoundMessage: "Crop list endpoint not found.",
+      serverMessage: "Server error while loading crops.",
+    })
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
@@ -554,43 +554,43 @@ export default function CropMasterPage() {
 
   const viewDrawer = active
     ? {
-        title: active.cropName,
-        subtitle: active.categoryName || "Read-only crop details",
-        status: active.status,
-        basicInfo: [
-          { label: "Field Type", value: active.fieldType || "—" },
-          { label: "Category", value: active.categoryName || "—" },
-          {
-            label: "Season / Period",
-            value: active.season.length > 0 ? active.season.join(", ") : "—",
-          },
-          {
-            label: "Description",
-            value: active.description?.trim() ? active.description : "—",
-          },
-        ],
-        showDescription: false,
-        children: (
-          <MasterDrawerSection title="Audit Information">
-            <div className="space-y-4">
-              <AuditUserRow label="Created By" name={active.createdBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Created Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.createdAt}
-                </p>
-              </div>
-              <AuditUserRow label="Updated By" name={active.updatedBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Updated Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.updatedAt}
-                </p>
-              </div>
+      title: active.cropName,
+      subtitle: active.categoryName || "Read-only crop details",
+      status: active.status,
+      basicInfo: [
+        { label: "Field Type", value: active.fieldType || "—" },
+        { label: "Category", value: active.categoryName || "—" },
+        {
+          label: "Season / Period",
+          value: active.season.length > 0 ? active.season.join(", ") : "—",
+        },
+        {
+          label: "Description",
+          value: active.description?.trim() ? active.description : "—",
+        },
+      ],
+      showDescription: false,
+      children: (
+        <MasterDrawerSection title="Audit Information">
+          <div className="space-y-4">
+            <AuditUserRow label="Created By" name={active.createdBy} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Created Date</p>
+              <p className="text-sm font-medium text-foreground font-mono">
+                {active.createdAt}
+              </p>
             </div>
-          </MasterDrawerSection>
-        ),
-      }
+            <AuditUserRow label="Updated By" name={active.updatedBy} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Updated Date</p>
+              <p className="text-sm font-medium text-foreground font-mono">
+                {active.updatedAt}
+              </p>
+            </div>
+          </div>
+        </MasterDrawerSection>
+      ),
+    }
     : { title: "Crop", basicInfo: [] };
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
@@ -22,7 +22,7 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../components/ProductForm";
-import { useCreateProduct } from "@/hooks/masters";
+import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -31,7 +31,8 @@ export default function NewProductPage() {
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
+  const { data: previewNumber } = useProductPreviewNumber();
+  // console.log("Asdadsd", previewNumber);
   const clearErr = (key: string) =>
     setErrors((prev) => {
       const next = { ...prev };
@@ -69,44 +70,58 @@ export default function NewProductPage() {
     const payload = {
       product_code: resolvedForm.productCode,
       product_name: resolvedForm.productName,
+      scientific_name: resolvedForm.scientificName || null,
       sku: resolvedForm.sku,
       supplier_id: resolvedForm.supplier || null,
       supplier_code: resolvedForm.supplierCode || null,
       hsn_id: resolvedForm.hsnId || resolvedForm.hsnCode || null,
       gst_rate_id: resolvedForm.gstId || null,
-      category_name: resolvedForm.category,
-      segment_name: resolvedForm.segment,
-      form_name: resolvedForm.form,
-      cfu: resolvedForm.cfu || null,
+      category_id: resolvedForm.category,
+      segment_id: resolvedForm.segment,
+      formulation_id: resolvedForm.form,
+      cfu_id: resolvedForm.cfu || null,
       authority: resolvedForm.authority || null,
       pack_size: parseNum(resolvedForm.packSize),
       base_unit: resolvedForm.baseUnit,
       unit: resolvedForm.baseUnit,
       mou: resolvedForm.mou || null,
-      unit_per_case: parseNum(resolvedForm.unitPerCase),
-      units_per_case: parseNum(resolvedForm.unitPerCase),
-      packaging_unit: resolvedForm.packagingUnit,
+      unit_per_packing: parseNum(resolvedForm.unitPerCase),
+      packing_unit: resolvedForm.packagingUnit,
       net_weight: parseNum(resolvedForm.netWeightPerPackagingUnit),
-      net_weight_per_packaging_unit: parseNum(resolvedForm.netWeightPerPackagingUnit),
       gross_weight: parseNum(resolvedForm.grossWeight),
       mrp: parseNum(resolvedForm.mrp),
       is_active: resolvedForm.status === "active",
       status: resolvedForm.status === "active" ? "Active" : "Inactive",
+      assets: productUrls.map((u) => ({
+        asset_type: "LINK",
+        link_url: u.url,
+      })),
     };
 
-    createMutation.mutate(payload, {
-      onSuccess: () => {
-        setToast({ msg: "Product created successfully.", type: "success" });
-        setTimeout(() => router.push("/masters/products"), 900);
+    createMutation.mutate(
+      {
+        payload,
+        images: productImages
+          .map((img) => img.file)
+          .filter((f): f is File => !!f),
       },
-      onError: (err) => {
-        setToast({
-          msg: err instanceof Error ? err.message : "Failed to save product.",
-          type: "error",
-        });
-        setTimeout(() => setToast(null), 4000);
-      },
-    });
+      {
+        onSuccess: () => {
+          setToast({
+            msg: "Product created successfully.",
+            type: "success",
+          });
+          setTimeout(() => router.push("/masters/products"), 900);
+        },
+        onError: (err) => {
+          setToast({
+            msg: err instanceof Error ? err.message : "Failed to save product.",
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 4000);
+        },
+      }
+    );
   };
 
   return (
@@ -136,6 +151,7 @@ export default function NewProductPage() {
         errors={errors}
         onClearError={clearErr}
         productImages={productImages}
+        previewNumber={previewNumber}
         productUrls={productUrls}
         onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
         onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}

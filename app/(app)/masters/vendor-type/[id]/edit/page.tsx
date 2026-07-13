@@ -7,37 +7,34 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { normalizeInitialCode } from "@/lib/masters/code-generation";
-import { MASTER_CURRENT_USER, masterToday } from "@/lib/masters/common";
-import {
-  loadVendorTypes,
-  saveVendorTypes,
-  validateVendorTypeInitialCode,
-  resolveVendorTypeCode,
-  validateVendorTypeCodeUnique,
-  findVendorTypeDuplicate,
-  vendorTypeToFormValues,
-} from "../../vendor-type-data";
 import {
   VendorTypeForm,
   validateVendorTypeForm,
   type VendorTypeFormValues,
 } from "../../components/VendorTypeForm";
+import { useSupplierType, useUpdateSupplierType } from "@/hooks/masters";
+import { SupplierTypeListService } from "@/services/supplier-type.service";
 
 export default function EditVendorTypePage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<VendorTypeFormValues | null>(null);
-  const [originalInitialCode, setOriginalInitialCode] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const { data: supplierType, isLoading, isError } = useSupplierType(id);
+  const updateMutation = useUpdateSupplierType();
+
   useEffect(() => {
-    const found = loadVendorTypes().find((item) => item.id === Number(id));
-    if (!found) return;
-    setOriginalInitialCode(found.initialCode);
-    setForm(vendorTypeToFormValues(found));
-  }, [id]);
+    if (!supplierType) return;
+    setForm({
+      vendorTypeName: supplierType.supplierTypeName,
+      vendorTypeCode: "",
+      initialCode: supplierType.initialCode,
+      description: supplierType.description ?? "",
+      status: supplierType.status,
+    });
+  }, [supplierType]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -47,22 +44,8 @@ export default function EditVendorTypePage() {
     });
 
   const handleSave = () => {
-    if (!form) return;
+    if (!form || !id) return;
     const validation = validateVendorTypeForm(form);
-    const list = loadVendorTypes();
-    const initialErr = validateVendorTypeInitialCode(form.initialCode, list, Number(id));
-    if (initialErr) validation.initialCode = initialErr;
-    if (findVendorTypeDuplicate(form.vendorTypeName, list, Number(id))) {
-      validation.vendorTypeName = "Supplier type name must be unique.";
-    }
-    const existing = list.find((item) => item.id === Number(id));
-    const vendorTypeCode = resolveVendorTypeCode(form.initialCode, list, {
-      recordId: Number(id),
-      existingCode: existing?.vendorTypeCode,
-      originalInitialCode,
-    });
-    const codeErr = validateVendorTypeCodeUnique(vendorTypeCode, list, Number(id));
-    if (codeErr) validation.vendorTypeCode = codeErr;
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -70,28 +53,42 @@ export default function EditVendorTypePage() {
       return;
     }
 
-    const today = masterToday();
-    const updated = list.map((item) =>
-      item.id === Number(id)
-        ? {
-            ...item,
-            vendorTypeCode,
-            vendorTypeName: form.vendorTypeName.trim(),
-            initialCode: normalizeInitialCode(form.initialCode),
-            description: form.description.trim(),
-            status: form.status,
-            updatedBy: MASTER_CURRENT_USER,
-            updatedAt: today,
-          }
-        : item,
+    updateMutation.mutate(
+      {
+        id,
+        payload: {
+          supplier_type_name: form.vendorTypeName.trim(),
+          initial_code: form.initialCode.trim().toUpperCase(),
+          description: form.description.trim() || null,
+          is_active: form.status === "active",
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Supplier type updated successfully.", type: "success" });
+          setTimeout(() => router.push(`/masters/vendor-type/${id}`), 900);
+        },
+        onError: (err) => {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : SupplierTypeListService.extractErrorMessage(err, "Failed to update supplier type.");
+          setToast({ msg, type: "error" });
+          setTimeout(() => setToast(null), 4000);
+        },
+      },
     );
-
-    saveVendorTypes(updated);
-    setToast({ msg: "Supplier type updated successfully.", type: "success" });
-    setTimeout(() => router.push(`/masters/vendor-type/${id}`), 900);
   };
 
-  if (!form) {
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Loading supplier type details...</p>
+      </div>
+    );
+  }
+
+  if (isError || !form) {
     return (
       <div className="py-16 text-center">
         <p className="text-sm text-muted-foreground">Supplier type not found.</p>
@@ -115,6 +112,7 @@ export default function EditVendorTypePage() {
           <Button
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={updateMutation.isPending}
           >
             <Save className="w-4 h-4" /> Update Supplier Type
           </Button>
@@ -131,8 +129,6 @@ export default function EditVendorTypePage() {
         }
         errors={errors}
         onClearError={clearErr}
-        recordId={Number(id)}
-        originalInitialCode={originalInitialCode}
       />
 
       {toast && (

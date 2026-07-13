@@ -265,7 +265,7 @@ export function validateDebitNoteLines(lines: DebitNoteLine[]): void {
 
 export function listPurchaseReturnsForDebitNote(): PurchaseReturn[] {
   const pendingIds = new Set(listPendingDebitNoteReturns().map((p) => p.returnId));
-  return loadPurchaseReturns().filter((r) => pendingIds.has(r.id));
+  return loadPurchaseReturns().filter((r) => pendingIds.has(Number(r.id)));
 }
 
 export function getPendingDebitNoteRow(returnId: number): PendingDebitNoteRow | undefined {
@@ -281,7 +281,7 @@ export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferen
   const ret = getPurchaseReturnById(returnId);
   if (!ret) return null;
   const pending = getPendingDebitNoteRow(returnId);
-  const pi = findPurchaseInvoiceForPO(ret.poId);
+  const pi = findPurchaseInvoiceForPO(Number(ret.poId));
   const basePreview = pi ? buildReferenceFromPurchaseInvoice(pi.id) : null;
   const vendor = getActiveVendors().find(
     (v) => v.id === ret.supplierId || v.vendorName === ret.supplierName,
@@ -330,14 +330,14 @@ export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferen
     documentDate: ret.returnDate,
     sourceInvoiceId: pi?.id ?? null,
     sourceInvoiceNo: pi?.invoiceNo ?? "",
-    sourcePoId: ret.poId,
+    sourcePoId: Number(ret.poId),
     sourcePoNo: ret.poNumber,
     sourceGrnNo: wh.sourceGrnNo || pending?.grnNo || firstGrnFromReturn(ret),
     sourceQcNo: wh.sourceQcNo,
     sourcePackingNo: pending?.packingNo ?? "",
     sourceDispatchNo: pending?.dispatchNo ?? "",
     dispatchStatus: pending?.dispatchStatus ?? "",
-    vendorId: ret.supplierId ?? vendor?.id ?? null,
+    vendorId: ret.supplierId ? Number(ret.supplierId) : vendor?.id ?? null,
     vendorName: ret.supplierName,
     vendorPhone: vendor ? `${vendor.mobileCountryCode} ${vendor.mobile}`.trim() : "",
     vendorEmail: vendor?.email ?? "",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
@@ -22,12 +22,10 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { markAsDelivered, revertDispatch } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown } from "./services";
 import {
-  CUSTOMER_OPTIONS,
-  DELIVERY_STATUS_OPTIONS,
   DELIVERY_STATUS_BADGE_CONFIG,
-  WAREHOUSE_OPTIONS,
+  TRANSPORTER_OPTIONS,
 } from "./constants";
 
 import Link from "next/link";
@@ -43,11 +41,10 @@ import { getSampleOrderByDocumentNo } from "@/app/(app)/sales/sample-order/packi
 import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
 
 interface DispatchListingProps {
-  rawDispatches: DispatchRecord[];
-  reload: () => void;
+  selectedWarehouse: string;
 }
 
-export function DispatchListing({ rawDispatches, reload }: DispatchListingProps) {
+export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   const router = useRouter();
 
   // Table state for Dispatches
@@ -67,85 +64,78 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
     setPage(1);
   }, [subTab]);
 
-  const filteredDispatches = useMemo(() => {
-    return rawDispatches.filter((d) => {
-      const type = resolveWarehouseOrderType({
-        sourceDocumentType: d.sourceDocumentType,
-        source_type: d.source_type,
-        salesOrderNo: d.salesOrderNumber,
-        source_document_no: d.source_document_no,
-      });
-      const typeFilter: OrderTypeFilterTab =
-        subTab === "sales_order"
-          ? "sales"
-          : subTab === "sample_order"
-            ? "sample"
-            : subTab === "purchase_return"
-              ? "purchase_return"
-              : "stock_transfer";
-      return matchesOrderTypeFilter(type, typeFilter);
-    });
-  }, [rawDispatches, subTab]);
+  const [data, setData] = useState<DispatchRecord[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  // Filtered & Sorted records
-  const processed = useMemo(() => {
-    let result = [...filteredDispatches];
-    Object.keys(filters).forEach(key => {
-      const val = filters[key];
-      if (!val) return;
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(d => {
-          const dispNo = d.dispatch_no || d.dispatchNumber || "";
-          const docNo = d.source_document_no || d.salesOrderNumber || "";
-          const cust = d.customer_name || d.customer || "";
-          const veh = d.vehicleNumber || "";
-          const drv = d.driverName || "";
-          return (
-            dispNo.toLowerCase().includes(q) ||
-            docNo.toLowerCase().includes(q) ||
-            cust.toLowerCase().includes(q) ||
-            veh.toLowerCase().includes(q) ||
-            drv.toLowerCase().includes(q)
-          );
-        });
-      } else if (key === "dispatch_no" || key === "dispatchNumber" || key === "source_document_no" || key === "salesOrderNumber" || key === "vehicleNumber" || key === "driverName") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(d => {
-          const rawVal = d[key as keyof DispatchRecord] || (key === "dispatch_no" ? d.dispatchNumber : d.salesOrderNumber);
-          return String(rawVal || "").toLowerCase().includes(q);
-        });
-      } else if (key === "customer_name" || key === "customer" || key === "dispatch_status" || key === "deliveryStatus") {
-        const selected = val as string[];
-        result = result.filter(d => {
-          const rawVal = d[key as keyof DispatchRecord] || (key === "customer_name" ? d.customer : d.deliveryStatus);
-          return selected.includes(String(rawVal || ""));
-        });
-      } else if (key === "dispatch_date" || key === "dispatchDate") {
-        const range = val as { fromDate: string; toDate: string };
-        result = result.filter(d => {
-          const dateVal = d.dispatch_date || d.dispatchDate;
-          if (range.fromDate && dateVal < range.fromDate) return false;
-          if (range.toDate && dateVal > range.toDate) return false;
-          return true;
-        });
+  const [customerOptions, setCustomerOptions] = useState<{label: string, value: string}[]>([]);
+  const [statusOptions, setStatusOptions] = useState<{label: string, value: string}[]>([]);
+
+  useEffect(() => {
+    async function fetchFilterOptions() {
+      try {
+        const custRes = await getDispatchFilterDropdown("customer__customer_name");
+        setCustomerOptions(custRes.map((x: any) => ({ label: x.customer__customer_name, value: x.customer__customer_name })));
+        
+        const statRes = await getDispatchFilterDropdown("dispatch_status");
+        setStatusOptions(statRes.map((x: any) => ({ label: x.dispatch_status, value: x.dispatch_status })));
+      } catch (err) {
+        console.error("Failed to fetch filter options", err);
       }
-    });
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const valA = String(a[sort.key as keyof DispatchRecord] || "");
-        const valB = String(b[sort.key as keyof DispatchRecord] || "");
-        return sort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      });
     }
-    return result;
-  }, [filteredDispatches, filters, sort]);
+    fetchFilterOptions();
+  }, []);
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return processed.slice(start, start + pageSize);
-  }, [processed, page, pageSize]);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const payload: any = {
+        page,
+        page_size: pageSize,
+      };
+      
+      if (sort.key && sort.direction !== "none") {
+        payload.ordering = sort.direction === "desc" ? `-${sort.key}` : sort.key;
+      }
+      
+      if (filters.search) {
+        payload.search = filters.search;
+      }
+      
+      const queryFilters: any = {};
+      if (selectedWarehouse !== "All") {
+        queryFilters.warehouse_id = selectedWarehouse;
+      }
+      
+      if (subTab === "sales_order") queryFilters.source_type = "normal_sales";
+      else if (subTab === "sample_order") queryFilters.source_type = "sample_order";
+      else if (subTab === "stock_transfer") queryFilters.source_type = "stock_transfer";
+      else if (subTab === "purchase_return") queryFilters.source_type = "purchase_return";
 
+      Object.entries(filters).forEach(([k, v]) => {
+        if (k === "search") return;
+        if (v !== undefined && v !== "") {
+           queryFilters[k] = v;
+        }
+      });
+      
+      if (Object.keys(queryFilters).length > 0) {
+        payload.filters = queryFilters;
+      }
+
+      const res = await getDispatches(payload);
+      setData(res?.data?.items || []);
+      setTotalRecords(res?.data?.total || 0);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, sort, filters, selectedWarehouse, subTab]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
 
   const partyHeader =
@@ -218,7 +208,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: CUSTOMER_OPTIONS,
+        filterOptions: customerOptions,
         width: "160px",
         render: (_: unknown, row: DispatchRecord) => {
           const type = resolveWarehouseOrderType({
@@ -303,7 +293,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: DELIVERY_STATUS_OPTIONS,
+        filterOptions: statusOptions,
         width: "155px",
         render: (_: unknown, row: DispatchRecord) => {
           const type = resolveWarehouseOrderType({
@@ -396,23 +386,24 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
     },
   ];
 
-  const handleRevertConfirm = () => {
+  const handleRevertConfirm = async () => {
     if (!revertTarget) return;
-    revertDispatch(revertTarget.id);
-    setRevertTarget(null);
-    reload();
+    try {
+      await revertDispatch(revertTarget.id);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRevertTarget(null);
+    }
   };
 
-  const handleDeliveryConfirm = () => {
+  const handleDeliveryConfirm = useCallback(() => {
     if (!deliveryTarget) return;
-    if (!deliveryForm.deliveryDate || !deliveryForm.receiverName) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-    markAsDelivered(deliveryTarget.id, deliveryForm);
+    // Delivery tracking is currently mocked/unsupported in backend
+    console.log("Delivery confirmed for", deliveryTarget.id);
     setDeliveryTarget(null);
-    reload();
-  };
+  }, [deliveryTarget]);
 
   return (
     <div className="space-y-4">
@@ -427,8 +418,9 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
 
       <MasterListing<DispatchRecord>
         columns={columns}
-        data={paginated}
-        totalRecords={processed.length}
+        data={data}
+        loading={loading}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}

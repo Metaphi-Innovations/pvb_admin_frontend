@@ -24,6 +24,7 @@ import {
   validateProductForm,
 } from "../../components/ProductForm";
 import { useProduct, useUpdateProduct } from "@/hooks/masters";
+import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function EditProductPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
-
+  const { data: previewNumber } = useProductPreviewNumber();
   const { data: apiProduct, isLoading, isError } = useProduct(id);
   const updateMutation = useUpdateProduct();
 
@@ -48,10 +49,14 @@ export default function EditProductPage() {
       supplier: apiProduct.supplierId || "",
       supplierCode: apiProduct.supplierCode || undefined,
       category: apiProduct.category,
+      categoryId: apiProduct.categoryId,
       subCategory: apiProduct.subCategory,
       segment: apiProduct.segment,
+      segmentId: apiProduct.segmentId,
       form: apiProduct.form || "",
+      formId: apiProduct.formId,
       cfu: apiProduct.cfu || undefined,
+      cfuId: apiProduct.cfuId,
       authority: apiProduct.authority || undefined,
       hsnCode: apiProduct.hsnUuid || apiProduct.hsnCode,
       hsnId: apiProduct.hsnId ? String(apiProduct.hsnId) : "",
@@ -70,9 +75,22 @@ export default function EditProductPage() {
       createdDate: apiProduct.createdAt || "",
       updatedBy: apiProduct.updatedBy || "Admin",
       updatedDate: apiProduct.updatedAt || "",
-      productImages: [],
-      productUrls: [],
+      productImages: (apiProduct.assets ?? [])
+        .filter((a) => a.asset_type === "MEDIA")
+        .map((a) => ({
+          id: a.product_asset_id ?? crypto.randomUUID(),
+          name: a.file_name ?? "image",
+          url: a.file_url ?? "",
+          size: a.file_size,
+        })),
+      productUrls: (apiProduct.assets ?? [])
+        .filter((a) => a.asset_type === "LINK")
+        .map((a) => ({
+          id: a.product_asset_id ?? crypto.randomUUID(),
+          url: a.link_url ?? "",
+        })),
     };
+
     setForm(productToFormValues(mappedProduct));
     setProductImages(getProductImages(mappedProduct));
     setProductUrls(getProductUrls(mappedProduct));
@@ -107,33 +125,40 @@ export default function EditProductPage() {
     const payload = {
       product_code: form.productCode,
       product_name: form.productName,
+      scientific_name: form.scientificName || null,
       sku: form.sku,
       supplier_id: form.supplier || null,
       supplier_code: form.supplierCode || null,
       hsn_id: form.hsnId || form.hsnCode || null,
       gst_rate_id: form.gstId || null,
-      category_name: form.category,
-      segment_name: form.segment,
-      form_name: form.form,
-      cfu: form.cfu || null,
+      category_id: form.category,
+      segment_id: form.segmentId || null,
+      formulation_id: form.formId || null,
+      cfu_id: form.cfuId || null,
       authority: form.authority || null,
       pack_size: parseNum(form.packSize),
       base_unit: form.baseUnit,
       unit: form.baseUnit,
       mou: form.mou || null,
-      unit_per_case: parseNum(form.unitPerCase),
-      units_per_case: parseNum(form.unitPerCase),
-      packaging_unit: form.packagingUnit,
+      unit_per_packing: parseNum(form.unitPerCase),
+      packing_unit: form.packagingUnit,
       net_weight: parseNum(form.netWeightPerPackagingUnit),
-      net_weight_per_packaging_unit: parseNum(form.netWeightPerPackagingUnit),
       gross_weight: parseNum(form.grossWeight),
       mrp: parseNum(form.mrp),
       is_active: form.status === "active",
       status: form.status === "active" ? "Active" : "Inactive",
+      assets: productUrls.map((u) => ({
+        asset_type: "LINK",
+        link_url: u.url,
+      })),
     };
 
     updateMutation.mutate(
-      { id, payload },
+      {
+        id,
+        payload,
+        images: productImages.map((img) => img.file).filter((f): f is File => !!f),
+      },
       {
         onSuccess: () => {
           setToast({ msg: "Product updated successfully.", type: "success" });
@@ -200,6 +225,7 @@ export default function EditProductPage() {
         onChange={setForm}
         errors={errors}
         onClearError={clearErr}
+        previewNumber={previewNumber}
         productImages={productImages}
         productUrls={productUrls}
         onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}

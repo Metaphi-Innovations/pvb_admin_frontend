@@ -6,22 +6,25 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
-import {
-  DEFAULT_SUPPLIER_FORM,
-  SupplierForm,
-  type SupplierFormValues,
-  validateSupplierForm,
-} from "../../suppliers/components/SupplierForm";
 import { useCreateSupplier, useSupplierPreviewNumber } from "@/hooks/masters/use-supplier";
+import { VendorForm } from "../components/VendorForm";
+import {
+  DEFAULT_VENDOR_FORM,
+  VendorFormValues,
+  VendorStatus,
+  validateVendorForm,
+} from "../vendor-data";
+import { SupplierCreatePayload } from "@/services/supplier-list.service";
 
 export default function NewSupplierPage() {
   const router = useRouter();
-  const [form, setForm] = useState<SupplierFormValues>(DEFAULT_SUPPLIER_FORM);
+  const [form, setForm] = useState<VendorFormValues>(DEFAULT_VENDOR_FORM);
+  // const [status] = useState<VendorStatus>("active");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   // Fetch the next supplier code from the API
-  const { data: previewCode } = useSupplierPreviewNumber(true);
+  const { data: previewCode } = useSupplierPreviewNumber(form.vendorType, true);
   const supplierCode = previewCode ?? "SUP-XXXX";
 
   const createMutation = useCreateSupplier();
@@ -34,36 +37,79 @@ export default function NewSupplierPage() {
     });
 
   const handleSave = () => {
-    const validation = validateSupplierForm(form);
-    setErrors(validation);
-    if (Object.keys(validation).length > 0) {
-      setToast({ msg: "Please fix the errors before saving.", type: "error" });
+    // validateVendorForm returns a single error message (or null), not a per-field map.
+    const validationError = validateVendorForm(form);
+    if (validationError) {
+      setErrors({ form: validationError });
+      setToast({ msg: validationError, type: "error" });
       setTimeout(() => setToast(null), 3200);
       return;
     }
+    setErrors({});
 
-    const payload = {
-      supplier_name: form.supplierName,
+    const payload: SupplierCreatePayload = {
+      supplier_type_id: form.vendorType,
       supplier_code: supplierCode,
-      mobile_country_code: "+91",
+      supplier_name: form.vendorName,
+      contact_person: form.contactPerson,
+      mobile_country_code: form.mobileCountryCode,
       mobile_number: form.mobile,
       email: form.email,
-      gst_registered: form.gstin ? true : false,
-      registration_type: form.gstin ? "regular" : "unregistered",
-      gstin_number: form.gstin || "",
-      registered_legal_name: form.supplierName,
-      registered_gst_address: form.address || "",
-      pan_number: form.gstin ? form.gstin.slice(2, 12) : "",
-      tan_number: "",
-      tds_applicable: false,
-      tds_section_id: "",
-      payment_terms: form.paymentTerms,
-      is_active: form.status === "active",
-      status: form.status === "active" ? "Active" : "Inactive",
-      contacts: [],
-      bankAccounts: [],
-      products: [],
-      documents: [],
+      gst_registered: form.gstRegistered,
+      registration_type: form.gstRegistered ? form.gstRegistrationType : null,
+      gstin_number: form.gstRegistered ? form.gstNumber : null,
+      registered_legal_name: form.legalCompanyName,
+      registered_gst_address: [form.billingAddress.line1, form.billingAddress.line2]
+        .filter(Boolean)
+        .join(", "),
+      pan_number: form.panNumber,
+      tan_number: form.tanNumber,
+      tds_applicable: form.tdsApplicable,
+      tds_section_id: form.tdsApplicable ? form.tdsMasterId : null,
+      msme_registered: form.msmeRegistered,
+      msme_reg_no: form.msmeRegistered ? form.msmeNumber : null,
+      address_1: form.billingAddress.line1,
+      address_2: form.billingAddress.line2,
+      pincode_id: form.billingAddress.pincodeId,
+      state: form.billingAddress.state,
+      city: form.billingAddress.city,
+      town: form.billingAddress.town,
+      remarks: form.remarks,
+      contacts: form.contacts.map((c, idx) => ({
+        contact_name: c.name,
+        designation: c.designation,
+        mobile_country_code: c.countryCode,
+        mobile_number: c.mobile,
+        email: c.email,
+        is_primary: idx === 0,
+      })),
+      bank_accounts: [
+        {
+          account_holder_name: form.accountHolderName,
+          bank_name: form.bankName,
+          branch_name: form.branch,
+          account_number: form.accountNumber,
+          ifsc_code: form.ifscCode,
+          swift_code: form.swiftCode,
+          is_primary: true,
+          payment_type: form.paymentType,
+          credit_days: form.creditDays,
+        },
+      ],
+      products: form.vendorProducts.map((p) => ({
+        product_id: p.productId,
+        cost_price: p.price ?? "",
+      })),
+      documents: form.documents.map((d) => ({
+        document_name: d.documentName,
+        document_type_id: d.documentTypeId,
+        file: d.file,
+        file_url: d.fileUrl,
+        uploaded: d.uploaded,
+        file_name: d.fileName,
+        uploaded_at: d.uploadedAt,
+        size: d.size,
+      })),
     };
 
     createMutation.mutate(payload, {
@@ -114,7 +160,7 @@ export default function NewSupplierPage() {
 
         {/* Form Content */}
         <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <SupplierForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} />
+          <VendorForm form={form} onChange={setForm} vendorCode={supplierCode} />
         </div>
       </div>
 

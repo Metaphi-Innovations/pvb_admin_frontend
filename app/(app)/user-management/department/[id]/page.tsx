@@ -55,7 +55,7 @@ export default function DepartmentViewPage() {
         statusVariant="neutral"
         tabs={[OVERVIEW_TAB]}
         activeTab="overview"
-        onTabChange={() => {}}
+        onTabChange={() => { }}
         sidebar={{}}
       >
         <p className="text-sm text-muted-foreground text-center py-8">
@@ -100,6 +100,7 @@ export default function DepartmentViewPage() {
             id: "updated",
             title: "Last updated",
             subtitle: dept.updatedBy,
+            date: dept.updatedDate,
             date: dept.updatedDate,
           },
         ],

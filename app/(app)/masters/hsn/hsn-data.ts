@@ -180,7 +180,7 @@ export function hsnToForm(record: HSNMaster): HSNForm {
   return {
     hsnDescription: record.hsnDescription,
     gstId: record.gstId ?? "",
-    hsnCode: record.hsnCode,
+    hsnCode: record.hsnCode,  
     gstRate: record.gstRate,
     productCategory: record.productCategory ?? "",
     effectiveDate: record.effectiveDate ?? "",

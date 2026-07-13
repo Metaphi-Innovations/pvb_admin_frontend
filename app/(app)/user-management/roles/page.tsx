@@ -682,7 +682,7 @@ export default function RolesPage() {
             addLabel="Add Role"
             onExport={() =>
               exportRoles.mutate(
-                { search: appliedSearch, status: roleStatus, ordering: roleOrdering, apiFilters: roleApiFilters },
+                { search: roleAppliedSearch, status: roleStatus, ordering: roleOrdering, apiFilters: roleApiFilters },
                 {
                   onSuccess: () => showToast("Roles exported successfully"),
                   onError: (error) => showToast(getErrorMessage(error, "Failed to export roles"), "error"),

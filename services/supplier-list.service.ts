@@ -33,6 +33,64 @@ export interface SupplierProductPayload {
 
 export interface SupplierDocumentPayload {
     document_name: string;
+    document_type_id?: string;
+    file?: File | string | null;
+    file_url?: string | null;
+    uploaded?: boolean;
+    file_name?: string;
+    uploaded_at?: string;
+    size?: string;
+}
+
+// responses
+export interface SupplierContact {
+    supplier_contact_id: string;
+    contact_name: string;
+    designation?: string | null;
+    mobile_country_code?: string;
+    mobile_number: string;
+    email?: string | null;
+    is_primary: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SupplierBankAccount {
+    supplier_bank_account_id: string;
+    account_holder_name: string | null;
+    bank_name: string | null;
+    branch_name?: string | null;
+    account_number: string | null;
+    ifsc_code: string | null;
+    swift_code?: string | null;
+    payment_type?: string | null;
+    credit_days?: string | number | null;
+    is_primary: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SupplierProduct {
+    supplier_product_id: string;
+    product_id: string;
+    cost_price: string | number;
+    created_at: string;
+    updated_at: string;
+    product: {
+        product_id: string;
+        product_code: string;
+        product_name: string;
+        scientific_name?: string;
+    };
+}
+
+export interface SupplierDocument {
+    supplier_document_id: string;
+    document_name: string;
+    file_name: string;
+    file_url: string;
+    created_at: string;
+    updated_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +157,17 @@ export interface SupplierUpdatePayload extends Partial<SupplierCreatePayload> {
 // Response shape (list / detail record)
 // ---------------------------------------------------------------------------
 
+export interface SupplierPincode {
+    id: string;
+    circlename: string;
+    regionname: string;
+    divisionname: string;
+    officename: string;
+    pincode: string;
+    district: string;
+    statename: string;
+}
+
 export interface SupplierListRecord {
     id: number;
     supplierUuid: string;
@@ -123,15 +192,16 @@ export interface SupplierListRecord {
     msmeRegNo: string;
     address1: string;
     pincodeId: string;
+    pincodeMaster: SupplierPincode | null;
     address2: string;
     state: string;
     city: string;
     town: string;
     remarks: string;
-    contacts: SupplierContactPayload[];
-    bankAccounts: SupplierBankAccountPayload[];
-    products: SupplierProductPayload[];
-    documents: SupplierDocumentPayload[];
+    contacts: SupplierContact[];
+    bankAccounts: SupplierBankAccount[];
+    products: SupplierProduct[];
+    documents: SupplierDocument[];
     paymentTerms?: string;
     status: "active" | "inactive";
     createdAt: string;
@@ -177,6 +247,8 @@ const SORT_FIELD_MAP: Record<string, string> = {
     state: "state",
     city: "city",
     status: "status",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {
@@ -198,6 +270,23 @@ export function sortStateToOrdering(
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+function mapPincode(value: unknown): SupplierPincode | null {
+    if (!value || typeof value !== "object") return null;
+
+    const obj = value as Record<string, unknown>;
+
+    return {
+        id: asString(obj.id),
+        circlename: asString(obj.circlename),
+        regionname: asString(obj.regionname),
+        divisionname: asString(obj.divisionname),
+        officename: asString(obj.officename),
+        pincode: asString(obj.pincode),
+        district: asString(obj.district),
+        statename: asString(obj.statename),
+    };
+}
 
 function asString(value: unknown): string {
     return typeof value === "string" ? value : String(value ?? "");
@@ -243,41 +332,61 @@ function toArray<T>(value: unknown): T[] {
     return [];
 }
 
-function mapContacts(value: unknown): SupplierContactPayload[] {
+function mapContacts(value: unknown): SupplierContact[] {
     return toArray<Record<string, unknown>>(value).map((c) => ({
+        supplier_contact_id: asString(c.supplier_contact_id),
         contact_name: asString(c.contact_name),
         designation: asString(c.designation),
         mobile_country_code: asString(c.mobile_country_code) || "+91",
         mobile_number: asString(c.mobile_number),
         email: asString(c.email),
         is_primary: toBool(c.is_primary),
+        created_at: asString(c.created_at),
+        updated_at: asString(c.updated_at),
     }));
 }
 
-function mapBankAccounts(value: unknown): SupplierBankAccountPayload[] {
+function mapBankAccounts(value: unknown): SupplierBankAccount[] {
     return toArray<Record<string, unknown>>(value).map((b) => ({
-        account_holder_name: asString(b.account_holder_name),
-        bank_name: asString(b.bank_name),
-        branch_name: asString(b.branch_name),
-        account_number: asString(b.account_number),
-        ifsc_code: asString(b.ifsc_code),
-        swift_code: asString(b.swift_code),
+        supplier_bank_account_id: asString(b.supplier_bank_account_id),
+        account_holder_name: asString(b.account_holder_name) || null,
+        bank_name: asString(b.bank_name) || null,
+        branch_name: asString(b.branch_name) || null,
+        account_number: asString(b.account_number) || null,
+        ifsc_code: asString(b.ifsc_code) || null,
+        swift_code: asString(b.swift_code) || null,
+        payment_type: asString(b.payment_type) || null,
+        credit_days: asString(b.credit_days) || null,
         is_primary: toBool(b.is_primary),
-        payment_type: asString(b.payment_type),
-        credit_days: asString(b.credit_days),
+        created_at: asString(b.created_at),
+        updated_at: asString(b.updated_at),
     }));
 }
 
-function mapProducts(value: unknown): SupplierProductPayload[] {
+function mapProducts(value: unknown): SupplierProduct[] {
     return toArray<Record<string, unknown>>(value).map((p) => ({
+        supplier_product_id: asString(p.supplier_product_id),
         product_id: asString(p.product_id),
-        cost_price: Number(p.cost_price) || 0,
+        cost_price: asString(p.cost_price),
+        created_at: asString(p.created_at),
+        updated_at: asString(p.updated_at),
+        product: {
+            product_id: asString((p.product as any)?.product_id),
+            product_code: asString((p.product as any)?.product_code),
+            product_name: asString((p.product as any)?.product_name),
+            scientific_name: asString((p.product as any)?.scientific_name),
+        },
     }));
 }
 
-function mapDocuments(value: unknown): SupplierDocumentPayload[] {
+function mapDocuments(value: unknown): SupplierDocument[] {
     return toArray<Record<string, unknown>>(value).map((d) => ({
+        supplier_document_id: asString(d.supplier_document_id),
         document_name: asString(d.document_name),
+        file_name: asString(d.file_name),
+        file_url: asString(d.file_url),
+        created_at: asString(d.created_at),
+        updated_at: asString(d.updated_at),
     }));
 }
 
@@ -325,6 +434,7 @@ function mapItem(
         msmeRegNo: asString(raw.msme_reg_no),
         address1: asString(raw.address_1),
         pincodeId: asString(raw.pincode_id),
+        pincodeMaster: mapPincode(raw.pincode_master),
         address2: asString(raw.address_2),
         state: asString(raw.state),
         city: asString(raw.city),
@@ -364,7 +474,28 @@ function buildFormData(payload: Record<string, unknown>): FormData {
     const formData = new FormData();
 
     Object.entries(payload).forEach(([key, value]) => {
-        if (value === undefined || value === null) return;
+        if (value == null) return;
+
+        if (key === "documents" && Array.isArray(value)) {
+
+            formData.append(
+                "documents",
+                JSON.stringify(
+                    value.map((doc: any) => {
+                        const { file, ...rest } = doc;
+                        return rest;
+                    })
+                )
+            );
+
+            value.forEach((doc: any) => {
+                if (doc.file instanceof File) {
+                    formData.append("file1", doc.file);
+                }
+            });
+
+            return;
+        }
 
         if (value instanceof File) {
             formData.append(key, value);
@@ -456,9 +587,10 @@ export const SupplierListService = {
         return mapDetail(data as Record<string, unknown>);
     },
 
-    async previewNumber(): Promise<string> {
+    async previewNumber(supplierTypeId?: string): Promise<string> {
         const response = await axiosInstance.get(
             API_ENDPOINTS.MASTER.SUPPLIER.PREVIEW_NUMBER,
+            { params: supplierTypeId ? { supplier_type_id: supplierTypeId } : undefined },
         );
         const payload = response.data as Record<string, unknown>;
         const data = payload.data as Record<string, unknown> | undefined;
@@ -466,12 +598,10 @@ export const SupplierListService = {
     },
 
     async create(payload: SupplierCreatePayload): Promise<void> {
-        const hasFile = payload.file1 instanceof File;
-
         const response = await axiosInstance.post(
             API_ENDPOINTS.MASTER.SUPPLIER.CREATE,
-            hasFile ? buildFormData(payload) : payload,
-            hasFile ? { headers: { "Content-Type": "multipart/form-data" } } : undefined,
+            buildFormData(payload),
+            { headers: { "Content-Type": "multipart/form-data" } },
         );
 
         const body = response.data as Record<string, unknown>;
@@ -481,12 +611,10 @@ export const SupplierListService = {
     },
 
     async update(id: string, payload: SupplierUpdatePayload): Promise<void> {
-        const hasFile = payload.file1 instanceof File;
-
         const response = await axiosInstance.put(
             API_ENDPOINTS.MASTER.SUPPLIER.UPDATE(id),
-            hasFile ? buildFormData(payload) : payload,
-            hasFile ? { headers: { "Content-Type": "multipart/form-data" } } : undefined,
+            buildFormData(payload),
+            { headers: { "Content-Type": "multipart/form-data" } },
         );
 
         const body = response.data as Record<string, unknown>;

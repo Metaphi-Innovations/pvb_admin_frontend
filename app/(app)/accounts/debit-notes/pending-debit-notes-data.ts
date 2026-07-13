@@ -5,7 +5,7 @@
 
 import { loadPurchaseReturns, type PurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
-import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
+const getDispatchRecords = (): any[] => [];
 
 const DEBIT_NOTES_STORAGE_KEY = "ds_accounts_debit_notes_v3";
 
@@ -113,13 +113,13 @@ function resolveDispatchContext(returnNumber: string, returnId: number): {
       p.salesOrderNo === returnNumber,
   );
 
-  const dispatch = getDispatchRecords().find((d) => {
+  const dispatch = getDispatchRecords().find((d: any) => {
     if (d.source_type !== "purchase_return" && d.sourceDocumentType !== "Purchase Return") {
       return false;
     }
     const docNos = (d.source_document_no || d.salesOrderNumber || "")
       .split(",")
-      .map((s) => s.trim());
+      .map((s: string) => s.trim());
     return docNos.includes(returnNumber);
   });
 
@@ -173,19 +173,19 @@ export function listPendingDebitNoteReturns(): PendingDebitNoteRow[] {
   const rows: PendingDebitNoteRow[] = [];
 
   for (const ret of returns) {
-    const ctx = resolveDispatchContext(ret.returnNumber, ret.id);
+    const ctx = resolveDispatchContext(ret.returnNumber, Number(ret.id));
     const dispatchStatus = inferDispatchStatusFromReturn(ret, ctx.dispatchStatus);
     if (!dispatchStatus) continue;
 
     const amounts = computeReturnAmounts(ret);
     rows.push({
-      returnId: ret.id,
+      returnId: Number(ret.id),
       returnNumber: ret.returnNumber,
       returnDate: ret.returnDate,
-      supplierId: ret.supplierId,
+      supplierId: Number(ret.supplierId),
       supplierName: ret.supplierName,
       supplierCode: ret.supplierCode,
-      poId: ret.poId,
+      poId: Number(ret.poId),
       poNumber: ret.poNumber,
       grnNo: firstGrnNo(ret),
       packingNo: ctx.packingNo,

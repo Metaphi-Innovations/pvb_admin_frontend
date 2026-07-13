@@ -83,15 +83,12 @@ import {
 } from "@/lib/masters/compliance-registration";
 import { ListingStatusToggle } from "@/components/listing";
 import { Button } from "@/components/ui/button";
-import { toTdsSelectOptions } from "../../tds/tds-data";
 import {
 	type Customer,
 	type CustomerStatus,
 	type CustomerProductMapping,
 	COUNTRY_CODES,
 	CUSTOMER_TYPE_OPTIONS,
-	getActiveGSTMasters,
-	getActiveTDSMasters,
 	getActiveGeoStates,
 	getDistrictsForState,
 	getTerritoriesUnderDistrict,
@@ -114,6 +111,11 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload, CustomerBranchDocument, buildFileKey } from "@/services/customer-list.service";
+import { useGstDropdown, usePincode, useTdsDropdown } from "@/hooks/masters";
+import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
+import { CustomerTypeDocument } from "@/services/customer-type-list.service";
+import { PincodeService } from "@/services/pincode.service";
 
 export interface BranchAddress {
 	address: string;
@@ -124,14 +126,17 @@ export interface BranchAddress {
 	city: string;
 	state: string;
 	pincode: string;
+	pincodeId?: string;
 }
 
 export interface BranchDocument {
+	documentTypeId?: string;
 	documentName: string;
 	required: boolean;
 	fileName?: string;
 	fileUrl?: string;
 	file?: File;
+	fileKey?: string;
 }
 
 export interface CustomerBranch {
@@ -142,35 +147,29 @@ export interface CustomerBranch {
 	documents: BranchDocument[];
 }
 
+export interface CustomerTypeWithDocs {
+	id: string;
+	customerType: string;
+	customerInitialCode?: string
+	documents?: CustomerTypeDocument[];
+}
+
 export function getDocumentsForCustomerType(
-	customerType: string,
+	customerTypeId: string,
+	customerTypes: CustomerTypeWithDocs[],
 ): BranchDocument[] {
-	const typeLower = (customerType || "").toLowerCase();
+	const ct = customerTypes.find((c) => c.id === customerTypeId);
+	if (!ct?.documents?.length) return [];
+	return ct.documents.map((d) => ({
+		documentTypeId: d.documentTypeId,
+		documentName: d.documentType?.title ?? "",
+		required: true,
+	}));
+}
 
-	if (typeLower === "individual" || typeLower === "farmer") {
-		return [
-			{ documentName: "PAN Card", required: true },
-			{ documentName: "Aadhaar Card", required: true },
-			{ documentName: "Address Proof", required: true },
-		];
-	}
-
-	if (typeLower === "dealer") {
-		return [
-			{ documentName: "GST Certificate", required: true },
-			{ documentName: "PAN Card", required: true },
-			{ documentName: "Trade License", required: true },
-			{ documentName: "Address Proof", required: true },
-		];
-	}
-
-	// For Company, Distributor, Retailer, CBBO, FPO, C&F etc.
-	return [
-		{ documentName: "GST Certificate", required: true },
-		{ documentName: "PAN Card", required: true },
-		{ documentName: "Incorporation Certificate", required: true },
-		{ documentName: "Address Proof", required: true },
-	];
+function extractPreviewSequence(previewNumber: string): string {
+	const parts = previewNumber.split("-");
+	return parts.length > 1 ? parts[parts.length - 1] : previewNumber;
 }
 
 export interface CustomerFormValues {
@@ -268,7 +267,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	registeredLegalName: "",
 	registeredAddress: "",
 	gstMasterId: "",
-	tdsApplicable: false,
+	tdsApplicable: true,
 	tdsMasterId: "",
 	pan: "",
 	msmeRegistered: false,
@@ -342,7 +341,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	],
 };
 
-export function customerToFormValues(c: Customer): CustomerFormValues {
+export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWithDocs[]): CustomerFormValues {
 	const gstCategory =
 		c.gstCategory || deriveGstCategory(c.gstApplicable, c.gstin);
 	const gstRegistered = deriveGstRegistered(
@@ -436,11 +435,9 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 						state: c.stateName || "",
 						pincode: c.pincode || "",
 					},
-					documents: getDocumentsForCustomerType(c.customerType).map((doc) => {
+					documents: getDocumentsForCustomerType(c.customerType, customerTypes).map((doc) => {
 						const existingDoc = c.documents?.requiredDocuments?.find(
-							(rd) =>
-								rd.documentName.toLowerCase() ===
-								doc.documentName.toLowerCase(),
+							(rd) => rd.documentTypeId === doc.documentTypeId,
 						);
 						return {
 							...doc,
@@ -506,31 +503,31 @@ function FieldError({ msg }: { msg?: string }) {
 	);
 }
 
-const YES_NO_OPTIONS = [
-	{ value: "yes", label: "Yes" },
-	{ value: "no", label: "No" },
-];
+// const YES_NO_OPTIONS = [
+// 	{ value: "yes", label: "Yes" },
+// 	{ value: "no", label: "No" },
+// ];
 
-const STATUS_OPTIONS = [
-	{ value: "active", label: "Active" },
-	{ value: "inactive", label: "Inactive" },
-	{ value: "draft", label: "Draft" },
-	{ value: "blocked", label: "Blocked" },
-];
+// const STATUS_OPTIONS = [
+// 	{ value: "active", label: "Active" },
+// 	{ value: "inactive", label: "Inactive" },
+// 	{ value: "draft", label: "Draft" },
+// 	{ value: "blocked", label: "Blocked" },
+// ];
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
-	return (
-		<div className='mb-2.5 mt-0.5'>
-      <div className='flex items-center gap-2'>
-        <span className='w-[3px] h-3.5 rounded-full bg-[#E57A1F] flex-shrink-0' />
-        <p className='text-[10px] font-bold uppercase tracking-widest text-[#0F172A]'>
-          {label}
-        </p>
-      </div>
-			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
-		</div>
-	);
-}
+// function SectionHead({ label, sub }: { label: string; sub?: string }) {
+// 	return (
+// 		<div className='mb-2.5 mt-0.5'>
+// 			<div className='flex items-center gap-2'>
+// 				<span className='w-[3px] h-3.5 rounded-full bg-[#E57A1F] flex-shrink-0' />
+// 				<p className='text-[10px] font-bold uppercase tracking-widest text-[#0F172A]'>
+// 					{label}
+// 				</p>
+// 			</div>
+// 			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
+// 		</div>
+// 	);
+// }
 
 function CountryCodePicker({
 	value,
@@ -583,6 +580,52 @@ function CountryCodePicker({
 	);
 }
 
+function BranchAddressWithPincode({
+	address,
+	onChange,
+	readOnly,
+	stateOptions,
+	errors,
+}: {
+	address: BranchAddress;
+	onChange: (addr: BranchAddress) => void;
+	readOnly?: boolean;
+	stateOptions: ReturnType<typeof getStateSelectOptions>;
+	errors?: Record<string, string | undefined>;
+}) {
+	const pincodeQuery = usePincode(
+		/^\d{6}$/.test(address.pincode.trim()) ? address.pincode.trim() : null,
+	);
+	const pincodeRecords = pincodeQuery.data ?? [];
+
+	useEffect(() => {
+		if (pincodeRecords.length === 0) return;
+
+		const first = pincodeRecords[0];
+
+		onChange({
+			...address,
+			state: first.statename || address.state,
+			district: first.district || address.district,
+			pincodeId: pincodeRecords.length === 1 ? first.id : address.pincodeId,
+			...(pincodeRecords.length === 1
+				? { town: first.officename || address.town, city: first.officename || address.city }
+				: {}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeRecords]);
+
+	return (
+		<BranchAddressFields
+			address={address}
+			onChange={onChange}
+			readOnly={readOnly}
+			stateOptions={stateOptions}
+			errors={errors}
+		/>
+	);
+}
+
 interface ProductCatalogItem {
 	productId: string;
 	numericId: number;
@@ -595,79 +638,80 @@ interface ProductCatalogItem {
 	gstRate?: string;
 }
 
-function ProductSelect({
-	products,
-	value,
-	onSelect,
-	disabled,
-}: {
-	products: ProductCatalogItem[];
-	value: string;
-	onSelect: (product: ProductCatalogItem) => void;
-	disabled?: boolean;
-}) {
-	const options = products.map((p) => ({
-		value: p.productId,
-		label: `${p.sku} - ${p.productName}`,
-		sublabel: [
-			p.category ? `Category: ${p.category}` : "",
-			p.unit ? `Unit: ${p.unit}` : "",
-			p.packSize ? `Pack Size: ${p.packSize}` : "",
-			p.hsnCode ? `HSN: ${p.hsnCode}` : "",
-			p.gstRate ? `GST: ${p.gstRate}` : "",
-		]
-			.filter(Boolean)
-			.join(" | "),
-		trailing: (
-			<span className='text-[10px] text-muted-foreground'>
-				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
-			</span>
-		),
-	}));
+// function ProductSelect({
+// 	products,
+// 	value,
+// 	onSelect,
+// 	disabled,
+// }: {
+// 	products: ProductCatalogItem[];
+// 	value: string;
+// 	onSelect: (product: ProductCatalogItem) => void;
+// 	disabled?: boolean;
+// }) {
+// 	const options = products.map((p) => ({
+// 		value: p.productId,
+// 		label: `${p.sku} - ${p.productName}`,
+// 		sublabel: [
+// 			p.category ? `Category: ${p.category}` : "",
+// 			p.unit ? `Unit: ${p.unit}` : "",
+// 			p.packSize ? `Pack Size: ${p.packSize}` : "",
+// 			p.hsnCode ? `HSN: ${p.hsnCode}` : "",
+// 			p.gstRate ? `GST: ${p.gstRate}` : "",
+// 		]
+// 			.filter(Boolean)
+// 			.join(" | "),
+// 		trailing: (
+// 			<span className='text-[10px] text-muted-foreground'>
+// 				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
+// 			</span>
+// 		),
+// 	}));
 
-	return (
-		<AutocompleteSelect
-			options={options}
-			value={value}
-			onChange={(val) => {
-				const prod = products.find((p) => p.productId === val);
-				if (prod) onSelect(prod);
-			}}
-			placeholder='Select product by name, SKU, or code'
-			searchPlaceholder='Search product...'
-			disabled={disabled}
-			className='h-8 text-xs font-normal'
-			renderTriggerLabel={(selectedOpt) => {
-				const option = Array.isArray(selectedOpt)
-					? selectedOpt[0]
-					: selectedOpt;
-				if (!option) return "Select product by name, SKU, or code";
-				const prod = products.find((p) => p.productId === option.value);
-				const meta = prod
-					? [
-							prod.category ? `Category: ${prod.category}` : "",
-							prod.unit ? `Unit: ${prod.unit}` : "",
-							prod.packSize ? `Pack Size: ${prod.packSize}` : "",
-							prod.hsnCode ? `HSN: ${prod.hsnCode}` : "",
-							prod.gstRate ? `GST: ${prod.gstRate}` : "",
-						]
-							.filter(Boolean)
-							.join(" | ")
-					: "";
-				return (
-					<span className='flex items-center min-w-0 gap-2'>
-						<span className='truncate text-foreground'>{option.label}</span>
-						{meta && (
-							<span className='truncate text-[10px] text-muted-foreground'>
-								{meta}
-							</span>
-						)}
-					</span>
-				);
-			}}
-		/>
-	);
-}
+// 	return (
+// 		<AutocompleteSelect
+// 			options={options}
+// 			value={value}
+// 			onChange={(val) => {
+// 				const prod = products.find((p) => p.productId === val);
+// 				if (prod) onSelect(prod);
+// 			}}
+// 			placeholder='Select product by name, SKU, or code'
+// 			searchPlaceholder='Search product...'
+// 			disabled={disabled}
+// 			className='h-8 text-xs font-normal'
+// 			renderTriggerLabel={(selectedOpt) => {
+// 				const option = Array.isArray(selectedOpt)
+// 					? selectedOpt[0]
+// 					: selectedOpt;
+// 				if (!option) return "Select product by name, SKU, or code";
+// 				const prod = products.find((p) => p.productId === option.value);
+// 				const meta = prod
+// 					? [
+// 						prod.category ? `Category: ${prod.category}` : "",
+// 						prod.unit ? `Unit: ${prod.unit}` : "",
+// 						prod.packSize ? `Pack Size: ${prod.packSize}` : "",
+// 						prod.hsnCode ? `HSN: ${prod.hsnCode}` : "",
+// 						prod.gstRate ? `GST: ${prod.gstRate}` : "",
+// 					]
+// 						.filter(Boolean)
+// 						.join(" | ")
+// 					: "";
+// 				return (
+// 					<span className='flex items-center min-w-0 gap-2'>
+// 						<span className='truncate text-foreground'>{option.label}</span>
+// 						{meta && (
+// 							<span className='truncate text-[10px] text-muted-foreground'>
+// 								{meta}
+// 							</span>
+// 						)}
+// 					</span>
+// 				);
+// 			}}
+// 		/>
+// 	);
+// }
+
 interface CustomerFormProps {
 	form: CustomerFormValues;
 	onChange: (form: CustomerFormValues) => void;
@@ -678,6 +722,58 @@ interface CustomerFormProps {
 	isAdd?: boolean;
 	/** Auto-generated code preview (add) or stored code (edit). */
 	customerCode?: string;
+	customerTypes: {
+		id: string;
+		customerType: string;
+		documents: CustomerTypeDocument[];
+	}[];
+}
+
+function branchDocumentsToPayload(
+	documents: BranchDocument[],
+	branchIndex: number,
+): CustomerBranchDocumentPayload[] {
+	return documents
+		.filter((d): d is BranchDocument & { documentTypeId: string; file: File } =>
+			!!d.documentTypeId && !!d.file,
+		)
+		.map((d) => ({
+			document_type_id: d.documentTypeId,
+			file_key: buildFileKey(branchIndex, d.documentTypeId),
+		}));
+}
+
+function branchToPayload(
+	branch: CustomerBranch,
+	idx: number,
+): { payload: CustomerBranchPayload } {
+	return {
+		payload: {
+			branch_name: branch.branchName || `Branch #${idx + 1}`,
+			is_main_branch: !!branch.isMain,
+
+			billing_country: branch.billingAddress.country || "India",
+			billing_address_line_1: branch.billingAddress.address,
+			billing_address_line_2: branch.billingAddress.addressLine2 || "",
+			billing_state: branch.billingAddress.state,
+			billing_city: branch.billingAddress.city,
+			billing_town: branch.billingAddress.town || "",
+			billing_pincode: branch.billingAddress.pincode,
+			billing_pincode_id: branch.billingAddress.pincodeId || "",
+
+			shipping_country: branch.shippingAddress.country || "India",
+			shipping_address_line_1: branch.shippingAddress.address,
+			shipping_address_line_2: branch.shippingAddress.addressLine2 || "",
+			shipping_state: branch.shippingAddress.state,
+			shipping_city: branch.shippingAddress.city,
+			shipping_town: branch.shippingAddress.town || "",
+			shipping_pincode: branch.shippingAddress.pincode,
+			shipping_pincode_id: branch.shippingAddress.pincodeId || "",
+
+			documents: branchDocumentsToPayload(branch.documents, idx),
+
+		},
+	};
 }
 
 export function CustomerForm({
@@ -689,7 +785,12 @@ export function CustomerForm({
 	readOnly,
 	isAdd,
 	customerCode,
+	customerTypes,
 }: CustomerFormProps) {
+	const { data: gstDropdownItems = [] } = useGstDropdown();
+	const { data: tdsDropdownItems = [] } = useTdsDropdown();
+	const { data: salesmanData = [] } = useSalesmenDropdown();
+
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
 	);
@@ -730,7 +831,17 @@ export function CustomerForm({
 				return;
 			}
 			const snap = gstDetailsToAddressSnapshot(details);
-			setGstAddressSnapshot(snap);
+
+			let pincodeId: string | undefined;
+			if (snap.pincode && /^\d{6}$/.test(snap.pincode.trim())) {
+				const pincodeRecords = await PincodeService.getByPincode(snap.pincode.trim());
+				if (pincodeRecords.length > 0) {
+					pincodeId = pincodeRecords[0].id;
+				}
+			}
+
+			const enrichedSnap = { ...snap, pincodeId };
+			setGstAddressSnapshot(enrichedSnap);
 			const displayName = details.tradeName || details.legalBusinessName;
 			const updatedBranches = form.branches.map((b, idx) => {
 				const isMain =
@@ -739,16 +850,16 @@ export function CustomerForm({
 				return {
 					...b,
 					billingAddress: {
-						...snap,
-						addressLine2: snap.addressLine2 ?? "",
-						country: snap.country ?? "India",
-						district: snap.district ?? snap.city,
+						...enrichedSnap,
+						addressLine2: enrichedSnap.addressLine2 ?? "",
+						country: enrichedSnap.country ?? "India",
+						district: enrichedSnap.district ?? enrichedSnap.city,
 					},
 					shippingAddress: {
-						...snap,
-						addressLine2: snap.addressLine2 ?? "",
-						country: snap.country ?? "India",
-						district: snap.district ?? snap.city,
+						...enrichedSnap,
+						addressLine2: enrichedSnap.addressLine2 ?? "",
+						country: enrichedSnap.country ?? "India",
+						district: enrichedSnap.district ?? enrichedSnap.city,
 					},
 				};
 			});
@@ -774,10 +885,10 @@ export function CustomerForm({
 		const updatedBranches = form.branches.map((b, idx) =>
 			idx === bIdx
 				? {
-						...b,
-						billingAddress: { ...gstAddressSnapshot },
-						shippingAddress: { ...gstAddressSnapshot },
-					}
+					...b,
+					billingAddress: { ...gstAddressSnapshot },
+					shippingAddress: { ...gstAddressSnapshot },
+				}
 				: b,
 		);
 		onChange({ ...form, branches: updatedBranches });
@@ -814,37 +925,28 @@ export function CustomerForm({
 	const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file) return;
+		if (!activeBranchUpload) return;
 
+		const { branchIndex, docIndex } = activeBranchUpload;
 		const fileUrl = URL.createObjectURL(file);
 		const fileName = file.name;
 
-		if (activeBranchUpload) {
-			const { branchIndex, docIndex } = activeBranchUpload;
-			const updatedBranches = [...form.branches];
-			updatedBranches[branchIndex] = {
-				...updatedBranches[branchIndex],
-				documents: updatedBranches[branchIndex].documents.map((doc, idx) => {
-					if (idx === docIndex) {
-						return {
-							...doc,
-							fileName,
-							fileUrl,
-							file,
-						};
-					}
-					return doc;
-				}),
-			};
-			onChange({ ...form, branches: updatedBranches });
-			showToast("Document uploaded successfully.", "success");
-			setActiveBranchUpload(null);
-		}
+		const updatedBranches = [...form.branches];
+		updatedBranches[branchIndex] = {
+			...updatedBranches[branchIndex],
+			documents: updatedBranches[branchIndex].documents.map((doc, idx) =>
+				idx === docIndex ? { ...doc, fileName, fileUrl, file } : doc,
+			),
+		};
+		onChange({ ...form, branches: updatedBranches });
+		showToast("Document selected.", "success");
+		setActiveBranchUpload(null);
 	};
+	// console.log('customerTypes[0]:', customerTypes[0]); // ⬅ add here
 
-	const customerTypes = useMemo(() => loadCustomerTypes(), []);
 	const customerTypeOptions = useMemo(() => {
 		return customerTypes.map((ct) => ({
-			value: ct.customerType.toLowerCase(),
+			value: ct.id,
 			label: ct.customerType,
 		}));
 	}, [customerTypes]);
@@ -857,8 +959,6 @@ export function CustomerForm({
 		onClearError(key);
 	};
 
-	const gstMasters = useMemo(() => getActiveGSTMasters(), []);
-	const tdsMasters = useMemo(() => getActiveTDSMasters(), []);
 	const states = useMemo(() => getActiveGeoStates(geoNodes), [geoNodes]);
 
 	const districts = useMemo(() => {
@@ -877,18 +977,18 @@ export function CustomerForm({
 	}, [form.territoryId, geoNodes]);
 
 	const salesOptions = useMemo(() => {
-		return getActiveSalesEmployees().map((e) => {
-			const name = e.fullName || `${e.firstName} ${e.lastName}`.trim();
-			const label = e.geoRegion ? `${name} (${e.geoRegion})` : name;
+		return salesmanData.map((s: any) => {
+			const name = `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "";
+			const label = s.geo_region ? `${name} (${s.geo_region})` : name;
 			return {
-				value: String(e.id),
+				value: String(s.user_id),
 				label,
-				sublabel: [e.employeeId, e.mobile, e.role, e.territory]
+				sublabel: [s.employee_id || s.username, s.mobile_no || s.mobile, s.role?.role_name || s.role_type]
 					.filter(Boolean)
 					.join(" - "),
 			};
 		});
-	}, []);
+	}, [salesmanData]);
 
 	const activeProducts = useMemo((): ProductCatalogItem[] => {
 		return loadProducts()
@@ -1146,7 +1246,7 @@ export function CustomerForm({
 				<FieldError msg={errors.pan} />
 			</div>
 			<div className="flex flex-wrap items-end gap-3">
-				<div className={ERP.field}>
+				{/* <div className={ERP.field}>
 					<Label className={ERP.label}>TDS Applicable</Label>
 					<div className="flex h-8 items-center">
 						<ListingStatusToggle
@@ -1162,8 +1262,8 @@ export function CustomerForm({
 							disabled={readOnly}
 						/>
 					</div>
-				</div>
-				{form.tdsApplicable ? (
+				</div> */}
+				<div className="flex flex-wrap items-end gap-3">
 					<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 						<Label className={ERP.label}>
 							TDS Section <span className="text-red-500">*</span>
@@ -1171,25 +1271,28 @@ export function CustomerForm({
 						<SearchableSelect
 							value={form.tdsMasterId}
 							onChange={(value) => set("tdsMasterId", value)}
-							options={toTdsSelectOptions(tdsMasters)}
+							options={tdsDropdownItems.map((tds) => ({
+								value: tds.tdsUuid,
+								label: tds.sectionCode,
+							}))}
 							placeholder="Select TDS..."
 							disabled={readOnly}
 							error={!!errors.tdsMasterId}
 						/>
 						<FieldError msg={errors.tdsMasterId} />
 					</div>
-				) : null}
+				</div>
 			</div>
-			{gstRegistered && !isAdd && (
+			{gstRegistered && (
 				<div className={ERP.field}>
-					<Label className={ERP.label}>GST % / GST Code</Label>
+					<Label className={ERP.label}>GST Code</Label>
 					<SearchableSelect
 						value={form.gstMasterId}
 						onChange={(value) => set("gstMasterId", value)}
-						options={gstMasters.map((gst) => ({
-							value: String(gst.id),
-							label: `${gst.gstId} - ${gst.gstPercentage}%`,
-							sublabel: gst.remarks,
+						options={gstDropdownItems.map((gst) => ({
+							value: gst.id,
+							label: `${gst.gstPercentage}%`,
+							sublabel: gst.remark,
 						}))}
 						placeholder="Select from GST Master..."
 						searchPlaceholder="Search GST code..."
@@ -1229,27 +1332,14 @@ export function CustomerForm({
 										<SearchableSelect
 											value={form.customerType}
 											onChange={(value) => {
-												const ct = customerTypes.find(
-													(c) =>
-														c.customerType.toLowerCase() ===
-														value.toLowerCase(),
-												);
-												const docs = ct
-													? ct.documentTypes.map((d) => ({
-															documentTypeId: d.id,
-															documentName: d.documentName,
-															required: true as const,
-														}))
-													: [];
+												const branchDocs = getDocumentsForCustomerType(value, customerTypes);
 
-												const branchDocs = getDocumentsForCustomerType(value);
 												const updatedBranches = form.branches.map((b) => ({
 													...b,
 													documents: branchDocs.map((d) => {
+														// match by documentTypeId, not name — stable across renames
 														const existing = b.documents.find(
-															(bd) =>
-																bd.documentName.toLowerCase() ===
-																d.documentName.toLowerCase(),
+															(bd) => bd.documentTypeId === d.documentTypeId,
 														);
 														return {
 															...d,
@@ -1263,8 +1353,7 @@ export function CustomerForm({
 												onChange({
 													...form,
 													customerType: value,
-													requiredDocuments: docs,
-													branches: updatedBranches,
+													branches: updatedBranches, // ⬅ this was missing
 												});
 												onClearError('customerType');
 											}}
@@ -1533,112 +1622,112 @@ export function CustomerForm({
 
 						<ErpFormSection title='Bank Details'>
 							<div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
-							{/* Account Holder Name */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									Account Holder Name
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.accountHolderName}
-									onChange={(e) => set("accountHolderName", e.target.value)}
-									className={vendorFieldClass("accountHolderName")}
-								/>
-								<FieldError msg={errors.accountHolderName} />
-							</div>
+								{/* Account Holder Name */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										Account Holder Name
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.accountHolderName}
+										onChange={(e) => set("accountHolderName", e.target.value)}
+										className={vendorFieldClass("accountHolderName")}
+									/>
+									<FieldError msg={errors.accountHolderName} />
+								</div>
 
-							{/* Bank Name */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									Bank Name
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.bankName}
-									onChange={(e) => set("bankName", e.target.value)}
-									className={vendorFieldClass("bankName")}
-								/>
-								<FieldError msg={errors.bankName} />
-							</div>
+								{/* Bank Name */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										Bank Name
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.bankName}
+										onChange={(e) => set("bankName", e.target.value)}
+										className={vendorFieldClass("bankName")}
+									/>
+									<FieldError msg={errors.bankName} />
+								</div>
 
-							{/* Branch Name */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									Branch Name
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.branch}
-									onChange={(e) => set("branch", e.target.value)}
-									className={vendorFieldClass("branch")}
-								/>
-								<FieldError msg={errors.branch} />
-							</div>
+								{/* Branch Name */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										Branch Name
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.branch}
+										onChange={(e) => set("branch", e.target.value)}
+										className={vendorFieldClass("branch")}
+									/>
+									<FieldError msg={errors.branch} />
+								</div>
 
-							{/* Account Number */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									Account Number
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.accountNumber}
-									onChange={(e) => set("accountNumber", e.target.value)}
-									className={cn(vendorFieldClass("accountNumber"), "font-mono")}
-								/>
-								<FieldError msg={errors.accountNumber} />
-							</div>
+								{/* Account Number */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										Account Number
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.accountNumber}
+										onChange={(e) => set("accountNumber", e.target.value)}
+										className={cn(vendorFieldClass("accountNumber"), "font-mono")}
+									/>
+									<FieldError msg={errors.accountNumber} />
+								</div>
 
-							{/* Confirm Account Number */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									Confirm Account Number
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.confirmAccountNumber}
-									onChange={(e) => set("confirmAccountNumber", e.target.value)}
-									className={cn(
-										vendorFieldClass("confirmAccountNumber"),
-										"font-mono",
-									)}
-								/>
-								<FieldError msg={errors.confirmAccountNumber} />
-							</div>
+								{/* Confirm Account Number */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										Confirm Account Number
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.confirmAccountNumber}
+										onChange={(e) => set("confirmAccountNumber", e.target.value)}
+										className={cn(
+											vendorFieldClass("confirmAccountNumber"),
+											"font-mono",
+										)}
+									/>
+									<FieldError msg={errors.confirmAccountNumber} />
+								</div>
 
-							{/* IFSC Code */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									IFSC Code
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.ifscCode}
-									onChange={(e) =>
-										set("ifscCode", e.target.value.toUpperCase())
-									}
-									className={cn(
-										vendorFieldClass("ifscCode"),
-										"font-mono uppercase",
-									)}
-								/>
-								<FieldError msg={errors.ifscCode} />
-							</div>
+								{/* IFSC Code */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										IFSC Code
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.ifscCode}
+										onChange={(e) =>
+											set("ifscCode", e.target.value.toUpperCase())
+										}
+										className={cn(
+											vendorFieldClass("ifscCode"),
+											"font-mono uppercase",
+										)}
+									/>
+									<FieldError msg={errors.ifscCode} />
+								</div>
 
-							{/* SWIFT Code */}
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium text-foreground'>
-									SWIFT Code
-								</Label>
-								<Input
-									disabled={readOnly}
-									value={form.swiftCode}
-									onChange={(e) => set("swiftCode", e.target.value)}
-									className={vendorFieldClass("swiftCode")}
-									placeholder='Optional'
-								/>
-								<FieldError msg={errors.swiftCode} />
-							</div>
+								{/* SWIFT Code */}
+								<div className='space-y-1'>
+									<Label className='text-xs font-medium text-foreground'>
+										SWIFT Code
+									</Label>
+									<Input
+										disabled={readOnly}
+										value={form.swiftCode}
+										onChange={(e) => set("swiftCode", e.target.value)}
+										className={vendorFieldClass("swiftCode")}
+										placeholder='Optional'
+									/>
+									<FieldError msg={errors.swiftCode} />
+								</div>
 							</div>
 						</ErpFormSection>
 					</div>
@@ -1684,7 +1773,7 @@ export function CustomerForm({
 														pincode: "",
 													},
 													documents: getDocumentsForCustomerType(
-														form.customerType,
+														form.customerType, customerTypes
 													),
 												},
 											],
@@ -1846,7 +1935,7 @@ export function CustomerForm({
 															</Button>
 														</div>
 													)}
-													<BranchAddressFields
+													<BranchAddressWithPincode
 														address={branch.billingAddress}
 														onChange={(addr) =>
 															updateBranchBillingAddress(bIdx, addr)
@@ -1856,11 +1945,11 @@ export function CustomerForm({
 														errors={
 															isMain
 																? {
-																		address: errors.mainBranchBillingAddress,
-																		state: errors.mainBranchBillingState,
-																		city: errors.mainBranchBillingCity,
-																		pincode: errors.mainBranchBillingPincode,
-																	}
+																	address: errors.mainBranchBillingAddress,
+																	state: errors.mainBranchBillingState,
+																	city: errors.mainBranchBillingCity,
+																	pincode: errors.mainBranchBillingPincode,
+																}
 																: undefined
 														}
 													/>
@@ -1893,7 +1982,7 @@ export function CustomerForm({
 															</Button>
 														</div>
 													)}
-													<BranchAddressFields
+													<BranchAddressWithPincode
 														address={branch.shippingAddress}
 														onChange={(addr) =>
 															updateBranchShippingAddress(bIdx, addr)
@@ -1910,242 +1999,242 @@ export function CustomerForm({
 													</p>
 
 													<div className='space-y-4 duration-200 animate-in fade-in-50'>
-															{!form.customerType ? (
-																<p className='text-xs italic text-muted-foreground'>
-																	Please select a Customer Type in Basic Details
-																	to view documents.
-																</p>
-															) : (
-																<>
-																	<div className='overflow-x-auto border rounded-lg border-border/50'>
-																		<table className='w-full text-xs min-w-[640px]'>
-																			<thead>
-																				<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
-																					<th className='px-3 py-2 font-medium'>
-																						Document Name
-																					</th>
-																					<th className='px-3 py-2 font-medium'>
-																						Upload File
-																					</th>
-																					<th className='w-10 px-3 py-2' />
-																				</tr>
-																			</thead>
-																			<tbody>
-																				{branch.documents.map(
-																					(doc, originalIdx) => {
-																						const isAttached = !!doc.fileName;
-																						return (
-																							<tr
-																								key={originalIdx}
-																								className='border-b border-border/40 last:border-0 hover:bg-muted/10'
-																							>
-																								<td className='px-3 py-2'>
-																									<Input
-																										disabled={
-																											readOnly || doc.required
-																										}
-																										value={doc.documentName}
-																										onChange={(e) => {
-																											const updatedBranches = [
-																												...form.branches,
-																											];
-																											updatedBranches[
-																												bIdx
-																											].documents[
-																												originalIdx
-																											].documentName =
-																												e.target.value;
-																											onChange({
-																												...form,
-																												branches:
-																													updatedBranches,
-																											});
-																										}}
-																										className={cn(
-																											"h-8 text-xs border-border/60 bg-white disabled:opacity-100 disabled:text-neutral-800 disabled:bg-muted/40 font-medium",
-																											doc.required &&
-																												"cursor-not-allowed",
-																										)}
-																										placeholder='Document name'
-																									/>
-																									{errors[
-																										`branch_${bIdx}_doc_${originalIdx}_name`
-																									] && (
+														{!form.customerType ? (
+															<p className='text-xs italic text-muted-foreground'>
+																Please select a Customer Type in Basic Details
+																to view documents.
+															</p>
+														) : (
+															<>
+																<div className='overflow-x-auto border rounded-lg border-border/50'>
+																	<table className='w-full text-xs min-w-[640px]'>
+																		<thead>
+																			<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
+																				<th className='px-3 py-2 font-medium'>
+																					Document Name
+																				</th>
+																				<th className='px-3 py-2 font-medium'>
+																					Upload File
+																				</th>
+																				<th className='w-10 px-3 py-2' />
+																			</tr>
+																		</thead>
+																		<tbody>
+																			{branch.documents.map(
+																				(doc, originalIdx) => {
+																					const isAttached = !!doc.fileName;
+																					return (
+																						<tr
+																							key={originalIdx}
+																							className='border-b border-border/40 last:border-0 hover:bg-muted/10'
+																						>
+																							<td className='px-3 py-2'>
+																								<Input
+																									disabled={
+																										readOnly || doc.required
+																									}
+																									value={doc.documentName}
+																									onChange={(e) => {
+																										const updatedBranches = [
+																											...form.branches,
+																										];
+																										updatedBranches[
+																											bIdx
+																										].documents[
+																											originalIdx
+																										].documentName =
+																											e.target.value;
+																										onChange({
+																											...form,
+																											branches:
+																												updatedBranches,
+																										});
+																									}}
+																									className={cn(
+																										"h-8 text-xs border-border/60 bg-white disabled:opacity-100 disabled:text-neutral-800 disabled:bg-muted/40 font-medium",
+																										doc.required &&
+																										"cursor-not-allowed",
+																									)}
+																									placeholder='Document name'
+																								/>
+																								{errors[
+																									`branch_${bIdx}_doc_${originalIdx}_name`
+																								] && (
 																										<p className='text-[10px] text-red-500 mt-0.5'>
 																											{
 																												errors[
-																													`branch_${bIdx}_doc_${originalIdx}_name`
+																												`branch_${bIdx}_doc_${originalIdx}_name`
 																												]
 																											}
 																										</p>
 																									)}
-																								</td>
-																								<td className='px-3 py-2'>
-																									{isAttached ? (
-																										<button
+																							</td>
+																							<td className='px-3 py-2'>
+																								{isAttached ? (
+																									<button
+																										type='button'
+																										className='text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium text-left truncate max-w-[280px] block'
+																										title={`Click to view ${doc.fileName}`}
+																										onClick={() => {
+																											if (
+																												doc.fileUrl &&
+																												doc.fileName
+																											) {
+																												setPreviewDoc({
+																													title:
+																														doc.documentName ||
+																														"Document",
+																													fileUrl:
+																														doc.fileUrl,
+																													fileName:
+																														doc.fileName,
+																												});
+																											}
+																										}}
+																									>
+																										{doc.fileName}
+																									</button>
+																								) : readOnly ? (
+																									<span className='text-muted-foreground'>
+																										—
+																									</span>
+																								) : (
+																									<div className='space-y-1'>
+																										<Button
 																											type='button'
-																											className='text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium text-left truncate max-w-[280px] block'
-																											title={`Click to view ${doc.fileName}`}
-																											onClick={() => {
-																												if (
-																													doc.fileUrl &&
-																													doc.fileName
-																												) {
-																													setPreviewDoc({
-																														title:
-																															doc.documentName ||
-																															"Document",
-																														fileUrl:
-																															doc.fileUrl,
-																														fileName:
-																															doc.fileName,
-																													});
-																												}
-																											}}
+																											variant='outline'
+																											size='sm'
+																											className='h-8 text-[11px] max-w-[180px] truncate'
+																											onClick={() =>
+																												triggerBranchUpload(
+																													bIdx,
+																													originalIdx,
+																												)
+																											}
 																										>
-																											{doc.fileName}
-																										</button>
-																									) : readOnly ? (
-																										<span className='text-muted-foreground'>
-																											—
-																										</span>
-																									) : (
-																										<div className='space-y-1'>
-																											<Button
-																												type='button'
-																												variant='outline'
-																												size='sm'
-																												className='h-8 text-[11px] max-w-[180px] truncate'
-																												onClick={() =>
-																													triggerBranchUpload(
-																														bIdx,
-																														originalIdx,
-																													)
-																												}
-																											>
-																												<Upload className='w-3 h-3 mr-1 shrink-0' />
-																												Choose File
-																											</Button>
-																											{errors[
-																												`branch_${bIdx}_doc_${originalIdx}_file`
-																											] && (
+																											<Upload className='w-3 h-3 mr-1 shrink-0' />
+																											Choose File
+																										</Button>
+																										{errors[
+																											`branch_${bIdx}_doc_${originalIdx}_file`
+																										] && (
 																												<p className='text-[10px] text-red-500 mt-0.5'>
 																													{
 																														errors[
-																															`branch_${bIdx}_doc_${originalIdx}_file`
+																														`branch_${bIdx}_doc_${originalIdx}_file`
 																														]
 																													}
 																												</p>
 																											)}
-																										</div>
-																									)}
-																								</td>
-																								<td className='px-3 py-2'>
-																									{!readOnly && (
-																										<Button
-																											type='button'
-																											variant='ghost'
-																											className='w-8 h-8 p-0 text-red-600 rounded-md hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent'
-																											disabled={
-																												!isAttached &&
-																												doc.required
+																									</div>
+																								)}
+																							</td>
+																							{/* <td className='px-3 py-2'>
+																								{!readOnly && (
+																									<Button
+																										type='button'
+																										variant='ghost'
+																										className='w-8 h-8 p-0 text-red-600 rounded-md hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent'
+																										disabled={
+																											!isAttached &&
+																											doc.required
+																										}
+																										onClick={() => {
+																											if (doc.required) {
+																												const updatedBranches =
+																													[...form.branches];
+																												updatedBranches[
+																													bIdx
+																												].documents[
+																													originalIdx
+																												] = {
+																													...doc,
+																													fileName: undefined,
+																													fileUrl: undefined,
+																													file: undefined,
+																												};
+																												onChange({
+																													...form,
+																													branches:
+																														updatedBranches,
+																												});
+																												showToast(
+																													"Document removed.",
+																													"success",
+																												);
+																											} else {
+																												const updatedBranches =
+																													[...form.branches];
+																												updatedBranches[
+																													bIdx
+																												].documents =
+																													updatedBranches[
+																														bIdx
+																													].documents.filter(
+																														(_, idx) =>
+																															idx !==
+																															originalIdx,
+																													);
+																												onChange({
+																													...form,
+																													branches:
+																														updatedBranches,
+																												});
+																												showToast(
+																													"Document row removed.",
+																													"success",
+																												);
 																											}
-																											onClick={() => {
-																												if (doc.required) {
-																													const updatedBranches =
-																														[...form.branches];
-																													updatedBranches[
-																														bIdx
-																													].documents[
-																														originalIdx
-																													] = {
-																														...doc,
-																														fileName: undefined,
-																														fileUrl: undefined,
-																														file: undefined,
-																													};
-																													onChange({
-																														...form,
-																														branches:
-																															updatedBranches,
-																													});
-																													showToast(
-																														"Document removed.",
-																														"success",
-																													);
-																												} else {
-																													const updatedBranches =
-																														[...form.branches];
-																													updatedBranches[
-																														bIdx
-																													].documents =
-																														updatedBranches[
-																															bIdx
-																														].documents.filter(
-																															(_, idx) =>
-																																idx !==
-																																originalIdx,
-																														);
-																													onChange({
-																														...form,
-																														branches:
-																															updatedBranches,
-																													});
-																													showToast(
-																														"Document row removed.",
-																														"success",
-																													);
-																												}
-																											}}
-																										>
-																											<Trash2 className='w-3.5 h-3.5' />
-																										</Button>
-																									)}
-																								</td>
-																							</tr>
-																						);
-																					},
-																				)}
-																			</tbody>
-																		</table>
+																										}}
+																									>
+																										<Trash2 className='w-3.5 h-3.5' />
+																									</Button>
+																								)}
+																							</td> */}
+																						</tr>
+																					);
+																				},
+																			)}
+																		</tbody>
+																	</table>
+																</div>
+
+																{errors[`branch_${bIdx}_documents`] && (
+																	<div className='flex items-center gap-1.5 mt-2 text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100'>
+																		<AlertCircle className='flex-shrink-0 w-4 h-4' />
+																		<span>
+																			{errors[`branch_${bIdx}_documents`]}
+																		</span>
 																	</div>
+																)}
 
-																	{errors[`branch_${bIdx}_documents`] && (
-																		<div className='flex items-center gap-1.5 mt-2 text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100'>
-																			<AlertCircle className='flex-shrink-0 w-4 h-4' />
-																			<span>
-																				{errors[`branch_${bIdx}_documents`]}
-																			</span>
-																		</div>
-																	)}
-
-																	{!readOnly && (
-																		<Button
-																			type='button'
-																			variant='outline'
-																			size='sm'
-																			className='h-8 mt-1 text-xs border-dashed'
-																			onClick={() => {
-																				const updatedBranches = [
-																					...form.branches,
-																				];
-																				updatedBranches[bIdx].documents = [
-																					...updatedBranches[bIdx].documents,
-																					{ documentName: "", required: false },
-																				];
-																				onChange({
-																					...form,
-																					branches: updatedBranches,
-																				});
-																			}}
-																		>
-																			<Plus className='w-3.5 h-3.5 mr-1' /> Add
-																			Document Row
-																		</Button>
-																	)}
-																</>
-															)}
-														</div>
+																{/* {!readOnly && (
+																	<Button
+																		type='button'
+																		variant='outline'
+																		size='sm'
+																		className='h-8 mt-1 text-xs border-dashed'
+																		onClick={() => {
+																			const updatedBranches = [
+																				...form.branches,
+																			];
+																			updatedBranches[bIdx].documents = [
+																				...updatedBranches[bIdx].documents,
+																				{ documentName: "", required: false },
+																			];
+																			onChange({
+																				...form,
+																				branches: updatedBranches,
+																			});
+																		}}
+																	>
+																		<Plus className='w-3.5 h-3.5 mr-1' /> Add
+																		Document Row
+																	</Button>
+																)} */}
+															</>
+														)}
+													</div>
 												</div>
 											</div>
 										)}
@@ -2231,6 +2320,197 @@ export function CustomerForm({
 	);
 }
 
+// Shape of what the customer detail API actually returns
+export interface CustomerApiBranchDocument {
+	customer_branch_document_id: string;
+	document_type_id: string;
+	file_url: string;
+	document_type?: { id: string; title: string };
+}
+
+export interface CustomerApiBranch {
+	branch_id?: string;
+	branch_name: string;
+	is_main_branch: boolean;
+	billing_country?: string;
+	billing_address_line_1?: string;
+	billing_address_line_2?: string;
+	billing_state?: string;
+	billing_city?: string;
+	billing_town?: string;
+	billing_pincode?: string;
+	billing_pincode_id?: string;
+	shipping_country?: string;
+	shipping_address_line_1?: string;
+	shipping_address_line_2?: string;
+	shipping_state?: string;
+	shipping_city?: string;
+	shipping_town?: string;
+	shipping_pincode?: string;
+	shipping_pincode_id?: string;
+	documents?: CustomerApiBranchDocument[];
+}
+
+export interface CustomerApiRecord {
+	customer_id: string;
+	customer_code: string;
+	customer_name: string;
+	country_code?: string;
+	mobile_no: string;
+	email?: string;
+	customer_type_id: string;
+	sales_man_id?: string;
+	cib_applicable?: boolean;
+	cib_reg_no?: string;
+	fco_applicable?: boolean;
+	fco_reg_no?: string;
+	fssai_applicable?: boolean;
+	fssai_no?: string;
+	msme_applicable?: boolean;
+	msme_reg_no?: string;
+	gst_applicable?: boolean;
+	registration_type?: string;
+	gstin_no?: string;
+	registered_legal_name?: string;
+	registered_gst_address?: string;
+	pan_no?: string;
+	tds_applicable?: boolean;
+	tds_section_id?: string;
+	credit_limit?: string | number;
+	payment_type?: string;
+	credit_days?: string | number;
+	advance?: string | number;
+	account_holder?: string;
+	bank_name?: string;
+	branch_name?: string;
+	account_number?: string;
+	ifsc_code?: string;
+	swift_code?: string;
+	status?: string;
+	branches?: CustomerApiBranch[];
+}
+
+function apiDocToBranchDocument(doc: CustomerApiBranchDocument): BranchDocument {
+	const fileName = doc.file_url ? doc.file_url.split("/").pop() : undefined;
+	return {
+		documentTypeId: doc.document_type_id,
+		documentName: doc.document_type?.title ?? "",
+		required: true,
+		fileUrl: doc.file_url || undefined,
+		fileName: fileName || undefined,
+	};
+}
+
+function apiBranchToFormBranch(b: CustomerApiBranch): CustomerBranch {
+	return {
+		branchName: b.branch_name ?? "",
+		isMain: !!b.is_main_branch,
+		billingAddress: {
+			address: b.billing_address_line_1 ?? "",
+			addressLine2: b.billing_address_line_2 ?? "",
+			country: b.billing_country ?? "India",
+			district: b.billing_city ?? "",
+			town: b.billing_town ?? "",
+			city: b.billing_city ?? "",
+			state: b.billing_state ?? "",
+			pincode: b.billing_pincode ?? "",
+			pincodeId: b.billing_pincode_id || undefined,
+		},
+		shippingAddress: {
+			address: b.shipping_address_line_1 ?? "",
+			addressLine2: b.shipping_address_line_2 ?? "",
+			country: b.shipping_country ?? "India",
+			district: b.shipping_city ?? "",
+			town: b.shipping_town ?? "",
+			city: b.shipping_city ?? "",
+			state: b.shipping_state ?? "",
+			pincode: b.shipping_pincode ?? "",
+			pincodeId: b.shipping_pincode_id || undefined,
+		},
+		documents: (b.documents ?? []).map(apiDocToBranchDocument),
+	};
+}
+
+export function customerApiRecordToFormValues(
+	record: CustomerApiRecord,
+): CustomerFormValues {
+	const gstApplicable = !!record.gst_applicable;
+	const gstin = record.gstin_no ?? "";
+	const gstCategory =
+		record.registration_type || deriveGstCategory(gstApplicable, gstin);
+	const gstRegistered = deriveGstRegistered(gstApplicable, gstin, gstCategory);
+
+	const branches: CustomerBranch[] = record.branches?.length
+		? record.branches.map(apiBranchToFormBranch)
+		: DEFAULT_CUSTOMER_FORM.branches;
+
+	return {
+		...DEFAULT_CUSTOMER_FORM,
+		customerName: record.customer_name ?? "",
+		countryCode: record.country_code || "+91",
+		mobile: record.mobile_no ?? "",
+		email: record.email ?? "",
+		customerType: record.customer_type_id ?? "",
+		status: (record.status?.toLowerCase() as CustomerStatus) ?? "draft",
+		blockReason: "",
+
+		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstRegistered,
+		gstRegistrationType: gstRegistered
+			? deriveGstRegistrationType(gstCategory)
+			: GST_CATEGORY_UNREGISTERED,
+		gstCategory,
+		gstin,
+		registeredLegalName: record.registered_legal_name ?? "",
+		registeredAddress: record.registered_gst_address ?? "",
+		gstMasterId: "",
+
+		tdsApplicable: true,
+		tdsMasterId: record.tds_section_id ?? "",
+		pan: record.pan_no ?? "",
+
+		msmeRegistered: !!record.msme_applicable,
+		msmeNumber: record.msme_reg_no ?? "",
+		fssaiRegistered: !!record.fssai_applicable,
+		fssai: record.fssai_no ?? "",
+		cibRegistered: !!record.cib_applicable,
+		cibRegn: record.cib_reg_no ?? "",
+		fcoRegistered: !!record.fco_applicable,
+		fcoRegn: record.fco_reg_no ?? "",
+
+		address: branches[0]?.billingAddress?.address ?? "",
+		pincode: branches[0]?.billingAddress?.pincode ?? "",
+
+		salesManId: record.sales_man_id ?? "",
+		creditLimit: record.credit_limit != null ? String(record.credit_limit) : "",
+		...structuredToFormValues(
+			resolveStructuredPaymentTerms({
+				paymentType: record.payment_type as any,
+				creditDays:
+					record.credit_days !== undefined && record.credit_days !== null
+						? Number(record.credit_days)
+						: undefined,
+				advancePercentage:
+					record.advance !== undefined && record.advance !== null
+						? Number(record.advance)
+						: undefined,
+			}),
+		),
+
+		bankName: record.bank_name ?? "",
+		bankBranchAddress: record.branch_name ?? "",
+		bankAccountNo: record.account_number ?? "",
+		ifscCode: record.ifsc_code ?? "",
+		accountHolderName: record.account_holder ?? "",
+		branch: record.branch_name ?? "",
+		accountNumber: record.account_number ?? "",
+		confirmAccountNumber: record.account_number ?? "",
+		swiftCode: record.swift_code ?? "",
+
+		branches,
+	};
+}
+
 export function validateCustomerForm(
 	form: CustomerFormValues,
 	isAdd?: boolean,
@@ -2258,7 +2538,7 @@ export function validateCustomerForm(
 			e.msmeNumber = MSME_NUMBER_ERROR;
 		}
 	}
-	if (form.tdsApplicable && !form.tdsMasterId)
+	if (!form.tdsMasterId)
 		e.tdsMasterId = "Select TDS section from master";
 	Object.assign(e, validateComplianceRegistration(form));
 
@@ -2331,6 +2611,181 @@ export function validateCustomerForm(
 	return e;
 }
 
+export function customerRecordToFormValues(
+	record: CustomerListRecord,
+): CustomerFormValues {
+	const gstApplicable = record.gstApplicable;
+	const gstin = record.gstinNo ?? "";
+	const gstCategory =
+		record.registrationType || deriveGstCategory(gstApplicable, gstin);
+	const gstRegistered = deriveGstRegistered(gstApplicable, gstin, gstCategory);
+
+	// record.branches is still the RAW API shape (snake_case), never transformed
+	// by the service layer — map it through apiBranchToFormBranch here.
+	const rawBranches = (record.branches ?? []) as unknown as CustomerApiBranch[];
+	const branches: CustomerBranch[] = rawBranches.length
+		? rawBranches.map(apiBranchToFormBranch)
+		: DEFAULT_CUSTOMER_FORM.branches;
+
+	return {
+		...DEFAULT_CUSTOMER_FORM,
+		customerName: record.customerName,
+		countryCode: record.countryCode || "+91",
+		mobile: record.mobileNo,
+		email: record.email,
+		customerType: record.customerTypeId ?? "",
+		status: record.status,
+		blockReason: "",
+
+		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstRegistered,
+		gstRegistrationType: gstRegistered
+			? deriveGstRegistrationType(gstCategory)
+			: GST_CATEGORY_UNREGISTERED,
+		gstCategory,
+		gstin,
+		registeredLegalName: record.registeredLegalName ?? "",
+		registeredAddress: record.registeredGstAddress ?? "",
+		gstMasterId: "",
+
+		tdsApplicable: record.tdsApplicable,
+		tdsMasterId: record.tdsSectionId ?? "",
+		pan: record.panNo ?? "",
+
+		msmeRegistered: record.msmeApplicable,
+		msmeNumber: record.msmeRegNo ?? "",
+		fssaiRegistered: record.fssaiApplicable,
+		fssai: record.fssaiNo ?? "",
+		cibRegistered: record.cibApplicable,
+		cibRegn: record.cibRegNo ?? "",
+		fcoRegistered: record.fcoApplicable,
+		fcoRegn: record.fcoRegNo ?? "",
+
+		address: branches[0]?.billingAddress?.address ?? "",
+		pincode: branches[0]?.billingAddress?.pincode ?? "",
+
+		salesManId: record.salesManId ?? "",
+		creditLimit: record.creditLimit != null ? String(record.creditLimit) : "",
+		...structuredToFormValues(
+			resolveStructuredPaymentTerms({
+				paymentType: record.paymentType as any,
+				creditDays: record.creditDays ?? undefined,
+				advancePercentage: record.advance ?? undefined,
+			}),
+		),
+
+		bankName: record.bankName ?? "",
+		bankBranchAddress: record.branchName ?? "",
+		bankAccountNo: record.accountNumber ?? "",
+		ifscCode: record.ifscCode ?? "",
+		accountHolderName: record.accountHolder ?? "",
+		branch: record.branchName ?? "",
+		accountNumber: record.accountNumber ?? "",
+		confirmAccountNumber: record.accountNumber ?? "",
+		swiftCode: record.swiftCode ?? "",
+
+		branches,
+	};
+}
+
+export function formValuesToUpdatePayload(
+	form: CustomerFormValues,
+): CustomerUpdatePayload {
+	return {
+		customer_name: form.customerName.trim(),
+		customer_type_id: form.customerType,
+		country_code: form.countryCode,
+		mobile_no: form.mobile.trim(),
+		email: form.email.trim(),
+		sales_man_id: form.salesManId,
+
+		cib_applicable: form.cibRegistered,
+		cib_reg_no: form.cibRegistered ? form.cibRegn : "",
+
+		fco_applicable: form.fcoRegistered,
+		fco_reg_no: form.fcoRegistered ? form.fcoRegn : "",
+
+		fssai_applicable: form.fssaiRegistered,
+		fssai_no: form.fssaiRegistered ? form.fssai : "",
+
+		msme_applicable: form.msmeRegistered,
+		msme_reg_no: form.msmeRegistered ? form.msmeNumber : "",
+
+		gst_applicable: form.gstRegistered,
+		registration_type: form.gstRegistrationType,
+		gstin_no: form.gstRegistered ? form.gstin.trim().toUpperCase() : "",
+		registered_legal_name: form.gstRegistered ? form.registeredLegalName : "",
+		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
+		pan_no: form.pan.trim().toUpperCase(),
+
+		tds_applicable: form.tdsApplicable,
+		tds_section_id: form.tdsMasterId,
+
+		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
+		payment_type: form.paymentType || undefined,
+		credit_days: form.creditDays ? Number(form.creditDays) : undefined,
+		advance: form.advancePercentage ? Number(form.advancePercentage) : undefined,
+
+		account_holder: form.accountHolderName.trim(),
+		bank_name: form.bankName.trim(),
+		branch_name: form.branch.trim(),
+		account_number: form.accountNumber.trim(),
+		ifsc_code: form.ifscCode.trim().toUpperCase(),
+		swift_code: form.swiftCode.trim(),
+
+		branches: form.branches.map((branch, idx) => branchToPayload(branch, idx).payload),
+	};
+}
+
+export function formValuesToCreatePayload(
+	form: CustomerFormValues,
+): CustomerCreatePayload {
+	return {
+		customer_name: form.customerName.trim(),
+		customer_type_id: form.customerType,
+		country_code: form.countryCode,
+		mobile_no: form.mobile.trim(),
+		email: form.email.trim(),
+		sales_man_id: form.salesManId,
+
+		cib_applicable: form.cibRegistered,
+		cib_reg_no: form.cibRegistered ? form.cibRegn : "",
+
+		fco_applicable: form.fcoRegistered,
+		fco_reg_no: form.fcoRegistered ? form.fcoRegn : "",
+
+		fssai_applicable: form.fssaiRegistered,
+		fssai_no: form.fssaiRegistered ? form.fssai : "",
+
+		msme_applicable: form.msmeRegistered,
+		msme_reg_no: form.msmeRegistered ? form.msmeNumber : "",
+
+		gst_applicable: form.gstRegistered,
+		registration_type: form.gstRegistrationType,
+		gstin_no: form.gstRegistered ? form.gstin.trim().toUpperCase() : "",
+		registered_legal_name: form.gstRegistered ? form.registeredLegalName : "",
+		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
+		pan_no: form.pan.trim().toUpperCase(),
+
+		tds_applicable: true,
+		tds_section_id: form.tdsMasterId,
+
+		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
+		payment_type: form.paymentType || undefined,
+		credit_days: form.creditDays ? Number(form.creditDays) : undefined,
+		advance: form.advancePercentage ? Number(form.advancePercentage) : undefined,
+
+		account_holder: form.accountHolderName.trim(),
+		bank_name: form.bankName.trim(),
+		branch_name: form.branch.trim(),
+		account_number: form.accountNumber.trim(),
+		ifsc_code: form.ifscCode.trim().toUpperCase(),
+		swift_code: form.swiftCode.trim(),
+
+		branches: form.branches.map((branch, idx) => branchToPayload(branch, idx).payload),
+	};
+}
+
 export function formValuesToCustomer(
 	form: CustomerFormValues,
 	base: Partial<Customer> & { id: number; customerCode: string },
@@ -2385,9 +2840,8 @@ export function formValuesToCustomer(
 			form.gstRegistered && form.gstMasterId
 				? Number(form.gstMasterId)
 				: null,
-		tdsApplicable: form.tdsApplicable,
-		tdsMasterId:
-			form.tdsApplicable && form.tdsMasterId ? Number(form.tdsMasterId) : null,
+		tdsApplicable: true,
+		tdsMasterId: form.tdsMasterId ? Number(form.tdsMasterId) : null,
 		pan: form.pan.trim().toUpperCase(),
 		tan: "",
 		msmeRegistered: form.msmeRegistered,
@@ -2478,7 +2932,7 @@ export function formValuesToCustomer(
 
 		documents: {
 			requiredDocuments: (cleanMainBranch?.documents || []).map((d) => ({
-				documentTypeId: d.documentName,
+				documentTypeId: d.documentTypeId,
 				documentName: d.documentName,
 				required: d.required,
 				fileName: d.fileName,

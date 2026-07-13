@@ -471,5 +471,29 @@ export const MASTER_FILTER_FIELD_MAPS = {
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
+  supplierType: {
+    supplierTypeName: "supplier_type_name",
+    initialCode: "initial_code",
+    description: "description",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+
+  warehouse: {
+    warehouseName: "warehouseName",
+    gstNumber: "gstNumber",
+    state: "state",
+    city: "city",
+    status: "status",
+    ...AUDIT_FILTER_FIELDS,
+  },
+
+  warehouseType: {
+    warehouseTypeName: "warehouse_type_name",
+    initialCode: "initial_code",
+    description: "description",
+    status: "status",
+    ...AUDIT_FILTER_FIELDS,
+  },
 } as const satisfies Record<string, Record<string, FieldMapper>>;
 
