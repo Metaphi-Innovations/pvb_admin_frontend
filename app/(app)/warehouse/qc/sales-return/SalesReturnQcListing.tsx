@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, ClipboardCheck } from "lucide-react";
+import { Eye, ClipboardCheck, Edit3 } from "lucide-react";
 import { getQcRecords } from "../mock-data";
 import { QcRecord, QcStatus } from "../types";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
@@ -21,6 +21,8 @@ const QC_STATUS_CONFIG: Record<QcStatus, { bg: string; label: string }> = {
 
 export function SalesReturnQcListing() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
   const [qcList, setQcList] = useState<QcRecord[]>([]);
   const [activeTab, setActiveTab] = useState<QcTab>("pending");
 
@@ -39,12 +41,11 @@ export function SalesReturnQcListing() {
 
   useEffect(() => {
     setQcPage(1);
+    setApiQcList([]);
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== "completed") return;
-
-    const fetchCompletedQcs = async () => {
+    const fetchQcs = async () => {
       setIsLoading(true);
       try {
         let ordering = undefined;
@@ -61,17 +62,37 @@ export function SalesReturnQcListing() {
         }
 
         const filters: any = {};
+        filters.source_type = "SALES_RETURN";
+        if (destinationWarehouse && destinationWarehouse !== "All") {
+          if (activeTab === "pending") {
+            filters.warehouse = filters.warehouse || {};
+            filters.warehouse.warehouse_name = destinationWarehouse;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.warehouse = filters.grn.warehouse || {};
+            filters.grn.warehouse.warehouse_name = destinationWarehouse;
+          }
+        }
         if (qcFilters.qcNo) {
           filters.qcNumber = qcFilters.qcNo;
         }
         if (qcFilters.grnNo) {
-          filters.grn = filters.grn || {};
-          filters.grn.grnNumber = qcFilters.grnNo;
+          if (activeTab === "pending") {
+            filters.grnNumber = qcFilters.grnNo;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.grnNumber = qcFilters.grnNo;
+          }
         }
         if (qcFilters.vendorName) {
-          filters.grn = filters.grn || {};
-          filters.grn.supplier = filters.grn.supplier || {};
-          filters.grn.supplier.supplier_name = qcFilters.vendorName;
+          if (activeTab === "pending") {
+            filters.supplier = filters.supplier || {};
+            filters.supplier.supplier_name = qcFilters.vendorName;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.supplier = filters.grn.supplier || {};
+            filters.grn.supplier.supplier_name = qcFilters.vendorName;
+          }
         }
         if (qcFilters.inspectionDate) {
           const range = qcFilters.inspectionDate as { fromDate: string; toDate: string };
@@ -84,7 +105,8 @@ export function SalesReturnQcListing() {
           }
         }
 
-        const res = await QcService.list({
+        const fetchMethod = activeTab === "pending" ? QcService.listPending : QcService.list;
+        const res = await fetchMethod({
           page: qcPage,
           page_size: qcPageSize,
           search: (qcFilters.search as string) || undefined,
@@ -96,14 +118,14 @@ export function SalesReturnQcListing() {
         setApiQcList(salesReturnOnly);
         setApiTotal(res.totalRecords);
       } catch (err) {
-        console.error("Error loading completed QCs:", err);
+        console.error("Error loading QCs:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchCompletedQcs();
-  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort]);
+    fetchQcs();
+  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort, destinationWarehouse]);
 
   const salesReturnQcs = useMemo(
     () => qcList.filter((q) => getQcSourceType(q) === "sales_return"),
@@ -114,6 +136,12 @@ export function SalesReturnQcListing() {
     let result = [...salesReturnQcs];
 
     result = result.filter((item) => item.status === activeTab);
+
+    if (destinationWarehouse && destinationWarehouse !== "All") {
+      result = result.filter(
+        (item) => item.warehouse.toLowerCase() === destinationWarehouse.toLowerCase()
+      );
+    }
 
     Object.keys(qcFilters).forEach((key) => {
       const val = qcFilters[key];
@@ -154,15 +182,15 @@ export function SalesReturnQcListing() {
       });
     }
     return result;
-  }, [salesReturnQcs, qcFilters, qcSort, activeTab]);
+  }, [salesReturnQcs, qcFilters, qcSort, activeTab, destinationWarehouse]);
 
   const paginatedSalesReturn = useMemo(() => {
     const start = (qcPage - 1) * qcPageSize;
     return processedSalesReturnQcs.slice(start, start + qcPageSize);
   }, [processedSalesReturnQcs, qcPage, qcPageSize]);
 
-  const displayedData = activeTab === "pending" ? paginatedSalesReturn : apiQcList;
-  const displayedTotal = activeTab === "pending" ? processedSalesReturnQcs.length : apiTotal;
+  const displayedData = apiQcList;
+  const displayedTotal = apiTotal;
 
   const salesReturnColumns: ColumnConfig<QcSalesReturnRow>[] = [
     {
@@ -256,6 +284,13 @@ export function SalesReturnQcListing() {
     },
   ];
 
+  const displayedColumns = useMemo(() => {
+    if (activeTab === "pending") {
+      return salesReturnColumns.filter((col) => col.key !== "qcNo" && col.key !== "inspectionDate");
+    }
+    return salesReturnColumns;
+  }, [activeTab]);
+
   const salesReturnActions: ActionItemConfig<QcSalesReturnRow>[] = [
     {
       label: "View Details",
@@ -267,8 +302,16 @@ export function SalesReturnQcListing() {
       label: "Perform QC",
       action: "inspect",
       icon: ClipboardCheck,
-      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.id}`),
+      onClick: (row) => router.push(`/warehouse/qc/create?grnId=${row.id}`),
       hide: (row) => row.status !== "pending",
+    },
+    {
+      label: "Edit QC",
+      action: "edit",
+      icon: Edit3,
+      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.id}&edit=true`),
+      hide: (row) => row.status === "pending",
+      disabled: (row) => !row.isEditable,
     },
   ];
 
@@ -294,7 +337,7 @@ export function SalesReturnQcListing() {
 
       <MasterListing<QcSalesReturnRow>
         data={displayedData}
-        columns={salesReturnColumns}
+        columns={displayedColumns}
         actions={salesReturnActions}
         totalRecords={displayedTotal}
         page={qcPage}
