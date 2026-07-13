@@ -366,5 +366,12 @@ export const API_ENDPOINTS = {
       CREATE: "/warehouse/grnqc/grn/create",
       PREVIEW_NUMBER: "/warehouse/grnqc/grn/preview-number",
     },
+    QC: {
+      PREVIEW_NUMBER: "/warehouse/grnqc/qc/preview-number",
+      CREATE: "/warehouse/grnqc/qc/create",
+      LIST: "/warehouse/grnqc/qc/list",
+      DETAILS: (id: string) => `/warehouse/grnqc/qc/${id}`,
+      FILTER_DROPDOWN: "/warehouse/grnqc/qc/filter-dropdown",
+    },
   },
 };

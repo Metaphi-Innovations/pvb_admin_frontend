@@ -9,6 +9,7 @@ import { QcRecord, QcStatus } from "../types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
+import { QcService } from "@/services/qc.service";
 
 type QcTab = "pending" | "completed";
 type QcSampleReturnRow = QcRecord;
@@ -28,6 +29,10 @@ export function SampleReturnQcListing() {
   const [qcPage, setQcPage] = useState(1);
   const [qcPageSize, setQcPageSize] = useState(10);
 
+  const [apiQcList, setApiQcList] = useState<QcRecord[]>([]);
+  const [apiTotal, setApiTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     setQcList(getQcRecords());
   }, []);
@@ -35,6 +40,70 @@ export function SampleReturnQcListing() {
   useEffect(() => {
     setQcPage(1);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "completed") return;
+
+    const fetchCompletedQcs = async () => {
+      setIsLoading(true);
+      try {
+        let ordering = undefined;
+        if (qcSort.key && qcSort.direction !== "none") {
+          const mapping: Record<string, string> = {
+            qcNo: "qcNumber",
+            grnNo: "grn__grnNumber",
+            inspectionDate: "qcDate",
+            vendorName: "grn__supplier__supplier_name",
+            warehouse: "grn__warehouse__warehouse_name",
+          };
+          const baseKey = mapping[qcSort.key] || qcSort.key;
+          ordering = qcSort.direction === "desc" ? `-${baseKey}` : baseKey;
+        }
+
+        const filters: any = {};
+        if (qcFilters.qcNo) {
+          filters.qcNumber = qcFilters.qcNo;
+        }
+        if (qcFilters.grnNo) {
+          filters.grn = filters.grn || {};
+          filters.grn.grnNumber = qcFilters.grnNo;
+        }
+        if (qcFilters.vendorName) {
+          filters.grn = filters.grn || {};
+          filters.grn.supplier = filters.grn.supplier || {};
+          filters.grn.supplier.supplier_name = qcFilters.vendorName;
+        }
+        if (qcFilters.inspectionDate) {
+          const range = qcFilters.inspectionDate as { fromDate: string; toDate: string };
+          if (range.fromDate || range.toDate) {
+            filters.range = filters.range || {};
+            filters.range.qcDate = {
+              from: range.fromDate || undefined,
+              to: range.toDate || undefined,
+            };
+          }
+        }
+
+        const res = await QcService.list({
+          page: qcPage,
+          page_size: qcPageSize,
+          search: (qcFilters.search as string) || undefined,
+          ordering,
+          filters,
+        });
+
+        const sampleReturnOnly = res.data.filter((q) => getQcSourceType(q) === "sample_return");
+        setApiQcList(sampleReturnOnly);
+        setApiTotal(res.totalRecords);
+      } catch (err) {
+        console.error("Error loading completed QCs:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCompletedQcs();
+  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort]);
 
   const sampleReturnQcs = useMemo(
     () => qcList.filter((q) => getQcSourceType(q) === "sample_return"),
@@ -91,6 +160,9 @@ export function SampleReturnQcListing() {
     const start = (qcPage - 1) * qcPageSize;
     return processedSampleReturnQcs.slice(start, start + qcPageSize);
   }, [processedSampleReturnQcs, qcPage, qcPageSize]);
+
+  const displayedData = activeTab === "pending" ? paginatedSampleReturn : apiQcList;
+  const displayedTotal = activeTab === "pending" ? processedSampleReturnQcs.length : apiTotal;
 
   const sampleReturnColumns: ColumnConfig<QcSampleReturnRow>[] = [
     {
@@ -221,10 +293,10 @@ export function SampleReturnQcListing() {
       </div>
 
       <MasterListing<QcSampleReturnRow>
-        data={paginatedSampleReturn}
+        data={displayedData}
         columns={sampleReturnColumns}
         actions={sampleReturnActions}
-        totalRecords={processedSampleReturnQcs.length}
+        totalRecords={displayedTotal}
         page={qcPage}
         pageSize={qcPageSize}
         onPageChange={setQcPage}

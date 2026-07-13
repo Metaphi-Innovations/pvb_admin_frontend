@@ -18,6 +18,7 @@ import {
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { computeQcListingKpis } from "./qc-listing-kpis";
 import { QcListingKpiRow } from "./components/QcListingKpiRow";
+import { QcService } from "@/services/qc.service";
 
 export function QcListingLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -31,7 +32,17 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setIsMounted(true);
-    setQcList(getQcRecords());
+    Promise.all([
+      QcService.list({ page: 1, page_size: 100 }),
+      QcService.listPending({ page: 1, page_size: 100 })
+    ]).then(([completedRes, pendingRes]) => {
+      const completedMap = new Map((completedRes.data || []).map((q: any) => [q.grnNo, q]));
+      const uniquePending = (pendingRes.data || []).filter((q: any) => !completedMap.has(q.grnNo));
+      setQcList([...uniquePending, ...completedMap.values()]);
+    }).catch((err) => {
+      console.error("Failed to load QC records from API:", err);
+      setQcList(getQcRecords());
+    });
     setGrnList(getGrnRecords());
   }, [pathname]);
 
