@@ -331,11 +331,7 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
   hsn: {
-    hsnCode: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const id = String(raw ?? "").trim();
-      return id ? { id } : null;
-    },
+    hsnCode: "hsnCode",
     hsnDescription: "hsnDescription",
     gstRate: (value) => {
       const raw = Array.isArray(value) ? value[0] : value;
@@ -480,11 +476,26 @@ export const MASTER_FILTER_FIELD_MAPS = {
   },
 
   warehouse: {
-    warehouseName: "warehouseName",
-    gstNumber: "gstNumber",
+    warehouseName: "warehouse_name",
+    operatedBy: "operated_by",
+    gstNumber: "gst_number",
     state: "state",
+    district: "district",
     city: "city",
-    status: "status",
+    pincode: "pincode",
+    status: (value) => {
+      const token = normalizeStatusToken(value);
+      if (!token || token === "all") return null;
+      if (token === "active") return { status: "Active" };
+      if (token === "inactive") return { status: "Inactive" };
+      if (token === "under maintenance" || token === "under_maintenance") {
+        return { status: "Under Maintenance" };
+      }
+      if (token === "closed") return { status: "Closed" };
+      const raw = Array.isArray(value) ? value[0] : value;
+      const label = String(raw ?? "").trim();
+      return label ? { status: label } : null;
+    },
     ...AUDIT_FILTER_FIELDS,
   },
 

@@ -101,14 +101,13 @@ export default function NewPackingListPage() {
           const config = getProductPackingConfig(Number(line.productId)) || {
             packingUnit: "Unit",
             baseUnit: "Unit",
-            unitsPerPackingUnit: 1,
           };
+          const unitsPerPacking = (line as any).packSize || (config as any).unitsPerPackingUnit || 1;
 
           let remaining = line.quantity;
 
           const allocations = batches.map((b: any) => {
             const availQty = Number(b.available_qty || 0);
-            const unitsPerPacking = config.unitsPerPackingUnit;
 
             const takeBase = Math.min(remaining, availQty);
             const takePacking = Math.floor(takeBase / unitsPerPacking);
@@ -146,7 +145,7 @@ export default function NewPackingListPage() {
             productName: line.productName || "",
             packingUnit: config.packingUnit,
             baseUnit: config.baseUnit,
-            unitsPerPackingUnit: config.unitsPerPackingUnit,
+            unitsPerPackingUnit: unitsPerPacking,
             orderedBaseQty: line.quantity,
             hasPackingConfig: true,
             allocations,

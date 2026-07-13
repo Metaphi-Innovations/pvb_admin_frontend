@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, ClipboardCheck } from "lucide-react";
+import { Eye, ClipboardCheck, Edit3 } from "lucide-react";
 import { getQcRecords } from "../mock-data";
 import { QcRecord, QcStatus } from "../types";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
@@ -21,6 +21,8 @@ const QC_STATUS_CONFIG: Record<QcStatus, { bg: string; label: string }> = {
 
 export function PurchaseQcListing() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
   const [qcList, setQcList] = useState<QcRecord[]>([]);
   const [activeTab, setActiveTab] = useState<QcTab>("pending");
 
@@ -83,6 +85,7 @@ export function PurchaseQcListing() {
 
   useEffect(() => {
     setQcPage(1);
+    setApiQcList([]);
     loadedFiltersRef.current.clear();
     setQcNoOptions([]);
     setGrnNoOptions([]);
@@ -108,6 +111,17 @@ export function PurchaseQcListing() {
         }
 
         const filters: any = {};
+        filters.source_type = "PURCHASE_ORDER";
+        if (destinationWarehouse && destinationWarehouse !== "All") {
+          if (activeTab === "pending") {
+            filters.warehouse = filters.warehouse || {};
+            filters.warehouse.warehouse_name = destinationWarehouse;
+          } else {
+            filters.grn = filters.grn || {};
+            filters.grn.warehouse = filters.grn.warehouse || {};
+            filters.grn.warehouse.warehouse_name = destinationWarehouse;
+          }
+        }
         if (qcFilters.qcNo) {
           filters.qcNumber = qcFilters.qcNo;
         }
@@ -163,7 +177,7 @@ export function PurchaseQcListing() {
     };
 
     fetchQcs();
-  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort]);
+  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort, destinationWarehouse]);
 
   const displayedData = useMemo(() => {
     if (!qcFilters.status) return apiQcList;
@@ -274,6 +288,13 @@ export function PurchaseQcListing() {
     },
   ];
 
+  const displayedColumns = useMemo(() => {
+    if (activeTab === "pending") {
+      return purchaseColumns.filter((col) => col.key !== "qcNo" && col.key !== "inspectionDate");
+    }
+    return purchaseColumns;
+  }, [activeTab, qcNoOptions, grnNoOptions, poNoOptions, vendorNameOptions]);
+
   const purchaseActions: ActionItemConfig<QcPurchaseRow>[] = [
     {
       label: "View Details",
@@ -287,6 +308,14 @@ export function PurchaseQcListing() {
       icon: ClipboardCheck,
       onClick: (row) => router.push(row.status === "pending" ? `/warehouse/qc/create?grnId=${row.id}` : `/warehouse/qc/create?qcId=${row.id}`),
       hide: (row) => row.status !== "pending",
+    },
+    {
+      label: "Edit QC",
+      action: "edit",
+      icon: Edit3,
+      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.id}&edit=true`),
+      hide: (row) => row.status === "pending",
+      disabled: (row) => !row.isEditable,
     },
   ];
 
@@ -312,7 +341,7 @@ export function PurchaseQcListing() {
 
       <MasterListing<QcPurchaseRow>
         data={displayedData}
-        columns={purchaseColumns}
+        columns={displayedColumns}
         actions={purchaseActions}
         totalRecords={displayedTotal}
         page={qcPage}

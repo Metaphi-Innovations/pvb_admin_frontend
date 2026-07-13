@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2 } from "lucide-react";
+import { Eye, FileCheck2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GrnListingLayout } from "../shared/GrnListingLayout";
@@ -57,6 +57,15 @@ export default function PurchaseListingRoutePage() {
         ),
       },
       {
+        key: "grnDate",
+        header: "GRN Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "140px",
+        render: (_val, row) => <span className="text-xs text-foreground">{row.grnDate}</span>,
+      },
+      {
         key: "poNumber",
         header: "PO No.",
         sortable: true,
@@ -102,30 +111,31 @@ export default function PurchaseListingRoutePage() {
           </span>
         ),
       },
-      {
-        key: "acceptedQty",
-        header: "Accepted Qty",
-        sortable: true,
-        align: "right",
-        width: "110px",
-        render: (val) => (
-          <span className="text-xs font-medium tabular-nums text-emerald-600">
-            {val != null ? val.toLocaleString() : "—"}
-          </span>
-        ),
-      },
-      {
-        key: "rejectedQty",
-        header: "Rejected Qty",
-        sortable: true,
-        align: "right",
-        width: "110px",
-        render: (val) => (
-          <span className="text-xs font-medium tabular-nums text-red-600">
-            {val != null ? val.toLocaleString() : "—"}
-          </span>
-        ),
-      },
+      // {
+      //   key: "acceptedQty",
+      //   header: "Accepted Qty",
+      //   sortable: true,
+      //   align: "right",
+      //   width: "110px",
+      //   render: (val) => (
+      //     <span className="text-xs font-medium tabular-nums text-emerald-600">
+      //       {val != null ? val.toLocaleString() : "—"}
+      //     </span>
+      //   ),
+      // },
+      // {
+      //   key: "rejectedQty",
+      //   header: "Rejected Qty",
+      //   sortable: true,
+      //   align: "right",
+      //   width: "110px",
+      //   render: (val) => (
+      //     <span className="text-xs font-medium tabular-nums text-red-600">
+      //       {val != null ? val.toLocaleString() : "—"}
+      //     </span>
+      //   ),
+      // },
+      
       {
         key: "status",
         header: "Status",
@@ -156,6 +166,13 @@ export default function PurchaseListingRoutePage() {
       action: "view",
       icon: Eye,
       onClick: (row) => router.push(`/warehouse/grn/purchase/${row.id}`),
+    },
+    {
+      label: "Edit GRN",
+      action: "edit",
+      icon: Pencil,
+      onClick: (row) => router.push(`/warehouse/grn/purchase/${row.id}/edit`),
+      hide: (row) => row.status === "qc_completed",
     },
     {
       label: "Perform QC Check",

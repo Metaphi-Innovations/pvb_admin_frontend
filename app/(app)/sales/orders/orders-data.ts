@@ -72,6 +72,7 @@ export interface SalesOrderLineItem {
   quantityType?: "Case" | "Piece";
   caseQuantity?: number;
   pieceQuantity?: number;
+  packSize?: number;
   quantity: number;
   /** Dealer price (DP) from Pricing Master */
   dealerPrice: number;

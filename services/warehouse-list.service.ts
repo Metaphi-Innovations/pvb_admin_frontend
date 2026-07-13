@@ -123,6 +123,23 @@ export interface WarehouseDropdownItem {
     warehouseName: string;
 }
 
+export interface WarehouseFilterOption {
+    label: string;
+    value: string;
+}
+
+export type WarehouseFilterField =
+    | "warehouse_name"
+    | "operated_by"
+    | "gst_number"
+    | "state"
+    | "district"
+    | "city"
+    | "pincode"
+    | "status"
+    | "created_by_user__username"
+    | "updated_by_user__username";
+
 // ---------------------------------------------------------------------------
 // Sort-key → API ordering field map
 // ---------------------------------------------------------------------------
@@ -297,6 +314,79 @@ function extractErrorMessage(error: unknown, fallback: string): string {
     );
 }
 
+function mapFilterOptions(
+    data: unknown[],
+    fieldName: WarehouseFilterField,
+): WarehouseFilterOption[] {
+    const options: WarehouseFilterOption[] = [];
+    const seen = new Set<string>();
+
+    for (const row of data) {
+        if (!row || typeof row !== "object") continue;
+        const record = row as Record<string, unknown>;
+        const raw = record[fieldName];
+        const value = asString(raw).trim();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+
+        if (fieldName === "status") {
+            const normalized = value.toLowerCase();
+            if (normalized === "active") {
+                options.push({ label: "Active", value: "active" });
+            } else if (normalized === "inactive") {
+                options.push({ label: "Inactive", value: "inactive" });
+            } else {
+                options.push({ label: value, value });
+            }
+            continue;
+        }
+
+        options.push({ label: value, value });
+    }
+
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Map frontend list filters to backend whitelist keys. */
+function toBackendFilters(apiFilters?: Record<string, unknown>): Record<string, unknown> {
+    const backendFilters: Record<string, unknown> = {};
+    if (!apiFilters) return backendFilters;
+
+    for (const [key, value] of Object.entries(apiFilters)) {
+        if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            backendFilters[key] = value;
+            continue;
+        }
+
+        let realVal: unknown = value;
+        if (Array.isArray(value)) {
+            if (value.length === 0) continue;
+            realVal = value[0];
+        }
+        if (realVal === undefined || realVal === null || realVal === "") continue;
+
+        if (key === "warehouseName") {
+            backendFilters.warehouse_name = realVal;
+        } else if (key === "operatedBy") {
+            backendFilters.operated_by = realVal;
+        } else if (key === "gstNumber") {
+            backendFilters.gst_number = realVal;
+        } else if (key === "registeredGstAddress") {
+            backendFilters.registered_gst_address = realVal;
+        } else if (key === "status") {
+            const token = String(realVal).trim().toLowerCase();
+            if (token === "all") continue;
+            if (token === "active") backendFilters.status = "Active";
+            else if (token === "inactive") backendFilters.status = "Inactive";
+            else backendFilters.status = realVal;
+        } else {
+            backendFilters[key] = realVal;
+        }
+    }
+
+    return backendFilters;
+}
+
 // Always builds multipart/form-data. Arrays/objects are JSON-stringified,
 // File instances (single or in a `files` array) are appended as-is.
 function buildFormData(payload: Record<string, unknown>): FormData {
@@ -339,33 +429,7 @@ function buildFormData(payload: Record<string, unknown>): FormData {
 export const WarehouseListService = {
     async list(params: WarehouseListParams): Promise<WarehouseListResult> {
         const ordering = encodeURIComponent(params.ordering ?? "");
-
-        // Map frontend camelCase array filters to backend snake_case single values
-        const backendFilters: Record<string, unknown> = {};
-        if (params.apiFilters) {
-            for (const [key, value] of Object.entries(params.apiFilters)) {
-                let realVal: unknown = value;
-                if (Array.isArray(value)) {
-                    if (value.length === 0) continue;
-                    realVal = value[0];
-                }
-                if (realVal === undefined || realVal === null || realVal === "") continue;
-
-                if (key === "warehouseName") {
-                    backendFilters["warehouse_name"] = realVal;
-                } else if (key === "operatedBy") {
-                    backendFilters["operated_by"] = realVal;
-                } else if (key === "gstNumber") {
-                    backendFilters["gst_number"] = realVal;
-                } else if (key === "registeredGstAddress") {
-                    backendFilters["registered_gst_address"] = realVal;
-                } else if (key === "status") {
-                    backendFilters["status"] = realVal;
-                } else {
-                    backendFilters[key] = realVal;
-                }
-            }
-        }
+        const backendFilters = toBackendFilters(params.apiFilters);
 
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.WAREHOUSE.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
@@ -453,12 +517,31 @@ export const WarehouseListService = {
         }
     },
 
+    async getFilterDropdown(
+        fieldName: WarehouseFilterField,
+        signal?: AbortSignal,
+    ): Promise<WarehouseFilterOption[]> {
+        const response = await axiosInstance.get(API_ENDPOINTS.MASTER.WAREHOUSE.FILTER_DROPDOWN, {
+            params: { field_name: fieldName },
+            signal,
+        });
+
+        const payload = response.data as Record<string, unknown>;
+        const data = payload.data;
+        if (!Array.isArray(data)) {
+            throw new Error("Unexpected response shape: 'data' must be an array.");
+        }
+
+        return mapFilterOptions(data, fieldName);
+    },
+
     async export(params: WarehouseExportParams): Promise<void> {
         const ordering = encodeURIComponent(params.ordering ?? "");
+        const backendFilters = toBackendFilters(params.apiFilters);
 
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.WAREHOUSE.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
-            { filters: params.apiFilters ?? {} },
+            { filters: backendFilters },
             { responseType: "blob" },
         );
 

@@ -9,15 +9,18 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { FilterPopover } from "@/components/listing/FilterPopover";
 import type { ColumnConfig, FilterValue } from "@/components/listing/types";
 
-const STATUS_CFG: Record<StockLineStatus, { bg: string; text: string; dot: string }> = {
+const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   Available: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   Hold: { bg: "bg-navy-50", text: "text-navy-700", dot: "bg-navy-500" },
   "Near Expiry": { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-400" },
   Expired: { bg: "bg-rose-50", text: "text-rose-700", dot: "bg-rose-400" },
+  "Low Stock": { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  Reserved: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-400" },
+  "Out Of Stock": { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400" },
 };
 
-function StatusPill({ status }: { status: StockLineStatus }) {
-  const cfg = STATUS_CFG[status];
+function StatusPill({ status }: { status: string }) {
+  const cfg = STATUS_CFG[status] || STATUS_CFG.Available;
   return (
     <span
       className={cn(

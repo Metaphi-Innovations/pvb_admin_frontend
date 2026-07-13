@@ -21,11 +21,14 @@ export const VENDOR_OPTIONS = [
   { label: "Aries Agro Industries", value: "Aries Agro Industries" },
 ];
 
-// QC Passed Stock Statuses
+// QC Passed / Inventory Stock Statuses (matches backend StockOverviewService.getStatus)
 export const QC_PASSED_STATUS_OPTIONS = [
   { label: "Available", value: "Available" },
+  { label: "Low Stock", value: "Low Stock" },
+  { label: "Reserved", value: "Reserved" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
+  { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
 // Rejected Stock Statuses
@@ -64,18 +67,20 @@ export const STATUS_OPTIONS = QC_PASSED_STATUS_OPTIONS;
 
 export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> = {
   Available: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Available" },
+  "Low Stock": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Low Stock" },
+  Reserved: { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Reserved" },
   Expired: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Expired" },
   "Near Expiry": { bg: "bg-orange-50 text-orange-700 border-orange-200", label: "Near Expiry" },
+  "Out Of Stock": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Out Of Stock" },
   Hold: { bg: "bg-navy-50 text-navy-700 border-navy-200", label: "Hold" },
-  "Rejected": { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Rejected" },
+  Rejected: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Rejected" },
   "Under Review": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Under Review" },
-  "Disposed": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Disposed" },
+  Disposed: { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Disposed" },
   "Returned To Supplier": { bg: "bg-indigo-50 text-indigo-700 border-indigo-200", label: "Returned To Supplier" },
-
   "QC Pending": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "QC Pending" },
-
-  // GRN Pending Stock badges
   "Pending QC": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC" },
   "QC In Progress": { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "QC In Progress" },
   "Awaiting Inspection": { bg: "bg-purple-50 text-purple-700 border-purple-200", label: "Awaiting Inspection" },
+  COMPLETED: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Completed" },
+  REJECTED: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Rejected" },
 };

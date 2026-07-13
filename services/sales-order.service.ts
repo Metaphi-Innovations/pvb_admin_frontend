@@ -97,6 +97,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     quantityType: isCaseType ? "Case" : "Piece",
     caseQuantity: caseQuantity,
     pieceQuantity: pieceQuantity,
+    packSize: packSize,
     quantity: quantity,
     dealerPrice: asNumber(raw.unit_price),
     unitPrice: asNumber(raw.unit_price),

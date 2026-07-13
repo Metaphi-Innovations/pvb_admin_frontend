@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
@@ -71,20 +71,32 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   const [customerOptions, setCustomerOptions] = useState<{label: string, value: string}[]>([]);
   const [statusOptions, setStatusOptions] = useState<{label: string, value: string}[]>([]);
 
-  useEffect(() => {
-    async function fetchFilterOptions() {
-      try {
-        const custRes = await getDispatchFilterDropdown("customer__customer_name");
-        setCustomerOptions(custRes.map((x: any) => ({ label: x.customer__customer_name, value: x.customer__customer_name })));
-        
-        const statRes = await getDispatchFilterDropdown("dispatch_status");
-        setStatusOptions(statRes.map((x: any) => ({ label: x.dispatch_status, value: x.dispatch_status })));
-      } catch (err) {
-        console.error("Failed to fetch filter options", err);
-      }
+  const loadedFiltersRef = useRef<Set<string>>(new Set());
+
+  const FILTER_FIELD_MAP: Record<string, { field: string; setter: (opts: { label: string; value: string }[]) => void }> = useMemo(() => ({
+    "customer.customer_name": { field: "customer__customer_name", setter: setCustomerOptions },
+    "status": { field: "status", setter: setStatusOptions },
+  }), []);
+
+  const handleOpenFilter = useCallback(async (columnKey: string) => {
+    if (loadedFiltersRef.current.has(columnKey)) return;
+    const mapping = FILTER_FIELD_MAP[columnKey];
+    if (!mapping) return;
+    loadedFiltersRef.current.add(columnKey);
+    try {
+      let apiSourceType;
+      if (subTab === "sales_order") apiSourceType = "normal_sales";
+      else if (subTab === "sample_order") apiSourceType = "sample_order";
+      else if (subTab === "stock_transfer") apiSourceType = "stock_transfer";
+      else if (subTab === "purchase_return") apiSourceType = "purchase_return";
+
+      const res = await getDispatchFilterDropdown(mapping.field, apiSourceType);
+      mapping.setter(res.map((x: any) => ({ label: x[mapping.field] || x.status || x.customer__customer_name, value: x[mapping.field] || x.status || x.customer__customer_name })));
+    } catch (err) {
+      console.error(`Failed to fetch filter options for ${columnKey}`, err);
+      loadedFiltersRef.current.delete(columnKey);
     }
-    fetchFilterOptions();
-  }, []);
+  }, [FILTER_FIELD_MAP, subTab]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -124,8 +136,8 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       }
 
       const res = await getDispatches(payload);
-      setData(res?.data?.items || []);
-      setTotalRecords(res?.data?.total || 0);
+      setData(res?.data || []);
+      setTotalRecords(res?.totalRecords || res?.count || 0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -174,7 +186,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         },
       },
       {
-        key: "dispatch_no",
+        key: "dispatch_number",
         header: "Dispatch No",
         sortable: true,
         filterable: true,
@@ -185,7 +197,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             href={`/warehouse/dispatch/view/${row.id}`}
             className="font-mono text-xs font-semibold text-brand-700 hover:underline"
           >
-            {row.dispatch_no || row.dispatchNumber}
+            {row.dispatch_no || row.dispatchNumber || row.dispatch_number}
           </Link>
         ),
       },
@@ -198,12 +210,12 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         width: "140px",
         render: (_: unknown, row: DispatchRecord) => (
           <span className="font-mono text-xs font-semibold">
-            {row.source_document_no || row.salesOrderNumber}
+            {row.source_document_no || row.salesOrderNumber || (row.packing_done as any)?.packing_done_no || row.source_id}
           </span>
         ),
       },
       {
-        key: "customer_name",
+        key: "customer.customer_name",
         header: partyHeader,
         sortable: true,
         filterable: true,
@@ -219,10 +231,10 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
           });
           const label =
             type === "stock_transfer"
-              ? row.target_warehouse_name || row.targetWarehouse || row.customer
+              ? row.target_warehouse_name || row.targetWarehouse || (row.customer as any)?.customer_name || row.customer
               : type === "purchase_return"
-                ? row.customer_name || row.customer
-                : row.customer_name || row.customer;
+                ? row.customer_name || (row.customer as any)?.customer_name || row.customer
+                : row.customer_name || (row.customer as any)?.customer_name || row.customer;
           return (
             <div className="min-w-0">
               <span className="text-xs font-bold text-foreground block truncate">{label}</span>
@@ -240,7 +252,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         width: "150px",
         render: (_: unknown, row: DispatchRecord) => (
           <span className="text-xs text-foreground font-medium">
-            {row.source_warehouse_name || row.sourceWarehouse || row.warehouse}
+            {row.source_warehouse_name || row.sourceWarehouse || (row.warehouse as any)?.warehouse_name || row.warehouse}
           </span>
         ),
       },
@@ -273,7 +285,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         filterable: true,
         filterType: "text",
         width: "120px",
-        render: (val: unknown) => <span className="font-mono text-xs">{val as string}</span>,
+        render: (_: unknown, row: DispatchRecord) => <span className="font-mono text-xs">{(row.vehicleNumber || row.vehicle_number || "—") as string}</span>,
       },
       { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
       {
@@ -288,7 +300,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         ),
       },
       {
-        key: "dispatch_status",
+        key: "status",
         header: "Status",
         sortable: true,
         filterable: true,
@@ -302,7 +314,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          const rawStatus = row.dispatch_status || row.deliveryStatus;
+          const rawStatus = row.dispatch_status || row.status || row.deliveryStatus;
           const label = formatDispatchStatusLabel(type, rawStatus);
           const cfg = DELIVERY_STATUS_BADGE_CONFIG[label] || {
             bg: "bg-slate-100 text-slate-600 border-slate-200",
@@ -432,9 +444,9 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
           const query = subTab === "purchase_return" ? "?sourceType=purchase_return" : "";
           router.push(`/warehouse/dispatch/create${query}`);
         }}
-        addLabel="Create Dispatch"
         emptyMessage="dispatch records"
-        searchPlaceholder="Search dispatch..."
+        searchPlaceholder="Search dispatches..."
+        onOpenFilter={handleOpenFilter}
       />
 
       {/* ── REVERT CONFIRMATION DIALOG ── */}

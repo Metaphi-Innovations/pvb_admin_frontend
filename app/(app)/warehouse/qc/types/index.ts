@@ -52,4 +52,5 @@ export interface QcRecord {
   qcResult?: QcResult;
   qcRemarks?: string;
   items: QcItem[];
+  isEditable?: boolean;
 }

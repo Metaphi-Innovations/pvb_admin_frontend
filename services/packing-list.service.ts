@@ -98,7 +98,8 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
   
   const totalQty = products.reduce((sum: number, p: any) => {
     if (p && typeof p === "object") {
-      const packSize = Number(p.product?.unit_per_packing || p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;
+      const packSize = Number(packSizeRaw) || 1;
       const orderQty = asNumber(p.order_base_qty) / packSize;
       return sum + Math.floor(orderQty);
     }
@@ -317,7 +318,8 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     customer: raw.customer_name || "",
     totalItems: products.length,
     totalQuantity: products.reduce((sum: number, p: any) => {
-      const packSize = Number(p.product?.unit_per_packing || p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;
+      const packSize = Number(packSizeRaw) || 1;
       return sum + Math.floor(Number(p.order_base_qty || 0) / packSize);
     }, 0),
     orderAmount: Number(raw.order_amount || 0),
@@ -335,7 +337,8 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     targetWarehouse: "—",
     products: products.map((p: any) => {
       const snap = p.batch_snapshot && typeof p.batch_snapshot === "object" ? p.batch_snapshot : {};
-      const packSize = Number(p.product?.unit_per_packing || p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
+      const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;
+      const packSize = Number(packSizeRaw) || 1;
       const orderBaseQty = Number(p.order_base_qty || 0);
       const packedBaseQty = Number(p.packed_base_qty || 0);
       const pendingBaseQty = Number(p.pending_base_qty || 0);

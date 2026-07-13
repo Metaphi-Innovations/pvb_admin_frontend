@@ -71,7 +71,7 @@ export default function TransferNewPackingListPage() {
           const config = {
             packingUnit: line.packingUnit || "Unit",
             baseUnit: line.baseUnit || "Unit",
-            unitsPerPackingUnit: line.unitsPerPackingUnit || 1,
+            unitsPerPackingUnit: line.unitsPerPackingUnit || line.packSize || 1,
           };
 
           let remaining = line.quantity;
