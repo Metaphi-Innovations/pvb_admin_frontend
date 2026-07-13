@@ -80,8 +80,7 @@ export function resolveGstLedger(
 ): ChartOfAccount | null {
   ensureGstAccountingLedgers();
   if (gstRatePct != null && gstRatePct > 0) {
-    const rateLedger = resolveGstRateLedger(mappingKey, gstRatePct);
-    if (rateLedger) return rateLedger;
+    return resolveGstRateLedger(mappingKey, gstRatePct);
   }
   return resolveLegacyGstLedger(mappingKey);
 }

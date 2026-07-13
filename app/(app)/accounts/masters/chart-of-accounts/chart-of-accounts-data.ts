@@ -22,6 +22,7 @@ import {
   isTdsGroupContext,
 } from "@/lib/accounts/coa-specialized-groups";
 import { getCoaDisplayPath, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
+import { isCoaSidebarLevel3Subgroup } from "@/lib/accounts/coa-sidebar-tree";
 import {
   type AccountType,
   type ChartOfAccount,
@@ -151,9 +152,32 @@ export function getAncestorPath(
 ): ChartOfAccount[] {
   const byId = coaIdMap(records);
   const path: ChartOfAccount[] = [];
+  const visited = new Set<number>();
   let current = byId.get(nodeId);
   while (current) {
+    if (visited.has(current.id)) {
+      // #region agent log
+      if (typeof window !== "undefined") {
+        fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "179db4" },
+          body: JSON.stringify({
+            sessionId: "179db4",
+            runId: "tb-oom",
+            hypothesisId: "H1",
+            location: "chart-of-accounts-data.ts:getAncestorPath",
+            message: "COA parent cycle detected",
+            data: { nodeId, cycleAt: current.id, pathLength: path.length },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+      break;
+    }
+    visited.add(current.id);
     path.unshift(current);
+    if (path.length > COA_MAX_HIERARCHY_LEVEL + 2) break;
     current =
       current.parentAccountId != null ? byId.get(current.parentAccountId) : undefined;
   }
@@ -308,23 +332,11 @@ export function canAddSubGroupUnder(node: ChartOfAccount, records: ChartOfAccoun
 }
 
 /**
- * Ledgers (L4) attach to leaf sub-groups / account groups (L2–L3).
- * Sub-ledgers (L5) attach only under Level 4 grouping ledgers.
+ * Ledgers attach only to Level 3 subgroups (leaf groups or duties-style container parents).
  */
 export function canAddLedgerUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
-  const level = getCoaHierarchyLevel(records, node.id);
-  if (level >= COA_MAX_HIERARCHY_LEVEL) return false;
-
-  if (node.nodeLevel === "account_group") {
-    if (hasChildAccountGroups(records, node.id)) return false;
-    return level >= 2 && level <= 3;
-  }
-
-  if (node.nodeLevel === "ledger") {
-    return level === 4;
-  }
-
-  return false;
+  if (node.nodeLevel !== "account_group") return false;
+  return isCoaSidebarLevel3Subgroup(node, records);
 }
 
 export const LEDGER_UNDER_LEDGER_ERROR =

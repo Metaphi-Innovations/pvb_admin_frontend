@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -36,8 +36,12 @@ import {
   ReportFilterRow,
   ReportFilterResetButton,
   useReportDateRange,
+  ACCOUNTS_FILTER_LABEL_CLASS,
+  ACCOUNTS_FILTER_SELECT_CLASS,
 } from "@/components/accounts/ReportFilters";
-import { resetReportDateRange, accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
+import { INVOICE_LISTING_DATE_PRESETS, resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
@@ -50,30 +54,134 @@ import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-r
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import {
-  loadGrnPurchaseInvoices,
+  loadAllPurchaseInvoices,
   getGrnsPendingInvoice,
   getPurchaseInvoiceGstBreakup,
   getPurchaseInvoicePaymentStatus,
+  getPurchaseInvoiceApprovalStatus,
+  getPurchaseInvoicePostingStatus,
+  hasPurchaseInvoiceAttachment,
+  resolvePurchaseSourceType,
+  PURCHASE_SOURCE_TYPE_LABELS,
   type PurchaseInvoiceRecord,
+  type PurchaseNature,
+  type PurchaseSourceType,
 } from "./purchase-invoices-data";
+import { PURCHASE_NATURE_LABELS } from "./purchase-invoice-direct-utils";
+import { PURCHASE_INVOICE_DEMO_SCENARIO_LABELS } from "./purchase-invoice-seed";
+import { PURCHASE_INVOICE_DIRECT_DEMO_LABELS } from "./purchase-invoice-direct-seed";
+import { PurchaseInvoiceAttachmentLink } from "./PurchaseInvoiceAttachmentLink";
 import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import "./purchase-invoice-listing.css";
 
 type Tab = "invoices" | "grn_pending";
-type PaymentStatus = "all" | "paid" | "partial" | "unpaid";
+type SourceTypeFilter = "all" | PurchaseSourceType;
+type NatureFilter = "all" | PurchaseNature;
 
-const PAYMENT_STATUS_LABELS: Record<Exclude<PaymentStatus, "all">, string> = {
-  paid: "Paid",
-  partial: "Partial",
-  unpaid: "Unpaid",
-};
+const LISTING_DEFAULT_PRESET = "this_month" as const;
 
-function SourceBadge() {
+function listingFilterDefaults() {
+  const { from, to } = resolveDateRangePreset(LISTING_DEFAULT_PRESET);
+  return {
+    search: "",
+    preset: LISTING_DEFAULT_PRESET,
+    dateFrom: from,
+    dateTo: to,
+    sourceType: "all" as SourceTypeFilter,
+    nature: "all" as NatureFilter,
+  };
+}
+
+function ListingFilterReset({
+  active,
+  onClick,
+}: {
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <Badge variant="outline" className="text-xs h-5 text-blue-700 border-blue-200 bg-blue-50">
-      GRN
+    <div className="space-y-0.5 shrink-0 self-end">
+      <span className={cn(ACCOUNTS_FILTER_LABEL_CLASS, "invisible select-none")} aria-hidden>
+        Reset
+      </span>
+      <ReportFilterResetButton
+        showOnlyWhenActive
+        active={active}
+        onClick={onClick}
+        className="h-8 min-h-8 max-h-8 px-3 text-[13px] rounded-md"
+      />
+    </div>
+  );
+}
+
+const LISTING_SELECT_TRIGGER_CLASS = cn(
+  "accounts-filter-control accounts-filter-select mt-0 h-8 min-h-8 max-h-8",
+  ACCOUNTS_FILTER_SELECT_CLASS,
+);
+
+function SourceTypeBadge({ type }: { type: PurchaseSourceType }) {
+  const isGrn = type === "from_grn";
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "text-xs h-5",
+        isGrn ? "text-blue-700 border-blue-200 bg-blue-50" : "text-brand-700 border-brand-200 bg-brand-50",
+      )}
+    >
+      {PURCHASE_SOURCE_TYPE_LABELS[type]}
     </Badge>
   );
+}
+
+function PaymentStatusBadge({ status }: { status: ReturnType<typeof getPurchaseInvoicePaymentStatus> }) {
+  const labels = { paid: "Paid", partial: "Partial", unpaid: "Unpaid" } as const;
+  const cfg = {
+    paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    partial: "bg-amber-50 text-amber-700 border-amber-200",
+    unpaid: "bg-red-50 text-red-700 border-red-200",
+  }[status];
+  return (
+    <Badge variant="outline" className={cn("text-xs h-5", cfg)}>
+      {labels[status]}
+    </Badge>
+  );
+}
+
+function ListingSelectFilter<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  widthClass = "w-[148px]",
+}: {
+  label: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+  widthClass?: string;
+}) {
+  return (
+    <div className={cn("space-y-0.5 shrink-0", widthClass)}>
+      <span className={ACCOUNTS_FILTER_LABEL_CLASS}>{label}</span>
+      <Select value={value} onValueChange={(v) => onChange(v as T)}>
+        <SelectTrigger className={cn(LISTING_SELECT_TRIGGER_CLASS, widthClass)}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-xs">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function demoLabel(inv: PurchaseInvoiceRecord): string | undefined {
+  return PURCHASE_INVOICE_DEMO_SCENARIO_LABELS[inv.id] ?? PURCHASE_INVOICE_DIRECT_DEMO_LABELS[inv.id];
 }
 
 function estimatedGrnValue(grn: GrnRecord) {
@@ -105,22 +213,23 @@ function PurchaseInvoicesTabTable({
 
   return (
     <>
-    <AccountsTable minWidth={1480}>
+    <AccountsTable minWidth={1900}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Invoice No" colKey="invoiceNo" />
-            <SortTh label="Supplier Invoice No" colKey="vendorInvoiceNo" />
+            <SortTh label="Source Type" colKey="sourceType" />
             <SortTh label="Supplier" colKey="vendorName" className="accounts-col-party" />
-            <SortTh label="Date" colKey="invoiceDate" filterType="date" />
-            <SortTh label="GRN No" colKey="grnNo" />
-            <SortTh label="Source" colKey="source" />
-            <SortTh label="Taxable Value" colKey="taxableValue" filterType="amount" align="right" />
-            <SortTh label="CGST" colKey="cgst" filterType="amount" align="right" />
-            <SortTh label="SGST" colKey="sgst" filterType="amount" align="right" />
-            <SortTh label="IGST" colKey="igst" filterType="amount" align="right" />
-            <SortTh label="Grand Total" colKey="grandTotal" filterType="amount" align="right" />
-            <SortTh label="Paid" colKey="amountPaid" filterType="amount" align="right" />
-            <SortTh label="Outstanding" colKey="outstanding" filterType="amount" align="right" />
+            <SortTh label="Supplier Inv. No" colKey="vendorInvoiceNo" />
+            <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
+            <SortTh label="Purchase Nature" colKey="purchaseNature" />
+            <SortTh label="Taxable Amount" colKey="taxableAmount" filterType="amount" align="right" />
+            <SortTh label="GST Amount" colKey="gstAmount" filterType="amount" align="right" />
+            <SortTh label="Net Payable" colKey="netPayable" filterType="amount" align="right" />
+            <SortTh label="Due Date" colKey="dueDate" filterType="date" />
+            <SortTh label="Approval" colKey="approvalStatus" />
+            <SortTh label="Posting" colKey="postingStatus" />
+            <SortTh label="Payment" colKey="paymentStatus" />
+            <SortTh label="Attachment" colKey="hasAttachment" align="center" />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -133,42 +242,62 @@ function PurchaseInvoicesTabTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={14} message="No purchase invoices found." />
+            <AccountsTableEmpty colSpan={16} message="No purchase invoices found." />
           ) : visible.length === 0 ? (
-            <AccountsTableEmpty colSpan={14} message="No records match the column filters." />
+            <AccountsTableEmpty colSpan={16} message="No records match the column filters." />
           ) : (
             pagedRows.map((inv) => {
               const gst = getPurchaseInvoiceGstBreakup(inv);
-              const outstandingAmt = Math.max(0, inv.grandTotal - inv.amountPaid);
+              const gstAmount = gst.cgst + gst.sgst + gst.igst;
+              const sourceType = resolvePurchaseSourceType(inv);
+              const label = demoLabel(inv);
               return (
                 <AccountsTableRow key={inv.id}>
                   <AccountsTableCell mono className="font-semibold text-brand-700">
                     <Link href={`/accounts/purchase-invoices/${inv.id}`} className="hover:underline">
                       {inv.invoiceNo}
                     </Link>
+                    {label && (
+                      <span className="block text-[10px] font-normal text-muted-foreground mt-0.5">{label}</span>
+                    )}
                   </AccountsTableCell>
-                  <AccountsTableCell className="text-muted-foreground">{inv.vendorInvoiceNo || "—"}</AccountsTableCell>
+                  <AccountsTableCell>
+                    <SourceTypeBadge type={sourceType} />
+                  </AccountsTableCell>
                   <AccountsTableCell className="font-medium">{inv.vendorName}</AccountsTableCell>
+                  <AccountsTableCell className="text-muted-foreground">{inv.vendorInvoiceNo || "—"}</AccountsTableCell>
                   <AccountsTableCell>{inv.invoiceDate}</AccountsTableCell>
-                  <AccountsTableCell mono>{inv.grnNo || "—"}</AccountsTableCell>
-                  <AccountsTableCell><SourceBadge /></AccountsTableCell>
-                  <AccountsTableCell align="right" money>{formatMoney(gst.taxableValue)}</AccountsTableCell>
-                  <AccountsTableCell align="right" className="tabular-nums">{formatMoney(gst.cgst)}</AccountsTableCell>
-                  <AccountsTableCell align="right" className="tabular-nums">{formatMoney(gst.sgst)}</AccountsTableCell>
-                  <AccountsTableCell align="right" className="tabular-nums">{formatMoney(gst.igst)}</AccountsTableCell>
-                  <AccountsTableCell align="right" money>{formatMoney(inv.grandTotal)}</AccountsTableCell>
-                  <AccountsTableCell align="right" className="text-emerald-700 tabular-nums">{formatMoney(inv.amountPaid)}</AccountsTableCell>
-                  <AccountsTableCell align="right" className="text-red-600 font-semibold tabular-nums">{formatMoney(outstandingAmt)}</AccountsTableCell>
+                  <AccountsTableCell className="text-xs">
+                    {inv.purchaseNature ? PURCHASE_NATURE_LABELS[inv.purchaseNature] : sourceType === "from_grn" ? "Inventory" : "—"}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money>{formatMoney(inv.taxableAmount ?? gst.taxableValue)}</AccountsTableCell>
+                  <AccountsTableCell align="right" className="tabular-nums">{formatMoney(gstAmount)}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>{formatMoney(inv.netPayable ?? inv.grandTotal)}</AccountsTableCell>
+                  <AccountsTableCell>{inv.dueDate || "—"}</AccountsTableCell>
+                  <AccountsTableCell>
+                    <AccountsVoucherStatusBadge workflow={inv.workflow} />
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs capitalize">
+                    {getPurchaseInvoicePostingStatus(inv)}
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    <PaymentStatusBadge status={getPurchaseInvoicePaymentStatus(inv)} />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="center">
+                    <PurchaseInvoiceAttachmentLink attachment={inv.attachment} />
+                  </AccountsTableCell>
                   <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                     <AccountsTableActionCell>
                       <AccountsViewAction href={`/accounts/purchase-invoices/${inv.id}`} />
-                      <Link
-                        href={`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${inv.id}`}
-                        title="Debit Note"
-                        className={ACCOUNTS_ACTION_BTN_CLASS}
-                      >
-                        <FileMinus className="w-4 h-4 text-muted-foreground" />
-                      </Link>
+                      {sourceType === "from_grn" && (
+                        <Link
+                          href={`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${inv.id}`}
+                          title="Debit Note"
+                          className={ACCOUNTS_ACTION_BTN_CLASS}
+                        >
+                          <FileMinus className="w-4 h-4 text-muted-foreground" />
+                        </Link>
+                      )}
                     </AccountsTableActionCell>
                   </AccountsTableCell>
                 </AccountsTableRow>
@@ -257,18 +386,16 @@ function PurchaseInvoicesTabBody({
   filteredInvoices,
   search,
   setSearch,
-  statusFilter,
-  setStatusFilter,
+  sourceTypeFilter,
+  setSourceTypeFilter,
+  natureFilter,
+  setNatureFilter,
   preset,
   setPreset,
   dateFrom,
   setDateFrom,
   dateTo,
   setDateTo,
-  invoices,
-  pendingGrns,
-  outstanding,
-  paidThisMonth,
   page,
   pageSize,
   onPageChange,
@@ -277,18 +404,16 @@ function PurchaseInvoicesTabBody({
   filteredInvoices: PurchaseInvoiceRecord[];
   search: string;
   setSearch: (v: string) => void;
-  statusFilter: PaymentStatus;
-  setStatusFilter: (v: PaymentStatus) => void;
+  sourceTypeFilter: SourceTypeFilter;
+  setSourceTypeFilter: (v: SourceTypeFilter) => void;
+  natureFilter: NatureFilter;
+  setNatureFilter: (v: NatureFilter) => void;
   preset: ReturnType<typeof useReportDateRange>["preset"];
   setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
   dateFrom: string;
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  invoices: PurchaseInvoiceRecord[];
-  pendingGrns: GrnRecord[];
-  outstanding: number;
-  paidThisMonth: number;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -315,7 +440,7 @@ function PurchaseInvoicesTabBody({
     const lines = columnFiltered.map((inv) => {
       const gst = getPurchaseInvoiceGstBreakup(inv);
       const outstandingAmt = Math.max(0, inv.grandTotal - inv.amountPaid);
-      const status = PAYMENT_STATUS_LABELS[getPurchaseInvoicePaymentStatus(inv)];
+      const status = { paid: "Paid", partial: "Partial", unpaid: "Unpaid" }[getPurchaseInvoicePaymentStatus(inv)];
       return [
         inv.invoiceNo,
         inv.vendorInvoiceNo,
@@ -345,7 +470,6 @@ function PurchaseInvoicesTabBody({
 
   return (
     <AccountsTableListing
-      className="purchase-invoice-listing"
       toolbar={
         <AccountsListingFilterCard>
           <ReportFilterRow
@@ -360,26 +484,33 @@ function PurchaseInvoicesTabBody({
             <ReportSearchFilter
               value={search}
               onChange={setSearch}
-              placeholder="Search invoice no., supplier invoice no., supplier, GRN no…"
-              className="min-w-[200px] flex-1 max-w-md"
+              placeholder="Search invoice no., supplier, supplier invoice no…"
+              className="min-w-[220px] flex-1 max-w-md"
             />
-            <div className="flex items-end gap-1 flex-wrap">
-              {(["all", "paid", "partial", "unpaid"] as PaymentStatus[]).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatusFilter(st)}
-                  className={cn(
-                    "h-7 px-2.5 text-xs rounded-lg border font-medium transition-colors",
-                    statusFilter === st
-                      ? "bg-brand-600 text-white border-brand-600"
-                      : "border-border text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {st === "all" ? "All" : PAYMENT_STATUS_LABELS[st]}
-                </button>
-              ))}
-            </div>
+            <ListingSelectFilter
+              label="Source Type"
+              value={sourceTypeFilter}
+              onChange={setSourceTypeFilter}
+              widthClass="w-[148px]"
+              options={[
+                { value: "all", label: "All Source Types" },
+                { value: "from_grn", label: "From GRN" },
+                { value: "direct_purchase", label: "Direct Purchase" },
+              ]}
+            />
+            <ListingSelectFilter
+              label="Purchase Nature"
+              value={natureFilter}
+              onChange={setNatureFilter}
+              widthClass="w-[148px]"
+              options={[
+                { value: "all", label: "All Nature" },
+                ...(Object.keys(PURCHASE_NATURE_LABELS) as PurchaseNature[]).map((k) => ({
+                  value: k,
+                  label: PURCHASE_NATURE_LABELS[k],
+                })),
+              ]}
+            />
             <ReportDateRangeFilter
               preset={preset}
               dateFrom={dateFrom}
@@ -387,33 +518,33 @@ function PurchaseInvoicesTabBody({
               onPresetChange={setPreset}
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
+              presetOptions={INVOICE_LISTING_DATE_PRESETS}
             />
-            <ReportFilterResetButton
-              showOnlyWhenActive
-              active={
-                accountsListingFiltersActive(
-                  { search, preset, dateFrom, dateTo, status: statusFilter === "all" ? "" : statusFilter },
-                  { search: "", preset: "this_month", dateFrom: "", dateTo: "", status: "" },
-                )
-              }
+            <ListingFilterReset
+              active={accountsListingFiltersActive(
+                {
+                  search,
+                  preset,
+                  dateFrom,
+                  dateTo,
+                  sourceType: sourceTypeFilter,
+                  nature: natureFilter,
+                },
+                listingFilterDefaults(),
+              )}
               onClick={() => {
-                setSearch("");
-                setStatusFilter("all");
-                resetReportDateRange(setPreset, setDateFrom, setDateTo, "this_month");
+                const defaults = listingFilterDefaults();
+                setSearch(defaults.search);
+                setSourceTypeFilter(defaults.sourceType);
+                setNatureFilter(defaults.nature);
+                setPreset(defaults.preset);
+                setDateFrom(defaults.dateFrom);
+                setDateTo(defaults.dateTo);
+                onPageChange(1);
               }}
             />
           </ReportFilterRow>
         </AccountsListingFilterCard>
-      }
-      summary={
-        <AccountsSummaryBar
-          items={[
-            { label: "Total Invoices", value: String(invoices.length) },
-            { label: "GRN Pending", value: String(pendingGrns.length), warn: pendingGrns.length > 0 },
-            { label: "Outstanding Payable", value: formatMoney(outstanding) },
-            { label: "Paid This Month", value: formatMoney(paidThisMonth) },
-          ]}
-        />
       }
       footer={
         columnFiltered.length > 0 ? (
@@ -437,32 +568,15 @@ function PurchaseInvoicesTabBody({
 
 function GrnPendingTabBody({
   pendingGrns,
-  invoices,
-  outstanding,
-  paidThisMonth,
   router,
 }: {
   pendingGrns: GrnRecord[];
-  invoices: PurchaseInvoiceRecord[];
-  outstanding: number;
-  paidThisMonth: number;
   router: ReturnType<typeof useRouter>;
 }) {
   const columnFiltered = useAccountsFilteredRows(pendingGrns);
 
   return (
     <AccountsTableListing
-      className="purchase-invoice-listing"
-      summary={
-        <AccountsSummaryBar
-          items={[
-            { label: "Total Invoices", value: String(invoices.length) },
-            { label: "GRN Pending", value: String(pendingGrns.length), warn: pendingGrns.length > 0 },
-            { label: "Outstanding Payable", value: formatMoney(outstanding) },
-            { label: "Paid This Month", value: formatMoney(paidThisMonth) },
-          ]}
-        />
-      }
       footer={
         columnFiltered.length > 0 ? (
           <AccountsListingCountFooter>
@@ -481,14 +595,16 @@ export default function PurchaseInvoiceListClient() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("invoices");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PaymentStatus>("all");
+  const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
+  const [natureFilter, setNatureFilter] = useState<NatureFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
+    useReportDateRange(LISTING_DEFAULT_PRESET);
   const sectionRefresh = useAccountsSectionRefresh("purchase-invoices");
 
-  const invoices = useMemo(() => loadGrnPurchaseInvoices(), [sectionRefresh]);
-  const pendingGrns = useMemo(() => getGrnsPendingInvoice(), []);
+  const invoices = useMemo(() => loadAllPurchaseInvoices(), [sectionRefresh]);
+  const pendingGrns = useMemo(() => getGrnsPendingInvoice(), [sectionRefresh]);
 
   const filteredInvoices = useMemo(() => {
     let list = invoices;
@@ -502,29 +618,29 @@ export default function PurchaseInvoiceListClient() {
           i.grnNo.toLowerCase().includes(q),
       );
     }
-    if (statusFilter !== "all") {
-      list = list.filter((i) => getPurchaseInvoicePaymentStatus(i) === statusFilter);
+    if (sourceTypeFilter !== "all") {
+      list = list.filter((i) => resolvePurchaseSourceType(i) === sourceTypeFilter);
+    }
+    if (natureFilter !== "all") {
+      list = list.filter((i) => i.purchaseNature === natureFilter);
     }
     if (dateFrom) list = list.filter((i) => i.invoiceDate >= dateFrom);
     if (dateTo) list = list.filter((i) => i.invoiceDate <= dateTo);
     return list;
-  }, [invoices, search, statusFilter, dateFrom, dateTo]);
-
-  const outstanding = invoices.reduce(
-    (s, i) => s + Math.max(0, i.grandTotal - i.amountPaid),
-    0,
-  );
-  const paidThisMonth = invoices.reduce((s, i) => s + i.amountPaid, 0);
+  }, [invoices, search, sourceTypeFilter, natureFilter, dateFrom, dateTo]);
 
   const getInvoiceCellValue = useCallback((row: PurchaseInvoiceRecord, key: string) => {
     if (key === "paymentStatus") return getPurchaseInvoicePaymentStatus(row);
-    if (key === "source") return "GRN";
-    if (key === "outstanding") return Math.max(0, row.grandTotal - row.amountPaid);
-    const gst = getPurchaseInvoiceGstBreakup(row);
-    if (key === "taxableValue") return gst.taxableValue;
-    if (key === "cgst") return gst.cgst;
-    if (key === "sgst") return gst.sgst;
-    if (key === "igst") return gst.igst;
+    if (key === "sourceType") return resolvePurchaseSourceType(row);
+    if (key === "approvalStatus") return getPurchaseInvoiceApprovalStatus(row);
+    if (key === "postingStatus") return getPurchaseInvoicePostingStatus(row);
+    if (key === "hasAttachment") return hasPurchaseInvoiceAttachment(row.attachment);
+    if (key === "taxableAmount") return row.taxableAmount ?? getPurchaseInvoiceGstBreakup(row).taxableValue;
+    if (key === "gstAmount") {
+      const g = getPurchaseInvoiceGstBreakup(row);
+      return g.cgst + g.sgst + g.igst;
+    }
+    if (key === "netPayable") return row.netPayable ?? row.grandTotal;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -536,18 +652,19 @@ export default function PurchaseInvoiceListClient() {
   const invoiceColumnConfig = useMemo(
     () => ({
       invoiceNo: { type: "text" as const },
-      vendorInvoiceNo: { type: "text" as const },
+      sourceType: { type: "text" as const },
       vendorName: { type: "text" as const },
+      vendorInvoiceNo: { type: "text" as const },
       invoiceDate: { type: "date" as const },
-      grnNo: { type: "text" as const },
-      source: { type: "text" as const },
-      taxableValue: { type: "amount" as const },
-      cgst: { type: "amount" as const },
-      sgst: { type: "amount" as const },
-      igst: { type: "amount" as const },
-      grandTotal: { type: "amount" as const },
-      amountPaid: { type: "amount" as const },
-      outstanding: { type: "amount" as const },
+      purchaseNature: { type: "text" as const },
+      taxableAmount: { type: "amount" as const },
+      gstAmount: { type: "amount" as const },
+      netPayable: { type: "amount" as const },
+      dueDate: { type: "date" as const },
+      approvalStatus: { type: "text" as const },
+      postingStatus: { type: "text" as const },
+      paymentStatus: { type: "text" as const },
+      hasAttachment: { type: "text" as const },
     }),
     [],
   );
@@ -569,28 +686,25 @@ export default function PurchaseInvoiceListClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Transactions", "Purchase Invoices")}
       title="Purchase Invoices"
-      description="Create supplier purchase bills from completed GRNs."
+      description="GRN-based inventory invoices and direct purchases for expenses, services, and assets."
       hideDescription
-      layout="split"
-      className="h-full min-h-0"
       actions={
         <Button
           size="sm"
-          className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white px-2.5"
-          onClick={() => router.push("/accounts/purchase-invoices/new?mode=grn")}
+          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+          onClick={() => router.push("/accounts/purchase-invoices/new?mode=direct")}
         >
-          <Truck className="w-4 h-4" />
-          From GRN
+          <FileText className="w-3.5 h-3.5" />
+          Direct Purchase
         </Button>
       }
     >
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="space-y-2">
         <PurchaseInvoiceTabs
           tab={tab}
           invoiceCount={invoices.length}
           pendingCount={pendingGrns.length}
           onTabChange={setTab}
-          className="flex-shrink-0 px-1 mb-2"
         />
         {tab === "invoices" ? (
           <AccountsColumnFilterProvider
@@ -605,18 +719,16 @@ export default function PurchaseInvoiceListClient() {
               filteredInvoices={filteredInvoices}
               search={search}
               setSearch={setSearch}
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
+              sourceTypeFilter={sourceTypeFilter}
+              setSourceTypeFilter={setSourceTypeFilter}
+              natureFilter={natureFilter}
+              setNatureFilter={setNatureFilter}
               preset={preset}
               setPreset={setPreset}
               dateFrom={dateFrom}
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
-              invoices={invoices}
-              pendingGrns={pendingGrns}
-              outstanding={outstanding}
-              paidThisMonth={paidThisMonth}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
@@ -632,13 +744,7 @@ export default function PurchaseInvoiceListClient() {
             defaultSortKey="grnDate"
             defaultSortDir="desc"
           >
-            <GrnPendingTabBody
-              pendingGrns={pendingGrns}
-              invoices={invoices}
-              outstanding={outstanding}
-              paidThisMonth={paidThisMonth}
-              router={router}
-            />
+            <GrnPendingTabBody pendingGrns={pendingGrns} router={router} />
           </AccountsColumnFilterProvider>
         )}
       </div>
@@ -651,16 +757,14 @@ function PurchaseInvoiceTabs({
   invoiceCount,
   pendingCount,
   onTabChange,
-  className,
 }: {
   tab: Tab;
   invoiceCount: number;
   pendingCount: number;
   onTabChange?: (tab: Tab) => void;
-  className?: string;
 }) {
   return (
-    <div className={cn("flex items-center gap-1", className)}>
+    <div className="flex items-center gap-1 border-b border-border pb-0">
       <TabBtn active={tab === "invoices"} onClick={() => onTabChange?.("invoices")}>
         <FileText className="w-4 h-4" />
         All Invoices

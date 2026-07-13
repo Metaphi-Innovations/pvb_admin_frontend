@@ -1,7 +1,5 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const GstSummaryPageClient = lazyAccountsPage(() => import("./GstSummaryPageClient"));
-
-export default function GstSummaryPage() {
-  return <GstSummaryPageClient />;
+export default function LegacyGstSummaryRedirectPage() {
+  redirect("/accounts/reports/gst-summary");
 }

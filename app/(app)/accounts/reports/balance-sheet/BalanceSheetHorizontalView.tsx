@@ -1,21 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableFoot,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
 import {
   buildBalanceSheetLedgerHref,
   buildBalanceSheetPartyHref,
   collectBalanceSheetGroupIds,
   isBalanceSheetGroupHeading,
   splitBalanceSheetHorizontal,
+  zipBalanceSheetHorizontalRows,
   type BalanceSheetDrillDownFilters,
-  type BalanceSheetSide,
+  type BalanceSheetLineItem,
   type BalanceSheetStatement,
-  type BalanceSheetTreeNode,
-  type BalanceSheetViewType,
 } from "./balance-sheet-data";
 
 const CHEVRON_COL_PX = 20;
@@ -23,7 +33,7 @@ const DEPTH_INDENT_PX = 16;
 const BASE_INDENT_PX = 8;
 
 function formatBsAmount(amount: number | null): string {
-  if (amount == null) return "—";
+  if (amount == null) return "";
   return formatMoney(amount);
 }
 
@@ -31,205 +41,119 @@ function indentPx(depth: number): number {
   return BASE_INDENT_PX + depth * DEPTH_INDENT_PX;
 }
 
-function SideTableHeader({ side }: { side: BalanceSheetSide }) {
-  return (
-    <thead className="sticky top-0 z-20 bg-[#FFF3E6] shadow-[0_1px_0_0_#E5E7EB]">
-      <tr>
-        <th className="px-3 py-2 text-left text-xs font-bold text-navy-700 align-middle">
-          {side.sectionTitle}
-        </th>
-        <th className="px-3 py-2 text-right text-xs font-bold text-navy-700 w-32 align-middle whitespace-nowrap">
-          {side.amountColumnLabel}
-        </th>
-      </tr>
-    </thead>
-  );
-}
-
-function SideGrandTotalRow({ side }: { side: BalanceSheetSide }) {
-  return (
-    <tr className="border-t-2 border-brand-600 bg-brand-50/60">
-      <td className="px-3 py-2.5 text-xs font-bold text-brand-800 align-middle">
-        {side.grandTotalLabel}
-        <span className="ml-1.5 text-[10px] font-semibold text-brand-700/80">
-          ({side.balanceSide})
-        </span>
-      </td>
-      <td
-        className={cn(
-          "px-3 py-2.5 text-right text-xs font-bold tabular-nums w-32 align-middle",
-          MONEY_AMOUNT_CLASS,
-          "text-brand-800",
-        )}
-      >
-        {formatBsAmount(side.grandTotal)}
-      </td>
-    </tr>
-  );
-}
-
-function SideTreeRows({
-  node,
+function ParticularCell({
+  item,
+  depth,
+  hasChildren,
   expandedIds,
   onToggle,
   drillDownFilters,
 }: {
-  node: BalanceSheetTreeNode;
+  item: BalanceSheetLineItem;
+  depth: number;
+  hasChildren: boolean;
   expandedIds: Set<string>;
   onToggle: (id: string) => void;
   drillDownFilters: BalanceSheetDrillDownFilters;
 }) {
-  const hasChildren = node.children.length > 0;
-  const isExpanded = expandedIds.has(node.item.id);
-  const isGroupHeading = isBalanceSheetGroupHeading(node.item);
-  const isLedger = Boolean(node.item.ledgerId);
-  const isPartyLedger = Boolean(node.item.partyId && node.item.partyKind);
-  const rowIndent = indentPx(node.depth);
+  const isGroupHeading = isBalanceSheetGroupHeading(item);
+  const isLedger = Boolean(item.ledgerId);
+  const isPartyLedger = Boolean(item.partyId && item.partyKind);
+  const isExpanded = expandedIds.has(item.id);
 
   const labelClass = cn(
     "text-xs truncate min-w-0",
     isGroupHeading ? "font-bold text-foreground" : "font-normal text-foreground/90",
-    (isLedger || isPartyLedger) && !node.item.isPlBalance && "text-brand-700 hover:text-brand-800 hover:underline cursor-pointer",
-    node.item.isPlBalance && "font-semibold text-emerald-800",
+    isLedger &&
+      !item.isPlBalance &&
+      "text-brand-700 hover:text-brand-800 hover:underline cursor-pointer",
+    item.isPlBalance && "font-semibold text-emerald-800",
   );
 
-  let labelContent: ReactNode;
-  if (isLedger && node.item.ledgerId) {
+  let labelContent: React.ReactNode;
+  if (isLedger && item.ledgerId) {
     labelContent = (
       <Link
-        href={buildBalanceSheetLedgerHref(node.item.ledgerId, drillDownFilters)}
+        href={buildBalanceSheetLedgerHref(item.ledgerId, drillDownFilters)}
         className={labelClass}
-        title={`View ${node.item.particular} ledger`}
+        title={`View ${item.particular} ledger`}
       >
-        {node.item.particular}
+        {item.particular}
       </Link>
     );
-  } else if (isPartyLedger && node.item.partyId && node.item.partyKind) {
+  } else if (isPartyLedger && item.partyId && item.partyKind) {
     labelContent = (
       <Link
-        href={buildBalanceSheetPartyHref(node.item.partyId, node.item.partyKind)}
+        href={buildBalanceSheetPartyHref(item.partyId, item.partyKind)}
         className={labelClass}
-        title={`View ${node.item.particular} outstanding`}
+        title={`View ${item.particular} outstanding`}
       >
-        {node.item.particular}
+        {item.particular}
       </Link>
     );
   } else {
     labelContent = (
-      <span className={labelClass} title={node.item.particular}>
-        {node.item.particular}
+      <span className={labelClass} title={item.particular}>
+        {item.particular}
       </span>
     );
   }
 
+  const showChevron = hasChildren;
+
   return (
-    <>
-      <tr
-        className={cn(
-          "border-b border-border/60 transition-colors",
-          isGroupHeading ? "bg-muted/10 hover:bg-muted/20" : "hover:bg-muted/10",
-        )}
-      >
-        <td className="py-1.5 align-middle min-w-0">
-          <div
-            className="flex items-center gap-0 min-w-0 pr-2"
-            style={{ paddingLeft: rowIndent }}
+    <div
+      className="flex items-center gap-0 min-w-0"
+      style={{ paddingLeft: indentPx(depth) }}
+    >
+      <span className="flex-shrink-0" style={{ width: CHEVRON_COL_PX }}>
+        {showChevron ? (
+          <button
+            type="button"
+            onClick={() => onToggle(item.id)}
+            className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            aria-label={isExpanded ? "Collapse" : "Expand"}
           >
-            <span className="flex-shrink-0" style={{ width: CHEVRON_COL_PX }}>
-              {hasChildren ? (
-                <button
-                  type="button"
-                  onClick={() => onToggle(node.item.id)}
-                  className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
-                >
-                  {isExpanded ? (
-                    <ChevronDown className="w-3.5 h-3.5" strokeWidth={2} />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
-                  )}
-                </button>
-              ) : null}
-            </span>
-            {labelContent}
-          </div>
-        </td>
-        <td
-          className={cn(
-            "px-3 py-1.5 text-right text-xs tabular-nums whitespace-nowrap w-32 align-middle",
-            isGroupHeading ? cn("font-bold", MONEY_AMOUNT_CLASS) : MONEY_AMOUNT_CLASS,
-            node.item.isPlBalance && "font-semibold text-emerald-700",
-          )}
-        >
-          {formatBsAmount(node.item.amount)}
-        </td>
-      </tr>
-      {hasChildren &&
-        isExpanded &&
-        node.children.map((child) => (
-          <SideTreeRows
-            key={child.item.id}
-            node={child}
-            expandedIds={expandedIds}
-            onToggle={onToggle}
-            drillDownFilters={drillDownFilters}
-          />
-        ))}
-    </>
+            {isExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5" strokeWidth={2} />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
+            )}
+          </button>
+        ) : null}
+      </span>
+      {labelContent}
+    </div>
   );
 }
 
-function SideTable({
-  side,
-  expandedIds,
-  onToggle,
-  drillDownFilters,
+function SideAmountCell({
+  item,
 }: {
-  side: BalanceSheetSide;
-  expandedIds: Set<string>;
-  onToggle: (id: string) => void;
-  drillDownFilters: BalanceSheetDrillDownFilters;
+  item: BalanceSheetLineItem | null;
 }) {
-  const hasRows = side.tree.length > 0;
-
+  if (!item) return null;
+  const isGroupHeading = isBalanceSheetGroupHeading(item);
   return (
-    <table className="w-full border-collapse table-fixed">
-      <colgroup>
-        <col />
-        <col className="w-32" />
-      </colgroup>
-      <SideTableHeader side={side} />
-      <tbody>
-        {hasRows ? (
-          side.tree.map((node) => (
-            <SideTreeRows
-              key={node.item.id}
-              node={node}
-              expandedIds={expandedIds}
-              onToggle={onToggle}
-              drillDownFilters={drillDownFilters}
-            />
-          ))
-        ) : (
-          <tr>
-            <td colSpan={2} className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No entries
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+    <span
+      className={cn(
+        "tabular-nums",
+        MONEY_AMOUNT_CLASS,
+        isGroupHeading ? "font-bold" : "",
+        item.isPlBalance && "font-semibold text-emerald-700",
+      )}
+    >
+      {formatBsAmount(item.amount)}
+    </span>
   );
 }
 
 export function BalanceSheetHorizontalView({
   statement,
   drillDownFilters,
-  viewType,
 }: {
   statement: BalanceSheetStatement;
   drillDownFilters: BalanceSheetDrillDownFilters;
-  viewType: BalanceSheetViewType;
 }) {
   const { liabilities, assets } = useMemo(
     () => splitBalanceSheetHorizontal(statement),
@@ -238,13 +162,11 @@ export function BalanceSheetHorizontalView({
 
   const defaultExpanded = useMemo(
     () =>
-      viewType === "detailed"
-        ? new Set([
-            ...collectBalanceSheetGroupIds(liabilities.tree),
-            ...collectBalanceSheetGroupIds(assets.tree),
-          ])
-        : new Set<string>(),
-    [liabilities.tree, assets.tree, viewType],
+      new Set([
+        ...collectBalanceSheetGroupIds(liabilities.tree),
+        ...collectBalanceSheetGroupIds(assets.tree),
+      ]),
+    [liabilities.tree, assets.tree],
   );
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpanded);
@@ -262,77 +184,146 @@ export function BalanceSheetHorizontalView({
     });
   }, []);
 
+  const zippedRows = useMemo(
+    () => zipBalanceSheetHorizontalRows(statement, expandedIds),
+    [statement, expandedIds],
+  );
+
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full w-full">
-      <div className="flex-shrink-0 px-4 py-2.5 border-b border-border bg-white">
-        <h2 className="text-base font-bold text-navy-700 text-center tracking-tight">Balance Sheet</h2>
-      </div>
+      <AccountsTableScroll className="flex-1 min-h-0">
+        <AccountsTable minWidth={720}>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <AccountsTableHeadCell className="min-w-[200px] border-r border-border font-bold">
+                {liabilities.sectionTitle}
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell
+                align="right"
+                className="min-w-[120px] border-r-2 border-border font-bold"
+              >
+                {liabilities.amountColumnLabel}
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell className="min-w-[200px] border-r border-border font-bold">
+                {assets.sectionTitle}
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" className="min-w-[120px] font-bold">
+                {assets.amountColumnLabel}
+              </AccountsTableHeadCell>
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
 
-      <div
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-contain border border-border border-t-0 bg-white"
-        role="region"
-        aria-label="Balance Sheet accounts"
-      >
-        <div className="flex flex-col lg:flex-row lg:items-start min-w-[720px]">
-          <div className="flex-1 min-w-0 lg:border-r border-border">
-            <SideTable
-              side={liabilities}
-              expandedIds={expandedIds}
-              onToggle={toggle}
-              drillDownFilters={drillDownFilters}
-            />
-          </div>
-          <div className="flex-1 min-w-0 border-t lg:border-t-0 border-border">
-            <SideTable
-              side={assets}
-              expandedIds={expandedIds}
-              onToggle={toggle}
-              drillDownFilters={drillDownFilters}
-            />
-          </div>
-        </div>
-      </div>
+          <AccountsTableBody>
+            {zippedRows.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
+                  No entries
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : (
+              zippedRows.map((pair, index) => (
+                <AccountsTableRow
+                  key={`bs-row-${index}`}
+                  className={cn(
+                    "hover:bg-muted/20 transition-colors",
+                    (pair.liability && isBalanceSheetGroupHeading(pair.liability.item)) ||
+                      (pair.asset && isBalanceSheetGroupHeading(pair.asset.item))
+                      ? "bg-muted/10"
+                      : undefined,
+                  )}
+                >
+                  <AccountsTableCell className="border-r border-border/60 align-top py-1.5">
+                    {pair.liability ? (
+                      <ParticularCell
+                        item={pair.liability.item}
+                        depth={pair.liability.depth}
+                        hasChildren={pair.liability.hasChildren}
+                        expandedIds={expandedIds}
+                        onToggle={toggle}
+                        drillDownFilters={drillDownFilters}
+                      />
+                    ) : null}
+                  </AccountsTableCell>
+                  <AccountsTableCell
+                    align="right"
+                    money
+                    className="border-r-2 border-border align-top py-1.5"
+                  >
+                    <SideAmountCell item={pair.liability?.item ?? null} />
+                  </AccountsTableCell>
+                  <AccountsTableCell className="border-r border-border/60 align-top py-1.5">
+                    {pair.asset ? (
+                      <ParticularCell
+                        item={pair.asset.item}
+                        depth={pair.asset.depth}
+                        hasChildren={pair.asset.hasChildren}
+                        expandedIds={expandedIds}
+                        onToggle={toggle}
+                        drillDownFilters={drillDownFilters}
+                      />
+                    ) : null}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money className="align-top py-1.5">
+                    <SideAmountCell item={pair.asset?.item ?? null} />
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))
+            )}
+          </AccountsTableBody>
 
-      <div className="flex-shrink-0 flex flex-col lg:flex-row border border-t-0 border-border overflow-hidden shadow-sm bg-white min-w-[720px]">
-        <div className="flex-1 min-w-0 lg:border-r border-border">
-          <table className="w-full border-collapse table-fixed">
-            <colgroup>
-              <col />
-              <col className="w-32" />
-            </colgroup>
-            <tbody>
-              <SideGrandTotalRow side={liabilities} />
-            </tbody>
-          </table>
-        </div>
-        <div className="flex-1 min-w-0 border-t lg:border-t-0 border-border">
-          <table className="w-full border-collapse table-fixed">
-            <colgroup>
-              <col />
-              <col className="w-32" />
-            </colgroup>
-            <tbody>
-              <SideGrandTotalRow side={assets} />
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <AccountsTableFoot>
+            <AccountsTableRow className="border-t-2 border-brand-600 bg-brand-50/60">
+              <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-brand-800 py-2.5">
+                {liabilities.grandTotalLabel}
+              </AccountsTableCell>
+              <AccountsTableCell
+                align="right"
+                money
+                className="border-r-2 border-border font-bold text-xs text-brand-800 py-2.5"
+              >
+                {formatBsAmount(liabilities.grandTotal)}
+              </AccountsTableCell>
+              <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-brand-800 py-2.5">
+                {assets.grandTotalLabel}
+              </AccountsTableCell>
+              <AccountsTableCell
+                align="right"
+                money
+                className="font-bold text-xs text-brand-800 py-2.5"
+              >
+                {formatBsAmount(assets.grandTotal)}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          </AccountsTableFoot>
+        </AccountsTable>
+      </AccountsTableScroll>
 
       <div
         className={cn(
-          "flex-shrink-0 mt-3 px-3 py-2 rounded-lg border text-center text-xs font-bold",
+          "flex-shrink-0 mt-3 px-3 py-2 rounded-lg border text-center text-xs",
           statement.isBalanced
             ? "bg-emerald-50 border-emerald-200 text-emerald-700"
             : "bg-red-50 border-red-200 text-red-700",
         )}
       >
-        {statement.isBalanced
-          ? `Balance Sheet is balanced — Total ₹ ${formatMoney(statement.totalAssets)} (Liabilities Cr = Assets Dr)`
-          : `Balance Sheet is not balanced — Difference ₹ ${formatMoney(Math.abs(statement.difference))}`}
+        {statement.isBalanced ? (
+          <p className="font-medium">
+            Total Liabilities ₹ {formatMoney(statement.totalLiabilities)} = Total Assets ₹{" "}
+            {formatMoney(statement.totalAssets)}
+          </p>
+        ) : (
+          <>
+            <p className="font-bold">
+              Difference : ₹ {formatMoney(Math.abs(statement.difference))}
+            </p>
+            <p className="font-bold mt-0.5">Balance Sheet does not tally.</p>
+          </>
+        )}
         {statement.unpostedVoucherCount > 0 && (
           <span className="block mt-1 text-[11px] font-medium text-amber-700">
             {statement.unpostedVoucherCount} unposted voucher
-            {statement.unpostedVoucherCount === 1 ? "" : "s"} found as on this date — balances may change after posting.
+            {statement.unpostedVoucherCount === 1 ? "" : "s"} found as on this date — balances may
+            change after posting.
           </span>
         )}
         {Math.abs(statement.netProfit) > 0 && (

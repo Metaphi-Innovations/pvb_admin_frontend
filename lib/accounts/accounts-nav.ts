@@ -313,7 +313,7 @@ export const REPORTS_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: FileSpreadsheet },
 
-  { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
+  { label: "GST Summary", href: "/accounts/reports/gst-summary", icon: Layers },
 
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
 
@@ -376,13 +376,13 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Profit & Loss", href: "/accounts/reports/pl", icon: TrendingUp },
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: FileSpreadsheet },
   { label: "Cash Flow", href: "/accounts/reports/cash-flow", icon: TrendingUp },
-  { label: "General Ledger", href: "/accounts/reports/ledger", icon: BookOpen },
+  { label: "General Ledger", href: "/accounts/reports/general-ledger", icon: BookOpen },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: BookMarked },
   { label: "Receipt Register", href: "/accounts/reports/receipt-register", icon: Receipt },
   { label: "Payment Register", href: "/accounts/reports/payment-register", icon: Receipt },
   { label: "Contra Register", href: "/accounts/reports/contra-register", icon: ArrowLeftRight },
   { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
-  { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
+  { label: "GST Summary", href: "/accounts/reports/gst-summary", icon: Layers },
   { label: "TDS Summary", href: "/accounts/reports/tds-party-wise", icon: FileText },
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
   { label: "Purchase Register", href: "/accounts/reports/purchase-register", icon: Receipt },

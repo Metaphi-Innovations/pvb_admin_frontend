@@ -31,6 +31,8 @@ export interface AccountsPageShellProps {
   className?: string;
   /** Hide description line in compact split layout */
   hideDescription?: boolean;
+  /** Optional content below title row (e.g. report view tabs) */
+  subHeader?: React.ReactNode;
 }
 
 export function AccountsPageShell({
@@ -45,6 +47,7 @@ export function AccountsPageShell({
   layout = "standard",
   className,
   hideDescription,
+  subHeader,
 }: AccountsPageShellProps) {
   const isSplit = layout === "split";
   const isForm = layout === "form";
@@ -119,6 +122,8 @@ export function AccountsPageShell({
           </div>
         )}
       </div>
+
+      {subHeader ? <div className="flex-shrink-0">{subHeader}</div> : null}
 
       {filters && <AccountsListingFilterCard>{filters}</AccountsListingFilterCard>}
 

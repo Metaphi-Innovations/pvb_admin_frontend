@@ -1359,6 +1359,64 @@ export function ReportTdsSectionMultiFilter({
   );
 }
 
+/** GST Period (month) filter for GST reports */
+export function ReportGstPeriodFilter({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[140px]">
+      <span className={filterLabelClass}>GST Period</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
+          <SelectValue placeholder="All months" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-xs">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Company GST registration (GSTIN) filter */
+export function ReportGstRegistrationFilter({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[200px]">
+      <span className={filterLabelClass}>GST Registration</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[200px]")}>
+          <SelectValue placeholder="All registrations" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-xs">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 /** @deprecated Use ReportFilterRow + individual filter components */
 export function ReportFilterBar({
   dateFrom,

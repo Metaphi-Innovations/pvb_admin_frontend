@@ -33,7 +33,7 @@ import {
   normalizeMultiFilter,
 } from "@/lib/accounts/report-multi-filter-utils";
 
-export type PandLViewType = "summary" | "detailed";
+export type PandLViewType = "normal" | "detailed";
 
 export interface PandLFilters {
   financialYearId: string;
@@ -223,7 +223,7 @@ export function computePandLNetProfit(
     ...filters,
     ledgerGroupId: "all",
     ledgerId: "all",
-    viewType: "summary",
+    viewType: "normal",
   });
   let income = 0;
   let expense = 0;

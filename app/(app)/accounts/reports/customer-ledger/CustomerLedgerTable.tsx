@@ -1,16 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
-import {
-  AccountsColumnHeader,
-  SortTh,
-  useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
+import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -33,94 +28,74 @@ export function CustomerLedgerTable({
   transactionRows: CustomerLedgerDisplayRow[];
   closingRow: CustomerLedgerDisplayRow;
 }) {
-  const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(transactionRows);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const filteredTotals = useMemo(
+  const totals = useMemo(
     () => ({
-      totalDebit: columnFilteredRows.reduce((s, r) => s + r.debit, 0),
-      totalCredit: columnFilteredRows.reduce((s, r) => s + r.credit, 0),
+      totalDebit: transactionRows.reduce((s, r) => s + r.debit, 0),
+      totalCredit: transactionRows.reduce((s, r) => s + r.credit, 0),
     }),
-    [columnFilteredRows],
+    [transactionRows],
   );
 
   const paginatedTransactions = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return columnFilteredRows.slice(start, start + pageSize);
-  }, [columnFilteredRows, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir]);
+    return transactionRows.slice(start, start + pageSize);
+  }, [transactionRows, page, pageSize]);
 
   return (
     <>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
-        <AccountsTable minWidth={1040} className="text-xs">
+        <AccountsTable minWidth={1040} className="text-xs financial-report">
           <AccountsTableHead>
             <AccountsTableHeadRow>
-              <SortTh label="Date" colKey="date" filterType="date" />
-              <SortTh label="Voucher No." colKey="voucher" />
-              <SortTh label="Voucher Type" colKey="type" />
-              <SortTh label="Particular" colKey="particular" />
-              <SortTh label="Narration" colKey="narration" />
-              <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
-              <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
-              <AccountsColumnHeader
-                label="Running Balance"
-                colKey="balance"
-                sortable={false}
-                filterable={false}
-                align="right"
-              />
+              <FinancialReportHeadCell>Date</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Voucher No.</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Voucher Type</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Particular</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Narration</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
+              <FinancialReportHeadCell align="right">Running Balance</FinancialReportHeadCell>
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
             <CustomerLedgerTableRow row={openingRow} />
-            {transactionRows.length > 0 && columnFilteredRows.length === 0 ? (
-              <AccountsTableRow>
-                <AccountsTableCell colSpan={8} className="accounts-table-empty">
-                  No records match the column filters.
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ) : (
-              paginatedTransactions.map((row, i) => (
-                <CustomerLedgerTableRow key={`${row.kind}-${row.date}-${i}`} row={row} />
-              ))
-            )}
+            {paginatedTransactions.map((row, i) => (
+              <CustomerLedgerTableRow key={`${row.kind}-${row.date}-${i}`} row={row} />
+            ))}
             <CustomerLedgerTableRow row={closingRow} />
           </AccountsTableBody>
           <AccountsTableFoot>
-            <AccountsTableRow className="bg-muted/20 font-semibold">
-              <AccountsTableCell colSpan={5} className="text-xs text-foreground py-2">
+            <AccountsTableRow className="bg-muted/20 font-semibold border-t-2 border-foreground/20">
+              <AccountsTableCell colSpan={5} className="text-xs text-foreground py-2 font-bold">
                 Total
               </AccountsTableCell>
-              <AccountsTableCell align="right" money className="py-2">
-                {formatMoney(filteredTotals.totalDebit)}
+              <AccountsTableCell align="right" money className="py-2 font-bold">
+                {formatMoney(totals.totalDebit)}
               </AccountsTableCell>
-              <AccountsTableCell align="right" money className="py-2">
-                {formatMoney(filteredTotals.totalCredit)}
+              <AccountsTableCell align="right" money className="py-2 font-bold">
+                {formatMoney(totals.totalCredit)}
               </AccountsTableCell>
               <AccountsTableCell align="right" className="tabular-nums whitespace-nowrap py-2">
                 <MoneyAmount
                   amount={closingRow.runningBalance}
                   side={closingRow.runningBalanceType}
                   sideBadge
-                  className="text-xs justify-end font-semibold"
+                  className="text-xs justify-end font-bold"
                 />
               </AccountsTableCell>
             </AccountsTableRow>
           </AccountsTableFoot>
         </AccountsTable>
       </AccountsTableScroll>
-      {columnFilteredRows.length > 0 && (
+      {transactionRows.length > 0 && (
         <div className="flex-shrink-0 border-t border-border">
           <AccountsTablePagination
             page={page}
             pageSize={pageSize}
-            totalRecords={columnFilteredRows.length}
+            totalRecords={transactionRows.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             recordLabel="transactions"
@@ -137,8 +112,8 @@ function CustomerLedgerTableRow({ row }: { row: CustomerLedgerDisplayRow }) {
   return (
     <AccountsTableRow
       className={cn(
-        isSummary && "bg-muted/20 font-medium",
-        row.kind === "closing" && "bg-brand-50/40",
+        isSummary && "bg-muted/20 font-semibold",
+        row.kind === "closing" && "border-t border-border/80",
       )}
     >
       <AccountsTableCell className="whitespace-nowrap py-2">{row.date}</AccountsTableCell>
@@ -181,7 +156,7 @@ function CustomerLedgerTableRow({ row }: { row: CustomerLedgerDisplayRow }) {
             amount={row.runningBalance}
             side={row.runningBalanceType}
             sideBadge
-            className={cn("text-xs justify-end", row.kind === "closing" && "font-semibold")}
+            className={cn("text-xs justify-end", row.kind === "closing" && "font-bold")}
           />
         )}
       </AccountsTableCell>

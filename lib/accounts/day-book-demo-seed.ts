@@ -35,6 +35,7 @@ import {
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { DAY_BOOK_DEMO_VOUCHER_PATTERN } from "@/lib/accounts/day-book-data";
+import { ACCOUNTS_VOUCHERS_UPDATED_EVENT } from "@/lib/accounts/accounts-section-seed";
 import {
   maybePostCreditNote,
   maybePostDebitNote,
@@ -705,6 +706,9 @@ export function seedDayBookDemoData(force = false): void {
   postDayBookDocuments();
 
   localStorage.setItem(VERSION_KEY, DAY_BOOK_DEMO_SEED_VERSION);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(ACCOUNTS_VOUCHERS_UPDATED_EVENT));
+  }
 }
 
 export function ensureDayBookDemoOnPageLoad(): void {

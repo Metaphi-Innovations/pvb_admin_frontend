@@ -8,7 +8,9 @@
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { loadGSTMasters } from "@/app/(app)/masters/gst/gst-data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import {
   GST_STATUTORY_LEDGER_BY_KIND,
   isRateSpecificGstLedgerName,
@@ -138,22 +140,185 @@ export function mappingKeyToGstKind(mappingKey: string): GstLedgerKind | null {
   }
 }
 
-/** Resolve flat statutory GST ledger for voucher posting (rate is on the transaction, not the ledger). */
-export function resolveGstRateLedger(
-  mappingKey: string,
-  _gstRatePct: number,
-): ChartOfAccount | null {
-  const kind = mappingKeyToGstKind(mappingKey);
-  if (!kind) return null;
+function gstComponentLabel(kind: GstLedgerKind): string {
+  if (kind.includes("cgst")) return "CGST";
+  if (kind.includes("sgst")) return "SGST";
+  return "IGST";
+}
 
-  const targetName = GST_STATUTORY_LEDGER_BY_KIND[kind];
-  const records = loadChartOfAccounts();
-  return (
-    records.find(
+/** CGST/SGST use half the line GST rate; IGST uses the full line rate. */
+export function gstComponentRate(kind: GstLedgerKind, totalGstRatePct: number): number {
+  if (kind.includes("igst")) return totalGstRatePct;
+  return Math.round((totalGstRatePct / 2) * 100) / 100;
+}
+
+/** Human-readable label for configuration errors, e.g. "Input SGST 9%". */
+export function formatGstPostingLedgerDisplayName(
+  mappingKey: string,
+  totalGstRatePct: number,
+): string {
+  const kind = mappingKeyToGstKind(mappingKey);
+  if (!kind) return mappingKey;
+  const prefix = kind.startsWith("input") ? "Input" : "Output";
+  const component = gstComponentLabel(kind);
+  const pct = gstComponentRate(kind, totalGstRatePct);
+  return `${prefix} ${component} ${formatGstPctLabel(pct)}%`;
+}
+
+function ledgerMatchesKind(ledger: ChartOfAccount, kind: GstLedgerKind): boolean {
+  const name = ledger.accountName.trim();
+  const component = gstComponentLabel(kind);
+  const prefix = kind.startsWith("input") ? "Input" : "Output";
+  if (name.toLowerCase() === GST_STATUTORY_LEDGER_BY_KIND[kind].toLowerCase()) return true;
+  return new RegExp(`^${prefix}\\s+${component}\\b`, "i").test(name);
+}
+
+function ledgerNameMatchesGstRate(
+  ledgerName: string,
+  kind: GstLedgerKind,
+  totalGstRatePct: number,
+): boolean {
+  const n = ledgerName.trim();
+  const component = gstComponentLabel(kind);
+  const prefix = kind.startsWith("input") ? "Input" : "Output";
+  const expectedComponentPct = gstComponentRate(kind, totalGstRatePct);
+
+  const bareMatch = n.match(/^(Input|Output)\s+(CGST|SGST|IGST)\s+([\d.]+)%$/i);
+  if (bareMatch) {
+    const type = bareMatch[2].toUpperCase();
+    if (type !== component) return false;
+    const pct = Number(bareMatch[3]);
+    return Math.abs(pct - expectedComponentPct) < 0.001;
+  }
+
+  const parsedTotal = parseGstRateFromLedgerName(n);
+  if (parsedTotal != null) {
+    if (!new RegExp(`^${prefix}\\s+${component}`, "i").test(n)) return false;
+    return Math.abs(parsedTotal - totalGstRatePct) < 0.001;
+  }
+
+  const bracketExpected = formatGstLedgerName(kind, totalGstRatePct);
+  if (n.toLowerCase() === bracketExpected.toLowerCase()) return true;
+
+  return false;
+}
+
+function collectDescendantLedgers(parentId: number, records: ChartOfAccount[]): ChartOfAccount[] {
+  const out: ChartOfAccount[] = [];
+  const queue = [parentId];
+  while (queue.length > 0) {
+    const pid = queue.shift()!;
+    for (const r of records) {
+      if (r.nodeLevel === "ledger" && r.parentAccountId === pid) {
+        out.push(r);
+        queue.push(r.id);
+      }
+    }
+  }
+  return out;
+}
+
+function resolveFromGstMaster(
+  kind: GstLedgerKind,
+  totalGstRatePct: number,
+  records: ChartOfAccount[],
+): ChartOfAccount | null {
+  const masters = loadGSTMasters().filter(
+    (g) => g.status === "active" && Math.abs(g.gstPercentage - totalGstRatePct) < 0.001,
+  );
+
+  for (const g of masters) {
+    let ledgerId: number | null | undefined = null;
+    switch (kind) {
+      case "input_cgst":
+        ledgerId = g.inputCgstLedgerId;
+        break;
+      case "input_sgst":
+        ledgerId = g.inputSgstLedgerId;
+        break;
+      case "input_igst":
+        ledgerId = g.inputIgstLedgerId;
+        break;
+      case "output_cgst":
+        ledgerId = g.outputCgstLedgerId;
+        break;
+      case "output_sgst":
+        ledgerId = g.outputSgstLedgerId;
+        break;
+      case "output_igst":
+        ledgerId = g.outputIgstLedgerId;
+        break;
+    }
+    if (ledgerId == null) continue;
+    const ledger = records.find((r) => r.id === ledgerId);
+    if (ledger && isPostableNode(ledger, records)) return ledger;
+  }
+
+  return null;
+}
+
+function findMatchingPostableLedger(
+  candidates: ChartOfAccount[],
+  kind: GstLedgerKind,
+  totalGstRatePct: number,
+  records: ChartOfAccount[],
+): ChartOfAccount | null {
+  const matches = candidates
+    .filter(
       (r) =>
         r.nodeLevel === "ledger" &&
         r.status === "active" &&
-        r.accountName.toLowerCase() === targetName.toLowerCase(),
-    ) ?? null
+        isPostableNode(r, records) &&
+        ledgerMatchesKind(r, kind) &&
+        ledgerNameMatchesGstRate(r.accountName, kind, totalGstRatePct),
+    )
+    .sort((a, b) => a.id - b.id);
+  return matches[0] ?? null;
+}
+
+/**
+ * Resolve an active posting leaf for a GST component and line rate.
+ * Never returns a grouping ledger that has sub-ledgers.
+ */
+export function resolveGstRateLedger(
+  mappingKey: string,
+  gstRatePct: number,
+): ChartOfAccount | null {
+  const kind = mappingKeyToGstKind(mappingKey);
+  if (!kind || gstRatePct <= 0) return null;
+
+  const records = loadChartOfAccounts();
+  const statutoryName = GST_STATUTORY_LEDGER_BY_KIND[kind];
+  const parent = records.find(
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.status === "active" &&
+      r.accountName.toLowerCase() === statutoryName.toLowerCase(),
   );
+
+  const fromMaster = resolveFromGstMaster(kind, gstRatePct, records);
+  if (fromMaster) return fromMaster;
+
+  if (parent) {
+    const descendants = collectDescendantLedgers(parent.id, records);
+    const underParent = findMatchingPostableLedger(descendants, kind, gstRatePct, records);
+    if (underParent) return underParent;
+
+    if (isPostableNode(parent, records)) {
+      return parent;
+    }
+  }
+
+  const globalCandidates = records.filter(
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.status === "active" &&
+      isPostableNode(r, records) &&
+      ledgerMatchesKind(r, kind) &&
+      isGstCoaLedger(r, records) &&
+      (isRateSpecificGstLedgerName(r.accountName) ||
+        /^(Input|Output)\s+(CGST|SGST|IGST)\s+[\d.]+%$/i.test(r.accountName.trim())),
+  );
+
+  return findMatchingPostableLedger(globalCandidates, kind, gstRatePct, records);
 }

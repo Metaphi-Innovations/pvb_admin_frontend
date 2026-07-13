@@ -1,16 +1,13 @@
-import { formatMoney, formatMoneyNumber } from "@/lib/accounts/money-format";
+import { formatMoneyNumber } from "@/lib/accounts/money-format";
 import {
-  buildBalanceMessageHtml,
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildTAccountTableHtml,
-  downloadReportExcelHtml,
-  escapeHtml,
-  indentParticular,
-  openReportPrintWindow,
+  buildHorizontalTAccountBodyHtml,
+  buildTAccountReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
+  type HorizontalTAccountRow,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
+import { buildBalanceMessageHtml } from "@/lib/accounts/report-export-presentation";
 import type {
   BalanceSheetHorizontalExportRow,
   BalanceSheetStatement,
@@ -27,40 +24,22 @@ export interface BalanceSheetExportMeta {
   viewType?: string;
 }
 
-function formatExportAmount(amount: number | null): string {
-  if (amount == null) return "";
-  if (amount < 0) return `(${formatMoney(Math.abs(amount))})`;
-  return formatMoney(amount);
-}
-
-function buildHorizontalTableRowsHtml(rows: BalanceSheetHorizontalExportRow[]): string {
-  return rows
-    .map((r) => {
-      const leftLabel = escapeHtml(indentParticular(r.liabilityParticular, r.liabilityIndent));
-      const rightLabel = escapeHtml(indentParticular(r.assetParticular, r.assetIndent));
-      const leftBold = r.liabilityBold ? " bold" : "";
-      const rightBold = r.assetBold ? " bold" : "";
-      const leftAmount = formatExportAmount(r.liabilityAmount);
-      const rightAmount = formatExportAmount(r.assetAmount);
-      const rowClass = r.rowType;
-
-      if (r.rowType === "title") {
-        return `<tr class="${rowClass}">
-        <td class="label bold" colspan="2">${leftLabel}</td>
-        <td class="divider"></td>
-        <td class="label" colspan="2"></td>
-      </tr>`;
-      }
-
-      return `<tr class="${rowClass}">
-        <td class="label${leftBold}">${leftLabel}</td>
-        <td class="num${leftBold}">${leftAmount}</td>
-        <td class="divider"></td>
-        <td class="label${rightBold}">${rightLabel}</td>
-        <td class="num${rightBold}">${rightAmount}</td>
-      </tr>`;
-    })
-    .join("");
+function toHorizontalRows(rows: BalanceSheetHorizontalExportRow[]): HorizontalTAccountRow[] {
+  return rows.map((r) => ({
+    rowType: r.rowType,
+    left: {
+      particular: r.liabilityParticular,
+      indent: r.liabilityIndent,
+      amount: r.liabilityAmount,
+      bold: r.liabilityBold,
+    },
+    right: {
+      particular: r.assetParticular,
+      indent: r.assetIndent,
+      amount: r.assetAmount,
+      bold: r.assetBold,
+    },
+  }));
 }
 
 function buildHeaderOptions(meta: BalanceSheetExportMeta): ReportHeaderOptions {
@@ -72,7 +51,6 @@ function buildHeaderOptions(meta: BalanceSheetExportMeta): ReportHeaderOptions {
       { label: "Branch", value: meta.branch ?? "All branches" },
       { label: "Warehouse", value: meta.warehouse ?? "All warehouses" },
       { label: "Party", value: meta.party ?? "All parties" },
-      { label: "View Type", value: meta.viewType ?? "Summary" },
     ],
   };
 }
@@ -82,18 +60,17 @@ function buildBalanceSheetBody(
   meta: BalanceSheetExportMeta,
   statement: BalanceSheetStatement,
 ): { bodyHtml: string; footerHtml: string } {
-  const tableRows = buildHorizontalTableRowsHtml(rows);
-  const tableHtml = buildTAccountTableHtml({
-    leftTitle: "Liabilities & Equity",
+  const tableHtml = buildTAccountReportBodyHtml({
+    leftTitle: "Liabilities",
     leftAmountHeader: "Amount (₹)",
     rightTitle: "Assets",
     rightAmountHeader: "Amount (₹)",
-    rowsHtml: tableRows,
+    rows: toHorizontalRows(rows),
   });
 
   const balanceText = statement.isBalanced
-    ? `Balance Sheet Balanced — Total ₹ ${formatMoneyNumber(statement.totalAssets)} on both sides`
-    : `Difference ₹ ${formatMoneyNumber(Math.abs(statement.difference))}`;
+    ? `Total Liabilities ₹ ${formatMoneyNumber(statement.totalLiabilities)} = Total Assets ₹ ${formatMoneyNumber(statement.totalAssets)}`
+    : `Difference : ₹ ${formatMoneyNumber(Math.abs(statement.difference))} — Balance Sheet does not tally.`;
   const unpostedNote =
     statement.unpostedVoucherCount > 0
       ? ` · ${statement.unpostedVoucherCount} unposted voucher(s) as on ${meta.asOnDate}`
@@ -117,14 +94,14 @@ export async function exportBalanceSheetToExcel(
   statement: BalanceSheetStatement,
 ): Promise<void> {
   const { bodyHtml, footerHtml } = buildBalanceSheetBody(rows, meta, statement);
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: REPORT_NAME,
+    filename: "Balance_Sheet",
     header: buildHeaderOptions(meta),
     bodyHtml,
     footerHtml,
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Balance_Sheet_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportBalanceSheetToPdf(
@@ -133,12 +110,15 @@ export function exportBalanceSheetToPdf(
   statement: BalanceSheetStatement,
 ): void {
   const { bodyHtml, footerHtml } = buildBalanceSheetBody(rows, meta, statement);
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: REPORT_NAME,
+    filename: "Balance_Sheet",
     header: buildHeaderOptions(meta),
     bodyHtml,
     footerHtml,
     landscape: true,
   });
-  openReportPrintWindow(html);
 }
+
+/** @internal Re-export for tests or custom builders */
+export { buildHorizontalTAccountBodyHtml };

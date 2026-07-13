@@ -193,6 +193,9 @@ export function resolveMappingLedger(
   if (isGstMappingKey(mappingKey)) {
     const gstLedger = resolveGstLedger(mappingKey, options?.gstRatePct);
     if (gstLedger) return gstLedger;
+    if (options?.gstRatePct != null && options.gstRatePct > 0) {
+      return null;
+    }
     const ledgerName = GST_MAPPING_LEDGER_NAMES[mappingKey];
     if (ledgerName) {
       const byName = loadChartOfAccounts().find(

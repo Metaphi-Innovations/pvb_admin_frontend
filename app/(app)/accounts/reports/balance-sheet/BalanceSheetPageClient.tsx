@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
@@ -17,11 +14,9 @@ import {
   ReportPartyMultiFilter,
   ReportLedgerGroupMultiFilter,
   ReportLedgerMultiFilter,
-  ReportViewTypeFilter,
   ReportMoreFilters,
   ReportFilterSummary,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  ReportShowZeroBalanceToggle,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
@@ -34,12 +29,9 @@ import {
 } from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { cn } from "@/lib/utils";
-import { useDebouncedValue } from "../pl/pl-hooks";
 import {
   buildBalanceSheetStatement,
   collectBalanceSheetGroupIds,
-  filterBalanceSheetStatement,
   flattenBalanceSheetHorizontalForExport,
   getBalanceSheetActivePartyOptions,
   getBalanceSheetBranchOptions,
@@ -49,12 +41,14 @@ import {
   resolveFinancialYearLabel,
   splitBalanceSheetHorizontal,
   type BalanceSheetFilters,
-  type BalanceSheetViewType,
 } from "./balance-sheet-data";
 import { exportBalanceSheetToExcel, exportBalanceSheetToPdf } from "./balance-sheet-export";
 import { BalanceSheetHorizontalView } from "./BalanceSheetHorizontalView";
+import { BalanceSheetReportSummary } from "./BalanceSheetReportSummary";
 import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import { ACCOUNTS_VOUCHERS_UPDATED_EVENT } from "@/lib/accounts/accounts-section-seed";
+import "../trial-balance/trial-balance-compact.css";
 
 const PLACEHOLDER_DATE = "2025-04-01";
 const EMPTY_MESSAGE = "No Balance Sheet data available for the selected date.";
@@ -67,6 +61,15 @@ function defaultFyAsOnDate(): { asOn: string; fyId: string } {
   if (!fy) return { asOn: today, fyId: "all" };
   const asOn = today < fy.endDate ? today : fy.endDate;
   return { asOn, fyId: String(fy.id) };
+}
+
+function resolveFyStartDate(financialYearId: string, asOnDate: string): string {
+  if (financialYearId !== "all" && financialYearId) {
+    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
+    if (fy) return fy.startDate;
+  }
+  const year = asOnDate.slice(0, 4);
+  return `${year}-04-01`;
 }
 
 function mergeLedgerOptions(
@@ -94,17 +97,31 @@ export default function BalanceSheetPageClient() {
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
   const [ledgerIds, setLedgerIds] = useState<string[]>([]);
-  const [viewType, setViewType] = useState<BalanceSheetViewType>("summary");
-  const [search, setSearch] = useState("");
+  const [showZeroBalance, setShowZeroBalance] = useState(false);
   const [exporting, setExporting] = useState(false);
-
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const [dataTick, setDataTick] = useState(0);
 
   useEffect(() => {
     const { asOn, fyId } = defaultFyAsOnDate();
     setAsOnDate(asOn);
     setFinancialYearId(fyId);
     setDatesReady(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/lib/accounts/general-ledger-demo-seed").then(
+      ({ ensureGeneralLedgerDemoOnPageLoad }) => {
+        ensureGeneralLedgerDemoOnPageLoad();
+        if (!cancelled) setDataTick((t) => t + 1);
+      },
+    );
+    const onVouchersUpdated = () => setDataTick((t) => t + 1);
+    window.addEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
+    };
   }, []);
 
   const handleFinancialYearChange = useCallback((fyId: string) => {
@@ -131,8 +148,9 @@ export default function BalanceSheetPageClient() {
     partyId: partyIds,
     ledgerGroupId: ledgerGroupIds,
     ledgerId: ledgerIds,
-    viewType,
-    search: debouncedSearch,
+    viewType: "detailed",
+    showZeroBalance,
+    search: "",
   }), [
     financialYearId,
     asOnDate,
@@ -141,29 +159,28 @@ export default function BalanceSheetPageClient() {
     partyIds,
     ledgerGroupIds,
     ledgerIds,
-    viewType,
-    debouncedSearch,
+    showZeroBalance,
   ]);
 
   const ledgerGroupOptions = useMemo(
     () => (mounted ? getBalanceSheetLedgerGroupOptions() : []),
-    [mounted, bsFilters],
+    [mounted, dataTick],
   );
   const ledgerOptions = useMemo(
     () => (mounted ? mergeLedgerOptions(getBalanceSheetLedgerOptions, ledgerGroupIds) : []),
-    [mounted, ledgerGroupIds, bsFilters],
+    [mounted, ledgerGroupIds, dataTick],
   );
   const branchOptions = useMemo(
     () => (mounted ? getBalanceSheetBranchOptions() : [...REPORT_BRANCH_OPTIONS]),
-    [mounted, bsFilters],
+    [mounted, dataTick],
   );
   const warehouseOptions = useMemo(
     () => (mounted ? getBalanceSheetWarehouseOptions() : []),
-    [mounted, bsFilters],
+    [mounted, dataTick],
   );
   const partyOptions = useMemo(
     () => (mounted ? getBalanceSheetActivePartyOptions() : []),
-    [mounted, bsFilters],
+    [mounted, dataTick],
   );
 
   const warehouseSelectOptions = useMemo(
@@ -193,28 +210,28 @@ export default function BalanceSheetPageClient() {
       };
     }
     const built = buildBalanceSheetStatement(bsFilters);
-    return filterBalanceSheetStatement(built, { search: debouncedSearch });
-  }, [mounted, datesReady, bsFilters, debouncedSearch]);
+    return built;
+  }, [mounted, datesReady, bsFilters, dataTick]);
 
   const exportExpandedIds = useMemo(() => {
-    if (viewType === "summary") return new Set<string>();
     const { liabilities, assets } = splitBalanceSheetHorizontal(sourceStatement);
     return new Set([
       ...collectBalanceSheetGroupIds(liabilities.tree),
       ...collectBalanceSheetGroupIds(assets.tree),
     ]);
-  }, [sourceStatement, viewType]);
+  }, [sourceStatement]);
 
   const defaultFy = useMemo(() => defaultFyAsOnDate(), []);
 
   const moreFiltersActiveCount = countActiveMoreFilters({
     warehouse: warehouses,
+    partyId: partyIds,
     ledgerGroupId: ledgerGroupIds,
     ledgerId: ledgerIds,
+    showZeroBalance,
   });
 
   const hasFilters =
-    Boolean(search.trim()) ||
     (datesReady &&
       (financialYearId !== defaultFy.fyId ||
         asOnDate !== defaultFy.asOn ||
@@ -223,10 +240,9 @@ export default function BalanceSheetPageClient() {
         isMultiFilterActive(partyIds) ||
         isMultiFilterActive(ledgerGroupIds) ||
         isMultiFilterActive(ledgerIds) ||
-        viewType !== "summary"));
+        showZeroBalance));
 
   const resetFilters = useCallback(() => {
-    setSearch("");
     const { asOn, fyId } = defaultFyAsOnDate();
     setAsOnDate(asOn);
     setFinancialYearId(fyId);
@@ -235,13 +251,18 @@ export default function BalanceSheetPageClient() {
     setPartyIds([]);
     setLedgerGroupIds([]);
     setLedgerIds([]);
-    setViewType("summary");
+    setShowZeroBalance(false);
   }, []);
+
+  const financialYearLabel = useMemo(
+    () => resolveFinancialYearLabel(financialYearId),
+    [financialYearId],
+  );
 
   const exportMeta = useMemo(
     () => ({
       asOnDate,
-      financialYear: resolveFinancialYearLabel(financialYearId),
+      financialYear: financialYearLabel,
       branch: branches.length === 0
         ? "All branches"
         : formatMultiSelectLabel(
@@ -262,29 +283,28 @@ export default function BalanceSheetPageClient() {
             })),
             "Party",
           ),
-      viewType: viewType === "summary" ? "Summary" : "Detailed",
     }),
     [
       asOnDate,
-      financialYearId,
+      financialYearLabel,
       branches,
       branchOptions,
       warehouses,
       warehouseSelectOptions,
       partyIds,
       partyOptions,
-      viewType,
     ],
   );
 
   const drillDownFilters = useMemo(
     () => ({
       asOnDate,
+      dateFrom: resolveFyStartDate(financialYearId, asOnDate),
       branch: branches[0],
       warehouse: warehouses[0],
       partyId: partyIds[0],
     }),
-    [asOnDate, branches, warehouses, partyIds],
+    [asOnDate, financialYearId, branches, warehouses, partyIds],
   );
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
@@ -368,13 +388,12 @@ export default function BalanceSheetPageClient() {
         onChange={setBranches}
         options={branchOptions}
       />
-      <ReportPartyMultiFilter
-        values={partyIds}
-        onChange={setPartyIds}
-        parties={partyOptions}
-      />
-      <ReportViewTypeFilter value={viewType} onChange={setViewType} />
       <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+        <ReportPartyMultiFilter
+          values={partyIds}
+          onChange={setPartyIds}
+          parties={partyOptions}
+        />
         <ReportWarehouseMultiFilter
           values={warehouses}
           onChange={setWarehouses}
@@ -390,28 +409,11 @@ export default function BalanceSheetPageClient() {
           onChange={setLedgerIds}
           ledgers={ledgerOptions}
         />
+        <ReportShowZeroBalanceToggle
+          checked={showZeroBalance}
+          onChange={setShowZeroBalance}
+        />
       </ReportMoreFilters>
-      <div className="space-y-0.5 min-w-[180px] flex-1">
-        <Label className={filterLabelClass}>Search Particular</Label>
-        <div className="relative">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name…"
-            className={cn(filterControlClass, "pr-7")}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
       {hasFilters && (
         <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
           Reset
@@ -440,6 +442,10 @@ export default function BalanceSheetPageClient() {
       filters={filterBar}
     >
       <AccountsListingTableCard className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <BalanceSheetReportSummary
+          financialYearLabel={financialYearLabel}
+          asOnDate={asOnDate}
+        />
         <ReportFilterSummary items={filterSummaryItems} />
         {!mounted || !datesReady ? (
           <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
@@ -462,7 +468,6 @@ export default function BalanceSheetPageClient() {
           <BalanceSheetHorizontalView
             statement={sourceStatement}
             drillDownFilters={drillDownFilters}
-            viewType={viewType}
           />
         )}
       </AccountsListingTableCard>

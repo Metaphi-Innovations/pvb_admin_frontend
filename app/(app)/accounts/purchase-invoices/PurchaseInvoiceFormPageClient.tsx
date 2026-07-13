@@ -13,6 +13,7 @@ import {
   Package,
   Building2,
   Calendar,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +21,11 @@ import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { cn } from "@/lib/utils";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
@@ -47,12 +48,34 @@ import {
   type TransactionProductOption,
 } from "@/lib/accounts/transaction-master-fetch";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import { ACCOUNTS_INVOICE_ADMIN } from "@/lib/accounts/config";
+import {
+  extractSupplierInvoiceFromGrn,
+  detectQuantityMismatch,
+  computeMatchStatusFromComparisons,
+} from "./purchase-invoice-quantity-match";
+import {
+  PurchaseInvoiceQtyComparisonTable,
+  PurchaseInvoiceMismatchBanner,
+  PurchaseInvoiceMatchStatusBadge,
+} from "./PurchaseInvoiceQtyComparisonTable";
+import type { PurchaseInvoiceLineQtyComparison } from "./purchase-invoices-data";
+import { PurchaseInvoiceDirectForm } from "./PurchaseInvoiceDirectForm";
+import { PurchaseInvoicePageShell } from "./PurchaseInvoicePageShell";
+import {
+  canEditPurchaseInvoice,
+  getPurchaseInvoiceById,
+  isDirectPurchaseInvoice,
+  PURCHASE_SOURCE_TYPE_LABELS,
+  type PurchaseSourceType,
+} from "./purchase-invoices-data";
 
 interface LineItem {
   id: string;
   productId: number | null;
   productName: string;
   hsnCode: string;
+  batchNumber?: string;
   qty: number;
   unit: string;
   rate: number;
@@ -61,6 +84,7 @@ interface LineItem {
   taxableAmt: number;
   gstAmt: number;
   total: number;
+  qtyComparison?: PurchaseInvoiceLineQtyComparison;
 }
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -102,31 +126,29 @@ function recalcLine(l: LineItem): LineItem {
   return { ...l, taxableAmt, gstAmt, total: taxableAmt + gstAmt };
 }
 
-function lineFromGrnItem(
-  item: GrnRecord["items"][number],
-  idx: number,
+function lineFromSupplierInvoice(
+  line: PurchaseInvoiceLine,
   vendorId?: number,
 ): LineItem {
-  const matched = findProductByName(item.productName);
-  const priced =
-    matched && vendorId
-      ? getProductsForPurchaseTransaction(vendorId).find((p) => p.id === matched.id) ?? matched
-      : matched;
-  const base = recalcLine({
-    id: `grn-line-${idx}`,
-    productId: priced?.id ?? null,
-    productName: item.productName,
-    hsnCode: priced?.hsn ?? "",
-    qty: item.receivedQty,
-    unit: item.unit ?? priced?.unit ?? "PCS",
-    rate: priced?.unitPrice ?? 0,
+  const matched = line.productId
+    ? getProductsForPurchaseTransaction(vendorId).find((p) => p.id === line.productId)
+    : findProductByName(line.productName);
+  return recalcLine({
+    id: line.id,
+    productId: line.productId,
+    productName: line.productName,
+    hsnCode: matched?.hsn ?? line.description.replace(/^HSN:\s*/, "") ?? "",
+    batchNumber: line.batchNumber,
+    qty: line.invoiceQty,
+    unit: line.unit,
+    rate: line.unitPrice,
     discountPct: 0,
-    gstPct: priced?.taxPct ?? 18,
-    taxableAmt: 0,
-    gstAmt: 0,
-    total: 0,
+    gstPct: line.taxPct,
+    taxableAmt: line.lineAmount,
+    gstAmt: line.taxAmount,
+    total: line.lineAmount + line.taxAmount,
+    qtyComparison: line.qtyComparison,
   });
-  return base;
 }
 
 function toPurchaseInvoiceLine(l: LineItem): PurchaseInvoiceLine {
@@ -135,6 +157,7 @@ function toPurchaseInvoiceLine(l: LineItem): PurchaseInvoiceLine {
     productId: l.productId,
     productName: l.productName,
     description: l.hsnCode ? `HSN: ${l.hsnCode}` : "",
+    batchNumber: l.batchNumber,
     invoiceQty: l.qty,
     unit: l.unit,
     unitPrice: l.rate,
@@ -143,6 +166,7 @@ function toPurchaseInvoiceLine(l: LineItem): PurchaseInvoiceLine {
     taxAmount: l.gstAmt,
     debitedQty: 0,
     debitedAmount: 0,
+    qtyComparison: l.qtyComparison,
   };
 }
 
@@ -237,7 +261,186 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const searchParams = useSearchParams();
   const { toast, showToast, dismissToast } = useAccountsToast();
   const isEdit = invoiceId != null;
+  const existing = useMemo(
+    () => (invoiceId ? getPurchaseInvoiceById(invoiceId) : null),
+    [invoiceId],
+  );
+  const initialMode = searchParams.get("mode");
   const preselectedGrnId = searchParams.get("grnId");
+
+  const [sourceType, setSourceType] = useState<PurchaseSourceType>(() => {
+    if (existing && isDirectPurchaseInvoice(existing)) return "direct_purchase";
+    if (initialMode === "direct") return "direct_purchase";
+    return "from_grn";
+  });
+
+  useEffect(() => {
+    if (isEdit && existing && !canEditPurchaseInvoice(existing)) {
+      router.replace(`/accounts/purchase-invoices/${invoiceId}`);
+    }
+  }, [isEdit, invoiceId, existing, router]);
+
+  if (isEdit && !existing) {
+    return (
+      <>
+        <PurchaseInvoicePageShell
+          breadcrumbs={accountsBreadcrumb("Transactions", "Not Found")}
+          title="Invoice Not Found"
+          description=""
+        >
+          <div className="flex flex-col items-center py-16">
+            <p className="text-sm font-medium text-foreground">
+              Purchase invoice #{invoiceId} could not be loaded.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Direct purchase invoices are saved independently of GRN or purchase orders.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 h-9 text-sm"
+              onClick={() => router.push("/accounts/purchase-invoices")}
+            >
+              Back to List
+            </Button>
+          </div>
+        </PurchaseInvoicePageShell>
+        <AccountsToast toast={toast} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
+  if (isEdit && existing && isDirectPurchaseInvoice(existing) && canEditPurchaseInvoice(existing)) {
+    return (
+      <>
+        <PurchaseInvoicePageShell
+          breadcrumbs={accountsBreadcrumb("Transactions", `Edit ${existing.invoiceNo}`)}
+          title={`Edit ${existing.invoiceNo}`}
+          description="Direct purchase invoice"
+        >
+          <div className="mb-2">
+            <SourceTypeSelector value={sourceType} onChange={setSourceType} disabled />
+          </div>
+          <div>
+            <PurchaseInvoiceDirectForm
+              invoiceId={invoiceId}
+              onCancel={() => router.push(`/accounts/purchase-invoices/${invoiceId}`)}
+              showToast={(msg) => showToast(msg)}
+            />
+          </div>
+        </PurchaseInvoicePageShell>
+        <AccountsToast toast={toast} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
+  if (sourceType === "direct_purchase") {
+    return (
+      <>
+        <PurchaseInvoicePageShell
+          breadcrumbs={accountsBreadcrumb("Transactions", "New Direct Purchase")}
+          title="New Direct Purchase Invoice"
+          description="Manual invoice entry for expenses, services, and fixed assets."
+        >
+          <div className="mb-2">
+            <SourceTypeSelector
+              value={sourceType}
+              onChange={(v) => {
+                setSourceType(v);
+                if (v === "from_grn") {
+                  router.replace("/accounts/purchase-invoices/new?mode=grn");
+                }
+              }}
+            />
+          </div>
+          <div>
+            <PurchaseInvoiceDirectForm
+              onCancel={() => router.push("/accounts/purchase-invoices")}
+              showToast={(msg) => showToast(msg)}
+            />
+          </div>
+        </PurchaseInvoicePageShell>
+        <AccountsToast toast={toast} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
+  return (
+    <GrnPurchaseInvoiceForm
+      invoiceId={invoiceId}
+      preselectedGrnId={preselectedGrnId}
+      sourceType={sourceType}
+      onSourceTypeChange={(v) => {
+        setSourceType(v);
+        if (v === "direct_purchase") {
+          router.replace("/accounts/purchase-invoices/new?mode=direct");
+        }
+      }}
+      toast={toast}
+      showToast={showToast}
+      dismissToast={dismissToast}
+    />
+  );
+}
+
+function SourceTypeSelector({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: PurchaseSourceType;
+  onChange: (v: PurchaseSourceType) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        Source Type
+      </span>
+      <div className="flex flex-wrap gap-1">
+        {(["from_grn", "direct_purchase"] as PurchaseSourceType[]).map((st) => (
+          <button
+            key={st}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(st)}
+            className={cn(
+              "inline-flex items-center gap-1 h-7 px-2.5 text-xs font-medium rounded-lg border transition-colors",
+              value === st
+                ? "border-brand-600 bg-brand-50 text-brand-700"
+                : "border-border text-muted-foreground hover:bg-muted/40",
+              disabled && "opacity-60 cursor-not-allowed",
+            )}
+          >
+            {st === "from_grn" ? <Truck className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+            {PURCHASE_SOURCE_TYPE_LABELS[st]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GrnPurchaseInvoiceForm({
+  invoiceId,
+  preselectedGrnId,
+  sourceType,
+  onSourceTypeChange,
+  toast,
+  showToast,
+  dismissToast,
+}: {
+  invoiceId?: number;
+  preselectedGrnId: string | null;
+  sourceType: PurchaseSourceType;
+  onSourceTypeChange: (v: PurchaseSourceType) => void;
+  toast: ReturnType<typeof useAccountsToast>["toast"];
+  showToast: (msg: string) => void;
+  dismissToast: () => void;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEdit = invoiceId != null;
 
   const [selectedGrn, setSelectedGrn] = useState<GrnRecord | null>(null);
   const [showGrnSelector, setShowGrnSelector] = useState(true);
@@ -261,8 +464,6 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
       );
     }
   }, [router, searchParams]);
-
-  // Vendor fields
   const [vendorId, setVendorId] = useState("");
   const [vendorFields, setVendorFields] = useState<VendorTransactionFields | null>(null);
   const [billToId, setBillToId] = useState("");
@@ -276,6 +477,16 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
 
   const [lines, setLines] = useState<LineItem[]>(() => [recalcLine(emptyLine())]);
+  const [ocrSourced, setOcrSourced] = useState(false);
+  const [supplierMeta, setSupplierMeta] = useState<{
+    poId: number | null;
+    poNumber: string;
+    poDate: string;
+    qcId: string | null;
+    qcNo: string;
+    supplierInvoiceId: string | null;
+    ocrPayload: import("./purchase-invoices-data").PurchaseInvoiceOcrPayload | null;
+  } | null>(null);
 
   const products = useMemo(
     () => getProductsForPurchaseTransaction(vendorId ? Number(vendorId) : undefined),
@@ -320,6 +531,34 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
       );
     }
   };
+  const qtyComparisonRows = useMemo(
+    () =>
+      lines.map((l) => ({
+        productName: l.productName,
+        batchNumber: l.batchNumber,
+        comparison:
+          l.qtyComparison ?? {
+            supplierInvoiceQty: l.qty,
+            grnReceivedQty: 0,
+            qcAcceptedQty: 0,
+            qcRejectedQty: 0,
+            shortQty: 0,
+          },
+      })),
+    [lines],
+  );
+
+  const hasQuantityMismatch = useMemo(
+    () => detectQuantityMismatch(qtyComparisonRows.map((r) => r.comparison)),
+    [qtyComparisonRows],
+  );
+
+  const previewMatchStatus = useMemo(
+    () => computeMatchStatusFromComparisons(qtyComparisonRows.map((r) => r.comparison)),
+    [qtyComparisonRows],
+  );
+
+  const canEditOcrFields = ACCOUNTS_INVOICE_ADMIN;
   const subtotal = lines.reduce((s, l) => s + l.taxableAmt, 0);
   const totalGst = lines.reduce((s, l) => s + l.gstAmt, 0);
   const grandTotal = subtotal + totalGst;
@@ -341,12 +580,24 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
     const matchedVendor = vendors.find(
       (v) => v.vendorName.toLowerCase() === grn.vendorName.toLowerCase(),
     );
+    const vid = matchedVendor?.id;
     if (matchedVendor) {
       onVendorMasterSelect(String(matchedVendor.id), vendorMasterToTransactionFields(matchedVendor));
     }
-    setInvoiceDate(new Date().toISOString().slice(0, 10));
-    const vid = matchedVendor?.id;
-    setLines(grn.items.map((item, i) => lineFromGrnItem(item, i, vid)));
+    const supplierInvoice = extractSupplierInvoiceFromGrn(grn, vid);
+    setVendorInvoiceNo(supplierInvoice.vendorInvoiceNo);
+    setInvoiceDate(supplierInvoice.invoiceDate);
+    setOcrSourced(supplierInvoice.ocrPayload.source === "ocr");
+    setSupplierMeta({
+      poId: supplierInvoice.poId,
+      poNumber: supplierInvoice.poNumber,
+      poDate: supplierInvoice.poDate,
+      qcId: supplierInvoice.qcId,
+      qcNo: supplierInvoice.qcNo,
+      supplierInvoiceId: supplierInvoice.supplierInvoiceId,
+      ocrPayload: supplierInvoice.ocrPayload,
+    });
+    setLines(supplierInvoice.lines.map((l) => lineFromSupplierInvoice(l, vid)));
     setShowGrnSelector(false);
   }
 
@@ -372,6 +623,14 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
         invoiceDate,
         remarks,
         lineItems: lines.map(toPurchaseInvoiceLine),
+        poId: supplierMeta?.poId ?? null,
+        poNumber: supplierMeta?.poNumber ?? selectedGrn.poNumber ?? "",
+        poDate: supplierMeta?.poDate ?? "",
+        qcId: supplierMeta?.qcId ?? null,
+        qcNo: supplierMeta?.qcNo ?? "",
+        supplierInvoiceId: supplierMeta?.supplierInvoiceId ?? null,
+        ocrPayload: supplierMeta?.ocrPayload ?? null,
+        hasQuantityMismatch,
       });
       dispatchAccountsDataChanged("purchase-invoices");
       showToast("Purchase invoice created successfully");
@@ -414,18 +673,33 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
   return (
     <>
-    <AccountsPageShell
+    <PurchaseInvoicePageShell
       breadcrumbs={accountsBreadcrumb("Transactions", "New Purchase Invoice")}
       title={title}
       description="Create a purchase invoice from a completed GRN."
     >
-      <div className="space-y-4 max-w-5xl pb-10">
+      <div className="space-y-4 w-full pb-10">
+        <SourceTypeSelector value={sourceType} onChange={onSourceTypeChange} />
+
         {error && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             {error}
           </div>
         )}
+
+        {selectedGrn && (
+          <div className="flex flex-wrap items-center gap-2">
+            <PurchaseInvoiceMatchStatusBadge status={previewMatchStatus} />
+            {ocrSourced && (
+              <Badge variant="outline" className="text-xs h-5 text-muted-foreground">
+                OCR Supplier Invoice
+              </Badge>
+            )}
+          </div>
+        )}
+
+        <PurchaseInvoiceMismatchBanner visible={!!selectedGrn && hasQuantityMismatch} />
 
         <Section title={selectedGrn ? "Selected GRN" : "Select GRN"}>
             {selectedGrn && !showGrnSelector ? (
@@ -451,6 +725,8 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                   onClick={() => {
                     setSelectedGrn(null);
                     setShowGrnSelector(true);
+                    setOcrSourced(false);
+                    setSupplierMeta(null);
                     setLines([recalcLine(emptyLine())]);
                   }}
                 >
@@ -508,6 +784,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 value={vendorInvoiceNo}
                 onChange={(e) => setVendorInvoiceNo(e.target.value)}
                 placeholder="e.g. INV/AC/2026/001"
+                readOnly={ocrSourced && !canEditOcrFields}
               />
             </div>
             <div>
@@ -529,7 +806,13 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               {selectedGrn.poNumber && (
                 <span>
                   <span className="font-medium text-foreground">PO: </span>
-                  <span className="font-mono">{selectedGrn.poNumber}</span>
+                  <span className="font-mono">{supplierMeta?.poNumber || selectedGrn.poNumber}</span>
+                </span>
+              )}
+              {supplierMeta?.qcNo && (
+                <span>
+                  <span className="font-medium text-foreground">QC: </span>
+                  <span className="font-mono">{supplierMeta.qcNo}</span>
                 </span>
               )}
               <span>
@@ -553,15 +836,19 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
         {/* Line Items */}
         <Section title="Item Details">
           <p className="text-xs text-muted-foreground mb-2">
-            Products from Product Master — HSN and GST auto-fill; edit qty, rate, and discount only.
+            {ocrSourced
+              ? "Supplier invoice lines from OCR — quantities and rates reflect the uploaded invoice."
+              : "Products from Product Master — HSN and GST auto-fill."}
+            {ocrSourced && !canEditOcrFields && " Invoice fields are read-only."}
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[800px]">
+            <table className="w-full text-xs min-w-[900px]">
               <thead>
                 <tr className="border-b border-border/60">
-                  <Th w="w-48">Item / Product</Th>
-                  <Th w="w-20">HSN</Th>
-                  <Th w="w-16 text-right">Qty</Th>
+                  <Th w="w-44">Item / Product</Th>
+                  <Th w="w-20">Batch</Th>
+                  <Th w="w-16">HSN</Th>
+                  <Th w="w-16 text-right">Invoice Qty</Th>
                   <Th w="w-16">Unit</Th>
                   <Th w="w-24 text-right">Rate (₹)</Th>
                   <Th w="w-16 text-right">Disc %</Th>
@@ -592,6 +879,14 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                       <Input
                         className="h-9 text-sm font-medium font-mono bg-muted/25"
                         readOnly
+                        value={line.batchNumber ?? ""}
+                        placeholder="—"
+                      />
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      <Input
+                        className="h-9 text-sm font-medium font-mono bg-muted/25"
+                        readOnly
                         value={line.hsnCode}
                         placeholder="HSN"
                       />
@@ -599,8 +894,12 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-9 text-sm font-medium text-right"
+                        className={cn(
+                          "h-9 text-sm font-medium text-right",
+                          ocrSourced && !canEditOcrFields && "bg-muted/25",
+                        )}
                         value={line.qty}
+                        readOnly={ocrSourced && !canEditOcrFields}
                         onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })}
                       />
                     </td>
@@ -613,8 +912,12 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     </td>
                     <td className="py-1.5 pr-2">
                       <AccountsMoneyInput
-                        className="h-9 text-sm font-medium text-right"
+                        className={cn(
+                          "h-9 text-sm font-medium text-right",
+                          ocrSourced && !canEditOcrFields && "bg-muted/25",
+                        )}
                         value={line.rate}
+                        disabled={ocrSourced && !canEditOcrFields}
                         onChange={(v) => updateLine(idx, { rate: v })}
                       />
                     </td>
@@ -663,6 +966,15 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
             <Plus className="w-4 h-4" /> Add Line
           </Button>
         </Section>
+
+        {selectedGrn && qtyComparisonRows.length > 0 && (
+          <Section title="Quantity Comparison">
+            <p className="text-xs text-muted-foreground mb-2">
+              Comparison only — supplier invoice quantities are not adjusted.
+            </p>
+            <PurchaseInvoiceQtyComparisonTable rows={qtyComparisonRows} />
+          </Section>
+        )}
 
         {/* Totals */}
         <Section title="Invoice Summary">
@@ -732,14 +1044,14 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           </Button>
         </div>
       </div>
-    </AccountsPageShell>
+    </PurchaseInvoicePageShell>
     <AccountsToast toast={toast} onDismiss={dismissToast} />
     {discardDialog}
     </>
   );
 }
 
-// ── Tiny helpers ─────────────────────────────────────────────────────────────
+// ── Tiny helpers (GRN form) ─────────────────────────────────────────────────
 
 function Th({ children, w = "" }: { children?: React.ReactNode; w?: string }) {
   return (
