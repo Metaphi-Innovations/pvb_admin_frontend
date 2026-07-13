@@ -29,7 +29,7 @@ function getLineKey(p: SalesOrderProduct): string {
 
 function buildInitialSelection(products: SalesOrderRecord["products"]): Record<string, boolean> {
   return products.reduce<Record<string, boolean>>((acc, p) => {
-    acc[getLineKey(p)] = p.pending_cases > 0;
+    acc[getLineKey(p)] = p.pendingBaseQty > 0;
     return acc;
   }, {});
 }
@@ -82,7 +82,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
         const initialQty: Record<string, number> = {};
         record.products.forEach((p) => {
-          initialQty[getLineKey(p)] = p.pending_cases;
+          initialQty[getLineKey(p)] = p.pendingBaseQty;
         });
 
         setPackingQty(initialQty);
@@ -114,7 +114,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       .filter((p) => selectedLines[getLineKey(p)] && (packingQty[getLineKey(p)] ?? 0) > 0)
       .map((p) => ({
         packing_list_product_id: p.lineId || "",
-        packed_cases: packingQty[getLineKey(p)] ?? 0,
+        base_qty: packingQty[getLineKey(p)] ?? 0,
       }));
 
     if (productsPayload.length === 0) {
@@ -153,8 +153,8 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         if (qty <= 0) {
           newErrors[key] = "Quantity must be greater than zero";
           hasErrors = true;
-        } else if (qty > p.pending_cases) {
-          newErrors[key] = `Cannot exceed pending quantity of ${p.pending_cases}`;
+        } else if (qty > p.pendingBaseQty) {
+          newErrors[key] = `Cannot exceed pending base quantity of ${p.pendingBaseQty}`;
           hasErrors = true;
         }
       }
@@ -182,7 +182,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     } else {
       const product = order?.products.find((p) => getLineKey(p) === key);
       if (product) {
-        setPackingQty((prev) => ({ ...prev, [key]: product.pending_cases }));
+        setPackingQty((prev) => ({ ...prev, [key]: product.pendingBaseQty }));
       }
     }
   };
@@ -195,7 +195,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     order.products.forEach((p) => {
       const key = getLineKey(p);
       next[key] = checked;
-      nextQty[key] = checked ? p.pending_cases : 0;
+      nextQty[key] = checked ? p.pendingBaseQty : 0;
     });
 
     setSelectedLines(next);
@@ -205,16 +205,15 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     }
   };
 
-  const handleQtyChange = (key: string, value: string, pending_cases: number) => {
-    const val = parseInt(value, 10);
-    const num = Number.isNaN(val) ? 0 : val;
+  const handleQtyChange = (key: string, value: number, maxBaseQty: number) => {
+    const num = Number.isNaN(value) ? 0 : value;
 
     setPackingQty((prev) => ({ ...prev, [key]: num }));
 
     let err = "";
     if (!selectedLines[key]) err = "";
     else if (num < 0) err = "Quantity cannot be negative";
-    else if (num > pending_cases) err = `Cannot exceed pending quantity of ${pending_cases}`;
+    else if (num > maxBaseQty) err = `Cannot exceed pending quantity`;
 
     setValidationErrors((prev) => ({ ...prev, [key]: err }));
   };

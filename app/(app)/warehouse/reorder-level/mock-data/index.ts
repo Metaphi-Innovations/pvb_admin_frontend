@@ -1,4 +1,4 @@
-import { ReorderLevel } from "../types";
+type ReorderLevel = Record<string, unknown>;
 import { computeStatus } from "../constants";
 
 function make(

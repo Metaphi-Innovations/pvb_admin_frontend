@@ -176,6 +176,7 @@ export const masterKeys = {
     filterDropdowns: () => [...masterKeys.formulations.all(), "filter-dropdown"] as const,
     filterDropdown: (fieldName: string) =>
       [...masterKeys.formulations.filterDropdowns(), fieldName] as const,
+    dropdown: () => [...masterKeys.formulations.all(), "dropdown"] as const,
   },
 
   products: {
@@ -194,7 +195,7 @@ export const masterKeys = {
     details: () => [...masterKeys.suppliers.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.suppliers.details(), id] as const,
     dropdown: () => [...masterKeys.suppliers.all(), "dropdown"] as const,
-    previewNumber: () => [...masterKeys.suppliers.all(), "preview-number"] as const,
+    previewNumber: (supplierTypeId?: string) => [...masterKeys.suppliers.all(), "preview-number", supplierTypeId] as const,
     export: () => [...masterKeys.suppliers.all(), "export"] as const,
   },
 
@@ -208,6 +209,7 @@ export const masterKeys = {
     dropdown: () => [...masterKeys.customers.all(), "dropdown"] as const,
     previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
     export: () => [...masterKeys.customers.all(), "export"] as const,
+    cfDropdown: () => [...masterKeys.customers.all(), "cf-dropdown"] as const,
   },
 
   warehouses: {

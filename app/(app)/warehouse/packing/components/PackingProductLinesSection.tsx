@@ -15,7 +15,7 @@ interface PackingProductLinesSectionProps {
   validationErrors: Record<string, string>;
   onToggleProduct: (key: string, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
-  onQtyChange: (key: string, value: string, pending_cases: number) => void;
+  onQtyChange: (key: string, value: number, maxBaseQty: number) => void;
 }
 
 function getLineKey(p: SalesOrderProduct): string {
@@ -94,7 +94,7 @@ interface PackingProductGroupProps {
   packingQty: Record<string, number>;
   validationErrors: Record<string, string>;
   onToggleProduct: (key: string, checked: boolean) => void;
-  onQtyChange: (key: string, value: string, pending_cases: number) => void;
+  onQtyChange: (key: string, value: number, maxBaseQty: number) => void;
 }
 
 function PackingProductGroup({
@@ -110,11 +110,11 @@ function PackingProductGroup({
 
   const product = products[0];
   const config = product.productId ? getProductPackingConfig(Number(product.productId)) : undefined;
-  const unitsPerCase = config?.unitsPerPackingUnit || 1;
+  const unitsPerCase = product.packSize || 1;
   const baseUnit = config?.baseUnit || "Units";
 
-  const totalOrderedQty = products.reduce((sum, p) => sum + (p.ordered_cases || 0), 0);
-  const totalPendingQty = products.reduce((sum, p) => sum + (p.pending_cases || 0), 0);
+  const totalOrderedQty = products.reduce((sum, p) => sum + (p.orderBaseQty || 0), 0);
+  const totalPendingQty = products.reduce((sum, p) => sum + (p.pendingBaseQty || 0), 0);
 
   const allGroupSelected = products.every((p) => selectedLines[getLineKey(p)]);
   const someGroupSelected = products.some((p) => selectedLines[getLineKey(p)]);
@@ -156,18 +156,18 @@ function PackingProductGroup({
         <div className="flex flex-col gap-1 min-w-[120px]">
           <span className="text-xs">
             <span className="text-muted-foreground">Total {orderedQtyLabel} (Cases): </span>
-            <span className="font-semibold text-foreground">{totalOrderedQty}</span>
-            {unitsPerCase > 1 && (
-              <span className="text-muted-foreground ml-1 text-[10px]">({totalOrderedQty * unitsPerCase} {baseUnit})</span>
+              <span className="font-bold text-emerald-600">{Math.floor(totalOrderedQty / unitsPerCase)}</span>
+              {unitsPerCase > 1 && (
+                <span className="text-muted-foreground ml-1 text-[10px]">({totalOrderedQty} {baseUnit})</span>
+              )}
+            </span>
+            <div>
+              <span className="text-muted-foreground mr-1 text-xs">Pending:</span>
+              <span className="font-bold text-amber-600 text-xs">{Math.floor(totalPendingQty / unitsPerCase)}</span>
+              {unitsPerCase > 1 && (
+                <span className="text-muted-foreground ml-1 text-[10px]">({totalPendingQty} {baseUnit})</span>
             )}
-          </span>
-          <span className="text-xs">
-            <span className="text-muted-foreground">Total Pending (Cases): </span>
-            <span className="font-bold text-amber-600">{totalPendingQty}</span>
-            {unitsPerCase > 1 && (
-              <span className="text-muted-foreground ml-1 text-[10px]">({totalPendingQty * unitsPerCase} {baseUnit})</span>
-            )}
-          </span>
+          </div>
         </div>
       </div>
 
@@ -218,34 +218,59 @@ function PackingProductGroup({
                 <div className="flex flex-col gap-0.5 min-w-[120px]">
                   <span className="text-xs">
                     <span className="text-muted-foreground">Pending (Cases): </span>
-                    <span className="font-bold text-amber-600">{p.pending_cases}</span>
+                    <span className="font-bold text-amber-600">{Math.floor(p.pendingBaseQty / unitsPerCase)}</span>
                   </span>
                   {unitsPerCase > 1 && (
                     <span className="text-[10px] text-muted-foreground">
-                      ({p.pending_cases * unitsPerCase} {baseUnit})
+                      ({p.pendingBaseQty} {baseUnit})
                     </span>
                   )}
                 </div>
 
-                <div className="w-[140px] flex-shrink-0 text-right pr-2">
+                <div className="flex-shrink-0 pr-2">
                   {isSelected ? (
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col gap-1 items-end">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-muted-foreground">Pack (Cases):</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={qtyValue || ""}
-                          onChange={(e) => onQtyChange(lineKey, e.target.value, p.pending_cases)}
-                          className={cn(
-                            "w-20 h-8 text-right font-bold text-sm",
-                            error ? "border-red-500 focus-visible:ring-red-500" : ""
+                        <span className="text-xs font-semibold text-muted-foreground">Pack:</span>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={Math.floor(qtyValue / unitsPerCase) || ""}
+                            onChange={(e) => {
+                              const newCases = e.target.value === "" ? 0 : Number(e.target.value);
+                              const currentLoose = qtyValue % unitsPerCase;
+                              onQtyChange(lineKey, newCases * unitsPerCase + currentLoose, p.pendingBaseQty);
+                            }}
+                            className={cn(
+                              "w-16 h-8 text-right font-bold text-sm",
+                              error ? "border-red-500 focus-visible:ring-red-500" : ""
+                            )}
+                            placeholder="C"
+                          />
+                          {unitsPerCase > 1 && (
+                            <Input
+                              type="number"
+                              min={0}
+                              max={unitsPerCase - 1}
+                              value={qtyValue % unitsPerCase || ""}
+                              onChange={(e) => {
+                                const newLoose = e.target.value === "" ? 0 : Number(e.target.value);
+                                const currentCases = Math.floor(qtyValue / unitsPerCase);
+                                onQtyChange(lineKey, currentCases * unitsPerCase + newLoose, p.pendingBaseQty);
+                              }}
+                              className={cn(
+                                "w-16 h-8 text-right font-bold text-sm",
+                                error ? "border-red-500 focus-visible:ring-red-500" : ""
+                              )}
+                              placeholder="L"
+                            />
                           )}
-                        />
+                        </div>
                       </div>
                       {qtyValue > 0 && unitsPerCase > 1 && !error && (
                         <span className="text-[10px] text-muted-foreground text-right w-full">
-                          = {qtyValue * unitsPerCase} {baseUnit}
+                          = {qtyValue} {baseUnit}
                         </span>
                       )}
                       {error && (

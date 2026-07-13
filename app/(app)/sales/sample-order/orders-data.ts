@@ -164,6 +164,7 @@ export interface SalesOrder {
   packingStatus?: PackingStatus;
   warehouseId?: string | number;
   warehouseName?: string;
+  warehouseCode?: string;
   issuedToEmployeeId?: string | number;
   issuedToEmployeeName?: string;
   issuedToEmployeeRole?: FieldUserRole | string;
@@ -408,7 +409,7 @@ export function canGeneratePackingList(order: SalesOrder): boolean {
 }
 
 export function canDownloadPI(order: SalesOrder): boolean {
-  return true;
+  return order.status !== "cancelled";
 }
 
 export function loadOrders(): SalesOrder[] {

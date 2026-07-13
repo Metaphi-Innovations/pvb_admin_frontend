@@ -21,21 +21,21 @@ import {
 	emptyContact,
 	todayStr,
 } from "../vendor-data";
-import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
-import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
-import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
+// import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
+// import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
+// import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
 import { SearchableSelect } from "../../customers/components/SearchableSelect";
 import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
-import { PhoneInput } from "@/components/ui/PhoneInput";
+// import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+// import {
+// 	Select,
+// 	SelectContent,
+// 	SelectItem,
+// 	SelectTrigger,
+// 	SelectValue,
+// } from "@/components/ui/select";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
@@ -61,6 +61,8 @@ import {
 	VendorTabBar,
 	fieldClass,
 } from "./VendorFormLayout";
+import { useDropdownSupplierTypes, useTdsDropdown, usePincode, useSupplierPreviewNumber } from "@/hooks/masters";
+import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
 
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
@@ -176,9 +178,8 @@ function Toast({
 }) {
 	return (
 		<div
-			className={`fixed top-5 right-5 z-[100] px-4 py-2.5 rounded-lg shadow-lg text-sm text-white ${
-				type === "success" ? "bg-emerald-600" : "bg-red-600"
-			}`}
+			className={`fixed top-5 right-5 z-[100] px-4 py-2.5 rounded-lg shadow-lg text-sm text-white ${type === "success" ? "bg-emerald-600" : "bg-red-600"
+				}`}
 		>
 			{msg}
 			<button type='button' className='ml-3 opacity-80' onClick={onDismiss}>
@@ -187,7 +188,6 @@ function Toast({
 		</div>
 	);
 }
-
 export function VendorForm({
 	form,
 	onChange,
@@ -219,8 +219,47 @@ export function VendorForm({
 
 	const gstRegistered = form.gstRegistered;
 
-	const vendorTypeOptions = useMemo(() => loadActiveVendorTypeOptions(), []);
-	const tdsMasters = useMemo(() => getActiveTDSMasters(), []);
+	const { data: supplierTypeData = [], isLoading: loadingSupplierTypes } =
+		useDropdownSupplierTypes();
+	const supplierTypeOptions = useMemo(
+		() =>
+			(supplierTypeData ?? []).map((item) => ({
+				value: item.supplier_type_id,
+				label: item.supplierTypeName,
+			})),
+		[supplierTypeData],
+	);
+	const { data: tdsData, isLoading: loadingTds } = useTdsDropdown();
+	const tdsOptions = useMemo(
+		() =>
+			(tdsData ?? []).map((item) => ({
+				value: item.tdsUuid,
+				label: item.sectionCode,
+			})),
+		[tdsData],
+	);
+
+	const pincodeValue = form.billingAddress.pincode?.trim();
+	const isCompletePincode = !!pincodeValue && pincodeValue.length === 6;
+	const {
+		data: pincodeResult,
+		isFetching: fetchingPincode,
+		isError: pincodeError,
+	} = usePincode(isCompletePincode ? pincodeValue : null);
+
+	useEffect(() => {
+		if (!pincodeResult || pincodeResult.length === 0) return;
+		const match = pincodeResult[0];
+		set("billingAddress", {
+			...form.billingAddress,
+			pincodeId: match.id,
+			// city: match.officename || form.billingAddress.city,
+			state: match.statename || form.billingAddress.state,
+			district: match.district || form.billingAddress.district,
+		} as typeof form.billingAddress);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeResult]);
+
 	const stateOptions = useMemo(
 		() => getStateSelectOptions(geoNodes),
 		[geoNodes],
@@ -453,11 +492,13 @@ export function VendorForm({
 											Supplier Type <span className='text-red-500'>*</span>
 										</Label>
 										<AutocompleteSelect
-											disabled={readOnly}
+											disabled={readOnly || loadingSupplierTypes}
 											value={form.vendorType}
 											onChange={(value) => set("vendorType", String(value))}
-											options={vendorTypeOptions}
-											placeholder='Select supplier type...'
+											options={supplierTypeOptions}
+											placeholder={
+												loadingSupplierTypes ? "Loading supplier types…" : "Select supplier type..."
+											}
 											className={inputCls}
 										/>
 									</div>
@@ -635,9 +676,9 @@ export function VendorForm({
 													<SearchableSelect
 														value={form.tdsMasterId}
 														onChange={(value) => set("tdsMasterId", value)}
-														options={toTdsSelectOptions(tdsMasters)}
-														placeholder='Select TDS...'
-														disabled={readOnly}
+														options={tdsOptions}
+														placeholder={loadingTds ? "Loading TDS sections…" : "Select TDS..."}
+														disabled={readOnly || loadingTds}
 													/>
 												</div>
 											) : null}
@@ -671,7 +712,32 @@ export function VendorForm({
 							/>
 						</ErpFormSection>
 
-						<ErpFormSection title='Registered Address'>
+						{/* <ErpFormSection title='Registered Address'>
+							<BranchAddressFields
+								address={billingAsBranch}
+								onChange={setBillingFromBranch}
+								readOnly={readOnly}
+								stateOptions={stateOptions}
+							/>
+						</ErpFormSection> */}
+						<ErpFormSection
+							title='Registered Address'
+							headerRight={
+								isCompletePincode ? (
+									fetchingPincode ? (
+										<span className='flex items-center gap-1 text-[11px] text-muted-foreground'>
+											<Loader2 className='w-3 h-3 animate-spin' /> Looking up pincode…
+										</span>
+									) : pincodeError || (pincodeResult && pincodeResult.length === 0) ? (
+										<span className='text-[11px] text-red-600'>Pincode not found</span>
+									) : pincodeResult && pincodeResult.length > 0 ? (
+										<span className='flex items-center gap-1 text-[11px] text-emerald-600'>
+											<Check className='w-3 h-3' /> Pincode matched
+										</span>
+									) : null
+								) : null
+							}
+						>
 							<BranchAddressFields
 								address={billingAsBranch}
 								onChange={setBillingFromBranch}

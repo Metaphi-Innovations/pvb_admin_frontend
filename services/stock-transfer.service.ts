@@ -61,7 +61,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const prod = raw.product_snapshot || {};
   const batch = raw.batch_snapshot || {};
   const unitsPerPacking = asNumber(prod.conversion_qty || 1);
-  const totalQty = asNumber(raw.transfer_qty);
+  const totalQty = asNumber(raw.transfer_base_qty);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
 
@@ -70,7 +70,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     productId: raw.product_id,
     productCode: asString(prod.product_code || raw.product_code),
     productName: asString(prod.product_name || raw.product_name),
-    availableStock: asNumber(raw.available_qty),
+    availableStock: asNumber(raw.available_base_qty),
     quantity: totalQty,
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
@@ -158,8 +158,8 @@ function buildBackendWriteBody(
     return {
       product_id: line.productId,
       inventory_batch_id: line.batchInventoryId || (line.id && line.id.toString().includes("-") && !line.id.toString().startsWith("line-") ? line.id : undefined),
-      available_qty: line.availableStock,
-      transfer_qty: line.quantity,
+      available_base_qty: line.availableStock,
+      transfer_base_qty: line.quantity,
       cp_price: line.unitPrice,
       cgst_percent: 9,
       cgst_amount: cgstAmount,
@@ -173,25 +173,27 @@ function buildBackendWriteBody(
 
   const expenses = (form.additionalExpenses || []).map((exp) => {
     const gstVal = asNumber(exp.gstRate);
+    const isInter = (exp.igstAmount || 0) > 0;
     return {
       charge_name: exp.expenseName,
       amount: exp.amount,
       gst_percent: gstVal,
-      cgst_percentage: gstVal / 2,
-      cgst_amount: exp.cgstAmount,
-      sgst_percentage: gstVal / 2,
-      sgst_amount: exp.sgstAmount,
-      igst_percentage: 0,
-      igst_amount: 0,
+      cgst_percentage: isInter ? 0 : gstVal / 2,
+      cgst_amount: isInter ? 0 : exp.cgstAmount,
+      sgst_percentage: isInter ? 0 : gstVal / 2,
+      sgst_amount: isInter ? 0 : exp.sgstAmount,
+      igst_percentage: isInter ? gstVal : 0,
+      igst_amount: isInter ? exp.igstAmount : 0,
       total_amount: exp.totalAmount,
       remarks: exp.remarks || "",
     };
   });
 
-  const totalQty = items.reduce((acc, curr) => acc + curr.transfer_qty, 0);
+  const totalQty = items.reduce((acc, curr) => acc + curr.transfer_base_qty, 0);
   const subtotal = items.reduce((acc, curr) => acc + curr.taxable_amount, 0);
   const additionalExp = expenses.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalGst = items.reduce((acc, curr) => acc + curr.cgst_amount + curr.sgst_amount, 0);
+  const totalGst = items.reduce((acc, curr) => acc + (curr.cgst_amount || 0) + (curr.sgst_amount || 0), 0) +
+                   expenses.reduce((acc, curr) => acc + (curr.cgst_amount || 0) + (curr.sgst_amount || 0) + (curr.igst_amount || 0), 0);
 
   return {
     transfer_no: options.transferNo,

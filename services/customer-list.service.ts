@@ -130,6 +130,7 @@ export interface CustomerListRecord {
     gstinNo?: string;
     registeredLegalName?: string;
     registeredGstAddress?: string;
+    address?: string;
     stateName?: string;
     districtName?: string;
     territoryName?: string;
@@ -207,6 +208,16 @@ export interface CustomerDropdownItem {
     credit_limit?: number | null;
 }
 
+export interface CfCustomerDropdownItem {
+    customer_code: string;
+    customer_name: string;
+    mobile_no: string;
+    customer_id: string;
+    customer_type: {
+        customer_type_name: string;
+    };
+}
+
 export function sortStateToOrdering(
     key: string,
     direction: "asc" | "desc" | "none",
@@ -230,6 +241,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
     creditLimit: "credit_limit",
     creditDays: "credit_days",
     status: "status",
+    address: "address",
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {
@@ -249,6 +261,8 @@ const FILTER_FIELD_MAP: Record<string, string> = {
 
     paymentType: "payment_type",
     creditLimit: "credit_limit",
+
+    address: "address",
 
     status: "status",
 };
@@ -390,7 +404,7 @@ function mapItem(
 
         msmeApplicable: Boolean(raw.msme_applicable),
         msmeRegNo: asString(raw.msme_reg_no),
-
+        address: asString(raw.address),
         gstApplicable: Boolean(raw.gst_applicable),
         registrationType: asString(raw.registration_type),
         gstinNo: asString(raw.gstin_no),
@@ -623,6 +637,22 @@ export const CustomerListService = {
         }
 
         return data as CustomerDropdownItem[];
+    },
+
+    async getCfCustomerDropdown() {
+        const response = await axiosInstance.get(
+            `${API_ENDPOINTS.MASTER.CUSTOMER.CFDROPDOWN}`,
+        );
+
+        const payload = response.data as Record<string, unknown>;
+        const inner = payload.data as Record<string, unknown> | undefined;
+        const data = inner?.data;
+
+        if (!Array.isArray(data)) {
+            throw new Error("Unexpected response shape: 'data' must be an array.");
+        }
+
+        return data as CfCustomerDropdownItem[];
     },
 
     extractErrorMessage,

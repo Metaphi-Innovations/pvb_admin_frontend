@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "@/api/endpoints";
 import { calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrder, SalesOrderLineItem, SalesOrderAdditionalExpense } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrderFormValues } from "@/app/(app)/sales/orders/components/SalesOrderForm";
+import { getCustomerAddressesForSalesOrder } from "@/app/(app)/sales/orders/sales-order-address-utils";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -171,11 +172,83 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
   };
 }
 
+function resolveBillShipObjects(form: SalesOrderFormValues, customerDetails?: any) {
+  let billToObj: any = null;
+  let shipToObj: any = null;
+
+  if (customerDetails) {
+    const base = {
+      id: customerDetails.customer_id,
+      customerCode: customerDetails.customer_code,
+      customerName: customerDetails.customer_name,
+      customerType: customerDetails.customer_type?.customer_type_name || "",
+      status: customerDetails.is_active ? "active" : "inactive",
+      mobile: customerDetails.mobile_no || "",
+      email: customerDetails.email || "",
+      gstApplicable: customerDetails.gst_applicable,
+      gstin: customerDetails.gstin_no || "",
+      registeredLegalName: customerDetails.registered_legal_name || "",
+      registeredAddress: customerDetails.registered_gst_address || "",
+      pan: customerDetails.pan_no || "",
+      branches: (customerDetails.branches || []).map((b: any) => ({
+        branchName: b.branch_name,
+        isMain: b.is_main_branch,
+        billingAddress: {
+          address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
+          city: b.billing_city || "",
+          state: b.billing_state || "",
+          pincode: b.billing_pincode || "",
+          gstin: customerDetails.gstin_no || "",
+        },
+        shippingAddress: {
+          address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
+          city: b.shipping_city || "",
+          state: b.shipping_state || "",
+          pincode: b.shipping_pincode || "",
+          gstin: customerDetails.gstin_no || "",
+        },
+      })),
+    };
+
+    const customerAddresses = getCustomerAddressesForSalesOrder(base as any);
+    const billToAddr = customerAddresses.find((a) => a.id === form.billToAddressId);
+    const shipToAddr = customerAddresses.find((a) => a.id === form.shipToAddressId);
+
+    if (billToAddr) {
+      billToObj = {
+        address: billToAddr.addressLine1,
+        city: billToAddr.city,
+        state: billToAddr.state,
+        pincode: billToAddr.pincode,
+      };
+    }
+    if (shipToAddr) {
+      shipToObj = {
+        address: shipToAddr.addressLine1,
+        city: shipToAddr.city,
+        state: shipToAddr.state,
+        pincode: shipToAddr.pincode,
+      };
+    }
+  }
+
+  if (!billToObj && form.billToAddressId) {
+    billToObj = { address: form.billToAddressId, city: "Mumbai", state: "Maharashtra", pincode: "400001" };
+  }
+  if (!shipToObj && form.shipToAddressId) {
+    shipToObj = { address: form.shipToAddressId, city: "Pune", state: "Maharashtra", pincode: "411001" };
+  }
+
+  return { billToObj, shipToObj };
+}
+
 function buildBackendWriteBody(
   form: SalesOrderFormValues,
-  options: { soNumber: string; status: string }
+  options: { soNumber: string; status: string },
+  customerDetails?: any
 ): Record<string, unknown> {
   const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses);
+  const { billToObj, shipToObj } = resolveBillShipObjects(form, customerDetails);
 
   return {
     so_number: options.soNumber,
@@ -190,8 +263,8 @@ function buildBackendWriteBody(
     tax_amount: totals.totalGst,
     grand_total: totals.grandTotal,
     source_warehouse_id: toUuidOrNull(form.warehouseId),
-    bill_to: form.billToAddressId ? { address: form.billToAddressId, city: "Mumbai", state: "Maharashtra", pincode: "400001" } : null,
-    ship_to: form.shipToAddressId ? { address: form.shipToAddressId, city: "Pune", state: "Maharashtra", pincode: "411001" } : null,
+    bill_to: billToObj,
+    ship_to: shipToObj,
     expenses: (form.additionalExpenses ?? []).map((exp) => {
       const isInter = (exp.igstAmount || 0) > 0;
       const gstPct = asNumber(exp.gstRate);
@@ -211,7 +284,6 @@ function buildBackendWriteBody(
     }),
     items: form.lineItems.map((line) => ({
       product_id: line.productId,
-      per_case_qty: line.caseQuantity || 0,
       base_qty: line.quantity,
       unit_price: line.unitPrice,
       discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
@@ -273,13 +345,15 @@ export const SalesOrderService = {
   },
 
   async create(form: SalesOrderFormValues, options: { soNumber: string; status: string }): Promise<SalesOrder> {
-    const body = buildBackendWriteBody(form, options);
+    const customerDetails = form.customerId ? await this.getCustomerDetails(String(form.customerId)) : null;
+    const body = buildBackendWriteBody(form, options, customerDetails);
     const response = await axiosInstance.post(API_ENDPOINTS.SALES.SALES_ORDER.CREATE, body);
     return mapBackendSalesOrder(response.data?.data || {});
   },
 
   async update(id: string | number, form: SalesOrderFormValues, options: { soNumber: string; status: string }): Promise<SalesOrder> {
-    const body = buildBackendWriteBody(form, options);
+    const customerDetails = form.customerId ? await this.getCustomerDetails(String(form.customerId)) : null;
+    const body = buildBackendWriteBody(form, options, customerDetails);
     const response = await axiosInstance.put(API_ENDPOINTS.SALES.SALES_ORDER.UPDATE(String(id)), body);
     return mapBackendSalesOrder(response.data?.data || {});
   },
@@ -323,7 +397,7 @@ export const SalesOrderService = {
   },
 
   async getWarehousesDropdown(): Promise<any[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.WAREHOUSE.DROPDOWN);
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER_DROPDOWNS.WAREHOUSE);
     return response.data?.data || [];
   },
 
@@ -375,6 +449,8 @@ export const SalesOrderService = {
     form: SalesOrderFormValues,
     options: { status: string; reason?: string }
   ): Promise<any> {
+    const customerDetails = form.customerId ? await this.getCustomerDetails(String(form.customerId)) : null;
+    const { billToObj, shipToObj } = resolveBillShipObjects(form, customerDetails);
     const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses);
     const body = {
       reason: options.reason || "Quantity not available",
@@ -385,15 +461,14 @@ export const SalesOrderService = {
       status: mapFrontendStatusToBackend(options.status),
       remarks: form.remarks || null,
       source_warehouse_id: toUuidOrNull(form.warehouseId),
-      bill_to: form.billToAddressId ? { address: form.billToAddressId, city: "Mumbai", state: "Maharashtra", pincode: "400001" } : null,
-      ship_to: form.shipToAddressId ? { address: form.shipToAddressId, city: "Pune", state: "Maharashtra", pincode: "411001" } : null,
+      bill_to: billToObj,
+      ship_to: shipToObj,
       subtotal_amount: totals.netTotal,
       discount_amount: totals.productDiscountTotal + totals.expenseDiscountTotal,
       tax_amount: totals.totalGst,
       grand_total: totals.grandTotal,
       items: form.lineItems.map((line) => ({
         product_id: line.productId,
-        per_case_qty: line.caseQuantity || 0,
         base_qty: line.quantity,
         unit_price: line.unitPrice,
         discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",

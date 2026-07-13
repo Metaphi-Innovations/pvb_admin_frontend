@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getGrnById, getGrnByNo, saveGrnRecord } from "@/app/(app)/warehouse/grn/mock-data";
-import { saveQcRecord, getQcById, getQcByGrnNo, createQcFromGrn } from "../mock-data";
+import { QcService } from "@/services/qc.service";
 import { QcItem, QcRecord, QcResult } from "../types";
 import { cn } from "@/lib/utils";
 import { TextField, FormSection } from "@/components/ui/FormFields";
@@ -61,41 +60,58 @@ function CreateQcForm() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    let qc: QcRecord | undefined = qcIdParam ? getQcById(qcIdParam) : undefined;
+    const loadRecord = async () => {
+      try {
+        let qc: QcRecord | undefined;
+        if (qcIdParam) {
+          qc = await QcService.get(qcIdParam);
+        } else if (grnIdParam) {
+          qc = await QcService.getGrn(grnIdParam);
+        }
 
-    if (!qc && grnIdParam) {
-      const grn = getGrnById(grnIdParam) ?? getGrnByNo(grnIdParam);
-      if (grn) {
-        qc = getQcByGrnNo(grn.grnNo) ?? createQcFromGrn(grn);
+        if (!qc) {
+          setLoadError("QC record not found. Open inspection from the QC listing.");
+          return;
+        }
+
+        if (qc.status === "completed") {
+          router.replace(`/warehouse/qc/view/${qc.id}`);
+          return;
+        }
+
+        const stMode = getQcSourceType(qc) === "stock_transfer";
+
+        setQcRecordId(qc.id);
+        
+        let displayQcNo = qc.qcNo;
+        if (!displayQcNo || displayQcNo === "—") {
+          try {
+            const preview = await QcService.getPreviewNumber();
+            displayQcNo = preview.qcNumber;
+          } catch (err) {
+            console.error("Failed to fetch preview QC number:", err);
+          }
+        }
+        setQcNo(displayQcNo || "—");
+        setGrnRecordId(qc.grnId ?? "");
+        setGrnNo(qc.grnNo);
+        setPoNumber(qc.poNumber ?? "");
+        setVendor(qc.vendorName);
+        setWarehouse(qc.warehouse);
+        setStockTransferNo(qc.stockTransferNo ?? qc.poNumber ?? "");
+        setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
+        setToWarehouse(qc.toWarehouse ?? qc.warehouse);
+        setIsStockTransfer(stMode);
+        setSourceType(stMode ? "stock_transfer" : "purchase_order");
+        setQcRemarks(qc.qcRemarks ?? "");
+        setItems(qc.items.map((it) => ({ ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 })));
+      } catch (err) {
+        console.error("Failed to load QC or GRN details:", err);
+        setLoadError("QC record not found. Open inspection from the QC listing.");
       }
-    }
+    };
 
-    if (!qc) {
-      setLoadError("QC record not found. Open inspection from the QC listing.");
-      return;
-    }
-
-    if (qc.status === "completed") {
-      router.replace(`/warehouse/qc/view/${qc.id}`);
-      return;
-    }
-
-    const stMode = getQcSourceType(qc) === "stock_transfer";
-
-    setQcRecordId(qc.id);
-    setQcNo(qc.qcNo);
-    setGrnRecordId(qc.grnId ?? "");
-    setGrnNo(qc.grnNo);
-    setPoNumber(qc.poNumber ?? "");
-    setVendor(qc.vendorName);
-    setWarehouse(qc.warehouse);
-    setStockTransferNo(qc.stockTransferNo ?? qc.poNumber ?? "");
-    setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
-    setToWarehouse(qc.toWarehouse ?? qc.warehouse);
-    setIsStockTransfer(stMode);
-    setSourceType(stMode ? "stock_transfer" : "purchase_order");
-    setQcRemarks(qc.qcRemarks ?? "");
-    setItems(qc.items.map((it) => ({ ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 })));
+    loadRecord();
   }, [qcIdParam, grnIdParam, router]);
 
   const handleQtyChange = (
@@ -169,7 +185,7 @@ function CreateQcForm() {
     (it) => it.acceptedQty > 0 || it.rejectedQty > 0 || (it.holdQty ?? 0) > 0,
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!grnNo || !qcRecordId) {
       alert("Missing QC / GRN reference.");
       return;
@@ -183,50 +199,33 @@ function CreateQcForm() {
       return;
     }
 
-    const qcResult = deriveQcResult(items);
-    const completedDate = new Date().toISOString().split("T")[0];
-    const updatedQc: QcRecord = {
-      id: qcRecordId,
-      qcNo,
-      grnId: grnRecordId,
-      grnNo,
-      poNumber,
-      vendorName: vendor,
-      warehouse,
-      sourceType,
-      stockTransferNo: isStockTransfer ? stockTransferNo : undefined,
-      fromWarehouse: isStockTransfer ? fromWarehouse : undefined,
-      toWarehouse: isStockTransfer ? toWarehouse : undefined,
-      inspectionDate: completedDate,
-      totalReceivedQty: items.reduce((sum, it) => sum + it.receivedQty, 0),
-      totalAcceptedQty: items.reduce((sum, it) => sum + it.acceptedQty, 0),
-      totalRejectedQty: items.reduce((sum, it) => sum + it.rejectedQty, 0),
-      totalHoldQty: items.reduce((sum, it) => sum + (it.holdQty ?? 0), 0),
-      status: "completed",
-      qcResult,
-      qcRemarks: qcRemarks.trim(),
-      items: items.map((it) => ({ ...it, holdQty: it.holdQty ?? 0, qcResult: deriveQcResult([it]) })),
-    };
+    try {
+      const payload = {
+        grnId: grnRecordId,
+        qcDate: new Date().toISOString(),
+        remarks: qcRemarks.trim(),
+        items: items.map((it) => ({
+          grnBatchId: it.grnBatchId,
+          receivedQty: it.receivedQty,
+          acceptedQty: it.acceptedQty,
+          rejectedQty: it.rejectedQty,
+          case_size: it.unitPerPacking || 10,
+          remarks: it.rejectionReason || "",
+        })),
+      };
 
-    saveQcRecord(updatedQc);
+      await QcService.create(payload);
 
-    const grn = getGrnById(grnRecordId) ?? getGrnByNo(grnNo);
-    if (grn) {
-      const updatedGrn = { ...grn, status: "qc_completed" as const };
-      saveGrnRecord(updatedGrn);
-      if (isStockTransfer) {
-        completeStockTransferQc(updatedGrn, updatedQc);
-      } else {
-        onQcCompleted(updatedGrn, updatedQc);
-      }
+      alert(
+        isStockTransfer
+          ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
+          : "QC completed — stock moved to Available / Rejected.",
+      );
+      router.push("/warehouse/qc");
+    } catch (err: any) {
+      console.error("Failed to submit QC Record:", err);
+      alert(err.response?.data?.message || "Failed to submit QC Record.");
     }
-
-    alert(
-      isStockTransfer
-        ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
-        : "QC completed — stock moved to Available / Rejected.",
-    );
-    router.push("/warehouse/qc");
   };
 
   if (loadError) {

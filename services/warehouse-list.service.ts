@@ -106,7 +106,7 @@ export interface WarehouseListRecord {
     pincode: string;
     contacts: WarehouseContactPayload[];
     documents: WarehouseDocumentPayload[];
-    status: "active" | "inactive";
+    status: "Active" | "Inactive" | "Under Maintenance" | "Closed";
     createdAt: string;
     updatedAt: string;
     createdBy: string;
@@ -132,7 +132,7 @@ const SORT_KEY_TO_ORDERING: Record<string, string> = {
     operatedBy: "operatedBy",
     state: "state",
     city: "city",
-    status: "isActive",
+    status: "status",
     createdAt: "createdAt",
     updatedAt: "updatedAt",
 };
@@ -143,6 +143,17 @@ const SORT_FIELD_MAP: Record<string, string> = {
     state: "state",
     city: "city",
     status: "status",
+    // contactPerson: "warehouse.contacts?.[0]?.contact_person",
+    // mobileNumber: "warehouse.contacts?.[0]?.mobile_number",
+    // emailAddress: "warehouse.contacts?.[0]?.email_address",
+    pincode: "pincode",
+    manager: "manager",
+    gstNumber: "gst_number",
+    district: "district",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+    createdBy: "created_by",
+    updatedBy: "updated_by",
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {
@@ -168,10 +179,13 @@ function asString(value: unknown): string {
     return typeof value === "string" ? value : String(value ?? "");
 }
 
-function toStatus(value: unknown, fallbackValue?: unknown): "active" | "inactive" {
+function toStatus(value: unknown, fallbackValue?: unknown): "Active" | "Inactive" | "Under Maintenance" | "Closed" {
     const primaryVal = value !== undefined && value !== null ? value : fallbackValue;
     const str = String(primaryVal).trim().toLowerCase();
-    return str === "active" || str === "true" || primaryVal === true ? "active" : "inactive";
+    if (str === "active" || str === "true" || primaryVal === true) return "Active";
+    if (str === "under maintenance" || str === "under_maintenance") return "Under Maintenance";
+    if (str === "closed") return "Closed";
+    return "Inactive";
 }
 
 function toBool(value: unknown): boolean {
@@ -346,7 +360,7 @@ export const WarehouseListService = {
                 } else if (key === "registeredGstAddress") {
                     backendFilters["registered_gst_address"] = realVal;
                 } else if (key === "status") {
-                    backendFilters["is_active"] = realVal === "active";
+                    backendFilters["status"] = realVal;
                 } else {
                     backendFilters[key] = realVal;
                 }
@@ -425,10 +439,10 @@ export const WarehouseListService = {
         }
     },
 
-    async updateStatus(id: string, isActive: boolean): Promise<void> {
+    async updateStatus(id: string, status: "Active" | "Inactive" | "Under Maintenance" | "Closed"): Promise<void> {
         const response = await axiosInstance.patch(
             API_ENDPOINTS.MASTER.WAREHOUSE.STATUS_UPDATE(id),
-            { is_active: isActive },
+            { status: status },
         );
 
         const body = response.data as Record<string, unknown>;

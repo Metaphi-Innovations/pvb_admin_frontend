@@ -482,20 +482,20 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
                 <div className="bg-brand-600 px-5 py-3 flex items-center justify-between">
                   <div>
                     <p className="text-white font-bold text-sm">DELIVERY CHALLAN</p>
-                    <p className="text-brand-100 text-xs">{challanTarget.dispatchNumber}</p>
+                    <p className="text-brand-100 text-xs">{challanTarget.dispatch_number || challanTarget.dispatch_no || challanTarget.dispatchNumber}</p>
                   </div>
                   <Truck className="w-8 h-8 text-brand-200" />
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-4 text-xs">
                   <div className="space-y-2.5">
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Sales Order No</p><p className="font-bold">{challanTarget.salesOrderNumber}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{challanTarget.customer}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Dispatch Date</p><p className="font-bold">{challanTarget.dispatchDate}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Sales Order No</p><p className="font-bold">{challanTarget.source_document_no || challanTarget.packing_done?.packing_done_no || "—"}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{((challanTarget as any).customer)?.customer_name || challanTarget.target_warehouse_name || challanTarget.customer_name || "—"}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Dispatch Date</p><p className="font-bold">{challanTarget.dispatch_date ? new Date(challanTarget.dispatch_date).toLocaleDateString() : new Date(challanTarget.created_at).toLocaleDateString()}</p></div>
                   </div>
                   <div className="space-y-2.5">
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Vehicle No</p><p className="font-mono font-bold">{challanTarget.vehicleNumber}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Driver Name</p><p className="font-bold">{challanTarget.driverName}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Transporter</p><p className="font-bold">{challanTarget.transporterName}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Vehicle No</p><p className="font-mono font-bold">{challanTarget.vehicle_number || "—"}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Driver Name</p><p className="font-bold">{challanTarget.driver_name || "—"}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Transporter</p><p className="font-bold">{challanTarget.transporter || "—"}</p></div>
                   </div>
                 </div>
               </div>
@@ -513,13 +513,18 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {challanTarget.products.map((p, i) => (
-                      <tr key={i} className="border-b border-border/50 last:border-0">
-                        <td className="py-2.5 px-4 font-bold">{p.product}</td>
-                        <td className="py-2.5 px-4 font-mono text-brand-700">{p.sku}</td>
-                        <td className="py-2.5 px-4 text-center font-bold">{p.dispatchQty}</td>
-                      </tr>
-                    ))}
+                    {(challanTarget.items || challanTarget.products || []).map((p: any, i: number) => {
+                      const packSize = Number(p.product?.unit_per_packing || p.product?.conversion_rate || 1);
+                      const baseQty = Number(p.dispatched_base_qty || p.dispatchQty || 0);
+                      const cases = Math.floor(baseQty / packSize);
+                      return (
+                        <tr key={i} className="border-b border-border/50 last:border-0">
+                          <td className="py-2.5 px-4 font-bold">{p.product?.product_name || p.product || "—"}</td>
+                          <td className="py-2.5 px-4 font-mono text-brand-700">{p.product?.product_code || p.sku || "—"}</td>
+                          <td className="py-2.5 px-4 text-center font-bold">{cases > 0 ? cases : baseQty} {cases > 0 && packSize > 1 ? "Cases" : "Units"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

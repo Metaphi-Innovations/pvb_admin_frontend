@@ -23,11 +23,12 @@ export interface QcItem {
 
   qcResult?: QcResult;
   rejectionReason?: string;
+  grnBatchId?: string;
 }
 
 export type QcStatus = "pending" | "completed";
 
-export type QcSourceType = "purchase_order" | "stock_transfer";
+export type QcSourceType = "purchase" | "purchase_order" | "stock_transfer" | "sales_return" | "sample_return";
 
 export interface QcRecord {
   id: string;

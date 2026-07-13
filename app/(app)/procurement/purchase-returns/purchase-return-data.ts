@@ -14,6 +14,8 @@ export type PurchaseReturnStatus =
   | "Received_By_Supplier"
   | "Cancelled";
 
+export type PurchaseReturnUnit = "CASE" | "PIECE";
+
 export interface PurchaseReturnItem {
   id: string;
   purchaseOrderProductId?: string;
@@ -27,8 +29,9 @@ export interface PurchaseReturnItem {
   qcNo?: string;
   grnItemId?: string;
   grnBatchId?: string;
+  batchGroupKey?: string;
   inventoryDetailId: string;
-  inventoryRejectedItemId: string;
+  inventoryRejectedItemId?: string;
   mfgDate: string;
   expDate: string;
   caseSize: number;

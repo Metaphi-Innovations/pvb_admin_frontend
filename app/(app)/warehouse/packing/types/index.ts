@@ -11,6 +11,10 @@ export interface SalesOrderProduct {
   ordered_cases: number;
   packedQty: number;
   pending_cases: number;
+  orderBaseQty: number;
+  packedBaseQty: number;
+  pendingBaseQty: number;
+  packSize: number;
   batchNumber?: string;
   grnNo?: string;
   mfgDate?: string;
@@ -48,6 +52,9 @@ export interface PackedProduct {
   sku: string;
   ordered_cases: number;
   packedQty: number;
+  orderBaseQty: number;
+  packedBaseQty: number;
+  packSize: number;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
   lineId?: string;

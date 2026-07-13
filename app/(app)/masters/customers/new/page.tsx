@@ -113,13 +113,27 @@ export default function NewCustomerPage() {
     );
   }, [searchParams]);
 
-  // Fetch the real preview customer code from the API whenever customer type changes.
-  // Replaces the old hardcoded "Auto-generated" placeholder.
   useEffect(() => {
     if (!form.customerType) {
       setCustomerCode("");
       return;
     }
+
+    function extractPreviewSequence(previewNumber: string): string {
+      const parts = previewNumber.split("-");
+      const sequencePart = parts.length > 1 ? parts[parts.length - 1] : previewNumber;
+
+      const parsedNumber = parseInt(sequencePart, 10);
+
+      if (isNaN(parsedNumber)) {
+        return sequencePart;
+      }
+
+      return (parsedNumber + 1).toString().padStart(sequencePart.length, "0");
+    }
+
+    const selectedType = customerTypes.find((ct) => ct.id === form.customerType);
+
 
     let cancelled = false;
     setCodeLoading(true);
@@ -127,7 +141,10 @@ export default function NewCustomerPage() {
 
     CustomerListService.previewNumber()
       .then((code) => {
-        if (!cancelled) setCustomerCode(code);
+        if (!cancelled) {
+          const sequence = extractPreviewSequence(code);
+          setCustomerCode(`${selectedType?.customerInitialCode}-${sequence}`);
+        }
       })
       .catch((err) => {
         console.error("Failed to fetch customer code preview", err);
@@ -144,7 +161,7 @@ export default function NewCustomerPage() {
     return () => {
       cancelled = true;
     };
-  }, [form.customerType]);
+  }, [form.customerType, customerTypes]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {

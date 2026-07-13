@@ -70,15 +70,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function mapDiscountType(value: unknown): "percentage" | "flat" {
-  const raw = asString(value).toLowerCase();
-  return raw === "flat" || raw === "fixed" ? "flat" : "percentage";
-}
-
-function mapBackendDiscountType(value: unknown): "Percentage" | "Flat" {
-  return mapDiscountType(value) === "flat" ? "Flat" : "Percentage";
-}
-
 function resolveLineQtyFields(line: POLineItem): {
   packingQty: number;
   baseQty: number;
@@ -178,12 +169,7 @@ function mapAttachments(raw: unknown): POAttachment[] {
 function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
   const { packingQty, baseQty, conversionQty } = resolveQtyFromBackend(raw);
   const rate = asNumber(raw.rate);
-  const discountType = mapDiscountType(raw.discount_type);
-  const discountValue = asNumber(raw.discount_value);
-  const discountAmount =
-    discountType === "percentage"
-      ? round2((baseQty * rate * discountValue) / 100)
-      : discountValue;
+  const discountAmount = 0;
   const taxable = round2(baseQty * rate - discountAmount);
   const cgstPct = asNumber(raw.cgst_percent);
   const sgstPct = asNumber(raw.sgst_percent);
@@ -191,6 +177,8 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
   const gstAmount = asNumber(raw.gst_amount);
   const totalAmount = asNumber(raw.total_amount);
   const productId = toUuidOrNull(raw.product_id) ?? asString(raw.product_id) ?? 0;
+  const receivedBaseQty = asNumber(raw.received_base_qty);
+  const shortClosedBaseQty = asNumber(raw.short_closed_base_qty);
 
   return {
     uid: asString(raw.purchase_order_product_id) || `pl-${index}`,
@@ -210,9 +198,9 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     uom: asString(raw.base_unit) || "Unit",
     orderedQty: baseQty,
     unitPrice: rate,
-    discountType,
-    discountPct: discountType === "percentage" ? discountValue : 0,
-    discountFlatAmount: discountType === "flat" ? discountValue : 0,
+    discountType: "percentage",
+    discountPct: 0,
+    discountFlatAmount: 0,
     discountAmount,
     cgstPct,
     sgstPct,
@@ -222,8 +210,14 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     netAmount: totalAmount || round2(taxable + gstAmount),
     deliverySchedule: "",
     remarks: asString(raw.remarks),
-    receivedQty: asNumber(raw.received_qty),
-    shortClosedQty: asNumber(raw.short_closed_qty),
+    receivedQty:
+      receivedBaseQty > 0
+        ? round2(receivedBaseQty / conversionQty)
+        : asNumber(raw.received_qty),
+    shortClosedQty:
+      shortClosedBaseQty > 0
+        ? round2(shortClosedBaseQty / conversionQty)
+        : asNumber(raw.short_closed_qty),
   };
 }
 
@@ -503,7 +497,7 @@ function buildWriteBody(
     taxable_amount: draft.summary.taxableValue,
     gst_amount: gstAmount,
     grand_total: draft.summary.grandTotal,
-    products: form.lines
+    products: draft.lines
       .filter((l) => l.productName || l.productCode || l.productId)
       .map((line) => {
         const { packingQty, baseQty } = resolveLineQtyFields(line);
@@ -516,9 +510,6 @@ function buildWriteBody(
           requested_base_qty: baseQty,
           ordered_base_qty: baseQty,
           rate: line.unitPrice,
-          discount_type: mapBackendDiscountType(line.discountType),
-          discount_value:
-            line.discountType === "flat" ? line.discountFlatAmount : line.discountPct,
           gst_percent: round2(line.cgstPct + line.sgstPct + line.igstPct),
           cgst_percent: line.cgstPct,
           sgst_percent: line.sgstPct,
@@ -560,7 +551,96 @@ function assertSuccess(body: Record<string, unknown>, fallback: string): void {
   }
 }
 
+export interface PurchaseOrderDropdownOption {
+  purchase_order_id: string;
+  po_no: string;
+}
+
+export interface PurchaseOrderSupplierDropdownOption {
+  value: string;
+  label: string;
+}
+
+export interface PurchaseOrderWarehouseDropdownOption {
+  value: string;
+  label: string;
+}
+
 export const PurchaseOrderService = {
+  async getSupplierDropdown(
+    signal?: AbortSignal,
+  ): Promise<PurchaseOrderSupplierDropdownOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.SUPPLIER_DROPDOWN,
+      { signal },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        value: asString(item.value ?? item.supplier_id),
+        label: asString(item.label ?? item.supplier_name),
+      };
+    }).filter((row) => row.value && row.label);
+  },
+
+  async getWarehouseDropdown(
+    supplierId: string,
+    signal?: AbortSignal,
+  ): Promise<PurchaseOrderWarehouseDropdownOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.WAREHOUSE_DROPDOWN,
+      {
+        params: { supplier_id: supplierId },
+        signal,
+      },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        value: asString(item.value ?? item.warehouse_id),
+        label: asString(item.label ?? item.warehouse_name),
+      };
+    }).filter((row) => row.value && row.label);
+  },
+
+  async getDropdown(
+    filters: { supplier_id?: string; warehouse_id?: string } = {},
+    signal?: AbortSignal,
+  ): Promise<PurchaseOrderDropdownOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.DROPDOWN,
+      {
+        params: {
+          ...(filters.supplier_id ? { supplier_id: filters.supplier_id } : {}),
+          ...(filters.warehouse_id ? { warehouse_id: filters.warehouse_id } : {}),
+        },
+        signal,
+      },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        purchase_order_id: asString(item.purchase_order_id),
+        po_no: asString(item.po_no),
+      };
+    }).filter((row) => row.purchase_order_id && row.po_no);
+  },
+
   async getById(id: string, signal?: AbortSignal): Promise<PurchaseOrder> {
     const response = await axiosInstance.get(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.DETAILS(id),

@@ -2,15 +2,15 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { Button } from "@/components/ui/button";
 import { Activity, Building, Package, BarChart2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
-import { getReorderById, getReordersByProduct } from "../../services";
+import { ReorderLevelService } from "../../services";
 import { ReorderLevel } from "../../types";
-import { STATUS_BADGE_CONFIG } from "../../constants";
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" };
+  const cfg = status === "Low Stock"
+    ? { bg: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" }
+    : { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
@@ -29,16 +29,32 @@ export default function ViewReorderLevelPage() {
 
   useEffect(() => {
     if (id) {
-      const r = getReorderById(id);
-      if (r) {
-        setRecord(r);
-        setSameProductRecords(getReordersByProduct(r.product));
-      }
+      ReorderLevelService.getById(id)
+        .then((r) => {
+          setRecord(r);
+          if (r.reorderType === "OVERALL") {
+            setSameProductRecords([]);
+            return null;
+          }
+          return ReorderLevelService.list({
+            page: 1,
+            pageSize: 200,
+            search: "",
+            reorder_type: "WAREHOUSE",
+            filters: { product: [r.product] },
+          });
+        })
+        .then((res) => {
+          if (res) setSameProductRecords(res.items);
+        })
+        .catch(() => undefined);
     }
   }, [id]);
 
   const statusConfig = useMemo(
-    () => record ? (STATUS_BADGE_CONFIG[record.status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" }) : null,
+    () => record ? (record.status === "Low Stock"
+      ? { bg: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" }
+      : { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" }) : null,
     [record]
   );
 
@@ -70,11 +86,14 @@ export default function ViewReorderLevelPage() {
       listHref="/warehouse/reorder-level"
       listLabel="Reorder Levels"
       recordName={record.product}
-      recordCode={record.sku}
+      recordCode={record.productCode}
       statusLabel={record.status}
       statusVariant={statusVariant}
       metaItems={[
-        { icon: Building, label: record.warehouse },
+        {
+          icon: Building,
+          label: record.reorderType === "OVERALL" ? "Overall (Product Level)" : record.warehouse,
+        },
         { icon: Package, label: record.category },
       ]}
       onEdit={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}
@@ -84,7 +103,7 @@ export default function ViewReorderLevelPage() {
           { label: "Reserved Stock", value: record.reservedStock },
           { label: "Available Stock", value: availableStock },
           { label: "Reorder Level Qty", value: record.reorderLevelQty },
-          { label: "Last Updated", value: record.lastUpdated },
+          { label: "Last Updated", value: record.updatedDate },
         ],
       }}
     >
@@ -139,10 +158,13 @@ export default function ViewReorderLevelPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
             {[
               { label: "Product", value: record.product },
-              { label: "SKU", value: record.sku, mono: true },
+              { label: "Product Code", value: record.productCode, mono: true },
               { label: "Category", value: record.category },
-              { label: "Warehouse", value: record.warehouse },
-              { label: "Last Updated", value: record.lastUpdated },
+              {
+                label: record.reorderType === "OVERALL" ? "Reorder Type" : "Warehouse",
+                value: record.reorderType === "OVERALL" ? "Overall (Product Level)" : record.warehouse,
+              },
+              { label: "Last Updated", value: record.updatedDate },
               { label: "Reorder Level Qty", value: record.reorderLevelQty },
             ].map(item => (
               <div key={item.label}>

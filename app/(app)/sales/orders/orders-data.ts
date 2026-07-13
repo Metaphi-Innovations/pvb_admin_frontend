@@ -9,6 +9,7 @@ import {
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
+import { getCustomerAddressesForSalesOrder } from "./sales-order-address-utils";
 import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
 /** Orders above this amount require approval on submit (not draft). */
@@ -1463,16 +1464,24 @@ export function buildOrderFromForm(
   const warehouse = warehouses.find(w => w.id === form.warehouseId);
   if (!customer || !salesman) return null;
 
+  const addresses = customer ? getCustomerAddressesForSalesOrder(customer) : [];
+  const shipTo = addresses.find(a => a.id === form.shipToAddressId);
+  const destState = shipTo?.state ?? customer?.stateName ?? "";
+  const taxSupplyType = resolveTaxSupplyType(warehouse?.state ?? "", destState);
+
   const sezLut = resolveSezLutSupply({
     customerGstCategory:
       customer.gstCategory ||
       (customer.gstApplicable ? "regular" : "unregistered"),
     transactionDate: form.orderDate,
   });
+
+  const recalculatedExpenses = (form.additionalExpenses ?? []).map(e => recalculateExpense(e, taxSupplyType));
+
   const totalAmount = calculateOrderTotalsSummary(
     form.lineItems,
-    form.additionalExpenses ?? [],
-    { sezLutApplies: sezLut.appliesLut },
+    recalculatedExpenses,
+    { sezLutApplies: sezLut.appliesLut, taxSupplyType },
   ).grandTotal;
   const finalStatus = resolveSubmitStatus(totalAmount, form.status, asDraft);
   const requiresApproval = orderRequiresApproval(totalAmount) && !asDraft;
@@ -1492,7 +1501,7 @@ export function buildOrderFromForm(
     deliveryDate: form.deliveryDate,
     status: finalStatus,
     lineItems: form.lineItems,
-    additionalExpenses: (form.additionalExpenses ?? []).map(e => recalculateExpense(e)),
+    additionalExpenses: recalculatedExpenses,
     totalAmount,
     requiresApproval,
     approvalStatus,

@@ -45,7 +45,10 @@ export function RouteGuard({
       : rule?.candidates ?? []);
   const requiredAction = action ?? rule?.action ?? "view";
 
-  const checksReady = !authLoading && (!isAuthenticated || !permsLoading);
+  // Wait for auth; for permissions, only block on the initial fetch.
+  // Soft-refetches keep the last tree so we do not unmount page hooks mid-navigation.
+  const checksReady =
+    !authLoading && (!isAuthenticated || !permsLoading || permissions !== null);
 
   const allowed =
     !isAuthenticated
@@ -61,12 +64,15 @@ export function RouteGuard({
       router.replace(`${loginHref}${next}`);
       return;
     }
+    // Do not redirect on a stale tree while a soft-refresh is still in flight.
+    if (permsLoading) return;
     if (!allowed) {
       router.replace(unauthorizedHref);
     }
   }, [
     checksReady,
     isAuthenticated,
+    permsLoading,
     allowed,
     router,
     loginHref,
@@ -82,7 +88,25 @@ export function RouteGuard({
     );
   }
 
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh] text-sm text-muted-foreground">
+        Redirecting…
+      </div>
+    );
+  }
+
+  // Stale tree does not grant this route — wait for the in-flight fetch before deny.
+  // Same-module navigations usually stay allowed and keep children mounted.
+  if (permsLoading && !allowed) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh] text-sm text-muted-foreground">
+        Checking access…
+      </div>
+    );
+  }
+
+  if (!permsLoading && !allowed) {
     return (
       <div className="flex items-center justify-center min-h-[40vh] text-sm text-muted-foreground">
         Redirecting…
