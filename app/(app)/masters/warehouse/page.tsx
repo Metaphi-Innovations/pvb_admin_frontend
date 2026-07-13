@@ -39,16 +39,15 @@ import {
   useWarehouses,
   useToggleWarehouseStatus,
   useExportWarehouses,
+  useWarehouseFilterDropdown,
 } from "@/hooks/masters";
 import { sortStateToOrdering, type WarehouseListRecord } from "@/services/warehouse-list.service";
 import {
   buildListApiFilters,
   MASTER_FILTER_FIELD_MAPS,
-  mergeListRequestFilters,
-  // resolveListStatus,
-  type FieldMapper,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -69,7 +68,7 @@ function getActionVerb(action: WarehouseStatusAction, style: "title" | "body") {
   if (action === "Active") return style === "title" ? "Activate" : "active";
   if (action === "Inactive") return style === "title" ? "Deactivate" : "inactive";
   if (action === "Under Maintenance") return style === "title" ? "Mark Under Maintenance" : "under maintenance";
-  return style === "title" ? "Close" : "closed"; // "Closed" is the only remaining case
+  return style === "title" ? "Close" : "closed";
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -104,8 +103,14 @@ interface ToastState {
 
 export default function WarehouseListPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "warehouseName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -115,36 +120,97 @@ export default function WarehouseListPage() {
     record: WarehouseListRecord;
   } | null>(null);
 
-  // ---- ordering / api-filters / status ----
   const ordering = useMemo(
     () => sortStateToOrdering(sort.key, sort.direction),
     [sort.key, sort.direction],
   );
 
   const apiFilters = useMemo(
-    () => buildListApiFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.warehouse, ["search"]),
-    [debouncedFilters],
+    () => buildListApiFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.warehouse, ["search"]),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: "all",
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, apiFilters, ordering],
+    [page, pageSize, appliedSearch, apiFilters, ordering],
   );
 
-  // ---- queries / mutations ----
   const listQuery = useWarehouses(listParams);
   const toggleStatusMutation = useToggleWarehouseStatus();
   const exportMutation = useExportWarehouses();
 
+  const warehouseNameOptionsQuery = useWarehouseFilterDropdown("warehouse_name", {
+    enabled: isFilterOpen("warehouseName"),
+  });
+  const districtOptionsQuery = useWarehouseFilterDropdown("district", {
+    enabled: isFilterOpen("district"),
+  });
+  const operatedByOptionsQuery = useWarehouseFilterDropdown("operated_by", {
+    enabled: isFilterOpen("operatedBy"),
+  });
+  const createdByOptionsQuery = useWarehouseFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useWarehouseFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
+  const stateOptionsQuery = useWarehouseFilterDropdown("state", {
+    enabled: isFilterOpen("state"),
+  });
+  const cityOptionsQuery = useWarehouseFilterDropdown("city", {
+    enabled: isFilterOpen("city"),
+  });
+
+  const warehouseNameOptions = useMemo(
+    () => warehouseNameOptionsQuery.data ?? [],
+    [warehouseNameOptionsQuery.data],
+  );
+  const districtOptions = useMemo(
+    () => districtOptionsQuery.data ?? [],
+    [districtOptionsQuery.data],
+  );
+  const operatedByOptions = useMemo(() => {
+    if (operatedByOptionsQuery.data?.length) return operatedByOptionsQuery.data;
+    return [
+      { label: "Self", value: "Self" },
+      { label: "C&F Agent", value: "C&F Agent" },
+    ];
+  }, [operatedByOptionsQuery.data]);
+  const statusOptions = useMemo(
+    () => [
+      { label: "All", value: "all" },
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ],
+    [],
+  );
+  const stateOptions = useMemo(
+    () => stateOptionsQuery.data ?? [],
+    [stateOptionsQuery.data],
+  );
+  const cityOptions = useMemo(
+    () => cityOptionsQuery.data ?? [],
+    [cityOptionsQuery.data],
+  );
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
   const records = listQuery.data?.items ?? [];
   const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
 
   const listError = listQuery.isError
     ? getMasterListErrorMessage(listQuery.error, {
@@ -154,19 +220,30 @@ export default function WarehouseListPage() {
     })
     : null;
 
-  // ---- reset page on filter / sort change ----
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
-  // ---- auto-dismiss toast ----
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
-  // ---- status toggle via dropdown ----
+  const handleFilterChange = (next: FilterState) => {
+    const normalized: FilterState = { ...next };
+    const statusVal = normalized.status;
+    const statusToken = Array.isArray(statusVal)
+      ? String(statusVal[0] ?? "").toLowerCase()
+      : String(statusVal ?? "").toLowerCase();
+    if (statusToken === "all") {
+      delete normalized.status;
+    }
+    setFilters(normalized);
+    applyFilters(normalized);
+    setPage(1);
+  };
+
   const handleStatusAction = (record: WarehouseListRecord, action: WarehouseStatusAction) => {
     setConfirmDialog({ action, record });
   };
@@ -195,22 +272,21 @@ export default function WarehouseListPage() {
     );
   };
 
-  // ---- export ----
   const handleExport = () => {
     exportMutation.mutate(
-      { search: debouncedSearch, status: "all", ordering, apiFilters },
+      { search: appliedSearch, status: "all", ordering, apiFilters },
       { onError: (error) => setToast({ msg: getErrorMessage(error, "Failed to export warehouses."), type: "error" }) },
     );
   };
 
-  // ---- columns ----
-  const columns: ColumnConfig<WarehouseListRecord>[] = [
+  const columns: ColumnConfig<WarehouseListRecord>[] = useMemo(() => [
     {
       key: "warehouseName",
       header: "Warehouse Name",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: warehouseNameOptions,
       width: "200px",
       render: (_val, row) => (
         <Link href={`/masters/warehouse/${row.warehouseUuid}`} className="block group/name">
@@ -227,40 +303,13 @@ export default function WarehouseListPage() {
       width: "150px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.gstNumber || "—"}</span>,
     },
-    // {
-    //   key: "contactPerson",
-    //   header: "Contact Person",
-    //   sortable: true,
-    //   filterable: true,
-    //   filterType: "text",
-    //   width: "140px",
-    //   render: (_val, row) => row.contacts?.find(c => c.is_primary)?.contact_person || row.contacts?.[0]?.contact_person || "—",
-    // },
-    // {
-    //   key: "mobileNumber",
-    //   header: "Mobile",
-    //   sortable: true,
-    //   filterable: true,
-    //   filterType: "text",
-    //   width: "130px",
-    //   render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.contacts?.find(c => c.is_primary)?.mobile_number || row.contacts?.[0]?.mobile_number || "—"}</span>,
-    // },
-    // {
-    //   key: "emailAddress",
-    //   header: "Email",
-    //   sortable: true,
-    //   filterable: true,
-    //   filterType: "text",
-    //   width: "180px",
-    //   render: (_val, row) => row.contacts?.find(c => c.is_primary)?.email_address || row.contacts?.[0]?.email_address || "—",
-    // },
     {
       key: "state",
       header: "State",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map(r => r.state).filter(Boolean))).sort().map(v => ({ label: v, value: v })),
+      filterOptions: stateOptions,
       width: "130px",
       render: (_val, row) => row.state || "—",
     },
@@ -270,7 +319,7 @@ export default function WarehouseListPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map(r => r.district).filter(Boolean))).sort().map(v => ({ label: v, value: v })),
+      filterOptions: districtOptions,
       width: "130px",
       render: (_val, row) => row.district || "—",
     },
@@ -280,7 +329,7 @@ export default function WarehouseListPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map(r => r.city).filter(Boolean))).sort().map(v => ({ label: v, value: v })),
+      filterOptions: cityOptions,
       width: "120px",
       render: (_val, row) => row.city || "—",
     },
@@ -293,32 +342,13 @@ export default function WarehouseListPage() {
       width: "90px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.pincode || "—"}</span>,
     },
-    // {
-    //   key: "manager",
-    //   header: "Designation",
-    //   sortable: true,
-    //   filterable: true,
-    //   filterType: "dropdown",
-    //   filterOptions: Array.from(
-    //     new Set(
-    //       records
-    //         .map(r => r.contacts?.find(c => c.is_primary)?.designation || r.contacts?.[0]?.designation)
-    //         .filter((v): v is string => Boolean(v))
-    //     )
-    //   ).sort().map(v => ({ label: v, value: v })),
-    //   width: "140px",
-    //   render: (_val, row) => row.contacts?.find(c => c.is_primary)?.designation || row.contacts?.[0]?.designation || "—",
-    // },
     {
       key: "operatedBy",
       header: "Operated By",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Self", value: "Self" },
-        { label: "C&F Agent", value: "C&F Agent" },
-      ],
+      filterOptions: operatedByOptions,
       width: "110px",
       render: (_val, row) =>
         row.operatedBy === "C&F Agent" && row.cfAgentId
@@ -331,12 +361,7 @@ export default function WarehouseListPage() {
       sortable: false,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "Active" },
-        { label: "Inactive", value: "Inactive" },
-        { label: "Under Maintenance", value: "Under Maintenance" },
-        { label: "Closed", value: "Closed" },
-      ],
+      filterOptions: statusOptions,
       width: "160px",
       render: (_val, row) => (
         <DropdownMenu>
@@ -441,6 +466,9 @@ export default function WarehouseListPage() {
       key: "createdBy",
       header: "Created",
       sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "120px",
       render: (_val, row) => <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />,
     },
@@ -448,10 +476,22 @@ export default function WarehouseListPage() {
       key: "updatedBy",
       header: "Updated",
       sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "120px",
       render: (_val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />,
     },
-  ];
+  ], [
+    warehouseNameOptions,
+    districtOptions,
+    operatedByOptions,
+    statusOptions,
+    stateOptions,
+    cityOptions,
+    createdByOptions,
+    updatedByOptions,
+  ]);
 
   const actions: ActionItemConfig<WarehouseListRecord>[] = [
     {
@@ -487,13 +527,14 @@ export default function WarehouseListPage() {
         <MasterListing<WarehouseListRecord>
           columns={columns}
           data={records}
+          loading={loading}
           totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={(f) => { setFilters(f); setPage(1); }}
+          onFilterChange={handleFilterChange}
           actions={actions}
           onAdd={() => router.push("/masters/warehouse/add")}
           addLabel="Add Warehouse"
@@ -502,10 +543,10 @@ export default function WarehouseListPage() {
           searchPlaceholder="Search name, GST, state, city..."
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 
-      {/* Status confirm dialog */}
       {confirmDialog && (
         <Dialog open={true} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
           <DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">
@@ -517,7 +558,7 @@ export default function WarehouseListPage() {
                 {getActionVerb(confirmDialog.action, "title")} Warehouse?
               </DialogTitle>
               <DialogDescription className="pt-1">
-                Are you sure you want to{" "}
+                This will mark{" "}
                 {getActionVerb(confirmDialog.action, "body")}{" "}
                 &quot;{confirmDialog.record.warehouseName}&quot;?
               </DialogDescription>

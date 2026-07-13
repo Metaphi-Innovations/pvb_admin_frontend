@@ -196,6 +196,10 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
     candidates: [{ module: "warehouse", submodule: "stock_overview" }],
   },
   {
+    prefix: "/warehouse/stock-overview",
+    candidates: [{ module: "warehouse", submodule: "stock_overview" }],
+  },
+  {
     prefix: "/events",
     candidates: [
       { module: "events", submodule: "events" },
@@ -302,6 +306,7 @@ export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   "/warehouse/dispatch": [{ module: "warehouse", submodule: "dispatch" }],
   "/warehouse/reorder-level": [{ module: "warehouse", submodule: "reorder_level" }],
   "/warehouse/stockoverview": [{ module: "warehouse", submodule: "stock_overview" }],
+  "/warehouse/stock-overview": [{ module: "warehouse", submodule: "stock_overview" }],
 };
 
 /** Top-level nav module id → permission module codes. */

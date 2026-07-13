@@ -5,11 +5,13 @@ import {
     WarehouseListService,
     type WarehouseCreatePayload,
     type WarehouseExportParams,
+    type WarehouseFilterField,
     type WarehouseListParams,
     type WarehouseUpdatePayload,
     type WarehouseDropdownItem,
 } from "@/services/warehouse-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 import { CustomerListService } from "@/services/customer-list.service";
 
 function toListParams(params: MasterListKeyParams): WarehouseListParams {
@@ -106,5 +108,17 @@ export function useWarehousePreviewNumber(enabled = false) {
 export function useExportWarehouses() {
     return useMutation({
         mutationFn: (params: WarehouseExportParams) => WarehouseListService.export(params),
+    });
+}
+
+export function useWarehouseFilterDropdown(
+    fieldName: WarehouseFilterField,
+    options?: FilterDropdownQueryOptions,
+) {
+    return useQuery({
+        queryKey: masterKeys.warehouses.filterDropdown(fieldName),
+        queryFn: ({ signal }) => WarehouseListService.getFilterDropdown(fieldName, signal),
+        staleTime: 5 * 60 * 1000,
+        enabled: options?.enabled ?? true,
     });
 }
