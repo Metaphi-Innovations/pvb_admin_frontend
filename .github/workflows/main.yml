@@ -24,10 +24,22 @@ jobs:
                     --exclude='.git' \
                     --exclude='node_modules' \
                     --exclude='.env' \
-                    ./ /var/www/pvb.dev.metaphi.in/ /var/www/pvb.dev1.metaphi.in/  
-      - name: Install dependencies
+                    ./ /var/www/pvb.dev.metaphi.in/
+
+          rsync -av --delete \
+                    --exclude='.git' \
+                    --exclude='node_modules' \
+                    --exclude='.env' \
+                    ./ /var/www/pvb.dev1.metaphi.in/                    
+      - name: Install dependencies on pvb.dev.metaphi.in
         working-directory: /var/www/pvb.dev.metaphi.in
+        run: npm i && npm run build
+      - name: Install dependencies on pvb.dev1.metaphi.in
+        working-directory: /var/www/pvb.dev1.metaphi.in
         run: npm i && npm run build
 
       - name: pm2 restart
         run: pm2 restart pvb.dev.metaphi.in
+
+      - name: pm2 restart
+        run: pm2 restart pvb.dev1.metaphi.in
