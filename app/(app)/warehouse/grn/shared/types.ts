@@ -31,6 +31,8 @@ export interface GrnItem {
   productName: string;
   productCode: string;
   poLineId?: number;
+  /** Purchase order product UUID — used for edit/create submit */
+  sourceItemId?: string;
   orderedQty: number;
   /** Quantity already received in prior GRNs */
   alreadyReceivedQty?: number;
@@ -114,10 +116,16 @@ export interface GrnRecord {
   grnNo: string;
   poNumber: string;
   poId?: number;
+  /** Purchase order UUID (source_id) — used for edit prefill */
+  sourceId?: string;
+  /** Supplier UUID — used for edit prefill */
+  supplierId?: string;
   vendorName: string;
   vendorReference?: string;
   warehouse: string;
   warehouseId?: number;
+  /** Warehouse UUID — used for edit / submit */
+  warehouseUuid?: string;
   grnDate: string;
   deliveryChallan?: string;
   deliveryChallanFileName?: string;

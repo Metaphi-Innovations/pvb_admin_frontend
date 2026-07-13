@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Field, TextField } from "@/components/ui/FormFields";
 import { FormContainer } from "@/components/layout/FormContainer";
-import { useGrnPreviewNumber, useCreateGrn } from "@/hooks/warehouse/use-grn";
+import { useGrnPreviewNumber, useCreateGrn, useUpdateGrn, useGrn } from "@/hooks/warehouse/use-grn";
 import {
   usePurchaseOrder,
   usePurchaseOrderDropdown,
@@ -19,7 +19,8 @@ import {
 } from "@/hooks/procurement/use-purchase-orders";
 import type { POLineItem } from "@/app/(app)/procurement/purchase-orders/po-data";
 import { round2 } from "@/lib/procurement/utils";
-import type { CreateGrnPayload } from "@/services/grn.service";
+import type { CreateGrnPayload, UpdateGrnPayload } from "@/services/grn.service";
+import type { GrnRecord } from "../shared/types";
 
 interface ManualInvoiceRow {
   id: string;
@@ -75,11 +76,22 @@ function getShortClosedBase(line: POLineItem): number {
   return round2((line.shortClosedQty ?? 0) * conversion);
 }
 
-function getPendingBase(line: POLineItem): number {
+function getPendingBase(line: POLineItem, excludeBaseQty = 0): number {
   return Math.max(
     0,
-    round2(line.orderedQty - getAlreadyReceivedBase(line) - getShortClosedBase(line)),
+    round2(
+      line.orderedQty - (getAlreadyReceivedBase(line) - excludeBaseQty) - getShortClosedBase(line),
+    ),
   );
+}
+
+function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  return fallback;
 }
 
 function calcAmounts(qty: number, unitPrice: number, gstPct: number) {
@@ -95,29 +107,79 @@ interface ReceiptItem extends GrnItem {
   sourceItemId: string;
 }
 
-function buildItemsFromPoLines(po: { poNumber: string; lines: POLineItem[] }): ReceiptItem[] {
+function buildItemsFromPoLines(
+  po: { poNumber: string; lines: POLineItem[] },
+  options?: {
+    /** This GRN's current received qty by source_item_id (edit mode). */
+    thisGrnQtyBySourceItem?: Map<string, number>;
+    /** Prefill received quantities from existing GRN. */
+    prefillReceivedBySourceItem?: Map<string, number>;
+  },
+): ReceiptItem[] {
+  const thisGrnQtyBySourceItem = options?.thisGrnQtyBySourceItem;
+  const prefillReceivedBySourceItem = options?.prefillReceivedBySourceItem;
+
   return po.lines
-    .filter((line) => getPendingBase(line) > 0 && line.purchaseOrderProductId)
+    .filter((line) => {
+      if (!line.purchaseOrderProductId) return false;
+      const exclude = thisGrnQtyBySourceItem?.get(line.purchaseOrderProductId) ?? 0;
+      const pending = getPendingBase(line, exclude);
+      const prefill = prefillReceivedBySourceItem?.get(line.purchaseOrderProductId) ?? 0;
+      return pending > 0 || prefill > 0;
+    })
     .map((line) => {
-      const alreadyReceivedQty = getAlreadyReceivedBase(line);
-      const pendingQty = getPendingBase(line);
+      const sourceItemId = line.purchaseOrderProductId as string;
+      const exclude = thisGrnQtyBySourceItem?.get(sourceItemId) ?? 0;
+      const alreadyReceivedQty = Math.max(0, round2(getAlreadyReceivedBase(line) - exclude));
+      const pendingQty = getPendingBase(line, exclude);
       const unitPerPacking = line.conversionQty || 1;
+      const receivedQty = prefillReceivedBySourceItem?.get(sourceItemId) ?? 0;
+      const receivedCases = unitPerPacking > 0 ? Math.floor(receivedQty / unitPerPacking) : receivedQty;
+      const receivedLooseQty = unitPerPacking > 0 ? round2(receivedQty - receivedCases * unitPerPacking) : 0;
       return {
-        sourceItemId: line.purchaseOrderProductId as string,
+        sourceItemId,
         productId: String(line.productId || ""),
         productName: line.productName,
         productCode: line.productCode || line.sku,
         orderedQty: line.orderedQty,
         alreadyReceivedQty,
         pendingQty,
-        receivedQty: 0,
-        receivedCases: 0,
-        receivedLooseQty: 0,
+        receivedQty,
+        receivedCases,
+        receivedLooseQty,
         unitPerPacking,
         unit: line.baseUnit || line.uom || "Unit",
         poNumber: po.poNumber,
       };
     });
+}
+
+function buildManualRowsFromGrn(grn: GrnRecord): ManualInvoiceRow[] {
+  if (!grn.batches.length) return [createEmptyRow()];
+
+  return grn.batches.map((batch, idx) => {
+    const matchingItem = grn.items.find((it) => it.productId === batch.productId);
+    const sourceItemId = matchingItem?.sourceItemId || "";
+    const qty = batch.quantity || 0;
+    const unitPrice = batch.unitPrice || 0;
+    const gstPct = batch.gstPct || 0;
+    const amounts = calcAmounts(qty, unitPrice, gstPct);
+    return {
+      id: `edit-row-${idx}-${batch.batchNumber || idx}`,
+      sourceItemId,
+      productId: batch.productId,
+      productName: batch.productName,
+      productCode: batch.productCode || "",
+      unit: matchingItem?.unit || "Unit",
+      batchNumber: batch.batchNumber || "",
+      mfgDate: batch.mfgDate || "",
+      expDate: batch.expDate || "",
+      quantity: qty,
+      unitPrice,
+      gstPct,
+      ...amounts,
+    };
+  });
 }
 
 function validateManualRow(row: ManualInvoiceRow): string | null {
@@ -159,8 +221,15 @@ function SectionCard({
   );
 }
 
-export function PurchaseCreate() {
+export function PurchaseCreate({
+  mode = "create",
+  grnId,
+}: {
+  mode?: "create" | "edit";
+  grnId?: string;
+}) {
   const router = useRouter();
+  const isEdit = mode === "edit" && Boolean(grnId);
 
   const [grnNo, setGrnNo] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -175,8 +244,16 @@ export function PurchaseCreate() {
   const [itemWarnings, setItemWarnings] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editPrefillDone, setEditPrefillDone] = useState(false);
+  const [editItemsSeeded, setEditItemsSeeded] = useState(false);
 
-  const { data: previewNumber } = useGrnPreviewNumber(true);
+  const { data: previewNumber } = useGrnPreviewNumber(!isEdit);
+  const {
+    data: existingGrn,
+    isLoading: grnLoading,
+    isError: grnError,
+    error: grnLoadError,
+  } = useGrn(grnId, isEdit);
   const { data: supplierOptions = [], isLoading: suppliersLoading } =
     usePurchaseOrderSupplierDropdown(true);
   const { data: poOptions = [], isLoading: posLoading } = usePurchaseOrderDropdown(
@@ -193,23 +270,89 @@ export function PurchaseCreate() {
     isError: poDetailsError,
   } = usePurchaseOrder(selectedPoId || undefined);
   const createGrnMutation = useCreateGrn();
+  const updateGrnMutation = useUpdateGrn();
+
+  const thisGrnQtyBySourceItem = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!isEdit || !existingGrn) return map;
+    for (const it of existingGrn.items) {
+      const key = it.sourceItemId;
+      if (!key) continue;
+      map.set(key, round2((map.get(key) ?? 0) + (it.receivedQty || 0)));
+    }
+    return map;
+  }, [isEdit, existingGrn]);
 
   useEffect(() => {
-    if (previewNumber) setGrnNo(previewNumber);
-  }, [previewNumber]);
+    if (!isEdit && previewNumber) setGrnNo(previewNumber);
+  }, [isEdit, previewNumber]);
+
+  // Prefill header fields from existing GRN (once)
+  useEffect(() => {
+    if (!isEdit || !existingGrn || editPrefillDone) return;
+
+    if (existingGrn.status === "qc_completed") {
+      setFormError("This GRN cannot be edited because QC is already completed.");
+      return;
+    }
+
+    setGrnNo(existingGrn.grnNo || "");
+    setSupplierId(existingGrn.supplierId || "");
+    setSelectedPoId(existingGrn.sourceId || "");
+    setWarehouseId(existingGrn.warehouseUuid || "");
+    setGrnDate(existingGrn.grnDate || new Date().toISOString().split("T")[0]);
+    setInvoiceNumber(existingGrn.invoiceNumber || "");
+    setInvoiceDate(existingGrn.invoiceDate || new Date().toISOString().split("T")[0]);
+    setManualRows(buildManualRowsFromGrn(existingGrn));
+    setEditPrefillDone(true);
+  }, [isEdit, existingGrn, editPrefillDone]);
 
   const poLines = useMemo(() => {
     if (!selectedPo?.lines) return [] as POLineItem[];
+    if (isEdit) {
+      return selectedPo.lines.filter((line) => {
+        if (!line.purchaseOrderProductId) return false;
+        const exclude = thisGrnQtyBySourceItem.get(line.purchaseOrderProductId) ?? 0;
+        return getPendingBase(line, exclude) > 0 || exclude > 0;
+      });
+    }
     return selectedPo.lines.filter((line) => getPendingBase(line) > 0);
-  }, [selectedPo]);
+  }, [selectedPo, isEdit, thisGrnQtyBySourceItem]);
 
   useEffect(() => {
     if (!selectedPo) {
-      setItems([]);
+      if (!isEdit) setItems([]);
       return;
     }
+
+    if (isEdit) {
+      if (!editPrefillDone || editItemsSeeded || !existingGrn) return;
+      setItems(
+        buildItemsFromPoLines(selectedPo, {
+          thisGrnQtyBySourceItem,
+          prefillReceivedBySourceItem: thisGrnQtyBySourceItem,
+        }),
+      );
+      setEditItemsSeeded(true);
+      return;
+    }
+
     setItems(buildItemsFromPoLines(selectedPo));
-  }, [selectedPo]);
+  }, [
+    selectedPo,
+    isEdit,
+    editPrefillDone,
+    editItemsSeeded,
+    existingGrn,
+    thisGrnQtyBySourceItem,
+  ]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    if (selectedPo?.warehouseId) {
+      setWarehouseId(String(selectedPo.warehouseId));
+    }
+  }, [isEdit, selectedPo?.warehouseId]);
 
   const productOptions = useMemo(
     () =>
@@ -239,14 +382,18 @@ export function PurchaseCreate() {
     for (const opt of fromApi) {
       if (!merged.some((m) => m.value === opt.value)) merged.push(opt);
     }
-    return merged;
-  }, [selectedPo, warehouseOptions]);
-
-  useEffect(() => {
-    if (selectedPo?.warehouseId) {
-      setWarehouseId(String(selectedPo.warehouseId));
+    if (
+      warehouseId &&
+      !merged.some((m) => m.value === warehouseId) &&
+      existingGrn?.warehouse
+    ) {
+      merged.unshift({
+        value: warehouseId,
+        label: existingGrn.warehouse,
+      });
     }
-  }, [selectedPo?.warehouseId]);
+    return merged;
+  }, [selectedPo, warehouseOptions, warehouseId, existingGrn?.warehouse]);
 
   const getReceivedQtyForProduct = useCallback(
     (sourceItemId: string) => {
@@ -559,9 +706,12 @@ export function PurchaseCreate() {
       if (!line || !line.purchaseOrderProductId) {
         throw new Error("Invalid purchase order product selection.");
       }
+      const exclude = isEdit
+        ? thisGrnQtyBySourceItem.get(line.purchaseOrderProductId) ?? 0
+        : 0;
       const ordered = line.orderedQty;
-      const previous = getAlreadyReceivedBase(line);
-      const pending = getPendingBase(line);
+      const previous = Math.max(0, round2(getAlreadyReceivedBase(line) - exclude));
+      const pending = getPendingBase(line, exclude);
       const batches = filledRows
         .filter((row) => row.sourceItemId === it.sourceItemId)
         .map((row) => ({
@@ -592,28 +742,49 @@ export function PurchaseCreate() {
       };
     });
 
-    const payload: CreateGrnPayload = {
-      grnNumber: grnNo || null,
-      source_id: selectedPoId,
-      source_type: "PURCHASE_ORDER",
-      supplierId,
-      warehouseId,
-      grnDate,
-      items: payloadItems,
-      invoices: [
-        {
-          invoiceNumber: invoiceNumber.trim(),
-          invoiceDate,
-        },
-      ],
-    };
-
     try {
       setIsSubmitting(true);
-      await createGrnMutation.mutateAsync(payload);
-      router.push("/warehouse/grn/purchase");
+      if (isEdit && grnId) {
+        const updatePayload: UpdateGrnPayload = {
+          supplierId,
+          warehouseId,
+          grnDate,
+          items: payloadItems,
+          invoices: [
+            {
+              invoiceNumber: invoiceNumber.trim(),
+              invoiceDate,
+            },
+          ],
+        };
+        await updateGrnMutation.mutateAsync({ id: grnId, input: updatePayload });
+        router.push(`/warehouse/grn/purchase/${grnId}`);
+      } else {
+        const payload: CreateGrnPayload = {
+          grnNumber: grnNo || null,
+          source_id: selectedPoId,
+          source_type: "PURCHASE_ORDER",
+          supplierId,
+          warehouseId,
+          grnDate,
+          items: payloadItems,
+          invoices: [
+            {
+              invoiceNumber: invoiceNumber.trim(),
+              invoiceDate,
+            },
+          ],
+        };
+        await createGrnMutation.mutateAsync(payload);
+        router.push("/warehouse/grn/purchase");
+      }
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to create GRN.");
+      setFormError(
+        getApiErrorMessage(
+          err,
+          isEdit ? "Failed to update GRN." : "Failed to create GRN.",
+        ),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -621,21 +792,101 @@ export function PurchaseCreate() {
 
   const supplierLabel =
     supplierOptions.find((s) => s.value === supplierId)?.label || "";
+  const isBusy =
+    isSubmitting || createGrnMutation.isPending || updateGrnMutation.isPending;
+  const backHref = isEdit && grnId
+    ? `/warehouse/grn/purchase/${grnId}`
+    : "/warehouse/grn/purchase";
+
+  const poSelectOptions = useMemo(() => {
+    const options = poOptions.map((po) => ({
+      value: po.purchase_order_id,
+      label: po.po_no,
+    }));
+    if (
+      selectedPoId &&
+      !options.some((o) => o.value === selectedPoId) &&
+      (existingGrn?.poNumber || selectedPo?.poNumber)
+    ) {
+      options.unshift({
+        value: selectedPoId,
+        label: existingGrn?.poNumber || selectedPo?.poNumber || selectedPoId,
+      });
+    }
+    return options;
+  }, [poOptions, selectedPoId, existingGrn?.poNumber, selectedPo?.poNumber]);
+
+  if (isEdit && grnLoading) {
+    return (
+      <FormContainer
+        title="Edit GRN"
+        description="Loading GRN details…"
+        onBack={() => router.push("/warehouse/grn/purchase")}
+        onCancel={() => router.push("/warehouse/grn/purchase")}
+      >
+        <p className="text-xs text-muted-foreground text-center py-8">Loading GRN…</p>
+      </FormContainer>
+    );
+  }
+
+  if (isEdit && (grnError || !existingGrn)) {
+    return (
+      <FormContainer
+        title="Edit GRN"
+        description="Unable to load GRN for editing."
+        onBack={() => router.push("/warehouse/grn/purchase")}
+        onCancel={() => router.push("/warehouse/grn/purchase")}
+      >
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {grnLoadError instanceof Error
+            ? grnLoadError.message
+            : "GRN not found or could not be loaded."}
+        </div>
+      </FormContainer>
+    );
+  }
+
+  if (isEdit && existingGrn?.status === "qc_completed") {
+    return (
+      <FormContainer
+        title="Edit GRN"
+        description="Editing is restricted after QC completion."
+        onBack={() => router.push(backHref)}
+        onCancel={() => router.push(backHref)}
+      >
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          This GRN cannot be edited because QC is already completed.
+        </div>
+      </FormContainer>
+    );
+  }
 
   return (
     <FormContainer
-      title="Generate GRN"
-      description="Capture physical goods receipt and batch details against a single purchase order. OCR will be integrated later."
-      onBack={() => router.push("/warehouse/grn/purchase")}
-      onCancel={() => router.push("/warehouse/grn/purchase")}
+      title={isEdit ? "Edit Purchase GRN" : "Generate GRN"}
+      description={
+        isEdit
+          ? "Update received quantities and batch details for this purchase GRN. Supplier and PO cannot be changed."
+          : "Capture physical goods receipt and batch details against a single purchase order. OCR will be integrated later."
+      }
+      onBack={() => router.push(backHref)}
+      onCancel={() => router.push(backHref)}
       actions={
         <Button
           className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
           onClick={handleSubmit}
-          disabled={isSubmitting || createGrnMutation.isPending}
+          disabled={isBusy}
         >
           <Send className="w-3.5 h-3.5" />
-          {isSubmitting || createGrnMutation.isPending ? "Submitting…" : "Submit GRN"}
+          {isBusy
+            ? isEdit
+              ? "Updating…"
+              : "Submitting…"
+            : isEdit
+              ? "Update GRN"
+              : "Submit GRN"}
         </Button>
       }
     >
@@ -665,7 +916,7 @@ export function PurchaseCreate() {
               onChange={handleSupplierChange}
               placeholder={suppliersLoading ? "Loading suppliers…" : "Select supplier…"}
               searchPlaceholder="Search vendor…"
-              disabled={suppliersLoading}
+              disabled={suppliersLoading || isEdit}
               className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
             />
           </Field>
@@ -674,16 +925,13 @@ export function PurchaseCreate() {
             label="Select Purchase Order"
             required
             hint={
-              supplierId && !posLoading && poOptions.length === 0
+              !isEdit && supplierId && !posLoading && poOptions.length === 0
                 ? "No purchase orders found for this supplier."
                 : undefined
             }
           >
             <AutocompleteSelect
-              options={poOptions.map((po) => ({
-                value: po.purchase_order_id,
-                label: po.po_no,
-              }))}
+              options={poSelectOptions}
               value={selectedPoId}
               onChange={handlePoChange}
               placeholder={
@@ -694,7 +942,7 @@ export function PurchaseCreate() {
                     : "Select PO…"
               }
               searchPlaceholder="Search PO…"
-              disabled={!supplierId || posLoading}
+              disabled={!supplierId || posLoading || isEdit}
               className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
             />
           </Field>

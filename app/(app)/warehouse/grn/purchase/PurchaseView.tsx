@@ -13,6 +13,7 @@ import {
   FileText,
   CheckCircle2,
   Clock,
+  Pencil,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
@@ -127,6 +128,7 @@ export function PurchaseView({ id }: { id: string }) {
   const totalReceived = grn.items.reduce((sum, it) => sum + it.receivedQty, 0);
   const totalOrdered = grn.items.reduce((sum, it) => sum + it.orderedQty, 0);
   const canStartQc = grn.status !== "qc_completed";
+  const canEdit = grn.status !== "qc_completed";
 
   const primaryInvoice = grn.supplierInvoices[0];
   const invoiceMeta =
@@ -151,6 +153,8 @@ export function PurchaseView({ id }: { id: string }) {
         { icon: Building, label: grn.warehouse || "—" },
         { icon: Calendar, label: grn.grnDate || "—" },
       ]}
+      onEdit={canEdit ? () => router.push(`/warehouse/grn/purchase/${id}/edit`) : undefined}
+      editLabel="Edit GRN"
       secondaryAction={
         canStartQc
           ? {
@@ -169,16 +173,28 @@ export function PurchaseView({ id }: { id: string }) {
           { label: "Total Received", value: totalReceived },
           { label: "Batches", value: grn.batches.length },
         ],
-        quickActions: canStartQc
-          ? [
-              {
-                label: "Perform QC Check",
-                icon: ClipboardCheck,
-                variant: "primary" as const,
-                onClick: qcRedirect,
-              },
-            ]
-          : [],
+        quickActions: [
+          ...(canEdit
+            ? [
+                {
+                  label: "Edit GRN",
+                  icon: Pencil,
+                  variant: "outline" as const,
+                  onClick: () => router.push(`/warehouse/grn/purchase/${id}/edit`),
+                },
+              ]
+            : []),
+          ...(canStartQc
+            ? [
+                {
+                  label: "Perform QC Check",
+                  icon: ClipboardCheck,
+                  variant: "primary" as const,
+                  onClick: qcRedirect,
+                },
+              ]
+            : []),
+        ],
       }}
     >
       <div className="w-full space-y-6">

@@ -1,7 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GrnService, type CreateGrnPayload } from "@/services/grn.service";
+import {
+  GrnService,
+  type CreateGrnPayload,
+  type UpdateGrnPayload,
+} from "@/services/grn.service";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 import { purchaseOrderKeys } from "@/lib/procurement/purchase-order-query-keys";
 
@@ -37,6 +41,23 @@ export function useCreateGrn() {
         createdId
           ? queryClient.invalidateQueries({ queryKey: grnKeys.detail(createdId) })
           : Promise.resolve(),
+      ]);
+    },
+  });
+}
+
+export function useUpdateGrn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateGrnPayload }) =>
+      GrnService.update(id, input),
+    onSuccess: async (data, variables) => {
+      const updatedId =
+        (typeof data?.id === "string" ? data.id : undefined) || variables.id;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
+        queryClient.invalidateQueries({ queryKey: grnKeys.detail(updatedId) }),
       ]);
     },
   });

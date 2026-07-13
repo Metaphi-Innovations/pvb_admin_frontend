@@ -378,6 +378,7 @@ export const API_ENDPOINTS = {
       FILTER: "/warehouse/grnqc/grn/filter",
       DETAILS: (id: string) => `/warehouse/grnqc/grn/${id}`,
       CREATE: "/warehouse/grnqc/grn/create",
+      UPDATE: (id: string) => `/warehouse/grnqc/grn/update/${id}`,
       PREVIEW_NUMBER: "/warehouse/grnqc/grn/preview-number",
     },
     QC: {

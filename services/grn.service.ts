@@ -115,6 +115,13 @@ export interface CreateGrnPayload {
   invoices: CreateGrnInvoicePayload[];
 }
 
+/** Edit payload — source_id / source_type / grnNumber are optional (immutable on backend). */
+export type UpdateGrnPayload = Omit<CreateGrnPayload, "source_id" | "source_type" | "grnNumber" | "status"> & {
+  source_id?: string;
+  source_type?: GrnSourceType;
+  grnNumber?: string | null;
+};
+
 export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
   const supplier = asRecord(raw.supplier);
   const warehouse = asRecord(raw.warehouse);
@@ -140,6 +147,22 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     asString(purchaseOrder.poNumber) ||
     "";
 
+  const sourceId =
+    asString(raw.source_id) ||
+    asString(raw.sourceId) ||
+    asString(purchaseOrder.purchase_order_id) ||
+    "";
+  const supplierId =
+    asString(raw.supplierId) ||
+    asString(supplier.supplier_id) ||
+    asString(supplierSnapshot.supplier_id) ||
+    "";
+  const warehouseUuid =
+    asString(raw.warehouseId) ||
+    asString(warehouse.warehouse_id) ||
+    asString(warehouseSnapshot.warehouse_id) ||
+    "";
+
   const invoicesRaw = Array.isArray(raw.invoices) ? raw.invoices : [];
   const invoiceById = new Map<string, Record<string, unknown>>();
   const supplierInvoices: GrnSupplierInvoice[] = invoicesRaw.map((inv, idx) => {
@@ -163,9 +186,10 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
   for (const itemRaw of itemsRaw) {
     const item = asRecord(itemRaw);
     const snapshot = asRecord(item.productSnapshot);
+    const sourceItemId = asString(item.source_item_id) || asString(item.sourceItemId);
     const productId =
       asString(snapshot.product_id) ||
-      asString(item.source_item_id) ||
+      sourceItemId ||
       asString(item.id);
     const productName =
       asString(snapshot.product_name) ||
@@ -185,6 +209,7 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       productId,
       productName,
       productCode,
+      sourceItemId: sourceItemId || undefined,
       orderedQty,
       alreadyReceivedQty,
       pendingQty,
@@ -233,9 +258,12 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     id: asString(raw.id),
     grnNo: asString(raw.grnNumber),
     poNumber,
+    sourceId: sourceId || undefined,
+    supplierId: supplierId || undefined,
     vendorName,
     warehouse: warehouseName,
     warehouseId: asNumber(warehouse.sr_no) || undefined,
+    warehouseUuid: warehouseUuid || undefined,
     grnDate: asDateOnly(raw.grnDate),
     totalProducts: items.length,
     totalQty: items.reduce((sum, it) => sum + it.receivedQty, 0),
@@ -283,6 +311,17 @@ export const GrnService = {
     const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.GRN.CREATE, input);
     const payload = response.data as Record<string, unknown>;
     assertSuccess(payload, "Failed to create GRN.");
+    const data = payload.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an object.");
+    }
+    return data as Record<string, unknown>;
+  },
+
+  async update(id: string, input: UpdateGrnPayload): Promise<Record<string, unknown>> {
+    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.GRN.UPDATE(id), input);
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to update GRN.");
     const data = payload.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw new Error("Unexpected response shape: 'data' must be an object.");

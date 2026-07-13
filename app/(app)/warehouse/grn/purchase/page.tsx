@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2 } from "lucide-react";
+import { Eye, FileCheck2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GrnListingLayout } from "../shared/GrnListingLayout";
@@ -166,6 +166,13 @@ export default function PurchaseListingRoutePage() {
       action: "view",
       icon: Eye,
       onClick: (row) => router.push(`/warehouse/grn/purchase/${row.id}`),
+    },
+    {
+      label: "Edit GRN",
+      action: "edit",
+      icon: Pencil,
+      onClick: (row) => router.push(`/warehouse/grn/purchase/${row.id}/edit`),
+      hide: (row) => row.status === "qc_completed",
     },
     {
       label: "Perform QC Check",
