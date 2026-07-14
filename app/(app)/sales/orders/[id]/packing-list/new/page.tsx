@@ -11,6 +11,7 @@ import {
   AlertCircle, Check, ChevronsUpDown, Package, Save,
   ChevronDown, ChevronUp, ArrowLeft
 } from "lucide-react";
+import { DualQuantityInput } from "@/components/ui/DualQuantityInput";
 import {
   type SalesOrder,
   hydrateOrderLineItems,
@@ -212,13 +213,11 @@ export default function NewPackingListPage() {
     setError("");
   };
 
-  const updateAllocation = (
+  const updateAllocationQty = (
     lineItemId: string,
     cartonId: string,
-    field: "cases" | "loose",
-    value: string,
+    baseQty: number,
   ) => {
-    const numValue = parseInt(value, 10) || 0;
     const key = `${lineItemId}-${cartonId}`;
     
     setLines(prev =>
@@ -229,16 +228,9 @@ export default function NewPackingListPage() {
           allocations: line.allocations.map(alloc => {
             if (alloc.cartonId !== cartonId) return alloc;
             
-            let c = alloc.allocatedPackingQty;
-            let p = alloc.allocatedBaseQty - (c * alloc.unitsPerPackingUnit);
+            const totalBase = baseQty;
+            const c = Math.floor(totalBase / alloc.unitsPerPackingUnit);
 
-            if (field === "cases") {
-              c = numValue;
-            } else {
-              p = numValue;
-            }
-
-            const totalBase = (c * alloc.unitsPerPackingUnit) + p;
             setCheckedAllocations(prevChecks => ({ ...prevChecks, [key]: totalBase > 0 }));
 
             return { ...alloc, allocatedPackingQty: c, allocatedBaseQty: totalBase };
@@ -438,8 +430,7 @@ export default function NewPackingListPage() {
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Box/Carton</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Cases</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Loose</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Cases</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Loose ({line.baseUnit})</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-[200px]">Qty (Cases + Loose)</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total</th>
                       </tr>
                     </thead>
@@ -471,24 +462,10 @@ export default function NewPackingListPage() {
                             <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)}</td>
                             <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{alloc.availableBaseQty % alloc.unitsPerPackingUnit}</td>
                             <td className="px-3 py-2.5">
-                              <Input
-                                type="number"
-                                min="0"
-                                value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "cases", e.target.value)}
-                                className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
-                                placeholder="0"
-                                disabled={!isChecked}
-                              />
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <Input
-                                type="number"
-                                min="0"
-                                value={isChecked ? alloc.allocatedBaseQty - (alloc.allocatedPackingQty * alloc.unitsPerPackingUnit) : (isChecked ? 0 : "")}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "loose", e.target.value)}
-                                className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
-                                placeholder="0"
+                              <DualQuantityInput
+                                value={isChecked ? alloc.allocatedBaseQty : 0}
+                                packSize={alloc.unitsPerPackingUnit}
+                                onChange={(val) => updateAllocationQty(line.lineItemId, alloc.cartonId, val)}
                                 disabled={!isChecked}
                               />
                             </td>

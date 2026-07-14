@@ -44,6 +44,8 @@ import {
 import type { EligibleProductDiscountSchemeOffer } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { Badge } from "@/components/ui/badge";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
+import { DualQuantityInput } from "@/components/ui/DualQuantityInput";
+import { formatQuantity, decomposeBaseQty } from "@/lib/warehouse/quantity-utils";
 import ProductSchemeOfferDialog, {
 	type ProductSchemeOfferDialogMode,
 } from "./ProductSchemeOfferDialog";
@@ -582,10 +584,7 @@ export default function ProductLinesEditor({
 	};
 
 	const [topSelectedProds, setTopSelectedProds] = useState<ProductCatalogItem[]>([]);
-	const [topInputQty, setTopInputQty] = useState<string>("1");
-	const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
-	const [topCaseQuantity, setTopCaseQuantity] = useState<number>(0);
-	const [topPieceQuantity, setTopPieceQuantity] = useState<number>(0);
+	const [topBaseQty, setTopBaseQty] = useState<number>(0);
 
 	const handleAddProductFromTop = () => {
 		if (topSelectedProds.length === 0) {
@@ -607,22 +606,12 @@ export default function ProductLinesEditor({
 			let newLine = createEmptyLineItem();
 			newLine.productId = prod.id;
 			const packSize = prod.packSize || 1;
-			newLine.quantityType = topQuantityType;
-			const totalOverride = Number(topInputQty) || 0;
-
-			// If manual total is provided and no case/piece specified, use total
-			if (totalOverride > 0 && topCaseQuantity === 0 && topPieceQuantity === 0) {
-				newLine.quantity = totalOverride;
-				newLine.caseQuantity = Math.floor(newLine.quantity / packSize);
-				newLine.pieceQuantity = newLine.quantity % packSize;
-			} else {
-				// use case / piece
-				const c = topCaseQuantity || 0;
-				const p = topPieceQuantity || 0;
-				newLine.caseQuantity = c;
-				newLine.pieceQuantity = p;
-				newLine.quantity = (c * packSize) + p;
-			}
+			
+			newLine.quantity = topBaseQty > 0 ? topBaseQty : 1;
+			const decomposed = decomposeBaseQty(newLine.quantity, packSize);
+			newLine.caseQuantity = decomposed.cases;
+			newLine.pieceQuantity = decomposed.pieces;
+			newLine.quantityType = decomposed.cases > 0 ? "Case" : "Piece"; // legacy fallback
 
 			if (newLine.quantity <= 0) {
 				setLocalError("Quantity must be greater than zero.");
@@ -638,9 +627,7 @@ export default function ProductLinesEditor({
 
 		onChange(newLines);
 		setTopSelectedProds([]);
-		setTopInputQty("1");
-		setTopCaseQuantity(0);
-		setTopPieceQuantity(0);
+		setTopBaseQty(0);
 		setLocalError(null);
 	};
 
@@ -672,8 +659,6 @@ export default function ProductLinesEditor({
 				totalQuantity={totalQuantity}
 				totalAmount={totalAmount}
 				showTotalsInHeader={true}
-				quantity={topInputQty}
-				onQuantityChange={setTopInputQty}
 				onAddItem={handleAddProductFromTop}
 				customSelectorArea={
 					<ProductSelect
@@ -687,45 +672,13 @@ export default function ProductLinesEditor({
 				customQuantityArea={
 					<>
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">Type</Label>
-							<Select
-								value={topQuantityType}
-								onValueChange={(value) => {
-									const type = value as "Case" | "Piece";
-									setTopQuantityType(type);
-									if (type === "Case") {
-										setTopPieceQuantity(0);
-									}
-								}}
-							>
-								<SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
-									<SelectValue placeholder="Type" />
-								</SelectTrigger>
-								<SelectContent className="min-w-[120px]">
-									<SelectItem value="Case">Case</SelectItem>
-									<SelectItem value="Piece">Piece</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Cases</Label>
-							<Input
-								type="number"
-								min={0}
-								value={topCaseQuantity || ""}
-								onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
-								className="h-8 text-xs w-20 bg-white"
-							/>
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Pieces</Label>
-							<Input
-								type="number"
-								min={0}
-								disabled={topQuantityType === "Case"}
-								value={topPieceQuantity || ""}
-								onChange={(e) => setTopPieceQuantity(Number(e.target.value) || 0)}
-								className="h-8 text-xs w-20 bg-white disabled:opacity-50"
+							<Label className="text-xs font-medium">Quantity</Label>
+							<DualQuantityInput
+								value={topBaseQty}
+								packSize={topSelectedProds.length === 1 ? (topSelectedProds[0].packSize || 1) : 1}
+								onChange={setTopBaseQty}
+								disabled={topSelectedProds.length === 0}
+								className="w-[200px]"
 							/>
 						</div>
 						<div className="space-y-1">
@@ -733,11 +686,7 @@ export default function ProductLinesEditor({
 							<Input
 								type="text"
 								disabled
-								value={
-									topSelectedProds.length === 1
-										? (((topCaseQuantity || 0) * (topSelectedProds[0].packSize || 1)) + (topQuantityType === "Case" ? 0 : (topPieceQuantity || 0))) || ""
-										: (topCaseQuantity || topPieceQuantity ? "—" : "")
-								}
+								value={topBaseQty > 0 ? topBaseQty : ""}
 								className="h-8 text-xs w-24 bg-muted text-muted-foreground font-semibold"
 							/>
 						</div>
@@ -748,10 +697,7 @@ export default function ProductLinesEditor({
 						{[
 							{ h: "Product", className: "w-[240px]" },
 							{ h: "Stock", className: "w-16" },
-							{ h: "Type", className: "w-[80px]" },
-							{ h: "Cases", className: "w-20" },
-							{ h: "Pieces", className: "w-20" },
-							{ h: "Total Unit Qty", className: "w-24" },
+							{ h: "Qty (Cs + Pcs)", className: "w-[170px]" },
 							{ h: "DP", className: "min-w-[80px]" },
 							{ h: "Offer", className: "min-w-[130px]" },
 							{ h: "Disc. Amt", className: "min-w-[80px]" },
@@ -852,71 +798,18 @@ export default function ProductLinesEditor({
 										{line.productId != null ? line.availableStock : "—"}
 									</span>
 								</td>
-								<td className='px-2 py-1.5 w-[80px]'>
+								<td className='px-2 py-1.5 w-[170px]'>
 									{isEditing ? (
-										<Select
-											value={draftLine.quantityType || "Piece"}
-											onValueChange={(value) => updateDraft({ quantityType: value as "Case" | "Piece" })}
-										>
-											<SelectTrigger className="h-7 text-xs rounded border-border bg-white w-full px-2">
-												<SelectValue placeholder="Type" />
-											</SelectTrigger>
-											<SelectContent className="min-w-[120px]">
-												<SelectItem value="Case">Case</SelectItem>
-												<SelectItem value="Piece">Piece</SelectItem>
-											</SelectContent>
-										</Select>
-									) : (
-										<span className="text-xs">{line.quantityType}</span>
-									)}
-								</td>
-								<td className='px-2 py-1.5 w-20'>
-									{isEditing ? (
-										<Input
-											type="number"
-											min={0}
-											value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
-											onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
-											className="h-7 text-xs w-full"
+										<DualQuantityInput
+											value={draftLine.quantity}
+											packSize={product?.packSize || 1}
+											onChange={(val) => updateDraft({ quantity: val, quantityType: 'Case' })}
+											disabled={!draftLine.productId}
 										/>
 									) : (
-										<span className="text-xs">{line.caseQuantity || 0}</span>
-									)}
-								</td>
-								<td className='px-2 py-1.5 w-20'>
-									{isEditing ? (
-										<Input
-											type="number"
-											min={0}
-											disabled={draftLine.quantityType === "Case"}
-											value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
-											onChange={(e) => updateDraft({ pieceQuantity: e.target.value ? Number(e.target.value) : 0 })}
-											className="h-7 text-xs w-full disabled:opacity-50"
-										/>
-									) : (
-										<span className="text-xs">{line.quantityType === "Case" ? "—" : (line.pieceQuantity || 0)}</span>
-									)}
-								</td>
-								<td className='px-2 py-1.5 w-20'>
-									{isEditing ? (
-										<Input
-											type="number"
-											disabled
-											value={draftLine.quantity || ""}
-											className={cn(
-												"h-7 text-xs w-full font-semibold bg-muted text-muted-foreground",
-												localError && draftLine.quantity <= 0 && "border-red-400"
-											)}
-										/>
-									) : (
-										<div className="flex flex-col">
-											<span className={cn("text-xs font-semibold", localError && line.quantity <= 0 && "text-red-500")}>
-												{line.quantity}
-											</span>
-											<span className="text-[9px] text-muted-foreground">
-												Pk: {product?.packSize || 1}
-											</span>
-										</div>
+										<span className="text-xs font-semibold">
+											{formatQuantity(line.quantity, product?.packSize || 1, true)}
+										</span>
 									)}
 								</td>
 								<td className='px-2 py-1.5'>
