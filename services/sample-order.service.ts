@@ -158,7 +158,7 @@ function buildBackendWriteBody(
     order_date: form.orderDate ? new Date(form.orderDate).toISOString() : new Date().toISOString(),
     status: mapFrontendStatusToBackend(options.status),
     remarks: form.remarks || null,
-    customer_id: "1a15aac2-1e1d-4337-8642-0d1cd6e1366c",
+    customer_id: form.customerId,
     warehouse_id: form.warehouseId,
     salesperson_id: form.salesManId,
     ...totals,
