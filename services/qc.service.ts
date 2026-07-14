@@ -253,12 +253,12 @@ export const QcService = {
   },
 
   async create(payload: { grnId: string; qcDate: string; remarks?: string; items: any[] }): Promise<any> {
-    const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.QC.CREATE, payload);
+    const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.QC.CREATE, payload, { timeout: 120000 });
     return response.data;
   },
 
   async update(id: string, payload: { grnId: string; qcDate: string; remarks?: string; items: any[] }): Promise<any> {
-    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.QC.UPDATE(id), payload);
+    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.QC.UPDATE(id), payload, { timeout: 120000 });
     return response.data;
   },
   
