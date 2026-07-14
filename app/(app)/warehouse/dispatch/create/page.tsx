@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Truck, CheckSquare, Check, RotateCcw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getPreviewNumber, getPackingDoneList, createDispatch } from "../services";
+import { getPreviewNumber, getPackingDoneList, createDispatch, getPackingDoneById } from "../services";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function CreateDispatchPage() {
@@ -28,6 +28,7 @@ export default function CreateDispatchPage() {
   
   const [availablePackings, setAvailablePackings] = useState<any[]>([]);
   const [selectedPackingId, setSelectedPackingId] = useState<string>("");
+  const [packingDetails, setPackingDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,6 +48,16 @@ export default function CreateDispatchPage() {
       })
       .catch(console.error);
   }, [packingIdFromUrl, sourceType]);
+
+  useEffect(() => {
+    if (!selectedPackingId) {
+      setPackingDetails(null);
+      return;
+    }
+    getPackingDoneById(selectedPackingId)
+      .then((data) => setPackingDetails(data))
+      .catch(console.error);
+  }, [selectedPackingId]);
 
   const selectedPacking = useMemo(() => {
     return availablePackings.find((p) => p.packing_done_id === selectedPackingId);
@@ -207,7 +218,7 @@ export default function CreateDispatchPage() {
         </div>
 
         {selectedPacking && (
-          <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
+          <div className="border-t border-border/80 pt-6 mt-6 space-y-6">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
               <CheckSquare className="w-4 h-4 text-brand-600" /> Selected Packing Details
             </h2>
@@ -229,6 +240,52 @@ export default function CreateDispatchPage() {
                 <p className="text-sm font-bold text-foreground">{selectedPacking.total_packed_qty}</p>
               </div>
             </div>
+
+            {packingDetails && packingDetails.customer && packingDetails.source_type !== "stock_transfer" && (
+              <div className="bg-slate-50 p-4 rounded-lg border border-border">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
+                <div className="text-xs text-foreground space-y-1">
+                  <p className="font-semibold">{packingDetails.customer.customer_name}</p>
+                  <p>{packingDetails.customer.shipping_address || packingDetails.customer.billing_address || "No address provided."}</p>
+                  {packingDetails.customer.city && <p>{packingDetails.customer.city}, {packingDetails.customer.state} {packingDetails.customer.pincode}</p>}
+                </div>
+              </div>
+            )}
+
+            {packingDetails && packingDetails.target_warehouse_name && packingDetails.source_type === "stock_transfer" && (
+              <div className="bg-slate-50 p-4 rounded-lg border border-border">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Destination Warehouse</p>
+                <div className="text-xs text-foreground space-y-1">
+                  <p className="font-semibold">{packingDetails.target_warehouse_name}</p>
+                </div>
+              </div>
+            )}
+
+            {packingDetails && packingDetails.items && packingDetails.items.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Packed Products</p>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-border">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground">Product</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Packed Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {packingDetails.items.map((item: any) => (
+                        <tr key={item.packing_done_product_id}>
+                          <td className="px-3 py-2 font-medium">{item.product?.product_name || item.product_id}</td>
+                          <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{item.packed_qty}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{item.remarks || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -21,6 +21,7 @@ import {
   getPackingWarehouseLabel,
   getPackingWarehouseValue,
   isPurchaseReturnDoc,
+  isStockTransferDoc,
 } from "../../lib/packing-document-labels";
 
 function getLineKey(p: SalesOrderProduct): string {
@@ -296,15 +297,26 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
                   className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5"
                 />
               </div>
+              {!isStockTransferDoc(order) && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {getPackingDocumentNoLabel(order.sourceDocumentType)}
+                  </p>
+                  <Input
+                    value={getPackingDocumentNo(order)}
+                    disabled
+                    className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5"
+                  />
+                </div>
+              )}
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  {getPackingDocumentNoLabel(order.sourceDocumentType)}
+                  {getPackingWarehouseLabel(order.sourceDocumentType)}
                 </p>
-                <Input
-                  value={getPackingDocumentNo(order)}
-                  disabled
-                  className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5"
-                />
+                <div className="flex items-center gap-1.5 h-8 border border-input px-3 rounded-md bg-slate-50 text-xs text-muted-foreground font-medium mt-1.5">
+                  <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
+                  {getPackingWarehouseValue(order)}
+                </div>
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -315,15 +327,6 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
                   disabled
                   className="h-8 text-xs bg-slate-50 font-medium mt-1.5"
                 />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  {getPackingWarehouseLabel(order.sourceDocumentType)}
-                </p>
-                <div className="flex items-center gap-1.5 h-8 border border-input px-3 rounded-md bg-slate-50 text-xs text-muted-foreground font-medium mt-1.5">
-                  <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
-                  {getPackingWarehouseValue(order)}
-                </div>
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">

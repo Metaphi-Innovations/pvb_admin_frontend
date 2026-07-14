@@ -155,12 +155,6 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
 
     const baseColumns: ColumnConfig<PackingListListItem>[] = [
       {
-        key: "orderType",
-        header: "Order Type",
-        width: "100px",
-        render: (_: unknown, row: PackingListListItem) => <OrderTypeBadge row={row} />,
-      },
-      {
         key: "packingNo",
         header: getPackingListOrderNoHeader(sourceFilter),
         sortable: true,
@@ -176,9 +170,6 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
             >
               {row.sourceDocumentNo || row.packingNumber}
             </Link>
-            {row.sourceDocumentNo && (
-              <span className="text-[10px] text-muted-foreground font-mono">{row.packingNumber}</span>
-            )}
           </div>
         ),
       },

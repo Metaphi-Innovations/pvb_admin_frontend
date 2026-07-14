@@ -162,12 +162,6 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   const columns = useMemo(() => {
     const cols: ColumnConfig<PackingRecord>[] = [
       {
-        key: "orderType",
-        header: "Order Type",
-        width: "100px",
-        render: (_: unknown, row: PackingRecord) => <OrderTypeBadge row={row} />,
-      },
-      {
         key: "packingNo",
         header: "Packing Done No",
         sortable: true,
