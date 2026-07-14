@@ -29,6 +29,16 @@ export async function createDispatch(payload: any) {
   return response.data;
 }
 
+export async function updateDispatch(id: string, payload: any) {
+  const response = await api.patch(`/warehouse/dispatch/${id}`, payload);
+  return response.data;
+}
+
+export async function updateDispatchStatus(id: string, status: string) {
+  const response = await api.patch(`/warehouse/dispatch/${id}/status`, { status });
+  return response.data;
+}
+
 export async function getDispatchFilterDropdown(fieldName: string, sourceType?: string) {
   const params: any = { field_name: fieldName };
   if (sourceType) params.source_type = sourceType;
@@ -52,4 +62,9 @@ export async function getFilterDropdown(fieldName: string, sourceType?: string) 
 export async function getPackingDoneList(payload: any = {}) {
   const response = await api.post(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.LIST, payload);
   return response.data;
+}
+
+export async function getPackingDoneById(id: string) {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.DETAILS(id));
+  return response.data?.data;
 }

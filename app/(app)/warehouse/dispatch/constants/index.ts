@@ -19,10 +19,12 @@ export const TRANSPORTER_OPTIONS = [
 export const DELIVERY_STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> = {
   "Pending Dispatch": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending Dispatch" },
   "Ready to Dispatch": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Ready to Dispatch" },
+  "Ready For Dispatch": { bg: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", label: "Ready For Dispatch" },
   "In Transit": { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "In Transit" },
   "Delivered": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Delivered" },
-  "Dispatched": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Dispatched" },
+  "Dispatched": { bg: "bg-teal-50 text-teal-700 border-teal-200", label: "Dispatched" },
   "Partially Delivered": { bg: "bg-indigo-50 text-indigo-700 border-indigo-200", label: "Partially Delivered" },
   "Returned": { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Returned" },
   "Cancelled": { bg: "bg-slate-100 text-slate-600 border-slate-200", label: "Cancelled" },
+  "Closed": { bg: "bg-slate-100 text-slate-600 border-slate-200", label: "Closed" },
 };
