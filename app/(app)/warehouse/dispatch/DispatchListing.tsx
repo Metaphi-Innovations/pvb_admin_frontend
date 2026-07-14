@@ -232,12 +232,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          const label =
-            type === "stock_transfer"
-              ? row.target_warehouse_name || row.targetWarehouse || (row.customer as any)?.customer_name || row.customer
-              : type === "purchase_return"
-                ? row.customer_name || (row.customer as any)?.customer_name || row.customer
-                : row.customer_name || (row.customer as any)?.customer_name || row.customer;
+          const label = row.customer_name || (row.customer as any)?.customer_name || row.customer || "Unknown";
           return (
             <div className="min-w-0">
               <span className="text-xs font-bold text-foreground block truncate">{label}</span>
@@ -548,7 +543,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
                 <div className="p-4 grid grid-cols-2 gap-4 text-xs">
                   <div className="space-y-2.5">
                     <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Sales Order No</p><p className="font-bold">{challanTarget.source_document_no || challanTarget.packing_done?.packing_done_no || "—"}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{((challanTarget as any).customer)?.customer_name || challanTarget.target_warehouse_name || challanTarget.customer_name || "—"}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{((challanTarget as any).customer)?.customer_name || challanTarget.customer_name || "--"}</p></div>
                     <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Dispatch Date</p><p className="font-bold">{challanTarget.dispatch_date ? new Date(challanTarget.dispatch_date).toLocaleDateString() : new Date(challanTarget.created_at).toLocaleDateString()}</p></div>
                   </div>
                   <div className="space-y-2.5">

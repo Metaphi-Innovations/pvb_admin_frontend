@@ -148,7 +148,7 @@ export default function ViewDispatchPage() {
                   <tr key={i} className="border-b border-border/60 hover:bg-slate-50/40">
                     <td className="py-3 px-3 text-xs font-bold">{p.product?.product_name || "—"}</td>
                     <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.product?.product_code || "—"}</td>
-                    <td className="py-3 px-3 text-xs text-center">{p.inventory_sellable_item?.batch_number || "—"}</td>
+                    <td className="py-3 px-3 text-xs text-center">{p.inventory_batch?.batch_no || "—"}</td>
                     <td className="py-3 px-3 text-xs font-bold text-center">
                       <span className="text-emerald-700">{cases > 0 ? cases : baseQty} {cases > 0 && packSize > 1 ? "Cases" : "Units"}</span>
                       {packSize > 1 && cases > 0 && <span className="text-muted-foreground ml-1 text-[10px]">({baseQty} Units)</span>}
