@@ -382,7 +382,15 @@ export default function ProfitLossPageClient() {
   );
 
   const filterBar = (
-    <ReportFilterRow className="items-end gap-x-2 gap-y-2.5">
+    <ReportFilterRow
+      end={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || !mounted || !sourceStatement.hasData}
+        />
+      }
+    >
       <ReportFinancialYearFilter
         value={financialYearId}
         onChange={handleFinancialYearChange}
@@ -445,13 +453,6 @@ export default function ProfitLossPageClient() {
       className="h-full min-h-0"
       subHeader={
         <ProfitLossViewTabs value={activeTab} onChange={setActiveTab} />
-      }
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !sourceStatement.hasData}
-        />
       }
       filters={filterBar}
     >

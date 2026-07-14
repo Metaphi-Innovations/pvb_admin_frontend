@@ -335,8 +335,16 @@ export default function HsnSummaryPageClient() {
 
   const filterBar = (
     <>
-      <ReportFilterRow className="items-end gap-2 flex-wrap">
-        <ReportFinancialYearFilter value={financialYearId} onChange={handleFinancialYearChange} />
+      <ReportFilterRow
+        className="items-end gap-2 flex-wrap"
+        end={
+          <AccountsExportMenu
+            onExcel={handleExportExcel}
+            onPdf={handleExportPdf}
+            disabled={exporting || !report.hasData}
+          />
+        }
+      >        <ReportFinancialYearFilter value={financialYearId} onChange={handleFinancialYearChange} />
         <ReportDateRangeFilter
           preset={preset}
           dateFrom={dateFrom}
@@ -418,18 +426,11 @@ export default function HsnSummaryPageClient() {
       layout="split"
       className="h-full min-h-0"
       actions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link href={backHref}>
-              <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
-            </Link>
-          </Button>
-          <AccountsExportMenu
-            onExcel={handleExportExcel}
-            onPdf={handleExportPdf}
-            disabled={exporting || !report.hasData}
-          />
-        </div>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+          <Link href={backHref}>
+            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
+          </Link>
+        </Button>
       }
       filters={filterBar}
     >

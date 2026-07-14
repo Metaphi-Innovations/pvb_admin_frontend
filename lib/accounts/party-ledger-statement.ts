@@ -1,6 +1,6 @@
 /**
- * Party ledger statement — builds transaction lists from linked COA receivable/payable ledgers
- * (posted voucher lines only), shared by Customer & Supplier Ledger reports.
+ * Party ↔ COA ledger resolution helpers (receivable/payable).
+ * Used by General Ledger deep-links and bank reconciliation categorization.
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";

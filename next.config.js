@@ -46,6 +46,10 @@ const nextConfig = {
       { source: "/accounts/masters/ledgers/:id", destination: "/accounts/masters/chart-of-accounts?node=:id", permanent: false },
       { source: "/accounts/masters/ledgers", destination: "/accounts/masters/chart-of-accounts", permanent: false },
       { source: "/accounts/outstanding", destination: "/accounts/reports/trial-balance", permanent: false },
+      { source: "/accounts/reports/receipt-register", destination: "/accounts/vouchers?tab=receipt", permanent: false },
+      { source: "/accounts/reports/payment-register", destination: "/accounts/vouchers?tab=payment", permanent: false },
+      { source: "/accounts/reports/contra-register", destination: "/accounts/vouchers?tab=contra", permanent: false },
+      { source: "/accounts/reports/journal-register", destination: "/accounts/vouchers/journal", permanent: false },
     ];
   },
 };

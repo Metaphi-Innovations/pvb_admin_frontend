@@ -9,7 +9,6 @@ import type {
 } from "@/lib/accounts/column-filter-types";
 import {
   applyAccountsColumnFilters,
-  applyAccountsTopN,
   collectColumnValueCounts,
   countActiveColumnFilters,
   sortAccountsRows,
@@ -65,14 +64,7 @@ export function useAccountsColumnFilters<T>({
   }, [defaultSortDir]);
 
   const filteredRows = useMemo(() => {
-    let result = applyAccountsColumnFilters(rows, columnFilters, getCellValue, getFilterValue);
-
-    for (const [key, filter] of Object.entries(columnFilters)) {
-      if (filter?.numberOperator === "top10") {
-        result = applyAccountsTopN(result, 10, key, getCellValue, true);
-      }
-    }
-
+    const result = applyAccountsColumnFilters(rows, columnFilters, getCellValue, getFilterValue);
     return sortAccountsRows(result, sortKey, sortDir, getCellValue);
   }, [rows, columnFilters, sortKey, sortDir, getCellValue, getFilterValue]);
 

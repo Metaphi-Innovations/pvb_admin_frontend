@@ -1,50 +1,48 @@
 "use client";
 
+/**
+ * Excel-style column filter — search + checkbox list only.
+ * Used across all Accounts reports via AccountsColumnHeader / SortTh.
+ */
+
 import React, { useEffect, useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Check, Filter, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import type {
   AccountsColumnFilterState,
   AccountsColumnFilterType,
   ColumnValueOption,
-  DateFilterPreset,
 } from "@/lib/accounts/column-filter-types";
 import { isColumnFilterActive } from "@/lib/accounts/column-filter-engine";
+import { formatMoney } from "@/lib/accounts/money-format";
 
-const DATE_PRESETS: { id: DateFilterPreset; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "yesterday", label: "Yesterday" },
-  { id: "thisWeek", label: "This Week" },
-  { id: "thisMonth", label: "This Month" },
-  { id: "thisFinancialYear", label: "Financial Year" },
-  { id: "custom", label: "Custom Range" },
+const BOOLEAN_OPTIONS: ColumnValueOption[] = [
+  { value: "yes", count: 0 },
+  { value: "no", count: 0 },
 ];
 
-const BOOLEAN_OPTIONS = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-];
-
-function defaultFilter(type: AccountsColumnFilterType): AccountsColumnFilterState {
-  return { type };
-}
-
-function usesValueList(type: AccountsColumnFilterType): boolean {
-  return type === "text" || type === "status" || type === "select" || type === "number" || type === "amount";
+function formatOptionLabel(
+  value: string,
+  filterType: AccountsColumnFilterType,
+  optionLabels: Record<string, string>,
+): string {
+  if (optionLabels[value]) return optionLabels[value];
+  if (filterType === "amount" || filterType === "number") {
+    const n = Number(String(value).replace(/[₹,\s]/g, ""));
+    if (Number.isFinite(n)) return formatMoney(n);
+  }
+  return value;
 }
 
 function ValueCheckboxRow({
-  value,
   label,
   count,
   checked,
   onToggle,
 }: {
-  value: string;
-  label?: string;
+  label: string;
   count?: number;
   checked: boolean;
   onToggle: () => void;
@@ -66,9 +64,11 @@ function ValueCheckboxRow({
       >
         {checked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
       </span>
-      <span className="text-[11px] text-foreground truncate flex-1 min-w-0">{label ?? value}</span>
-      {count != null && (
-        <span className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0">({count})</span>
+      <span className="text-[11px] text-foreground truncate flex-1 min-w-0">{label}</span>
+      {count != null && count > 0 && (
+        <span className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0">
+          ({count})
+        </span>
       )}
     </button>
   );
@@ -87,7 +87,6 @@ export function AccountsColumnFilterPopover({
   filterType: AccountsColumnFilterType;
   value?: AccountsColumnFilterState;
   onChange: (value: AccountsColumnFilterState | undefined) => void;
-  /** Distinct values with counts — preferred over legacy uniqueValues. */
   valueOptions?: ColumnValueOption[];
   /** @deprecated Use valueOptions */
   uniqueValues?: string[];
@@ -95,19 +94,11 @@ export function AccountsColumnFilterPopover({
   optionLabels?: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<AccountsColumnFilterState>(() => value ?? defaultFilter(filterType));
+  const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    if (open) {
-      setDraft(value ?? defaultFilter(filterType));
-      setSearch("");
-    }
-  }, [open, value, filterType]);
-
-  const active = isColumnFilterActive(value);
-
   const listOptions = useMemo((): ColumnValueOption[] => {
+    if (filterType === "boolean") return BOOLEAN_OPTIONS;
     if (valueOptions.length > 0) return valueOptions;
     if (filterType === "status" || filterType === "select") {
       return statusOptions.map((v) => ({ value: v, count: 0 }));
@@ -115,98 +106,83 @@ export function AccountsColumnFilterPopover({
     return [];
   }, [valueOptions, filterType, statusOptions]);
 
+  useEffect(() => {
+    if (!open) return;
+    const existing = value?.selectedValues;
+    if (existing && existing.length > 0) {
+      setSelected([...existing]);
+    } else {
+      // Excel default: all values selected when no filter is active
+      setSelected(listOptions.map((o) => o.value));
+    }
+    setSearch("");
+  }, [open, value, listOptions]);
+
+  const active = isColumnFilterActive(value);
+
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return listOptions;
     return listOptions.filter((o) => {
-      const display = optionLabels[o.value] ?? o.value;
+      const display = formatOptionLabel(o.value, filterType, optionLabels);
       return display.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
     });
-  }, [listOptions, search, optionLabels]);
+  }, [listOptions, search, optionLabels, filterType]);
 
-  const selectedSet = useMemo(() => new Set(draft.selectedValues ?? []), [draft.selectedValues]);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   const allFilteredSelected =
     filteredOptions.length > 0 && filteredOptions.every((o) => selectedSet.has(o.value));
 
   const toggleValue = (val: string) => {
-    setDraft((d) => {
-      const cur = d.selectedValues ?? [];
-      const next = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val];
-      return { ...d, selectedValues: next, textValue: undefined };
-    });
+    setSelected((cur) => (cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val]));
   };
 
-  const selectAllFiltered = () => {
-    setDraft((d) => {
-      const cur = new Set(d.selectedValues ?? []);
-      for (const o of filteredOptions) cur.add(o.value);
-      return { ...d, selectedValues: [...cur], textValue: undefined };
-    });
-  };
-
-  const clearAllSelected = () => {
-    setDraft((d) => ({ ...d, selectedValues: [], textValue: undefined }));
-    setSearch("");
+  const toggleSelectAllFiltered = () => {
+    if (allFilteredSelected) {
+      const remove = new Set(filteredOptions.map((o) => o.value));
+      setSelected((cur) => cur.filter((v) => !remove.has(v)));
+    } else {
+      setSelected((cur) => {
+        const next = new Set(cur);
+        for (const o of filteredOptions) next.add(o.value);
+        return [...next];
+      });
+    }
   };
 
   const apply = () => {
-    let next: AccountsColumnFilterState = { ...draft, type: filterType };
-
-    if (filterType === "date") {
-      if (!next.datePreset && !next.dateFrom && !next.dateTo) {
-        onChange(undefined);
-        setOpen(false);
-        return;
-      }
-      if (next.datePreset && next.datePreset !== "custom" && next.datePreset !== "between") {
-        next = { ...next, dateFrom: undefined, dateTo: undefined, selectedValues: undefined };
-      } else if (next.datePreset === "custom" || next.datePreset === "between") {
-        if (!next.dateFrom && !next.dateTo) {
-          onChange(undefined);
-          setOpen(false);
-          return;
-        }
-        next = {
-          ...next,
-          dateFrom: next.dateFrom || undefined,
-          dateTo: next.dateTo || next.dateFrom || undefined,
-          selectedValues: undefined,
-        };
-      }
-    } else if (filterType === "boolean") {
-      if (!next.selectedValues?.length) {
-        onChange(undefined);
-        setOpen(false);
-        return;
-      }
-    } else if (usesValueList(filterType)) {
-      if (!next.selectedValues?.length) {
-        onChange(undefined);
-        setOpen(false);
-        return;
-      }
-      next = { ...next, textValue: undefined, textOperator: undefined };
+    // No values / nothing selectable → clear
+    if (listOptions.length === 0 || selected.length === 0) {
+      onChange(undefined);
+      setOpen(false);
+      return;
     }
 
-    onChange(isColumnFilterActive(next) ? next : undefined);
+    // All column values selected → same as no filter (Excel behavior)
+    const allSelected =
+      selected.length === listOptions.length &&
+      listOptions.every((o) => selectedSet.has(o.value));
+
+    if (allSelected) {
+      onChange(undefined);
+      setOpen(false);
+      return;
+    }
+
+    const next: AccountsColumnFilterState = {
+      type: filterType,
+      selectedValues: selected,
+    };
+    onChange(next);
     setOpen(false);
   };
 
   const clear = () => {
     onChange(undefined);
-    setDraft(defaultFilter(filterType));
+    setSelected(listOptions.map((o) => o.value));
     setSearch("");
     setOpen(false);
-  };
-
-  const setDatePreset = (preset: DateFilterPreset) => {
-    setDraft((d) => ({
-      ...d,
-      datePreset: preset,
-      selectedValues: undefined,
-      ...(preset !== "custom" && preset !== "between" ? { dateFrom: undefined, dateTo: undefined } : {}),
-    }));
   };
 
   return (
@@ -225,110 +201,43 @@ export function AccountsColumnFilterPopover({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="accounts-col-filter-popover w-[260px] p-0 z-[120]"
+        className="accounts-col-filter-popover w-[240px] p-0 z-[120]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-2.5 py-2 border-b border-border/70 bg-muted/10">
-          <p className="text-[11px] font-semibold text-foreground truncate">Filter: {label}</p>
+        <div className="p-2 border-b border-border/60">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2 top-[7px] text-muted-foreground pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="w-full h-8 pl-7 pr-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
+              autoFocus
+            />
+          </div>
         </div>
 
-        <div className="max-h-[320px] overflow-y-auto overscroll-contain">
-          {filterType === "date" ? (
-            <div className="px-2.5 py-2 space-y-2">
-              <div className="space-y-0.5">
-                {DATE_PRESETS.map((preset) => (
-                  <label
-                    key={preset.id}
-                    className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/40 cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      name={`date-preset-${label}`}
-                      className="w-3.5 h-3.5 accent-brand-600"
-                      checked={(draft.datePreset ?? "custom") === preset.id}
-                      onChange={() => setDatePreset(preset.id)}
-                    />
-                    <span className="text-[11px] text-foreground">{preset.label}</span>
-                  </label>
-                ))}
-              </div>
-              {(draft.datePreset === "custom" || draft.datePreset === "between" || !draft.datePreset) && (
-                <div className="space-y-2 pt-1 border-t border-border/60">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                      From
-                    </span>
-                    <AccountsDateInput
-                      value={draft.dateFrom ?? ""}
-                      onChange={(v) => setDraft((d) => ({ ...d, dateFrom: v, datePreset: "custom" }))}
-                      aria-label={`${label} from date`}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">To</span>
-                    <AccountsDateInput
-                      value={draft.dateTo ?? ""}
-                      onChange={(v) => setDraft((d) => ({ ...d, dateTo: v, datePreset: "custom" }))}
-                      aria-label={`${label} to date`}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : filterType === "boolean" ? (
-            <div className="px-2.5 py-2 space-y-0.5">
-              {BOOLEAN_OPTIONS.map((opt) => (
-                <ValueCheckboxRow
-                  key={opt.value}
-                  value={opt.value}
-                  label={opt.label}
-                  checked={selectedSet.has(opt.value)}
-                  onToggle={() => toggleValue(opt.value)}
-                />
-              ))}
-            </div>
-          ) : usesValueList(filterType) ? (
-            <>
-              <div className="p-2 border-b border-border/60">
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2 top-[7px] text-muted-foreground pointer-events-none" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={`Search ${label.toLowerCase()}…`}
-                    className="w-full h-8 pl-7 pr-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/60 bg-muted/15">
-                <button
-                  type="button"
-                  onClick={allFilteredSelected ? clearAllSelected : selectAllFiltered}
-                  className="text-[11px] font-medium text-brand-600 hover:underline"
-                >
-                  {allFilteredSelected ? "Clear All" : "Select All"}
-                </button>
-                {selectedSet.size > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{selectedSet.size} selected</span>
-                )}
-              </div>
-              <div className="px-1.5 py-1.5 space-y-0.5 max-h-[200px] overflow-y-auto">
-                {filteredOptions.map((opt) => (
-                  <ValueCheckboxRow
-                    key={opt.value}
-                    value={opt.value}
-                    label={optionLabels[opt.value] ?? opt.value}
-                    count={opt.count > 0 ? opt.count : undefined}
-                    checked={selectedSet.has(opt.value)}
-                    onToggle={() => toggleValue(opt.value)}
-                  />
-                ))}
-                {filteredOptions.length === 0 && (
-                  <p className="text-[11px] text-muted-foreground py-3 text-center">No matching values</p>
-                )}
-              </div>
-            </>
-          ) : null}
+        <div className="px-1.5 py-1.5 border-b border-border/60">
+          <ValueCheckboxRow
+            label="Select All"
+            checked={allFilteredSelected && filteredOptions.length > 0}
+            onToggle={toggleSelectAllFiltered}
+          />
+        </div>
+
+        <div className="px-1.5 py-1.5 space-y-0.5 max-h-[220px] overflow-y-auto overscroll-contain">
+          {filteredOptions.map((opt) => (
+            <ValueCheckboxRow
+              key={opt.value}
+              label={formatOptionLabel(opt.value, filterType, optionLabels)}
+              count={opt.count > 0 ? opt.count : undefined}
+              checked={selectedSet.has(opt.value)}
+              onToggle={() => toggleValue(opt.value)}
+            />
+          ))}
+          {filteredOptions.length === 0 && (
+            <p className="text-[11px] text-muted-foreground py-3 text-center">No matching values</p>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-1.5 px-2.5 py-2 border-t border-border/70 bg-muted/10">

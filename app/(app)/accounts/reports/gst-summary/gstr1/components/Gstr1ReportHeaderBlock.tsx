@@ -4,14 +4,24 @@ import { ACCOUNTS_COMPANY_NAME } from "@/lib/accounts/report-export-presentation
 import { cn } from "@/lib/utils";
 import type { Gstr1ReportHeader } from "../gstr1-report-types";
 
+export type GstReportHeaderItem = {
+  label: string;
+  value: string;
+  mono?: boolean;
+  status?: boolean;
+};
+
 export function Gstr1ReportHeaderBlock({
   header,
   className,
+  items: itemsOverride,
 }: {
   header: Gstr1ReportHeader;
   className?: string;
+  /** Optional override — used by GSTR-3B and other GST Summary tabs. */
+  items?: GstReportHeaderItem[];
 }) {
-  const items = [
+  const items: GstReportHeaderItem[] = itemsOverride ?? [
     { label: "Company Name", value: header.companyName || ACCOUNTS_COMPANY_NAME },
     { label: "Report Name", value: header.reportName },
     { label: "GST Registration (GSTIN)", value: header.gstin, mono: true },

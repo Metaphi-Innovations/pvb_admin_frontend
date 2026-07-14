@@ -64,15 +64,17 @@ export function ReportFilterRow({
   className,
 }: {
   children: React.ReactNode;
-  /** Right-aligned actions (e.g. Export) in the filter row */
+  /** Right-aligned actions (e.g. Export) — pinned to extreme right of the filter row */
   end?: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end gap-x-2 gap-y-2.5 w-full min-w-0", className)}>
-      {children}
+    <div className={cn("flex items-end gap-2 w-full min-w-0", className)}>
+      <div className="flex flex-nowrap items-end gap-x-2 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:thin]">
+        {children}
+      </div>
       {end ? (
-        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">{end}</div>
+        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0 self-end">{end}</div>
       ) : null}
     </div>
   );

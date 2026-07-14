@@ -22,7 +22,7 @@ import {
 } from "@/lib/accounts/gst-report-filters";
 import { getGstReportBranchOptions } from "@/lib/accounts/gst-report-filters";
 import { normalizeMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { useGstReportFilters } from "../useGstReportFilters";
 
 type FilterState = ReturnType<typeof useGstReportFilters>;
@@ -30,9 +30,11 @@ type FilterState = ReturnType<typeof useGstReportFilters>;
 export function GstReportFilterBar({
   filterState,
   mounted,
+  end,
 }: {
   filterState: FilterState;
   mounted: boolean;
+  end?: ReactNode;
 }) {
   const {
     preset,
@@ -87,7 +89,7 @@ export function GstReportFilterBar({
 
   return (
     <>
-      <ReportFilterRow className="items-end gap-2">
+      <ReportFilterRow className="items-end gap-2" end={end}>
         <ReportFinancialYearFilter
           value={financialYearId}
           onChange={handleFinancialYearChange}

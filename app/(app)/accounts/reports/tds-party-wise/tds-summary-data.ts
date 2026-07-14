@@ -1,171 +1,81 @@
+/**
+ * TDS Summary — transaction-wise rows for Accounts → Reports → TDS Summary.
+ * Adapts shared TDS party-wise voucher lines into the client report format.
+ */
+
+import {
+  loadFinancialYears,
+  type FinancialYear,
+} from "@/app/(app)/accounts/masters/masters-data";
 import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import {
+  loadTdsPartyWiseRows,
+  resolvePartyGeneralLedgerHref,
+  resolveTdsSourceHref,
+  type TdsPartyType,
+  type TdsPartyWiseRow,
+  type TdsSourceVoucherType,
+} from "@/lib/accounts/tds-party-wise-data";
 
-export type TdsPartyType =
-  | "Supplier"
-  | "Contractor"
-  | "Professional"
-  | "Employee"
-  | "Other";
+export type TdsDeducteeType = TdsPartyType;
 
-export interface TdsSummaryRow {
+export type TdsVoucherTypeFilter = TdsSourceVoucherType;
+
+export interface TdsSummaryTxnRow {
   id: string;
+  /** YYYY-MM for sorting / month filter */
+  monthKey: string;
+  /** Display month e.g. Apr-2025 */
+  month: string;
   partyName: string;
-  partyType: TdsPartyType;
   pan: string;
-  tdsSection: string;
-  tdsSectionName: string;
-  grossAmount: number;
-  tdsRate: number;
+  invoiceDate: string;
+  invoiceDateDisplay: string;
+  invoiceNo: string;
+  amount: number;
   tdsAmount: number;
-  netPayable: number;
-}
-
-export type TdsSummaryLineKind = "section" | "data" | "total";
-
-export interface TdsSummaryLine {
-  id: string;
-  kind: TdsSummaryLineKind;
-  label?: string;
-  row?: TdsSummaryRow;
+  tdsRate: string;
+  tdsRateValue: number;
+  tdsSection: string;
+  tdsSectionLabel: string;
+  /** More-filter / identity */
+  deducteeType: TdsDeducteeType;
+  branch: string;
+  voucherType: TdsVoucherTypeFilter;
+  voucherTypeLabel: string;
+  partyId: string;
+  partyLedgerId: number | null;
+  invoiceHref: string;
+  partyLedgerHref: string;
+  /** Composite default sort key: month | invoice date | invoice no */
+  defaultSortKey: string;
 }
 
 export interface TdsSummaryFilters {
-  partyType: string;
+  financialYearId: string;
+  dateFrom: string;
+  dateTo: string;
+  month: string;
   tdsSection: string | string[];
   partyIds: string | string[];
   search: string;
+  branch: string | string[];
+  voucherType: string | string[];
+  deducteeType: string | string[];
 }
 
 export interface TdsSummaryTotals {
-  totalGross: number;
+  totalAmount: number;
   totalTds: number;
-  totalNet: number;
+  count: number;
 }
 
-const TDS_SEED_ROWS: TdsSummaryRow[] = [
-  {
-    id: "tds-1",
-    partyName: "Green Logistics",
-    partyType: "Contractor",
-    pan: "AABCG1234K",
-    tdsSection: "194C",
-    tdsSectionName: "Contractor",
-    grossAmount: 240000,
-    tdsRate: 1,
-    tdsAmount: 2400,
-    netPayable: 237600,
-  },
-  {
-    id: "tds-2",
-    partyName: "BuildRight Contractors",
-    partyType: "Contractor",
-    pan: "AAKCB5678R",
-    tdsSection: "194C",
-    tdsSectionName: "Contractor",
-    grossAmount: 185000,
-    tdsRate: 2,
-    tdsAmount: 3700,
-    netPayable: 181300,
-  },
-  {
-    id: "tds-3",
-    partyName: "Mehta & Associates",
-    partyType: "Professional",
-    pan: "AADFM4567P",
-    tdsSection: "194J",
-    tdsSectionName: "Professional Fees",
-    grossAmount: 150000,
-    tdsRate: 10,
-    tdsAmount: 15000,
-    netPayable: 135000,
-  },
-  {
-    id: "tds-4",
-    partyName: "Legal Advisory Services",
-    partyType: "Professional",
-    pan: "AAAPL8901Q",
-    tdsSection: "194J",
-    tdsSectionName: "Professional Fees",
-    grossAmount: 85000,
-    tdsRate: 10,
-    tdsAmount: 8500,
-    netPayable: 76500,
-  },
-  {
-    id: "tds-5",
-    partyName: "Agro Sales Partner",
-    partyType: "Contractor",
-    pan: "AAKFA6789D",
-    tdsSection: "194H",
-    tdsSectionName: "Commission",
-    grossAmount: 95000,
-    tdsRate: 5,
-    tdsAmount: 4750,
-    netPayable: 90250,
-  },
-  {
-    id: "tds-6",
-    partyName: "City Office Rentals",
-    partyType: "Other",
-    pan: "AACFC3210M",
-    tdsSection: "194I",
-    tdsSectionName: "Rent",
-    grossAmount: 360000,
-    tdsRate: 10,
-    tdsAmount: 36000,
-    netPayable: 324000,
-  },
-  {
-    id: "tds-7",
-    partyName: "Prime Warehouse LLP",
-    partyType: "Supplier",
-    pan: "AAFCP7890L",
-    tdsSection: "194Q",
-    tdsSectionName: "Purchase of Goods",
-    grossAmount: 820000,
-    tdsRate: 0.1,
-    tdsAmount: 820,
-    netPayable: 819180,
-  },
-  {
-    id: "tds-8",
-    partyName: "Agro Chem Distributors",
-    partyType: "Supplier",
-    pan: "AABCA2345N",
-    tdsSection: "194Q",
-    tdsSectionName: "Purchase of Goods",
-    grossAmount: 450000,
-    tdsRate: 0.1,
-    tdsAmount: 450,
-    netPayable: 449550,
-  },
-  {
-    id: "tds-9",
-    partyName: "Rajesh Kumar",
-    partyType: "Employee",
-    pan: "ABCPK1234F",
-    tdsSection: "192",
-    tdsSectionName: "Salary",
-    grossAmount: 540000,
-    tdsRate: 10,
-    tdsAmount: 54000,
-    netPayable: 486000,
-  },
-  {
-    id: "tds-10",
-    partyName: "Priya Sharma",
-    partyType: "Employee",
-    pan: "ABCPR5678G",
-    tdsSection: "192",
-    tdsSectionName: "Salary",
-    grossAmount: 420000,
-    tdsRate: 5,
-    tdsAmount: 21000,
-    netPayable: 399000,
-  },
-];
-
-const SECTION_ORDER = ["194C", "194J", "194H", "194I", "194Q", "192"];
+const VOUCHER_TYPE_LABELS: Record<TdsSourceVoucherType, string> = {
+  purchase_invoice: "Purchase Voucher",
+  journal: "Journal Voucher",
+  payment: "Payment Voucher",
+};
 
 export const TDS_SECTION_OPTIONS = [
   { value: "194C", label: "194C — Contractor" },
@@ -176,139 +86,193 @@ export const TDS_SECTION_OPTIONS = [
   { value: "192", label: "192 — Salary" },
 ] as const;
 
-export function getTdsPartyOptions(): { value: string; label: string }[] {
-  const seen = new Set<string>();
-  const options: { value: string; label: string }[] = [];
-  for (const row of TDS_SEED_ROWS) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    options.push({ value: row.id, label: row.partyName });
-  }
-  return options.sort((a, b) => a.label.localeCompare(b.label));
+export const TDS_DEDUCTEE_TYPE_OPTIONS = [
+  { value: "Supplier", label: "Vendor" },
+  { value: "Contractor", label: "Contractor" },
+  { value: "Professional", label: "Professional" },
+  { value: "Employee", label: "Employee" },
+  { value: "Customer", label: "Customer" },
+  { value: "Other", label: "Other" },
+] as const;
+
+export const TDS_VOUCHER_TYPE_OPTIONS = [
+  { value: "purchase_invoice", label: "Purchase Voucher" },
+  { value: "journal", label: "Journal Voucher" },
+  { value: "payment", label: "Payment Voucher" },
+] as const;
+
+function parseIsoDate(iso: string): Date | null {
+  if (!iso || iso.length < 10) return null;
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function filterRows(filters: TdsSummaryFilters): TdsSummaryRow[] {
-  const q = filters.search.trim().toLowerCase();
-  return TDS_SEED_ROWS.filter((row) => {
-    if (filters.partyType !== "all" && row.partyType !== filters.partyType) return false;
-    if (!matchesMultiFilter(filters.tdsSection, row.tdsSection)) return false;
-    if (!matchesMultiFilter(filters.partyIds, row.id)) return false;
-    if (!q) return true;
-    return (
-      row.partyName.toLowerCase().includes(q) ||
-      row.pan.toLowerCase().includes(q) ||
-      row.tdsSection.toLowerCase().includes(q) ||
-      row.tdsSectionName.toLowerCase().includes(q)
-    );
+export function formatTdsMonthLabel(iso: string): string {
+  const d = parseIsoDate(iso);
+  if (!d) return "—";
+  const mon = d.toLocaleDateString("en-IN", { month: "short" });
+  return `${mon}-${d.getFullYear()}`;
+}
+
+export function formatTdsInvoiceDate(iso: string): string {
+  const d = parseIsoDate(iso);
+  if (!d) return iso || "—";
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
 }
 
-export function buildTdsSummaryStatement(filters: TdsSummaryFilters): {
-  lines: TdsSummaryLine[];
-  totals: TdsSummaryTotals;
-  hasData: boolean;
-} {
-  const rows = filterRows(filters);
-  if (rows.length === 0) {
-    return {
-      lines: [],
-      totals: { totalGross: 0, totalTds: 0, totalNet: 0 },
-      hasData: false,
-    };
-  }
+export function monthKeyFromIso(iso: string): string {
+  return iso?.length >= 7 ? iso.slice(0, 7) : "";
+}
 
-  const lines: TdsSummaryLine[] = [];
-  const grouped = new Map<string, TdsSummaryRow[]>();
+function parseRateValue(rate: string): number {
+  const n = Number(String(rate).replace(/%/g, "").trim());
+  return Number.isFinite(n) ? n : 0;
+}
 
-  for (const row of rows) {
-    const list = grouped.get(row.tdsSection) ?? [];
-    list.push(row);
-    grouped.set(row.tdsSection, list);
-  }
+/** Optional branch on seed rows (demo / extended storage shape). */
+function rowBranch(row: TdsPartyWiseRow & { branch?: string }): string {
+  return row.branch?.trim() || "Head Office";
+}
 
-  for (const section of SECTION_ORDER) {
-    const sectionRows = grouped.get(section);
-    if (!sectionRows?.length) continue;
-    const sectionName = sectionRows[0].tdsSectionName;
-    lines.push({
-      id: `sec-${section}`,
-      kind: "section",
-      label: `${section} — ${sectionName}`,
-    });
-    for (const row of sectionRows) {
-      lines.push({ id: row.id, kind: "data", row });
-    }
-  }
-
-  const totalGross = rows.reduce((a, r) => a + r.grossAmount, 0);
-  const totalTds = rows.reduce((a, r) => a + r.tdsAmount, 0);
-  const totalNet = rows.reduce((a, r) => a + r.netPayable, 0);
-
-  lines.push({ id: "total-row", kind: "total" });
-
+export function toTdsSummaryTxnRow(row: TdsPartyWiseRow): TdsSummaryTxnRow {
+  const invoiceDate = row.voucherDate;
+  const monthKey = monthKeyFromIso(invoiceDate);
+  const invoiceNo = (row.billNo || row.voucherNo || "—").trim() || "—";
+  const extended = row as TdsPartyWiseRow & { branch?: string };
   return {
-    lines,
-    totals: { totalGross, totalTds, totalNet },
-    hasData: true,
+    id: row.id,
+    monthKey,
+    month: formatTdsMonthLabel(invoiceDate),
+    partyName: row.partyName,
+    pan: row.pan,
+    invoiceDate,
+    invoiceDateDisplay: formatTdsInvoiceDate(invoiceDate),
+    invoiceNo,
+    amount: row.taxableAmount,
+    tdsAmount: row.tdsAmount,
+    tdsRate: row.tdsRate,
+    tdsRateValue: parseRateValue(row.tdsRate),
+    tdsSection: row.tdsSection,
+    tdsSectionLabel: `${row.tdsSection} — ${row.tdsSectionName}`,
+    deducteeType: row.partyType,
+    branch: rowBranch(extended),
+    voucherType: row.sourceType,
+    voucherTypeLabel: VOUCHER_TYPE_LABELS[row.sourceType],
+    partyId: String(row.partyId),
+    partyLedgerId: row.partyLedgerId,
+    invoiceHref: resolveTdsSourceHref(row),
+    partyLedgerHref: resolvePartyGeneralLedgerHref(row),
+    defaultSortKey: `${monthKey}|${invoiceDate}|${invoiceNo.toLowerCase()}`,
   };
 }
 
-export function formatTdsRate(rate: number): string {
-  if (rate === 0.1) return "0.1%";
-  return `${rate}%`;
+export function loadTdsSummaryTxnRows(): TdsSummaryTxnRow[] {
+  return loadTdsPartyWiseRows().map(toTdsSummaryTxnRow);
 }
 
-export interface TdsSummaryExportRow {
-  partyName: string;
-  partyType: string;
-  pan: string;
-  tdsSection: string;
-  grossAmount: number | null;
-  tdsRate: string;
-  tdsAmount: number | null;
-  netPayable: number | null;
-  rowType: TdsSummaryLineKind;
+function resolveFy(id: string): FinancialYear | null {
+  if (!id || id === "all") return null;
+  return loadFinancialYears().find((f) => String(f.id) === id) ?? null;
 }
 
-export function flattenTdsSummaryForExport(lines: TdsSummaryLine[]): TdsSummaryExportRow[] {
-  return lines.map((line) => {
-    if (line.kind === "section") {
-      return {
-        partyName: line.label ?? "",
-        partyType: "",
-        pan: "",
-        tdsSection: "",
-        grossAmount: null,
-        tdsRate: "",
-        tdsAmount: null,
-        netPayable: null,
-        rowType: "section",
-      };
+export function getDefaultTdsFinancialYearId(): string {
+  const id = getActiveFinancialYearId();
+  return id != null ? String(id) : "all";
+}
+
+export function getTdsPartyOptions(rows?: TdsSummaryTxnRow[]): { value: string; label: string }[] {
+  const source = rows ?? loadTdsSummaryTxnRows();
+  const seen = new Map<string, string>();
+  for (const row of source) {
+    if (!seen.has(row.partyId)) seen.set(row.partyId, row.partyName);
+  }
+  return Array.from(seen.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function getTdsMonthOptions(
+  rows: TdsSummaryTxnRow[],
+): { value: string; label: string }[] {
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    if (row.monthKey && !map.has(row.monthKey)) map.set(row.monthKey, row.month);
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([value, label]) => ({ value, label }));
+}
+
+export function getTdsBranchOptions(rows?: TdsSummaryTxnRow[]): string[] {
+  const source = rows ?? loadTdsSummaryTxnRows();
+  return Array.from(new Set(source.map((r) => r.branch))).sort((a, b) => a.localeCompare(b));
+}
+
+export function filterTdsSummaryRows(
+  rows: TdsSummaryTxnRow[],
+  filters: TdsSummaryFilters,
+): TdsSummaryTxnRow[] {
+  const q = filters.search.trim().toLowerCase();
+  const fy = resolveFy(filters.financialYearId);
+
+  return rows.filter((row) => {
+    if (fy && (row.invoiceDate < fy.startDate || row.invoiceDate > fy.endDate)) return false;
+    if (filters.dateFrom && row.invoiceDate < filters.dateFrom) return false;
+    if (filters.dateTo && row.invoiceDate > filters.dateTo) return false;
+    if (filters.month !== "all" && filters.month && row.monthKey !== filters.month) return false;
+    if (!matchesMultiFilter(filters.tdsSection, row.tdsSection)) return false;
+    if (!matchesMultiFilter(filters.partyIds, row.partyId)) return false;
+    if (!matchesMultiFilter(filters.branch, row.branch)) return false;
+    if (!matchesMultiFilter(filters.voucherType, row.voucherType)) return false;
+    if (!matchesMultiFilter(filters.deducteeType, row.deducteeType)) return false;
+    if (q) {
+      const hay = [
+        row.month,
+        row.partyName,
+        row.pan,
+        row.invoiceNo,
+        row.tdsSection,
+        row.tdsSectionLabel,
+        row.tdsRate,
+        row.branch,
+        row.voucherTypeLabel,
+        row.deducteeType,
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
     }
-    if (line.kind === "total") {
-      return {
-        partyName: "Totals",
-        partyType: "",
-        pan: "",
-        tdsSection: "",
-        grossAmount: null,
-        tdsRate: "",
-        tdsAmount: null,
-        netPayable: null,
-        rowType: "total",
-      };
-    }
-    const r = line.row!;
-    return {
-      partyName: r.partyName,
-      partyType: r.partyType,
-      pan: r.pan,
-      tdsSection: r.tdsSection,
-      grossAmount: r.grossAmount,
-      tdsRate: formatTdsRate(r.tdsRate),
-      tdsAmount: r.tdsAmount,
-      netPayable: r.netPayable,
-      rowType: "data",
-    };
+    return true;
   });
+}
+
+export function sortTdsSummaryDefault(rows: TdsSummaryTxnRow[]): TdsSummaryTxnRow[] {
+  return [...rows].sort((a, b) => a.defaultSortKey.localeCompare(b.defaultSortKey));
+}
+
+export function computeTdsSummaryTotals(rows: TdsSummaryTxnRow[]): TdsSummaryTotals {
+  return {
+    totalAmount: rows.reduce((s, r) => s + r.amount, 0),
+    totalTds: rows.reduce((s, r) => s + r.tdsAmount, 0),
+    count: rows.length,
+  };
+}
+
+export function buildTdsSummaryReport(filters: TdsSummaryFilters): {
+  rows: TdsSummaryTxnRow[];
+  totals: TdsSummaryTotals;
+  hasData: boolean;
+} {
+  const filtered = sortTdsSummaryDefault(
+    filterTdsSummaryRows(loadTdsSummaryTxnRows(), filters),
+  );
+  return {
+    rows: filtered,
+    totals: computeTdsSummaryTotals(filtered),
+    hasData: filtered.length > 0,
+  };
 }

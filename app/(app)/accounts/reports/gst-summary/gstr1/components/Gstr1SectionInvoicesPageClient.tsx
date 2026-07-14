@@ -115,20 +115,25 @@ export function Gstr1SectionInvoicesPageClient({
       layout="split"
       className="h-full min-h-0"
       actions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link href={backHref}>
-              <ArrowLeft className="w-3.5 h-3.5" /> GSTR-1 Summary
-            </Link>
-          </Button>
-          <AccountsExportMenu
-            onExcel={() => handleExport("excel")}
-            onPdf={() => handleExport("pdf")}
-            disabled={exporting || listRows.length === 0}
-          />
-        </div>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+          <Link href={backHref}>
+            <ArrowLeft className="w-3.5 h-3.5" /> GSTR-1 Summary
+          </Link>
+        </Button>
       }
-      filters={<GstReportFilterBar filterState={filterState} mounted={mounted} />}
+      filters={
+        <GstReportFilterBar
+          filterState={filterState}
+          mounted={mounted}
+          end={
+            <AccountsExportMenu
+              onExcel={() => handleExport("excel")}
+              onPdf={() => handleExport("pdf")}
+              disabled={exporting || listRows.length === 0}
+            />
+          }
+        />
+      }
       subHeader={<GstReportNavTabs filters={filters} />}
     >
       <AccountsReportBody className="space-y-3">

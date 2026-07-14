@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
@@ -30,6 +31,7 @@ import {
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
 import {
+  AccountsClearAllColumnFiltersButton,
   AccountsColumnFilterProvider,
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
@@ -62,10 +64,13 @@ const STOCK_TXN_TYPE_OPTIONS = STOCK_LEDGER_TRANSACTION_TYPE_OPTIONS.filter(
 
 export default function StockLedgerPageClient() {
   const mounted = useClientMounted();
+  const searchParams = useSearchParams();
+  const drilldownApplied = useRef(false);
 
   const [preset, setPreset] = useState<DateRangePresetId>("custom");
   const [dateFrom, setDateFrom] = useState(() => demoFinancialYearStart());
   const [dateTo, setDateTo] = useState(() => demoToday());
+  const [financialYearId, setFinancialYearId] = useState("all");
   const [productIds, setProductIds] = useState<string[]>([]);
   const [warehouses, setWarehouses] = useState<string[]>([]);
   const [batchNos, setBatchNos] = useState<string[]>([]);
@@ -99,11 +104,29 @@ export default function StockLedgerPageClient() {
     [sourceRows],
   );
 
+  useEffect(() => {
+    if (!mounted || drilldownApplied.current) return;
+    const product = searchParams.get("product");
+    const warehouse = searchParams.get("warehouse");
+    const from = searchParams.get("dateFrom");
+    const to = searchParams.get("dateTo");
+    const fy = searchParams.get("fy");
+    if (!product && !warehouse && !from && !to && !fy) return;
+
+    drilldownApplied.current = true;
+    setPreset("custom");
+    if (product) setProductIds([product]);
+    if (warehouse) setWarehouses([warehouse]);
+    if (from) setDateFrom(from);
+    if (to) setDateTo(to);
+    if (fy) setFinancialYearId(fy);
+  }, [mounted, searchParams]);
+
   const filterParams = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYearId: "all",
+      financialYearId,
       productIds,
       warehouse: warehouses,
       batchNos,
@@ -111,7 +134,7 @@ export default function StockLedgerPageClient() {
       documentNo,
       search,
     }),
-    [dateFrom, dateTo, productIds, warehouses, batchNos, transactionTypes, documentNo, search],
+    [dateFrom, dateTo, financialYearId, productIds, warehouses, batchNos, transactionTypes, documentNo, search],
   );
 
   const filteredRows = useMemo(
@@ -426,12 +449,15 @@ function StockLedgerPageBody({
           <ReportFilterRow
             className="items-end"
             end={
-              <AccountsExportMenu
-                onExcel={handleExportExcel}
-                onPdf={handleExportPdf}
-                onCsv={handleExportCsv}
-                disabled={exporting || columnFilteredRows.length === 0}
-              />
+              <>
+                <AccountsClearAllColumnFiltersButton />
+                <AccountsExportMenu
+                  onExcel={handleExportExcel}
+                  onPdf={handleExportPdf}
+                  onCsv={handleExportCsv}
+                  disabled={exporting || columnFilteredRows.length === 0}
+                />
+              </>
             }
           >
             <ReportDateRangeFilter

@@ -350,7 +350,16 @@ export default function CashFlowPageClient() {
   );
 
   const filterBar = (
-    <ReportFilterRow className="items-end gap-2">
+    <ReportFilterRow
+      className="items-end gap-2"
+      end={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || !mounted || !statement.hasData}
+        />
+      }
+    >
       <ReportFinancialYearFilter
         value={financialYearId}
         onChange={handleFinancialYearChange}
@@ -415,13 +424,6 @@ export default function CashFlowPageClient() {
       hideDescription
       layout="split"
       className="h-full min-h-0 trial-balance-compact"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !statement.hasData}
-        />
-      }
       filters={
         <>
           {filterBar}

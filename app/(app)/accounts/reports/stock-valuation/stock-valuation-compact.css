@@ -1,0 +1,87 @@
+/* Stock Valuation — compact density (scoped to this page only) */
+
+.stock-valuation-compact .accounts-listing-filter-card {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  gap: 0.25rem;
+  background-color: #ffffff;
+  border: 1px solid #E5E7EB;
+  /* No decorative orange accent / bottom border */
+  border-bottom-color: #E5E7EB;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  overflow: visible;
+}
+
+/* Keep filters wrapping; never horizontal scroll (avoids orange scrollbar thumb) */
+.stock-valuation-compact .accounts-listing-filter-card > .accounts-report-filter-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.stock-valuation-compact .accounts-listing-filter-card > .accounts-report-filter-stack::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.stock-valuation-compact .accounts-report-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+}
+
+.stock-valuation-compact .accounts-report-kpi-grid > div {
+  min-height: 38px;
+  padding: 0.375rem 0.5rem;
+}
+
+/* One scroll region only — enable wheel/touchpad (avoid nested scroll trap) */
+.stock-valuation-compact .accounts-listing-card,
+.stock-valuation-compact .accounts-listing-table-card {
+  min-height: 0;
+  height: 100%;
+}
+
+.stock-valuation-compact .accounts-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* paint containment can block wheel scrolling in nested flex layouts */
+  contain: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.stock-valuation-compact .accounts-table-th,
+.stock-valuation-compact .accounts-table > thead > tr > th {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  vertical-align: middle;
+}
+
+.stock-valuation-compact .accounts-table-td,
+.stock-valuation-compact .accounts-table > tbody > tr > td {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  min-height: 40px;
+  vertical-align: middle;
+}
+
+.stock-valuation-compact .accounts-table-foot tr,
+.stock-valuation-compact .accounts-table > tfoot > tr {
+  background-color: hsl(var(--muted) / 0.35);
+}
+
+.stock-valuation-compact .accounts-table-foot .accounts-table-td,
+.stock-valuation-compact .accounts-table > tfoot > tr > td {
+  font-weight: 600;
+}

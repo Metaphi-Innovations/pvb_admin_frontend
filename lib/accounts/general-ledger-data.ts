@@ -27,6 +27,7 @@ export function buildGeneralLedgerHref(
   if (p.warehouse && p.warehouse !== "all") search.set("warehouse", p.warehouse);
   if (p.company && p.company !== "all") search.set("company", p.company);
   if (p.partyId && p.partyId !== "all") search.set("party", p.partyId);
+  if (p.ledgerType && p.ledgerType !== "all") search.set("ledgerType", p.ledgerType);
   if (p.financialYearId && p.financialYearId !== "all") {
     search.set("fy", p.financialYearId);
   }

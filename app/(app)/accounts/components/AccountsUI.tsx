@@ -12,6 +12,11 @@ import { useAccountsColumnFilterContext } from "@/components/accounts/AccountsCo
 
 export { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 export { AccountsColumnFilterPopover } from "@/components/accounts/AccountsColumnFilterPopover";
+export { ExcelColumnFilter, ExcelColumnHeader } from "@/components/accounts/ExcelColumnFilter";
+export {
+  AccountingReportToolbar,
+  AccountsClearAllColumnFiltersButton,
+} from "@/components/accounts/AccountingReportToolbar";
 export { useAccountsColumnFilters } from "@/components/accounts/useAccountsColumnFilters";
 export {
   AccountsColumnFilterProvider,
@@ -69,6 +74,7 @@ export function SortTh({
       onFilterChange={onFilterChangeProp ?? fromCtx?.onFilterChange}
       valueOptions={valueOptionsProp ?? fromCtx?.valueOptions}
       statusOptions={statusOptionsProp ?? fromCtx?.statusOptions}
+      optionLabels={fromCtx?.optionLabels}
       className={className}
     />
   );
