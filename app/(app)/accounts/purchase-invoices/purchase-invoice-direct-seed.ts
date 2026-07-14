@@ -4,8 +4,7 @@ import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import {
   createInitialWorkflow,
-  submitForApproval,
-  approveCurrentStep,
+  markWorkflowPosted,
 } from "@/lib/accounts/accounts-maker-checker";
 import type {
   DirectPurchaseLineItem,
@@ -89,14 +88,11 @@ function buildDemoLine(
   };
 }
 
+/** Posted demos use markWorkflowPosted — never approveCurrentStep (approver checks must not run on data load). */
 function buildWorkflow(status: DirectDemoSpec["workflowStatus"]) {
   const draft = createInitialWorkflow();
   if (status === "posted") {
-    let wf = submitForApproval(draft, "Demo submitted");
-    while (wf.status !== "posted") {
-      wf = approveCurrentStep(wf, undefined, "Demo approved");
-    }
-    return wf;
+    return markWorkflowPosted(draft, "Demo posted");
   }
   return draft;
 }
