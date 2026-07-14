@@ -375,6 +375,7 @@ export function approveCurrentStep(
   actor: Employee = getAccountsCheckerEmployee(),
   remarks = "",
 ): AccountsDocumentWorkflow {
+  // Call only from Approve button handlers (e.g. approveDocumentStep). Never during page/listing/report load.
   if (workflow.status !== "pending_approval") {
     throw new Error("Voucher is not pending approval.");
   }

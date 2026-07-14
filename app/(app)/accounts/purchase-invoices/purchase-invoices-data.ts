@@ -433,7 +433,12 @@ export function loadPurchaseInvoices(): PurchaseInvoiceRecord[] {
       mergePurchaseInvoiceDemoScenarios(list.map(normalizePI)),
     );
   } catch {
-    return mergeDirectPurchaseDemoScenarios(mergePurchaseInvoiceDemoScenarios([]));
+    // Seed/merge must not block Accounts pages or reports.
+    try {
+      return readPurchaseInvoicesRaw();
+    } catch {
+      return [];
+    }
   }
 }
 
