@@ -48,7 +48,27 @@ export function mapBackendRecordToFrontend(item: any): QcRecord {
 }
 
 export function mapBackendGrnToPendingQc(grn: any): QcRecord {
-  const totalReceived = (grn.receivedQty ?? grn.items?.reduce((sum: number, it: any) => sum + Number(it.current_received_base_qty || 0), 0)) || 0;
+  const qcItems: QcItem[] = [];
+  grn.items?.forEach((item: any) => {
+    const product = item.productSnapshot || {};
+    item.batches?.forEach((batch: any) => {
+      qcItems.push({
+        productId: product.product_id || "",
+        productName: product.product_name || "",
+        productCode: product.product_code || "",
+        batchNumber: batch.batchNumber,
+        receivedQty: Number(batch.quantity_base_qty || batch.quantity_base_unit || batch.quantity || 0),
+        acceptedQty: 0,
+        rejectedQty: 0,
+        holdQty: 0,
+        grnBatchId: batch.id,
+        unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
+      });
+    });
+  });
+
+  const totalReceived = qcItems.reduce((sum, it) => sum + it.receivedQty, 0) || (grn.receivedQty ?? 0);
+
   return {
     id: grn.id,
     qcNo: "—",
@@ -64,7 +84,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
     totalHoldQty: 0,
     status: "pending",
     sourceType: mapSourceType(grn.source_type),
-    items: [],
+    items: qcItems,
   };
 }
 
