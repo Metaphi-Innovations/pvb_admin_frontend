@@ -265,7 +265,7 @@ export const INVENTORY_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Stock Valuation", href: "/accounts/reports/stock-valuation", icon: BarChart3 },
 
-  { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: BookOpen },
+  { label: "Stock Register", href: "/accounts/reports/stock-register", icon: BookOpen },
 
 ];
 
@@ -313,7 +313,7 @@ export const REPORTS_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: FileSpreadsheet },
 
-  { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
+  { label: "GST Summary", href: "/accounts/reports/gst-summary", icon: Layers },
 
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
 
@@ -376,21 +376,14 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Profit & Loss", href: "/accounts/reports/pl", icon: TrendingUp },
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: FileSpreadsheet },
   { label: "Cash Flow", href: "/accounts/reports/cash-flow", icon: TrendingUp },
-  { label: "General Ledger", href: "/accounts/reports/ledger", icon: BookOpen },
+  { label: "General Ledger", href: "/accounts/reports/general-ledger", icon: BookOpen },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: BookMarked },
-  { label: "Receipt Register", href: "/accounts/reports/receipt-register", icon: Receipt },
-  { label: "Payment Register", href: "/accounts/reports/payment-register", icon: Receipt },
-  { label: "Contra Register", href: "/accounts/reports/contra-register", icon: ArrowLeftRight },
-  { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
-  { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
+  { label: "GST Summary", href: "/accounts/reports/gst-summary", icon: Layers },
   { label: "TDS Summary", href: "/accounts/reports/tds-party-wise", icon: FileText },
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
   { label: "Purchase Register", href: "/accounts/reports/purchase-register", icon: Receipt },
   { label: "Stock Valuation", href: "/accounts/reports/stock-valuation", icon: BarChart3 },
-  { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: Package },
-  { label: "Customer Ledger", href: "/accounts/reports/customer-ledger", icon: Users },
-  { label: "Supplier Ledger", href: "/accounts/reports/supplier-ledger", icon: Truck },
-  { label: "Stock Ledger", href: "/accounts/reports/stock-ledger", icon: Boxes },
+  { label: "Stock Register", href: "/accounts/reports/stock-register", icon: Package },
   { label: "Audit Trail", href: "/accounts/reports/audit-trail", icon: History },
 ];
 
@@ -665,7 +658,7 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Sales Invoices": "Create and post tax invoices",
 
-  "Sales Register": "All sales voucher summary",
+  "Sales Register": "Posted sales tax invoices register",
 
   "Customer Outstanding": "Open customer balances",
 
@@ -673,7 +666,7 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Purchase Invoices": "Supplier bills and GST input",
 
-  "Purchase Register": "All purchase voucher summary",
+  "Purchase Register": "GST purchase register with RCM, ITC & GSTR-2B",
 
   "Supplier Outstanding": "Open supplier balances",
 
@@ -689,17 +682,13 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Trial Balance": "Debit/credit summary by ledger",
 
+  "General Ledger": "All ledger statements — filter Customer, Vendor, Bank, and more",
+
   "GST Summary": "Output and input GST summary",
 
-  "Customer Ledger": "Customer account voucher ledger",
+  "Stock Register": "Stock summary, detailed batch movement, and batch-wise register",
 
-  "Supplier Ledger": "Supplier account voucher ledger",
-
-  "Journal Register": "All journal voucher lines",
-
-  "Stock Ledger": "Item-wise stock movement register",
-
-  "Audit Trail": "Accounting actions and change log",
+  "Audit Trail": "Voucher alteration register",
 
 };
 
@@ -755,9 +744,6 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
       "Cash Flow",
       "General Ledger",
       "Day Book",
-      "Customer Ledger",
-      "Supplier Ledger",
-      "Journal Register",
     ],
     right: [
       "GST Summary",
@@ -765,8 +751,7 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
       "Sales Register",
       "Purchase Register",
       "Stock Valuation",
-      "Inventory Register",
-      "Stock Ledger",
+      "Stock Register",
       "Audit Trail",
     ],
   },

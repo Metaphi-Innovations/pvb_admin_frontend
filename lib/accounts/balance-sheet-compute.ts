@@ -24,7 +24,7 @@ import {
 } from "@/lib/accounts/pl-compute";
 import {
   fromSignedBalance,
-  isLedgerMovementVoucherStatus,
+  isPostedVoucherStatus,
   openingSignedBalance,
   signedBalanceAfterMovements,
   sortChronological,
@@ -60,11 +60,13 @@ export interface BalanceSheetFilters {
   ledgerGroupId: string | string[];
   ledgerId: string | string[];
   viewType: BalanceSheetViewType;
+  showZeroBalance: boolean;
   search?: string;
 }
 
 export interface ComputedBalanceSheetLedgerRow {
   ledgerId: number;
+  ledgerCode: string;
   ledgerName: string;
   amount: number;
   signedBalance: number;
@@ -73,6 +75,8 @@ export interface ComputedBalanceSheetLedgerRow {
   ledgerType: ReturnType<typeof resolveLedgerType>;
   partyId: string | null;
   partyKind: "customer" | "vendor" | null;
+  accountGroupName: string;
+  subGroupName: string;
 }
 
 function voucherMatchesFinancialYear(
@@ -110,7 +114,7 @@ function voucherPassesBalanceSheetFilters(
 
 function collectVouchersUpToDate(filters: BalanceSheetFilters): AccountingVoucher[] {
   return loadVouchers().filter((v) => {
-    if (!isLedgerMovementVoucherStatus(v.status)) return false;
+    if (!isPostedVoucherStatus(v.status)) return false;
     return voucherPassesBalanceSheetFilters(v, filters);
   });
 }
@@ -284,7 +288,7 @@ export function computeBalanceSheetLedgerRows(
     const movements = buildMovementRows(ledger, vouchers);
     const signedClosing = signedBalanceAfterMovements(startSigned, movements);
     const amount = bsDisplayAmount(ledger, signedClosing);
-    if (amount === 0) continue;
+    if (amount === 0 && !filters.showZeroBalance) continue;
 
     const path = resolveHierarchyPath(records, ledger.id);
     const group = path.standardGroup ?? path.accountGroup;
@@ -292,6 +296,7 @@ export function computeBalanceSheetLedgerRows(
 
     rows.push({
       ledgerId: ledger.id,
+      ledgerCode: ledger.accountCode,
       ledgerName: ledger.accountName,
       amount,
       signedBalance: signedClosing,
@@ -300,13 +305,12 @@ export function computeBalanceSheetLedgerRows(
       ledgerType: resolveLedgerType(ledger, records),
       partyId: partyMeta.partyId,
       partyKind: partyMeta.partyKind,
+      accountGroupName: path.accountGroup?.accountName ?? "",
+      subGroupName: path.standardGroup?.accountName ?? "",
     });
   }
 
-  const q = (filters.search ?? "").trim().toLowerCase();
-  const filteredRows = q
-    ? rows.filter((r) => r.ledgerName.toLowerCase().includes(q))
-    : rows;
+  const filteredRows = rows;
 
   const { dateFrom, dateTo } = resolveFyDateRange(filters);
   const netProfit = computePandLNetProfit({

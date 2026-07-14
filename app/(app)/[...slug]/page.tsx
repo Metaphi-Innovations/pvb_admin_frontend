@@ -36,6 +36,22 @@ export default function PlaceholderPage() {
   const sub = segments.slice(1).map(toTitle).join(" › ");
   const title = sub ? `${module} › ${sub}` : module;
 
+  // #region agent log
+  fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
+    body: JSON.stringify({
+      sessionId: "8fbc9e",
+      runId: "daybook-404",
+      hypothesisId: "H-E",
+      location: "[...slug]/page.tsx",
+      message: "Catch-all placeholder matched",
+      data: { segments, title },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   const crumbs = [
     { label: "Home", href: "/dashboard" },
     { label: module, href: segments.length > 1 ? `/${root}` : undefined },

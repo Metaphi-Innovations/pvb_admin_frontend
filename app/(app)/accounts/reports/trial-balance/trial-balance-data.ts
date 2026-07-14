@@ -1,7 +1,12 @@
 import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { roundMoney } from "@/lib/accounts/money-format";
 import {
+  filterValidTrialBalanceLedgerRows,
+  isValidTrialBalanceLedgerRow,
+} from "./trial-balance-validation";
+import {
   computeTrialBalanceLedgerRows,
+  computeTrialBalanceLedgerVoucherLines,
   findTrialBalanceExceptions,
   getTrialBalanceBranchOptions,
   getTrialBalanceLedgerGroupOptions,
@@ -12,6 +17,7 @@ import {
   type TrialBalanceAmountColumns,
   type TrialBalanceFilters,
   type TrialBalanceVoucherException,
+  type TrialBalanceLedgerVoucherLine,
 } from "@/lib/accounts/trial-balance-compute";
 
 export type {
@@ -19,6 +25,7 @@ export type {
   TrialBalanceAmountColumns,
   ComputedTrialBalanceLedgerRow,
   TrialBalanceVoucherException,
+  TrialBalanceLedgerVoucherLine,
 };
 export {
   findTrialBalanceExceptions,
@@ -26,6 +33,7 @@ export {
   getTrialBalanceLedgerGroupOptions,
   getTrialBalanceLedgerOptions,
   getTrialBalanceWarehouseOptions,
+  computeTrialBalanceLedgerVoucherLines,
 };
 
 export type TrialBalanceTab = "normal" | "detailed";
@@ -43,10 +51,42 @@ export interface TrialBalanceSummary {
   openingCredit: number;
   closingDebit: number;
   closingCredit: number;
+  /** @deprecated Use closingDifference */
   difference: number;
+  openingDifference: number;
+  periodDifference: number;
+  closingDifference: number;
   totalLedgers: number;
   totalGroups: number;
   isBalanced: boolean;
+}
+
+export function computeTrialBalanceBalanceCheck(
+  totals: TrialBalanceAmountColumns,
+  hasUnbalancedVouchers = false,
+): Pick<
+  TrialBalanceSummary,
+  | "openingDifference"
+  | "periodDifference"
+  | "closingDifference"
+  | "difference"
+  | "isBalanced"
+> {
+  const openingDifference = roundMoney(totals.openingDebit - totals.openingCredit);
+  const periodDifference = roundMoney(totals.debit - totals.credit);
+  const closingDifference = roundMoney(totals.closingDebit - totals.closingCredit);
+  const isBalanced =
+    openingDifference === 0 &&
+    periodDifference === 0 &&
+    closingDifference === 0 &&
+    !hasUnbalancedVouchers;
+  return {
+    openingDifference,
+    periodDifference,
+    closingDifference,
+    difference: closingDifference,
+    isBalanced,
+  };
 }
 
 /** Group-wise row — account group level */
@@ -64,21 +104,35 @@ export interface TrialBalanceDetailedLedgerRow extends TrialBalanceAmountColumns
   ledgerName: string;
   groupKey: string;
   groupName: string;
+  subgroupKey: string;
+  subgroupId: number;
+  subgroupName: string;
+  /** @deprecated Use subgroupName */
   standardGroup: string;
   groupSortOrder: number;
+  subgroupSortOrder: number;
   primaryHead: string;
   primaryHeadId: number;
   primaryHeadSort: number;
 }
 
+export interface TrialBalanceDetailedSubGroup extends TrialBalanceAmountColumns {
+  subgroupKey: string;
+  subgroupId: number;
+  subgroupName: string;
+  sortOrder: number;
+  ledgers: TrialBalanceDetailedLedgerRow[];
+}
+
 export interface TrialBalanceDetailedGroup extends TrialBalanceAmountColumns {
   groupKey: string;
+  groupId: number;
   groupName: string;
   sortOrder: number;
   primaryHead: string;
   primaryHeadId: number;
   primaryHeadSort: number;
-  ledgers: TrialBalanceDetailedLedgerRow[];
+  subgroups: TrialBalanceDetailedSubGroup[];
 }
 
 export interface TrialBalancePrimaryHeadSection extends TrialBalanceAmountColumns {
@@ -133,15 +187,20 @@ function buildSummaryFromLedgers(
   );
 }
 
-function mapLedgerRow(row: ComputedTrialBalanceLedgerRow): TrialBalanceDetailedLedgerRow {
+function mapLedgerRow(row: ComputedTrialBalanceLedgerRow): TrialBalanceDetailedLedgerRow | null {
+  if (!isValidTrialBalanceLedgerRow(row)) return null;
   return {
     ledgerId: row.ledgerId,
     ledgerCode: row.ledgerCode,
     ledgerName: row.ledgerName,
     groupKey: String(row.accountGroupId),
     groupName: row.accountGroup,
-    standardGroup: row.standardGroup,
+    subgroupKey: String(row.subGroupId),
+    subgroupId: row.subGroupId,
+    subgroupName: row.subGroup,
+    standardGroup: row.subGroup,
     groupSortOrder: row.accountGroupSort,
+    subgroupSortOrder: row.subGroupSort,
     primaryHead: row.primaryHead,
     primaryHeadId: row.primaryHeadId,
     primaryHeadSort: row.primaryHeadSort,
@@ -152,6 +211,38 @@ function mapLedgerRow(row: ComputedTrialBalanceLedgerRow): TrialBalanceDetailedL
     closingDebit: row.closingDebit,
     closingCredit: row.closingCredit,
   };
+}
+
+export function getLedgerRowsFromDetailedGroups(
+  groups: TrialBalanceDetailedGroup[],
+): TrialBalanceDetailedLedgerRow[] {
+  return groups.flatMap((g) => g.subgroups.flatMap((sg) => sg.ledgers));
+}
+
+function sumAmountColumns(
+  rows: Pick<TrialBalanceAmountColumns, keyof TrialBalanceAmountColumns>[],
+): TrialBalanceAmountColumns {
+  return sumTrialBalanceColumns(rows);
+}
+
+function rebuildSubGroupFromLedgers(
+  subgroup: TrialBalanceDetailedSubGroup,
+): TrialBalanceDetailedSubGroup {
+  const totals = sumAmountColumns(subgroup.ledgers);
+  return { ...subgroup, ...totals };
+}
+
+function rebuildGroupFromSubgroups(
+  group: TrialBalanceDetailedGroup,
+): TrialBalanceDetailedGroup {
+  const subgroups = group.subgroups
+    .map(rebuildSubGroupFromLedgers)
+    .filter((sg) => sg.ledgers.length > 0)
+    .sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.subgroupName.localeCompare(b.subgroupName),
+    );
+  const totals = sumAmountColumns(subgroups);
+  return { ...group, subgroups, ...totals };
 }
 
 export function buildTrialBalanceLedgerRows(
@@ -166,6 +257,12 @@ export function buildTrialBalanceSummaryRows(
   return buildSummaryFromLedgers(computeTrialBalanceLedgerRows(filters));
 }
 
+function rebuildGroupFromLedgers(
+  group: TrialBalanceDetailedGroup,
+): TrialBalanceDetailedGroup {
+  return rebuildGroupFromSubgroups(group);
+}
+
 export function buildTrialBalanceDetailedGroups(
   filters: TrialBalanceFilters,
 ): TrialBalanceDetailedGroup[] {
@@ -173,9 +270,15 @@ export function buildTrialBalanceDetailedGroups(
   const groupMap = new Map<string, TrialBalanceDetailedGroup>();
 
   for (const row of rows) {
-    const key = String(row.accountGroupId);
-    const existing = groupMap.get(key) ?? {
-      groupKey: key,
+    const mapped = mapLedgerRow(row);
+    if (!mapped) continue;
+
+    const groupKey = String(row.accountGroupId);
+    const subgroupKey = String(row.subGroupId);
+
+    const existingGroup = groupMap.get(groupKey) ?? {
+      groupKey,
+      groupId: row.accountGroupId,
       groupName: row.accountGroup,
       sortOrder: row.accountGroupSort,
       primaryHead: row.primaryHead,
@@ -187,23 +290,42 @@ export function buildTrialBalanceDetailedGroups(
       credit: 0,
       closingDebit: 0,
       closingCredit: 0,
-      ledgers: [],
+      subgroups: [],
     };
-    existing.ledgers.push(mapLedgerRow(row));
-    existing.openingDebit = roundMoney(existing.openingDebit + row.openingDebit);
-    existing.openingCredit = roundMoney(existing.openingCredit + row.openingCredit);
-    existing.debit = roundMoney(existing.debit + row.debit);
-    existing.credit = roundMoney(existing.credit + row.credit);
-    existing.closingDebit = roundMoney(existing.closingDebit + row.closingDebit);
-    existing.closingCredit = roundMoney(existing.closingCredit + row.closingCredit);
-    groupMap.set(key, existing);
+
+    let subgroup = existingGroup.subgroups.find((sg) => sg.subgroupKey === subgroupKey);
+    if (!subgroup) {
+      subgroup = {
+        subgroupKey,
+        subgroupId: row.subGroupId,
+        subgroupName: row.subGroup,
+        sortOrder: row.subGroupSort,
+        openingDebit: 0,
+        openingCredit: 0,
+        debit: 0,
+        credit: 0,
+        closingDebit: 0,
+        closingCredit: 0,
+        ledgers: [],
+      };
+      existingGroup.subgroups.push(subgroup);
+    }
+
+    subgroup.ledgers.push(mapped);
+    groupMap.set(groupKey, existingGroup);
   }
 
   return [...groupMap.values()]
-    .map((g) => ({
-      ...g,
-      ledgers: g.ledgers.sort((a, b) => a.ledgerName.localeCompare(b.ledgerName)),
-    }))
+    .map((g) =>
+      rebuildGroupFromSubgroups({
+        ...g,
+        subgroups: g.subgroups.map((sg) => ({
+          ...sg,
+          ledgers: sg.ledgers.sort((a, b) => a.ledgerName.localeCompare(b.ledgerName)),
+        })),
+      }),
+    )
+    .filter((g) => g.subgroups.length > 0)
     .sort(
       (a, b) =>
         a.primaryHeadSort - b.primaryHeadSort ||
@@ -283,34 +405,60 @@ export function filterTrialBalanceDetailedGroups(
   filters: TrialBalanceFilterParams,
 ): TrialBalanceDetailedGroup[] {
   const q = (filters.search ?? "").trim().toLowerCase();
-  if (!q) return groups;
 
-  return groups
+  const withValidHierarchy = groups
+    .map((group) => {
+      const subgroups = group.subgroups
+        .map((sg) => {
+          const ledgers = filterValidTrialBalanceLedgerRows(sg.ledgers);
+          if (ledgers.length === 0) return null;
+          return rebuildSubGroupFromLedgers({ ...sg, ledgers });
+        })
+        .filter((sg): sg is TrialBalanceDetailedSubGroup => sg != null);
+      if (subgroups.length === 0) return null;
+      return rebuildGroupFromSubgroups({ ...group, subgroups });
+    })
+    .filter((g): g is TrialBalanceDetailedGroup => g != null);
+
+  if (!q) return withValidHierarchy;
+
+  return withValidHierarchy
     .map((group) => {
       const groupMatches =
         group.groupName.toLowerCase().includes(q) ||
         group.primaryHead.toLowerCase().includes(q);
-      const ledgers = groupMatches
-        ? group.ledgers
-        : group.ledgers.filter(
-            (l) =>
-              l.ledgerName.toLowerCase().includes(q) ||
-              l.ledgerCode.toLowerCase().includes(q),
-          );
-      if (!groupMatches && ledgers.length === 0) return null;
-      return { ...group, ledgers };
+
+      const subgroups = group.subgroups
+        .map((sg) => {
+          const subgroupMatches =
+            groupMatches || sg.subgroupName.toLowerCase().includes(q);
+          const ledgers = subgroupMatches
+            ? filterValidTrialBalanceLedgerRows(sg.ledgers)
+            : filterValidTrialBalanceLedgerRows(
+                sg.ledgers.filter(
+                  (l) =>
+                    l.ledgerName.toLowerCase().includes(q) ||
+                    l.ledgerCode.toLowerCase().includes(q),
+                ),
+              );
+          if (ledgers.length === 0) return null;
+          return rebuildSubGroupFromLedgers({ ...sg, ledgers });
+        })
+        .filter((sg): sg is TrialBalanceDetailedSubGroup => sg != null);
+
+      if (subgroups.length === 0) return null;
+      return rebuildGroupFromSubgroups({ ...group, subgroups });
     })
     .filter((g): g is TrialBalanceDetailedGroup => g != null);
 }
 
 export function computeTrialBalanceSummaryFromDetailedGroups(
   groups: TrialBalanceDetailedGroup[],
+  hasUnbalancedVouchers = false,
 ): TrialBalanceSummary {
-  const ledgerRows = groups.flatMap((g) => g.ledgers);
+  const ledgerRows = getLedgerRowsFromDetailedGroups(groups);
   const totals = sumTrialBalanceColumns(ledgerRows);
-
-  const difference = roundMoney(totals.closingDebit - totals.closingCredit);
-  const periodDiff = roundMoney(totals.debit - totals.credit);
+  const balance = computeTrialBalanceBalanceCheck(totals, hasUnbalancedVouchers);
 
   return {
     totalDebit: totals.closingDebit,
@@ -321,19 +469,18 @@ export function computeTrialBalanceSummaryFromDetailedGroups(
     openingCredit: totals.openingCredit,
     closingDebit: totals.closingDebit,
     closingCredit: totals.closingCredit,
-    difference,
+    ...balance,
     totalLedgers: ledgerRows.length,
     totalGroups: groups.length,
-    isBalanced: difference === 0 && periodDiff === 0,
   };
 }
 
 export function computeTrialBalanceSummaryFromGroups(
   rows: TrialBalanceSummaryGroupRow[],
+  hasUnbalancedVouchers = false,
 ): TrialBalanceSummary {
   const totals = sumTrialBalanceColumns(rows);
-  const difference = roundMoney(totals.closingDebit - totals.closingCredit);
-  const periodDiff = roundMoney(totals.debit - totals.credit);
+  const balance = computeTrialBalanceBalanceCheck(totals, hasUnbalancedVouchers);
 
   return {
     totalDebit: totals.closingDebit,
@@ -344,10 +491,9 @@ export function computeTrialBalanceSummaryFromGroups(
     openingCredit: totals.openingCredit,
     closingDebit: totals.closingDebit,
     closingCredit: totals.closingCredit,
-    difference,
+    ...balance,
     totalLedgers: 0,
     totalGroups: rows.length,
-    isBalanced: difference === 0 && periodDiff === 0,
   };
 }
 
@@ -360,6 +506,7 @@ export type TrialBalanceDetailedFlatRow =
     }
   | {
       type: "group";
+      groupId: number;
       groupKey: string;
       groupName: string;
       primaryHead: string;
@@ -368,19 +515,25 @@ export type TrialBalanceDetailedFlatRow =
     }
   | {
       type: "subgroup";
+      subgroupId: number;
       subgroupKey: string;
       subgroupName: string;
       groupKey: string;
       ledgerCount: number;
       amounts: TrialBalanceAmountColumns;
     }
-  | { type: "ledger"; ledger: TrialBalanceDetailedLedgerRow };
+  | { type: "ledger"; ledger: TrialBalanceDetailedLedgerRow }
+  | { type: "voucher"; ledgerId: number; voucher: TrialBalanceLedgerVoucherLine };
 
 export function flattenTrialBalanceDetailedGroups(
   groups: TrialBalanceDetailedGroup[],
   expandedPrimaryIds: Set<number>,
   expandedGroupIds: Set<string>,
   expandedSubgroupIds: Set<string> = new Set(),
+  options?: {
+    expandedLedgerIds?: Set<number>;
+    voucherLinesByLedgerId?: Map<number, TrialBalanceLedgerVoucherLine[]>;
+  },
 ): TrialBalanceDetailedFlatRow[] {
   const flat: TrialBalanceDetailedFlatRow[] = [];
   const sections = new Map<number, TrialBalancePrimaryHeadSection>();
@@ -426,12 +579,14 @@ export function flattenTrialBalanceDetailedGroups(
     if (!expandedPrimaryIds.has(section.primaryHeadId)) continue;
 
     for (const group of section.groups) {
+      const ledgerCount = group.subgroups.reduce((n, sg) => n + sg.ledgers.length, 0);
       flat.push({
         type: "group",
+        groupId: group.groupId,
         groupKey: group.groupKey,
         groupName: group.groupName,
         primaryHead: group.primaryHead,
-        ledgerCount: group.ledgers.length,
+        ledgerCount,
         amounts: {
           openingDebit: group.openingDebit,
           openingCredit: group.openingCredit,
@@ -444,61 +599,37 @@ export function flattenTrialBalanceDetailedGroups(
 
       if (!expandedGroupIds.has(group.groupKey)) continue;
 
-      const bySubGroup = new Map<string, TrialBalanceDetailedLedgerRow[]>();
-      for (const ledger of group.ledgers) {
-        const hasSubGroup =
-          ledger.standardGroup.trim().length > 0 &&
-          ledger.standardGroup !== group.groupName;
-        const key = hasSubGroup ? ledger.standardGroup : "__direct__";
-        const list = bySubGroup.get(key) ?? [];
-        list.push(ledger);
-        bySubGroup.set(key, list);
-      }
+      for (const subgroup of group.subgroups) {
+        flat.push({
+          type: "subgroup",
+          subgroupId: subgroup.subgroupId,
+          subgroupKey: subgroup.subgroupKey,
+          subgroupName: subgroup.subgroupName,
+          groupKey: group.groupKey,
+          ledgerCount: subgroup.ledgers.length,
+          amounts: {
+            openingDebit: subgroup.openingDebit,
+            openingCredit: subgroup.openingCredit,
+            debit: subgroup.debit,
+            credit: subgroup.credit,
+            closingDebit: subgroup.closingDebit,
+            closingCredit: subgroup.closingCredit,
+          },
+        });
 
-      const subGroupEntries = [...bySubGroup.entries()].sort(([a], [b]) => {
-        if (a === "__direct__") return 1;
-        if (b === "__direct__") return -1;
-        return a.localeCompare(b);
-      });
+        if (!expandedSubgroupIds.has(subgroup.subgroupKey)) continue;
 
-      for (const [subKey, ledgers] of subGroupEntries) {
-        const sortedLedgers = [...ledgers].sort((a, b) =>
-          a.ledgerName.localeCompare(b.ledgerName),
-        );
-
-        if (subKey !== "__direct__") {
-          const subKeyId = `${group.groupKey}::${subKey}`;
-          const subAmounts = sortedLedgers.reduce(
-            (acc, l) => ({
-              openingDebit: roundMoney(acc.openingDebit + l.openingDebit),
-              openingCredit: roundMoney(acc.openingCredit + l.openingCredit),
-              debit: roundMoney(acc.debit + l.debit),
-              credit: roundMoney(acc.credit + l.credit),
-              closingDebit: roundMoney(acc.closingDebit + l.closingDebit),
-              closingCredit: roundMoney(acc.closingCredit + l.closingCredit),
-            }),
-            {
-              openingDebit: 0,
-              openingCredit: 0,
-              debit: 0,
-              credit: 0,
-              closingDebit: 0,
-              closingCredit: 0,
-            },
-          );
-          flat.push({
-            type: "subgroup",
-            subgroupKey: subKeyId,
-            subgroupName: subKey,
-            groupKey: group.groupKey,
-            ledgerCount: sortedLedgers.length,
-            amounts: subAmounts,
-          });
-          if (!expandedSubgroupIds.has(subKeyId)) continue;
-        }
-
-        for (const ledger of sortedLedgers) {
+        for (const ledger of subgroup.ledgers) {
           flat.push({ type: "ledger", ledger });
+          if (
+            options?.expandedLedgerIds?.has(ledger.ledgerId) &&
+            options.voucherLinesByLedgerId
+          ) {
+            const vouchers = options.voucherLinesByLedgerId.get(ledger.ledgerId) ?? [];
+            for (const voucher of vouchers) {
+              flat.push({ type: "voucher", ledgerId: ledger.ledgerId, voucher });
+            }
+          }
         }
       }
     }
@@ -512,17 +643,8 @@ export function collectAllDetailedSubgroupKeys(
 ): Set<string> {
   const keys = new Set<string>();
   for (const group of groups) {
-    const subNames = new Set<string>();
-    for (const ledger of group.ledgers) {
-      if (
-        ledger.standardGroup.trim().length > 0 &&
-        ledger.standardGroup !== group.groupName
-      ) {
-        subNames.add(ledger.standardGroup);
-      }
-    }
-    for (const name of subNames) {
-      keys.add(`${group.groupKey}::${name}`);
+    for (const subgroup of group.subgroups) {
+      keys.add(subgroup.subgroupKey);
     }
   }
   return keys;
@@ -537,3 +659,42 @@ export function collectAllPrimaryHeadKeys(groups: TrialBalanceDetailedGroup[]): 
 }
 
 export { buildGeneralLedgerHref };
+
+export function buildTrialBalanceLedgerHref(
+  ledgerId: number,
+  filters: Pick<TrialBalanceFilters, "dateFrom" | "dateTo" | "branch" | "warehouse" | "financialYearId">,
+  options?: { groupId?: number; groupName?: string },
+): string {
+  const branch = Array.isArray(filters.branch) ? filters.branch[0] : filters.branch;
+  const warehouse = Array.isArray(filters.warehouse) ? filters.warehouse[0] : filters.warehouse;
+  return buildGeneralLedgerHref({
+    ledgerId,
+    fromDate: filters.dateFrom,
+    toDate: filters.dateTo,
+    source: "trial-balance",
+    branch: branch && branch !== "all" ? branch : undefined,
+    warehouse: warehouse && warehouse !== "all" ? warehouse : undefined,
+    financialYearId: filters.financialYearId,
+    groupId: options?.groupId,
+    groupName: options?.groupName,
+  });
+}
+
+export function buildTrialBalanceGroupHref(
+  groupId: number,
+  groupName: string,
+  filters: Pick<TrialBalanceFilters, "dateFrom" | "dateTo" | "branch" | "warehouse" | "financialYearId">,
+): string {
+  const branch = Array.isArray(filters.branch) ? filters.branch[0] : filters.branch;
+  const warehouse = Array.isArray(filters.warehouse) ? filters.warehouse[0] : filters.warehouse;
+  return buildGeneralLedgerHref({
+    groupId,
+    groupName,
+    fromDate: filters.dateFrom,
+    toDate: filters.dateTo,
+    source: "trial-balance",
+    branch: branch && branch !== "all" ? branch : undefined,
+    warehouse: warehouse && warehouse !== "all" ? warehouse : undefined,
+    financialYearId: filters.financialYearId,
+  });
+}

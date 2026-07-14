@@ -4,6 +4,8 @@ import {
   loadTDSMasters,
   type TDSMaster,
 } from "@/app/(app)/masters/tds/tds-data";
+import { demoDateAt } from "@/lib/accounts/demo-date-utils";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
 import { resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
 
@@ -12,7 +14,8 @@ export type TdsPartyType =
   | "Customer"
   | "Contractor"
   | "Professional"
-  | "Employee";
+  | "Employee"
+  | "Other";
 
 export type TdsPaymentStatus = "paid" | "unpaid";
 
@@ -38,6 +41,7 @@ export interface TdsPartyWiseRow {
   sourceType: TdsSourceVoucherType;
   sourceId: number;
   partyLedgerId: number | null;
+  branch?: string;
 }
 
 export interface TdsPartyWiseFilters {
@@ -50,7 +54,7 @@ export interface TdsPartyWiseFilters {
   search: string;
 }
 
-const STORAGE_KEY = "ds_tds_party_wise_v1";
+const STORAGE_KEY = "ds_tds_party_wise_v2";
 
 function resolvePartyLedgerId(
   partyId: number,
@@ -93,9 +97,15 @@ export function resolveTdsSourceHref(row: TdsPartyWiseRow): string {
 
 export function resolvePartyGeneralLedgerHref(row: TdsPartyWiseRow): string {
   if (row.partyLedgerId) {
-    return `/accounts/reports/ledger?ledger=${row.partyLedgerId}`;
+    return buildGeneralLedgerHref({ ledgerId: row.partyLedgerId });
   }
-  return "/accounts/reports/ledger";
+  const ledgerType =
+    row.partyType === "Customer"
+      ? "Customer"
+      : row.partyType === "Employee"
+        ? "Employee"
+        : "Vendor";
+  return buildGeneralLedgerHref({ ledgerType });
 }
 
 const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
@@ -110,7 +120,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "1%",
     tdsLedgerId: null,
     voucherNo: "PUR-2026-001",
-    voucherDate: "2026-04-12",
+    voucherDate: demoDateAt(95),
     billNo: "ACD/INV/26/041",
     taxableAmount: 85000,
     tdsAmount: 850,
@@ -118,6 +128,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "purchase_invoice",
     sourceId: 1,
     partyLedgerId: null,
+    branch: "Head Office",
   },
   {
     id: "tds-2",
@@ -130,7 +141,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "1%",
     tdsLedgerId: null,
     voucherNo: "PAY-2026-0142",
-    voucherDate: "2026-04-18",
+    voucherDate: demoDateAt(88),
     billNo: "GFL/WT/042",
     taxableAmount: 42000,
     tdsAmount: 420,
@@ -139,6 +150,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "payment",
     sourceId: 14,
     partyLedgerId: null,
+    branch: "Mumbai",
   },
   {
     id: "tds-3",
@@ -151,7 +163,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "10%",
     tdsLedgerId: null,
     voucherNo: "PUR-2026-003",
-    voucherDate: "2026-05-05",
+    voucherDate: demoDateAt(70),
     billNo: "LEA/PRO/2026/09",
     taxableAmount: 25000,
     tdsAmount: 2500,
@@ -159,6 +171,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "purchase_invoice",
     sourceId: 3,
     partyLedgerId: null,
+    branch: "Head Office",
   },
   {
     id: "tds-4",
@@ -171,7 +184,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "0.1%",
     tdsLedgerId: null,
     voucherNo: "PUR-2026-004",
-    voucherDate: "2026-05-12",
+    voucherDate: demoDateAt(62),
     billNo: "KIP/26/INV-033",
     taxableAmount: 125000,
     tdsAmount: 125,
@@ -179,6 +192,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "purchase_invoice",
     sourceId: 4,
     partyLedgerId: null,
+    branch: "Pune",
   },
   {
     id: "tds-5",
@@ -191,7 +205,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "5%",
     tdsLedgerId: null,
     voucherNo: "JRN-2026-0088",
-    voucherDate: "2026-05-20",
+    voucherDate: demoDateAt(55),
     billNo: "CCI/COM/19B",
     taxableAmount: 18000,
     tdsAmount: 900,
@@ -200,6 +214,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "journal",
     sourceId: 88,
     partyLedgerId: null,
+    branch: "Head Office",
   },
   {
     id: "tds-6",
@@ -212,7 +227,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "1%",
     tdsLedgerId: null,
     voucherNo: "PUR-2026-002",
-    voucherDate: "2026-04-22",
+    voucherDate: demoDateAt(85),
     billNo: "GFL/FRT/118",
     taxableAmount: 31500,
     tdsAmount: 315,
@@ -220,6 +235,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "purchase_invoice",
     sourceId: 2,
     partyLedgerId: null,
+    branch: "Mumbai",
   },
   {
     id: "tds-7",
@@ -232,7 +248,7 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     tdsRate: "10%",
     tdsLedgerId: null,
     voucherNo: "PAY-2026-0156",
-    voucherDate: "2026-06-02",
+    voucherDate: demoDateAt(40),
     billNo: "ACD/CONS/12",
     taxableAmount: 12000,
     tdsAmount: 1200,
@@ -241,6 +257,71 @@ const TDS_PARTY_WISE_SEED: TdsPartyWiseRow[] = [
     sourceType: "payment",
     sourceId: 156,
     partyLedgerId: null,
+    branch: "Head Office",
+  },
+  {
+    id: "tds-8",
+    partyId: 6,
+    partyType: "Other",
+    partyName: "City Office Rentals",
+    pan: "AACFC3210M",
+    tdsSection: "194I",
+    tdsSectionName: "Rent",
+    tdsRate: "10%",
+    tdsLedgerId: null,
+    voucherNo: "JRN-2026-0102",
+    voucherDate: demoDateAt(48),
+    billNo: "COR/RENT/05",
+    taxableAmount: 90000,
+    tdsAmount: 9000,
+    paymentStatus: "unpaid",
+    sourceType: "journal",
+    sourceId: 102,
+    partyLedgerId: null,
+    branch: "Head Office",
+  },
+  {
+    id: "tds-9",
+    partyId: 7,
+    partyType: "Employee",
+    partyName: "Rajesh Kumar",
+    pan: "ABCPK1234F",
+    tdsSection: "192",
+    tdsSectionName: "Salary",
+    tdsRate: "10%",
+    tdsLedgerId: null,
+    voucherNo: "JRN-2026-0110",
+    voucherDate: demoDateAt(30),
+    billNo: "SAL/JUN/RK",
+    taxableAmount: 45000,
+    tdsAmount: 4500,
+    paymentStatus: "paid",
+    challanNo: "CH-TDS-JUN-018",
+    sourceType: "journal",
+    sourceId: 110,
+    partyLedgerId: null,
+    branch: "Pune",
+  },
+  {
+    id: "tds-10",
+    partyId: 4,
+    partyType: "Supplier",
+    partyName: "Krishna Pesticides Ltd",
+    pan: "AABCK3456P",
+    tdsSection: "194Q",
+    tdsSectionName: "Purchase of Goods",
+    tdsRate: "0.1%",
+    tdsLedgerId: null,
+    voucherNo: "PUR-2026-018",
+    voucherDate: demoDateAt(22),
+    billNo: "KIP/26/INV-041",
+    taxableAmount: 210000,
+    tdsAmount: 210,
+    paymentStatus: "unpaid",
+    sourceType: "purchase_invoice",
+    sourceId: 18,
+    partyLedgerId: null,
+    branch: "Pune",
   },
 ];
 
@@ -324,11 +405,12 @@ export function computeTdsPartyWiseSummary(rows: TdsPartyWiseRow[]) {
 
 export const TDS_PARTY_TYPE_OPTIONS = [
   { value: "all", label: "All Party Types" },
-  { value: "Supplier", label: "Supplier" },
+  { value: "Supplier", label: "Vendor" },
   { value: "Customer", label: "Customer" },
   { value: "Contractor", label: "Contractor" },
   { value: "Professional", label: "Professional" },
   { value: "Employee", label: "Employee" },
+  { value: "Other", label: "Other" },
 ] as const;
 
 export const TDS_PAYMENT_STATUS_OPTIONS = [

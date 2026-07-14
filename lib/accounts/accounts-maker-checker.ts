@@ -296,6 +296,35 @@ function activateNextApprover(steps: AccountsApprovalStep[]): AccountsApprovalSt
   return next;
 }
 
+/** Mark voucher posted without an approval chain (e.g. direct purchase when approval is off). */
+export function markWorkflowPosted(
+  workflow: AccountsDocumentWorkflow,
+  remarks = "Posted",
+): AccountsDocumentWorkflow {
+  const steps = workflow.steps.map((s) => ({
+    ...s,
+    state:
+      s.level === 0
+        ? ("created" as ApprovalStepState)
+        : s.state === "waiting" || s.state === "pending"
+          ? ("approved" as ApprovalStepState)
+          : s.state,
+  }));
+  let next: AccountsDocumentWorkflow = {
+    ...workflow,
+    status: "posted",
+    steps,
+    postedAt: nowIso(),
+    remarks,
+  };
+  return pushHistory(next, {
+    action: "posted",
+    by: workflow.makerName,
+    byRole: workflow.makerRole,
+    remarks,
+  });
+}
+
 export function submitForApproval(
   workflow: AccountsDocumentWorkflow,
   remarks = "",
@@ -346,6 +375,7 @@ export function approveCurrentStep(
   actor: Employee = getAccountsCheckerEmployee(),
   remarks = "",
 ): AccountsDocumentWorkflow {
+  // Call only from Approve button handlers (e.g. approveDocumentStep). Never during page/listing/report load.
   if (workflow.status !== "pending_approval") {
     throw new Error("Voucher is not pending approval.");
   }

@@ -1,378 +1,220 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { formatMoneyNumber, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableFoot,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
 import {
   buildPandLLedgerHref,
-  collectPandLGroupIds,
-  splitPandLHorizontal,
   type PandLDrillDownFilters,
-  type PandLLineItem,
-  type PandLSide,
+  type PandLSideDisplayRow,
   type PandLStatement,
-  type PandLTreeNode,
-  type PandLViewType,
 } from "./pl-data";
 
-const CHEVRON_COL_PX = 20;
-const DEPTH_INDENT_PX = 16;
-const BASE_INDENT_PX = 8;
-
-function formatPlAmount(item: PandLLineItem): string {
-  if (item.amount == null) return "—";
-  if (item.isReturn && !item.ledgerId) {
-    return formatMoney(item.amount);
-  }
-  if (item.isReturn) {
-    return `(${formatMoney(item.amount)})`;
-  }
-  return formatMoney(item.amount);
+function formatAmount(amount: number, isReturn?: boolean): string {
+  if (isReturn) return `(${formatMoneyNumber(amount)})`;
+  return formatMoneyNumber(amount);
 }
 
-function formatGroupAmount(amount: number | null): string {
-  if (amount == null) return "—";
-  return formatMoney(amount);
-}
-
-function indentPx(depth: number): number {
-  return BASE_INDENT_PX + depth * DEPTH_INDENT_PX;
-}
-
-function SideTableHeader({ side }: { side: PandLSide }) {
+function isBoldRow(row: PandLSideDisplayRow): boolean {
   return (
-    <thead className="sticky top-0 z-20 bg-[#FFF3E6] shadow-[0_1px_0_0_#E5E7EB]">
-      <tr>
-        <th className="px-3 py-2 text-left text-xs font-semibold text-navy-700 align-middle">
-          {side.sectionTitle}
-        </th>
-        <th className="px-3 py-2 text-right text-xs font-semibold text-navy-700 w-36 align-middle whitespace-nowrap">
-          {side.amountColumnLabel}
-        </th>
-      </tr>
-    </thead>
+    row.rowType === "group" ||
+    row.rowType === "carried" ||
+    row.rowType === "section_total" ||
+    row.rowType === "net" ||
+    row.rowType === "grand_total"
   );
 }
 
-function NetBalanceRow({
+function ParticularLabel({
   row,
-  side,
-}: {
-  row: PandLLineItem;
-  side: PandLSide;
-}) {
-  const isProfit = row.particular === "Net Profit";
-  return (
-    <tr className="border-b border-border/60 bg-brand-50/80">
-      <td className="py-2 px-3 align-middle">
-        <div className="flex items-center gap-0" style={{ paddingLeft: BASE_INDENT_PX }}>
-          <span className="flex-shrink-0" style={{ width: CHEVRON_COL_PX }} />
-          <span
-            className={cn(
-              "text-xs font-bold uppercase tracking-wide",
-              isProfit ? "text-emerald-800" : "text-red-800",
-            )}
-          >
-            {row.particular}
-          </span>
-        </div>
-      </td>
-      <td
-        className={cn(
-          "px-3 py-2 text-right text-xs font-bold tabular-nums w-36 align-middle whitespace-nowrap",
-          MONEY_AMOUNT_CLASS,
-          isProfit ? "text-emerald-700" : "text-red-700",
-        )}
-      >
-        {formatGroupAmount(row.amount)}
-      </td>
-    </tr>
-  );
-}
-
-function SideGrandTotalRow({ side }: { side: PandLSide }) {
-  return (
-    <tr className="border-t-2 border-brand-600 bg-brand-50/60">
-      <td className="px-3 py-2.5 text-xs font-bold text-brand-800 align-middle">
-        {side.grandTotalLabel}
-        <span className="ml-1.5 text-[10px] font-semibold text-brand-700/80">
-          ({side.balanceSide})
-        </span>
-      </td>
-      <td
-        className={cn(
-          "px-3 py-2.5 text-right text-xs font-bold tabular-nums w-36 align-middle whitespace-nowrap",
-          MONEY_AMOUNT_CLASS,
-          "text-brand-800",
-        )}
-      >
-        {formatGroupAmount(side.grandTotal)}
-      </td>
-    </tr>
-  );
-}
-
-function SideTreeRows({
-  node,
-  expandedIds,
-  onToggle,
   drillDownFilters,
 }: {
-  node: PandLTreeNode;
-  expandedIds: Set<string>;
-  onToggle: (id: string) => void;
+  row: PandLSideDisplayRow;
   drillDownFilters: PandLDrillDownFilters;
 }) {
-  const hasChildren = node.children.length > 0;
-  const isExpanded = expandedIds.has(node.item.id);
-  const isGroup = hasChildren;
-  const isLedger = Boolean(node.item.ledgerId);
-  const rowIndent = indentPx(node.depth);
-
+  const bold = isBoldRow(row);
   const labelClass = cn(
-    "text-xs truncate min-w-0",
-    isGroup ? "font-semibold text-foreground" : "font-normal text-foreground/90",
-    isLedger && "text-brand-700 hover:text-brand-800 hover:underline cursor-pointer",
+    "text-xs truncate",
+    bold ? "font-bold text-foreground" : "font-normal text-foreground",
+    row.ledgerId && "text-brand-700 hover:text-brand-800 hover:underline",
   );
 
-  const labelContent = isLedger ? (
-    <Link
-      href={buildPandLLedgerHref(node.item.ledgerId!, drillDownFilters)}
-      className={labelClass}
-      title={`View ${node.item.particular} ledger`}
-    >
-      {node.item.particular}
-    </Link>
-  ) : (
-    <span className={labelClass} title={node.item.particular}>
-      {node.item.particular}
+  if (row.ledgerId) {
+    return (
+      <Link
+        href={buildPandLLedgerHref(row.ledgerId, drillDownFilters)}
+        className={labelClass}
+        title={`View ${row.particular} ledger`}
+      >
+        {row.particular}
+      </Link>
+    );
+  }
+
+  return (
+    <span className={labelClass} title={row.particular}>
+      {row.particular}
     </span>
   );
+}
 
-  const displayAmount = isGroup
-    ? formatGroupAmount(node.item.amount)
-    : formatPlAmount(node.item);
+function DualAmountCell({ row }: { row: PandLSideDisplayRow }) {
+  const bold = isBoldRow(row);
+
+  if (row.rowType === "ledger") {
+    return (
+      <div className="grid grid-cols-[1fr_1fr] w-full items-center gap-2">
+        <span className={cn("text-left tabular-nums", MONEY_AMOUNT_CLASS)}>
+          {row.ledgerAmount != null ? formatAmount(row.ledgerAmount, row.isReturn) : ""}
+        </span>
+        <span />
+      </div>
+    );
+  }
 
   return (
-    <>
-      <tr
-        className={cn(
-          "border-b border-border/60 transition-colors",
-          isGroup ? "bg-muted/10 hover:bg-muted/20" : "hover:bg-muted/10",
-        )}
-      >
-        <td className="py-1.5 align-middle min-w-0">
-          <div
-            className="flex items-center gap-0 min-w-0 pr-2"
-            style={{ paddingLeft: rowIndent }}
-          >
-            <span className="flex-shrink-0" style={{ width: CHEVRON_COL_PX }}>
-              {hasChildren ? (
-                <button
-                  type="button"
-                  onClick={() => onToggle(node.item.id)}
-                  className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
-                >
-                  {isExpanded ? (
-                    <ChevronDown className="w-3.5 h-3.5" strokeWidth={2} />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
-                  )}
-                </button>
-              ) : null}
-            </span>
-            {labelContent}
-          </div>
-        </td>
-        <td
-          className={cn(
-            "px-3 py-1.5 text-right text-xs tabular-nums whitespace-nowrap w-36 align-middle",
-            isGroup ? cn("font-semibold", MONEY_AMOUNT_CLASS) : MONEY_AMOUNT_CLASS,
-            node.item.isReturn && !isGroup && "text-red-700",
-          )}
-        >
-          {displayAmount}
-        </td>
-      </tr>
-      {hasChildren &&
-        isExpanded &&
-        node.children.map((child) => (
-          <SideTreeRows
-            key={child.item.id}
-            node={child}
-            expandedIds={expandedIds}
-            onToggle={onToggle}
-            drillDownFilters={drillDownFilters}
-          />
-        ))}
-    </>
+    <div className="grid grid-cols-[1fr_1fr] w-full items-center gap-2">
+      <span />
+      <span className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS, bold && "font-bold")}>
+        {row.groupTotal != null ? formatAmount(row.groupTotal, row.isReturn) : ""}
+      </span>
+    </div>
   );
 }
 
-function SideTable({
-  side,
-  expandedIds,
-  onToggle,
-  drillDownFilters,
-}: {
-  side: PandLSide;
-  expandedIds: Set<string>;
-  onToggle: (id: string) => void;
-  drillDownFilters: PandLDrillDownFilters;
-}) {
-  const hasRows = side.tree.length > 0;
+function zipRows(statement: PandLStatement) {
+  const debitBody = statement.debitRows.filter((r) => r.rowType !== "grand_total");
+  const creditBody = statement.creditRows.filter((r) => r.rowType !== "grand_total");
+  const rowCount = Math.max(debitBody.length, creditBody.length);
 
-  return (
-    <table className="w-full border-collapse table-fixed">
-      <colgroup>
-        <col />
-        <col className="w-36" />
-      </colgroup>
-      <SideTableHeader side={side} />
-      <tbody>
-        {hasRows ? (
-          <>
-            {side.tree.map((node) => (
-              <SideTreeRows
-                key={node.item.id}
-                node={node}
-                expandedIds={expandedIds}
-                onToggle={onToggle}
-                drillDownFilters={drillDownFilters}
-              />
-            ))}
-            {side.netBalanceRow && (
-              <NetBalanceRow row={side.netBalanceRow} side={side} />
-            )}
-          </>
-        ) : (
-          <tr>
-            <td colSpan={2} className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No entries
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
+  const bodyRows = Array.from({ length: rowCount }, (_, i) => ({
+    debit: debitBody[i] ?? null,
+    credit: creditBody[i] ?? null,
+  }));
+
+  const grandDebit: PandLSideDisplayRow =
+    statement.debitRows.find((r) => r.rowType === "grand_total") ?? {
+      id: "pl-grand-dr",
+      particular: "Total",
+      rowType: "grand_total",
+      groupTotal: statement.finalDebitTotal,
+    };
+
+  const grandCredit: PandLSideDisplayRow =
+    statement.creditRows.find((r) => r.rowType === "grand_total") ?? {
+      id: "pl-grand-cr",
+      particular: "Total",
+      rowType: "grand_total",
+      groupTotal: statement.finalCreditTotal,
+    };
+
+  return { bodyRows, grandDebit, grandCredit };
+}
+
+function sectionTotalRowClass(row: PandLSideDisplayRow | null): string | undefined {
+  if (row?.rowType === "section_total") return "border-t-2 border-foreground/20 bg-muted/20";
+  if (row?.rowType === "group" || row?.rowType === "carried") return "bg-muted/10";
+  return undefined;
 }
 
 export function ProfitLossHorizontalView({
   statement,
   drillDownFilters,
-  viewType,
 }: {
   statement: PandLStatement;
   drillDownFilters: PandLDrillDownFilters;
-  viewType: PandLViewType;
 }) {
-  const { expenses, income } = useMemo(
-    () => splitPandLHorizontal(statement),
+  const { bodyRows, grandDebit, grandCredit } = useMemo(
+    () => zipRows(statement),
     [statement],
   );
 
-  const defaultExpanded = useMemo(
-    () =>
-      viewType === "detailed"
-        ? new Set([
-            ...collectPandLGroupIds(expenses.tree),
-            ...collectPandLGroupIds(income.tree),
-          ])
-        : new Set<string>(),
-    [expenses.tree, income.tree, viewType],
-  );
-
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpanded);
-
-  useEffect(() => {
-    setExpandedIds(defaultExpanded);
-  }, [defaultExpanded]);
-
-  const toggle = useCallback((id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const isProfit = statement.netProfit >= 0;
-  const netLabel = isProfit ? "Net Profit" : "Net Loss";
-
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full w-full">
-      <div className="flex-shrink-0 px-4 py-2.5 border-b border-border bg-white">
-        <h2 className="text-sm font-bold text-navy-700 text-center">
-          Profit &amp; Loss Account
-        </h2>
-      </div>
+    <AccountsTableScroll className="flex-1 min-h-0">
+      <AccountsTable minWidth={720}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <AccountsTableHeadCell className="min-w-[200px] border-r border-border">
+              Particulars
+            </AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" className="min-w-[140px] border-r-2 border-border">
+              Amount
+            </AccountsTableHeadCell>
+            <AccountsTableHeadCell className="min-w-[200px] border-r border-border">
+              Particulars
+            </AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" className="min-w-[140px]">
+              Amount
+            </AccountsTableHeadCell>
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
 
-      <div
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-contain border border-border border-t-0 bg-white"
-        role="region"
-        aria-label="Profit and Loss accounts"
-      >
-        <div className="flex flex-col lg:flex-row lg:items-start min-w-[760px]">
-          <div className="flex-1 min-w-0 lg:border-r border-border">
-            <SideTable
-              side={expenses}
-              expandedIds={expandedIds}
-              onToggle={toggle}
-              drillDownFilters={drillDownFilters}
-            />
-          </div>
-          <div className="flex-1 min-w-0 border-t lg:border-t-0 border-border">
-            <SideTable
-              side={income}
-              expandedIds={expandedIds}
-              onToggle={toggle}
-              drillDownFilters={drillDownFilters}
-            />
-          </div>
-        </div>
-      </div>
+        <AccountsTableBody>
+          {bodyRows.map((pair, index) => (
+            <AccountsTableRow
+              key={`pl-row-${index}`}
+              className={cn(
+                "hover:bg-muted/30 transition-colors",
+                sectionTotalRowClass(pair.debit) ?? sectionTotalRowClass(pair.credit),
+              )}
+            >
+              <AccountsTableCell className="border-r border-border/60 align-top">
+                {pair.debit ? (
+                  <ParticularLabel row={pair.debit} drillDownFilters={drillDownFilters} />
+                ) : null}
+              </AccountsTableCell>
+              <AccountsTableCell
+                align="right"
+                money
+                className="border-r-2 border-border align-top"
+              >
+                {pair.debit ? <DualAmountCell row={pair.debit} /> : null}
+              </AccountsTableCell>
+              <AccountsTableCell className="border-r border-border/60 align-top">
+                {pair.credit ? (
+                  <ParticularLabel row={pair.credit} drillDownFilters={drillDownFilters} />
+                ) : null}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money className="align-top">
+                {pair.credit ? <DualAmountCell row={pair.credit} /> : null}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ))}
+        </AccountsTableBody>
 
-      <div className="flex-shrink-0 flex flex-col lg:flex-row border border-t-0 border-border overflow-hidden shadow-sm bg-white min-w-[760px]">
-        <div className="flex-1 min-w-0 lg:border-r border-border">
-          <table className="w-full border-collapse table-fixed">
-            <colgroup>
-              <col />
-              <col className="w-36" />
-            </colgroup>
-            <tbody>
-              <SideGrandTotalRow side={expenses} />
-            </tbody>
-          </table>
-        </div>
-        <div className="flex-1 min-w-0 border-t lg:border-t-0 border-border">
-          <table className="w-full border-collapse table-fixed">
-            <colgroup>
-              <col />
-              <col className="w-36" />
-            </colgroup>
-            <tbody>
-              <SideGrandTotalRow side={income} />
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div
-        className={cn(
-          "flex-shrink-0 mt-3 px-3 py-2 rounded-lg border text-center text-xs font-bold",
-          statement.isBalanced
-            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-            : "bg-red-50 border-red-200 text-red-700",
-        )}
-      >
-        {statement.isBalanced
-          ? `${netLabel}: ₹ ${formatMoney(Math.abs(statement.netProfit))} — Total ₹ ${formatMoney(expenses.grandTotal)} on both sides (Expenses Dr = Income Cr)`
-          : `P&L is not balanced — Difference ₹ ${formatMoney(Math.abs(statement.totalIncome - statement.totalExpenses))}`}
-      </div>
-    </div>
+        <AccountsTableFoot>
+          <AccountsTableRow className="border-t-2 border-foreground/20 bg-brand-50/60">
+            <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-foreground">
+              {grandDebit.particular}
+            </AccountsTableCell>
+            <AccountsTableCell
+              align="right"
+              money
+              className="border-r-2 border-border font-bold"
+            >
+              <DualAmountCell row={grandDebit} />
+            </AccountsTableCell>
+            <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-foreground">
+              {grandCredit.particular}
+            </AccountsTableCell>
+            <AccountsTableCell align="right" money className="font-bold">
+              <DualAmountCell row={grandCredit} />
+            </AccountsTableCell>
+          </AccountsTableRow>
+        </AccountsTableFoot>
+      </AccountsTable>
+    </AccountsTableScroll>
   );
 }

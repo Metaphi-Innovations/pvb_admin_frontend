@@ -1,243 +1,137 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import {
-  AccountsTable,
-  AccountsTableBody,
-  AccountsTableCell,
-  AccountsTableHead,
-  AccountsTableHeadRow,
-  AccountsTableRow,
-} from "@/components/accounts/AccountsTable";
-import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  ReportFinancialYearFilter,
+  ReportBranchMultiFilter,
+  ReportWarehouseMultiFilter,
+  ReportPartyMultiFilter,
+  ReportLedgerGroupMultiFilter,
+  ReportLedgerMultiFilter,
+  ReportMoreFilters,
+  ReportFilterSummary,
+  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
-  AccountsColumnFilterProvider,
-  SortTh,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { cn } from "@/lib/utils";
-import { useDebouncedValue } from "../pl/pl-hooks";
+import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import { ACCOUNTS_VOUCHERS_UPDATED_EVENT } from "@/lib/accounts/accounts-section-seed";
 import {
   buildCashFlowStatement,
-  filterCashFlowStatement,
   flattenCashFlowForExport,
-  formatSignedCashFlowAmount,
-  type CashFlowLineItem,
-  type CashFlowStatement,
+  getCashFlowActivePartyOptions,
+  getCashFlowBranchOptions,
+  getCashFlowLedgerGroupOptions,
+  getCashFlowLedgerOptions,
+  getCashFlowWarehouseOptions,
+  resolveFinancialYearLabel,
+  type CashFlowFilters,
 } from "./cash-flow-data";
 import { exportCashFlowToExcel, exportCashFlowToPdf } from "./cash-flow-export";
+import { CashFlowCompareToggle } from "./CashFlowCompareToggle";
+import { CashFlowStatementView } from "./CashFlowStatementView";
+import "../trial-balance/trial-balance-compact.css";
 
 const PLACEHOLDER_DATE = "2025-04-01";
+const EMPTY_MESSAGE = "No Cash Flow data available for the selected period.";
 
-function CashFlowRow({ line }: { line: CashFlowLineItem }) {
-  if (line.kind === "section") {
-    return (
-      <AccountsTableRow className="bg-muted/20">
-        <AccountsTableCell colSpan={2} className="text-xs font-bold text-navy-700 py-2">
-          {line.particular}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  if (line.kind === "total") {
-    return (
-      <AccountsTableRow className="bg-muted/30 border-t border-border">
-        <AccountsTableCell className="font-bold text-foreground text-xs">
-          {line.particular}
-        </AccountsTableCell>
-        <AccountsTableCell align="right" money className={cn("font-bold", MONEY_AMOUNT_CLASS)}>
-          {formatSignedCashFlowAmount(line.amount)}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  if (line.kind === "summary") {
-    const isClosing = line.id === "closing-balance";
-    return (
-      <AccountsTableRow
-        className={cn(
-          "border-t border-border",
-          isClosing ? "bg-brand-50 border-t-2 border-brand-300" : "bg-muted/20",
-        )}
-      >
-        <AccountsTableCell
-          className={cn(
-            "font-bold text-xs",
-            isClosing ? "text-brand-800 uppercase tracking-wide" : "text-foreground",
-          )}
-        >
-          {line.particular}
-        </AccountsTableCell>
-        <AccountsTableCell
-          align="right"
-          money
-          className={cn(
-            "font-bold",
-            MONEY_AMOUNT_CLASS,
-            isClosing && "text-brand-800",
-          )}
-        >
-          {formatSignedCashFlowAmount(line.amount)}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  return (
-    <AccountsTableRow>
-      <AccountsTableCell className="text-xs text-foreground pl-4">
-        {line.particular}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-        {formatSignedCashFlowAmount(line.amount)}
-      </AccountsTableCell>
-    </AccountsTableRow>
-  );
+function defaultFyDateRange(): { from: string; to: string; fyId: string } {
+  ensureFinancialYearsCurrent();
+  const activeFyId = getActiveFinancialYearId();
+  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!fy) return { from: PLACEHOLDER_DATE, to: today, fyId: "all" };
+  return {
+    from: fy.startDate,
+    to: today < fy.endDate ? today : fy.endDate,
+    fyId: String(fy.id),
+  };
 }
 
-function CashFlowBody({
-  mounted,
-  statement,
-  hasFilters,
-  resetFilters,
-  exportMeta,
-  exporting,
-  setExporting,
-  filterBar,
-}: {
-  mounted: boolean;
-  statement: CashFlowStatement;
-  hasFilters: boolean;
-  resetFilters: () => void;
-  exportMeta: Parameters<typeof exportCashFlowToExcel>[1];
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  filterBar: React.ReactNode;
-}) {
-  const columnFilteredLines = useAccountsFilteredRows(statement.lines);
-
-  const exportStatement = useMemo(
-    (): CashFlowStatement => ({
-      ...statement,
-      lines: columnFilteredLines,
-    }),
-    [statement, columnFilteredLines],
-  );
-
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      const rows = flattenCashFlowForExport(exportStatement);
-      await exportCashFlowToExcel(rows, exportMeta, exportStatement);
-    } finally {
-      setExporting(false);
+function mergeLedgerOptions(
+  getOptions: (ledgerGroupId: string) => { id: number; name: string }[],
+  ledgerGroupIds: string[],
+): { id: number; name: string }[] {
+  if (ledgerGroupIds.length === 0) return getOptions("all");
+  const seen = new Map<number, { id: number; name: string }>();
+  for (const groupId of ledgerGroupIds) {
+    for (const ledger of getOptions(groupId)) {
+      seen.set(ledger.id, ledger);
     }
-  };
-
-  const handleExportPdf = () => {
-    const rows = flattenCashFlowForExport(exportStatement);
-    exportCashFlowToPdf(rows, exportMeta, exportStatement);
-  };
-
-  const showTable = mounted && statement.hasData;
-
-  return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", "Cash Flow")}
-      title="Cash Flow"
-      description="Cash flow statement for the selected period."
-      hideDescription
-      layout="split"
-      className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || columnFilteredLines.length === 0}
-        />
-      }
-      filters={filterBar}
-    >
-      <AccountsTableListing>
-        {!mounted ? (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            Loading Cash Flow…
-          </div>
-        ) : !showTable ? (
-          <div className="accounts-table-empty py-4 text-center">
-            No Cash Flow entries match the current search.
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="block mx-auto mt-1 text-brand-600 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : statement.lines.length > 0 && columnFilteredLines.length === 0 ? (
-          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
-            No records match the column filters.
-          </div>
-        ) : (
-          <AccountsTable minWidth={520}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                <SortTh label="Particular" colKey="particular" />
-                <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {columnFilteredLines.map((line) => (
-                <CashFlowRow key={line.id} line={line} />
-              ))}
-            </AccountsTableBody>
-          </AccountsTable>
-        )}
-      </AccountsTableListing>
-    </AccountsPageShell>
-  );
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default function CashFlowPageClient() {
   const mounted = useClientMounted();
 
-  const [preset, setPreset] = useState<DateRangePresetId>("this_month");
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
   const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
   const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
   const [datesReady, setDatesReady] = useState(false);
-  const [search, setSearch] = useState("");
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [warehouses, setWarehouses] = useState<string[]>([]);
+  const [partyIds, setPartyIds] = useState<string[]>([]);
+  const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
+  const [ledgerIds, setLedgerIds] = useState<string[]>([]);
+  const [comparePreviousPeriod, setComparePreviousPeriod] = useState(false);
   const [exporting, setExporting] = useState(false);
-
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const [dataTick, setDataTick] = useState(0);
 
   useEffect(() => {
-    const { from, to } = resolveDateRangePreset("this_month");
+    const { from, to, fyId } = defaultFyDateRange();
     setDateFrom(from);
     setDateTo(to);
+    setFinancialYearId(fyId);
     setDatesReady(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/lib/accounts/general-ledger-demo-seed").then(
+      ({ ensureGeneralLedgerDemoOnPageLoad }) => {
+        ensureGeneralLedgerDemoOnPageLoad();
+        if (!cancelled) setDataTick((t) => t + 1);
+      },
+    );
+    const onVouchersUpdated = () => setDataTick((t) => t + 1);
+    window.addEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
+    };
+  }, []);
+
+  const handleFinancialYearChange = useCallback((fyId: string) => {
+    setFinancialYearId(fyId);
+    if (fyId !== "all") {
+      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (fy) {
+        const today = new Date().toISOString().slice(0, 10);
+        setDateFrom(fy.startDate);
+        setDateTo(today < fy.endDate ? today : fy.endDate);
+        setPreset("custom");
+      }
+    }
   }, []);
 
   const handlePresetChange = useCallback((value: DateRangePresetId) => {
@@ -249,8 +143,69 @@ export default function CashFlowPageClient() {
     }
   }, []);
 
-  const sourceStatement = useMemo(() => {
-    if (!mounted) {
+  const handleLedgerGroupChange = useCallback((values: string[]) => {
+    setLedgerGroupIds(values);
+    setLedgerIds([]);
+  }, []);
+
+  const cfFilters = useMemo((): CashFlowFilters => ({
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branch: branches,
+    warehouse: warehouses,
+    partyId: partyIds,
+    ledgerGroupId: ledgerGroupIds,
+    ledgerId: ledgerIds,
+    search: "",
+  }), [
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branches,
+    warehouses,
+    partyIds,
+    ledgerGroupIds,
+    ledgerIds,
+    dataTick,
+  ]);
+
+  const ledgerGroupOptions = useMemo(
+    () => (mounted ? getCashFlowLedgerGroupOptions() : []),
+    [mounted, dataTick],
+  );
+  const ledgerOptions = useMemo(
+    () => (mounted ? mergeLedgerOptions(getCashFlowLedgerOptions, ledgerGroupIds) : []),
+    [mounted, ledgerGroupIds, dataTick],
+  );
+  const branchOptions = useMemo(
+    () => (mounted ? getCashFlowBranchOptions() : [...REPORT_BRANCH_OPTIONS]),
+    [mounted, dataTick],
+  );
+  const warehouseOptions = useMemo(
+    () => (mounted ? getCashFlowWarehouseOptions() : []),
+    [mounted, dataTick],
+  );
+  const partyOptions = useMemo(
+    () => (mounted ? getCashFlowActivePartyOptions() : []),
+    [mounted, dataTick],
+  );
+
+  const warehouseSelectOptions = useMemo(
+    () => warehouseOptions.filter((w) => w !== "all").map((w) => ({ value: w, label: w })),
+    [warehouseOptions],
+  );
+  const ledgerGroupSelectOptions = useMemo(
+    () => ledgerGroupOptions.map((g) => ({ value: String(g.id), label: g.name })),
+    [ledgerGroupOptions],
+  );
+  const ledgerSelectOptions = useMemo(
+    () => ledgerOptions.map((l) => ({ value: String(l.id), label: l.name })),
+    [ledgerOptions],
+  );
+
+  const statement = useMemo(() => {
+    if (!mounted || !datesReady) {
       return {
         lines: [],
         netOperating: 0,
@@ -262,50 +217,153 @@ export default function CashFlowPageClient() {
         hasData: false,
       };
     }
-    return buildCashFlowStatement();
-  }, [mounted, dateFrom, dateTo]);
+    const built = buildCashFlowStatement(cfFilters, { comparePreviousPeriod });
+    return built;
+  }, [mounted, datesReady, cfFilters, comparePreviousPeriod]);
 
-  const statement = useMemo(
-    () => filterCashFlowStatement(sourceStatement, { search: debouncedSearch }),
-    [sourceStatement, debouncedSearch],
-  );
-
-  const getCellValue = useCallback(
-    (row: CashFlowLineItem, key: string) => (row as unknown as Record<string, unknown>)[key],
-    [],
-  );
-
-  const columnConfig = useMemo(
-    () => ({
-      particular: { type: "text" as const },
-      amount: { type: "amount" as const },
-    }),
-    [],
-  );
+  const moreFilterCount =
+    countActiveMoreFilters({
+      warehouse: warehouses,
+      partyId: partyIds,
+      ledgerGroupId: ledgerGroupIds,
+      ledgerId: ledgerIds,
+    }) + (comparePreviousPeriod ? 1 : 0);
 
   const hasFilters =
-    Boolean(search.trim()) ||
-    (datesReady && preset !== "this_month");
+    isMultiFilterActive(branches) ||
+    isMultiFilterActive(warehouses) ||
+    isMultiFilterActive(partyIds) ||
+    isMultiFilterActive(ledgerGroupIds) ||
+    isMultiFilterActive(ledgerIds) ||
+    comparePreviousPeriod ||
+    (datesReady && preset !== "custom" && financialYearId === "all");
 
   const resetFilters = useCallback(() => {
-    setSearch("");
-    setPreset("this_month");
-    const { from, to } = resolveDateRangePreset("this_month");
+    setBranches([]);
+    setWarehouses([]);
+    setPartyIds([]);
+    setLedgerGroupIds([]);
+    setLedgerIds([]);
+    setComparePreviousPeriod(false);
+    const { from, to, fyId } = defaultFyDateRange();
     setDateFrom(from);
     setDateTo(to);
+    setFinancialYearId(fyId);
+    setPreset("custom");
   }, []);
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: "",
+      financialYear: resolveFinancialYearLabel(financialYearId),
+      comparePreviousPeriod,
+      currentPeriodLabel: statement.currentPeriodLabel,
+      previousPeriodLabel: statement.previousPeriodLabel,
     }),
-    [dateFrom, dateTo],
+    [
+      dateFrom,
+      dateTo,
+      financialYearId,
+      comparePreviousPeriod,
+      statement.currentPeriodLabel,
+      statement.previousPeriodLabel,
+    ],
+  );
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const rows = flattenCashFlowForExport(statement);
+      await exportCashFlowToExcel(rows, exportMeta, statement);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    const rows = flattenCashFlowForExport(statement);
+    exportCashFlowToPdf(rows, exportMeta, statement);
+  };
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+      [
+        {
+          id: "period",
+          label: "Period",
+          value: `${dateFrom} to ${dateTo}`,
+        },
+        comparePreviousPeriod
+          ? {
+              id: "compare",
+              label: "Comparison",
+              value: "Previous period",
+            }
+          : null,
+        buildBranchFilterSummary(branches, () => setBranches([])),
+        buildEntityFilterSummary(
+          "party",
+          "Party",
+          partyIds,
+          partyOptions.map((p) => ({
+            value: p.id,
+            label: p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`,
+          })),
+          () => setPartyIds([]),
+        ),
+        buildEntityFilterSummary(
+          "warehouse",
+          "Warehouse",
+          warehouses,
+          warehouseSelectOptions,
+          () => setWarehouses([]),
+        ),
+        buildEntityFilterSummary(
+          "ledgerGroup",
+          "Account Group",
+          ledgerGroupIds,
+          ledgerGroupSelectOptions,
+          () => setLedgerGroupIds([]),
+        ),
+        buildEntityFilterSummary(
+          "ledger",
+          "Ledger",
+          ledgerIds,
+          ledgerSelectOptions,
+          () => setLedgerIds([]),
+        ),
+      ].filter((item): item is ReportFilterSummaryItem => item != null),
+    [
+      dateFrom,
+      dateTo,
+      comparePreviousPeriod,
+      branches,
+      partyIds,
+      partyOptions,
+      warehouses,
+      warehouseSelectOptions,
+      ledgerGroupIds,
+      ledgerGroupSelectOptions,
+      ledgerIds,
+      ledgerSelectOptions,
+    ],
   );
 
   const filterBar = (
-    <ReportFilterRow className="items-end gap-2">
+    <ReportFilterRow
+      className="items-end gap-2"
+      end={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || !mounted || !statement.hasData}
+        />
+      }
+    >
+      <ReportFinancialYearFilter
+        value={financialYearId}
+        onChange={handleFinancialYearChange}
+      />
       <ReportDateRangeFilter
         preset={preset}
         dateFrom={dateFrom}
@@ -314,27 +372,37 @@ export default function CashFlowPageClient() {
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
       />
-      <div className="space-y-0.5 min-w-[180px] flex-1">
-        <Label className={filterLabelClass}>Search Particular</Label>
-        <div className="relative">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name…"
-            className={cn(filterControlClass, "pr-7")}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
+      <ReportBranchMultiFilter
+        values={branches}
+        onChange={setBranches}
+        options={branchOptions}
+      />
+      <ReportMoreFilters activeCount={moreFilterCount}>
+        <ReportWarehouseMultiFilter
+          values={warehouses}
+          onChange={setWarehouses}
+          options={warehouseOptions}
+        />
+        <ReportPartyMultiFilter
+          values={partyIds}
+          onChange={setPartyIds}
+          parties={partyOptions}
+        />
+        <ReportLedgerGroupMultiFilter
+          values={ledgerGroupIds}
+          onChange={handleLedgerGroupChange}
+          groups={ledgerGroupOptions}
+        />
+        <ReportLedgerMultiFilter
+          values={ledgerIds}
+          onChange={setLedgerIds}
+          ledgers={ledgerOptions}
+        />
+        <CashFlowCompareToggle
+          checked={comparePreviousPeriod}
+          onChange={setComparePreviousPeriod}
+        />
+      </ReportMoreFilters>
       {hasFilters && (
         <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
           Reset
@@ -343,24 +411,48 @@ export default function CashFlowPageClient() {
     </ReportFilterRow>
   );
 
+  const filterSummary =
+    filterSummaryItems.length > 0 ? (
+      <ReportFilterSummary items={filterSummaryItems} className="mt-1" />
+    ) : null;
+
   return (
-    <AccountsColumnFilterProvider
-      rows={statement.lines}
-      getCellValue={getCellValue}
-      columnConfig={columnConfig}
-      defaultSortKey="particular"
-      defaultSortDir="asc"
+    <AccountsPageShell
+      breadcrumbs={accountsBreadcrumb("Reports", "Cash Flow")}
+      title="Cash Flow"
+      description="Cash flow statement for the selected period."
+      hideDescription
+      layout="split"
+      className="h-full min-h-0 trial-balance-compact"
+      filters={
+        <>
+          {filterBar}
+          {filterSummary}
+        </>
+      }
     >
-      <CashFlowBody
-        mounted={mounted}
-        statement={statement}
-        hasFilters={hasFilters}
-        resetFilters={resetFilters}
-        exportMeta={exportMeta}
-        exporting={exporting}
-        setExporting={setExporting}
-        filterBar={filterBar}
-      />
-    </AccountsColumnFilterProvider>
+      <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
+        {!mounted ? (
+          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+            Loading Cash Flow…
+          </div>
+        ) : !statement.hasData ? (
+          <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
+            {EMPTY_MESSAGE}
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="block mx-auto mt-1 text-brand-600 hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <CashFlowStatementView statement={statement} />
+        )}
+      </AccountsListingTableCard>
+    </AccountsPageShell>
   );
 }

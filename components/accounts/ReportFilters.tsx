@@ -64,15 +64,17 @@ export function ReportFilterRow({
   className,
 }: {
   children: React.ReactNode;
-  /** Right-aligned actions (e.g. Export) in the filter row */
+  /** Right-aligned actions (e.g. Export) — pinned to extreme right of the filter row */
   end?: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end gap-x-2 gap-y-2.5 w-full min-w-0", className)}>
-      {children}
+    <div className={cn("flex items-end gap-2 w-full min-w-0", className)}>
+      <div className="flex flex-nowrap items-end gap-x-2 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:thin]">
+        {children}
+      </div>
       {end ? (
-        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">{end}</div>
+        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0 self-end">{end}</div>
       ) : null}
     </div>
   );
@@ -1356,6 +1358,64 @@ export function ReportTdsSectionMultiFilter({
       allLabel="All Sections"
       minWidthClass="min-w-[170px]"
     />
+  );
+}
+
+/** GST Period (month) filter for GST reports */
+export function ReportGstPeriodFilter({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[140px]">
+      <span className={filterLabelClass}>GST Period</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
+          <SelectValue placeholder="All months" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-xs">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Company GST registration (GSTIN) filter */
+export function ReportGstRegistrationFilter({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-0.5 min-w-[200px]">
+      <span className={filterLabelClass}>GST Registration</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[200px]")}>
+          <SelectValue placeholder="All registrations" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-xs">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

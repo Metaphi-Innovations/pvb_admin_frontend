@@ -26,6 +26,7 @@ import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { GENERAL_LEDGER_HREF, buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
 import { resolveCoaTreeSelectionNode } from "@/lib/accounts/coa-tree-children";
+import { getCoaSidebarExpandableIds } from "@/lib/accounts/coa-sidebar-tree";
 import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import {
   buildTdsPartyWiseReportHref,
@@ -361,8 +362,14 @@ export function CoaNavigationProvider({
   }, []);
 
   const expandAll = useCallback(() => {
-    setExpandedIds(new Set(getAllExpandableIds(records)));
-  }, [records]);
+    setExpandedIds(
+      new Set(
+        isCoaRoute || activeAccountsSection === "coa"
+          ? getCoaSidebarExpandableIds(records)
+          : getAllExpandableIds(records),
+      ),
+    );
+  }, [records, isCoaRoute, activeAccountsSection]);
 
   const collapseAll = useCallback(() => {
     setExpandedIds(

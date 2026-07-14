@@ -41,10 +41,18 @@ export function stripMisplacedGstLedgers(records: ChartOfAccount[]): ChartOfAcco
     if (r.isSystem && r.isSystemGenerated) return true;
 
     if (r.erpSourceModule === "gst_master") return false;
-    if (isRateSpecificGstLedgerName(r.accountName)) return false;
 
     const pathNames = ancestorNames(records, r.id);
     const nameLower = r.accountName.trim().toLowerCase();
+
+    if (isRateSpecificGstLedgerName(r.accountName)) {
+      const parent = r.parentAccountId != null ? records.find((p) => p.id === r.parentAccountId) : null;
+      const parentName = parent?.accountName.trim().toLowerCase() ?? "";
+      if (GST_INPUT_LEDGER_NAMES.has(parentName) || GST_OUTPUT_LEDGER_NAMES.has(parentName)) {
+        return true;
+      }
+      return false;
+    }
 
     if (GST_INPUT_LEDGER_NAMES.has(nameLower)) {
       return isUnderGstInput(pathNames);

@@ -28,6 +28,9 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS,
   ACCOUNTS_FILTER_SELECT_CLASS,
 } from "@/lib/accounts/accounts-typography";
+import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
+import { primaryDebitCreditLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { cn } from "@/lib/utils";
 import {
   ReportDateRangeFilter,
   ReportFilterRow,
@@ -41,19 +44,24 @@ import {
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "../../components/AccountsUI";
-import { getJournalVouchers, canEditVoucher } from "../voucher-data";
-import { cn } from "@/lib/utils";
-
+import { getJournalVouchers, canEditVoucher, type AccountingVoucher } from "../voucher-data";
 import { AccountsTablePagination, ACCOUNTS_DEFAULT_PAGE_SIZE, AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
+  AccountsTableFoot,
   AccountsTableHead,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
+import {
+  computeJournalExportSummary,
+  exportJournalVouchersToExcel,
+  exportJournalVouchersToPdf,
+  vouchersToJournalExportRows,
+} from "./journal-voucher-export";
 
 const DEFAULT_PAGE_SIZE = ACCOUNTS_DEFAULT_PAGE_SIZE;
 
@@ -64,7 +72,15 @@ const STATUS_OPTIONS = [
   { value: "approved", label: "Approved" },
 ] as const;
 
-type JournalRow = ReturnType<typeof getJournalVouchers>[number];
+type JournalDisplayRow = AccountingVoucher & {
+  debitLedger: string;
+  creditLedger: string;
+};
+
+function toDisplayRow(v: AccountingVoucher): JournalDisplayRow {
+  const { debitLedger, creditLedger } = primaryDebitCreditLedgers(v.lines);
+  return { ...v, debitLedger, creditLedger };
+}
 
 function JournalListTable({
   mounted,
@@ -77,7 +93,7 @@ function JournalListTable({
   mounted: boolean;
   page: number;
   pageSize: number;
-  toolbarFiltered: JournalRow[];
+  toolbarFiltered: JournalDisplayRow[];
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
 }) {
@@ -90,25 +106,42 @@ function JournalListTable({
     [visible, page, pageSize],
   );
 
+  const totals = useMemo(() => {
+    const totalDebit = roundMoney(visible.reduce((s, r) => s + (Number(r.totalDebit) || 0), 0));
+    const totalCredit = roundMoney(visible.reduce((s, r) => s + (Number(r.totalCredit) || 0), 0));
+    const difference = roundMoney(totalDebit - totalCredit);
+    return {
+      totalDebit,
+      totalCredit,
+      difference,
+      isBalanced: difference === 0,
+      count: visible.length,
+    };
+  }, [visible]);
+
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
+  const colSpan = 8;
+
   return (
     <>
-      <AccountsTable minWidth={900}>
+      <AccountsTable minWidth={1100}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Voucher Number" colKey="voucherNumber" />
             <SortTh label="Date" colKey="date" filterType="date" />
+            <SortTh label="Debit Ledger" colKey="debitLedger" />
+            <SortTh label="Credit Ledger" colKey="creditLedger" />
             <AccountsColumnHeader
               label="Narration"
               colKey="narration"
               sortable={false}
               className="accounts-col-narration"
             />
-            <SortTh label="Total Amount" colKey="totalDebit" filterType="amount" align="right" />
-            <SortTh label="Created By" colKey="createdBy" />
+            <SortTh label="Debit" colKey="totalDebit" filterType="amount" align="right" />
+            <SortTh label="Credit" colKey="totalCredit" filterType="amount" align="right" />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -122,13 +155,13 @@ function JournalListTable({
         <AccountsTableBody>
           {!mounted ? (
             <AccountsTableRow>
-              <AccountsTableCell colSpan={6} className="accounts-table-empty">
+              <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                 Loading…
               </AccountsTableCell>
             </AccountsTableRow>
           ) : visible.length === 0 ? (
             <AccountsTableRow>
-              <AccountsTableCell colSpan={6} className="accounts-table-empty">
+              <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                 No records found.
               </AccountsTableCell>
             </AccountsTableRow>
@@ -144,13 +177,21 @@ function JournalListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
-                <AccountsTableCell className="accounts-col-narration max-w-[280px] truncate">
+                <AccountsTableCell className="text-xs max-w-[140px] truncate" title={v.debitLedger}>
+                  {v.debitLedger}
+                </AccountsTableCell>
+                <AccountsTableCell className="text-xs max-w-[140px] truncate" title={v.creditLedger}>
+                  {v.creditLedger}
+                </AccountsTableCell>
+                <AccountsTableCell className="accounts-col-narration max-w-[220px] truncate">
                   {v.narration || "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money>
                   <MoneyAmount amount={v.totalDebit} />
                 </AccountsTableCell>
-                <AccountsTableCell className="text-muted-foreground">{v.createdBy}</AccountsTableCell>
+                <AccountsTableCell align="right" money>
+                  <MoneyAmount amount={v.totalCredit} />
+                </AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <AccountsTableActionCell>
                     <AccountsViewAction
@@ -169,6 +210,35 @@ function JournalListTable({
             ))
           )}
         </AccountsTableBody>
+        {mounted && visible.length > 0 ? (
+          <AccountsTableFoot>
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={5} className="font-semibold text-xs text-foreground">
+                Total ({totals.count} {totals.count === 1 ? "entry" : "entries"})
+                {!totals.isBalanced ? (
+                  <span className="ml-2 font-medium text-amber-700">
+                    Difference: {formatMoney(Math.abs(totals.difference))}
+                  </span>
+                ) : null}
+              </AccountsTableCell>
+              <AccountsTableCell
+                align="right"
+                money
+                className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+              >
+                {formatMoney(totals.totalDebit)}
+              </AccountsTableCell>
+              <AccountsTableCell
+                align="right"
+                money
+                className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+              >
+                {formatMoney(totals.totalCredit)}
+              </AccountsTableCell>
+              <AccountsTableCell />
+            </AccountsTableRow>
+          </AccountsTableFoot>
+        ) : null}
       </AccountsTable>
       {mounted && visible.length > 0 ? (
         <AccountsTablePagination
@@ -189,6 +259,10 @@ function JournalListContent({
   page,
   pageSize,
   toolbarFiltered,
+  statusFilter,
+  search,
+  dateFrom,
+  dateTo,
   setPage,
   setPageSize,
 }: {
@@ -196,33 +270,34 @@ function JournalListContent({
   filterBar: React.ReactNode;
   page: number;
   pageSize: number;
-  toolbarFiltered: JournalRow[];
+  toolbarFiltered: JournalDisplayRow[];
+  statusFilter: string;
+  search: string;
+  dateFrom: string;
+  dateTo: string;
   setPage: (p: number) => void;
   setPageSize: (s: number) => void;
 }) {
   const visible = useAccountsFilteredRows(toolbarFiltered);
 
-  const exportCsv = () => {
-    const header = "Voucher Number,Date,Narration,Total Amount,Status,Created By\n";
-    const rows = visible
-      .map((v) =>
-        [
-          `"${v.voucherNumber}"`,
-          v.date,
-          `"${(v.narration || "").replace(/"/g, '""')}"`,
-          v.totalDebit.toFixed(2),
-          v.status,
-          `"${v.createdBy}"`,
-        ].join(","),
-      )
-      .join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "journal-vouchers.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExcel = () => {
+    const rows = vouchersToJournalExportRows(visible);
+    const summary = computeJournalExportSummary(rows);
+    void exportJournalVouchersToExcel(
+      rows,
+      { dateFrom, dateTo, search, status: statusFilter },
+      summary,
+    );
+  };
+
+  const handlePdf = () => {
+    const rows = vouchersToJournalExportRows(visible);
+    const summary = computeJournalExportSummary(rows);
+    exportJournalVouchersToPdf(
+      rows,
+      { dateFrom, dateTo, search, status: statusFilter },
+      summary,
+    );
   };
 
   return (
@@ -232,7 +307,7 @@ function JournalListContent({
       description="Manual double-entry journal. Total debit must equal total credit before posting."
       actions={
         <>
-          <AccountsExportMenu onExcel={exportCsv} />
+          <AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} />
           <Button
             size="sm"
             className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
@@ -274,10 +349,13 @@ export default function JournalListPageClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const records = useMemo(() => (mounted ? getJournalVouchers() : []), [mounted]);
+  const records = useMemo(
+    () => (mounted ? getJournalVouchers().map(toDisplayRow) : []),
+    [mounted],
+  );
 
   const getCellValue = useCallback(
-    (row: JournalRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    (row: JournalDisplayRow, key: string) => (row as unknown as Record<string, unknown>)[key],
     [],
   );
 
@@ -290,7 +368,9 @@ export default function JournalListPageClient() {
           v.voucherNumber.toLowerCase().includes(q) ||
           v.narration.toLowerCase().includes(q) ||
           v.createdBy.toLowerCase().includes(q) ||
-          v.referenceNo.toLowerCase().includes(q),
+          v.referenceNo.toLowerCase().includes(q) ||
+          v.debitLedger.toLowerCase().includes(q) ||
+          v.creditLedger.toLowerCase().includes(q),
       );
     }
     if (statusFilter !== "all") {
@@ -313,7 +393,7 @@ export default function JournalListPageClient() {
           setSearch(v);
           setPage(1);
         }}
-        placeholder="Search voucher no., narration, created by…"
+        placeholder="Search voucher, ledger, narration…"
         className="min-w-[200px] flex-1 max-w-sm"
       />
       <div className="space-y-0.5 shrink-0">
@@ -361,9 +441,11 @@ export default function JournalListPageClient() {
       columnConfig={{
         voucherNumber: { type: "text" },
         date: { type: "date" },
+        debitLedger: { type: "text" },
+        creditLedger: { type: "text" },
         narration: { type: "text" },
         totalDebit: { type: "amount" },
-        createdBy: { type: "text" },
+        totalCredit: { type: "amount" },
       }}
       defaultSortKey="date"
       defaultSortDir="desc"
@@ -374,6 +456,10 @@ export default function JournalListPageClient() {
         page={page}
         pageSize={pageSize}
         toolbarFiltered={toolbarFiltered}
+        statusFilter={statusFilter}
+        search={search}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
         setPage={setPage}
         setPageSize={setPageSize}
       />

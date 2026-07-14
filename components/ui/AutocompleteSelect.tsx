@@ -43,6 +43,8 @@ interface AutocompleteSelectProps {
   error?: boolean;
   multiple?: boolean;
   className?: string;
+  /** Extra classes on the dropdown panel (e.g. min-w for narrow table cells). */
+  popoverClassName?: string;
   renderTriggerLabel?: (selectedOptions: AutocompleteOption | AutocompleteOption[]) => React.ReactNode;
 }
 
@@ -56,6 +58,7 @@ export function AutocompleteSelect({
   error = false,
   multiple = false,
   className,
+  popoverClassName,
   renderTriggerLabel,
 }: AutocompleteSelectProps) {
   const [open, setOpen] = useState(false);
@@ -114,6 +117,8 @@ export function AutocompleteSelect({
     }
   };
 
+  const isDense = Boolean(className?.includes("h-6") || className?.includes("h-7"));
+
   return (
     <Popover open={open} onOpenChange={(o) => { if (!disabled) setOpen(o); if (!o) setQ(""); }}>
       <PopoverTrigger asChild>
@@ -121,8 +126,9 @@ export function AutocompleteSelect({
           type="button"
           disabled={disabled}
           className={cn(
-            "flex w-full cursor-pointer items-center justify-between border border-border bg-white px-3 py-2 text-left shadow-sm",
+            "flex w-full min-w-0 cursor-pointer items-center justify-between border border-border bg-white text-left shadow-sm",
             "transition-colors select-none text-left focus:outline-none",
+            isDense ? "px-1.5 py-0" : "px-3 py-2",
             !className?.includes("h-") && "h-9",
             !className?.includes("text-") && "text-xs",
             !className?.includes("rounded-") && "rounded-lg",
@@ -136,14 +142,17 @@ export function AutocompleteSelect({
             className
           )}
         >
-          <span className={cn("truncate flex-1", (multiple ? (Array.isArray(value) && value.length > 0) : value) ? "text-foreground" : "text-muted-foreground")}>
+          <span className={cn("truncate flex-1 min-w-0", (multiple ? (Array.isArray(value) && value.length > 0) : value) ? "text-foreground" : "text-muted-foreground")}>
             {getSelectedLabel()}
           </span>
-          <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-2" />
+          <ChevronsUpDown className={cn("text-muted-foreground flex-shrink-0", isDense ? "w-3 h-3 ml-0.5" : "w-4 h-4 ml-2")} />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] rounded-xl border border-border bg-white p-0 shadow-lg"
+        className={cn(
+          "rounded-xl border border-border bg-white p-0 shadow-lg",
+          popoverClassName ?? "w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)]",
+        )}
         align="start"
         sideOffset={4}
       >

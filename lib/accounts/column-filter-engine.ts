@@ -211,14 +211,8 @@ function matchBoolean(cell: unknown, filter: AccountsColumnFilterState): boolean
 
 export function isColumnFilterActive(filter: AccountsColumnFilterState | undefined): boolean {
   if (!filter) return false;
-  if (filter.selectedValues && filter.selectedValues.length > 0) return true;
-  if (filter.textValue?.trim()) return true;
-  if (filter.numberOperator === "blank" || filter.numberOperator === "notBlank") return true;
-  if (filter.numberValue != null || filter.numberValue2 != null) return true;
-  if (filter.textOperator === "blank" || filter.textOperator === "notBlank") return true;
-  if (filter.datePreset && filter.datePreset !== "custom") return true;
-  if (filter.dateFrom || filter.dateTo) return true;
-  return false;
+  // Excel-style filters: active only when specific values are selected
+  return Boolean(filter.selectedValues && filter.selectedValues.length > 0);
 }
 
 export function countActiveColumnFilters(filters: AccountsColumnFilters): number {

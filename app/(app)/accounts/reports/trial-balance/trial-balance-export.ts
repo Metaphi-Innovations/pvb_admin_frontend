@@ -1,15 +1,19 @@
-import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { formatMoney } from "@/lib/accounts/money-format";
 import {
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
-  escapeHtml,
-  exportTabularReportToPdf,
-  openReportPrintWindow,
+  buildGrandTotalRowHtml,
+  buildHierarchyTabularBodyHtml,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
+  mapCoaLevelToRowType,
+  type HierarchyTabularRow,
   type ReportColumnHeader,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
+} from "@/lib/accounts/report-export-engine";
+import {
+  buildReportDocumentHtml,
+  escapeHtml,
+  openReportPrintWindow,
 } from "@/lib/accounts/report-export-presentation";
 import type {
   TrialBalanceDetailedGroup,
@@ -18,7 +22,7 @@ import type {
 } from "./trial-balance-data";
 import {
   balanceSideAbbrev,
-  flattenTrialBalanceNormalRows,
+  flattenTrialBalanceNormalLedgerRows,
   netBalanceFromSplit,
 } from "./trial-balance-display";
 
@@ -67,216 +71,193 @@ function buildHeaderOptions(meta: TrialBalanceExportMeta): ReportHeaderOptions {
   };
 }
 
-function normalAmountCells(debit: number, credit: number, bold = false): string {
-  const tag = bold ? "strong" : "span";
-  return `
-    <td class="num"><${tag}>${formatMoneyOrDash(debit)}</${tag}></td>
-    <td class="num"><${tag}>${formatMoneyOrDash(credit)}</${tag}></td>`;
-}
-
-function detailedAmountCells(
+function openingMiddleCells(
   openingDebit: number,
   openingCredit: number,
-  debit: number,
-  credit: number,
-  closingDebit: number,
-  closingCredit: number,
-  bold = false,
-  includeOpening = true,
+  bold: boolean,
+  includeOpening: boolean,
 ): string {
   const tag = bold ? "strong" : "span";
+  if (!includeOpening) {
+    return `<td class="num"><${tag}>—</${tag}></td><td class="center"><${tag}>—</${tag}></td>`;
+  }
   const opening = netBalanceFromSplit(openingDebit, openingCredit);
+  return `<td class="num"><${tag}>${opening.amount ? formatMoney(opening.amount) : "—"}</${tag}></td>
+    <td class="center"><${tag}>${balanceSideAbbrev(opening.side)}</${tag}></td>`;
+}
+
+function closingMiddleCells(
+  closingDebit: number,
+  closingCredit: number,
+  bold: boolean,
+): string {
+  const tag = bold ? "strong" : "span";
   const closing = netBalanceFromSplit(closingDebit, closingCredit);
-  const openingCells = includeOpening
-    ? `<td class="num"><${tag}>${opening.amount ? formatMoney(opening.amount) : "—"}</${tag}></td>
-    <td class="center"><${tag}>${balanceSideAbbrev(opening.side)}</${tag}></td>`
-    : `<td class="num"><${tag}>—</${tag}></td><td class="center"><${tag}>—</${tag}></td>`;
-  return `${openingCells}
-    <td class="num"><${tag}>${formatMoneyOrDash(debit)}</${tag}></td>
-    <td class="num"><${tag}>${formatMoneyOrDash(credit)}</${tag}></td>
-    <td class="num"><${tag}>${closing.amount ? formatMoney(closing.amount) : "—"}</${tag}></td>
+  return `<td class="num"><${tag}>${closing.amount ? formatMoney(closing.amount) : "—"}</${tag}></td>
     <td class="center"><${tag}>${balanceSideAbbrev(closing.side)}</${tag}></td>`;
 }
 
-function balanceNoteHtml(summary: TrialBalanceSummary): string {
-  if (summary.isBalanced) {
-    return `<p class="balance-msg balanced">Trial Balance is balanced</p>`;
-  }
-  return `<p class="balance-msg unbalanced">Trial Balance is not balanced — Difference: ${escapeHtml(formatMoney(summary.difference))}</p>`;
-}
-
 function buildNormalBodyHtml(groups: TrialBalanceDetailedGroup[]): string {
-  const rows = flattenTrialBalanceNormalRows(groups);
-  return rows
-    .map((row) => {
-      if (row.type === "primary") {
-        return `<tr class="primary">
-      <td class="indent-0"><strong>${escapeHtml(row.primaryHead)}</strong></td>
-      ${normalAmountCells(row.debit, row.credit, true)}
-    </tr>`;
-      }
-      if (row.type === "group") {
-        return `<tr class="group">
-      <td class="indent-1"><strong>${escapeHtml(row.groupName)}</strong></td>
-      ${normalAmountCells(row.debit, row.credit, true)}
-    </tr>`;
-      }
-      if (row.type === "subgroup") {
-        return `<tr class="subgroup">
-      <td class="indent-2"><strong>${escapeHtml(row.subgroupName)}</strong></td>
-      ${normalAmountCells(row.debit, row.credit)}
-    </tr>`;
-      }
-      const l = row.ledger;
-      return `<tr class="line">
-      <td class="indent-3">${escapeHtml(l.ledgerName)}</td>
-      ${normalAmountCells(l.closingDebit, l.closingCredit)}
-    </tr>`;
-    })
-    .join("");
+  const flatRows = flattenTrialBalanceNormalLedgerRows(groups);
+  const rows: HierarchyTabularRow[] = flatRows.map((row) => ({
+    rowType: mapCoaLevelToRowType("ledger"),
+    label: row.ledger.ledgerName,
+    amounts: [row.ledger.closingDebit, row.ledger.closingCredit],
+    dashWhenZero: true,
+  }));
+  return buildHierarchyTabularBodyHtml(rows);
 }
 
 function buildDetailedBodyHtml(
   groups: TrialBalanceDetailedGroup[],
   includeOpening = true,
 ): string {
-  const normalRows = flattenTrialBalanceNormalRows(groups);
-  const flatDetailed: {
-    kind: "primary" | "group" | "subgroup" | "ledger";
-    label: string;
-    indent: number;
-    amounts: {
-      openingDebit: number;
-      openingCredit: number;
-      debit: number;
-      credit: number;
-      closingDebit: number;
-      closingCredit: number;
-    };
-    bold?: boolean;
-  }[] = [];
+  const rows: HierarchyTabularRow[] = [];
 
-  for (const row of normalRows) {
-    if (row.type === "primary") {
-      const section = groups.filter((g) => g.primaryHeadId === row.primaryHeadId);
-      const amounts = section.reduce(
-        (acc, g) => ({
-          openingDebit: acc.openingDebit + g.openingDebit,
-          openingCredit: acc.openingCredit + g.openingCredit,
-          debit: acc.debit + g.debit,
-          credit: acc.credit + g.credit,
-          closingDebit: acc.closingDebit + g.closingDebit,
-          closingCredit: acc.closingCredit + g.closingCredit,
-        }),
-        {
-          openingDebit: 0,
-          openingCredit: 0,
-          debit: 0,
-          credit: 0,
-          closingDebit: 0,
-          closingCredit: 0,
-        },
-      );
-      flatDetailed.push({
-        kind: "primary",
-        label: row.primaryHead,
-        indent: 0,
-        amounts,
-        bold: true,
-      });
-      continue;
-    }
-    if (row.type === "group") {
-      const group = groups.find((g) => g.groupKey === row.groupKey);
-      if (!group) continue;
-      flatDetailed.push({
-        kind: "group",
-        label: row.groupName,
-        indent: 1,
-        amounts: group,
-        bold: true,
-      });
-      continue;
-    }
-    if (row.type === "subgroup") {
-      const group = groups.find((g) => g.groupKey === row.subgroupKey.split("::")[0]);
-      const ledgers =
-        group?.ledgers.filter((l) => l.standardGroup === row.subgroupName) ?? [];
-      const amounts = ledgers.reduce(
-        (acc, l) => ({
-          openingDebit: acc.openingDebit + l.openingDebit,
-          openingCredit: acc.openingCredit + l.openingCredit,
-          debit: acc.debit + l.debit,
-          credit: acc.credit + l.credit,
-          closingDebit: acc.closingDebit + l.closingDebit,
-          closingCredit: acc.closingCredit + l.closingCredit,
-        }),
-        {
-          openingDebit: 0,
-          openingCredit: 0,
-          debit: 0,
-          credit: 0,
-          closingDebit: 0,
-          closingCredit: 0,
-        },
-      );
-      flatDetailed.push({
-        kind: "subgroup",
-        label: row.subgroupName,
-        indent: 2,
-        amounts,
-      });
-      continue;
-    }
-    flatDetailed.push({
-      kind: "ledger",
-      label: row.ledger.ledgerName,
-      indent: 3,
-      amounts: row.ledger,
-    });
+  const sections = new Map<number, TrialBalanceDetailedGroup[]>();
+  for (const group of groups) {
+    const list = sections.get(group.primaryHeadId) ?? [];
+    list.push(group);
+    sections.set(group.primaryHeadId, list);
   }
 
-  return flatDetailed
-    .map(
-      (row) => `<tr class="${row.kind}">
-      <td class="indent-${row.indent}">${row.bold ? `<strong>${escapeHtml(row.label)}</strong>` : escapeHtml(row.label)}</td>
-      ${detailedAmountCells(
-        row.amounts.openingDebit,
-        row.amounts.openingCredit,
-        row.amounts.debit,
-        row.amounts.credit,
-        row.amounts.closingDebit,
-        row.amounts.closingCredit,
-        row.bold,
+  for (const [, sectionGroups] of [...sections.entries()].sort(
+    (a, b) => (a[1][0]?.primaryHeadSort ?? 0) - (b[1][0]?.primaryHeadSort ?? 0),
+  )) {
+    const primaryHead = sectionGroups[0]?.primaryHead ?? "";
+    const primaryAmounts = sectionGroups.reduce(
+      (acc, g) => ({
+        openingDebit: acc.openingDebit + g.openingDebit,
+        openingCredit: acc.openingCredit + g.openingCredit,
+        debit: acc.debit + g.debit,
+        credit: acc.credit + g.credit,
+        closingDebit: acc.closingDebit + g.closingDebit,
+        closingCredit: acc.closingCredit + g.closingCredit,
+      }),
+      {
+        openingDebit: 0,
+        openingCredit: 0,
+        debit: 0,
+        credit: 0,
+        closingDebit: 0,
+        closingCredit: 0,
+      },
+    );
+
+    rows.push({
+      rowType: mapCoaLevelToRowType("primary"),
+      label: primaryHead,
+      amounts: [primaryAmounts.debit, primaryAmounts.credit],
+      dashWhenZero: true,
+      middleCellsHtml: openingMiddleCells(
+        primaryAmounts.openingDebit,
+        primaryAmounts.openingCredit,
+        true,
         includeOpening,
-      )}
-    </tr>`,
-    )
-    .join("");
+      ),
+      trailingCellsHtml: closingMiddleCells(
+        primaryAmounts.closingDebit,
+        primaryAmounts.closingCredit,
+        true,
+      ),
+    });
+
+    for (const group of sectionGroups) {
+      rows.push({
+        rowType: mapCoaLevelToRowType("group"),
+        label: group.groupName,
+        amounts: [group.debit, group.credit],
+        dashWhenZero: true,
+        middleCellsHtml: openingMiddleCells(
+          group.openingDebit,
+          group.openingCredit,
+          true,
+          includeOpening,
+        ),
+        trailingCellsHtml: closingMiddleCells(
+          group.closingDebit,
+          group.closingCredit,
+          true,
+        ),
+      });
+
+      for (const subgroup of group.subgroups) {
+        rows.push({
+          rowType: mapCoaLevelToRowType("subgroup"),
+          label: subgroup.subgroupName,
+          amounts: [subgroup.debit, subgroup.credit],
+          dashWhenZero: true,
+          middleCellsHtml: openingMiddleCells(
+            subgroup.openingDebit,
+            subgroup.openingCredit,
+            true,
+            includeOpening,
+          ),
+          trailingCellsHtml: closingMiddleCells(
+            subgroup.closingDebit,
+            subgroup.closingCredit,
+            true,
+          ),
+        });
+
+        for (const ledger of subgroup.ledgers) {
+          rows.push({
+            rowType: mapCoaLevelToRowType("ledger"),
+            label: ledger.ledgerName,
+            amounts: [ledger.debit, ledger.credit],
+            dashWhenZero: true,
+            middleCellsHtml: openingMiddleCells(
+              ledger.openingDebit,
+              ledger.openingCredit,
+              false,
+              includeOpening,
+            ),
+            trailingCellsHtml: closingMiddleCells(
+              ledger.closingDebit,
+              ledger.closingCredit,
+              false,
+            ),
+          });
+        }
+      }
+    }
+  }
+
+  return buildHierarchyTabularBodyHtml(rows);
+}
+
+function balanceNoteHtml(summary: TrialBalanceSummary): string {
+  if (summary.isBalanced) {
+    return `<p class="balance-msg balanced">Trial Balance is balanced</p>`;
+  }
+  return `<p class="balance-msg unbalanced">Trial Balance is not balanced — Opening Difference: ${escapeHtml(formatMoney(summary.openingDifference))}; Period Difference: ${escapeHtml(formatMoney(summary.periodDifference))}; Closing Difference: ${escapeHtml(formatMoney(summary.closingDifference))}</p>`;
 }
 
 function normalFooterHtml(summary: TrialBalanceSummary): string {
-  return `<tr class="total">
-    <td><strong>TOTAL</strong></td>
-    ${normalAmountCells(summary.totalDebit, summary.totalCredit, true)}
-  </tr>`;
+  return buildGrandTotalRowHtml({
+    label: "Grand Total",
+    amounts: [summary.totalDebit, summary.totalCredit],
+    dashWhenZero: true,
+  });
 }
 
 function detailedFooterHtml(summary: TrialBalanceSummary, includeOpening = true): string {
   const opening = netBalanceFromSplit(summary.openingDebit, summary.openingCredit);
   const closing = netBalanceFromSplit(summary.closingDebit, summary.closingCredit);
+  const tag = "strong";
   const openingCells = includeOpening
-    ? `<td class="num"><strong>${opening.amount ? formatMoney(opening.amount) : "—"}</strong></td>
-    <td class="center"><strong>${balanceSideAbbrev(opening.side)}</strong></td>`
-    : `<td class="num"><strong>—</strong></td><td class="center"><strong>—</strong></td>`;
-  return `<tr class="total">
-    <td><strong>TOTAL</strong></td>
-    ${openingCells}
-    <td class="num"><strong>${formatMoney(summary.periodDebit)}</strong></td>
-    <td class="num"><strong>${formatMoney(summary.periodCredit)}</strong></td>
-    <td class="num"><strong>${closing.amount ? formatMoney(closing.amount) : "—"}</strong></td>
-    <td class="center"><strong>${balanceSideAbbrev(closing.side)}</strong></td>
-  </tr>`;
+    ? `<td class="num"><${tag}>${opening.amount ? formatMoney(opening.amount) : "—"}</${tag}></td>
+    <td class="center"><${tag}>${balanceSideAbbrev(opening.side)}</${tag}></td>`
+    : `<td class="num"><${tag}>—</${tag}></td><td class="center"><${tag}>—</${tag}></td>`;
+  const trailing =
+    `<td class="num"><${tag}>${closing.amount ? formatMoney(closing.amount) : "—"}</${tag}></td>` +
+    `<td class="center"><${tag}>${balanceSideAbbrev(closing.side)}</${tag}></td>`;
+  return buildGrandTotalRowHtml({
+    label: "Grand Total",
+    middleCellsHtml: openingCells,
+    amounts: [summary.periodDebit, summary.periodCredit],
+    trailingCellsHtml: trailing,
+  });
 }
 
 export async function exportTrialBalanceNormalToExcel(
@@ -284,18 +265,20 @@ export async function exportTrialBalanceNormalToExcel(
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
 ): Promise<void> {
-  const tableHtml = buildStandardReportTableHtml({
-    columns: NORMAL_COLUMNS,
-    bodyHtml: buildNormalBodyHtml(groups),
-    footerHtml: normalFooterHtml(summary),
-  });
-  const html = buildReportExcelDocumentHtml({
+  const tableHtml =
+    buildTabularReportBodyHtml({
+      columns: NORMAL_COLUMNS,
+      bodyHtml: buildNormalBodyHtml(groups),
+      footerHtml: normalFooterHtml(summary),
+    }) + balanceNoteHtml(summary);
+
+  exportAccountsReportToExcel({
     title: REPORT_NAME,
+    filename: `Trial_Balance_Normal_${meta.view}`,
     header: buildHeaderOptions(meta),
-    bodyHtml: tableHtml + balanceNoteHtml(summary),
+    bodyHtml: tableHtml,
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Trial_Balance_Normal_${todayExportDateSuffix()}.xls`);
 }
 
 export async function exportTrialBalanceDetailedToExcel(
@@ -304,18 +287,20 @@ export async function exportTrialBalanceDetailedToExcel(
   summary: TrialBalanceSummary,
 ): Promise<void> {
   const includeOpening = meta.includeOpeningBalance !== false;
-  const tableHtml = buildStandardReportTableHtml({
-    columns: DETAILED_COLUMNS,
-    bodyHtml: buildDetailedBodyHtml(groups, includeOpening),
-    footerHtml: detailedFooterHtml(summary, includeOpening),
-  });
-  const html = buildReportExcelDocumentHtml({
+  const tableHtml =
+    buildTabularReportBodyHtml({
+      columns: DETAILED_COLUMNS,
+      bodyHtml: buildDetailedBodyHtml(groups, includeOpening),
+      footerHtml: detailedFooterHtml(summary, includeOpening),
+    }) + balanceNoteHtml(summary);
+
+  exportAccountsReportToExcel({
     title: REPORT_NAME,
+    filename: `Trial_Balance_Detailed_${meta.view}`,
     header: buildHeaderOptions(meta),
-    bodyHtml: tableHtml + balanceNoteHtml(summary),
+    bodyHtml: tableHtml,
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Trial_Balance_Detailed_${todayExportDateSuffix()}.xls`);
 }
 
 /** @deprecated Use exportTrialBalanceNormalToExcel */
@@ -332,15 +317,16 @@ export function exportTrialBalanceNormalToPdf(
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
 ): void {
-  exportTabularReportToPdf({
+  exportAccountsReportToPdf({
     title: REPORT_NAME,
+    filename: "Trial_Balance_Normal",
     header: buildHeaderOptions(meta),
     columns: NORMAL_COLUMNS,
     bodyHtml: buildNormalBodyHtml(groups),
     footerHtml: normalFooterHtml(summary),
     footerNote: summary.isBalanced
       ? "Trial Balance is balanced"
-      : `Trial Balance is not balanced — Difference: ${formatMoney(summary.difference)}`,
+      : `Trial Balance is not balanced — Opening Difference: ${formatMoney(summary.openingDifference)}; Period Difference: ${formatMoney(summary.periodDifference)}; Closing Difference: ${formatMoney(summary.closingDifference)}`,
     landscape: true,
   });
 }
@@ -351,15 +337,17 @@ export function exportTrialBalanceDetailedToPdf(
   summary: TrialBalanceSummary,
 ): void {
   const includeOpening = meta.includeOpeningBalance !== false;
-  const tableHtml = buildStandardReportTableHtml({
-    columns: DETAILED_COLUMNS,
-    bodyHtml: buildDetailedBodyHtml(groups, includeOpening),
-    footerHtml: detailedFooterHtml(summary, includeOpening),
-  });
+  const tableHtml =
+    buildTabularReportBodyHtml({
+      columns: DETAILED_COLUMNS,
+      bodyHtml: buildDetailedBodyHtml(groups, includeOpening),
+      footerHtml: detailedFooterHtml(summary, includeOpening),
+    }) + balanceNoteHtml(summary);
+
   const html = buildReportDocumentHtml({
     title: REPORT_NAME,
     header: buildHeaderOptions(meta),
-    bodyHtml: tableHtml + balanceNoteHtml(summary),
+    bodyHtml: tableHtml,
     landscape: true,
   });
   openReportPrintWindow(html);

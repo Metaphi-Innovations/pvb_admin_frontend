@@ -85,6 +85,7 @@ export function CoaSidebarNavTree({
     toggleExpand,
     expandAll,
     collapseAll,
+    setRecords,
     coaReady,
     highlightedLedgerId,
   } = useCoaNavigation();
@@ -202,6 +203,7 @@ export function CoaSidebarNavTree({
             onToggle={toggleExpand}
             onAddLedger={requestCoaAddLedger}
             onAddSubGroup={requestCoaAddSubGroup}
+            onRecordsChange={setRecords}
           />
         )}
       </div>

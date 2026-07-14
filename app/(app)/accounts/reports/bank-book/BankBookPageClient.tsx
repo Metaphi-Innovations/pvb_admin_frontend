@@ -22,6 +22,7 @@ import {
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
 import {
+  AccountsClearAllColumnFiltersButton,
   AccountsColumnFilterProvider,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
@@ -310,11 +311,14 @@ function BankBookPageBody({
           <ReportFilterRow
             className="items-end"
             end={
-              <AccountsExportMenu
-                onExcel={handleExportExcel}
-                onPdf={handleExportPdf}
-                disabled={!canExport || exporting}
-              />
+              <>
+                <AccountsClearAllColumnFiltersButton />
+                <AccountsExportMenu
+                  onExcel={handleExportExcel}
+                  onPdf={handleExportPdf}
+                  disabled={!canExport || exporting}
+                />
+              </>
             }
           >
             <ReportDateRangeFilter

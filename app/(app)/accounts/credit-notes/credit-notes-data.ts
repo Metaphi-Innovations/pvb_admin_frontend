@@ -957,24 +957,26 @@ function settleSchemeFromCreditNote(note: CreditNoteRecord): void {
 function recordCreditNoteAudit(
   note: CreditNoteRecord,
   activityType: "Post" | "Approve" | "Delete",
-  details: string,
+  _details: string,
 ): void {
+  const action = activityType === "Delete" ? "Deleted" : "Modified";
+
   appendAuditTrailEntry({
     dateTime: new Date().toISOString(),
-    category: activityType === "Delete" ? "edit_delete" : "voucher_approval",
+    voucherType: "Credit Note",
+    voucherTypeCode: "credit_note",
+    voucherNo: note.creditNoteNo,
     user: ACCOUNTS_CURRENT_USER,
-    role: "Accounts User",
-    module: "Credit Notes",
-    moduleCode: "credit_note",
-    reference: note.creditNoteNo,
-    activityType,
-    action: `${activityType} Credit Note`,
-    oldValue: note.status,
-    newValue: activityType === "Delete" ? "cancelled" : "approved",
-    status: activityType === "Delete" ? "deleted" : "posted",
-    details,
-    partyName: note.customerName,
-    voucherAmount: note.currentCreditAmount.toFixed(2),
+    action,
+    particular: activityType === "Delete" ? "Voucher" : "Status",
+    beforeAlteration: note.status,
+    afterAlteration:
+      activityType === "Delete"
+        ? "—"
+        : activityType === "Approve"
+          ? "Approved"
+          : "Posted",
+    status: activityType === "Delete" ? "Cancelled" : "Posted",
   });
   invalidateAccountsDataCache("auditTrail");
 }

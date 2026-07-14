@@ -39,6 +39,8 @@ interface GroupedLedgerSelectProps {
   listMaxHeight?: number;
   /** Compact trigger and dropdown — for dense voucher forms */
   compact?: boolean;
+  /** Trigger label: full code + name, or account name only (dense tables). */
+  triggerFormat?: "code-name" | "name";
   /** Called after a ledger is created via quick-add */
   onQuickAddSuccess?: (ledger: ChartOfAccount) => void;
 }
@@ -144,6 +146,7 @@ export function GroupedLedgerSelect({
   enableQuickAdd = true,
   listMaxHeight = 300,
   compact = false,
+  triggerFormat = "code-name",
   onQuickAddSuccess,
 }: GroupedLedgerSelectProps) {
   const [open, setOpen] = useState(false);
@@ -161,7 +164,7 @@ export function GroupedLedgerSelect({
       buildCoaHierarchyTree(coaRecords, (ledger) =>
         ledgerFilterRef.current ? ledgerFilterRef.current(ledger) : true,
       ),
-    [coaRecords],
+    [coaRecords, ledgerFilter],
   );
 
   useEffect(() => {
@@ -187,10 +190,12 @@ export function GroupedLedgerSelect({
     if (!ledger) return fallbackLabel?.trim() || null;
     const bankMaster = getBankAccountByLedgerId(ledger.id);
     if (bankMaster) return formatBankAccountMaster(bankMaster);
-    return ledger.accountCode
-      ? `${ledger.accountCode} · ${ledger.accountName}`
-      : ledger.accountName;
-  }, [value, coaRecords, fallbackLabel]);
+    return triggerFormat === "name"
+      ? ledger.accountName
+      : ledger.accountCode
+        ? `${ledger.accountCode} · ${ledger.accountName}`
+        : ledger.accountName;
+  }, [value, coaRecords, fallbackLabel, triggerFormat]);
 
   const selectedPath = useMemo(() => {
     if (!value) return "";

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, ChevronRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
@@ -17,10 +17,6 @@ import {
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
 import {
-  AccountsTableListing,
-  AccountsTablePagination,
-} from "@/components/accounts/AccountsTableListing";
-import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportFinancialYearFilter,
@@ -30,11 +26,9 @@ import {
   ReportShowZeroBalanceToggle,
   ReportMoreFilters,
   ReportFilterSummary,
-  ReportTrialBalanceViewTypeFilter,
   ReportIncludeOpeningBalanceToggle,
   ReportFromDateFilter,
   ReportToDateFilter,
-  ReportParticularSearchFilter,
   ReportVoucherTypeMultiFilter,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
@@ -47,14 +41,11 @@ import {
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
 import {
-  AccountsColumnFilterProvider,
-  SortTh,
-  useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
-import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
+  AccountsTableListing,
+  AccountsTablePagination,
+} from "@/components/accounts/AccountsTableListing";
+import { FinancialReportHeadCell, financialReportThClassName } from "@/components/accounts/FinancialReportTableHead";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import {
   resolveDateRangePreset,
@@ -64,11 +55,13 @@ import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
   buildTrialBalanceDetailedGroups,
+  buildTrialBalanceLedgerHref,
+  buildTrialBalanceGroupHref,
   collectAllDetailedGroupKeys,
   collectAllDetailedSubgroupKeys,
   collectAllPrimaryHeadKeys,
   computeTrialBalanceSummaryFromDetailedGroups,
-  filterTrialBalanceDetailedGroups,
+  computeTrialBalanceLedgerVoucherLines,
   findTrialBalanceExceptions,
   flattenTrialBalanceDetailedGroups,
   getTrialBalanceBranchOptions,
@@ -81,12 +74,18 @@ import {
 } from "./trial-balance-data";
 import {
   balanceSideAbbrev,
-  flattenTrialBalanceNormalRows,
+  flattenTrialBalanceNormalLedgerRows,
   netBalanceFromSplit,
   TB_DETAILED_INDENT,
   TB_NORMAL_INDENT,
-  type TrialBalanceNormalFlatRow,
+  type TrialBalanceNormalLedgerRow,
 } from "./trial-balance-display";
+import {
+  isRenderableTrialBalanceDetailedRow,
+  isRenderableTrialBalanceNormalRow,
+} from "./trial-balance-validation";
+import { formatTrialBalanceReportDate } from "./TrialBalanceReportSummary";
+import { TrialBalanceViewTabs } from "./TrialBalanceViewTabs";
 import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import {
@@ -95,8 +94,8 @@ import {
   exportTrialBalanceNormalToExcel,
   exportTrialBalanceNormalToPdf,
 } from "./trial-balance-export";
-import { useDebouncedValue } from "./trial-balance-hooks";
 import "./trial-balance-compact.css";
+import { AccountsCoaHierarchyRowLabel } from "@/lib/accounts/accounts-coa-hierarchy-ui";
 
 const PLACEHOLDER_DATE = "2025-04-01";
 
@@ -128,7 +127,7 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
 }
 
 function rowKey(
-  row: TrialBalanceNormalFlatRow | TrialBalanceDetailedFlatRow,
+  row: TrialBalanceNormalLedgerRow | TrialBalanceDetailedFlatRow,
   index: number,
 ): string {
   if ("type" in row) {
@@ -137,16 +136,23 @@ function rowKey(
     if (row.type === "subgroup") return `sg-${row.subgroupKey}`;
     if (row.type === "ledger") return `l-${row.ledger.ledgerId}`;
   }
+  if ("type" in row && row.type === "voucher") {
+    return `v-${row.ledgerId}-${row.voucher.voucherId}-${row.voucher.debit}-${row.voucher.credit}`;
+  }
   return `row-${index}`;
 }
 
 function BalanceStatusBanner({
   isBalanced,
-  difference,
+  openingDifference,
+  periodDifference,
+  closingDifference,
   visible,
 }: {
   isBalanced: boolean;
-  difference: number;
+  openingDifference: number;
+  periodDifference: number;
+  closingDifference: number;
   visible: boolean;
 }) {
   if (!visible) return null;
@@ -159,9 +165,14 @@ function BalanceStatusBanner({
     );
   }
   return (
-    <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border-t border-red-100 text-xs text-red-700">
-      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-      Trial Balance is not balanced — Difference: {formatMoney(difference)}
+    <div className="flex-shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 bg-red-50 border-t border-red-100 text-xs text-red-700">
+      <span className="inline-flex items-center gap-1.5 font-medium">
+        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+        Trial Balance is not balanced (total Debits ≠ total Credits)
+      </span>
+      <span title="Opening Dr minus Opening Cr">Opening Difference: {formatMoney(openingDifference)}</span>
+      <span title="Period Dr minus Period Cr">Period Difference: {formatMoney(periodDifference)}</span>
+      <span title="Closing Dr minus Closing Cr">Closing Difference: {formatMoney(closingDifference)}</span>
     </div>
   );
 }
@@ -239,7 +250,6 @@ export default function TrialBalancePageClient() {
   const [showZeroBalance, setShowZeroBalance] = useState(false);
   const [includeOpeningBalance, setIncludeOpeningBalance] = useState(true);
 
-  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -248,9 +258,13 @@ export default function TrialBalancePageClient() {
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
   const [expandedSubgroupIds, setExpandedSubgroupIds] = useState<Set<string>>(new Set());
 
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const [expandedLedgerIds, setExpandedLedgerIds] = useState<Set<number>>(new Set());
 
   const effectiveBranches = branches;
+
+  // Bumped after demo voucher transactions are seeded / whenever vouchers change,
+  // so all derived trial-balance data recomputes against the freshest postings.
+  const [dataTick, setDataTick] = useState(0);
 
   useEffect(() => {
     const { from, to, fyId } = defaultFyDateRange();
@@ -258,6 +272,22 @@ export default function TrialBalancePageClient() {
     setDateTo(to);
     setFinancialYearId(fyId);
     setDatesReady(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/lib/accounts/general-ledger-demo-seed").then(
+      ({ ensureGeneralLedgerDemoOnPageLoad }) => {
+        ensureGeneralLedgerDemoOnPageLoad();
+        if (!cancelled) setDataTick((t) => t + 1);
+      },
+    );
+    const onVouchersUpdated = () => setDataTick((t) => t + 1);
+    window.addEventListener("ds-accounts-vouchers-updated", onVouchersUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ds-accounts-vouchers-updated", onVouchersUpdated);
+    };
   }, []);
 
   const handleFinancialYearChange = useCallback((fyId: string) => {
@@ -295,8 +325,9 @@ export default function TrialBalancePageClient() {
     warehouse: [],
     ledgerGroupId: ledgerGroupIds,
     ledgerId: ledgerIds,
+    voucherType: voucherTypes,
     showZeroBalance,
-    search: debouncedSearch,
+    search: "",
   }), [
     financialYearId,
     dateFrom,
@@ -304,8 +335,8 @@ export default function TrialBalancePageClient() {
     effectiveBranches,
     ledgerGroupIds,
     ledgerIds,
+    voucherTypes,
     showZeroBalance,
-    debouncedSearch,
   ]);
 
   const ledgerGroupOptions = useMemo(
@@ -340,124 +371,112 @@ export default function TrialBalancePageClient() {
 
   const exceptions = useMemo(
     () => (mounted ? findTrialBalanceExceptions(tbFilters) : []),
-    [mounted, tbFilters],
+    [mounted, tbFilters, dataTick],
   );
 
   const sourceDetailedGroups = useMemo(() => {
     if (!mounted) return [];
-    return buildTrialBalanceDetailedGroups(tbFilters);
-  }, [mounted, tbFilters]);
+    const t0 = typeof performance !== "undefined" ? performance.now() : 0;
+    const groups = buildTrialBalanceDetailedGroups(tbFilters);
+    const t1 = typeof performance !== "undefined" ? performance.now() : 0;
+    // #region agent log
+    if (typeof window !== "undefined") {
+      const ledgerCount = groups.reduce(
+        (sum, g) => sum + g.subgroups.reduce((s, sg) => s + sg.ledgers.length, 0),
+        0,
+      );
+      fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "179db4" },
+        body: JSON.stringify({
+          sessionId: "179db4",
+          runId: "tb-oom",
+          hypothesisId: "H2",
+          location: "TrialBalancePageClient.tsx:sourceDetailedGroups",
+          message: "trial balance groups built",
+          data: {
+            groupCount: groups.length,
+            ledgerCount,
+            ms: Math.round(t1 - t0),
+            voucherCount: typeof window !== "undefined" ? undefined : undefined,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+    return groups;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, tbFilters, dataTick]);
 
   useEffect(() => {
-    if (!mounted || sourceDetailedGroups.length === 0) return;
-    if (debouncedSearch.trim()) {
-      const filtered = filterTrialBalanceDetailedGroups(sourceDetailedGroups, {
-        search: debouncedSearch,
-      });
-      setExpandedPrimaryIds(collectAllPrimaryHeadKeys(filtered));
-      setExpandedGroupIds(collectAllDetailedGroupKeys(filtered));
-      setExpandedSubgroupIds(collectAllDetailedSubgroupKeys(filtered));
-      return;
-    }
+    if (!mounted || activeTab !== "detailed" || sourceDetailedGroups.length === 0) return;
     setExpandedPrimaryIds(collectAllPrimaryHeadKeys(sourceDetailedGroups));
     setExpandedGroupIds(collectAllDetailedGroupKeys(sourceDetailedGroups));
     setExpandedSubgroupIds(collectAllDetailedSubgroupKeys(sourceDetailedGroups));
-  }, [mounted, sourceDetailedGroups, debouncedSearch]);
+  }, [mounted, activeTab, sourceDetailedGroups]);
 
-  const filteredDetailedGroups = useMemo(
-    () => filterTrialBalanceDetailedGroups(sourceDetailedGroups, { search: debouncedSearch }),
-    [sourceDetailedGroups, debouncedSearch],
-  );
+  const filteredDetailedGroups = sourceDetailedGroups;
 
   const normalFlatRows = useMemo(
-    () => flattenTrialBalanceNormalRows(filteredDetailedGroups),
+    () =>
+      flattenTrialBalanceNormalLedgerRows(filteredDetailedGroups).filter(
+        isRenderableTrialBalanceNormalRow,
+      ),
     [filteredDetailedGroups],
   );
 
-  const detailedFlatRows = useMemo(
-    () =>
-      flattenTrialBalanceDetailedGroups(
-        filteredDetailedGroups,
-        expandedPrimaryIds,
-        expandedGroupIds,
-        expandedSubgroupIds,
-      ),
-    [filteredDetailedGroups, expandedPrimaryIds, expandedGroupIds, expandedSubgroupIds],
-  );
-
-  const providerRows = useMemo(
-    () => (activeTab === "normal" ? normalFlatRows : detailedFlatRows),
-    [activeTab, normalFlatRows, detailedFlatRows],
-  );
-
-  const getCellValue = useCallback(
-    (row: TrialBalanceNormalFlatRow | TrialBalanceDetailedFlatRow, key: string) => {
-      if (activeTab === "normal") {
-        const normalRow = row as TrialBalanceNormalFlatRow;
-        if (normalRow.type === "primary") {
-          if (key === "particular") return normalRow.primaryHead;
-          if (key === "debit") return normalRow.debit;
-          if (key === "credit") return normalRow.credit;
-          return "";
-        }
-        if (normalRow.type === "group") {
-          if (key === "particular") return normalRow.groupName;
-          if (key === "debit") return normalRow.debit;
-          if (key === "credit") return normalRow.credit;
-          return "";
-        }
-        if (normalRow.type === "subgroup") {
-          if (key === "particular") return normalRow.subgroupName;
-          if (key === "debit") return normalRow.debit;
-          if (key === "credit") return normalRow.credit;
-          return "";
-        }
-        const ledger = normalRow.ledger;
-        if (key === "particular") return ledger.ledgerName;
-        if (key === "debit") return ledger.closingDebit;
-        if (key === "credit") return ledger.closingCredit;
-        return "";
-      }
-
-      const flat = row as TrialBalanceDetailedFlatRow;
-      if (flat.type === "primary") {
-        if (key === "particular") return flat.primaryHead;
-        return flat.amounts[key as keyof typeof flat.amounts] ?? "";
-      }
-      if (flat.type === "group") {
-        if (key === "particular") return flat.groupName;
-        return flat.amounts[key as keyof typeof flat.amounts] ?? "";
-      }
-      if (flat.type === "subgroup") {
-        if (key === "particular") return flat.subgroupName;
-        return flat.amounts[key as keyof typeof flat.amounts] ?? "";
-      }
-      const ledger = flat.ledger;
-      if (key === "particular") return ledger.ledgerName;
-      return ledger[key as keyof typeof ledger] ?? "";
-    },
-    [activeTab],
-  );
-
-  const columnConfig = useMemo((): AccountsColumnFilterConfig => {
-    if (activeTab === "normal") {
-      return {
-        particular: { type: "text" },
-        debit: { type: "amount" },
-        credit: { type: "amount" },
-      };
+  const voucherLinesByLedgerId = useMemo(() => {
+    const map = new Map<number, ReturnType<typeof computeTrialBalanceLedgerVoucherLines>>();
+    if (activeTab !== "detailed") return map;
+    for (const ledgerId of expandedLedgerIds) {
+      map.set(ledgerId, computeTrialBalanceLedgerVoucherLines(tbFilters, ledgerId));
     }
-    return {
-      particular: { type: "text" },
-      openingDebit: { type: "amount" },
-      debit: { type: "amount" },
-      credit: { type: "amount" },
-      closingDebit: { type: "amount" },
-    };
-  }, [activeTab]);
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, expandedLedgerIds, tbFilters, dataTick]);
+
+  const detailedFlatRows = useMemo(() => {
+    if (activeTab !== "detailed") return [];
+    const rows = flattenTrialBalanceDetailedGroups(
+      filteredDetailedGroups,
+      expandedPrimaryIds,
+      expandedGroupIds,
+      expandedSubgroupIds,
+      {
+        expandedLedgerIds,
+        voucherLinesByLedgerId,
+      },
+    ).filter(isRenderableTrialBalanceDetailedRow);
+    // #region agent log
+    if (typeof window !== "undefined") {
+      fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "179db4" },
+        body: JSON.stringify({
+          sessionId: "179db4",
+          runId: "tb-oom",
+          hypothesisId: "H3",
+          location: "TrialBalancePageClient.tsx:detailedFlatRows",
+          message: "detailed flat rows computed",
+          data: { activeTab, rowCount: rows.length, expandedLedgers: expandedLedgerIds.size },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+    return rows;
+  }, [
+    activeTab,
+    filteredDetailedGroups,
+    expandedPrimaryIds,
+    expandedGroupIds,
+    expandedSubgroupIds,
+    expandedLedgerIds,
+    voucherLinesByLedgerId,
+  ]);
 
   const hasFilters =
-    Boolean(search.trim()) ||
     isMultiFilterActive(branches) ||
     isMultiFilterActive(ledgerGroupIds) ||
     isMultiFilterActive(ledgerIds) ||
@@ -468,7 +487,6 @@ export default function TrialBalancePageClient() {
 
   const resetFilters = useCallback(() => {
     const { from, to, fyId } = defaultFyDateRange();
-    setSearch("");
     setPreset("custom");
     setDateFrom(from);
     setDateTo(to);
@@ -485,7 +503,6 @@ export default function TrialBalancePageClient() {
   useEffect(() => {
     setPage(1);
   }, [
-    debouncedSearch,
     pageSize,
     activeTab,
     financialYearId,
@@ -525,11 +542,6 @@ export default function TrialBalancePageClient() {
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
       [
-        {
-          id: "period",
-          label: "Period",
-          value: `${dateFrom} to ${dateTo}`,
-        },
         buildBranchFilterSummary(effectiveBranches, () => setBranches([])),
         buildEntityFilterSummary(
           "ledgerGroup",
@@ -563,8 +575,6 @@ export default function TrialBalancePageClient() {
           : null,
       ].filter((item): item is ReportFilterSummaryItem => item != null),
     [
-      dateFrom,
-      dateTo,
       effectiveBranches,
       ledgerGroupIds,
       ledgerGroupSelectOptions,
@@ -593,6 +603,15 @@ export default function TrialBalancePageClient() {
     });
   }, []);
 
+  const toggleLedger = useCallback((ledgerId: number) => {
+    setExpandedLedgerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ledgerId)) next.delete(ledgerId);
+      else next.add(ledgerId);
+      return next;
+    });
+  }, []);
+
   const toggleSubgroup = useCallback((subgroupKey: string) => {
     setExpandedSubgroupIds((prev) => {
       const next = new Set(prev);
@@ -603,14 +622,6 @@ export default function TrialBalancePageClient() {
   }, []);
 
   return (
-    <AccountsColumnFilterProvider
-      key={activeTab}
-      rows={providerRows}
-      getCellValue={getCellValue}
-      columnConfig={columnConfig}
-      defaultSortKey="particular"
-      defaultSortDir="asc"
-    >
       <TrialBalancePageBody
         mounted={mounted}
         activeTab={activeTab}
@@ -621,9 +632,12 @@ export default function TrialBalancePageClient() {
         expandedPrimaryIds={expandedPrimaryIds}
         expandedGroupIds={expandedGroupIds}
         expandedSubgroupIds={expandedSubgroupIds}
+        expandedLedgerIds={expandedLedgerIds}
         togglePrimary={togglePrimary}
         toggleGroup={toggleGroup}
         toggleSubgroup={toggleSubgroup}
+        toggleLedger={toggleLedger}
+        financialYearLabel={financialYearLabel}
         hasFilters={hasFilters}
         resetFilters={resetFilters}
         preset={preset}
@@ -651,8 +665,6 @@ export default function TrialBalancePageClient() {
         setDateFrom={setDateFrom}
         dateTo={dateTo}
         setDateTo={setDateTo}
-        search={search}
-        setSearch={setSearch}
         page={page}
         setPage={setPage}
         pageSize={pageSize}
@@ -662,7 +674,6 @@ export default function TrialBalancePageClient() {
         exportMeta={exportMeta}
         exceptions={exceptions}
       />
-    </AccountsColumnFilterProvider>
   );
 }
 
@@ -676,9 +687,12 @@ function TrialBalancePageBody({
   expandedPrimaryIds,
   expandedGroupIds,
   expandedSubgroupIds,
+  expandedLedgerIds,
   togglePrimary,
   toggleGroup,
   toggleSubgroup,
+  toggleLedger,
+  financialYearLabel,
   hasFilters,
   resetFilters,
   preset,
@@ -706,8 +720,6 @@ function TrialBalancePageBody({
   setDateFrom,
   dateTo,
   setDateTo,
-  search,
-  setSearch,
   page,
   setPage,
   pageSize,
@@ -721,14 +733,17 @@ function TrialBalancePageBody({
   activeTab: TrialBalanceTab;
   setActiveTab: (v: TrialBalanceTab) => void;
   filteredDetailedGroups: ReturnType<typeof buildTrialBalanceDetailedGroups>;
-  normalFlatRows: TrialBalanceNormalFlatRow[];
+  normalFlatRows: TrialBalanceNormalLedgerRow[];
   detailedFlatRows: TrialBalanceDetailedFlatRow[];
   expandedPrimaryIds: Set<number>;
   expandedGroupIds: Set<string>;
   expandedSubgroupIds: Set<string>;
+  expandedLedgerIds: Set<number>;
   togglePrimary: (id: number) => void;
   toggleGroup: (groupKey: string) => void;
   toggleSubgroup: (subgroupKey: string) => void;
+  toggleLedger: (ledgerId: number) => void;
+  financialYearLabel: string;
   hasFilters: boolean;
   resetFilters: () => void;
   preset: DateRangePresetId;
@@ -756,8 +771,6 @@ function TrialBalancePageBody({
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
-  search: string;
-  setSearch: (v: string) => void;
   page: number;
   setPage: (p: number) => void;
   pageSize: number;
@@ -767,30 +780,35 @@ function TrialBalancePageBody({
   exportMeta: Parameters<typeof exportTrialBalanceNormalToExcel>[1];
   exceptions: TrialBalanceVoucherException[];
 }) {
-  const ctx = useAccountsColumnFilterContext();
-  const columnFilteredNormalRows = useAccountsFilteredRows(normalFlatRows);
-  const columnFilteredDetailedRows = useAccountsFilteredRows(detailedFlatRows);
-  const columnFilteredRows =
-    activeTab === "normal" ? columnFilteredNormalRows : columnFilteredDetailedRows;
-
-  const summary = useMemo(
-    () => computeTrialBalanceSummaryFromDetailedGroups(filteredDetailedGroups),
-    [filteredDetailedGroups],
+  const glDrillDownFilters = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      branch,
+      warehouse: [] as string[],
+      financialYearId,
+    }),
+    [dateFrom, dateTo, branch, financialYearId],
   );
 
   const paginatedNormalRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return columnFilteredNormalRows.slice(start, start + pageSize);
-  }, [columnFilteredNormalRows, page, pageSize]);
+    return normalFlatRows.slice(start, start + pageSize);
+  }, [normalFlatRows, page, pageSize]);
 
   const paginatedDetailedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return columnFilteredDetailedRows.slice(start, start + pageSize);
-  }, [columnFilteredDetailedRows, page, pageSize]);
+    return detailedFlatRows.slice(start, start + pageSize);
+  }, [detailedFlatRows, page, pageSize]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+  const summary = useMemo(
+    () =>
+      computeTrialBalanceSummaryFromDetailedGroups(
+        filteredDetailedGroups,
+        exceptions.length > 0,
+      ),
+    [filteredDetailedGroups, exceptions.length],
+  );
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -813,7 +831,8 @@ function TrialBalancePageBody({
     }
   };
 
-  const totalRecords = columnFilteredRows.length;
+  const totalRecords =
+    activeTab === "normal" ? normalFlatRows.length : detailedFlatRows.length;
   const recordLabel = activeTab === "normal" ? "rows" : "rows";
   const showEmpty = mounted && totalRecords === 0;
   const showTable = mounted && totalRecords > 0;
@@ -830,15 +849,17 @@ function TrialBalancePageBody({
       hideDescription
       layout="split"
       className="trial-balance-compact h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !hasExportData}
-        />
-      }
+      subHeader={<TrialBalanceViewTabs value={activeTab} onChange={setActiveTab} />}
       filters={
-        <ReportFilterRow className="items-end gap-x-2 gap-y-2.5">
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || !mounted || !hasExportData}
+            />
+          }
+        >
           <ReportFinancialYearFilter
             value={financialYearId}
             onChange={onFinancialYearChange}
@@ -859,8 +880,6 @@ function TrialBalancePageBody({
             onChange={onBranchChange}
             options={branchOptions.length ? branchOptions : REPORT_BRANCH_OPTIONS}
           />
-          <ReportTrialBalanceViewTypeFilter value={activeTab} onChange={setActiveTab} />
-          <ReportParticularSearchFilter value={search} onChange={setSearch} />
           <ReportMoreFilters activeCount={moreFiltersActiveCount}>
             <ReportLedgerGroupMultiFilter
               values={ledgerGroupIds}
@@ -884,11 +903,6 @@ function TrialBalancePageBody({
               checked={includeOpeningBalance}
               onChange={onIncludeOpeningBalanceChange}
             />
-            <ReportBranchMultiFilter
-              values={branch}
-              onChange={onBranchChange}
-              options={branchOptions.length ? branchOptions : REPORT_BRANCH_OPTIONS}
-            />
           </ReportMoreFilters>
           {hasFilters && (
             <Button
@@ -907,13 +921,15 @@ function TrialBalancePageBody({
         <TrialBalanceExceptionsPanel exceptions={exceptions} />
       )}
       <AccountsListingTableCard className="trial-balance-compact flex-1 min-h-0">
-        <ReportFilterSummary items={filterSummaryItems} />
+        {filterSummaryItems.length > 0 && <ReportFilterSummary items={filterSummaryItems} />}
         <AccountsTableListing
           footer={
             <>
               <BalanceStatusBanner
                 isBalanced={summary.isBalanced}
-                difference={summary.difference}
+                openingDifference={summary.openingDifference}
+                periodDifference={summary.periodDifference}
+                closingDifference={summary.closingDifference}
                 visible={mounted && totalRecords > 0}
               />
               {mounted && totalRecords > 0 && (
@@ -939,109 +955,55 @@ function TrialBalancePageBody({
             <AccountsTable minWidth={720}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <SortTh label="Particular" colKey="particular" className="min-w-[280px]" />
-                  <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
-                  <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+                  <FinancialReportHeadCell className="min-w-[280px]">Particular</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
-                {paginatedNormalRows.map((row, i) => {
-                  if (row.type === "primary") {
-                    return (
-                      <AccountsTableRow
-                        key={rowKey(row, i)}
-                        className="bg-muted/40 border-b border-border/80"
-                      >
-                        <AccountsTableCell
-                          className={cn(
-                            TB_NORMAL_INDENT.primary,
-                            "font-bold text-foreground",
-                          )}
-                        >
-                          {row.primaryHead}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money className="font-semibold">
-                          {formatMoneyOrDash(row.debit)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money className="font-semibold">
-                          {formatMoneyOrDash(row.credit)}
-                        </AccountsTableCell>
-                      </AccountsTableRow>
-                    );
-                  }
-                  if (row.type === "group") {
-                    return (
-                      <AccountsTableRow key={rowKey(row, i)} className="bg-muted/20">
-                        <AccountsTableCell
-                          className={cn(TB_NORMAL_INDENT.group, "font-bold text-foreground")}
-                        >
-                          {row.groupName}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money className="font-semibold">
-                          {formatMoneyOrDash(row.debit)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money className="font-semibold">
-                          {formatMoneyOrDash(row.credit)}
-                        </AccountsTableCell>
-                      </AccountsTableRow>
-                    );
-                  }
-                  if (row.type === "subgroup") {
-                    return (
-                      <AccountsTableRow key={rowKey(row, i)}>
-                        <AccountsTableCell
-                          className={cn(
-                            TB_NORMAL_INDENT.subgroup,
-                            "font-semibold text-foreground",
-                          )}
-                        >
-                          {row.subgroupName}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money>
-                          {formatMoneyOrDash(row.debit)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money>
-                          {formatMoneyOrDash(row.credit)}
-                        </AccountsTableCell>
-                      </AccountsTableRow>
-                    );
-                  }
-                  return (
-                    <AccountsTableRow key={rowKey(row, i)}>
-                      <AccountsTableCell className={TB_NORMAL_INDENT.ledger}>
-                        <Link
-                          href={buildGeneralLedgerHref(row.ledger.ledgerId)}
-                          className="text-xs font-normal text-brand-700 hover:underline"
-                        >
-                          {row.ledger.ledgerName}
-                        </Link>
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" money>
-                        {formatMoneyOrDash(row.ledger.closingDebit)}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" money>
-                        {formatMoneyOrDash(row.ledger.closingCredit)}
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  );
-                })}
+                {paginatedNormalRows.map((row, i) => (
+                  <AccountsTableRow
+                    key={rowKey(row, i)}
+                        className="group hover:bg-muted/30 transition-colors"
+                  >
+                    <AccountsTableCell className={TB_NORMAL_INDENT.ledger}>
+                      <AccountsCoaHierarchyRowLabel
+                        level="ledger"
+                        name={row.ledger.ledgerName}
+                        nameHref={buildTrialBalanceLedgerHref(row.ledger.ledgerId, glDrillDownFilters)}
+                      />
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right" money>
+                      {formatMoneyOrDash(row.ledger.closingDebit)}
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right" money>
+                      {formatMoneyOrDash(row.ledger.closingCredit)}
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                ))}
               </AccountsTableBody>
               <AccountsTableFoot>
                 <AccountsTableRow className="border-t-2 border-foreground/20">
                   <AccountsTableCell className="font-bold text-foreground text-xs">
-                    TOTAL
+                    Grand Total
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn("font-bold", !summary.isBalanced && "text-red-600")}
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
                   >
                     {formatMoney(summary.totalDebit)}
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn("font-bold", !summary.isBalanced && "text-red-600")}
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
                   >
                     {formatMoney(summary.totalCredit)}
                   </AccountsTableCell>
@@ -1052,25 +1014,15 @@ function TrialBalancePageBody({
             <AccountsTable minWidth={980}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <SortTh label="Particular" colKey="particular" className="min-w-[260px]" />
-                  <SortTh
-                    label="Opening Balance"
-                    colKey="openingDebit"
-                    filterType="amount"
-                    align="right"
-                  />
-                  <th className="accounts-table-th text-center w-14">
+                  <FinancialReportHeadCell className="min-w-[260px]">Particular</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Opening Balance</FinancialReportHeadCell>
+                  <th className={financialReportThClassName("text-center w-14")}>
                     <span className="text-xs font-semibold text-foreground">Dr/Cr</span>
                   </th>
-                  <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
-                  <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
-                  <SortTh
-                    label="Closing Balance"
-                    colKey="closingDebit"
-                    filterType="amount"
-                    align="right"
-                  />
-                  <th className="accounts-table-th text-center w-14">
+                  <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Closing Balance</FinancialReportHeadCell>
+                  <th className={financialReportThClassName("text-center w-14")}>
                     <span className="text-xs font-semibold text-foreground">Dr/Cr</span>
                   </th>
                 </AccountsTableHeadRow>
@@ -1078,24 +1030,25 @@ function TrialBalancePageBody({
               <AccountsTableBody>
                 {paginatedDetailedRows.map((row, i) => {
                   if (row.type === "primary") {
+                    const expanded = expandedPrimaryIds.has(row.primaryHeadId);
                     return (
                       <AccountsTableRow
                         key={rowKey(row, i)}
-                        className="bg-muted/40 border-b border-border/80"
+                        className="group border-b border-border/80 bg-muted/20 hover:bg-muted/30 transition-colors"
                       >
                         <AccountsTableCell className={TB_DETAILED_INDENT.primary}>
                           <button
                             type="button"
                             onClick={() => togglePrimary(row.primaryHeadId)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-foreground hover:text-brand-700 w-full text-left"
+                            className="w-full text-left"
                           >
-                            <ChevronRight
-                              className={cn(
-                                "w-4 h-4 flex-shrink-0 transition-transform",
-                                expandedPrimaryIds.has(row.primaryHeadId) && "rotate-90",
-                              )}
+                            <AccountsCoaHierarchyRowLabel
+                              level="primary_head"
+                              name={row.primaryHead}
+                              expandable
+                              expanded={expanded}
+                              showTreeGuides
                             />
-                            {row.primaryHead}
                           </button>
                         </AccountsTableCell>
                         <DetailedAmountCells
@@ -1107,25 +1060,27 @@ function TrialBalancePageBody({
                     );
                   }
                   if (row.type === "group") {
+                    const expanded = expandedGroupIds.has(row.groupKey);
                     return (
-                      <AccountsTableRow key={rowKey(row, i)} className="bg-muted/20">
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group bg-muted/15 hover:bg-muted/30 transition-colors"
+                      >
                         <AccountsTableCell className={TB_DETAILED_INDENT.group}>
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(row.groupKey)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-foreground hover:text-brand-700 w-full text-left"
-                          >
-                            <ChevronRight
-                              className={cn(
-                                "w-4 h-4 flex-shrink-0 transition-transform",
-                                expandedGroupIds.has(row.groupKey) && "rotate-90",
-                              )}
-                            />
-                            {row.groupName}
-                            <span className="text-xs font-normal text-muted-foreground ml-1">
-                              ({row.ledgerCount})
-                            </span>
-                          </button>
+                          <AccountsCoaHierarchyRowLabel
+                            level="account_group"
+                            name={row.groupName}
+                            nameHref={buildTrialBalanceGroupHref(
+                              row.groupId,
+                              row.groupName,
+                              glDrillDownFilters,
+                            )}
+                            ledgerCount={row.ledgerCount}
+                            expandable={row.ledgerCount > 0}
+                            expanded={expanded}
+                            onExpandClick={() => toggleGroup(row.groupKey)}
+                            showTreeGuides
+                          />
                         </AccountsTableCell>
                         <DetailedAmountCells
                           amounts={row.amounts}
@@ -1136,25 +1091,27 @@ function TrialBalancePageBody({
                     );
                   }
                   if (row.type === "subgroup") {
+                    const expanded = expandedSubgroupIds.has(row.subgroupKey);
                     return (
-                      <AccountsTableRow key={rowKey(row, i)}>
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group bg-muted/10 hover:bg-muted/30 transition-colors"
+                      >
                         <AccountsTableCell className={TB_DETAILED_INDENT.subgroup}>
-                          <button
-                            type="button"
-                            onClick={() => toggleSubgroup(row.subgroupKey)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-brand-700 w-full text-left"
-                          >
-                            <ChevronRight
-                              className={cn(
-                                "w-4 h-4 flex-shrink-0 transition-transform",
-                                expandedSubgroupIds.has(row.subgroupKey) && "rotate-90",
-                              )}
-                            />
-                            {row.subgroupName}
-                            <span className="text-xs font-normal text-muted-foreground ml-1">
-                              ({row.ledgerCount})
-                            </span>
-                          </button>
+                          <AccountsCoaHierarchyRowLabel
+                            level="sub_group"
+                            name={row.subgroupName}
+                            nameHref={buildTrialBalanceGroupHref(
+                              row.subgroupId,
+                              row.subgroupName,
+                              glDrillDownFilters,
+                            )}
+                            ledgerCount={row.ledgerCount}
+                            expandable={row.ledgerCount > 0}
+                            expanded={expanded}
+                            onExpandClick={() => toggleSubgroup(row.subgroupKey)}
+                            showTreeGuides
+                          />
                         </AccountsTableCell>
                         <DetailedAmountCells
                           amounts={row.amounts}
@@ -1163,18 +1120,63 @@ function TrialBalancePageBody({
                       </AccountsTableRow>
                     );
                   }
+                  if (row.type === "ledger") {
+                    return (
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => toggleLedger(row.ledger.ledgerId)}
+                      >
+                        <AccountsTableCell className={TB_DETAILED_INDENT.ledger}>
+                          <AccountsCoaHierarchyRowLabel
+                            level="ledger"
+                            name={row.ledger.ledgerName}
+                            nameHref={buildTrialBalanceLedgerHref(row.ledger.ledgerId, glDrillDownFilters)}
+                            showTreeGuides
+                          />
+                        </AccountsTableCell>
+                        <DetailedAmountCells
+                          amounts={row.ledger}
+                          includeOpening={includeOpeningBalance}
+                        />
+                      </AccountsTableRow>
+                    );
+                  }
                   return (
-                    <AccountsTableRow key={rowKey(row, i)}>
-                      <AccountsTableCell className={TB_DETAILED_INDENT.ledger}>
-                        <Link
-                          href={buildGeneralLedgerHref(row.ledger.ledgerId)}
-                          className="text-xs font-normal text-brand-700 hover:underline"
-                        >
-                          {row.ledger.ledgerName}
-                        </Link>
+                    <AccountsTableRow
+                      key={rowKey(row, i)}
+                      className="group bg-muted/10 hover:bg-muted/25 transition-colors"
+                    >
+                      <AccountsTableCell className={TB_DETAILED_INDENT.voucher}>
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                            <span className="text-muted-foreground">
+                              {formatTrialBalanceReportDate(row.voucher.date)}
+                            </span>
+                            <Link
+                              href={row.voucher.viewHref}
+                              className="font-mono text-brand-700 hover:underline"
+                            >
+                              {row.voucher.voucherNo}
+                            </Link>
+                            <span className="text-muted-foreground">
+                              {row.voucher.voucherTypeLabel}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2">
+                            {row.voucher.narration}
+                          </p>
+                        </div>
                       </AccountsTableCell>
                       <DetailedAmountCells
-                        amounts={row.ledger}
+                        amounts={{
+                          openingDebit: 0,
+                          openingCredit: 0,
+                          debit: row.voucher.debit,
+                          credit: row.voucher.credit,
+                          closingDebit: 0,
+                          closingCredit: 0,
+                        }}
                         includeOpening={includeOpeningBalance}
                       />
                     </AccountsTableRow>
@@ -1184,11 +1186,18 @@ function TrialBalancePageBody({
               <AccountsTableFoot>
                 <AccountsTableRow className="border-t-2 border-foreground/20">
                   <AccountsTableCell className="font-bold text-foreground text-xs">
-                    TOTAL
+                    Grand Total
                   </AccountsTableCell>
                   {includeOpeningBalance ? (
                     <>
-                      <AccountsTableCell align="right" money className="font-bold">
+                      <AccountsTableCell
+                        align="right"
+                        money
+                        className={cn(
+                          "font-bold",
+                          summary.openingDifference !== 0 && "text-red-600",
+                        )}
+                      >
                         {openingTotal.amount ? formatMoney(openingTotal.amount) : "—"}
                       </AccountsTableCell>
                       <AccountsTableCell align="center" className="font-bold text-xs">
@@ -1208,18 +1217,31 @@ function TrialBalancePageBody({
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn("font-bold", !summary.isBalanced && "text-red-600")}
+                    className={cn(
+                      "font-bold",
+                      summary.periodDifference !== 0 && "text-red-600",
+                    )}
                   >
                     {formatMoney(summary.periodDebit)}
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn("font-bold", !summary.isBalanced && "text-red-600")}
+                    className={cn(
+                      "font-bold",
+                      summary.periodDifference !== 0 && "text-red-600",
+                    )}
                   >
                     {formatMoney(summary.periodCredit)}
                   </AccountsTableCell>
-                  <AccountsTableCell align="right" money className="font-bold">
+                  <AccountsTableCell
+                    align="right"
+                    money
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
+                  >
                     {closingTotal.amount ? formatMoney(closingTotal.amount) : "—"}
                   </AccountsTableCell>
                   <AccountsTableCell align="center" className="font-bold text-xs">

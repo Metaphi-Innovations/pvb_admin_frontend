@@ -2,9 +2,13 @@ import {
   buildRegisterPartyOptions,
   buildSalesRegisterRows,
   findRegisterRow,
+  isSalesRegisterSourceInvoice,
 } from "../register-shared/register-live-data";
 import type { RegisterPartyOption, RegisterReportRow } from "../register-shared/register-types";
 
+export { isSalesRegisterSourceInvoice, buildSalesRegisterRows };
+
+/** Canonical Sales Register source — posted (+ optionally cancelled) Sales Tax Invoices only. */
 export function buildSalesRegisterDemoRows(): RegisterReportRow[] {
   return buildSalesRegisterRows();
 }

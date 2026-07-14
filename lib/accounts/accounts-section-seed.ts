@@ -129,6 +129,8 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
         .then((m) => m.ensureCashBookDemoOnPageLoad())
         .then(() => import("./general-ledger-demo-seed"))
         .then((m) => m.ensureGeneralLedgerDemoOnPageLoad())
+        .then(() => import("./pl-demo-seed"))
+        .then((m) => m.ensurePlDemoOnPageLoad())
         .then(finish)
         .catch((err) => {
           inflightSections.delete(groupId);

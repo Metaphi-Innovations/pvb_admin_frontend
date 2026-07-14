@@ -1,17 +1,14 @@
-import { formatMoney, formatMoneyNumber } from "@/lib/accounts/money-format";
+import { formatMoneyNumber } from "@/lib/accounts/money-format";
 import {
-  buildBalanceMessageHtml,
-  buildReportDocumentHtml,
-  buildReportExcelDocumentHtml,
-  buildTAccountTableHtml,
-  downloadReportExcelHtml,
-  escapeHtml,
-  indentParticular,
-  openReportPrintWindow,
+  buildTAccountReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
+  type HorizontalTAccountRow,
   type ReportHeaderOptions,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
+} from "@/lib/accounts/report-export-engine";
+import { buildBalanceMessageHtml } from "@/lib/accounts/report-export-presentation";
 import type { PandLHorizontalExportRow, PandLStatement } from "./pl-data";
+import { formatPlReportDate } from "./pl-display";
 
 const REPORT_NAME = "Profit & Loss Account";
 
@@ -25,19 +22,60 @@ export interface PandLExportMeta {
   viewType?: string;
 }
 
-function formatExportAmount(amount: number | null, isReturn?: boolean): string {
-  if (amount == null) return "";
-  if (isReturn) return `(${formatMoney(amount)})`;
-  if (amount < 0) return `(${formatMoney(Math.abs(amount))})`;
-  return formatMoney(amount);
+function resolveExportAmount(
+  groupTotal: number | null,
+  ledgerAmount: number | null,
+  isReturn?: boolean,
+): number | null {
+  if (ledgerAmount != null) return ledgerAmount;
+  return groupTotal;
+}
+
+function toHorizontalRows(rows: PandLHorizontalExportRow[]): HorizontalTAccountRow[] {
+  return rows.map((r) => {
+    const rowType =
+      r.rowType === "total"
+        ? "total"
+        : r.rowType === "net"
+          ? "net"
+          : r.rowType === "section_total"
+            ? "subtotal"
+            : "line";
+
+    return {
+      rowType,
+      left: {
+        particular: r.expenseParticular,
+        indent: 0,
+        amount: resolveExportAmount(
+          r.expenseGroupTotal,
+          r.expenseLedgerAmount,
+          r.expenseIsReturn,
+        ),
+        bold: r.expenseBold,
+        isReturn: r.expenseIsReturn,
+      },
+      right: {
+        particular: r.incomeParticular,
+        indent: 0,
+        amount: resolveExportAmount(
+          r.incomeGroupTotal,
+          r.incomeLedgerAmount,
+          r.incomeIsReturn,
+        ),
+        bold: r.incomeBold,
+        isReturn: r.incomeIsReturn,
+      },
+    };
+  });
 }
 
 function buildHeaderOptions(meta: PandLExportMeta): ReportHeaderOptions {
   return {
     reportTitle: REPORT_NAME,
     financialYear: meta.financialYear || "All years",
-    dateFrom: meta.dateFrom,
-    dateTo: meta.dateTo,
+    dateFrom: formatPlReportDate(meta.dateFrom),
+    dateTo: formatPlReportDate(meta.dateTo),
     filters: [
       { label: "Branch", value: meta.branch ?? "All branches" },
       { label: "Warehouse", value: meta.warehouse ?? "All warehouses" },
@@ -47,66 +85,22 @@ function buildHeaderOptions(meta: PandLExportMeta): ReportHeaderOptions {
   };
 }
 
-function buildTableRowsHtml(rows: PandLHorizontalExportRow[]): string {
-  return rows
-    .map((r) => {
-      const rowClass =
-        r.rowType === "title"
-          ? "title"
-          : r.rowType === "header"
-            ? "header"
-            : r.rowType === "total"
-              ? "total"
-              : r.rowType === "net"
-                ? `net${statementNetLossClass(r)}`
-                : "line";
-      const leftLabel = escapeHtml(indentParticular(r.expenseParticular, r.expenseIndent));
-      const rightLabel = escapeHtml(indentParticular(r.incomeParticular, r.incomeIndent));
-      const leftBold = r.expenseBold ? " bold" : "";
-      const rightBold = r.incomeBold ? " bold" : "";
-      const leftAmount = formatExportAmount(r.expenseAmount, r.expenseIsReturn);
-      const rightAmount = formatExportAmount(r.incomeAmount, r.incomeIsReturn);
-
-      if (r.rowType === "title") {
-        return `<tr class="${rowClass}">
-        <td class="label bold" colspan="2">${leftLabel}</td>
-        <td class="divider"></td>
-        <td class="label" colspan="2"></td>
-      </tr>`;
-      }
-
-      return `<tr class="${rowClass}">
-        <td class="label${leftBold}">${leftLabel}</td>
-        <td class="num${leftBold}">${leftAmount}</td>
-        <td class="divider"></td>
-        <td class="label${rightBold}">${rightLabel}</td>
-        <td class="num${rightBold}">${rightAmount}</td>
-      </tr>`;
-    })
-    .join("");
-}
-
-function statementNetLossClass(r: PandLHorizontalExportRow): string {
-  if (r.rowType !== "net") return "";
-  return r.expenseParticular.toLowerCase().includes("loss") ? " loss" : "";
-}
-
 function buildPandLBody(
   rows: PandLHorizontalExportRow[],
   statement: PandLStatement,
 ): string {
-  const tableHtml = buildTAccountTableHtml({
-    leftTitle: "Expenses (Debit)",
-    leftAmountHeader: "Amount (₹)",
-    rightTitle: "Income (Credit)",
-    rightAmountHeader: "Amount (₹)",
-    rowsHtml: buildTableRowsHtml(rows),
+  const tableHtml = buildTAccountReportBodyHtml({
+    leftTitle: "Debit",
+    leftAmountHeader: "Amount",
+    rightTitle: "Credit",
+    rightAmountHeader: "Amount",
+    rows: toHorizontalRows(rows),
   });
 
   const netLabel = statement.netProfit >= 0 ? "Net Profit" : "Net Loss";
   const balanceText = statement.isBalanced
-    ? `${netLabel}: ₹ ${formatMoneyNumber(Math.abs(statement.netProfit))} — P&amp;L Balanced — Total ₹ ${formatMoneyNumber(Math.max(statement.totalIncome, statement.totalExpenses))} on both sides`
-    : `Difference ₹ ${formatMoneyNumber(Math.abs(statement.netProfit))}`;
+    ? `${netLabel}: ₹ ${formatMoneyNumber(Math.abs(statement.netProfit))} — P&amp;L Balanced — Total ₹ ${formatMoneyNumber(statement.finalDebitTotal)} on both sides`
+    : `Difference ₹ ${formatMoneyNumber(Math.abs(statement.finalDebitTotal - statement.finalCreditTotal))}`;
 
   const balanceMsg = buildBalanceMessageHtml(
     balanceText,
@@ -114,9 +108,9 @@ function buildPandLBody(
   );
 
   const footerNote = `<p class="report-footer-note">
-    Total Expenses: ₹ ${formatMoneyNumber(statement.totalExpenses)} ·
-    Total Income: ₹ ${formatMoneyNumber(statement.totalIncome)}
-  </p>`;
+  Gross Profit: ₹ ${formatMoneyNumber(Math.abs(statement.grossProfit))} ·
+  Net Profit: ₹ ${formatMoneyNumber(statement.netProfit)}
+</p>`;
 
   return tableHtml + balanceMsg + footerNote;
 }
@@ -126,13 +120,13 @@ export async function exportPandLToExcel(
   meta: PandLExportMeta,
   statement: PandLStatement,
 ): Promise<void> {
-  const html = buildReportExcelDocumentHtml({
+  exportAccountsReportToExcel({
     title: REPORT_NAME,
+    filename: "Profit_and_Loss",
     header: buildHeaderOptions(meta),
     bodyHtml: buildPandLBody(rows, statement),
     landscape: true,
   });
-  downloadReportExcelHtml(html, `Profit_and_Loss_${todayExportDateSuffix()}.xls`);
 }
 
 export function exportPandLToPdf(
@@ -140,11 +134,11 @@ export function exportPandLToPdf(
   meta: PandLExportMeta,
   statement: PandLStatement,
 ): void {
-  const html = buildReportDocumentHtml({
+  exportAccountsReportToPdf({
     title: REPORT_NAME,
+    filename: "Profit_and_Loss",
     header: buildHeaderOptions(meta),
     bodyHtml: buildPandLBody(rows, statement),
     landscape: true,
   });
-  openReportPrintWindow(html);
 }

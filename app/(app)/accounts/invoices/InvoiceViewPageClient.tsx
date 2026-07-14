@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Calendar, Download } from "lucide-react";
@@ -8,6 +9,7 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
   calcGstLineSplit,
+  calcLineAmounts,
   getInvoiceById,
   getInvoiceRowActions,
   type InvoiceRecord,
@@ -25,6 +27,7 @@ import {
   resolveInvoiceDocumentType,
 } from "@/lib/accounts/invoice-type";
 import { formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
 import { cn } from "@/lib/utils";
 import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 
@@ -58,15 +61,16 @@ function invoiceStatusVariant(
 const ITEM_COLUMNS = [
   "Product Code",
   "Product Name",
-  "HSN",
-  "Batch No.",
-  "Qty",
+  "HSN Code",
+  "Batch Number",
+  "Quantity",
+  "Unit",
   "Rate",
+  "Discount",
   "Taxable Value",
-  "CGST",
-  "SGST",
-  "IGST",
-  "Total",
+  "GST %",
+  "GST Amount",
+  "Line Total",
 ] as const;
 
 export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number }) {
@@ -145,6 +149,38 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
               className="md:col-span-2"
             />
             <DetailRow label="Warehouse" value={record.warehouse} />
+            <DetailRow
+              label="Accounting Voucher"
+              value={
+                record.postedVoucherId ? (
+                  <Link
+                    href={`/accounts/vouchers/view/${record.postedVoucherId}`}
+                    className="font-mono text-brand-700 hover:underline"
+                  >
+                    {record.postedVoucherNo || `V-${record.postedVoucherId}`}
+                  </Link>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <DetailRow
+              label="General Ledger"
+              value={
+                record.customerLedgerId ? (
+                  <Link
+                    href={`${GENERAL_LEDGER_HREF}?ledgerId=${record.customerLedgerId}&ledgerType=Customer`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    Open customer ledger
+                  </Link>
+                ) : (
+                  <Link href={GENERAL_LEDGER_HREF} className="text-brand-700 hover:underline">
+                    Open General Ledger
+                  </Link>
+                )
+              }
+            />
             {bankDetails ? (
               <>
                 <DetailRow label="Bank Name" value={bankDetails.bankName} />
@@ -169,8 +205,12 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
                       key={h}
                       className={cn(
                         "px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-foreground whitespace-nowrap",
-                        h !== "Product Name" && h !== "Batch No." && "text-right",
-                        (h === "Product Code" || h === "Product Name" || h === "HSN" || h === "Batch No.") &&
+                        h !== "Product Name" && h !== "Batch Number" && "text-right",
+                        (h === "Product Code" ||
+                          h === "Product Name" ||
+                          h === "HSN Code" ||
+                          h === "Batch Number" ||
+                          h === "Unit") &&
                           "text-left",
                       )}
                     >
@@ -189,8 +229,10 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
                 ) : (
                   record.lineItems.map((line) => {
                     const split = calcGstLineSplit(line, interstate);
+                    const { discountAmt } = calcLineAmounts(line);
                     const productCode =
-                      line.productId != null ? productCodeById.get(line.productId) ?? "—" : "—";
+                      line.productCode?.trim() ||
+                      (line.productId != null ? productCodeById.get(line.productId) ?? "—" : "—");
                     return (
                       <tr key={line.id} className="border-b border-border/60 hover:bg-muted/20">
                         <td className="px-3 py-2 font-mono text-brand-700 whitespace-nowrap">{productCode}</td>
@@ -198,11 +240,18 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
                         <td className="px-3 py-2 whitespace-nowrap">{line.hsn || "—"}</td>
                         <td className="px-3 py-2 font-mono text-muted-foreground">—</td>
                         <td className="px-3 py-2 text-right tabular-nums">{line.qty}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{line.unit || "—"}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatINR(line.unitPrice)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {discountAmt > 0 ? formatINR(discountAmt) : "—"}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatINR(split.taxable)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.cgst)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.sgst)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.igst)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {formatMoneyOrDash(split.taxAmt)}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium">
                           {formatINR(split.lineTotal)}
                         </td>

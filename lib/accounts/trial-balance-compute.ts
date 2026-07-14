@@ -3,10 +3,12 @@
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import { getCoaLedgers, loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { getPostableCoaAccounts, loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { loadInvoices } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
+import { findPostingLedgerByName, resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
+import { resolveTrialBalanceLedgerCoaPlacement } from "@/lib/accounts/trial-balance-coa-hierarchy";
+import { warnInvalidTrialBalanceRecord } from "@/app/(app)/accounts/reports/trial-balance/trial-balance-validation";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
 import {
   fromSignedBalance,
@@ -18,20 +20,21 @@ import {
 } from "@/lib/accounts/running-balance";
 import {
   loadVouchers,
+  VOUCHER_TYPE_LABELS,
   type AccountingVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
-import {
-  resolveVoucherTransactionTags,
-  voucherMatchesBranchWarehouse,
-} from "@/lib/accounts/trial-balance-voucher-tags";
 import {
   matchesLedgerGroupIdFilter,
   matchesLedgerIdFilter,
   normalizeMultiFilter,
 } from "@/lib/accounts/report-multi-filter-utils";
-import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
 import { resolveSourceDocumentLink } from "@/lib/accounts/ledger-source-resolver";
-import { VOUCHER_TYPE_LABELS } from "@/app/(app)/accounts/vouchers/voucher-data";
+import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
+import {
+  resolveVoucherTransactionTags,
+  voucherMatchesBranchWarehouse,
+  voucherMatchesParty,
+} from "@/lib/accounts/trial-balance-voucher-tags";
 
 export interface TrialBalanceFilters {
   financialYearId: string;
@@ -41,6 +44,8 @@ export interface TrialBalanceFilters {
   warehouse: string | string[];
   ledgerGroupId: string | string[];
   ledgerId: string | string[];
+  voucherType?: string | string[];
+  partyId?: string | string[];
   showZeroBalance: boolean;
   search?: string;
 }
@@ -64,6 +69,10 @@ export interface ComputedTrialBalanceLedgerRow extends TrialBalanceAmountColumns
   accountGroup: string;
   accountGroupId: number;
   accountGroupSort: number;
+  subGroup: string;
+  subGroupId: number;
+  subGroupSort: number;
+  /** @deprecated Use subGroup — kept for export compatibility */
   standardGroup: string;
 }
 
@@ -96,20 +105,56 @@ function voucherPassesDimensionFilters(
   filters: TrialBalanceFilters,
 ): boolean {
   if (!voucherMatchesFinancialYear(voucher, filters.financialYearId)) return false;
-  return voucherMatchesBranchWarehouse(voucher, filters.branch, filters.warehouse);
+  if (!voucherMatchesBranchWarehouse(voucher, filters.branch, filters.warehouse)) {
+    return false;
+  }
+  if (!voucherMatchesVoucherType(voucher, filters.voucherType)) return false;
+  if (!voucherMatchesParty(voucher, filters.partyId ?? [])) return false;
+  return true;
+}
+
+function voucherMatchesVoucherType(
+  voucher: AccountingVoucher,
+  voucherType: string | string[] | undefined,
+): boolean {
+  const selected = normalizeMultiFilter(voucherType);
+  if (selected.length === 0) return true;
+  return selected.includes(voucher.voucherType);
+}
+
+function isVoucherBalanced(voucher: AccountingVoucher): boolean {
+  let totalDebit = 0;
+  let totalCredit = 0;
+  for (const line of voucher.lines) {
+    totalDebit += Number(line.debit) || 0;
+    totalCredit += Number(line.credit) || 0;
+  }
+  return roundMoney(totalDebit - totalCredit) === 0;
+}
+
+function resolveVoucherLineLedgerId(
+  line: AccountingVoucher["lines"][number],
+  records: ChartOfAccount[],
+): number | null {
+  if (line.ledgerId) return line.ledgerId;
+  if (!line.ledgerName?.trim()) return null;
+  return findPostingLedgerByName(line.ledgerName, records)?.id ?? null;
 }
 
 function aggregateVoucherLines(
   vouchers: AccountingVoucher[],
+  records: ChartOfAccount[],
 ): Map<number, { debit: number; credit: number }> {
   const map = new Map<number, { debit: number; credit: number }>();
   for (const voucher of vouchers) {
+    if (!isVoucherBalanced(voucher)) continue;
     for (const line of voucher.lines) {
-      if (!line.ledgerId) continue;
-      const cur = map.get(line.ledgerId) ?? { debit: 0, credit: 0 };
+      const ledgerId = resolveVoucherLineLedgerId(line, records);
+      if (!ledgerId) continue;
+      const cur = map.get(ledgerId) ?? { debit: 0, credit: 0 };
       cur.debit += Number(line.debit) || 0;
       cur.credit += Number(line.credit) || 0;
-      map.set(line.ledgerId, cur);
+      map.set(ledgerId, cur);
     }
   }
   return map;
@@ -121,6 +166,7 @@ function collectFilteredVouchers(
 ): AccountingVoucher[] {
   return loadVouchers().filter((v) => {
     if (!isLedgerMovementVoucherStatus(v.status)) return false;
+    if (!isVoucherBalanced(v)) return false;
     if (!voucherPassesDimensionFilters(v, filters)) return false;
     if (options?.beforeDate && v.date >= options.beforeDate) return false;
     if (options?.fromDate && v.date < options.fromDate) return false;
@@ -136,11 +182,12 @@ function ledgerPassesStructuralFilters(
 ): boolean {
   if (!matchesLedgerIdFilter(filters.ledgerId, ledgerId)) return false;
   if (normalizeMultiFilter(filters.ledgerGroupId).length > 0) {
-    const hierarchy = resolveHierarchyPath(records, ledgerId);
+    const placement = resolveTrialBalanceLedgerCoaPlacement(ledgerId, records);
+    if (!placement) return false;
     if (
       !matchesLedgerGroupIdFilter(filters.ledgerGroupId, [
-        hierarchy.accountGroup?.id,
-        hierarchy.standardGroup?.id,
+        placement.accountGroup.id,
+        placement.subGroup.id,
       ])
     ) {
       return false;
@@ -160,26 +207,35 @@ function isZeroBalanceRow(row: TrialBalanceAmountColumns): boolean {
   );
 }
 
-function buildPriorMovementRows(
-  ledger: ChartOfAccount,
+function buildPriorMovementsByLedger(
   priorVouchers: AccountingVoucher[],
-): { date: string; voucherNo: string; debit: number; credit: number }[] {
-  const rows: { date: string; voucherNo: string; debit: number; credit: number }[] = [];
+  records: ChartOfAccount[],
+): Map<number, { date: string; voucherNo: string; debit: number; credit: number }[]> {
+  const map = new Map<
+    number,
+    { date: string; voucherNo: string; debit: number; credit: number }[]
+  >();
   for (const voucher of priorVouchers) {
     for (const line of voucher.lines) {
-      if (line.ledgerId !== ledger.id) continue;
+      const ledgerId = resolveVoucherLineLedgerId(line, records);
+      if (!ledgerId) continue;
       const debit = Number(line.debit) || 0;
       const credit = Number(line.credit) || 0;
       if (debit === 0 && credit === 0) continue;
+      const rows = map.get(ledgerId) ?? [];
       rows.push({
         date: voucher.date,
         voucherNo: voucher.voucherNumber,
         debit,
         credit,
       });
+      map.set(ledgerId, rows);
     }
   }
-  return sortChronological(rows);
+  for (const [ledgerId, rows] of map) {
+    map.set(ledgerId, sortChronological(rows));
+  }
+  return map;
 }
 
 export function computeTrialBalanceLedgerRows(
@@ -198,18 +254,33 @@ export function computeTrialBalanceLedgerRows(
     beforeDate: filters.dateFrom,
   });
 
-  const periodMap = aggregateVoucherLines(periodVouchers);
+  const periodMap = aggregateVoucherLines(periodVouchers, records);
+  const priorMovementsByLedger = buildPriorMovementsByLedger(priorVouchers, records);
   const rows: ComputedTrialBalanceLedgerRow[] = [];
 
-  for (const ledger of getCoaLedgers()) {
+  for (const ledger of getPostableCoaAccounts(records)) {
+    if (!ledger.accountName?.trim()) continue;
     if (!ledgerPassesStructuralFilters(ledger.id, filters, records)) continue;
 
-    const hierarchy = resolveHierarchyPath(records, ledger.id);
-    const primaryHead = hierarchy.primaryHead;
-    const accountGroup = hierarchy.accountGroup ?? hierarchy.standardGroup;
-    if (!primaryHead || !accountGroup) continue;
+    const placement = resolveTrialBalanceLedgerCoaPlacement(ledger.id, records);
+    if (!placement) {
+      warnInvalidTrialBalanceRecord("missing-coa-placement", {
+        ledgerId: ledger.id,
+        ledgerName: ledger.accountName,
+      });
+      continue;
+    }
 
-    const priorRows = buildPriorMovementRows(ledger, priorVouchers);
+    const { primaryHead, accountGroup, subGroup } = placement;
+    if (
+      !primaryHead.accountName?.trim() ||
+      !accountGroup.accountName?.trim() ||
+      !subGroup.accountName?.trim()
+    ) {
+      continue;
+    }
+
+    const priorRows = priorMovementsByLedger.get(ledger.id) ?? [];
     const periodOpeningSigned =
       signedBalanceAfterMovements(openingSignedBalance(ledger), priorRows);
     const periodOpening = fromSignedBalance(periodOpeningSigned);
@@ -236,7 +307,10 @@ export function computeTrialBalanceLedgerRows(
       accountGroup: accountGroup.accountName,
       accountGroupId: accountGroup.id,
       accountGroupSort: accountGroup.id,
-      standardGroup: hierarchy.standardGroup?.accountName ?? accountGroup.accountName,
+      subGroup: subGroup.accountName,
+      subGroupId: subGroup.id,
+      subGroupSort: subGroup.id,
+      standardGroup: subGroup.accountName,
       openingDebit: openingSplit.debit,
       openingCredit: openingSplit.credit,
       debit: periodDebit,
@@ -249,7 +323,8 @@ export function computeTrialBalanceLedgerRows(
 
     const q = (filters.search ?? "").trim().toLowerCase();
     if (q) {
-      const haystack = `${row.ledgerName} ${row.ledgerCode} ${row.accountGroup} ${row.primaryHead}`.toLowerCase();
+      const haystack =
+        `${row.ledgerName} ${row.ledgerCode} ${row.accountGroup} ${row.subGroup} ${row.primaryHead}`.toLowerCase();
       if (!haystack.includes(q)) continue;
     }
 
@@ -260,6 +335,7 @@ export function computeTrialBalanceLedgerRows(
     (a, b) =>
       a.primaryHeadSort - b.primaryHeadSort ||
       a.accountGroupSort - b.accountGroupSort ||
+      a.subGroupSort - b.subGroupSort ||
       a.ledgerName.localeCompare(b.ledgerName),
   );
 }
@@ -360,11 +436,12 @@ export function getTrialBalanceLedgerOptions(
   ledgerGroupId: string,
 ): { id: number; name: string }[] {
   const records = loadChartOfAccounts();
-  const ledgers = getCoaLedgers();
+  const ledgers = getPostableCoaAccounts(records);
   const groupId = ledgerGroupId !== "all" && ledgerGroupId ? Number(ledgerGroupId) : null;
 
   return ledgers
     .filter((ledger) => {
+      if (!ledger.accountName?.trim()) return false;
       if (!groupId) return true;
       const hierarchy = resolveHierarchyPath(records, ledger.id);
       return (
@@ -377,6 +454,58 @@ export function getTrialBalanceLedgerOptions(
 }
 
 /** Dynamic branch / warehouse options from tagged source documents + vouchers. */
+export interface TrialBalanceLedgerVoucherLine {
+  voucherId: number;
+  date: string;
+  voucherNo: string;
+  voucherType: string;
+  voucherTypeLabel: string;
+  narration: string;
+  debit: number;
+  credit: number;
+  viewHref: string;
+}
+
+export function computeTrialBalanceLedgerVoucherLines(
+  filters: TrialBalanceFilters,
+  ledgerId: number,
+): TrialBalanceLedgerVoucherLine[] {
+  const records = loadChartOfAccounts();
+  const periodVouchers = collectFilteredVouchers(filters, {
+    fromDate: filters.dateFrom,
+    toDate: filters.dateTo,
+  });
+  const lines: TrialBalanceLedgerVoucherLine[] = [];
+  const sortedVouchers = [...periodVouchers].sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.voucherNumber.localeCompare(b.voucherNumber),
+  );
+
+  for (const voucher of sortedVouchers) {
+    for (const line of voucher.lines) {
+      const lineLedgerId = resolveVoucherLineLedgerId(line, records);
+      if (lineLedgerId !== ledgerId) continue;
+      const debit = roundMoney(Number(line.debit) || 0);
+      const credit = roundMoney(Number(line.credit) || 0);
+      if (debit === 0 && credit === 0) continue;
+      lines.push({
+        voucherId: voucher.id,
+        date: voucher.date,
+        voucherNo: statementVoucherNo(voucher),
+        voucherType: voucher.voucherType,
+        voucherTypeLabel: VOUCHER_TYPE_LABELS[voucher.voucherType] ?? voucher.voucherType,
+        narration: line.remarks?.trim() || voucher.narration?.trim() || "—",
+        debit,
+        credit,
+        viewHref: resolveSourceDocumentLink(voucher).href,
+      });
+    }
+  }
+
+  return lines;
+}
+
 export function getTrialBalanceBranchOptions(): string[] {
   const branches = new Set<string>();
   for (const voucher of loadVouchers()) {

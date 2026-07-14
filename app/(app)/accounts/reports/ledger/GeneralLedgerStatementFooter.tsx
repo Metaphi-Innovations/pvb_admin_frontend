@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export function GeneralLedgerStatementFooter({ summary }: { summary: GeneralLedgerSummary }) {
+  const balanced = summary.grandTotalDebit === summary.grandTotalCredit;
   const items = [
     {
       label: "Opening Balance",
@@ -21,10 +22,8 @@ export function GeneralLedgerStatementFooter({ summary }: { summary: GeneralLedg
       label: "Closing Balance",
       value: formatBalanceAmount(summary.closingBalance, summary.closingBalanceType),
     },
-    {
-      label: "Current Balance",
-      value: formatBalanceAmount(summary.currentBalance, summary.currentBalanceType),
-    },
+    { label: "Grand Total Debit", value: formatMoney(summary.grandTotalDebit), warn: !balanced },
+    { label: "Grand Total Credit", value: formatMoney(summary.grandTotalCredit), warn: !balanced },
   ];
 
   return (
@@ -40,7 +39,7 @@ export function GeneralLedgerStatementFooter({ summary }: { summary: GeneralLedg
           className="flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-border/50 bg-white min-h-[44px] min-w-0"
         >
           <p className={ACCOUNTS_SUMMARY_LABEL_CLASS}>{item.label}</p>
-          <p className={ACCOUNTS_SUMMARY_VALUE_CLASS}>{item.value}</p>
+          <p className={cn(ACCOUNTS_SUMMARY_VALUE_CLASS, item.warn && "text-red-600")}>{item.value}</p>
         </div>
       ))}
     </div>

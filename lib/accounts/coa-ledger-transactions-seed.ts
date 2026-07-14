@@ -42,7 +42,7 @@ import { ACCOUNTS_VOUCHERS_UPDATED_EVENT } from "@/lib/accounts/accounts-section
 
 
 
-export const COA_LEDGER_TXN_SEED_VERSION = "exact-2-ring-v3";
+export const COA_LEDGER_TXN_SEED_VERSION = "exact-2-ring-v4";
 
 const VERSION_KEY = "ds_coa_ledger_txn_seed_version";
 
@@ -50,7 +50,9 @@ export const COA_DEMO_VOUCHER_PREFIX = "COA-DMO-";
 
 
 
-const DEMO_DATES = [demoDateAt(8), demoDateAt(16)];
+// Recent postings (within the current month / quarter) so the default and
+// common date-range filters always show real period Debit/Credit movement.
+const DEMO_DATES = [demoDateAt(2), demoDateAt(5)];
 
 
 

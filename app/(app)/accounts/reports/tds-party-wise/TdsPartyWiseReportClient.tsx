@@ -1,10 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
-} from "@/components/accounts/ReportFilters";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,128 +27,101 @@ import {
 } from "@/components/accounts/AccountsTable";
 import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import {
-  ReportFilterRow,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ReportBranchMultiFilter,
   ReportDateRangeFilter,
+  ReportFilterRow,
+  ReportFilterSummary,
+  ReportFinancialYearFilter,
+  ReportMoreFilters,
+  ReportProductMultiFilter,
   ReportSearchFilter,
   ReportTdsSectionMultiFilter,
-  ReportProductMultiFilter,
-  ReportFilterSummary,
+  ReportVoucherTypeMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
-  buildEntityFilterSummary,
-  formatMultiSelectLabel,
-  type ReportFilterSummaryItem,
-} from "@/lib/accounts/report-multi-filter-utils";
-import {
+  AccountsClearAllColumnFiltersButton,
   AccountsColumnFilterProvider,
-  AccountsColumnHeader,
   SortTh,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import {
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../pl/pl-hooks";
 import {
-  buildTdsSummaryStatement,
-  flattenTdsSummaryForExport,
-  formatTdsRate,
+  buildTdsSummaryReport,
+  computeTdsSummaryTotals,
+  getDefaultTdsFinancialYearId,
+  getTdsBranchOptions,
+  getTdsMonthOptions,
   getTdsPartyOptions,
+  TDS_DEDUCTEE_TYPE_OPTIONS,
   TDS_SECTION_OPTIONS,
-  type TdsSummaryLine,
-  type TdsSummaryRow,
+  TDS_VOUCHER_TYPE_OPTIONS,
+  type TdsSummaryTxnRow,
 } from "./tds-summary-data";
 import { exportTdsSummaryToExcel, exportTdsSummaryToPdf } from "./tds-summary-export";
-import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 
-const PARTY_TYPE_OPTIONS = [
-  { value: "all", label: "All" },
-  { value: "Supplier", label: "Supplier" },
-  { value: "Contractor", label: "Contractor" },
-  { value: "Professional", label: "Professional" },
-  { value: "Employee", label: "Employee" },
-  { value: "Other", label: "Other" },
-] as const;
-
-const PARTY_TYPE_COLUMN_OPTIONS = PARTY_TYPE_OPTIONS.filter((o) => o.value !== "all").map(
-  (o) => o.value,
-);
-
-function filterTdsDisplayLines(lines: TdsSummaryLine[], visibleDataIds: Set<string>): TdsSummaryLine[] {
-  const visibleSectionIds = new Set<string>();
-  let currentSectionId: string | null = null;
-  for (const line of lines) {
-    if (line.kind === "section") {
-      currentSectionId = line.id;
-      continue;
-    }
-    if (line.kind === "data" && line.row && visibleDataIds.has(line.row.id) && currentSectionId) {
-      visibleSectionIds.add(currentSectionId);
-    }
-  }
-  return lines.filter((line) => {
-    if (line.kind === "total") return false;
-    if (line.kind === "section") return visibleSectionIds.has(line.id);
-    if (line.kind === "data") return Boolean(line.row && visibleDataIds.has(line.row.id));
-    return false;
-  });
-}
-
-function TdsDataRow({ row }: { row: TdsSummaryRow }) {
+function TdsTxnRow({ row }: { row: TdsSummaryTxnRow }) {
   return (
-    <AccountsTableRow>
-      <AccountsTableCell className="text-xs font-semibold text-foreground max-w-[180px] truncate" title={row.partyName}>
-        {row.partyName}
+    <AccountsTableRow className="hover:bg-muted/20">
+      <AccountsTableCell className="text-xs whitespace-nowrap tabular-nums">
+        {row.month}
       </AccountsTableCell>
-      <AccountsTableCell className="text-xs whitespace-nowrap">{row.partyType}</AccountsTableCell>
+      <AccountsTableCell className="text-xs font-semibold max-w-[180px] truncate" title={row.partyName}>
+        <Link
+          href={row.partyLedgerHref}
+          className="text-brand-700 hover:underline"
+        >
+          {row.partyName}
+        </Link>
+      </AccountsTableCell>
       <AccountsTableCell mono className="text-xs uppercase whitespace-nowrap">
         {row.pan}
       </AccountsTableCell>
-      <AccountsTableCell className="whitespace-nowrap">
-        <span className="font-mono text-xs font-semibold text-brand-700">{row.tdsSection}</span>
+      <AccountsTableCell className="text-xs whitespace-nowrap tabular-nums">
+        {row.invoiceDateDisplay}
+      </AccountsTableCell>
+      <AccountsTableCell mono className="text-xs whitespace-nowrap">
+        <Link
+          href={row.invoiceHref}
+          className="font-semibold text-brand-700 hover:underline"
+        >
+          {row.invoiceNo}
+        </Link>
       </AccountsTableCell>
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-        {formatMoney(row.grossAmount)}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" className="text-xs whitespace-nowrap">
-        {formatTdsRate(row.tdsRate)}
+        {formatMoney(row.amount)}
       </AccountsTableCell>
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
         {formatMoney(row.tdsAmount)}
       </AccountsTableCell>
-      <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-        {formatMoney(row.netPayable)}
+      <AccountsTableCell align="right" className="text-xs whitespace-nowrap tabular-nums">
+        {row.tdsRate}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap">
+        <span className="font-mono text-xs font-semibold text-brand-700">{row.tdsSection}</span>
       </AccountsTableCell>
     </AccountsTableRow>
   );
 }
 
-function TdsSummaryTableRow({ line }: { line: TdsSummaryLine }) {
-  if (line.kind === "section") {
-    return (
-      <AccountsTableRow className="bg-muted/20">
-        <AccountsTableCell
-          colSpan={8}
-          className="text-xs font-bold text-navy-700 py-2 uppercase tracking-wide"
-        >
-          {line.label}
-        </AccountsTableCell>
-      </AccountsTableRow>
-    );
-  }
-
-  if (line.kind === "data" && line.row) {
-    return <TdsDataRow row={line.row} />;
-  }
-
-  return null;
-}
-
-function TdsPartyWiseBody({
+function TdsSummaryBody({
   mounted,
-  statement,
+  toolbarRows,
   hasFilters,
   resetFilters,
   exportMeta,
@@ -160,79 +130,55 @@ function TdsPartyWiseBody({
   filterBar,
 }: {
   mounted: boolean;
-  statement: ReturnType<typeof buildTdsSummaryStatement>;
+  toolbarRows: TdsSummaryTxnRow[];
   hasFilters: boolean;
   resetFilters: () => void;
   exportMeta: Parameters<typeof exportTdsSummaryToExcel>[1];
   exporting: boolean;
   setExporting: (v: boolean) => void;
-  filterBar: React.ReactNode;
+  filterBar: (end?: ReactNode) => ReactNode;
 }) {
-  const dataRows = useMemo(
-    () =>
-      statement.lines
-        .filter((l): l is TdsSummaryLine & { row: TdsSummaryRow } => l.kind === "data" && Boolean(l.row))
-        .map((l) => l.row),
-    [statement.lines],
-  );
-  const columnFilteredDataRows = useAccountsFilteredRows(dataRows);
-  const visibleDataIds = useMemo(
-    () => new Set(columnFilteredDataRows.map((r) => r.id)),
-    [columnFilteredDataRows],
-  );
-  const displayLines = useMemo(
-    () => filterTdsDisplayLines(statement.lines, visibleDataIds),
-    [statement.lines, visibleDataIds],
-  );
-  const totals = useMemo(
-    () => ({
-      totalGross: columnFilteredDataRows.reduce((s, r) => s + r.grossAmount, 0),
-      totalTds: columnFilteredDataRows.reduce((s, r) => s + r.tdsAmount, 0),
-      totalNet: columnFilteredDataRows.reduce((s, r) => s + r.netPayable, 0),
-    }),
-    [columnFilteredDataRows],
-  );
+  const visible = useAccountsFilteredRows(toolbarRows);
+  const totals = useMemo(() => computeTdsSummaryTotals(visible), [visible]);
 
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const exportLines = [...displayLines, { id: "total-row", kind: "total" as const }];
-      const rows = flattenTdsSummaryForExport(exportLines);
-      await exportTdsSummaryToExcel(rows, exportMeta, totals);
+      await exportTdsSummaryToExcel(visible, exportMeta, totals);
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    const exportLines = [...displayLines, { id: "total-row", kind: "total" as const }];
-    const rows = flattenTdsSummaryForExport(exportLines);
-    exportTdsSummaryToPdf(rows, exportMeta, totals);
+    exportTdsSummaryToPdf(visible, exportMeta, totals);
   };
 
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "TDS Summary")}
       title="TDS Summary"
-      description="Party-wise and section-wise TDS deductions for the selected period."
+      description="Transaction-wise TDS deductions for the selected period."
       hideDescription
       layout="split"
       className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || columnFilteredDataRows.length === 0}
-        />
-      }
-      filters={filterBar}
+      filters={filterBar(
+        <>
+          <AccountsClearAllColumnFiltersButton />
+          <AccountsExportMenu
+            onExcel={handleExportExcel}
+            onPdf={handleExportPdf}
+            disabled={exporting || visible.length === 0}
+          />
+        </>,
+      )}
     >
       <AccountsTableListing>
         {!mounted ? (
           <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
             Loading TDS Summary…
           </div>
-        ) : !statement.hasData ? (
+        ) : toolbarRows.length === 0 ? (
           <div className="accounts-table-empty py-4 text-center">
             No TDS entries match the current filters.
             {hasFilters && (
@@ -245,50 +191,43 @@ function TdsPartyWiseBody({
               </button>
             )}
           </div>
-        ) : dataRows.length > 0 && columnFilteredDataRows.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div className="accounts-table-empty py-4 text-center text-sm text-muted-foreground">
             No records match the column filters.
           </div>
         ) : (
           <AccountsTableScroll>
-            <AccountsTable minWidth={1000}>
+            <AccountsTable minWidth={1120}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
+                  <SortTh label="Month" colKey="monthKey" />
                   <SortTh label="Party Name" colKey="partyName" />
-                  <AccountsColumnHeader
-                    label="Party Type"
-                    colKey="partyType"
-                    filterType="status"
-                    sortable={false}
-                    statusOptions={PARTY_TYPE_COLUMN_OPTIONS}
-                  />
                   <SortTh label="PAN" colKey="pan" />
-                  <SortTh label="TDS Section" colKey="tdsSection" />
-                  <SortTh label="Gross Amount" colKey="grossAmount" filterType="amount" align="right" />
-                  <SortTh label="TDS Rate" colKey="tdsRate" filterType="amount" align="right" />
+                  <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
+                  <SortTh label="Invoice No." colKey="invoiceNo" />
+                  <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
                   <SortTh label="TDS Amount" colKey="tdsAmount" filterType="amount" align="right" />
-                  <SortTh label="Net Payable" colKey="netPayable" filterType="amount" align="right" />
+                  <SortTh label="TDS Rate" colKey="tdsRateValue" filterType="amount" align="right" />
+                  <SortTh label="TDS Section" colKey="tdsSection" />
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
-                {displayLines.map((line) => (
-                  <TdsSummaryTableRow key={line.id} line={line} />
+                {visible.map((row) => (
+                  <TdsTxnRow key={row.id} row={row} />
                 ))}
               </AccountsTableBody>
               <AccountsTableFoot>
                 <AccountsTableRow className="bg-muted/30 border-t-2 border-border">
-                  <AccountsTableCell colSpan={4} className="font-bold text-xs text-foreground">
-                    Totals ({columnFilteredDataRows.length}{" "}
-                    {columnFilteredDataRows.length === 1 ? "entry" : "entries"})
+                  <AccountsTableCell colSpan={5} className="font-bold text-xs text-foreground">
+                    Totals ({totals.count} {totals.count === 1 ? "entry" : "entries"})
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
                     className={cn("font-bold", MONEY_AMOUNT_CLASS)}
                   >
-                    {formatMoney(totals.totalGross)}
+                    {formatMoney(totals.totalAmount)}
                   </AccountsTableCell>
-                  <AccountsTableCell />
                   <AccountsTableCell
                     align="right"
                     money
@@ -296,13 +235,8 @@ function TdsPartyWiseBody({
                   >
                     {formatMoney(totals.totalTds)}
                   </AccountsTableCell>
-                  <AccountsTableCell
-                    align="right"
-                    money
-                    className={cn("font-bold", MONEY_AMOUNT_CLASS)}
-                  >
-                    {formatMoney(totals.totalNet)}
-                  </AccountsTableCell>
+                  <AccountsTableCell />
+                  <AccountsTableCell />
                 </AccountsTableRow>
               </AccountsTableFoot>
             </AccountsTable>
@@ -317,115 +251,272 @@ export default function TdsPartyWiseReportClient() {
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
 
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [partyType, setPartyType] = useState("all");
+  const [fyId, setFyId] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
+    useReportDateRange("this_year");
+  const [month, setMonth] = useState("all");
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [tdsSections, setTdsSections] = useState<string[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
+  const [deducteeTypes, setDeducteeTypes] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const partyOptions = useMemo(() => getTdsPartyOptions(), []);
-  const tdsSectionOptions = useMemo(
-    () => TDS_SECTION_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
-    [],
-  );
+  useEffect(() => {
+    if (!mounted) return;
+    setFyId(getDefaultTdsFinancialYearId());
+  }, [mounted]);
 
   useEffect(() => {
     const fromUrl = searchParams.get("section");
     if (fromUrl) setTdsSections([fromUrl.toUpperCase()]);
   }, [searchParams]);
 
-  const partyTypeLabel =
-    PARTY_TYPE_OPTIONS.find((o) => o.value === partyType)?.label ?? "All";
-  const tdsSectionLabel = formatMultiSelectLabel(
-    tdsSections,
-    tdsSectionOptions,
-    "Section",
-    "All Sections",
+  const allSourceRows = useMemo(
+    () => (mounted ? buildTdsSummaryReport({
+      financialYearId: "all",
+      dateFrom: "",
+      dateTo: "",
+      month: "all",
+      tdsSection: [],
+      partyIds: [],
+      search: "",
+      branch: [],
+      voucherType: [],
+      deducteeType: [],
+    }).rows : []),
+    [mounted],
   );
 
-  const statement = useMemo(
-    () =>
-      buildTdsSummaryStatement({
-        partyType,
-        tdsSection: tdsSections,
-        partyIds,
-        search: debouncedSearch,
-      }),
-    [partyType, tdsSections, partyIds, debouncedSearch],
+  const partyOptions = useMemo(() => getTdsPartyOptions(allSourceRows), [allSourceRows]);
+  const branchOptions = useMemo(() => getTdsBranchOptions(allSourceRows), [allSourceRows]);
+  const tdsSectionOptions = useMemo(
+    () => TDS_SECTION_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
+    [],
   );
-
-  const dataRows = useMemo(
-    () =>
-      statement.lines
-        .filter((l): l is TdsSummaryLine & { row: TdsSummaryRow } => l.kind === "data" && Boolean(l.row))
-        .map((l) => l.row),
-    [statement.lines],
+  const voucherTypeOptions = useMemo(
+    () => TDS_VOUCHER_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    [],
   );
-
-  const getCellValue = useCallback(
-    (row: TdsSummaryRow, key: string) => {
-      if (key === "tdsRate") return row.tdsRate;
-      return (row as unknown as Record<string, unknown>)[key];
-    },
+  const deducteeOptions = useMemo(
+    () => TDS_DEDUCTEE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
     [],
   );
 
+  const report = useMemo(
+    () =>
+      buildTdsSummaryReport({
+        financialYearId: fyId,
+        dateFrom,
+        dateTo,
+        month,
+        tdsSection: tdsSections,
+        partyIds,
+        search: debouncedSearch,
+        branch: branches,
+        voucherType: voucherTypes,
+        deducteeType: deducteeTypes,
+      }),
+    [
+      fyId,
+      dateFrom,
+      dateTo,
+      month,
+      tdsSections,
+      partyIds,
+      debouncedSearch,
+      branches,
+      voucherTypes,
+      deducteeTypes,
+    ],
+  );
+
+  const monthOptions = useMemo(() => {
+    const forMonths = buildTdsSummaryReport({
+      financialYearId: fyId,
+      dateFrom,
+      dateTo,
+      month: "all",
+      tdsSection: [],
+      partyIds: [],
+      search: "",
+      branch: [],
+      voucherType: [],
+      deducteeType: [],
+    }).rows;
+    return getTdsMonthOptions(forMonths.length > 0 ? forMonths : allSourceRows);
+  }, [fyId, dateFrom, dateTo, allSourceRows]);
+
+  const getCellValue = useCallback((row: TdsSummaryTxnRow, key: string) => {
+    if (key === "monthKey") return row.monthKey;
+    if (key === "invoiceDate") return row.invoiceDate;
+    if (key === "tdsRateValue") return row.tdsRateValue;
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
+
   const columnConfig = useMemo(
     () => ({
+      monthKey: { type: "text" as const },
       partyName: { type: "text" as const },
-      partyType: { type: "text" as const },
       pan: { type: "text" as const },
-      tdsSection: { type: "text" as const },
-      grossAmount: { type: "amount" as const },
-      tdsRate: { type: "amount" as const },
+      invoiceDate: { type: "date" as const },
+      invoiceNo: { type: "text" as const },
+      amount: { type: "amount" as const },
       tdsAmount: { type: "amount" as const },
-      netPayable: { type: "amount" as const },
+      tdsRateValue: { type: "amount" as const },
+      tdsSection: { type: "text" as const },
     }),
     [],
   );
 
+  const moreFiltersActiveCount =
+    countActiveMoreFilters({
+      branch: branches,
+      voucherType: voucherTypes,
+    }) + (deducteeTypes.length > 0 ? 1 : 0);
+
   const hasFilters =
     Boolean(search.trim()) ||
-    partyType !== "all" ||
+    month !== "all" ||
     partyIds.length > 0 ||
-    tdsSections.length > 0;
+    tdsSections.length > 0 ||
+    branches.length > 0 ||
+    voucherTypes.length > 0 ||
+    deducteeTypes.length > 0 ||
+    fyId !== getDefaultTdsFinancialYearId();
 
   const resetFilters = useCallback(() => {
     setSearch("");
-    setPartyType("all");
+    setMonth("all");
     setPartyIds([]);
     setTdsSections([]);
+    setBranches([]);
+    setVoucherTypes([]);
+    setDeducteeTypes([]);
+    setFyId(getDefaultTdsFinancialYearId());
     setPreset("this_year");
     const { from, to } = resolveDateRangePreset("this_year");
     setDateFrom(from);
     setDateTo(to);
   }, [setPreset, setDateFrom, setDateTo]);
 
+  const financialYearLabel = useMemo(() => {
+    if (fyId === "all") return "All years";
+    return loadFinancialYears().find((f) => String(f.id) === fyId)?.name ?? "—";
+  }, [fyId]);
+
+  const monthLabel =
+    month === "all"
+      ? "All Months"
+      : monthOptions.find((o) => o.value === month)?.label ?? month;
+
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
     [
+      month !== "all"
+        ? {
+            id: "month",
+            label: "Month",
+            value: monthLabel,
+            onRemove: () => setMonth("all"),
+          }
+        : null,
       buildEntityFilterSummary("party", "Parties", partyIds, partyOptions, () => setPartyIds([])),
-      buildEntityFilterSummary("tdsSection", "TDS Sections", tdsSections, tdsSectionOptions, () => setTdsSections([])),
+      buildEntityFilterSummary(
+        "tdsSection",
+        "TDS Sections",
+        tdsSections,
+        tdsSectionOptions,
+        () => setTdsSections([]),
+      ),
+      buildBranchFilterSummary(branches, () => setBranches([])),
+      buildEntityFilterSummary(
+        "voucherType",
+        "Voucher Types",
+        voucherTypes,
+        voucherTypeOptions,
+        () => setVoucherTypes([]),
+      ),
+      buildEntityFilterSummary(
+        "deducteeType",
+        "Deductee Types",
+        deducteeTypes,
+        deducteeOptions,
+        () => setDeducteeTypes([]),
+      ),
     ].filter((item): item is ReportFilterSummaryItem => item != null),
-  [partyIds, tdsSections, partyOptions, tdsSectionOptions]);
+  [
+    month,
+    monthLabel,
+    partyIds,
+    partyOptions,
+    tdsSections,
+    tdsSectionOptions,
+    branches,
+    voucherTypes,
+    voucherTypeOptions,
+    deducteeTypes,
+    deducteeOptions,
+  ]);
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: "",
-      partyType: partyTypeLabel,
-      tdsSection: tdsSectionLabel,
+      financialYear: financialYearLabel,
+      month: monthLabel,
+      tdsSection: formatMultiSelectLabel(
+        tdsSections,
+        tdsSectionOptions,
+        "Section",
+        "All Sections",
+      ),
+      party: formatMultiSelectLabel(partyIds, partyOptions, "Party", "All Parties"),
       search: debouncedSearch,
+      branch: formatMultiSelectLabel(
+        branches,
+        branchOptions.map((b) => ({ value: b, label: b })),
+        "Branch",
+        "All",
+      ),
+      voucherType: formatMultiSelectLabel(
+        voucherTypes,
+        voucherTypeOptions,
+        "Type",
+        "All",
+      ),
+      deducteeType: formatMultiSelectLabel(
+        deducteeTypes,
+        deducteeOptions,
+        "Type",
+        "All",
+      ),
     }),
-    [dateFrom, dateTo, partyTypeLabel, tdsSectionLabel, debouncedSearch],
+    [
+      dateFrom,
+      dateTo,
+      financialYearLabel,
+      monthLabel,
+      tdsSections,
+      tdsSectionOptions,
+      partyIds,
+      partyOptions,
+      debouncedSearch,
+      branches,
+      branchOptions,
+      voucherTypes,
+      voucherTypeOptions,
+      deducteeTypes,
+      deducteeOptions,
+    ],
   );
 
-  const filterBar = (
+  const filterBar = (end?: ReactNode) => (
     <>
-      <ReportFilterRow className="items-end gap-2">
+      <ReportFilterRow className="items-end gap-2" end={end}>
+        <ReportFinancialYearFilter value={fyId} onChange={setFyId} />
         <ReportDateRangeFilter
           preset={preset}
           dateFrom={dateFrom}
@@ -434,14 +525,17 @@ export default function TdsPartyWiseReportClient() {
           onDateFromChange={setDateFrom}
           onDateToChange={setDateTo}
         />
-        <div className="space-y-1 min-w-[130px]">
-          <Label className={filterLabelClass}>Party Type</Label>
-          <Select value={partyType} onValueChange={setPartyType}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
-              <SelectValue />
+        <div className="space-y-1 min-w-[120px]">
+          <Label className={filterLabelClass}>Month</Label>
+          <Select value={month} onValueChange={setMonth}>
+            <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
+              <SelectValue placeholder="All months" />
             </SelectTrigger>
             <SelectContent>
-              {PARTY_TYPE_OPTIONS.map((o) => (
+              <SelectItem value="all" className="text-xs">
+                All months
+              </SelectItem>
+              {monthOptions.map((o) => (
                 <SelectItem key={o.value} value={o.value} className="text-xs">
                   {o.label}
                 </SelectItem>
@@ -449,19 +543,37 @@ export default function TdsPartyWiseReportClient() {
             </SelectContent>
           </Select>
         </div>
+        <ReportTdsSectionMultiFilter values={tdsSections} onChange={setTdsSections} />
         <ReportProductMultiFilter
           values={partyIds}
           onChange={setPartyIds}
           products={partyOptions}
           label="Party"
         />
-        <ReportTdsSectionMultiFilter values={tdsSections} onChange={setTdsSections} />
         <ReportSearchFilter
           value={search}
           onChange={setSearch}
-          placeholder="Party, PAN, section…"
-          className="min-w-[180px]"
+          placeholder="Party, PAN, invoice no.…"
+          className="min-w-[170px]"
         />
+        <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+          <ReportBranchMultiFilter
+            values={branches}
+            onChange={setBranches}
+            options={branchOptions}
+          />
+          <ReportVoucherTypeMultiFilter
+            values={voucherTypes}
+            onChange={setVoucherTypes}
+            options={voucherTypeOptions}
+          />
+          <ReportProductMultiFilter
+            values={deducteeTypes}
+            onChange={setDeducteeTypes}
+            products={deducteeOptions}
+            label="TDS Deductee Type"
+          />
+        </ReportMoreFilters>
         {hasFilters && (
           <Button
             variant="outline"
@@ -479,15 +591,15 @@ export default function TdsPartyWiseReportClient() {
 
   return (
     <AccountsColumnFilterProvider
-      rows={dataRows}
+      rows={report.rows}
       getCellValue={getCellValue}
       columnConfig={columnConfig}
-      defaultSortKey="partyName"
+      defaultSortKey="defaultSortKey"
       defaultSortDir="asc"
     >
-      <TdsPartyWiseBody
+      <TdsSummaryBody
         mounted={mounted}
-        statement={statement}
+        toolbarRows={report.rows}
         hasFilters={hasFilters}
         resetFilters={resetFilters}
         exportMeta={exportMeta}

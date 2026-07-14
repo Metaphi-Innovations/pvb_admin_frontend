@@ -1,8 +1,8 @@
 "use client";
 
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock, AlertTriangle } from "lucide-react";
 import type { ChartOfAccount } from "../../../data";
 import {
   canAddLedgerUnder,
@@ -12,10 +12,22 @@ import {
   countLedgersUnder,
   getSearchVisibleIds,
   nodeMatchesSearch,
+  saveChartOfAccounts,
 } from "../chart-of-accounts-data";
 import { coaTreeNodeHasChildren, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
+import {
+  canCoaSidebarAddLedgerUnder,
+  canCoaSidebarDeleteNode,
+  canCoaSidebarEditNode,
+  coaSidebarNodeHasChildren,
+  coaSidebarNodeShowsExpandChevron,
+  getCoaSidebarSearchVisibleIds,
+  getCoaSidebarTreeChildren,
+  resolveCoaSidebarVisualLevel,
+} from "@/lib/accounts/coa-sidebar-tree";
 import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
 import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
+import { requestCoaEditLedger } from "../coa-edit-ledger-bridge";
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
@@ -34,6 +46,15 @@ import {
 } from "./coa-tree-visual";
 import { CoaTreeNodeLabel } from "./CoaTreeNodeLabel";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 
 interface TreeNodeProps {
   node: ChartOfAccount;
@@ -53,6 +74,7 @@ interface TreeNodeProps {
   onLedgerOpen?: (node: ChartOfAccount) => void;
   onAddLedger?: (parentGroupId: number) => void;
   onAddSubGroup?: (parentGroupId: number) => void;
+  onDeleteLedger?: (ledgerId: number) => void;
 }
 
 const TreeNode = memo(function TreeNodeComponent({
@@ -73,31 +95,51 @@ const TreeNode = memo(function TreeNodeComponent({
   onLedgerOpen,
   onAddLedger,
   onAddSubGroup,
+  onDeleteLedger,
 }: TreeNodeProps) {
   const isSidebar = variant === "sidebar";
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
-  const visualLevel = resolveCoaVisualLevel(node, records);
+  const visualLevel = isSidebar
+    ? resolveCoaSidebarVisualLevel(node, records)
+    : resolveCoaVisualLevel(node, records);
   const Icon = resolveCoaSidebarIcon(node, visualLevel, records);
   const isLedger = node.nodeLevel === "ledger";
   const isPrimaryHead = node.nodeLevel === "primary_head";
   const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
-  const hasChildren = coaTreeNodeHasChildren(records, node.id);
+  const hasChildren = isSidebar
+    ? coaSidebarNodeHasChildren(records, node.id)
+    : coaTreeNodeHasChildren(records, node.id);
   const children = useMemo(
-    () => (isExpanded && hasChildren ? getCoaTreeChildren(records, node.id) : []),
-    [isExpanded, hasChildren, records, node.id],
+    () =>
+      isExpanded && hasChildren
+        ? isSidebar
+          ? getCoaSidebarTreeChildren(records, node.id)
+          : getCoaTreeChildren(records, node.id)
+        : [],
+    [isExpanded, hasChildren, isSidebar, records, node.id],
   );
   const ledgerCount = !isSidebar && !isLedger ? countLedgersUnder(records, node.id) : 0;
-  const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
+  const showExpandChevron = isSidebar
+    ? coaSidebarNodeShowsExpandChevron(node, records)
+    : coaNodeShowsExpandChevron(node, records, hasChildren);
   const allowAddSubGroup =
-    canCreate && onAddSubGroup != null && canAddSubGroupUnder(node, records);
-  const allowAddLedger =
+    !isSidebar &&
     canCreate &&
-    onAddLedger != null &&
-    canAddLedgerUnder(node, records) &&
-    !isAddLedgerBlocked(node, records);
-  const allowEdit = canEdit && canEditGroup(node);
-  const allowDelete = canEdit && canDeleteGroup(node, records);
+    onAddSubGroup != null &&
+    canAddSubGroupUnder(node, records);
+  const allowAddLedger = isSidebar
+    ? canCreate && onAddLedger != null && canCoaSidebarAddLedgerUnder(node, records)
+    : canCreate &&
+      onAddLedger != null &&
+      canAddLedgerUnder(node, records) &&
+      !isAddLedgerBlocked(node, records);
+  const allowEdit = isSidebar
+    ? canEdit && canCoaSidebarEditNode(node)
+    : canEdit && canEditGroup(node);
+  const allowDelete = isSidebar
+    ? canEdit && canCoaSidebarDeleteNode(node, records)
+    : canEdit && canDeleteGroup(node, records);
   const isHighlighted = highlightedLedgerId === node.id;
   const isSearchMatch =
     Boolean(searchQuery.trim()) && nodeMatchesSearch(records, node, searchQuery);
@@ -227,8 +269,16 @@ const TreeNode = memo(function TreeNodeComponent({
             showDelete={allowDelete}
             onAddSubGroup={() => (onAddSubGroup ?? requestCoaAddSubGroup)(node.id)}
             onAddLedger={() => onAddLedger!(node.id)}
-            onEdit={() => requestCoaEditGroup(node.id)}
-            onDelete={() => requestCoaDeleteGroup(node.id)}
+            onEdit={() =>
+              isSidebar && isLedger
+                ? requestCoaEditLedger(node.id)
+                : requestCoaEditGroup(node.id)
+            }
+            onDelete={() =>
+              isSidebar && isLedger
+                ? onDeleteLedger?.(node.id)
+                : requestCoaDeleteGroup(node.id)
+            }
             className={isSidebar ? "mr-0.5 shrink-0" : "mr-0.5 shrink-0"}
           />
         </div>
@@ -255,6 +305,7 @@ const TreeNode = memo(function TreeNodeComponent({
               onLedgerOpen={onLedgerOpen}
               onAddLedger={onAddLedger}
               onAddSubGroup={onAddSubGroup}
+              onDeleteLedger={onDeleteLedger}
             />
           ))}
         </div>
@@ -277,6 +328,7 @@ interface CoaExplorerTreeProps {
   onLedgerOpen?: (node: ChartOfAccount) => void;
   onAddLedger?: (parentGroupId: number) => void;
   onAddSubGroup?: (parentGroupId: number) => void;
+  onRecordsChange?: (records: ChartOfAccount[]) => void;
 }
 
 export function CoaExplorerTree({
@@ -293,7 +345,29 @@ export function CoaExplorerTree({
   onLedgerOpen,
   onAddLedger,
   onAddSubGroup,
+  onRecordsChange,
 }: CoaExplorerTreeProps) {
+  const [deleteTarget, setDeleteTarget] = useState<ChartOfAccount | null>(null);
+  const isSidebar = variant === "sidebar";
+
+  const handleDeleteLedger = (ledgerId: number) => {
+    const ledger = records.find((r) => r.id === ledgerId);
+    if (!ledger || !canCoaSidebarDeleteNode(ledger, records)) return;
+    setDeleteTarget(ledger);
+  };
+
+  const confirmDeleteLedger = () => {
+    if (!deleteTarget) return;
+    const next = records.filter((r) => r.id !== deleteTarget.id);
+    saveChartOfAccounts(next);
+    onRecordsChange?.(next);
+    dispatchAccountsDataChanged("ledgers", {
+      operation: "delete",
+      recordId: deleteTarget.id,
+    });
+    setDeleteTarget(null);
+  };
+
   const roots = useMemo(
     () =>
       records
@@ -303,9 +377,16 @@ export function CoaExplorerTree({
   );
 
   const visibleIds = useMemo(
-    () => (search.trim() ? getSearchVisibleIds(records, search) : null),
-    [records, search],
+    () =>
+      search.trim()
+        ? isSidebar
+          ? getCoaSidebarSearchVisibleIds(records, search)
+          : getSearchVisibleIds(records, search)
+        : null,
+    [records, search, isSidebar],
   );
+
+  const onDeleteLedger = isSidebar ? handleDeleteLedger : undefined;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -345,11 +426,49 @@ export function CoaExplorerTree({
                 onLedgerOpen={onLedgerOpen}
                 onAddLedger={onAddLedger}
                 onAddSubGroup={onAddSubGroup}
+                onDeleteLedger={onDeleteLedger}
               />
             ))
           )}
         </div>
       </div>
+
+      {isSidebar && (
+        <Dialog open={deleteTarget != null} onOpenChange={() => setDeleteTarget(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                </div>
+                Delete ledger?
+              </DialogTitle>
+              <DialogDescription className="pt-1">
+                {deleteTarget
+                  ? `"${deleteTarget.accountName}" will be removed from the chart of accounts. This cannot be undone.`
+                  : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+                onClick={confirmDeleteLedger}
+              >
+                Delete
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </TooltipProvider>
   );
 }
