@@ -476,7 +476,8 @@ export function POLineItemsSection({
                   ? enrichProductFromDropdown(draft.productId, dbProducts)
                   : null;
                 const calcLine = getPreviewLine(line.uid);
-                const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
+                const displayHsn =  draftInfo?.hsnCode ?? line.hsnCode;
+                console.log(":",line);
                 const displayPackaging = draftInfo?.packagingUnit ?? line.packagingUnit;
                 const displayConversion = draftInfo?.conversionQty ?? line.conversionQty;
                 const displaySkuQty =

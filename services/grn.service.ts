@@ -7,6 +7,12 @@ import type {
   GrnSupplierInvoice,
 } from "@/app/(app)/warehouse/grn/shared/types";
 import { mapBackendGrnStatus } from "@/lib/warehouse/grn-status";
+import {
+  DEFAULT_LEGACY_GRN_QUANTITY_TYPE,
+  DEFAULT_NEW_GRN_QUANTITY_TYPE,
+  normalizeGrnQuantityType,
+  resolvePackingSize,
+} from "@/lib/warehouse/grn-quantity";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -81,6 +87,7 @@ export interface CreateGrnBatchPayload {
   quantity_base_qty: number;
   rate?: number | null;
   gst?: number | null;
+  gstAmount?: number | null;
   remarks?: string | null;
 }
 
@@ -90,6 +97,7 @@ export interface CreateGrnItemPayload {
   previous_received_base_qty: number;
   current_received_base_qty: number;
   pending_base_qty: number;
+  quantity_type?: "CASE" | "PIECE" | null;
   remarks?: string | null;
   productSnapshot?: Record<string, unknown> | null;
   batches: CreateGrnBatchPayload[];
@@ -204,6 +212,16 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     const alreadyReceivedQty = asNumber(item.previous_received_base_qty);
     const receivedQty = asNumber(item.current_received_base_qty);
     const pendingQty = asNumber(item.pending_base_qty);
+    const packingSize = resolvePackingSize({
+      productSnapshot: snapshot,
+    });
+    const sourceType =
+      asString(raw.source_type) || asString(raw.sourceType);
+    const quantityType =
+      normalizeGrnQuantityType(asString(item.quantity_type)) ??
+      (sourceType === "PURCHASE_ORDER"
+        ? DEFAULT_NEW_GRN_QUANTITY_TYPE
+        : DEFAULT_LEGACY_GRN_QUANTITY_TYPE);
 
     items.push({
       productId,
@@ -214,6 +232,8 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       alreadyReceivedQty,
       pendingQty,
       receivedQty,
+      quantityType,
+      unitPerPacking: packingSize || undefined,
       unit: asString(snapshot.base_unit) || "Unit",
       poNumber: poNumber || undefined,
       remarks: asString(item.remarks) || undefined,
@@ -228,9 +248,16 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       const rate = asNumber(batch.rate);
       const gstPct = asNumber(batch.gst);
       const taxable = qty * rate;
-      const gstAmount = asNumber(batch.totalPrice)
-        ? Math.max(0, asNumber(batch.totalPrice) - taxable)
-        : (taxable * gstPct) / 100;
+      const hasStoredGstAmount =
+        batch.gstAmount !== null &&
+        batch.gstAmount !== undefined &&
+        String(batch.gstAmount).trim() !== "";
+      const storedGstAmount = asNumber(batch.gstAmount);
+      const gstAmount = hasStoredGstAmount
+        ? storedGstAmount
+        : asNumber(batch.totalPrice)
+          ? Math.max(0, asNumber(batch.totalPrice) - taxable)
+          : (taxable * gstPct) / 100;
       const totalAmount = asNumber(batch.totalPrice) || taxable + gstAmount;
 
       batches.push({
@@ -248,6 +275,8 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
         gstAmount: gstAmount || undefined,
         totalAmount: totalAmount || undefined,
         poNumber: poNumber || undefined,
+        quantityType,
+        unitPerPacking: packingSize || undefined,
       });
     }
   }

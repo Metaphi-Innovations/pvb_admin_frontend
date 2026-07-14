@@ -217,7 +217,7 @@ export function StockTransferView({ id }: { id: string }) {
         {grn.batches.length > 0 && (
           <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Batch Details</h3>
-            <BatchDetailsReadOnlyTable batches={grn.batches} />
+            <BatchDetailsReadOnlyTable batches={grn.batches} items={grn.items} />
           </div>
         )}
 
