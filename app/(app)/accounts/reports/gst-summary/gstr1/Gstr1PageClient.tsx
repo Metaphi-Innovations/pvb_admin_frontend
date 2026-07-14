@@ -42,14 +42,19 @@ export default function Gstr1PageClient() {
       hideDescription
       layout="split"
       className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={() => handleExport("excel")}
-          onPdf={() => handleExport("pdf")}
-          disabled={exporting || !report}
+      filters={
+        <GstReportFilterBar
+          filterState={filterState}
+          mounted={mounted}
+          end={
+            <AccountsExportMenu
+              onExcel={() => handleExport("excel")}
+              onPdf={() => handleExport("pdf")}
+              disabled={exporting || !report}
+            />
+          }
         />
       }
-      filters={<GstReportFilterBar filterState={filterState} mounted={mounted} />}
       subHeader={<GstReportNavTabs filters={filters} />}
     >
       <div className="flex-1 min-h-0 overflow-y-auto">

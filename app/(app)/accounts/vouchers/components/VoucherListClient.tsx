@@ -11,6 +11,9 @@ import {
 } from "@/components/accounts/AccountsTableActions";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
+import { primaryDebitCreditLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { cn } from "@/lib/utils";
 import {
   AccountsColumnHeader,
   SortTh,
@@ -27,6 +30,7 @@ import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
+  AccountsTableFoot,
   AccountsTableHead,
   AccountsTableHeadRow,
   AccountsTableRow,
@@ -48,6 +52,22 @@ interface VoucherListClientProps {
   embedded?: boolean;
 }
 
+type VoucherListDisplayRow = VoucherRow & {
+  debitLedger: string;
+  creditLedger: string;
+  paymentModeLabel: string;
+};
+
+function toDisplayRow(v: VoucherRow): VoucherListDisplayRow {
+  const { debitLedger, creditLedger } = primaryDebitCreditLedgers(v.lines);
+  return {
+    ...v,
+    debitLedger,
+    creditLedger,
+    paymentModeLabel: v.paymentMode?.trim() || "—",
+  };
+}
+
 function VoucherListTable({
   mounted,
   page,
@@ -59,7 +79,7 @@ function VoucherListTable({
   mounted: boolean;
   page: number;
   pageSize: number;
-  toolbarFiltered: VoucherRow[];
+  toolbarFiltered: VoucherListDisplayRow[];
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
 }) {
@@ -72,18 +92,28 @@ function VoucherListTable({
     [visible, page, pageSize],
   );
 
+  const totalAmount = useMemo(
+    () => roundMoney(visible.reduce((s, r) => s + (Number(r.totalDebit) || 0), 0)),
+    [visible],
+  );
+
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
+  const colSpan = 9;
+
   return (
     <>
-      <AccountsTable minWidth={900}>
+      <AccountsTable minWidth={1100}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Date" colKey="date" filterType="date" />
             <SortTh label="Voucher No." colKey="voucherNumber" />
             <AccountsColumnHeader label="Reference" colKey="referenceNo" sortable={false} />
+            <SortTh label="Debit Ledger" colKey="debitLedger" />
+            <SortTh label="Credit Ledger" colKey="creditLedger" />
+            <AccountsColumnHeader label="Mode" colKey="paymentModeLabel" sortable={false} />
             <AccountsColumnHeader label="Narration" colKey="narration" sortable={false} className="accounts-col-narration" />
             <SortTh label="Amount" colKey="totalDebit" filterType="amount" align="right" />
             <AccountsColumnHeader
@@ -99,13 +129,13 @@ function VoucherListTable({
         <AccountsTableBody>
           {!mounted ? (
             <AccountsTableRow>
-              <AccountsTableCell colSpan={6} className="accounts-table-empty">
+              <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                 Loading…
               </AccountsTableCell>
             </AccountsTableRow>
           ) : visible.length === 0 ? (
             <AccountsTableRow>
-              <AccountsTableCell colSpan={6} className="accounts-table-empty">
+              <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                 No records found.
               </AccountsTableCell>
             </AccountsTableRow>
@@ -122,6 +152,15 @@ function VoucherListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="text-muted-foreground">{v.referenceNo || "—"}</AccountsTableCell>
+                <AccountsTableCell className="text-xs max-w-[130px] truncate" title={v.debitLedger}>
+                  {v.debitLedger}
+                </AccountsTableCell>
+                <AccountsTableCell className="text-xs max-w-[130px] truncate" title={v.creditLedger}>
+                  {v.creditLedger}
+                </AccountsTableCell>
+                <AccountsTableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                  {v.paymentModeLabel}
+                </AccountsTableCell>
                 <AccountsTableCell className="accounts-col-narration max-w-[200px] truncate">{v.narration || "—"}</AccountsTableCell>
                 <AccountsTableCell align="right" money>
                   <MoneyAmount amount={v.totalDebit} />
@@ -144,6 +183,23 @@ function VoucherListTable({
             ))
           )}
         </AccountsTableBody>
+        {mounted && visible.length > 0 ? (
+          <AccountsTableFoot>
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={7} className="font-semibold text-xs text-foreground">
+                Total ({visible.length} {visible.length === 1 ? "entry" : "entries"})
+              </AccountsTableCell>
+              <AccountsTableCell
+                align="right"
+                money
+                className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+              >
+                {formatMoney(totalAmount)}
+              </AccountsTableCell>
+              <AccountsTableCell />
+            </AccountsTableRow>
+          </AccountsTableFoot>
+        ) : null}
       </AccountsTable>
       {mounted && visible.length > 0 ? (
         <AccountsTablePagination
@@ -168,12 +224,12 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
 
   const records = useMemo(
-    () => (mounted ? getVouchersByTypeForList(voucherType) : []),
+    () => (mounted ? getVouchersByTypeForList(voucherType).map(toDisplayRow) : []),
     [voucherType, mounted, listRefreshKey],
   );
 
   const getCellValue = useCallback(
-    (row: VoucherRow, key: string) => (row as unknown as Record<string, unknown>)[key],
+    (row: VoucherListDisplayRow, key: string) => (row as unknown as Record<string, unknown>)[key],
     [],
   );
 
@@ -185,7 +241,10 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
         (v) =>
           v.voucherNumber.toLowerCase().includes(q) ||
           v.narration.toLowerCase().includes(q) ||
-          v.referenceNo.toLowerCase().includes(q),
+          v.referenceNo.toLowerCase().includes(q) ||
+          v.debitLedger.toLowerCase().includes(q) ||
+          v.creditLedger.toLowerCase().includes(q) ||
+          v.paymentModeLabel.toLowerCase().includes(q),
       );
     }
     if (dateFrom) r = r.filter((v) => v.date >= dateFrom);
@@ -205,7 +264,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
             search={{
               value: search,
               onChange: setSearch,
-              placeholder: "Search voucher no., narration…",
+              placeholder: "Search voucher, ledger, narration…",
             }}
             filters={
               <ReportDateRangeFilter
@@ -227,6 +286,9 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
             date: { type: "date" },
             voucherNumber: { type: "text" },
             referenceNo: { type: "text" },
+            debitLedger: { type: "text" },
+            creditLedger: { type: "text" },
+            paymentModeLabel: { type: "text" },
             narration: { type: "text" },
             totalDebit: { type: "amount" },
           }}

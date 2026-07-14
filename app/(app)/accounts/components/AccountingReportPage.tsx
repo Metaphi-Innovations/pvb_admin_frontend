@@ -4,6 +4,8 @@ import React, { useCallback, useMemo } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
+import { ReportFilterRow } from "@/components/accounts/ReportFilters";
+import { AccountsClearAllColumnFiltersButton } from "@/components/accounts/AccountingReportToolbar";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   AccountsColumnarTable,
@@ -87,12 +89,19 @@ export function AccountingReportPage({
       title={title}
       description={description}
       filters={
-        <div className="flex flex-wrap items-end gap-2 w-full">
+        <ReportFilterRow
+          end={
+            <>
+              <AccountsClearAllColumnFiltersButton
+                onClear={col.clearAllColumnFilters}
+                activeCount={col.activeFilterCount}
+              />
+              <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={exportRows.length === 0} />
+            </>
+          }
+        >
           {filters}
-          <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">
-            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={exportRows.length === 0} />
-          </div>
-        </div>
+        </ReportFilterRow>
       }
       layout="split"
       className="h-full min-h-0"

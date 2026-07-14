@@ -21,7 +21,6 @@ import {
   type CreateVoucherInput,
   type SimpleCashVoucherInput,
   type SimpleContraVoucherInput,
-  type VoucherLine,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { postVoucher, type PostingResult } from "@/lib/accounts/posting-engine";
 import {
@@ -163,55 +162,24 @@ function validateAllocations(input: ManualVoucherPostInput): string | null {
   return null;
 }
 
-function affectedLedgerNames(lines: VoucherLine[]): string {
-  const names = lines
-    .filter((l) => l.ledgerId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0))
-    .map((l) => l.ledgerName)
-    .filter(Boolean);
-  return [...new Set(names)].join(", ") || "—";
-}
-
-function allocationSummary(allocations?: VoucherAllocationLine[]): string {
-  if (!allocations?.length) return "On-account / advance";
-  return allocations
-    .map((a) => {
-      const ref = a.documentNo ?? (a.invoiceId != null ? `INV#${a.invoiceId}` : `BILL#${a.billId}`);
-      return `${ref}: ${formatMoney(a.amount)}`;
-    })
-    .join("; ");
-}
-
 export function recordVoucherPostingAudit(
   voucher: AccountingVoucher,
-  allocations?: VoucherAllocationLine[],
+  _allocations?: VoucherAllocationLine[],
 ): void {
   const now = new Date();
   const typeLabel = VOUCHER_MODULE_LABEL[voucher.voucherType] ?? voucher.voucherType;
-  const amount = roundMoney(voucher.totalDebit || voucher.totalCredit);
 
   appendAuditTrailEntry({
     dateTime: now.toISOString(),
-    category: "voucher_approval",
+    voucherType: typeLabel,
+    voucherTypeCode: voucher.voucherType,
+    voucherNo: voucher.voucherNumber,
     user: ACCOUNTS_CURRENT_USER,
-    role: "Accounts User",
-    module: typeLabel,
-    moduleCode: voucher.voucherType,
-    reference: voucher.voucherNumber,
-    activityType: "Post",
-    action: "Post",
-    oldValue: "draft",
-    newValue: "posted",
-    status: "posted",
-    details: `${typeLabel} ${voucher.voucherNumber} posted — ${formatMoney(amount)}`,
-    remarks: voucher.narration?.trim() || undefined,
-    voucherAmount: formatMoney(amount),
-    partyName: affectedLedgerNames(voucher.lines),
-    approvalDetails: {
-      level: "Posting",
-      approver: ACCOUNTS_CURRENT_USER,
-      approvedAt: now.toISOString().slice(0, 10),
-      note: `Allocation: ${allocationSummary(allocations)}. Ledgers: ${affectedLedgerNames(voucher.lines)}`,
-    },
+    action: "Modified",
+    particular: "Status",
+    beforeAlteration: "Draft",
+    afterAlteration: "Posted",
+    status: "Posted",
   });
 }
 

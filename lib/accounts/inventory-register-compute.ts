@@ -10,6 +10,7 @@ import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
   buildStockLedgerRows,
   resolveStockLedgerDocumentHref,
+  STOCK_LEDGER_TRANSACTION_TYPE_LABELS,
   type StockLedgerTransactionType,
 } from "@/app/(app)/accounts/reports/stock-ledger/stock-ledger-data";
 import {
@@ -86,15 +87,7 @@ interface BaseMovement {
 }
 
 const TXN_LABELS: Record<StockLedgerTransactionType, string> = {
-  opening: "Stock Opening",
-  purchase: "Purchase Receipt",
-  purchase_return: "Purchase Return",
-  sales: "Sales",
-  sales_return: "Sales Return",
-  stock_transfer_in: "Stock Transfer In",
-  stock_transfer_out: "Stock Transfer Out",
-  adjustment: "Stock Adjustment",
-  production: "Production",
+  ...STOCK_LEDGER_TRANSACTION_TYPE_LABELS,
 };
 
 function transactionTypeLabel(type: StockLedgerTransactionType, inQty: number, outQty: number): string {

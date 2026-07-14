@@ -377,7 +377,16 @@ export default function BalanceSheetPageClient() {
   };
 
   const filterBar = (
-    <ReportFilterRow className="items-end gap-2">
+    <ReportFilterRow
+      className="items-end gap-2"
+      end={
+        <AccountsExportMenu
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          disabled={exporting || !mounted || !sourceStatement.hasData}
+        />
+      }
+    >
       <ReportFinancialYearFilter
         value={financialYearId}
         onChange={handleFinancialYearChange}
@@ -432,13 +441,6 @@ export default function BalanceSheetPageClient() {
       hideDescription
       layout="split"
       className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !sourceStatement.hasData}
-        />
-      }
       filters={filterBar}
     >
       <AccountsListingTableCard className="flex flex-col flex-1 min-h-0 overflow-hidden">

@@ -850,15 +850,16 @@ function TrialBalancePageBody({
       layout="split"
       className="trial-balance-compact h-full min-h-0"
       subHeader={<TrialBalanceViewTabs value={activeTab} onChange={setActiveTab} />}
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !hasExportData}
-        />
-      }
       filters={
-        <ReportFilterRow className="items-end gap-x-2 gap-y-2.5">
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || !mounted || !hasExportData}
+            />
+          }
+        >
           <ReportFinancialYearFilter
             value={financialYearId}
             onChange={onFinancialYearChange}

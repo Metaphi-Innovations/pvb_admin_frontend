@@ -46,6 +46,28 @@ export const AccountsModuleShell = memo(function AccountsModuleShell({
   const sectionId = useActiveAccountsSectionId();
   const { collapsed } = useAccountsSidebar();
 
+  // #region agent log
+  fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
+    body: JSON.stringify({
+      sessionId: "8fbc9e",
+      runId: "post-fix",
+      hypothesisId: "H-G",
+      location: "AccountsModuleShell.tsx",
+      message: "ModuleShell child component types",
+      data: {
+        TooltipProvider: typeof TooltipProvider,
+        AccountsSectionSidebar: typeof AccountsSectionSidebar,
+        AccountsModuleErrorBoundary: typeof AccountsModuleErrorBoundary,
+        AccountsNavigationOverlay: typeof AccountsNavigationOverlay,
+        sectionId,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="accounts-module-shell flex h-full min-h-0 w-full overflow-hidden">

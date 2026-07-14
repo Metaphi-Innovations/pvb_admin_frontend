@@ -7,9 +7,12 @@ import { loadPurchaseInvoices, type PurchaseInvoiceRecord } from "@/app/(app)/ac
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import { demoToday } from "@/lib/accounts/demo-date-utils";
+import { getInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
+import { resolveInvoiceDocumentType } from "@/lib/accounts/invoice-type";
 import { roundMoney } from "@/lib/accounts/money-format";
 import type {
   RegisterGstRate,
+  RegisterGstType,
   RegisterInvoiceStatus,
   RegisterPartyOption,
   RegisterPaymentStatus,
@@ -49,6 +52,9 @@ function dominantGstRate(taxPcts: number[]): RegisterGstRate {
 function mapSalesInvoiceStatus(inv: InvoiceRecord): RegisterInvoiceStatus {
   if (inv.invoiceStatus === "cancelled") return "cancelled";
   if (inv.invoiceStatus === "draft") return "draft";
+  const ws = inv.workflow?.status;
+  if (ws === "cancelled") return "cancelled";
+  if (ws && ["draft", "sent_back", "rejected"].includes(ws)) return "draft";
   return "posted";
 }
 
@@ -107,10 +113,27 @@ function financialYearIdForDate(isoDate: string): number {
   return startYear;
 }
 
+function otherChargesForInvoice(inv: InvoiceRecord): number {
+  return roundMoney(
+    (inv.shippingCharges ?? 0) + (inv.otherCharges ?? 0) + (inv.roundOff ?? 0),
+  );
+}
+
+/** Sales Tax Invoices only — excludes stock transfers, drafts (unless cancelled tracking), and duplicates. */
+export function isSalesRegisterSourceInvoice(inv: InvoiceRecord): boolean {
+  if (resolveInvoiceDocumentType(inv) !== "sales") return false;
+  const status = mapSalesInvoiceStatus(inv);
+  // Never surface drafts / deleted-like workflow states in the register source
+  if (status === "draft") return false;
+  return status === "posted" || status === "cancelled";
+}
+
 export function salesInvoiceToRegisterRow(inv: InvoiceRecord): RegisterReportRow {
-  const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
+  const { gstAmount } = getInvoiceAmountBreakup(inv);
+  const gst = getInvoiceGstBreakup(inv);
   const taxPcts = inv.lineItems.map((l) => l.taxPct).filter((n) => n > 0);
   const customer = inv.customerId != null ? loadCustomers().find((c) => c.id === inv.customerId) : undefined;
+  const gstType: RegisterGstType = gst.interstate ? "igst" : "cgst_sgst";
 
   return {
     id: inv.id,
@@ -118,19 +141,32 @@ export function salesInvoiceToRegisterRow(inv: InvoiceRecord): RegisterReportRow
     invoiceNo: inv.invoiceNo,
     partyId: inv.customerId ?? 0,
     partyName: inv.customerName || "—",
+    partyCode: customer?.customerCode?.trim() || "—",
     gstin: inv.customerGst || "—",
     state: customerState(inv.customerId, inv.state ?? inv.placeOfSupply),
     branch: inv.branch?.trim() || customer?.branch?.trim() || "Head Office",
+    warehouse: inv.warehouse?.trim() || "",
     salesperson: inv.salesperson?.trim() || customer?.salesManName?.trim() || "",
+    customerType: customer?.customerType?.trim() || "",
     voucherType: "SI",
     productNames: inv.lineItems.map((l) => l.productName).filter(Boolean),
-    taxableValue,
+    taxableValue: gst.taxableValue,
     gstAmount,
-    invoiceTotal,
+    cgst: gst.cgst,
+    sgst: gst.sgst,
+    igst: gst.igst,
+    discount: roundMoney(inv.discountTotal ?? 0),
+    otherCharges: otherChargesForInvoice(inv),
+    invoiceTotal: gst.invoiceTotal,
+    paymentTerms: inv.paymentTerms?.trim() || (inv.creditDays != null ? `${inv.creditDays} Days` : "—"),
     paymentStatus: mapSalesPaymentStatus(inv),
     invoiceStatus: mapSalesInvoiceStatus(inv),
     gstRate: dominantGstRate(taxPcts),
+    gstType,
     financialYearId: financialYearIdForDate(inv.invoiceDate),
+    postedVoucherId: inv.postedVoucherId ?? null,
+    postedVoucherNo: inv.postedVoucherNo ?? null,
+    customerLedgerId: inv.customerLedgerId ?? null,
   };
 }
 
@@ -148,6 +184,7 @@ export function purchaseInvoiceToRegisterRow(rec: PurchaseInvoiceRecord): Regist
         : ("posted" as const);
 
   const vendor = loadVendors().find((v) => v.id === rec.vendorId);
+  const half = roundMoney(gstAmount / 2);
 
   return {
     id: rec.id,
@@ -155,6 +192,7 @@ export function purchaseInvoiceToRegisterRow(rec: PurchaseInvoiceRecord): Regist
     invoiceNo: rec.invoiceNo,
     partyId: rec.vendorId,
     partyName: rec.vendorName || "—",
+    partyCode: vendor?.vendorCode?.trim() || "—",
     gstin: rec.vendorGst || "—",
     state: vendorState(rec.vendorId, rec.vendorGst),
     branch: vendor?.billingAddress?.city?.trim() || "Head Office",
@@ -162,18 +200,35 @@ export function purchaseInvoiceToRegisterRow(rec: PurchaseInvoiceRecord): Regist
     productNames: rec.lineItems.map((l) => l.productName).filter(Boolean),
     taxableValue,
     gstAmount,
+    cgst: half,
+    sgst: roundMoney(gstAmount - half),
+    igst: 0,
+    discount: 0,
+    otherCharges: 0,
     invoiceTotal,
     paymentStatus: mapPurchasePaymentStatus(rec),
     invoiceStatus: posted,
     gstRate: dominantGstRate(taxPcts),
+    gstType: "cgst_sgst",
     financialYearId: financialYearIdForDate(rec.invoiceDate),
   };
 }
 
 export function buildSalesRegisterRows(): RegisterReportRow[] {
-  return loadInvoices()
-    .map(salesInvoiceToRegisterRow)
-    .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate) || b.id - a.id);
+  const seenNos = new Set<string>();
+  const rows: RegisterReportRow[] = [];
+
+  for (const inv of loadInvoices()) {
+    if (!isSalesRegisterSourceInvoice(inv)) continue;
+    const key = inv.invoiceNo.trim().toUpperCase();
+    if (key && seenNos.has(key)) continue;
+    if (key) seenNos.add(key);
+    rows.push(salesInvoiceToRegisterRow(inv));
+  }
+
+  return rows.sort(
+    (a, b) => b.invoiceDate.localeCompare(a.invoiceDate) || b.id - a.id,
+  );
 }
 
 export function buildPurchaseRegisterRows(): RegisterReportRow[] {

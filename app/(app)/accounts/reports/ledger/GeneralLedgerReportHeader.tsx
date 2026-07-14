@@ -16,6 +16,9 @@ export function GeneralLedgerReportHeader({
   ledgerName,
   ledgerCode,
   parentGroup,
+  ledgerType,
+  gstin,
+  pan,
   dateFrom,
   dateTo,
   financialYearLabel,
@@ -24,12 +27,16 @@ export function GeneralLedgerReportHeader({
   ledgerName?: string;
   ledgerCode?: string;
   parentGroup?: string;
+  ledgerType?: string;
+  gstin?: string;
+  pan?: string;
   dateFrom: string;
   dateTo: string;
   financialYearLabel?: string;
   className?: string;
 }) {
   const period = formatGeneralLedgerPeriod(dateFrom, dateTo);
+  const emptyLike = (v?: string) => !v || v === "—" || v.trim() === "";
 
   const companyItems = [
     { label: "Company", value: ACCOUNTS_COMPANY_NAME },
@@ -42,7 +49,10 @@ export function GeneralLedgerReportHeader({
     ? [
         { label: "Ledger", value: ledgerName },
         ...(ledgerCode ? [{ label: "Code", value: ledgerCode }] : []),
+        ...(ledgerType ? [{ label: "Type", value: ledgerType }] : []),
         ...(parentGroup ? [{ label: "Parent Group", value: parentGroup }] : []),
+        ...(!emptyLike(gstin) ? [{ label: "GSTIN", value: gstin! }] : []),
+        ...(!emptyLike(pan) ? [{ label: "PAN", value: pan! }] : []),
       ]
     : [];
 

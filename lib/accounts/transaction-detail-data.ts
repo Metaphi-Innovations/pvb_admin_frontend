@@ -404,8 +404,8 @@ function detailFromInventoryMovement(m: InventoryMovement): TransactionDetail {
     credit: m.outQty > 0 ? roundMoney(m.outQty * m.rate) : undefined,
     narration: m.narration ?? `${m.voucherType}: ${m.product} (${m.sku}) @ ${m.warehouse}`,
     attachments: [],
-    sourceHref: "/accounts/reports/inventory-register",
-    sourceLabel: "View Inventory Register",
+    sourceHref: "/accounts/reports/stock-register",
+    sourceLabel: "View Stock Register",
   };
 }
 

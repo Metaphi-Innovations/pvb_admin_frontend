@@ -32,7 +32,7 @@ export const GST_REPORT_NAV_ITEMS = [
   { id: "gstr2b", label: "GSTR-2B", href: `${GST_REPORT_BASE_PATH}/gstr2b` },
   {
     id: "annual-computation",
-    label: "Annual GST Computation",
+    label: "Annual GST Summary",
     href: `${GST_REPORT_BASE_PATH}/annual-computation`,
   },
 ] as const;

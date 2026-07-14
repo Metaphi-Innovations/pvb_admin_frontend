@@ -308,7 +308,9 @@ export function CoaGroupDrillDownPanel({
         actions={
           <>
             <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
-              <Link href="/accounts/receivables/outstanding">Customer Ledger</Link>
+              <Link href={buildGeneralLedgerHref({ ledgerType: "Customer", source: "coa" })}>
+                General Ledger
+              </Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
               <Link href="/accounts/receivables/outstanding">Outstanding Report</Link>
@@ -368,7 +370,9 @@ export function CoaGroupDrillDownPanel({
           actions={
             <>
               <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
-                <Link href="/accounts/payables/outstanding">View Supplier Ledger</Link>
+                <Link href={buildGeneralLedgerHref({ ledgerType: "Vendor", source: "coa" })}>
+                  General Ledger
+                </Link>
               </Button>
               <Button asChild size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white">
                 <Link href="/masters/vendors">Open Supplier Master</Link>

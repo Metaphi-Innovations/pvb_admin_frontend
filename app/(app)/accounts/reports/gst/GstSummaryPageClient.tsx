@@ -283,7 +283,16 @@ export default function GstSummaryPageClient() {
 
   const filterBar = (
     <>
-      <ReportFilterRow className="items-end gap-2">
+      <ReportFilterRow
+        className="items-end gap-2"
+        end={
+          <AccountsExportMenu
+            onExcel={handleExportExcel}
+            onPdf={handleExportPdf}
+            disabled={exporting || !dashboard.hasData}
+          />
+        }
+      >
         <ReportFinancialYearFilter
           value={financialYearId}
           onChange={handleFinancialYearChange}
@@ -331,13 +340,6 @@ export default function GstSummaryPageClient() {
       hideDescription
       layout="split"
       className="h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !dashboard.hasData}
-        />
-      }
       filters={filterBar}
     >
       <AccountsReportBody>

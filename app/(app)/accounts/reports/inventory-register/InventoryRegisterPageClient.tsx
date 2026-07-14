@@ -39,6 +39,7 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import {
+  AccountsClearAllColumnFiltersButton,
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
@@ -299,6 +300,12 @@ export default function InventoryRegisterPageClient() {
   const { totals } = report;
 
   return (
+    <AccountsColumnFilterProvider
+      rows={report.rows}
+      getCellValue={getInventoryCellValue}
+      defaultSortKey="productName"
+      defaultSortDir="asc"
+    >
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Inventory Register")}
       title="Inventory Register"
@@ -307,11 +314,14 @@ export default function InventoryRegisterPageClient() {
         <>
           <ReportFilterRow
             end={
-              <AccountsExportMenu
-                onExcel={handleExportExcel}
-                onPdf={handleExportPdf}
-                disabled={exporting || !report.hasData}
-              />
+              <>
+                <AccountsClearAllColumnFiltersButton />
+                <AccountsExportMenu
+                  onExcel={handleExportExcel}
+                  onPdf={handleExportPdf}
+                  disabled={exporting || !report.hasData}
+                />
+              </>
             }
           >
             <ReportFinancialYearFilter value={financialYearId} onChange={handleFinancialYearChange} />
@@ -418,28 +428,22 @@ export default function InventoryRegisterPageClient() {
               )}
             </div>
           ) : (
-            <AccountsColumnFilterProvider
+            <InventoryRegisterTableSection
               rows={report.rows}
-              getCellValue={getInventoryCellValue}
-              defaultSortKey="productName"
-              defaultSortDir="asc"
-            >
-              <InventoryRegisterTableSection
-                rows={report.rows}
-                page={page}
-                pageSize={pageSize}
-                expandedKeys={expandedKeys}
-                totals={totals}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                onToggleExpand={toggleExpand}
-                onVoucherClick={(href) => router.push(href)}
-              />
-            </AccountsColumnFilterProvider>
+              page={page}
+              pageSize={pageSize}
+              expandedKeys={expandedKeys}
+              totals={totals}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              onToggleExpand={toggleExpand}
+              onVoucherClick={(href) => router.push(href)}
+            />
           )}
         </AccountsListingTableCard>
       </AccountsReportBody>
     </AccountsPageShell>
+    </AccountsColumnFilterProvider>
   );
 }
 

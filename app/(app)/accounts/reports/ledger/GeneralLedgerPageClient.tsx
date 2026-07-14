@@ -42,6 +42,10 @@ import {
   GENERAL_LEDGER_SOURCE_REPORTS,
   type GeneralLedgerDrillDownParams,
 } from "@/lib/accounts/general-ledger-data";
+import {
+  resolveCustomerReceivableLedger,
+  resolveVendorPayableLedger,
+} from "@/lib/accounts/party-ledger-statement";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
@@ -49,9 +53,12 @@ import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/acc
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { useFY } from "@/lib/fy-store";
 import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { getVendorById } from "@/app/(app)/masters/vendors/vendor-data";
 import {
   buildGeneralLedgerGroupDrillDown,
   buildGeneralLedgerStatement,
+  GENERAL_LEDGER_TYPE_OPTIONS,
   getGeneralLedgerLedgers,
   type GeneralLedgerDisplayRow,
   type GeneralLedgerFilters,
@@ -98,6 +105,7 @@ function GeneralLedgerPageContent() {
 
   const [ledgerId, setLedgerId] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [ledgerType, setLedgerType] = useState("all");
   const [sourceReport, setSourceReport] = useState("");
   const [fyId, setFyId] = useState("all");
   const [branches, setBranches] = useState<string[]>([]);
@@ -113,6 +121,11 @@ function GeneralLedgerPageContent() {
     () => (mounted ? getGeneralLedgerLedgers() : []),
     [mounted, dataTick],
   );
+
+  const filteredLedgers = useMemo(() => {
+    if (ledgerType === "all") return ledgers;
+    return ledgers.filter((l) => l.ledgerType === ledgerType);
+  }, [ledgers, ledgerType]);
 
   const sectionRefresh = useAccountsSectionRefresh();
 
@@ -131,7 +144,35 @@ function GeneralLedgerPageContent() {
     const ledgerParam =
       searchParams.get("ledgerId") ?? searchParams.get("ledger") ?? "";
     const groupParam = searchParams.get("groupId") ?? "";
-    const resolved = resolveLedgerFromUrl(ledgerParam);
+    const urlLedgerType = searchParams.get("ledgerType") ?? "all";
+    setLedgerType(urlLedgerType || "all");
+
+    let resolved = resolveLedgerFromUrl(ledgerParam);
+
+    const customerParam = searchParams.get("customer");
+    const supplierParam = searchParams.get("supplier");
+    if (!resolved && customerParam) {
+      const customer = loadCustomers().find((c) => String(c.id) === customerParam);
+      if (customer) {
+        const ledger = resolveCustomerReceivableLedger(customer);
+        if (ledger) {
+          resolved = String(ledger.id);
+          setLedgerType("Customer");
+        }
+      }
+    }
+    if (!resolved && supplierParam) {
+      const vendorId = Number(supplierParam);
+      const vendor = Number.isFinite(vendorId) ? getVendorById(vendorId) : undefined;
+      if (vendor) {
+        const ledger = resolveVendorPayableLedger(vendor);
+        if (ledger) {
+          resolved = String(ledger.id);
+          setLedgerType("Vendor");
+        }
+      }
+    }
+
     setLedgerId(resolved);
     setGroupId(groupParam && !resolved ? groupParam : "");
 
@@ -163,7 +204,8 @@ function GeneralLedgerPageContent() {
   }, [searchParams, mounted, setDateFrom, setDateTo, setPreset]);
 
   const syncUrl = useCallback(
-    (next: { ledgerId?: string; groupId?: string }) => {
+    (next: { ledgerId?: string; groupId?: string; ledgerType?: string }) => {
+      const nextType = next.ledgerType !== undefined ? next.ledgerType : ledgerType;
       const params: GeneralLedgerDrillDownParams = {
         fromDate: dateFrom,
         toDate: dateTo,
@@ -171,6 +213,7 @@ function GeneralLedgerPageContent() {
         financialYearId: fyId !== "all" ? fyId : undefined,
         branch: branches.length > 0 ? branches.join(",") : undefined,
         warehouse: warehouses.length > 0 ? warehouses.join(",") : undefined,
+        ledgerType: nextType !== "all" ? nextType : undefined,
       };
       const resolvedLedgerId = next.ledgerId !== undefined ? next.ledgerId : ledgerId;
       const resolvedGroupId = next.groupId !== undefined ? next.groupId : groupId;
@@ -178,7 +221,7 @@ function GeneralLedgerPageContent() {
       else if (resolvedGroupId) params.groupId = Number(resolvedGroupId);
       router.replace(buildGeneralLedgerHref(params), { scroll: false });
     },
-    [router, ledgerId, groupId, dateFrom, dateTo, sourceReport, fyId, branches, warehouses],
+    [router, ledgerId, groupId, ledgerType, dateFrom, dateTo, sourceReport, fyId, branches, warehouses],
   );
 
   const handleLedgerChange = useCallback(
@@ -188,6 +231,23 @@ function GeneralLedgerPageContent() {
       syncUrl({ ledgerId: value });
     },
     [syncUrl],
+  );
+
+  const handleLedgerTypeChange = useCallback(
+    (value: string) => {
+      setLedgerType(value);
+      const stillValid =
+        !ledgerId ||
+        value === "all" ||
+        ledgers.some((l) => l.id === ledgerId && l.ledgerType === value);
+      if (!stillValid) {
+        setLedgerId("");
+        syncUrl({ ledgerId: "", ledgerType: value });
+      } else {
+        syncUrl({ ledgerType: value });
+      }
+    },
+    [ledgerId, ledgers, syncUrl],
   );
 
   const statementFilters = useMemo(
@@ -235,9 +295,8 @@ function GeneralLedgerPageContent() {
         "balance-sheet": "/accounts/reports/balance-sheet",
         "profit-loss": "/accounts/reports/pl",
         "cash-flow": "/accounts/reports/cash-flow",
-        "customer-ledger": "/accounts/reports/customer-ledger",
-        "supplier-ledger": "/accounts/reports/supplier-ledger",
         "day-book": "/accounts/reports/day-book",
+        "chart-of-accounts": "/accounts/masters/chart-of-accounts",
       }[sourceReport] ?? null)
     : null;
 
@@ -263,6 +322,14 @@ function GeneralLedgerPageContent() {
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
     [
+      ledgerType !== "all"
+        ? {
+            id: "ledgerType",
+            label: "Ledger Type",
+            value: ledgerType,
+            onRemove: () => handleLedgerTypeChange("all"),
+          }
+        : null,
       buildBranchFilterSummary(branches, () => setBranches([])),
       buildEntityFilterSummary(
         "voucherType",
@@ -280,7 +347,7 @@ function GeneralLedgerPageContent() {
           }
         : null,
     ].filter((item): item is ReportFilterSummaryItem => item != null),
-  [voucherTypes, voucherTypeOptions, branches, debitCredit]);
+  [voucherTypes, voucherTypeOptions, branches, debitCredit, ledgerType, handleLedgerTypeChange]);
 
   const moreFiltersActiveCount = countActiveMoreFilters({
     warehouse: warehouses,
@@ -369,7 +436,8 @@ function GeneralLedgerPageContent() {
         loading={loading}
         ledgerId={ledgerId}
         groupId={groupId}
-        ledgers={ledgers}
+        ledgerType={ledgerType}
+        ledgers={filteredLedgers}
         statement={statement}
         groupDrillDown={groupDrillDown}
         allTransactionRows={allTransactionRows}
@@ -379,6 +447,7 @@ function GeneralLedgerPageContent() {
         setExporting={setExporting}
         exportMeta={exportMeta}
         handleLedgerChange={handleLedgerChange}
+        handleLedgerTypeChange={handleLedgerTypeChange}
         preset={preset}
         setPreset={setPreset}
         dateFrom={dateFrom}
@@ -415,6 +484,7 @@ function GeneralLedgerPageBody({
   loading,
   ledgerId,
   groupId,
+  ledgerType,
   ledgers,
   statement,
   groupDrillDown,
@@ -425,6 +495,7 @@ function GeneralLedgerPageBody({
   setExporting,
   exportMeta,
   handleLedgerChange,
+  handleLedgerTypeChange,
   preset,
   setPreset,
   dateFrom,
@@ -456,6 +527,7 @@ function GeneralLedgerPageBody({
   loading: boolean;
   ledgerId: string;
   groupId: string;
+  ledgerType: string;
   ledgers: ReturnType<typeof getGeneralLedgerLedgers>;
   statement: ReturnType<typeof buildGeneralLedgerStatement> | null;
   groupDrillDown: ReturnType<typeof buildGeneralLedgerGroupDrillDown> | null;
@@ -466,6 +538,7 @@ function GeneralLedgerPageBody({
   setExporting: (v: boolean) => void;
   exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
   handleLedgerChange: (value: string) => void;
+  handleLedgerTypeChange: (value: string) => void;
   preset: ReturnType<typeof useReportDateRange>["preset"];
   setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
   dateFrom: string;
@@ -526,7 +599,7 @@ function GeneralLedgerPageBody({
     <AccountsPageShell
       breadcrumbs={breadcrumbs}
       title="General Ledger"
-      description="Complete transaction history for a selected ledger with running balance."
+      description="Complete transaction history for any ledger. Filter by type (Customer, Vendor, Bank, …) to focus customer or supplier accounts."
       layout="split"
       className="h-full min-h-0 trial-balance-compact"
       actions={
@@ -550,16 +623,20 @@ function GeneralLedgerPageBody({
             <Printer className="w-3.5 h-3.5" />
             Print
           </Button>
-          <AccountsExportMenu
-            onExcel={handleExportExcel}
-            onPdf={handleExportPdf}
-            disabled={!canExport || exporting}
-          />
         </>
       }
       filters={
         <>
-          <ReportFilterRow className="items-end">
+          <ReportFilterRow
+            className="items-end"
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportPdf}
+                disabled={!canExport || exporting}
+              />
+            }
+          >
             <ReportFinancialYearFilter value={fyId} onChange={setFyId} />
             <ReportDateRangeFilter
               preset={preset}
@@ -569,6 +646,20 @@ function GeneralLedgerPageBody({
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
             />
+            <div className="space-y-1 min-w-[140px]">
+              <Label className={filterLabelClass}>Ledger Type</Label>
+              <select
+                value={ledgerType}
+                onChange={(e) => handleLedgerTypeChange(e.target.value)}
+                className={cn(filterControlClass, "mt-0 w-full")}
+              >
+                {GENERAL_LEDGER_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <GeneralLedgerSelect value={ledgerId} ledgers={ledgers} onChange={handleLedgerChange} />
             <ReportBranchMultiFilter values={branches} onChange={setBranches} />
             <ReportMoreFilters activeCount={moreFiltersActiveCount}>
@@ -609,8 +700,8 @@ function GeneralLedgerPageBody({
                   Select a ledger or open from another report.
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Select a ledger above, or click a ledger / account group from Trial
-                  Balance, Balance Sheet, P&amp;L, or Cash Flow.
+                  Use Ledger Type (Customer / Vendor) to narrow party accounts, search for a ledger,
+                  or drill down from Trial Balance, Balance Sheet, P&amp;L, or Cash Flow.
                 </p>
               </div>
             </div>
@@ -628,6 +719,9 @@ function GeneralLedgerPageBody({
                 ledgerName={statement.summary.ledgerName}
                 ledgerCode={statement.summary.ledgerCode}
                 parentGroup={statement.summary.parentGroup}
+                ledgerType={statement.summary.ledgerType}
+                gstin={statement.summary.gstin}
+                pan={statement.summary.pan}
                 dateFrom={dateFrom}
                 dateTo={dateTo}
                 financialYearLabel={financialYearLabel}

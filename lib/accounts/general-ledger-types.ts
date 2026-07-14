@@ -6,8 +6,6 @@ export const GENERAL_LEDGER_SOURCE_REPORTS = {
   "balance-sheet": "Balance Sheet",
   "profit-loss": "Profit & Loss",
   "cash-flow": "Cash Flow",
-  "customer-ledger": "Debtors Ledger",
-  "supplier-ledger": "Creditors Ledger",
   "day-book": "Day Book",
   "chart-of-accounts": "Chart of Accounts",
 } as const;
@@ -26,6 +24,8 @@ export interface GeneralLedgerDrillDownParams {
   company?: string;
   partyId?: string;
   financialYearId?: string;
+  /** Restrict ledger picker / deep-link (Customer, Vendor, Bank, …). */
+  ledgerType?: string;
 }
 
 export type GeneralLedgerLedgerType =
