@@ -318,6 +318,7 @@ export default function SalesOrdersPage() {
 
   const { data: orderNoFilterRaw } = useSampleOrderFilterOptions("order_no");
   const { data: salespersonFilterRaw } = useSampleOrderFilterOptions("salesperson__username");
+  const { data: statusFilterRaw } = useSampleOrderFilterOptions("status");
 
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
@@ -417,6 +418,19 @@ export default function SalesOrdersPage() {
       .map((t) => ({ label: t, value: t }));
   }, [ordersList]);
 
+  const statusOptions = useMemo(() => {
+    if (!statusFilterRaw || statusFilterRaw.length === 0) {
+      return ORDER_STATUS_OPTIONS.map((o) => ({
+        label: o.label,
+        value: o.value.toUpperCase(),
+      }));
+    }
+    return statusFilterRaw.map((item: any) => ({
+      label: formatOrderStatus((item.status || "").toLowerCase() as OrderStatus) || item.status,
+      value: item.status,
+    }));
+  }, [statusFilterRaw]);
+
   const columns: ColumnConfig<SalesOrder>[] = [
     {
       key: "soNumber",
@@ -480,9 +494,9 @@ export default function SalesOrdersPage() {
       key: "status",
       header: "Status",
       sortable: true,
-      filterable: true,
+      filterable: activeTab === "all",
       filterType: "dropdown",
-      filterOptions: FILTER_STATUSES.map(s => ({ label: formatOrderStatus(s), value: s })),
+      filterOptions: statusOptions,
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />

@@ -99,6 +99,7 @@ export default function SalesOrdersPage() {
 
   const { data: customerFilterRaw } = useSalesOrderFilterOptions("customer__customer_name", activeTab);
   const { data: soNumberFilterRaw } = useSalesOrderFilterOptions("so_number", activeTab);
+  const { data: statusFilterRaw } = useSalesOrderFilterOptions("status", activeTab);
 
   const customerOptions = useMemo(() => {
     return (customerFilterRaw || []).map((item: any) => ({
@@ -113,6 +114,14 @@ export default function SalesOrdersPage() {
       value: item.so_number,
     }));
   }, [soNumberFilterRaw]);
+
+  const statusOptions = useMemo(() => {
+    if (!statusFilterRaw || statusFilterRaw.length === 0) return STATUS_OPTIONS;
+    return statusFilterRaw.map((item: any) => ({
+      label: formatOrderStatus(item.status as OrderStatus) || item.status,
+      value: item.status,
+    }));
+  }, [statusFilterRaw]);
 
   useEffect(() => {
     setSalesReturnCount(getSalesReturnRecords().length);
@@ -206,21 +215,25 @@ export default function SalesOrdersPage() {
   const { data: allCountData } = useSalesOrders({
     page: 1,
     pageSize: 1,
+    search: searchVal,
     apiFilters: {},
   });
   const { data: draftCountData } = useSalesOrders({
     page: 1,
     pageSize: 1,
+    search: searchVal,
     apiFilters: { status: "DRAFT" },
   });
   const { data: approvalCountData } = useSalesOrders({
     page: 1,
     pageSize: 1,
+    search: searchVal,
     apiFilters: { status: "PENDING_APPROVAL" },
   });
   const { data: rejectedCountData } = useSalesOrders({
     page: 1,
     pageSize: 1,
+    search: searchVal,
     apiFilters: { status: "REJECTED" },
   });
 
@@ -305,9 +318,9 @@ export default function SalesOrdersPage() {
       key: "status",
       header: "Status",
       sortable: true,
-      filterable: true,
+      filterable: activeTab === "all",
       filterType: "dropdown",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: statusOptions,
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />
