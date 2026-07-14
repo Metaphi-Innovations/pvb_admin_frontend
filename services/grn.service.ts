@@ -301,6 +301,12 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     asString(asRecord(raw.customer).customer_name) ||
     "";
 
+  const mappedSourceType = mapSourceType(asString(raw.source_type));
+  const toWarehouseName =
+    warehouseName ||
+    asString(warehouseSnapshot.warehouse_name) ||
+    asString(warehouseSnapshot.name);
+
   return {
     id: asString(raw.id),
     grnNo: asString(raw.grnNumber),
@@ -326,11 +332,23 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     invoiceFileNames: supplierInvoices.map((inv) => inv.fileName),
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
-    sourceType: mapSourceType(asString(raw.source_type)),
+    sourceType: mappedSourceType,
     salesReturnNo: salesReturnNo || undefined,
     sampleReturnNo: sampleReturnNo || undefined,
     customerName: customerName || undefined,
     receiptRemarks: asString(raw.remarks) || undefined,
+    stockTransferNo:
+      mappedSourceType === "stock_transfer"
+        ? asString(raw.transfer_no) ||
+          asString(raw.stockTransferNo) ||
+          asString(raw.grnNumber)
+        : undefined,
+    fromWarehouse:
+      mappedSourceType === "stock_transfer"
+        ? asString(raw.fromWarehouse) || vendorName || "—"
+        : undefined,
+    toWarehouse:
+      mappedSourceType === "stock_transfer" ? toWarehouseName || undefined : undefined,
   };
 }
 

@@ -1,40 +1,51 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Send } from "lucide-react";
+import { AlertCircle, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Field, TextField } from "@/components/ui/FormFields";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { getTransferById, hydrateTransferLineItems } from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
-import { getStockTransferDispatchLines, createStockTransferGrn } from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
-import { getGrnRecords } from "../shared/mock-data";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import {
+  useCreateGrn,
+  useGrn,
+  useGrnPreviewNumber,
+  useUpdateGrn,
+} from "@/hooks/warehouse/use-grn";
+import { useWarehousesDropdown } from "@/hooks/masters";
+import { getDispatchById } from "@/app/(app)/warehouse/dispatch/services";
+import { StockTransferService } from "@/services/stock-transfer.service";
+import type { CreateGrnPayload, UpdateGrnPayload } from "@/services/grn.service";
+import {
+  buildStockTransferLinesFromDispatch,
+  getCustomerSnapshot,
+  matchesDestinationWarehouse,
+  type StockTransferLineFromDispatch,
+} from "./stock-transfer-grn-utils";
 
-interface LineInputState {
-  productId: string;
-  productName: string;
-  productCode: string;
-  batchNumber: string;
-  mfgDate: string;
-  expDate: string;
-  dispatchedQty: number;
+interface LineInputState extends StockTransferLineFromDispatch {
+  previousReceivedQty: number;
   receivedQty: number;
-  caseSize: number;
+  batchLocked: boolean;
+}
+
+interface FieldErrors {
+  warehouseId?: string;
+  grnDate?: string;
+  lines?: Record<number, string>;
 }
 
 function SectionCard({
   title,
   description,
   children,
-  action,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
-  action?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-border bg-muted/5 p-4 space-y-3 shadow-sm">
@@ -45,130 +56,424 @@ function SectionCard({
             <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
           )}
         </div>
-        {action}
       </div>
       {children}
     </div>
   );
 }
 
-export function StockTransferCreate({ dispatchId }: { dispatchId: number }) {
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+interface StockTransferCreateProps {
+  dispatchId?: string;
+  mode?: "create" | "edit";
+  grnId?: string;
+}
+
+export function StockTransferCreate({
+  dispatchId,
+  mode = "create",
+  grnId,
+}: StockTransferCreateProps) {
   const router = useRouter();
+  const isEdit = mode === "edit";
+  const basePath = "/warehouse/grn/stock-transfer";
 
-  const transfer = useMemo(() => {
-    const t = getTransferById(dispatchId);
-    return t ? hydrateTransferLineItems(t) : null;
-  }, [dispatchId]);
-
-  const dispatchLines = useMemo(() => {
-    return transfer ? getStockTransferDispatchLines(transfer) : [];
-  }, [transfer]);
-
-  // Form State
   const [grnNo, setGrnNo] = useState("");
+  const [grnDate, setGrnDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [warehouseId, setWarehouseId] = useState("");
+  const [warehouseName, setWarehouseName] = useState("");
+  const [fromWarehouseName, setFromWarehouseName] = useState("");
+  const [stockTransferId, setStockTransferId] = useState("");
+  const [stockTransferNo, setStockTransferNo] = useState("");
+  const [dispatchNumber, setDispatchNumber] = useState("");
   const [remarks, setRemarks] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  // Line items received quantities
   const [lines, setLines] = useState<LineInputState[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hydratedEdit, setHydratedEdit] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(!isEdit);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
-  // 1. Precompute GRN Number
-  useEffect(() => {
-    if (!transfer) return;
-    const grnList = getGrnRecords();
-    const generated = `ST-GRN-${transfer.transferNumber.replace("ST-", "")}-${grnList.length + 1}`;
-    setGrnNo(generated);
-  }, [transfer]);
+  const {
+    data: previewNumber,
+    isLoading: previewLoading,
+    isError: previewError,
+    error: previewLoadError,
+    refetch: refetchPreviewNumber,
+  } = useGrnPreviewNumber(!isEdit);
 
-  // 2. Prepopulate items to receive
+  const {
+    data: existingGrn,
+    isLoading: grnLoading,
+    isError: grnError,
+    error: grnLoadError,
+  } = useGrn(grnId, isEdit);
+
+  const { data: warehouses = [] } = useWarehousesDropdown();
+
+  const createGrnMutation = useCreateGrn();
+  const updateGrnMutation = useUpdateGrn();
+
   useEffect(() => {
-    if (!dispatchLines.length) return;
+    if (!isEdit && previewNumber) {
+      setGrnNo(previewNumber);
+    }
+  }, [isEdit, previewNumber]);
+
+  useEffect(() => {
+    if (isEdit || !dispatchId) return;
+    let active = true;
+
+    async function loadDispatch() {
+      setDetailLoading(true);
+      setDetailError(null);
+      try {
+        const dispatch = await getDispatchById(dispatchId!);
+        if (!active) return;
+        if (!dispatch) {
+          setDetailError("Dispatch not found.");
+          return;
+        }
+
+        const snapshot = getCustomerSnapshot(dispatch.packing_done);
+        const toName = String(snapshot.to_warehouse || "");
+        const fromName = String(snapshot.from_warehouse || "");
+        const matchedWarehouse = warehouses.find(
+          (wh) =>
+            wh.warehouseName &&
+            matchesDestinationWarehouse(snapshot, wh.warehouseName),
+        );
+
+        const sourceId = String(dispatch.source_id || "");
+        let transferNo = "";
+        if (sourceId) {
+          try {
+            const transfer = await StockTransferService.getById(sourceId);
+            transferNo = transfer.transferNumber;
+          } catch {
+            transferNo = dispatch.dispatch_number || sourceId;
+          }
+        }
+
+        const { lines: builtLines } = await buildStockTransferLinesFromDispatch(dispatch);
+        if (!active) return;
+
+        setStockTransferId(sourceId);
+        setStockTransferNo(transferNo || dispatch.dispatch_number || "");
+        setDispatchNumber(dispatch.dispatch_number || "");
+        setFromWarehouseName(fromName);
+        setWarehouseName(toName || matchedWarehouse?.warehouseName || "");
+        setWarehouseId(matchedWarehouse?.warehouse_id || "");
+        setLines(
+          builtLines.map((line) => ({
+            ...line,
+            previousReceivedQty: 0,
+            receivedQty: line.maxQty,
+            batchLocked: Boolean(line.batchNo),
+          })),
+        );
+      } catch (err) {
+        if (!active) return;
+        setDetailError(
+          err instanceof Error ? err.message : "Failed to load dispatch for GRN creation.",
+        );
+      } finally {
+        if (active) setDetailLoading(false);
+      }
+    }
+
+    void loadDispatch();
+    return () => {
+      active = false;
+    };
+  }, [isEdit, dispatchId, warehouses]);
+
+  useEffect(() => {
+    if (!isEdit || !existingGrn || hydratedEdit) return;
+    if (existingGrn.status === "qc_completed") return;
+
+    setGrnNo(existingGrn.grnNo || "");
+    setGrnDate(existingGrn.grnDate || new Date().toISOString().slice(0, 10));
+    setWarehouseId(existingGrn.warehouseUuid || "");
+    setWarehouseName(existingGrn.warehouse || existingGrn.toWarehouse || "");
+    setFromWarehouseName(existingGrn.fromWarehouse || "");
+    setStockTransferId(existingGrn.sourceId || "");
+    setStockTransferNo(existingGrn.stockTransferNo || existingGrn.grnNo || "");
+    setRemarks(existingGrn.receiptRemarks || "");
+
     setLines(
-      dispatchLines.map((line) => ({
-        productId: line.productId,
-        productName: line.productName,
-        productCode: line.productCode,
-        batchNumber: line.batchNumber,
-        mfgDate: line.mfgDate || new Date().toISOString().slice(0, 10),
-        expDate: line.expDate || new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        dispatchedQty: line.dispatchedQty,
-        receivedQty: line.dispatchedQty, // default to receive full quantity
-        caseSize: 10, // default case size
-      }))
+      existingGrn.items.map((item) => {
+        const batch =
+          existingGrn.batches.find(
+            (b) =>
+              (item.sourceItemId && b.productId === item.sourceItemId) ||
+              b.productId === item.productId ||
+              b.productCode === item.productCode,
+          );
+        return {
+          sourceItemId: item.sourceItemId || item.productId,
+          productId: item.productId,
+          sku: item.productCode || "",
+          productName: item.productName,
+          unit: item.unit || "Unit",
+          batchNo: batch?.batchNumber || "",
+          mfgDate: batch?.mfgDate || "",
+          expDate: batch?.expDate || "",
+          maxQty: item.orderedQty || item.receivedQty || 0,
+          previousReceivedQty: item.alreadyReceivedQty || 0,
+          receivedQty: item.receivedQty,
+          caseSize: item.unitPerPacking || 1,
+          batchLocked: Boolean(batch?.batchNumber),
+          productSnapshot: {
+            product_id: item.productId,
+            product_name: item.productName,
+            product_code: item.productCode,
+            base_unit: item.unit || "Unit",
+          },
+        };
+      }),
     );
-  }, [dispatchLines]);
+    setHydratedEdit(true);
+  }, [isEdit, existingGrn, hydratedEdit]);
 
   const updateLineField = <K extends keyof LineInputState>(
     index: number,
     field: K,
-    val: LineInputState[K]
+    val: LineInputState[K],
   ) => {
     setLines((prev) => {
       const copy = [...prev];
-      copy[index] = {
-        ...copy[index],
-        [field]: val,
-      };
+      copy[index] = { ...copy[index], [field]: val };
       return copy;
+    });
+    setFieldErrors((prev) => {
+      if (!prev.lines?.[index]) return prev;
+      const nextLines = { ...prev.lines };
+      delete nextLines[index];
+      return { ...prev, lines: nextLines };
     });
   };
 
-  const handleSave = () => {
-    if (!transfer) {
-      setError("Source stock transfer not found.");
-      return;
+  const validate = (): boolean => {
+    const next: FieldErrors = {};
+    if (!warehouseId) {
+      next.warehouseId =
+        "Destination warehouse could not be resolved. Ensure PackingDone.to_warehouse matches a warehouse master.";
+    }
+    if (!grnDate) {
+      next.grnDate = "GRN date is required.";
     }
 
-    // Validation
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.receivedQty === 0) {
-        setError(`Please enter received quantity for product "${line.productName}".`);
+    const lineErrors: Record<number, string> = {};
+    let hasPositiveReceive = false;
+
+    lines.forEach((line, idx) => {
+      if (line.receivedQty > 0) hasPositiveReceive = true;
+      if (line.receivedQty < 0) {
+        lineErrors[idx] = "Received quantity cannot be negative.";
         return;
       }
-      if (line.receivedQty > line.dispatchedQty) {
-        setError(
-          `Received quantity (${line.receivedQty}) for "${line.productName}" exceeds the dispatched quantity (${line.dispatchedQty}).`
-        );
+      if (line.receivedQty > line.maxQty) {
+        lineErrors[idx] = `Received qty exceeds dispatched qty (${line.maxQty}).`;
         return;
       }
+      if (line.receivedQty > 0) {
+        if (!line.batchNo.trim()) {
+          lineErrors[idx] = "Batch number is required.";
+          return;
+        }
+        if (!line.mfgDate.trim()) {
+          lineErrors[idx] = "MFG date is required.";
+          return;
+        }
+        if (!line.expDate.trim()) {
+          lineErrors[idx] = "Expiry date is required.";
+          return;
+        }
+        if (line.mfgDate && line.expDate && line.expDate < line.mfgDate) {
+          lineErrors[idx] = "Expiry date must be on or after MFG date.";
+        }
+      }
+    });
+
+    if (!hasPositiveReceive) {
+      setFormError("Enter received quantity for at least one product.");
+    } else {
+      setFormError(null);
     }
 
-    setError(null);
-
-    const result = createStockTransferGrn(
-      transfer,
-      lines.map((line) => ({
-        productId: line.productId,
-        productName: line.productName,
-        productCode: line.productCode,
-        batchNumber: line.batchNumber,
-        mfgDate: line.mfgDate,
-        expDate: line.expDate,
-        dispatchedQty: line.dispatchedQty,
-        receivedQty: line.receivedQty,
-      })),
-      remarks
-    );
-
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    if (Object.keys(lineErrors).length > 0) {
+      next.lines = lineErrors;
     }
 
-    router.push("/warehouse/grn/stock-transfer");
+    setFieldErrors(next);
+    return Object.keys(next).length === 0 && hasPositiveReceive;
   };
 
-  if (!transfer) {
+  const handleSave = async () => {
+    if (!validate()) return;
+    if (!isEdit && !stockTransferId) {
+      setFormError("Stock transfer source id is missing on this dispatch.");
+      return;
+    }
+
+    const invoiceNumber = stockTransferNo || dispatchNumber || grnNo || "ST-RECEIPT";
+    const invoiceDate = grnDate;
+
+    const payloadItems = lines
+      .filter((line) => line.receivedQty > 0)
+      .map((line) => {
+        const current = round2(line.receivedQty);
+        const previous = round2(line.previousReceivedQty);
+        const ordered = round2(line.maxQty);
+        return {
+          source_item_id: line.sourceItemId,
+          ordered_base_qty: ordered,
+          previous_received_base_qty: previous,
+          current_received_base_qty: current,
+          pending_base_qty: Math.max(0, round2(ordered - previous - current)),
+          quantity_type: "PIECE" as const,
+          remarks: null,
+          productSnapshot: line.productSnapshot,
+          batches: [
+            {
+              batchNumber: line.batchNo.trim(),
+              invoiceNumber,
+              manufactureDate: line.mfgDate || null,
+              expiryDate: line.expDate || null,
+              quantity_base_qty: current,
+              rate: null,
+              gst: null,
+              gstAmount: null,
+              remarks: null,
+            },
+          ],
+        };
+      });
+
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      if (isEdit && grnId) {
+        const payload: UpdateGrnPayload = {
+          warehouseId,
+          grnDate,
+          remarks: remarks.trim() || null,
+          items: payloadItems,
+          invoices: [{ invoiceNumber, invoiceDate }],
+        };
+        await updateGrnMutation.mutateAsync({ id: grnId, input: payload });
+        router.push(`${basePath}/${grnId}`);
+      } else {
+        const payload: CreateGrnPayload = {
+          grnNumber: grnNo || null,
+          source_id: stockTransferId,
+          source_type: "STOCK_TRANSFER",
+          supplierId: null,
+          warehouseId,
+          grnDate,
+          remarks: remarks.trim() || null,
+          items: payloadItems,
+          invoices: [{ invoiceNumber, invoiceDate }],
+        };
+        await createGrnMutation.mutateAsync(payload);
+        router.push(basePath);
+      }
+    } catch (err) {
+      const message = getErrorMessage(
+        err,
+        isEdit ? "Failed to update GRN." : "Failed to create GRN.",
+      );
+
+      if (!isEdit && /grn number .+ already exists/i.test(message)) {
+        try {
+          const { data: nextNumber } = await refetchPreviewNumber();
+          if (nextNumber) {
+            setGrnNo(nextNumber);
+            setFormError(
+              `${message} A new GRN number (${nextNumber}) has been loaded. Please submit again.`,
+            );
+            return;
+          }
+        } catch {
+          // Fall through
+        }
+      }
+
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isBusy =
+    isSubmitting || createGrnMutation.isPending || updateGrnMutation.isPending;
+  const backHref = isEdit && grnId ? `${basePath}/${grnId}` : basePath;
+
+  if (isEdit && grnLoading) {
+    return (
+      <FormContainer
+        title="Edit Stock Transfer GRN"
+        description="Loading GRN details…"
+        onBack={() => router.push(basePath)}
+        onCancel={() => router.push(basePath)}
+      >
+        <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading GRN…
+        </div>
+      </FormContainer>
+    );
+  }
+
+  if (isEdit && (grnError || !existingGrn)) {
+    return (
+      <FormContainer
+        title="Edit Stock Transfer GRN"
+        description="Unable to load GRN for editing."
+        onBack={() => router.push(basePath)}
+        onCancel={() => router.push(basePath)}
+      >
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {grnLoadError instanceof Error
+            ? grnLoadError.message
+            : "GRN not found or could not be loaded."}
+        </div>
+      </FormContainer>
+    );
+  }
+
+  if (isEdit && existingGrn?.status === "qc_completed") {
+    return (
+      <FormContainer
+        title="Edit Stock Transfer GRN"
+        description="This GRN can no longer be edited."
+        onBack={() => router.push(backHref)}
+        onCancel={() => router.push(backHref)}
+      >
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          QC is completed for this GRN. Editing is disabled.
+        </div>
+      </FormContainer>
+    );
+  }
+
+  if (!isEdit && !dispatchId) {
     return (
       <FormContainer
         title="Create Stock Transfer GRN"
-        description="Transfer not found or not eligible for receipt."
-        onBack={() => router.push("/warehouse/grn/stock-transfer")}
+        description="Dispatch is required to create a stock transfer GRN."
+        onBack={() => router.push(basePath)}
       >
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-500" />
-          <span>This stock transfer is not available. It may already be received or is not in transit.</span>
+          <span>Missing dispatchId. Open Create GRN from a pending dispatch.</span>
         </div>
       </FormContainer>
     );
@@ -176,135 +481,231 @@ export function StockTransferCreate({ dispatchId }: { dispatchId: number }) {
 
   return (
     <FormContainer
-      title="Create Stock Transfer GRN"
-      description="Record receipt of transferred stock between warehouses. Details are populated from dispatch records."
-      onBack={() => router.push("/warehouse/grn/stock-transfer")}
-      onCancel={() => router.push("/warehouse/grn/stock-transfer")}
+      title={isEdit ? "Edit Stock Transfer GRN" : "Create Stock Transfer GRN"}
+      description={
+        isEdit
+          ? "Update receipt quantities and batch details for this stock transfer GRN."
+          : "Record receipt of transferred stock. Details are populated from the dispatch / packing record."
+      }
+      onBack={() => router.push(backHref)}
+      onCancel={() => router.push(backHref)}
       actions={
         <Button
           className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
           onClick={handleSave}
+          disabled={isBusy || detailLoading}
         >
-          <Send className="w-3.5 h-3.5" /> Complete Receipt
+          {isBusy ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Send className="w-3.5 h-3.5" />
+          )}
+          {isEdit ? "Update GRN" : "Complete Receipt"}
         </Button>
       }
     >
       <div className="space-y-6">
-        {error && (
+        {(formError || previewError || detailError) && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            {error}
+            {formError ||
+              detailError ||
+              getErrorMessage(previewLoadError, "Failed to load GRN number.")}
           </div>
         )}
 
-        {/* 1. Header General Information */}
         <SectionCard
           title="General Information"
-          description="Inward details automatically fetched from transit dispatch record."
+          description="Destination warehouse is taken from PackingDone.customer_snapshot.to_warehouse."
         >
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <TextField
+                label="GRN Number"
+                value={previewLoading && !isEdit ? "Loading…" : grnNo}
+                readOnly
+                className="h-9 text-xs font-mono font-bold bg-muted/30"
+              />
+            </div>
+
             <TextField
-              label="GRN Number"
-              value={grnNo}
+              label="Stock Transfer No."
+              value={stockTransferNo || (detailLoading ? "Loading…" : "")}
               readOnly
-              className="h-9 text-xs font-mono font-bold bg-muted/30"
+              className="h-9 text-xs font-mono bg-muted/30"
             />
 
-            <Field label="Stock Transfer Number">
-              <AutocompleteSelect
-                options={[{ value: transfer.transferNumber, label: transfer.transferNumber }]}
-                value={transfer.transferNumber}
-                onChange={() => {}}
-                disabled={true}
-                className="h-9 text-xs py-1.5 px-3 rounded-lg border-border bg-muted/30 shadow-none focus:outline-none opacity-80"
-              />
-            </Field>
-
-            <Field label="Destination Warehouse">
-              <AutocompleteSelect
-                options={[{ value: transfer.targetWarehouseName, label: transfer.targetWarehouseName }]}
-                value={transfer.targetWarehouseName}
-                onChange={() => {}}
-                disabled={true}
-                className="h-9 text-xs py-1.5 px-3 rounded-lg border-border bg-muted/30 shadow-none focus:outline-none opacity-80"
+            <Field
+              label="Destination Warehouse"
+              required
+              error={fieldErrors.warehouseId}
+            >
+              <Input
+                value={warehouseName || (detailLoading ? "Loading…" : "")}
+                readOnly
+                placeholder="Auto-populated from packing snapshot…"
+                className="h-9 text-xs bg-muted/30"
               />
             </Field>
 
             <TextField
               label="GRN Date"
-              value={new Date().toISOString().slice(0, 10)}
-              readOnly
-              className="h-9 text-xs font-bold bg-muted/30"
+              type="date"
+              required
+              error={fieldErrors.grnDate}
+              value={grnDate}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setGrnDate(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, grnDate: undefined }));
+              }}
+              className="h-9 text-xs bg-white"
             />
           </div>
+
+          {(fromWarehouseName || dispatchNumber) && (
+            <p className="text-[11px] text-muted-foreground">
+              {fromWarehouseName && (
+                <>
+                  From:{" "}
+                  <span className="font-medium text-foreground">{fromWarehouseName}</span>
+                </>
+              )}
+              {fromWarehouseName && dispatchNumber && " · "}
+              {dispatchNumber && (
+                <>
+                  Dispatch:{" "}
+                  <span className="font-medium text-foreground font-mono">{dispatchNumber}</span>
+                </>
+              )}
+            </p>
+          )}
         </SectionCard>
+
+        {detailLoading && !isEdit && (
+          <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading dispatch items…
+          </div>
+        )}
+
+        {!detailLoading && lines.length === 0 && !detailError && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            This dispatch has no products to receive.
+          </div>
+        )}
 
         {lines.length > 0 && (
           <SectionCard
             title="Items to Receive"
-            description="Input received quantities in pieces. Batch details and case sizes are read-only."
+            description="Enter received quantities. Batch details are prefilled from packing / inventory."
           >
             <div className="border border-border rounded-xl overflow-hidden bg-white shadow-xs">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[1100px]">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[200px]">Product & SKU</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">Batch No.</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">MFG Date</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">Expiry Date</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">Case Size</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">Dispatched</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-28">Received Qty (Pcs)</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-36">Case Breakdown</th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[200px]">
+                        Product & SKU
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                        Batch No.
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                        MFG Date
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                        Expiry Date
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                        Case Size
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                        Dispatched
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-28">
+                        Received Qty
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-36">
+                        Case Breakdown
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {lines.map((line, idx) => {
                       const cases = Math.floor(line.receivedQty / line.caseSize);
                       const loose = line.receivedQty % line.caseSize;
-                      const breakdownText = cases > 0 
-                        ? `${cases} Case${cases > 1 ? 's' : ''} + ${loose} Loose` 
-                        : `${loose} Loose`;
+                      const breakdownText =
+                        cases > 0
+                          ? `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`
+                          : `${loose} Loose`;
+                      const lineError = fieldErrors.lines?.[idx];
 
                       return (
-                        <tr key={idx} className="hover:bg-muted/10">
+                        <tr key={`${line.sourceItemId}-${idx}`} className="hover:bg-muted/10">
                           <td className="p-3">
                             <p className="text-xs font-semibold text-foreground">{line.productName}</p>
-                            <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{line.productCode}</p>
+                            <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                              {line.sku}
+                            </p>
+                            {lineError && (
+                              <p className="text-[10px] text-red-600 mt-1">{lineError}</p>
+                            )}
                           </td>
                           <td className="p-3">
-                            <span className="inline-block text-[10px] font-mono font-semibold bg-brand-50 text-brand-700 px-2 py-0.5 rounded border border-brand-100">
-                              {line.batchNumber}
-                            </span>
+                            {line.batchLocked ? (
+                              <span className="inline-block text-[10px] font-mono font-semibold bg-brand-50 text-brand-700 px-2 py-0.5 rounded border border-brand-100">
+                                {line.batchNo}
+                              </span>
+                            ) : (
+                              <Input
+                                value={line.batchNo}
+                                onChange={(e) => updateLineField(idx, "batchNo", e.target.value)}
+                                className="h-8 text-xs font-mono w-28"
+                              />
+                            )}
                           </td>
-                          <td className="p-3 text-xs text-muted-foreground">
-                            {line.mfgDate}
+                          <td className="p-3">
+                            <Input
+                              type="date"
+                              value={line.mfgDate}
+                              onChange={(e) => updateLineField(idx, "mfgDate", e.target.value)}
+                              className="h-8 text-xs w-32"
+                            />
                           </td>
-                          <td className="p-3 text-xs text-muted-foreground">
-                            {line.expDate}
+                          <td className="p-3">
+                            <Input
+                              type="date"
+                              value={line.expDate}
+                              onChange={(e) => updateLineField(idx, "expDate", e.target.value)}
+                              className="h-8 text-xs w-32"
+                            />
                           </td>
                           <td className="p-3 text-center text-xs font-medium text-muted-foreground tabular-nums">
                             {line.caseSize}
                           </td>
                           <td className="p-3 text-center text-xs font-medium tabular-nums">
-                            {line.dispatchedQty}
+                            {line.maxQty}
                           </td>
                           <td className="p-3">
                             <div className="flex justify-center">
                               <Input
                                 type="number"
                                 value={line.receivedQty || ""}
-                                onChange={(e) => updateLineField(idx, "receivedQty", Math.max(0, parseInt(e.target.value) || 0))}
+                                onChange={(e) =>
+                                  updateLineField(
+                                    idx,
+                                    "receivedQty",
+                                    Math.max(0, parseFloat(e.target.value) || 0),
+                                  )
+                                }
                                 className={cn(
                                   "h-8 text-center text-xs font-medium w-20 focus:ring-brand-500",
-                                  line.receivedQty > line.dispatchedQty && "border-red-500 text-red-600 focus:ring-red-500"
+                                  line.receivedQty > line.maxQty &&
+                                    "border-red-500 text-red-600 focus:ring-red-500",
                                 )}
                               />
                             </div>
-                            {line.receivedQty > line.dispatchedQty && (
-                              <span className="block text-[8px] text-red-500 font-semibold text-center mt-1">Exceeds Shipped</span>
-                            )}
                           </td>
                           <td className="p-3">
                             <span className="text-[10px] font-semibold text-brand-700 bg-brand-50/50 border border-brand-100/80 px-2.5 py-1 rounded-lg block text-center min-w-[100px] leading-tight">
@@ -321,7 +722,10 @@ export function StockTransferCreate({ dispatchId }: { dispatchId: number }) {
           </SectionCard>
         )}
 
-        <SectionCard title="Receipt Remarks" description="Add any relevant notes or details about the stock transfer receipt.">
+        <SectionCard
+          title="Receipt Remarks"
+          description="Add any relevant notes about the stock transfer receipt."
+        >
           <textarea
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}

@@ -139,10 +139,14 @@ function mapListItem(
     asString(purchaseOrder.poNumber) ||
     "";
 
+  const sourceId =
+    asString(raw.source_id) || asString(raw.sourceId) || undefined;
+
   return {
     id: asString(raw.id),
     grnNo,
     poNumber,
+    sourceId,
     vendorName: supplierName,
     warehouse: warehouseName,
     warehouseId: asNumber(warehouse.sr_no) || undefined,
