@@ -40,6 +40,13 @@ export interface GrnItem {
   pendingQty?: number;
   /** Current received quantity entered on this GRN (this is the base_qty) */
   receivedQty: number;
+  /**
+   * Display quantity in the unit of quantityType (CASE or PIECE).
+   * Converted to receivedQty (base) before submit.
+   */
+  displayQty?: number;
+  /** CASE | PIECE — UX only; storage remains base qty. */
+  quantityType?: "CASE" | "PIECE";
   receivedCases?: number;
   receivedLooseQty?: number;
   unitPerPacking?: number;
@@ -68,6 +75,8 @@ export interface GrnBatch {
   receivedCases?: number;
   receivedLooseQty?: number;
   unitPerPacking?: number;
+  /** Copied from parent GRN item when available (batches store base qty only). */
+  quantityType?: "CASE" | "PIECE";
   poNumber?: string;
   poLineId?: number;
   invoiceNumber?: string;

@@ -119,6 +119,7 @@ export function ReturnGrnCreate({
     isLoading: previewLoading,
     isError: previewError,
     error: previewLoadError,
+    refetch: refetchPreviewNumber,
   } = useGrnPreviewNumber(!isEdit);
 
   const {
@@ -358,12 +359,14 @@ export function ReturnGrnCreate({
       previous_received_base_qty: line.previousReceivedQty,
       current_received_base_qty: line.receivedQty,
       pending_base_qty: Math.max(0, round2(line.maxQty - line.previousReceivedQty - line.receivedQty)),
+      quantity_type: "PIECE" as const,
       productSnapshot: {
         ...line.productSnapshot,
         product_id: line.productId,
         product_code: line.sku,
         product_name: line.productName,
         base_unit: line.unit,
+        unit_per_packing: line.caseSize || 1,
       },
       batches: [
         {
@@ -374,6 +377,7 @@ export function ReturnGrnCreate({
           quantity_base_qty: line.receivedQty,
           rate: null,
           gst: null,
+          gstAmount: null,
         },
       ],
     }));
@@ -409,12 +413,27 @@ export function ReturnGrnCreate({
         router.push(basePath);
       }
     } catch (err) {
-      setFormError(
-        getErrorMessage(
-          err,
-          isEdit ? "Failed to update GRN." : "Failed to create GRN.",
-        ),
+      const message = getErrorMessage(
+        err,
+        isEdit ? "Failed to update GRN." : "Failed to create GRN.",
       );
+
+      if (!isEdit && /grn number .+ already exists/i.test(message)) {
+        try {
+          const { data: nextNumber } = await refetchPreviewNumber();
+          if (nextNumber) {
+            setGrnNo(nextNumber);
+            setFormError(
+              `${message} A new GRN number (${nextNumber}) has been loaded. Please submit again.`,
+            );
+            return;
+          }
+        } catch {
+          // Fall through to the original error if preview refresh fails.
+        }
+      }
+
+      setFormError(message);
     } finally {
       setIsSubmitting(false);
     }
