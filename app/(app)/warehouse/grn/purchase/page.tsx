@@ -20,7 +20,9 @@ export default function PurchaseListingRoutePage() {
   const [grnSort, setGrnSort] = useState<SortState>({ key: "", direction: "none" });
   const [grnPage, setGrnPage] = useState(1);
   const [grnPageSize, setGrnPageSize] = useState(10);
-  const { handleOpenFilter, getFilterOptionsForColumn } = useGrnLazyFilters();
+  const { handleOpenFilter, getFilterOptionsForColumn } = useGrnLazyFilters(
+    PURCHASE_TAB_CONTEXT.sourceType,
+  );
 
   const { items, total, loading } = useGrnListData({
     tabContext: PURCHASE_TAB_CONTEXT,

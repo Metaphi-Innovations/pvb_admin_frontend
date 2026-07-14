@@ -361,10 +361,14 @@ export const GrnListService = {
 
   async getFilterDropdown(
     fieldName: GrnFilterField,
+    sourceType?: BackendGrnSourceType,
     signal?: AbortSignal,
   ): Promise<GrnFilterOption[]> {
     const response = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.GRN.FILTER, {
-      params: { field_name: fieldName },
+      params: {
+        field_name: fieldName,
+        ...(sourceType ? { source_type: sourceType } : {}),
+      },
       signal,
     });
 

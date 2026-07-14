@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FilterState, SortState } from "@/components/listing/types";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
 import type { GrnTabApiContext } from "@/lib/warehouse/grn-list-config";
+import type { BackendGrnSourceType } from "@/lib/warehouse/grn-status";
 import {
   buildGrnApiFilters,
   buildGrnOrdering,
@@ -107,10 +108,14 @@ export function useGrnListData({
   };
 }
 
-const filterOptionsCache = new Map<GrnFilterField, GrnFilterOption[]>();
-const filterLoadingFields = new Set<GrnFilterField>();
+const filterOptionsCache = new Map<string, GrnFilterOption[]>();
+const filterLoadingFields = new Set<string>();
 
-export function useGrnLazyFilters() {
+function filterCacheKey(fieldName: GrnFilterField, sourceType?: BackendGrnSourceType) {
+  return `${sourceType ?? "ALL"}:${fieldName}`;
+}
+
+export function useGrnLazyFilters(sourceType?: BackendGrnSourceType) {
   const [filterOptions, setFilterOptions] = useState<
     Partial<Record<GrnFilterField, GrnFilterOption[]>>
   >({});
@@ -122,21 +127,23 @@ export function useGrnLazyFilters() {
     const fieldName = GRN_FILTER_COLUMN_MAP[columnKey];
     if (!fieldName) return;
 
-    if (filterOptionsCache.has(fieldName)) {
+    const cacheKey = filterCacheKey(fieldName, sourceType);
+
+    if (filterOptionsCache.has(cacheKey)) {
       loadedColumnsRef.current.add(columnKey);
       setFilterOptions((prev) => ({
         ...prev,
-        [fieldName]: filterOptionsCache.get(fieldName),
+        [fieldName]: filterOptionsCache.get(cacheKey),
       }));
       return;
     }
 
-    if (filterLoadingFields.has(fieldName)) return;
+    if (filterLoadingFields.has(cacheKey)) return;
 
-    filterLoadingFields.add(fieldName);
+    filterLoadingFields.add(cacheKey);
     try {
-      const options = await GrnListService.getFilterDropdown(fieldName);
-      filterOptionsCache.set(fieldName, options);
+      const options = await GrnListService.getFilterDropdown(fieldName, sourceType);
+      filterOptionsCache.set(cacheKey, options);
       loadedColumnsRef.current.add(columnKey);
       setFilterOptions((prev) => ({
         ...prev,
@@ -146,9 +153,9 @@ export function useGrnLazyFilters() {
       console.error(`Error loading GRN filter options for ${columnKey}:`, err);
       loadedColumnsRef.current.delete(columnKey);
     } finally {
-      filterLoadingFields.delete(fieldName);
+      filterLoadingFields.delete(cacheKey);
     }
-  }, []);
+  }, [sourceType]);
 
   const getFilterOptionsForColumn = useCallback(
     (columnKey: string, staticOptions?: GrnFilterOption[]) => {
