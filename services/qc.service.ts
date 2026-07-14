@@ -82,7 +82,7 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
       rejectedQty: Number(item.rejected_base_qty || item.rejectedQty_base_unit || item.rejectedQty || 0),
       holdQty: 0,
       grnBatchId: batch.id || item.source_batch_id,
-      unitPerPacking: Number(product.packaging_ratio || 10),
+      unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
       rejectionReason: item.remarks || "",
     };
   }) || [];
@@ -128,7 +128,7 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
         rejectedQty: 0,
         holdQty: 0,
         grnBatchId: batch.id,
-        unitPerPacking: Number(product.packaging_ratio || 10),
+        unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
       });
     });
   });
