@@ -13,6 +13,7 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { onQcCompleted } from "@/lib/warehouse/inventory-movement";
 import { completeStockTransferQc } from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
+import { showToast } from "@/lib/toast";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -209,14 +210,15 @@ function CreateQcForm() {
 
   const handleSubmit = async () => {
     if (!grnNo || !qcRecordId) {
-      alert("Missing QC / GRN reference.");
+      showToast("Missing QC / GRN reference.", "error");
       return;
     }
     if (hasErrors || hasEmptyRows) {
-      alert(
+      showToast(
         isStockTransfer
           ? "Enter accepted, rejected, or hold qty for each batch. Sum must equal received qty."
           : "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
+        "error"
       );
       return;
     }
@@ -239,19 +241,20 @@ function CreateQcForm() {
       const editParam = searchParams.get("edit") === "true";
       if (editParam) {
         await QcService.update(qcRecordId, payload);
-        alert("QC Record updated successfully.");
+        showToast("QC Record updated successfully.", "success");
       } else {
         await QcService.create(payload);
-        alert(
+        showToast(
           isStockTransfer
             ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
             : "QC completed — stock moved to Available / Rejected.",
+          "success"
         );
       }
       router.push("/warehouse/qc");
     } catch (err: any) {
       console.error("Failed to submit QC Record:", err);
-      alert(err.response?.data?.message || "Failed to submit QC Record.");
+      showToast(err.response?.data?.message || "Failed to submit QC Record.", "error");
     }
   };
 

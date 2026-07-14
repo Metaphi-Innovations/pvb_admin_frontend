@@ -41,6 +41,7 @@ interface ProductLinesEditorProps {
 	error?: string;
 	sampleMode?: boolean;
 	showHeader?: boolean;
+	pricingContext?: { stateName: string; customerMasterType: string } | null;
 }
 
 const NUM_INPUT =
@@ -230,6 +231,7 @@ export default function ProductLinesEditor({
 	onChange,
 	error,
 	showHeader = false,
+	pricingContext,
 }: ProductLinesEditorProps) {
 	const [localError, setLocalError] = useState<string | null>(null);
 	const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
@@ -244,7 +246,7 @@ export default function ProductLinesEditor({
 			let next = { ...prev, ...patch };
 			if (patch.productId !== undefined && patch.productId !== null) {
 				const product = getProductById(patch.productId);
-				if (product) next = applyProductToLine(next as SalesOrderLineItem, product);
+				if (product) next = applyProductToLine(next as SalesOrderLineItem, product, pricingContext);
 			} else {
 				if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
 					if (next.quantityType === "Case") {
@@ -270,7 +272,7 @@ export default function ProductLinesEditor({
 
 				if (patch.productId !== undefined && patch.productId !== null) {
 					const product = getProductById(patch.productId);
-					if (product) next = applyProductToLine(next, product);
+					if (product) next = applyProductToLine(next, product, pricingContext);
 				} else {
 					if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
 						if (next.quantityType === "Case") {
@@ -328,13 +330,13 @@ export default function ProductLinesEditor({
 
 		const newLines = [...lines];
 		const p1 = selectedProducts[0];
-		newLines[lineIndex] = applyProductToLine(newLines[lineIndex], p1);
+		newLines[lineIndex] = applyProductToLine(newLines[lineIndex], p1, pricingContext);
 
 		for (let i = 1; i < selectedProducts.length; i++) {
 			const p = selectedProducts[i];
 			let newLine = createEmptyLineItem();
 			newLine.productId = p.id;
-			newLine = applyProductToLine(newLine, p);
+			newLine = applyProductToLine(newLine, p, pricingContext);
 			newLines.push(newLine);
 		}
 
@@ -377,7 +379,7 @@ export default function ProductLinesEditor({
 			newLine.caseQuantity = topCaseQuantity;
 			newLine.pieceQuantity = topPieceQuantity;
 			newLine.quantity = qty;
-			newLine = applyProductToLine(newLine, prod);
+			newLine = applyProductToLine(newLine, prod, pricingContext);
 			newLines.push(newLine);
 		}
 

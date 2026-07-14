@@ -197,6 +197,7 @@ export default function StockTransferPage() {
   const { data: sourceWhFilterRaw } = useStockTransferFilterOptions("from_warehouse__warehouse_name", filterStatus);
   const { data: targetWhFilterRaw } = useStockTransferFilterOptions("to_warehouse__warehouse_name", filterStatus);
   const { data: transferNoFilterRaw } = useStockTransferFilterOptions("transfer_no", filterStatus);
+  const { data: statusFilterRaw } = useStockTransferFilterOptions("status", filterStatus);
 
   const sourceWarehouseOptions = useMemo(() => {
     return (sourceWhFilterRaw || []).map((item: any) => ({
@@ -218,6 +219,22 @@ export default function StockTransferPage() {
       value: item.transfer_no,
     }));
   }, [transferNoFilterRaw]);
+
+  const statusOptions = useMemo(() => {
+    if (!statusFilterRaw || statusFilterRaw.length === 0) {
+      return [
+        { label: "Draft", value: "draft" },
+        { label: "Pending Approval", value: "pending" },
+        { label: "Approved", value: "approved" },
+        { label: "Rejected", value: "rejected" },
+        { label: "Cancelled", value: "cancelled" },
+      ];
+    }
+    return statusFilterRaw.map((item: any) => ({
+      label: formatTransferStatus(item.status as TransferStatus) || item.status,
+      value: item.status,
+    }));
+  }, [statusFilterRaw]);
 
   const cancelMutation = useCancelStockTransfer();
 
@@ -344,13 +361,7 @@ export default function StockTransferPage() {
       sortable: true,
       filterable: activeTab === "all",
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Draft", value: "draft" },
-        { label: "Pending Approval", value: "pending" },
-        { label: "Approved", value: "approved" },
-        { label: "Rejected", value: "rejected" },
-        { label: "Cancelled", value: "cancelled" },
-      ],
+      filterOptions: statusOptions,
       render: (val, row) => (
         <StatusPill status={row.status} />
       )
