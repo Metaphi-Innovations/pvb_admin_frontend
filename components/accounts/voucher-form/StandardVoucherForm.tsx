@@ -16,6 +16,14 @@ import {
   VOUCHER_ERROR_CLASS,
   VOUCHER_FORM_CARD,
   VOUCHER_FORM_OUTER,
+  RECEIPT_VOUCHER_FORM_CARD,
+  RECEIPT_VOUCHER_PAGE_WRAP,
+  ReceiptFormSection,
+  ReceiptFormTotal,
+  RECEIPT_BUTTON_CLASS,
+  RECEIPT_INPUT_CLASS,
+  RECEIPT_LABEL_CLASS,
+  RECEIPT_PREVIEW_TEXT_CLASS,
   VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
   VOUCHER_PREVIEW_TEXT_CLASS,
@@ -154,6 +162,12 @@ export function StandardVoucherForm({
     [partyRef],
   );
 
+  const isPremiumVoucher =
+    voucherType === "receipt" ||
+    voucherType === "contra" ||
+    voucherType === "journal" ||
+    (voucherType === "payment" && !readOnly);
+  const isJournalGrid = config.layout === "journal-grid";
   const showTdsSection = config.showTds && (deductTds || Boolean(vendor?.tdsApplicable));
   const numericTds = showTdsSection ? Number(tdsAmount) || 0 : 0;
   const paymentGrossDebit = voucherType === "payment" ? roundMoney(debitEntry?.amount ?? 0) : 0;
@@ -288,13 +302,13 @@ export function StandardVoucherForm({
       actions={
         readOnly ? (
           <>
-            <Button variant="outline" size="sm" className={cn(VOUCHER_BUTTON_CLASS, "gap-1")} onClick={onDone}>
+            <Button variant="outline" size="sm" className={cn(isPremiumVoucher ? RECEIPT_BUTTON_CLASS : VOUCHER_BUTTON_CLASS, "gap-1")} onClick={onDone}>
               <X className="w-3.5 h-3.5" /> Back
             </Button>
             {canEdit && onEdit && (
               <Button
                 size="sm"
-                className={cn(VOUCHER_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white gap-1")}
+                className={cn(isPremiumVoucher ? RECEIPT_BUTTON_CLASS : VOUCHER_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white gap-1")}
                 onClick={onEdit}
               >
                 <Pencil className="w-3.5 h-3.5" /> Edit
@@ -307,7 +321,7 @@ export function StandardVoucherForm({
               type="button"
               variant="outline"
               size="sm"
-              className={VOUCHER_BUTTON_CLASS}
+              className={isPremiumVoucher ? RECEIPT_BUTTON_CLASS : VOUCHER_BUTTON_CLASS}
               onClick={requestCancel}
               disabled={isSubmitting}
             >
@@ -316,7 +330,7 @@ export function StandardVoucherForm({
             <Button
               variant="outline"
               size="sm"
-              className={cn(VOUCHER_BUTTON_CLASS, "gap-1")}
+              className={cn(isPremiumVoucher ? RECEIPT_BUTTON_CLASS : VOUCHER_BUTTON_CLASS, "gap-1")}
               onClick={onSaveDraftClick}
               disabled={isSubmitting}
             >
@@ -324,7 +338,7 @@ export function StandardVoucherForm({
             </Button>
             <Button
               size="sm"
-              className={cn(VOUCHER_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white gap-1")}
+              className={cn(isPremiumVoucher ? RECEIPT_BUTTON_CLASS : VOUCHER_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white gap-1")}
               onClick={onPostClick}
               disabled={!canPost || isSubmitting}
             >
@@ -335,10 +349,176 @@ export function StandardVoucherForm({
         )
       }
     >
-      <div className={VOUCHER_FORM_OUTER}>
+      <div className={cn(VOUCHER_FORM_OUTER, isPremiumVoucher && RECEIPT_VOUCHER_PAGE_WRAP)}>
         {error && <div className={VOUCHER_ERROR_CLASS}>{error}</div>}
 
-        <div className={VOUCHER_FORM_CARD}>
+        <div className={cn(isPremiumVoucher ? RECEIPT_VOUCHER_FORM_CARD : VOUCHER_FORM_CARD)}>
+          {isPremiumVoucher ? (
+            <>
+              <ReceiptFormSection title="Voucher Details">
+                <VoucherFormHeaderFields
+                  model={model}
+                  config={config}
+                  readOnly={readOnly}
+                  status={model.status}
+                  showStatus={isView}
+                  showFinancialYear={showFinancialYear}
+                  financialYears={financialYears}
+                  onChange={patchModel}
+                  variant="receipt"
+                />
+                {!readOnly && isJournalGrid && (
+                  <div className="mt-2 max-w-sm">
+                    <VoucherFormField
+                      label="Warehouse / Branch"
+                      labelClassName={RECEIPT_LABEL_CLASS}
+                      spacingClassName="space-y-1"
+                    >
+                      <Select
+                        value={extras.warehouseRef ?? ""}
+                        onValueChange={(v) => setExtras((e) => ({ ...e, warehouseRef: v || undefined }))}
+                      >
+                        <SelectTrigger className={RECEIPT_INPUT_CLASS}>
+                          <SelectValue placeholder="Select warehouse for bank accounts…" />
+                        </SelectTrigger>
+                        <VoucherSelectContent>
+                          {loadWarehouseMappingOptions().map((w) => (
+                            <SelectItem key={w.value} value={w.label} className="text-[12px]">
+                              {w.label}
+                            </SelectItem>
+                          ))}
+                        </VoucherSelectContent>
+                      </Select>
+                    </VoucherFormField>
+                  </div>
+                )}
+              </ReceiptFormSection>
+
+              {!readOnly && !isJournalGrid && (
+                <ReceiptFormSection title={config.detailsSectionTitle}>
+                  <div className="max-w-sm">
+                    <VoucherFormField
+                      label="Warehouse / Branch"
+                      labelClassName={RECEIPT_LABEL_CLASS}
+                      spacingClassName="space-y-1"
+                    >
+                      <Select
+                        value={extras.warehouseRef ?? ""}
+                        onValueChange={(v) => setExtras((e) => ({ ...e, warehouseRef: v || undefined }))}
+                      >
+                        <SelectTrigger className={RECEIPT_INPUT_CLASS}>
+                          <SelectValue placeholder="Select warehouse for bank accounts…" />
+                        </SelectTrigger>
+                        <VoucherSelectContent>
+                          {loadWarehouseMappingOptions().map((w) => (
+                            <SelectItem key={w.value} value={w.label} className="text-[12px]">
+                              {w.label}
+                            </SelectItem>
+                          ))}
+                        </VoucherSelectContent>
+                      </Select>
+                    </VoucherFormField>
+                  </div>
+                </ReceiptFormSection>
+              )}
+
+              {isJournalGrid ? (
+                <ReceiptFormSection title={config.detailsSectionTitle}>
+                  <VoucherJournalEntryGrid
+                    entries={model.entries}
+                    voucherDate={model.voucherDate}
+                    coaRecords={coaRecords}
+                    readOnly={readOnly}
+                    onEntriesChange={setEntries}
+                    warehouseRef={extras.warehouseRef}
+                    variant="receipt"
+                  />
+                </ReceiptFormSection>
+              ) : (
+                <>
+                  <VoucherDualEntryPanel
+                    entries={model.entries}
+                    config={config}
+                    voucherDate={model.voucherDate}
+                    coaRecords={coaRecords}
+                    readOnly={readOnly}
+                    onEntriesChange={setEntries}
+                    tdsAmount={numericTds}
+                    onQuickAddSuccess={handleQuickAddSuccess}
+                    warehouseRef={extras.warehouseRef}
+                    variant="receipt"
+                  />
+
+                  {voucherType === "payment" && showTdsSection && (deductTds || readOnly) && paymentGrossDebit > 0 && (
+                    <div className="mx-3 mb-2 rounded-md border border-border/40 bg-muted/15 px-2.5 py-2 space-y-1 max-w-md">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Payment Summary
+                      </p>
+                      <div className="flex justify-between text-[12px]">
+                        <span className="text-muted-foreground">Gross Debit Amount</span>
+                        <span className="tabular-nums font-medium">{formatMoney(paymentGrossDebit)}</span>
+                      </div>
+                      {numericTds > 0 && (
+                        <div className="flex justify-between text-[12px]">
+                          <span className="text-muted-foreground">TDS Amount</span>
+                          <span className="tabular-nums font-medium">{formatMoney(numericTds)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-[12px] border-t border-border/40 pt-1">
+                        <span className="text-muted-foreground font-medium">Net Bank Credit</span>
+                        <span className="tabular-nums font-semibold">{formatMoney(paymentNetBank)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {voucherType === "payment" && showTdsSection && !readOnly && (
+                    <div className="mx-3 mb-2 rounded-md border border-border/40 bg-white p-2 space-y-2 max-w-[420px]">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={deductTds}
+                          onCheckedChange={(c) => setDeductTds(Boolean(c))}
+                        />
+                        <span className={RECEIPT_PREVIEW_TEXT_CLASS}>Deduct TDS</span>
+                        {vendor?.tdsApplicable && (
+                          <span className="text-[11px] text-muted-foreground">
+                            (applicable for this vendor)
+                          </span>
+                        )}
+                      </label>
+                      {deductTds && (
+                        <VoucherFormField
+                          label="TDS Amount"
+                          className={VOUCHER_AMOUNT_WIDTH}
+                          labelClassName={RECEIPT_LABEL_CLASS}
+                        >
+                          <AccountsMoneyInput
+                            compact={false}
+                            className={cn(RECEIPT_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS)}
+                            value={numericTds}
+                            onChange={(v) => setTdsAmount(String(v))}
+                          />
+                        </VoucherFormField>
+                      )}
+                    </div>
+                  )}
+
+                  <ReceiptFormTotal totalAmount={summaryAmount} />
+                </>
+              )}
+
+              {isJournalGrid && readOnly && impactLines.length > 0 && (
+                <div className="px-3 pb-3">
+                  <JournalLedgerImpactPreview
+                    lines={impactLines}
+                    totalDebit={totalDebit}
+                    totalCredit={totalCredit}
+                    balanced={journalBalanced}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <>
           <VoucherFormSection title="Voucher Details">
             <VoucherFormHeaderFields
               model={model}
@@ -459,12 +639,15 @@ export function StandardVoucherForm({
           {config.layout === "dual-simple" && (
             <VoucherFormSummary totalAmount={summaryAmount} />
           )}
+            </>
+          )}
         </div>
 
         <VoucherNarrationSection
           narration={model.narration}
           readOnly={readOnly}
           onChange={(narration) => patchModel({ narration })}
+          variant={isPremiumVoucher ? "premium" : "default"}
         />
 
         {readOnly && resolvedVoucherId != null && VOUCHER_CATEGORY_MAP[voucherType] && (

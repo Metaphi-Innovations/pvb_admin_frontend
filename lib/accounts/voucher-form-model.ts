@@ -507,7 +507,7 @@ export function validateFormModelForPost(
     const debit = getFormEntry(model.entries, "DEBIT");
     const credit = getFormEntry(model.entries, "CREDIT");
     if (debit?.accountId && credit?.accountId && debit.accountId === credit.accountId) {
-      return "Debit and Credit accounts cannot be the same.";
+      return "Account (Dr) and Account (Cr) cannot be the same.";
     }
   }
 

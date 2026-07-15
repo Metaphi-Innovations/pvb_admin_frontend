@@ -3,14 +3,61 @@
 import { Label } from "@/components/ui/label";
 import { SelectContent } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import { computeLedgerBalanceAsOfDate } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+import { formatMoney } from "@/lib/accounts/money-format";
 
 export const VOUCHER_FORM_OUTER = "w-full";
 
 export const VOUCHER_FORM_CARD =
   "rounded-lg border border-border bg-white shadow-sm p-3 space-y-2.5 w-full";
+
+/** Receipt voucher — premium ERP layout (warm cream page tint + sectioned card) */
+export const RECEIPT_VOUCHER_PAGE_WRAP =
+  "w-full bg-[#FCFAF7] rounded-xl p-2.5 space-y-2";
+
+export const RECEIPT_VOUCHER_FORM_CARD =
+  "rounded-lg border border-border bg-white shadow-sm overflow-hidden w-full";
+
+export const RECEIPT_SECTION_HEADER =
+  "bg-[#FAF6F1] border-b border-border/60 px-3 py-1.5";
+
+export const RECEIPT_SECTION_TITLE = "text-[13px] font-semibold text-foreground";
+
+export const RECEIPT_SECTION_BODY = "px-3 py-2";
+
+export const RECEIPT_TOTAL_SECTION =
+  "flex justify-end items-baseline gap-3 px-3 py-2 border-t border-border bg-white";
+
+export const RECEIPT_TOTAL_LABEL = "text-[12px] font-medium text-muted-foreground";
+
+export const RECEIPT_TOTAL_AMOUNT = "text-base font-bold tabular-nums text-foreground";
+
+/** Receipt voucher scale (~5% tighter): labels 12px, inputs 12px / 36px, buttons 36px */
+export const RECEIPT_LABEL_CLASS = "text-[12px] font-medium text-muted-foreground leading-none";
+
+export const RECEIPT_INPUT_CLASS =
+  "h-9 w-full min-w-0 text-[12px] accounts-form-input rounded-md border border-border bg-white focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400";
+
+export const RECEIPT_MONEY_INPUT_CLASS = "text-[12px] text-right tabular-nums";
+
+export const RECEIPT_PREVIEW_TEXT_CLASS = "text-[12px] text-foreground leading-snug";
+
+export const RECEIPT_BUTTON_CLASS = "h-9 min-h-9 text-[12px] accounts-action-button";
+
+export const RECEIPT_FIELD_DATE = "w-[130px]";
+export const RECEIPT_FIELD_NUMBER = "w-[130px]";
+export const RECEIPT_FIELD_REFERENCE = "w-[184px]";
+export const RECEIPT_FIELD_MODE = "w-[164px]";
+
+export const RECEIPT_ROW_GAP = "gap-2.5";
+
+export const RECEIPT_LEDGER_SELECT = {
+  compact: true,
+  listMaxHeight: 220,
+  className: "h-9 text-[12px]",
+} as const;
+
+export const RECEIPT_NARRATION_INPUT =
+  "min-h-[60px] max-h-28 h-auto py-2 resize-y text-[12px]";
 
 /** Prefer shared Accounts tokens; kept for voucher form imports */
 export const VOUCHER_PAGE_TITLE_CLASS = "accounts-page-title";
@@ -32,9 +79,6 @@ export const VOUCHER_BUTTON_CLASS = "h-8 accounts-action-button";
 export const VOUCHER_BODY_TEXT = "text-[13px] text-foreground leading-snug";
 
 export const VOUCHER_MUTED_TEXT = "text-xs text-muted-foreground leading-snug";
-
-export const VOUCHER_BALANCE_TEXT =
-  "text-[11px] text-muted-foreground tabular-nums leading-snug mt-0.5";
 
 export const VOUCHER_TOTAL_LABEL_CLASS = "text-xs text-muted-foreground";
 
@@ -151,18 +195,24 @@ export function VoucherFormField({
   required,
   children,
   className,
+  labelClassName,
+  spacingClassName = "space-y-1",
 }: {
   label: string;
   required?: boolean;
   children: React.ReactNode;
   className?: string;
+  labelClassName?: string;
+  spacingClassName?: string;
 }) {
   return (
-    <div className={cn("space-y-1 min-w-0", className)}>
-      <Label className={VOUCHER_LABEL_CLASS}>
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </Label>
+    <div className={cn(spacingClassName, "min-w-0", className)}>
+      {label ? (
+        <Label className={cn(VOUCHER_LABEL_CLASS, labelClassName)}>
+          {label}
+          {required && <span className="text-red-500 ml-0.5">*</span>}
+        </Label>
+      ) : null}
       {children}
     </div>
   );
@@ -182,6 +232,43 @@ export function VoucherFormSection({
       <h2 className={VOUCHER_SECTION_TITLE}>{title}</h2>
       {children}
     </section>
+  );
+}
+
+/** Receipt voucher section — light cream header band with bottom border */
+export function ReceiptFormSection({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("border-b border-border/60 last:border-b-0 w-full", className)}>
+      <div className={RECEIPT_SECTION_HEADER}>
+        <h2 className={RECEIPT_SECTION_TITLE}>{title}</h2>
+      </div>
+      <div className={RECEIPT_SECTION_BODY}>{children}</div>
+    </section>
+  );
+}
+
+export function ReceiptFormTotal({
+  totalAmount,
+  className,
+}: {
+  totalAmount: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn(RECEIPT_TOTAL_SECTION, className)}>
+      <span className={RECEIPT_TOTAL_LABEL}>Total Amount</span>
+      <span className={RECEIPT_TOTAL_AMOUNT}>
+        {totalAmount > 0 ? formatMoney(totalAmount) : "—"}
+      </span>
+    </div>
   );
 }
 
@@ -224,37 +311,6 @@ export function VoucherEntryRow({
   variant?: "bank" | "ledger";
 }) {
   return <div className={cn(className)}>{children}</div>;
-}
-
-/** Ledger balance from actual postings as of voucher date — Dr/Cr only when amount > 0 */
-export function VoucherLedgerCurBalance({
-  ledger,
-  asOfDate,
-  className,
-}: {
-  ledger: ChartOfAccount | null;
-  /** Voucher date (YYYY-MM-DD) — balance includes movements on or before this date */
-  asOfDate?: string | null;
-  variant?: "header" | "inline";
-  className?: string;
-}) {
-  if (!ledger) return null;
-
-  const bal = computeLedgerBalanceAsOfDate(ledger, asOfDate || null);
-
-  if (bal.amount < 0.005) {
-    return (
-      <p className={cn(VOUCHER_BALANCE_TEXT, className)}>
-        Current Balance: {formatMoney(0)}
-      </p>
-    );
-  }
-
-  return (
-    <p className={cn(VOUCHER_BALANCE_TEXT, className)}>
-      Current Balance: {formatMoney(bal.amount)} {balanceSideLabel(bal.balanceType)}
-    </p>
-  );
 }
 
 export function VoucherSelectContent({

@@ -628,10 +628,10 @@ export function buildPaymentVoucherLines(input: SimpleCashVoucherInput): Voucher
 export function validatePaymentVoucherForPost(input: SimpleCashVoucherInput): string | null {
   const records = loadChartOfAccounts();
   const debitId = input.expenseHeadLedgerId ?? input.partyLedgerId;
-  if (!debitId) return "Ledger is required.";
-  if (!input.bankCashLedgerId) return "Payment Account is required.";
+  if (!debitId) return "Account (Dr) is required.";
+  if (!input.bankCashLedgerId) return "Account (Cr) is required.";
   if (input.bankCashLedgerId === debitId) {
-    return "Payment Account and Ledger cannot be the same.";
+    return "Account (Dr) and Account (Cr) cannot be the same.";
   }
   const scopeErr = validatePaymentVoucherLedgerScopes(
     input.bankCashLedgerId,
@@ -652,10 +652,10 @@ export function validatePaymentVoucherForPost(input: SimpleCashVoucherInput): st
 
 export function validateReceiptVoucherForPost(input: SimpleCashVoucherInput): string | null {
   const records = loadChartOfAccounts();
-  if (!input.bankCashLedgerId) return "Receipt Account is required.";
-  if (!input.partyLedgerId) return "Ledger is required.";
+  if (!input.bankCashLedgerId) return "Account (Dr) is required.";
+  if (!input.partyLedgerId) return "Account (Cr) is required.";
   if (input.bankCashLedgerId === input.partyLedgerId) {
-    return "Receipt Account and Ledger cannot be the same.";
+    return "Account (Dr) and Account (Cr) cannot be the same.";
   }
   const scopeErr = validateReceiptVoucherLedgerScopes(
     input.bankCashLedgerId,
@@ -762,19 +762,19 @@ export function validateReceiptVoucherGridForPost(
   creditLines: VoucherLine[],
   records = loadChartOfAccounts(),
 ): string | null {
-  if (!receiptLedgerId) return "Receipt Account is required.";
+  if (!receiptLedgerId) return "Account (Dr) is required.";
 
   const credits = creditLines
     .map(normalizeVoucherLineAmounts)
     .filter((l) => l.ledgerId || lineCreditAmount(l) > 0 || Boolean(l.remarks?.trim()));
 
   const filledCredits = credits.filter((l) => l.ledgerId && lineCreditAmount(l) > 0);
-  if (filledCredits.length === 0) return "Add at least one Ledger (Cr) row with amount.";
+  if (filledCredits.length === 0) return "Add at least one Account (Cr) row with amount.";
 
   for (const line of filledCredits) {
-    if (!line.ledgerId) return "Ledger is required on each credit row.";
+    if (!line.ledgerId) return "Account (Cr) is required on each credit row.";
     if (line.ledgerId === receiptLedgerId) {
-      return "Receipt Account and Ledger cannot be the same.";
+      return "Account (Dr) and Account (Cr) cannot be the same.";
     }
     const scopeErr = validateReceiptVoucherLedgerScopes(
       receiptLedgerId,
@@ -924,19 +924,19 @@ export function validatePaymentVoucherGridForPost(
   records = loadChartOfAccounts(),
   options?: Pick<PaymentVoucherGridBuildOptions, "tdsAmount" | "tdsSectionMasterId">,
 ): string | null {
-  if (!paymentLedgerId) return "Payment Account is required.";
+  if (!paymentLedgerId) return "Account (Cr) is required.";
 
   const debits = debitLines
     .map(normalizeVoucherLineAmounts)
     .filter((l) => l.ledgerId || lineDebitAmount(l) > 0 || Boolean(l.remarks?.trim()));
 
   const filledDebits = debits.filter((l) => l.ledgerId && lineDebitAmount(l) > 0);
-  if (filledDebits.length === 0) return "Add at least one Ledger (Dr) row with amount.";
+  if (filledDebits.length === 0) return "Add at least one Account (Dr) row with amount.";
 
   for (const line of filledDebits) {
-    if (!line.ledgerId) return "Ledger is required on each debit row.";
+    if (!line.ledgerId) return "Account (Dr) is required on each debit row.";
     if (line.ledgerId === paymentLedgerId) {
-      return "Payment Account and Ledger cannot be the same.";
+      return "Account (Dr) and Account (Cr) cannot be the same.";
     }
     const scopeErr = validatePaymentVoucherLedgerScopes(
       paymentLedgerId,
@@ -1012,10 +1012,10 @@ export function buildContraVoucherLines(input: SimpleContraVoucherInput): Vouche
 }
 
 export function validateContraVoucherForPost(input: SimpleContraVoucherInput): string | null {
-  if (!input.toLedgerId) return "Debit Account is required.";
-  if (!input.fromLedgerId) return "Credit Account is required.";
+  if (!input.toLedgerId) return "Account (Dr) is required.";
+  if (!input.fromLedgerId) return "Account (Cr) is required.";
   if (input.fromLedgerId === input.toLedgerId) {
-    return "Debit Account and Credit Account must be different.";
+    return "Account (Dr) and Account (Cr) cannot be the same.";
   }
   if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
   const scopeErr = validateContraVoucherLedgerScopes(
