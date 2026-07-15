@@ -707,7 +707,7 @@ export function StockTransferCreate({
         {lines.length > 0 && (
           <SectionCard
             title="Items to Receive"
-            description="Choose Case or Piece per product. Enter quantity in that unit; values convert to base quantity using packing size before save."
+            description="Full dispatched quantity is received by default (quantity locked). Manufacture and expiry dates can be updated if needed."
           >
             <div className="border border-border rounded-xl overflow-hidden bg-white shadow-xs">
               <div className="overflow-x-auto">
@@ -754,7 +754,6 @@ export function StockTransferCreate({
                         }),
                       );
                       const lineError = fieldErrors.lines?.[idx];
-                      const exceeds = line.receivedQty > line.maxQty;
 
                       return (
                         <tr key={`${line.sourceItemId}-${idx}`} className="hover:bg-muted/10 align-top">
@@ -803,13 +802,8 @@ export function StockTransferCreate({
                             {displayDispatched}
                           </td>
                           <td className="p-3 align-middle w-[120px] min-w-[120px]">
-                            <Select
-                              value={line.quantityType}
-                              onValueChange={(val) =>
-                                handleQuantityTypeChange(idx, val as GrnQuantityType)
-                              }
-                            >
-                              <SelectTrigger className="h-8 w-full text-xs rounded-lg">
+                            <Select value={line.quantityType} disabled>
+                              <SelectTrigger className="h-8 w-full text-xs rounded-lg bg-muted opacity-100">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -825,15 +819,11 @@ export function StockTransferCreate({
                             <div className="flex justify-center">
                               <Input
                                 type="number"
-                                min={0}
-                                step="any"
+                                readOnly
+                                disabled
                                 value={line.displayQty === 0 ? "" : line.displayQty}
                                 placeholder={line.quantityType === "CASE" ? "Cases" : "Pcs"}
-                                onChange={(e) => handleDisplayQtyChange(idx, e.target.value)}
-                                className={cn(
-                                  "h-8 text-center text-xs font-medium w-24 focus:ring-brand-500",
-                                  exceeds && "border-red-500 text-red-600 focus:ring-red-500",
-                                )}
+                                className="h-8 text-center text-xs font-medium w-24 bg-muted opacity-100 cursor-not-allowed"
                               />
                             </div>
                           </td>
@@ -843,10 +833,7 @@ export function StockTransferCreate({
                               readOnly
                               value={line.receivedQty === 0 ? "" : line.receivedQty}
                               placeholder="0"
-                              className={cn(
-                                "h-8 w-full text-xs text-center tabular-nums font-semibold rounded-lg bg-muted focus-visible:ring-0",
-                                exceeds && "border-red-400",
-                              )}
+                              className="h-8 w-full text-xs text-center tabular-nums font-semibold rounded-lg bg-muted focus-visible:ring-0"
                             />
                           </td>
                         </tr>
