@@ -110,6 +110,7 @@ export interface SalesOrderLineItem {
   gstAmount: number;
   lineTotal: number;
   unit?: string;
+  packingUnit?: string;
   batchNumber?: string;
   expiryDate?: string;
 }

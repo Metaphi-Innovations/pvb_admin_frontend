@@ -42,7 +42,9 @@ export default function NewSampleOrderPackingListPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: rawOrder, isLoading: orderLoading } = useSampleOrder(orderId || null);
-  const order: SalesOrder | null = rawOrder ? hydrateOrderLineItems(mapBackendSampleOrder(rawOrder)) : null;
+  const order = useMemo(() => {
+    return rawOrder ? hydrateOrderLineItems(rawOrder) : null;
+  }, [rawOrder]);
 
   const { data: backendWarehousesData } = useWarehousesDropdown();
   const warehouses = useMemo(() => {
@@ -54,13 +56,25 @@ export default function NewSampleOrderPackingListPage() {
     })).filter((w) => w.status === "active");
   }, [backendWarehousesData]);
 
-  // Autofill warehouse and fetch batches
+  // Auto-select warehouse when order and warehouse list are loaded
   useEffect(() => {
-    if (!order || !order.warehouseId) return;
+    if (order?.warehouseId && warehouses.length > 0 && !warehouseId) {
+      const match = warehouses.find(w => w.id === String(order.warehouseId));
+      if (match) {
+        setWarehouseId(match.id);
+        setWarehouseCode(match.warehouseCode);
+        setWarehouseName(match.warehouseName);
+      } else {
+        setWarehouseId(String(order.warehouseId));
+        setWarehouseName(order.warehouseName || "");
+        setWarehouseCode(order.warehouseCode || "");
+      }
+    }
+  }, [order, warehouses, warehouseId]);
 
-    setWarehouseId(String(order.warehouseId));
-    setWarehouseName(order.warehouseName || "");
-    setWarehouseCode(order.warehouseCode || "");
+  // Fetch batches when warehouse changes
+  useEffect(() => {
+    if (!order || !warehouseId) return;
 
     const fetchAllBatches = async () => {
       const newBatchesMap: Record<string, any[]> = {};
@@ -68,7 +82,7 @@ export default function NewSampleOrderPackingListPage() {
         await Promise.all(
           order.lineItems.map(async (line) => {
             if (!line.productId) return;
-            const data = await PackingListService.getBatches(String(line.productId), String(order.warehouseId));
+            const data = await PackingListService.getBatches(String(line.productId), warehouseId);
             newBatchesMap[String(line.productId)] = data;
           })
         );
@@ -78,7 +92,7 @@ export default function NewSampleOrderPackingListPage() {
       }
     };
     fetchAllBatches();
-  }, [order]);
+  }, [order, warehouseId]);
 
   // Populate packing list lines when order or batchesMap changes
   useEffect(() => {
@@ -91,7 +105,7 @@ export default function NewSampleOrderPackingListPage() {
         batchNumber: b.batch_code,
         expiryDate: b.expiry_date || "—",
         cartonNumber: "BX-" + b.batch_code,
-        packingUnit: line.unit || "Unit",
+        packingUnit: (line as any).packingUnit || "Unit",
         baseUnit: line.unit || "Unit",
         unitsPerPackingUnit: (line as any).packSize || 1,
         availablePackingQty: b.available_qty,
@@ -109,11 +123,12 @@ export default function NewSampleOrderPackingListPage() {
         if (remaining <= 0) return alloc;
         const take = Math.min(remaining, alloc.availableBaseQty);
         remaining -= take;
+        const autoFillPacking = Math.floor(take / alloc.unitsPerPackingUnit);
         return {
           ...alloc,
-          suggestedPackingQty: take,
+          suggestedPackingQty: autoFillPacking,
           suggestedBaseQty: take,
-          allocatedPackingQty: take,
+          allocatedPackingQty: autoFillPacking,
           allocatedBaseQty: take,
         };
       });
@@ -123,7 +138,7 @@ export default function NewSampleOrderPackingListPage() {
         productId: line.productId as any,
         productCode: line.productCode || "",
         productName: line.productName || "",
-        packingUnit: line.unit || "Unit",
+        packingUnit: (line as any).packingUnit || "Unit",
         baseUnit: line.unit || "Unit",
         unitsPerPackingUnit: (line as any).packSize || 1,
         orderedBaseQty: line.quantity,
@@ -379,7 +394,7 @@ export default function NewSampleOrderPackingListPage() {
 
         </div>
 
-        {warehouseCode && lines.map(line => {
+        {warehouseId && lines.map(line => {
           const visibleAllocations = line.allocations;
 
           const allocated = line.allocations.reduce((sum, a) => {
