@@ -9,8 +9,8 @@ export const GRN_QUANTITY_TYPE_OPTIONS: { value: GrnQuantityType; label: string 
 /** Default for newly added product rows. */
 export const DEFAULT_NEW_GRN_QUANTITY_TYPE: GrnQuantityType = "CASE";
 
-/** Legacy GRNs without quantity_type. */
-export const DEFAULT_LEGACY_GRN_QUANTITY_TYPE: GrnQuantityType = "PIECE";
+/** Fallback when quantity_type is missing on read (UI display / conversion). */
+export const DEFAULT_LEGACY_GRN_QUANTITY_TYPE: GrnQuantityType = "CASE";
 
 export function normalizeGrnQuantityType(
   value?: string | null,
@@ -21,20 +21,21 @@ export function normalizeGrnQuantityType(
   return null;
 }
 
+/**
+ * Resolve quantity_type for GRN UI: use backend value when present (PIECE or CASE);
+ * default to CASE when missing.
+ */
 export function resolveGrnQuantityType(
   value?: string | null,
 ): GrnQuantityType {
-  return normalizeGrnQuantityType(value) ?? DEFAULT_LEGACY_GRN_QUANTITY_TYPE;
+  return normalizeGrnQuantityType(value) ?? DEFAULT_NEW_GRN_QUANTITY_TYPE;
 }
 
-/**
- * Purchase Order GRNs are always Case by default — suppliers ship in cases.
- * Missing quantity_type falls back to CASE (not legacy PIECE).
- */
+/** @deprecated Use resolveGrnQuantityType — same CASE default when missing. */
 export function resolvePoGrnQuantityType(
   value?: string | null,
 ): GrnQuantityType {
-  return normalizeGrnQuantityType(value) ?? DEFAULT_NEW_GRN_QUANTITY_TYPE;
+  return resolveGrnQuantityType(value);
 }
 
 export function resolvePackingSize(input?: {

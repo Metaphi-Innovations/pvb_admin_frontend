@@ -8,7 +8,6 @@ import type {
 } from "@/app/(app)/warehouse/grn/shared/types";
 import { mapBackendGrnStatus } from "@/lib/warehouse/grn-status";
 import {
-  DEFAULT_LEGACY_GRN_QUANTITY_TYPE,
   DEFAULT_NEW_GRN_QUANTITY_TYPE,
   normalizeGrnQuantityType,
   resolvePackingSize,
@@ -215,13 +214,10 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     const packingSize = resolvePackingSize({
       productSnapshot: snapshot,
     });
-    const sourceType =
-      asString(raw.source_type) || asString(raw.sourceType);
     const quantityType =
-      normalizeGrnQuantityType(asString(item.quantity_type)) ??
-      (sourceType === "PURCHASE_ORDER"
-        ? DEFAULT_NEW_GRN_QUANTITY_TYPE
-        : DEFAULT_LEGACY_GRN_QUANTITY_TYPE);
+      normalizeGrnQuantityType(
+        asString(item.quantity_type) || asString(item.quantityType),
+      ) ?? DEFAULT_NEW_GRN_QUANTITY_TYPE;
 
     items.push({
       productId,

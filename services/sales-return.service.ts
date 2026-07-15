@@ -1,5 +1,9 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import {
+  normalizeGrnQuantityType,
+  type GrnQuantityType,
+} from "@/lib/warehouse/grn-quantity";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -60,6 +64,8 @@ export interface SalesReturnLineItem {
   mfgDate: string;
   expDate: string;
   returnedBaseQty: number;
+  /** From backend; missing → UI defaults to CASE. */
+  quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
 }
 
@@ -95,6 +101,7 @@ function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
   const product = asRecord(raw.product);
   const snapshot = asRecord(raw.product_snapshot);
   const batchSnapshot = asRecord(raw.batch_snapshot);
+  const dispatchItem = asRecord(raw.dispatch_item);
   const unitPerPacking =
     asNumber(snapshot.unit_per_packing) ||
     asNumber(product.unit_per_packing) ||
@@ -150,6 +157,14 @@ function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
       asNumber(raw.total_return_pieces) ||
       asNumber(raw.base_qty) ||
       asNumber(raw.qty),
+    quantityType: normalizeGrnQuantityType(
+      asString(raw.quantity_type) ||
+        asString(raw.quantityType) ||
+        asString(dispatchItem.quantity_type) ||
+        asString(dispatchItem.quantityType) ||
+        asString(snapshot.quantity_type) ||
+        asString(snapshot.quantityType),
+    ),
     productSnapshot: Object.keys(snapshot).length > 0 ? snapshot : {
       product_id: asString(product.product_id) || asString(raw.product_id),
       product_code: asString(product.product_code),
