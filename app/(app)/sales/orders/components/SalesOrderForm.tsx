@@ -58,7 +58,7 @@ import {
 	resolveSezLutSupply,
 } from "@/lib/settings/gst-tax-config";
 import { calculateCustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
-import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
+
 import CreditLimitSummaryCard from "./CreditLimitSummaryCard";
 
 export type { SalesOrderFormValues };
@@ -436,9 +436,7 @@ export default function SalesOrderForm({
 }: SalesOrderFormProps) {
 	const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
 
-	useEffect(() => {
-		seedAccountsDemoData();
-	}, []);
+
 
 	const { data: customerDetails } = useCustomerDetails(
 		form.customerId ? String(form.customerId) : null,
