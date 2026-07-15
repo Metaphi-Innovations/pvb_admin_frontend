@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
 import { GRN_STATUS_CONFIG } from "@/lib/warehouse/grn-status";
-import { useGrnListData } from "../shared/useGrnListData";
+import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
 import type { GrnListItem } from "@/services/grn-list.service";
 
 interface SalesReturnListingProps {
@@ -23,6 +23,9 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const { handleOpenFilter, getFilterOptionsForColumn } = useGrnLazyFilters(
+    SALES_RETURN_TAB_CONTEXT.sourceType,
+  );
 
   const { items, total, loading, error } = useGrnListData({
     tabContext: SALES_RETURN_TAB_CONTEXT,
@@ -47,6 +50,9 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         key: "grnNo",
         header: "GRN No.",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("grnNo"),
         width: "140px",
         render: (_val, row) => (
           <Link href={`/warehouse/grn/sales-return/${row.id}`}>
@@ -60,6 +66,9 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         key: "salesReturnNo",
         header: "Sales Return No.",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("salesReturnNo"),
         width: "140px",
         render: (val) => <span className="font-mono text-xs text-foreground font-medium">{val || "—"}</span>,
       },
@@ -67,6 +76,9 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         key: "customerName",
         header: "Customer",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("customerName"),
         width: "160px",
         render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
       },
@@ -74,6 +86,9 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         key: "warehouse",
         header: "Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("warehouse"),
         width: "140px",
         render: (val) => <span className="text-xs text-foreground">{val}</span>,
       },
@@ -81,6 +96,8 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         key: "grnDate",
         header: "GRN Date",
         sortable: true,
+        filterable: true,
+        filterType: "date",
         width: "120px",
         render: (val) => <span className="text-xs text-foreground">{val}</span>,
       },
@@ -96,6 +113,9 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         key: "status",
         header: "Status",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("status"),
         width: "140px",
         render: (val: string) => {
           const cfg = GRN_STATUS_CONFIG[val as keyof typeof GRN_STATUS_CONFIG] || {
@@ -110,7 +130,7 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         },
       },
     ],
-    [],
+    [getFilterOptionsForColumn],
   );
 
   const actions: ActionItemConfig<GrnListItem>[] = [
@@ -162,9 +182,10 @@ export function SalesReturnListing({ destinationWarehouse }: SalesReturnListingP
         onSortChange={setSort}
         actions={actions}
         emptyMessage="No Sales Return GRNs found"
-        searchPlaceholder="Search sales return GRN..."
+        searchPlaceholder="Search by GRN No, Sales Return No, Customer..."
         addLabel="Create Sales Return GRN"
         onAdd={() => router.push("/warehouse/grn/sales-return/create")}
+        onOpenFilter={handleOpenFilter}
       />
     </div>
   );

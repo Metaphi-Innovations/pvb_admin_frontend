@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { QcService } from "@/services/qc.service";
 import { QcItem, QcRecord, QcResult } from "../types";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ import { onQcCompleted } from "@/lib/warehouse/inventory-movement";
 import { completeStockTransferQc } from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { showToast } from "@/lib/toast";
+import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -40,6 +42,7 @@ function qtyInputValue(qty: number): string {
 
 function CreateQcForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const qcIdParam = searchParams.get("qcId") || "";
   const grnIdParam = searchParams.get("grnId") || "";
@@ -251,6 +254,10 @@ function CreateQcForm() {
           "success"
         );
       }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
+      ]);
       router.push("/warehouse/qc");
     } catch (err: any) {
       console.error("Failed to submit QC Record:", err);

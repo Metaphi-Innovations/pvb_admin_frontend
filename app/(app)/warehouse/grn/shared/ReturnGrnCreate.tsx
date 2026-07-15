@@ -159,7 +159,10 @@ export function ReturnGrnCreate({
     isLoading: sampleDropdownLoading,
     isError: sampleDropdownError,
     error: sampleDropdownLoadError,
-  } = useSampleReturnDropdown(undefined, !isSales && !isEdit);
+  } = useSampleReturnDropdown(
+    ["DRAFT", "SUBMITTED", "APPROVED"],
+    !isSales && !isEdit,
+  );
 
   const {
     data: salesReturnDetail,
