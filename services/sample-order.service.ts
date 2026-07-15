@@ -28,15 +28,16 @@ function asDateOnly(value: unknown): string {
 }
 
 export function mapBackendStatusToFrontend(status: string): any {
-  const s = asString(status).toUpperCase();
+  const s = asString(status).toUpperCase().replace(/[\s_]+/g, "_");
   if (s === "PENDING_APPROVAL" || s === "SUBMITTED") return "pending_approval";
   if (s === "APPROVED") return "approved";
   if (s === "REJECTED") return "rejected";
   if (s === "CONFIRMED") return "confirmed";
+  if (s === "READY_FOR_PACKING") return "ready_for_packing";
   if (s === "CANCELLED") return "cancelled";
   if (s === "DISPATCHED") return "dispatched";
   if (s === "DELIVERED") return "delivered";
-  if (s === "PACKED" || s === "PICKING") return "packed";
+  if (s === "PACKED" || s === "FULLY_PACKED" || s === "PICKING") return "fully_packed";
   return "draft";
 }
 

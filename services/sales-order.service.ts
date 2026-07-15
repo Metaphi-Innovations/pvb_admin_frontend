@@ -50,7 +50,7 @@ function toDisplayName(user: unknown): string {
 }
 
 function mapBackendStatusToFrontend(status: string): any {
-  const s = asString(status).toLowerCase();
+  const s = asString(status).toLowerCase().replace(/\s+/g, "_");
   if (s === "pending_approval") return "pending_approval";
   if (s === "approved") return "approved";
   if (s === "rejected") return "rejected";
@@ -59,7 +59,7 @@ function mapBackendStatusToFrontend(status: string): any {
   if (s === "dispatched") return "dispatched";
   if (s === "delivered") return "delivered";
   if (s === "ready_for_packing") return "ready_for_packing";
-  if (s === "packed") return "packed";
+  if (s === "packed" || s === "fully_packed") return "fully_packed";
   return "draft";
 }
 
