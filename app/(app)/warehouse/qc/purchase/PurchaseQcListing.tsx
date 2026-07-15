@@ -46,31 +46,31 @@ export function PurchaseQcListing() {
     loadedFiltersRef.current.add(columnKey);
     try {
       if (columnKey === "qcNo") {
-        const data = await QcService.getFilterDropdown("qcNumber");
+        const data = await QcService.getFilterDropdown("qcNumber", "PURCHASE_ORDER");
         setQcNoOptions(data.map((item: any) => ({ label: item.qcNumber, value: item.qcNumber })));
       } else if (columnKey === "grnNo") {
         if (activeTab === "pending") {
-          const data = await QcService.getGrnFilterDropdown("grnNumber");
+          const data = await QcService.getGrnFilterDropdown("grnNumber", "PURCHASE_ORDER", "QC_PENDING");
           setGrnNoOptions(data.map((item: any) => ({ label: item.grnNumber, value: item.grnNumber })));
         } else {
-          const data = await QcService.getFilterDropdown("grn__grnNumber");
+          const data = await QcService.getFilterDropdown("grn__grnNumber", "PURCHASE_ORDER");
           setGrnNoOptions(data.map((item: any) => ({ label: item.grn__grnNumber, value: item.grn__grnNumber })));
         }
       } else if (columnKey === "poNumber") {
         if (activeTab === "pending") {
-          const data = await QcService.getGrnFilterDropdown("po_no");
+          const data = await QcService.getGrnFilterDropdown("po_no", "PURCHASE_ORDER", "QC_PENDING");
           setPoNoOptions(data.map((item: any) => ({ label: item.po_no, value: item.po_no })));
         } else {
-          const data = await QcService.getFilterDropdown("poNumber");
+          const data = await QcService.getFilterDropdown("poNumber", "PURCHASE_ORDER");
           setPoNoOptions(data.map((item: any) => ({ label: item.poNumber, value: item.poNumber })));
         }
       } else if (columnKey === "vendorName") {
         if (activeTab === "pending") {
-          const data = await QcService.getGrnFilterDropdown("supplier__supplier_name");
+          const data = await QcService.getGrnFilterDropdown("supplier__supplier_name", "PURCHASE_ORDER", "QC_PENDING");
           setVendorNameOptions(data.map((item: any) => ({ label: item.supplier__supplier_name, value: item.supplier__supplier_name })));
         } else {
-          const data = await QcService.getFilterDropdown("grn__supplier__supplier_name");
-          setVendorNameOptions(data.map((item: any) => ({ label: item.grn__supplier__supplier_name, value: item.grn__supplier__supplier_name })));
+          const data = await QcService.getFilterDropdown("vendorName", "PURCHASE_ORDER");
+          setVendorNameOptions(data.map((item: any) => ({ label: item.supplierName || item.vendorName, value: item.supplierName || item.vendorName })));
         }
       }
     } catch (err) {

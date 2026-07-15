@@ -104,7 +104,7 @@ function CreateQcForm() {
         setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
         setToWarehouse(qc.toWarehouse ?? qc.warehouse);
         setIsStockTransfer(stMode);
-        setSourceType(stMode ? "stock_transfer" : "purchase_order");
+        setSourceType(getQcSourceType(qc));
         setQcRemarks(qc.qcRemarks ?? "");
         
         setItems(qc.items.map((it) => {

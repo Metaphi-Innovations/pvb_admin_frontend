@@ -228,16 +228,16 @@ export const QcService = {
     };
   },
 
-  async getFilterDropdown(fieldName: string): Promise<Array<Record<string, string>>> {
+  async getFilterDropdown(fieldName: string, sourceType?: string): Promise<Array<Record<string, string>>> {
     const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.QC.FILTER_DROPDOWN}?field_name=${fieldName}`
+      `${API_ENDPOINTS.WAREHOUSE.QC.FILTER_DROPDOWN}?field_name=${fieldName}${sourceType ? `&source_type=${sourceType}` : ""}&_t=${Date.now()}`
     );
     return response.data?.data || [];
   },
 
-  async getGrnFilterDropdown(fieldName: string): Promise<Array<Record<string, string>>> {
+  async getGrnFilterDropdown(fieldName: string, sourceType?: string, status?: string): Promise<Array<Record<string, string>>> {
     const response = await axiosInstance.get(
-      `/warehouse/grnqc/grn/filter-dropdown?field_name=${fieldName}`
+      `/warehouse/grnqc/grn/filter?field_name=${fieldName}${sourceType ? `&source_type=${sourceType}` : ""}${status ? `&status=${status}` : ""}&_t=${Date.now()}`
     );
     return response.data?.data || [];
   },
