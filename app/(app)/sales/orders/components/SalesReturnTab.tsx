@@ -96,9 +96,16 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
 
       let ordering = undefined;
       if (returnSort.key && returnSort.direction !== "none") {
-        ordering = returnSort.direction === "desc" ? `-${returnSort.key}` : returnSort.key;
-        if (returnSort.key === "returnNumber") ordering = returnSort.direction === "desc" ? "-return_number" : "return_number";
-        if (returnSort.key === "returnDate") ordering = returnSort.direction === "desc" ? "-return_date" : "return_date";
+        const fieldMap: Record<string, string> = {
+          returnNumber: "return_number",
+          returnDate: "return_date",
+          dispatchNumber: "dispatch__dispatch_number",
+          salesOrderNumber: "sales_order__so_number",
+          customer: "customer__customer_name",
+          totalAmount: "return_amount",
+        };
+        const backendKey = fieldMap[returnSort.key] || returnSort.key;
+        ordering = returnSort.direction === "desc" ? `-${backendKey}` : backendKey;
       }
 
       const res = await SalesReturnService.list({
