@@ -19,11 +19,15 @@ export type OrderStatus =
   | "draft"
   | "pending_approval"
   | "approved"
+  | "APPROVED"
   | "rejected"
   | "confirmed"
   | "cancelled"
   | "dispatched"
-  | "delivered";
+  | "delivered"
+  | "Ready For Packing"
+  | "Fully Packed"
+  | "Partially Packed";
 
 export type PackingStatus =
   | "draft"
@@ -1414,7 +1418,12 @@ export function canDownloadPI(order: SalesOrder): boolean {
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
-  if (order.status === "draft") return false;
+
+  // Only allow generating packing list if status is APPROVED or Ready For Packing
+  if (order.status !== "APPROVED" && order.status !== "approved" && order.status !== "Ready For Packing") {
+    return false;
+  }
+
   const hydrated = hydrateOrderLineItems(order);
   return hydrated.lineItems.some(l => l.productId && l.quantity > 0);
 }
