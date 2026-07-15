@@ -25,7 +25,7 @@ export default function CreateDispatchPage() {
   const [transporterName, setTransporterName] = useState("");
   const [lrNumber, setLrNumber] = useState("");
   const [ewayBillNumber, setEwayBillNumber] = useState("");
-  
+
   const [availablePackings, setAvailablePackings] = useState<any[]>([]);
   const [selectedPackingId, setSelectedPackingId] = useState<string>("");
   const [packingDetails, setPackingDetails] = useState<any>(null);
@@ -33,10 +33,10 @@ export default function CreateDispatchPage() {
 
   useEffect(() => {
     getPreviewNumber().then((num) => setDispatchNumber(num)).catch(console.error);
-    
-    // Fetch available packing done records (assume status=PACKED implies ready for dispatch)
+
+    // Fetch available packing done records (assume status=Ready For Dispatch implies ready for dispatch)
     const mappedSourceType = sourceType === "sales_order" ? "normal_sales" : sourceType;
-    getPackingDoneList({ filters: { status: "PACKED", source_type: mappedSourceType }, page: 1, page_size: 100 })
+    getPackingDoneList({ filters: { status: "Ready For Dispatch", source_type: mappedSourceType }, page: 1, page_size: 100 })
       .then((res) => {
         const items = res?.data?.items || res?.data || [];
         setAvailablePackings(items);
@@ -129,7 +129,7 @@ export default function CreateDispatchPage() {
       <Tabs value={sourceType} onValueChange={setSourceType} className="mb-6 w-full">
         <TabsList>
           <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
-          <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
+          <TabsTrigger value="sample" className="text-xs">Sample Order</TabsTrigger>
           <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
           <TabsTrigger value="purchase_return" className="text-xs">Purchase Return</TabsTrigger>
         </TabsList>
@@ -145,7 +145,7 @@ export default function CreateDispatchPage() {
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Number</p>
               <Input value={dispatchNumber} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
             </div>
-            
+
             <div className="md:col-span-2">
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                 Select Packing List *
