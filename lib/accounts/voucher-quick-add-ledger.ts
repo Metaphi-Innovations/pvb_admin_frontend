@@ -20,10 +20,7 @@ import {
   ledgerHasAncestorNamed,
   resolveHierarchyPath,
 } from "@/lib/accounts/coa-hierarchy";
-import {
-  isBankAccountLedger,
-  isUnderBankAccounts,
-} from "@/lib/accounts/bank-coa-utils";
+import { resolveSpecializedGroupType } from "@/lib/accounts/coa-specialized-groups";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
 import { isBankAccountMappedToWarehouse, resolveWarehouseId } from "@/lib/accounts/bank-warehouse-mapping";
 import type { VoucherLine, VoucherTypeCode } from "@/app/(app)/accounts/vouchers/voucher-data";
@@ -205,43 +202,100 @@ function namesIncludeAny(names: string[], terms: string[]): boolean {
   return terms.some((t) => names.some((n) => n.includes(t)));
 }
 
-/** Receipt — debit side: Bank Accounts, Cash-in-Hand, OD and CC accounts only */
+const BANK_OD_CC_GROUP_TERMS = [
+  "bank od",
+  "cash credit",
+  "bank od / cash credit",
+  "od / cash credit",
+  "overdraft",
+];
+
+function isUnderCashInHandGroup(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (resolveSpecializedGroupType(ledger, records) === "cash_in_hand") return true;
+  return ledgerHasAncestorNamed(ledger, "Cash-in-Hand", records);
+}
+
+function isUnderBankAccountsGroup(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (resolveSpecializedGroupType(ledger, records) === "bank_accounts") return true;
+  return ledgerHasAncestorNamed(ledger, "Bank Accounts", records);
+}
+
+function isUnderBankOdOrCashCreditGroup(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  // Receipt's approved scope keeps OD/CC under the asset-side bank hierarchy.
+  if (ledger.accountType !== "Asset") return false;
+  const names = ledgerPathNamesLower(ledger, records);
+  if (!names.some((n) => n === "assets" || n === "current assets" || n.includes("bank od"))) {
+    return false;
+  }
+  return namesIncludeAny(names, BANK_OD_CC_GROUP_TERMS);
+}
+
+function isPaymentOdOrCashCreditLedger(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  const names = ledgerPathNamesLower(ledger, records);
+  if (!namesIncludeAny(names, BANK_OD_CC_GROUP_TERMS)) return false;
+  return (
+    ledger.accountType === "Asset" ||
+    ledger.accountType === "Liability" ||
+    ledger.bankAccountFlag ||
+    namesIncludeAny(names, ["bank account", "bank loan", "loans / borrowings"])
+  );
+}
+
+/** True for posting ledgers under Cash-in-Hand, Bank Accounts, or Bank OD / Cash Credit. */
+function isReceiptBankOrCashLedger(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (!isPostableNode(ledger, records)) return false;
+  return (
+    isUnderCashInHandGroup(ledger, records) ||
+    isUnderBankAccountsGroup(ledger, records) ||
+    isUnderBankOdOrCashCreditGroup(ledger, records)
+  );
+}
+
+function passesBankMasterReceiptRules(
+  ledger: ChartOfAccount,
+  warehouseRef?: string | number | null,
+): boolean {
+  const master = loadBankAccountMasters().find((m) => m.coaLedgerId === ledger.id);
+  if (!master) return true;
+  const typeOk =
+    master.accountType === "Current" ||
+    master.accountType === "Savings" ||
+    master.accountType === "OD" ||
+    master.accountType === "CC";
+  if (!typeOk) return false;
+  const warehouseId = resolveWarehouseId(warehouseRef);
+  if (warehouseId != null) {
+    return isBankAccountMappedToWarehouse(master.mappedWarehouseIds, warehouseId, master.status);
+  }
+  return true;
+}
+
+/** Receipt — debit side: Cash-in-Hand, Bank Accounts, and Bank OD / Cash Credit posting ledgers only */
 export function ledgerMatchesReceiptDebitScope(
   ledger: ChartOfAccount,
   records = loadChartOfAccounts(),
   warehouseRef?: string | number | null,
 ): boolean {
-  if (!isPostableNode(ledger, records)) return false;
-
-  if (ledgerHasAncestorNamed(ledger, "Cash-in-Hand", records)) {
-    return true;
-  }
-
-  if (isBankAccountLedger(ledger) && isUnderBankAccounts(ledger, records)) {
-    const master = loadBankAccountMasters().find((m) => m.coaLedgerId === ledger.id);
-    if (master) {
-      const typeOk =
-        master.accountType === "Current" ||
-        master.accountType === "Savings" ||
-        master.accountType === "OD" ||
-        master.accountType === "CC";
-      if (!typeOk) return false;
-      const warehouseId = resolveWarehouseId(warehouseRef);
-      if (warehouseId != null) {
-        return isBankAccountMappedToWarehouse(master.mappedWarehouseIds, warehouseId, master.status);
-      }
-      return true;
-    }
-    return true;
-  }
-
-  return false;
+  if (!isReceiptBankOrCashLedger(ledger, records)) return false;
+  if (isUnderCashInHandGroup(ledger, records)) return true;
+  return passesBankMasterReceiptRules(ledger, warehouseRef);
 }
 
 function isBankCashLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (isReceiptBankOrCashLedger(ledger, records)) return true;
   return (
-    ledgerMatchesReceiptDebitScope(ledger, records) ||
-    ledgerMatchesVoucherScope(ledger, "bank_cash", records)
+    ledger.bankAccountFlag ||
+    ledgerHasAncestorNamed(ledger, "Bank Accounts", records) ||
+    ledgerHasAncestorNamed(ledger, "Cash-in-Hand", records)
   );
 }
 
@@ -275,7 +329,51 @@ function isPurchaseOrInventoryLedger(ledger: ChartOfAccount, records: ChartOfAcc
   ]);
 }
 
-/** Receipt — credit side: Customer, Vendor (refunds), Income, Capital, Loan, Security Deposit, Other Receipt */
+function isDutiesTaxesLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  const names = ledgerPathNamesLower(ledger, records);
+  return (
+    ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records) ||
+    ledgerHasAncestorNamed(ledger, "GST Payable", records) ||
+    ledgerHasAncestorNamed(ledger, "GST Input", records) ||
+    ledgerHasAncestorNamed(ledger, "GST Output", records) ||
+    ledgerHasAncestorNamed(ledger, "TDS Payable", records) ||
+    namesIncludeAny(names, [
+      "duties & taxes",
+      "gst payable",
+      "gst input",
+      "gst output",
+      "cgst payable",
+      "sgst payable",
+      "igst payable",
+      "tds payable",
+    ])
+  );
+}
+
+function isNonReceiptAssetLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  const names = ledgerPathNamesLower(ledger, records);
+  if (isCustomerLedgerScope(ledger, records)) return false;
+  return (
+    ledgerHasAncestorNamed(ledger, "Fixed Assets", records) ||
+    ledgerHasAncestorNamed(ledger, "Investments", records) ||
+    ledgerHasAncestorNamed(ledger, "Loans & Advances Given", records) ||
+    ledgerHasAncestorNamed(ledger, "Inventory / Stock-in-Hand", records) ||
+    ledgerHasAncestorNamed(ledger, "Prepaid Expenses", records) ||
+    ledgerHasAncestorNamed(ledger, "Accrued Income", records) ||
+    ledgerHasAncestorNamed(ledger, "Other Current Assets", records) ||
+    ledgerHasAncestorNamed(ledger, "TDS Receivable", records) ||
+    // Asset-side deposits paid (not security deposits received)
+    (ledgerHasAncestorNamed(ledger, "Deposits", records) &&
+      ledger.accountType === "Asset" &&
+      !namesIncludeAny(names, ["security deposit received", "deposit received"]))
+  );
+}
+
+/**
+ * Receipt — credit side: customer, vendor refund, income, capital, loans,
+ * current liabilities (advances / deposits received), and other eligible sources.
+ * Primary heads / groups are never postable — only leaf ledgers.
+ */
 export function ledgerMatchesReceiptCreditScope(
   ledger: ChartOfAccount,
   records = loadChartOfAccounts(),
@@ -284,6 +382,8 @@ export function ledgerMatchesReceiptCreditScope(
   if (isBankCashLedger(ledger, records)) return false;
   if (isExpenseLedgerScope(ledger, records)) return false;
   if (isPurchaseOrInventoryLedger(ledger, records)) return false;
+  if (isDutiesTaxesLedger(ledger, records)) return false;
+  if (isNonReceiptAssetLedger(ledger, records)) return false;
 
   const names = ledgerPathNamesLower(ledger, records);
 
@@ -293,6 +393,7 @@ export function ledgerMatchesReceiptCreditScope(
 
   if (
     ledgerHasAncestorNamed(ledger, "Capital Account", records) ||
+    ledger.accountType === "Equity" ||
     namesIncludeAny(names, [
       "shareholder capital",
       "partner capital",
@@ -307,16 +408,19 @@ export function ledgerMatchesReceiptCreditScope(
 
   if (
     ledgerHasAncestorNamed(ledger, "Loans / Borrowings", records) ||
-    ledgerHasAncestorNamed(ledger, "Loans & Advances Given", records) ||
-    namesIncludeAny(names, ["bank loan", "unsecured loan", "secured loan", "nbfc loan", "working capital loan"])
+    namesIncludeAny(names, [
+      "bank loan",
+      "unsecured loan",
+      "secured loan",
+      "nbfc loan",
+      "working capital loan",
+      "cash credit",
+    ])
   ) {
     return true;
   }
 
-  if (
-    ledgerHasAncestorNamed(ledger, "Deposits", records) ||
-    namesIncludeAny(names, ["security deposit", "refundable security deposit"])
-  ) {
+  if (ledgerHasAncestorNamed(ledger, "Current Liabilities", records)) {
     return true;
   }
 
@@ -329,15 +433,21 @@ export function ledgerMatchesReceiptCreditScope(
       "interest income",
       "rent income",
       "commission income",
+      "security deposit received",
+      "deposit received",
+      "customer advance",
+      "advance received",
     ])
   ) {
     return true;
   }
 
-  if (
-    ledgerHasAncestorNamed(ledger, "Advance Received from Customers", records) ||
-    namesIncludeAny(names, ["advance received"])
-  ) {
+  if (ledgerHasAncestorNamed(ledger, "Advance Received from Customers", records)) {
+    return true;
+  }
+
+  // Other liability ledgers configured under Liabilities (excl. provisions handled above via CL)
+  if (ledger.accountType === "Liability" && !namesIncludeAny(names, ["provision"])) {
     return true;
   }
 
@@ -346,6 +456,9 @@ export function ledgerMatchesReceiptCreditScope(
 
 function isGstPayableLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
   const names = ledgerPathNamesLower(ledger, records);
+  if (namesIncludeAny(names, ["gst input", "input tax credit", "tds receivable"])) {
+    return false;
+  }
   return (
     ledgerHasAncestorNamed(ledger, "GST Payable", records) ||
     ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records) ||
@@ -366,7 +479,62 @@ function isAdvancePaymentLedger(ledger: ChartOfAccount, records: ChartOfAccount[
   if (namesIncludeAny(names, ["advance received"])) return false;
   return (
     ledgerHasAncestorNamed(ledger, "Loans & Advances Given", records) ||
-    namesIncludeAny(names, ["advance to", "supplier advance", "staff advance", "dealer advance"])
+    namesIncludeAny(names, [
+      "advance to",
+      "supplier advance",
+      "vendor advance",
+      "employee advance",
+      "staff advance",
+      "dealer advance",
+    ])
+  );
+}
+
+function isEmployeeOrOtherPaymentPayable(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  const names = ledgerPathNamesLower(ledger, records);
+  return (
+    namesIncludeAny(names, [
+      "employee payable",
+      "salary payable",
+      "staff payable",
+      "expense payable",
+      "expenses payable",
+      "pf / esic payable",
+      "pf payable",
+      "esic payable",
+    ]) ||
+    (ledgerHasAncestorNamed(ledger, "Other Current Liabilities", records) &&
+      !namesIncludeAny(names, ["advance received", "deposit received"]))
+  );
+}
+
+function isLoanRepaymentLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  const names = ledgerPathNamesLower(ledger, records);
+  return (
+    ledgerHasAncestorNamed(ledger, "Loans / Borrowings", records) ||
+    namesIncludeAny(names, [
+      "secured loan",
+      "unsecured loan",
+      "bank loan",
+      "nbfc loan",
+      "director loan",
+      "related party loan",
+      "term loan",
+    ])
+  );
+}
+
+function isDrawingsOrCapitalWithdrawalLedger(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  const names = ledgerPathNamesLower(ledger, records);
+  return (
+    ledgerHasAncestorNamed(ledger, "Drawings", records) ||
+    namesIncludeAny(names, ["drawings", "capital withdrawal", "capital withdrawn"])
   );
 }
 
@@ -401,23 +569,30 @@ function isAssetPaymentLedger(ledger: ChartOfAccount, records: ChartOfAccount[])
   );
 }
 
-/** Payment — debit side: Vendor, Expense, Asset, GST Payable, TDS Payable, Advance */
+/**
+ * Payment — debit side: the final active ledger representing why money is paid.
+ * Includes ERP-synced vendors/customers, expenses, assets and advances, statutory
+ * and employee payables, loan repayments, and drawings/capital withdrawals.
+ */
 export function ledgerMatchesPaymentDebitScope(
   ledger: ChartOfAccount,
   records = loadChartOfAccounts(),
 ): boolean {
   if (!isPostableNode(ledger, records)) return false;
   if (isBankCashLedger(ledger, records)) return false;
-  if (isCustomerLedgerScope(ledger, records)) return false;
   if (isIncomeLedgerScope(ledger, records)) return false;
 
   return (
     isVendorLedgerScope(ledger, records) ||
+    isCustomerLedgerScope(ledger, records) ||
     isExpenseLedgerScope(ledger, records) ||
     isAssetPaymentLedger(ledger, records) ||
     isGstPayableLedger(ledger, records) ||
     isTdsPayableLedgerScope(ledger, records) ||
-    isAdvancePaymentLedger(ledger, records)
+    isAdvancePaymentLedger(ledger, records) ||
+    isEmployeeOrOtherPaymentPayable(ledger, records) ||
+    isLoanRepaymentLedger(ledger, records) ||
+    isDrawingsOrCapitalWithdrawalLedger(ledger, records)
   );
 }
 
@@ -428,21 +603,27 @@ export function validateReceiptVoucherLedgerScopes(
 ): string | null {
   if (!bankCashLedgerId) return null;
   const bank = records.find((r) => r.id === bankCashLedgerId);
-  if (!bank) return "Receipt Account is not a valid ledger.";
+  if (!bank) return "Account (Dr) is not a valid ledger.";
+  if (!isPostableNode(bank, records)) {
+    return "Account (Dr) must be a posting ledger — groups cannot be selected.";
+  }
   if (!ledgerMatchesReceiptDebitScope(bank, records)) {
-    return "Receipt Account must be Bank, Cash-in-Hand, OD, or CC ledger only.";
+    return "Account (Dr) must be a Cash, Bank, Bank OD, or Cash Credit ledger.";
   }
   if (!partyLedgerId) return null;
   if (bankCashLedgerId === partyLedgerId) {
-    return "Receipt Account and Ledger cannot be the same.";
+    return "Account (Dr) and Account (Cr) cannot be the same.";
   }
   const party = records.find((r) => r.id === partyLedgerId);
-  if (!party) return "Ledger is not a valid account.";
+  if (!party) return "Account (Cr) is not a valid ledger.";
+  if (!isPostableNode(party, records)) {
+    return "Account (Cr) must be a posting ledger — groups cannot be selected.";
+  }
   if (!ledgerMatchesReceiptCreditScope(party, records)) {
-    return "Ledger must be Customer, Vendor Refund, Income, Capital, Advance Received, or other applicable receipt ledger.";
+    return "Account (Cr) must be a customer, vendor refund, income, capital, loan, or liability ledger.";
   }
   if (ledgerMatchesReceiptDebitScope(party, records)) {
-    return "Ledger cannot be a Bank, Cash, OD, or CC account.";
+    return "Account (Cr) cannot be a Cash, Bank, Bank OD, or Cash Credit ledger.";
   }
   return null;
 }
@@ -453,7 +634,22 @@ export function ledgerMatchesPaymentCreditScope(
   records = loadChartOfAccounts(),
   warehouseRef?: string | number | null,
 ): boolean {
-  return ledgerMatchesReceiptDebitScope(ledger, records, warehouseRef);
+  if (!isPostableNode(ledger, records)) return false;
+  if (ledgerMatchesReceiptDebitScope(ledger, records, warehouseRef)) return true;
+  if (ledger.bankAccountFlag && passesBankMasterReceiptRules(ledger, warehouseRef)) return true;
+  return isPaymentOdOrCashCreditLedger(ledger, records);
+}
+
+/**
+ * Contra — both debit and credit: active posting ledgers under Cash-in-Hand,
+ * Bank Accounts, Bank OD, or Cash Credit only.
+ */
+export function ledgerMatchesContraScope(
+  ledger: ChartOfAccount,
+  records = loadChartOfAccounts(),
+  warehouseRef?: string | number | null,
+): boolean {
+  return ledgerMatchesPaymentCreditScope(ledger, records, warehouseRef);
 }
 
 export function validatePaymentVoucherLedgerScopes(
@@ -465,21 +661,27 @@ export function validatePaymentVoucherLedgerScopes(
   if (!bankCashLedgerId) return null;
   const bank = records.find((r) => r.id === bankCashLedgerId);
   if (!bank) return "Payment Account is not a valid ledger.";
+  if (!isPostableNode(bank, records)) {
+    return "Account (Cr) must be a final active ledger — groups cannot be selected.";
+  }
   if (!ledgerMatchesPaymentCreditScope(bank, records)) {
-    return "Payment Account must be Bank, Cash-in-Hand, OD, or CC ledger only.";
+    return "Account (Cr) must be a Cash, Bank, Bank OD, or Cash Credit ledger.";
   }
   const debitId = expenseHeadLedgerId ?? partyLedgerId;
   if (!debitId) return null;
   if (bankCashLedgerId === debitId) {
-    return "Payment Account and Ledger cannot be the same.";
+    return "Account (Dr) and Account (Cr) cannot be the same.";
   }
   const debit = records.find((r) => r.id === debitId);
-  if (!debit) return "Ledger is not a valid account.";
+  if (!debit) return "Account (Dr) is not a valid ledger.";
+  if (!isPostableNode(debit, records)) {
+    return "Account (Dr) must be a final active ledger — groups cannot be selected.";
+  }
   if (!ledgerMatchesPaymentDebitScope(debit, records)) {
-    return "Ledger must be Vendor, Expense, Employee Payable, Advance, Loan, Statutory, or other applicable payment ledger.";
+    return "Account (Dr) must be a valid vendor, customer refund, expense, asset, advance, statutory payable, employee payable, loan, or drawings ledger.";
   }
   if (ledgerMatchesPaymentCreditScope(debit, records)) {
-    return "Ledger cannot be a Bank, Cash, OD, or CC account.";
+    return "Account (Dr) cannot be a Cash, Bank, Bank OD, or Cash Credit ledger.";
   }
   return null;
 }
@@ -489,19 +691,28 @@ export function validateContraVoucherLedgerScopes(
   toLedgerId: number | null,
   records = loadChartOfAccounts(),
 ): string | null {
-  if (fromLedgerId) {
-    const credit = records.find((r) => r.id === fromLedgerId);
-    if (!credit) return "Credit Account is not a valid ledger.";
-    if (!ledgerMatchesReceiptDebitScope(credit, records)) {
-      return "Credit Account must be Bank, Cash-in-Hand, OD, or CC ledger only.";
-    }
-  }
   if (toLedgerId) {
     const debit = records.find((r) => r.id === toLedgerId);
-    if (!debit) return "Debit Account is not a valid ledger.";
-    if (!ledgerMatchesReceiptDebitScope(debit, records)) {
-      return "Debit Account must be Bank, Cash-in-Hand, OD, or CC ledger only.";
+    if (!debit) return "Account (Dr) is not a valid ledger.";
+    if (!isPostableNode(debit, records)) {
+      return "Account (Dr) must be a final active ledger — groups cannot be selected.";
     }
+    if (!ledgerMatchesContraScope(debit, records)) {
+      return "Account (Dr) must be a Cash, Bank, Bank OD, or Cash Credit ledger.";
+    }
+  }
+  if (fromLedgerId) {
+    const credit = records.find((r) => r.id === fromLedgerId);
+    if (!credit) return "Account (Cr) is not a valid ledger.";
+    if (!isPostableNode(credit, records)) {
+      return "Account (Cr) must be a final active ledger — groups cannot be selected.";
+    }
+    if (!ledgerMatchesContraScope(credit, records)) {
+      return "Account (Cr) must be a Cash, Bank, Bank OD, or Cash Credit ledger.";
+    }
+  }
+  if (fromLedgerId && toLedgerId && fromLedgerId === toLedgerId) {
+    return "Account (Dr) and Account (Cr) cannot be the same.";
   }
   return null;
 }

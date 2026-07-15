@@ -509,39 +509,52 @@ function getVoucherHubTabFromHref(href: string): string | null {
   return new URLSearchParams(href.split("?")[1] ?? "").get("tab");
 }
 
-function readClientSearchParams(): URLSearchParams {
+function readClientSearchParams(search?: string): URLSearchParams {
+  if (search != null) return new URLSearchParams(search);
   if (typeof window === "undefined") return new URLSearchParams();
   return new URLSearchParams(window.location.search);
 }
 
-function isJournalVoucherNavActive(pathname: string, href: string): boolean {
+function isJournalVoucherNavActive(
+  pathname: string,
+  href: string,
+  search?: string,
+): boolean {
   if (href !== JOURNAL_VOUCHER_HREF) return false;
   if (pathname.startsWith("/accounts/vouchers/journal")) return true;
   if (pathname !== VOUCHERS_HUB_HREF) return false;
-  if (typeof window === "undefined") return false;
-  const tab = readClientSearchParams().get("tab");
+  if (search == null && typeof window === "undefined") return false;
+  const tab = readClientSearchParams(search).get("tab");
   return tab === "journal" || tab == null || tab === "";
 }
 
-function isVoucherHubTabNavActive(pathname: string, href: string): boolean | null {
+function isVoucherHubTabNavActive(
+  pathname: string,
+  href: string,
+  search?: string,
+): boolean | null {
   const tab = getVoucherHubTabFromHref(href);
   if (tab == null) return null;
   // Hub tab links must not match dedicated routes like /accounts/vouchers/journal.
   if (pathname !== VOUCHERS_HUB_HREF) return false;
-  if (typeof window === "undefined") return false;
-  return readClientSearchParams().get("tab") === tab;
+  if (search == null && typeof window === "undefined") return false;
+  return readClientSearchParams(search).get("tab") === tab;
 }
 
 
 
-export function isAccountsNavActive(pathname: string, href: string): boolean {
+export function isAccountsNavActive(
+  pathname: string,
+  href: string,
+  search?: string,
+): boolean {
 
-  if (pathname === href) return true;
-
-  const hubTabActive = isVoucherHubTabNavActive(pathname, href);
+  const hubTabActive = isVoucherHubTabNavActive(pathname, href, search);
   if (hubTabActive != null) return hubTabActive;
 
-  if (isJournalVoucherNavActive(pathname, href)) return true;
+  if (isJournalVoucherNavActive(pathname, href, search)) return true;
+
+  if (pathname === href) return true;
 
 
 
@@ -559,9 +572,9 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
     if (pathname === base || pathname.startsWith(`${base}/`)) {
 
-      if (typeof window !== "undefined") {
+      if (search != null || typeof window !== "undefined") {
 
-        const params = new URLSearchParams(window.location.search);
+        const params = readClientSearchParams(search);
 
         const expected = new URLSearchParams(query);
 

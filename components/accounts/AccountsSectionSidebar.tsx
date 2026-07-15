@@ -3,7 +3,7 @@
 import React, { memo, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -119,6 +119,8 @@ const FlatSectionMenu = memo(function FlatSectionMenu({
   collapsed: boolean;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
   const { toggleCollapsed } = useAccountsSidebar();
 
   return (
@@ -143,7 +145,7 @@ const FlatSectionMenu = memo(function FlatSectionMenu({
             href={item.href}
             label={item.label}
             icon={item.icon}
-            active={isAccountsNavActive(pathname, item.href)}
+            active={isAccountsNavActive(pathname, item.href, search)}
             collapsed={collapsed}
           />
         ))}

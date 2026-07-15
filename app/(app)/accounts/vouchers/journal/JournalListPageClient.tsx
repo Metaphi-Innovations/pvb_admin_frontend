@@ -29,7 +29,10 @@ import {
   ACCOUNTS_FILTER_SELECT_CLASS,
 } from "@/lib/accounts/accounts-typography";
 import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
-import { primaryDebitCreditLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { summarizeVoucherLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { ensureVoucherListingDemoOnPageLoad } from "@/lib/accounts/voucher-listing-demo-seed";
 import { cn } from "@/lib/utils";
 import {
   ReportDateRangeFilter,
@@ -75,11 +78,16 @@ const STATUS_OPTIONS = [
 type JournalDisplayRow = AccountingVoucher & {
   debitLedger: string;
   creditLedger: string;
+  debitLedgerTitle: string;
+  creditLedgerTitle: string;
 };
 
-function toDisplayRow(v: AccountingVoucher): JournalDisplayRow {
-  const { debitLedger, creditLedger } = primaryDebitCreditLedgers(v.lines);
-  return { ...v, debitLedger, creditLedger };
+function toDisplayRow(v: AccountingVoucher, coaRecords: ReturnType<typeof loadChartOfAccounts>): JournalDisplayRow {
+  const { debitLedger, creditLedger, debitLedgerTitle, creditLedgerTitle } = summarizeVoucherLedgers(
+    v.lines,
+    coaRecords,
+  );
+  return { ...v, debitLedger, creditLedger, debitLedgerTitle, creditLedgerTitle };
 }
 
 function JournalListTable({
@@ -177,10 +185,10 @@ function JournalListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
-                <AccountsTableCell className="text-xs max-w-[140px] truncate" title={v.debitLedger}>
+                <AccountsTableCell className="text-xs max-w-[200px] truncate" title={v.debitLedgerTitle}>
                   {v.debitLedger}
                 </AccountsTableCell>
-                <AccountsTableCell className="text-xs max-w-[140px] truncate" title={v.creditLedger}>
+                <AccountsTableCell className="text-xs max-w-[200px] truncate" title={v.creditLedgerTitle}>
                   {v.creditLedger}
                 </AccountsTableCell>
                 <AccountsTableCell className="accounts-col-narration max-w-[220px] truncate">
@@ -342,6 +350,7 @@ function JournalListContent({
 
 export default function JournalListPageClient() {
   const mounted = useClientMounted();
+  const sectionRefresh = useAccountsSectionRefresh();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
@@ -349,10 +358,15 @@ export default function JournalListPageClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const records = useMemo(
-    () => (mounted ? getJournalVouchers().map(toDisplayRow) : []),
-    [mounted],
-  );
+  useEffect(() => {
+    ensureVoucherListingDemoOnPageLoad();
+  }, []);
+
+  const records = useMemo(() => {
+    if (!mounted) return [];
+    const coa = loadChartOfAccounts();
+    return getJournalVouchers().map((v) => toDisplayRow(v, coa));
+  }, [mounted, sectionRefresh]);
 
   const getCellValue = useCallback(
     (row: JournalDisplayRow, key: string) => (row as unknown as Record<string, unknown>)[key],
