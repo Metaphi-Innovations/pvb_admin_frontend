@@ -135,20 +135,29 @@ export function filterCoaHierarchyTree(
   const q = query.trim().toLowerCase();
   if (!q) return nodes;
 
+  function nodeTextMatches(node: CoaHierarchyNode): boolean {
+    const code = node.accountCode?.toLowerCase() ?? "";
+    return (
+      node.label.toLowerCase().includes(q) ||
+      node.path.toLowerCase().includes(q) ||
+      code.includes(q)
+    );
+  }
+
   function walk(node: CoaHierarchyNode): CoaHierarchyNode | null {
     if (node.kind === "ledger") {
-      const code = node.accountCode?.toLowerCase() ?? "";
-      return node.label.toLowerCase().includes(q) ||
-        node.path.toLowerCase().includes(q) ||
-        code.includes(q)
-        ? node
-        : null;
+      return nodeTextMatches(node) ? node : null;
     }
+
+    // Group / path match: keep the full eligible subtree so nested ledgers stay visible
+    // even when the parent group was collapsed and child labels do not contain the query.
+    if (nodeTextMatches(node)) {
+      return node;
+    }
+
     const children = node.children.map(walk).filter((n): n is CoaHierarchyNode => n != null);
-    if (children.length > 0 || node.label.toLowerCase().includes(q)) {
-      return { ...node, children };
-    }
-    return null;
+    if (children.length === 0) return null;
+    return { ...node, children };
   }
 
   return nodes.map(walk).filter((n): n is CoaHierarchyNode => n != null);

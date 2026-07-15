@@ -6,6 +6,7 @@
 import type { VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import {
+  ledgerMatchesContraScope,
   ledgerMatchesPaymentCreditScope,
   ledgerMatchesPaymentDebitScope,
   ledgerMatchesReceiptCreditScope,
@@ -17,7 +18,6 @@ export type VoucherFormLayout = "dual-simple" | "journal-grid";
 
 const RECEIPT_PAYMENT_MODES = ["Cash", "Cheque", "NEFT/RTGS", "UPI", "IMPS", "Other"] as const;
 const CONTRA_TRANSFER_MODES = ["Bank Transfer", "Cash Deposit", "Cash Withdrawal", "Cheque", "Other"] as const;
-const JOURNAL_MODES = ["Cash", "Cheque", "NEFT/RTGS", "UPI", "IMPS", "Other"] as const;
 
 export interface VoucherFormTypeConfig {
   voucherType: VoucherTypeCode;
@@ -28,6 +28,8 @@ export interface VoucherFormTypeConfig {
   transactionModeLabel: string;
   transactionModeOptions: readonly string[];
   defaultTransactionMode: string;
+  /** When false, Mode of Payment/Receipt/Transfer is hidden (journal). Default true. */
+  showTransactionMode?: boolean;
   debitAccountLabel: string;
   creditAccountLabel: string;
   debitAccountPlaceholder: string;
@@ -66,6 +68,16 @@ function bankCashFilter(
   return true;
 }
 
+function contraAccountFilter(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+  otherAccountId?: number | null,
+): boolean {
+  if (!ledgerMatchesContraScope(ledger, records)) return false;
+  if (otherAccountId != null && ledger.id === otherAccountId) return false;
+  return true;
+}
+
 export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormTypeConfig {
   switch (voucherType) {
     case "receipt":
@@ -80,10 +92,10 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         defaultTransactionMode: "NEFT/RTGS",
         debitAccountLabel: "Account (Dr)",
         creditAccountLabel: "Account (Cr)",
-        debitAccountPlaceholder: "Select bank, cash, OD or CC account…",
-        creditAccountPlaceholder: "Select customer, vendor refund, income, capital…",
-        debitQuickAddScope: "receipt_debit",
-        creditQuickAddScope: "receipt_credit",
+        debitAccountPlaceholder: "Select cash or bank ledger…",
+        creditAccountPlaceholder: "Select customer, income, capital, loan or liability…",
+        debitQuickAddScope: undefined,
+        creditQuickAddScope: undefined,
         debitAccountFilter: (ledger, records, other) => bankCashFilter(ledger, records, other),
         creditAccountFilter: (ledger, records, other) => {
           if (!ledgerMatchesReceiptCreditScope(ledger, records)) return false;
@@ -148,10 +160,10 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         creditAccountLabel: "Account (Cr)",
         debitAccountPlaceholder: "Select bank, cash, OD or CC account…",
         creditAccountPlaceholder: "Select bank, cash, OD or CC account…",
-        debitQuickAddScope: "receipt_debit",
-        creditQuickAddScope: "receipt_debit",
-        debitAccountFilter: bankCashFilter,
-        creditAccountFilter: bankCashFilter,
+        debitQuickAddScope: undefined,
+        creditQuickAddScope: undefined,
+        debitAccountFilter: contraAccountFilter,
+        creditAccountFilter: contraAccountFilter,
         remarkOnCreditEntry: false,
         showBankRemark: false,
         showInvoiceAllocation: false,
@@ -167,14 +179,15 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         layout: "journal-grid",
         pageSubtitle: "Record multiple debit and credit lines. Total debit must equal total credit.",
         detailsSectionTitle: "Journal Entries",
-        voucherNumberLabel: "Journal#",
+        voucherNumberLabel: "Journal No.",
         transactionModeLabel: "Mode of Payment",
-        transactionModeOptions: JOURNAL_MODES,
-        defaultTransactionMode: "NEFT/RTGS",
-        debitAccountLabel: "Account (Dr)",
-        creditAccountLabel: "Account (Cr)",
-        debitAccountPlaceholder: "Select an account",
-        creditAccountPlaceholder: "Select an account",
+        transactionModeOptions: [],
+        defaultTransactionMode: "",
+        showTransactionMode: false,
+        debitAccountLabel: "Account",
+        creditAccountLabel: "Account",
+        debitAccountPlaceholder: "Select an account…",
+        creditAccountPlaceholder: "Select an account…",
         debitAccountFilter: () => true,
         creditAccountFilter: () => true,
         remarkOnCreditEntry: false,

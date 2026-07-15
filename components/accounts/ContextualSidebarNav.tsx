@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isAccountsNavActive, type AccountsNavLink } from "@/lib/accounts/accounts-nav";
@@ -17,6 +17,8 @@ export function ContextualSidebarNav({
   items: AccountsNavLink[];
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
 
   return (
     <div className="px-2.5 py-4">
@@ -28,7 +30,7 @@ export function ContextualSidebarNav({
       </div>
       <nav className="space-y-0.5 border-l border-border/50 ml-3 pl-2">
         {items.map((item) => {
-          const active = isAccountsNavActive(pathname, item.href);
+          const active = isAccountsNavActive(pathname, item.href, search);
           const ItemIcon = item.icon;
           return (
             <Link

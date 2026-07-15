@@ -12,7 +12,10 @@ import {
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
-import { primaryDebitCreditLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { summarizeVoucherLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { ensureVoucherListingDemoOnPageLoad } from "@/lib/accounts/voucher-listing-demo-seed";
 import { cn } from "@/lib/utils";
 import {
   AccountsColumnHeader,
@@ -55,15 +58,22 @@ interface VoucherListClientProps {
 type VoucherListDisplayRow = VoucherRow & {
   debitLedger: string;
   creditLedger: string;
+  debitLedgerTitle: string;
+  creditLedgerTitle: string;
   paymentModeLabel: string;
 };
 
-function toDisplayRow(v: VoucherRow): VoucherListDisplayRow {
-  const { debitLedger, creditLedger } = primaryDebitCreditLedgers(v.lines);
+function toDisplayRow(v: VoucherRow, coaRecords: ReturnType<typeof loadChartOfAccounts>): VoucherListDisplayRow {
+  const { debitLedger, creditLedger, debitLedgerTitle, creditLedgerTitle } = summarizeVoucherLedgers(
+    v.lines,
+    coaRecords,
+  );
   return {
     ...v,
     debitLedger,
     creditLedger,
+    debitLedgerTitle,
+    creditLedgerTitle,
     paymentModeLabel: v.paymentMode?.trim() || "—",
   };
 }
@@ -152,10 +162,10 @@ function VoucherListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="text-muted-foreground">{v.referenceNo || "—"}</AccountsTableCell>
-                <AccountsTableCell className="text-xs max-w-[130px] truncate" title={v.debitLedger}>
+                <AccountsTableCell className="text-xs max-w-[200px] truncate" title={v.debitLedgerTitle}>
                   {v.debitLedger}
                 </AccountsTableCell>
-                <AccountsTableCell className="text-xs max-w-[130px] truncate" title={v.creditLedger}>
+                <AccountsTableCell className="text-xs max-w-[200px] truncate" title={v.creditLedgerTitle}>
                   {v.creditLedger}
                 </AccountsTableCell>
                 <AccountsTableCell className="text-xs text-muted-foreground whitespace-nowrap">
@@ -217,16 +227,22 @@ function VoucherListTable({
 export function VoucherListClient({ voucherType, embedded }: VoucherListClientProps) {
   const searchParams = useSearchParams();
   const listRefreshKey = searchParams.get("t");
+  const sectionRefresh = useAccountsSectionRefresh();
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
 
-  const records = useMemo(
-    () => (mounted ? getVouchersByTypeForList(voucherType).map(toDisplayRow) : []),
-    [voucherType, mounted, listRefreshKey],
-  );
+  useEffect(() => {
+    ensureVoucherListingDemoOnPageLoad();
+  }, []);
+
+  const records = useMemo(() => {
+    if (!mounted) return [];
+    const coa = loadChartOfAccounts();
+    return getVouchersByTypeForList(voucherType).map((v) => toDisplayRow(v, coa));
+  }, [voucherType, mounted, listRefreshKey, sectionRefresh]);
 
   const getCellValue = useCallback(
     (row: VoucherListDisplayRow, key: string) => (row as unknown as Record<string, unknown>)[key],

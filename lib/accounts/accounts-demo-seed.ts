@@ -1119,10 +1119,12 @@ function seedTransactionsDemoRecords(): InvoiceRecord[] {
 /** Transactions section — sales/purchase docs, credit/debit notes, expenses, vouchers. */
 export function seedTransactionsSectionDemoData(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(TX_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
   try {
-    seedTransactionsDemoRecords();
-    localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    if (localStorage.getItem(TX_SECTION_KEY) !== ACCOUNTS_DEMO_SEED_VERSION) {
+      seedTransactionsDemoRecords();
+      localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    }
+    void import("./voucher-listing-demo-seed").then((m) => m.seedVoucherListingDemoData());
   } catch (err) {
     console.error("[accounts] transactions section seed failed:", err);
   }
@@ -1140,6 +1142,7 @@ export function seedReportsSectionDemoData(): void {
       localStorage.setItem(REPORTS_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
     }
     ensureCoaPostingLedgerTransactionsOnPageLoad();
+    void import("./voucher-listing-demo-seed").then((m) => m.seedVoucherListingDemoData());
   } catch (err) {
     console.error("[accounts] reports section seed failed:", err);
   }
@@ -1174,6 +1177,8 @@ export function seedAccountsDemoData(force = false): void {
     saveVouchers([]);
     seedCoaPostingLedgerTransactions(true);
 
+    void import("./voucher-listing-demo-seed").then((m) => m.seedVoucherListingDemoData(true));
+
     localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
     localStorage.setItem(COA_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
     localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
@@ -1191,6 +1196,7 @@ export function resetAccountsDemoData(): void {
   localStorage.removeItem(TX_SECTION_KEY);
   localStorage.removeItem(REPORTS_SECTION_KEY);
   localStorage.removeItem("ds_coa_ledger_txn_seed_version");
+  localStorage.removeItem("ds_voucher_listing_demo_seed_version");
   void import("./accounts-section-seed").then((m) => m.resetAccountsSectionBootstrapCache());
   seedAccountsDemoData(true);
 }

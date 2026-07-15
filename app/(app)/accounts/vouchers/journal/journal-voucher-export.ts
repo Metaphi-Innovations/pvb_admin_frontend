@@ -17,7 +17,8 @@ import {
   type ReportHeaderOptions,
   todayExportDateSuffix,
 } from "@/lib/accounts/report-export-presentation";
-import { primaryDebitCreditLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { summarizeVoucherLedgers } from "@/lib/accounts/voucher-line-helpers";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import type { AccountingVoucher } from "../voucher-data";
 
 export interface JournalVoucherExportMeta {
@@ -57,8 +58,9 @@ function formatExportDate(iso: string): string {
 }
 
 export function vouchersToJournalExportRows(vouchers: AccountingVoucher[]): JournalExportRow[] {
+  const coa = loadChartOfAccounts();
   return vouchers.map((v) => {
-    const { debitLedger, creditLedger } = primaryDebitCreditLedgers(v.lines);
+    const { debitLedger, creditLedger } = summarizeVoucherLedgers(v.lines, coa);
     return {
       date: v.date,
       journalNo: v.voucherNumber,

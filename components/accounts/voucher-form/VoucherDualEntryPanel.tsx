@@ -12,6 +12,7 @@ import {
 import type { VoucherFormTypeConfig } from "@/lib/accounts/voucher-form-config";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
+import { ReceiptFormSection } from "@/components/accounts/voucher-simple-form-ui";
 import { isBankAccountLedger } from "@/lib/accounts/bank-coa-utils";
 import { getBankAccountByLedgerId } from "@/lib/accounts/bank-accounts-data";
 import { isBankAccountMappedToWarehouse, resolveWarehouseId } from "@/lib/accounts/bank-warehouse-mapping";
@@ -28,6 +29,8 @@ export interface VoucherDualEntryPanelProps {
   onQuickAddSuccess?: () => void;
   /** Limits bank ledgers to accounts mapped to this warehouse. */
   warehouseRef?: string | number | null;
+  /** Receipt-style voucher presentation — separate Debit/Credit headers and compact rows. */
+  variant?: "default" | "receipt";
 }
 
 export function VoucherDualEntryPanel({
@@ -40,6 +43,7 @@ export function VoucherDualEntryPanel({
   tdsAmount = 0,
   onQuickAddSuccess,
   warehouseRef,
+  variant = "default",
 }: VoucherDualEntryPanelProps) {
   const debitEntry = getFormEntry(entries, "DEBIT");
   const creditEntry = getFormEntry(entries, "CREDIT");
@@ -123,6 +127,17 @@ export function VoucherDualEntryPanel({
     if (changed) onEntriesChange(next);
   }, [warehouseRef, coaRecords, onEntriesChange]);
 
+  const isPremiumDualLayout =
+    variant === "receipt" ||
+    config.voucherType === "receipt" ||
+    config.voucherType === "payment" ||
+    config.voucherType === "contra";
+
+  const disableQuickAdd =
+    config.voucherType === "receipt" ||
+    config.voucherType === "payment" ||
+    config.voucherType === "contra";
+
   const debitBlock = debitEntry ? (
     <VoucherEntryBlock
       entry={debitEntry}
@@ -134,7 +149,10 @@ export function VoucherDualEntryPanel({
       accountPlaceholder={config.debitAccountPlaceholder}
       ledgerFilter={debitFilter}
       quickAddScope={config.debitQuickAddScope}
+      enableQuickAdd={!disableQuickAdd}
       showAmount={amountEditableOnDebit}
+      showLineRemark={!isPremiumDualLayout}
+      compact={isPremiumDualLayout}
       onQuickAddSuccess={onQuickAddSuccess}
       onChange={(patch) => patchEntry("DEBIT", patch)}
     />
@@ -151,7 +169,10 @@ export function VoucherDualEntryPanel({
       accountPlaceholder={config.creditAccountPlaceholder}
       ledgerFilter={creditFilter}
       quickAddScope={config.creditQuickAddScope}
+      enableQuickAdd={!disableQuickAdd}
       showAmount={amountEditableOnCredit}
+      showLineRemark={!isPremiumDualLayout}
+      compact={isPremiumDualLayout}
       onQuickAddSuccess={onQuickAddSuccess}
       onChange={(patch) => patchEntry("CREDIT", patch)}
     />
@@ -171,27 +192,43 @@ export function VoucherDualEntryPanel({
 
   const amount = grossAmount;
 
+  const renderEntryBlocks = () => {
+    if (isPremiumDualLayout) {
+      return (
+        <>
+          {config.creditAccountFirst ? (
+            <>
+              {creditBlock && <ReceiptFormSection title="Credit">{creditBlock}</ReceiptFormSection>}
+              {debitBlock && <ReceiptFormSection title="Debit">{debitBlock}</ReceiptFormSection>}
+            </>
+          ) : (
+            <>
+              {debitBlock && <ReceiptFormSection title="Debit">{debitBlock}</ReceiptFormSection>}
+              {creditBlock && <ReceiptFormSection title="Credit">{creditBlock}</ReceiptFormSection>}
+            </>
+          )}
+        </>
+      );
+    }
+
+    return config.creditAccountFirst ? (
+      <>
+        {creditBlock}
+        {debitBlock}
+      </>
+    ) : (
+      <>
+        {debitBlock}
+        {creditBlock}
+      </>
+    );
+  };
+
   return (
-    <div className="space-y-2.5">
-      {config.voucherType === "contra" && (
-        <p className="text-[11px] text-muted-foreground">
-          Use Contra Voucher for transfers between bank and cash accounts.
-        </p>
-      )}
+    <div className={cn(isPremiumDualLayout ? "space-y-0" : "space-y-2.5")}>
+      {renderEntryBlocks()}
 
-      {config.creditAccountFirst ? (
-        <>
-          {creditBlock}
-          {debitBlock}
-        </>
-      ) : (
-        <>
-          {debitBlock}
-          {creditBlock}
-        </>
-      )}
-
-      {debitEntry?.accountId && creditEntry?.accountId && amount > 0 && (
+      {debitEntry?.accountId && creditEntry?.accountId && amount > 0 && !isPremiumDualLayout && (
         <div className="rounded-md border border-border/50 bg-muted/15 px-2.5 py-2 space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Voucher Entry

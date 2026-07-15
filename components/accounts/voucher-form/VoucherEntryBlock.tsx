@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,12 @@ import {
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import {
+  RECEIPT_INPUT_CLASS,
+  RECEIPT_LABEL_CLASS,
+  RECEIPT_LEDGER_SELECT,
+  RECEIPT_MONEY_INPUT_CLASS,
+  RECEIPT_PREVIEW_TEXT_CLASS,
+  RECEIPT_ROW_GAP,
   VOUCHER_INPUT_CLASS,
   VOUCHER_LEDGER_SELECT_COMPACT,
   VOUCHER_MONEY_INPUT_CLASS,
@@ -20,7 +26,6 @@ import {
   VOUCHER_ROW_EQUAL_4,
   VoucherFormField,
   VoucherSelectContent,
-  VoucherLedgerCurBalance,
 } from "@/components/accounts/voucher-simple-form-ui";
 import { VoucherEntryAllocationDialog } from "@/components/accounts/voucher-form/VoucherEntryAllocationDialog";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
@@ -55,9 +60,17 @@ export interface VoucherEntryBlockProps {
   accountPlaceholder?: string;
   ledgerFilter: (ledger: ChartOfAccount) => boolean;
   quickAddScope?: string;
+  /** When false, hide Create New Sub Group Ledger in the account dropdown. */
+  enableQuickAdd?: boolean;
   showEntryType?: boolean;
   /** When false, Amount is hidden and synced from the other entry (receipt/payment bank side). */
   showAmount?: boolean;
+  /** When false, hide per-line remark (receipt voucher uses voucher-level narration only). */
+  showLineRemark?: boolean;
+  /** Compact inner layout — used in receipt premium sections. */
+  compact?: boolean;
+  /** Optional trailing cell (e.g. remove-row action on journal grid). */
+  rowAction?: ReactNode;
   onQuickAddSuccess?: () => void;
   onChange: (patch: Partial<VoucherFormEntry>) => void;
   className?: string;
@@ -66,15 +79,18 @@ export interface VoucherEntryBlockProps {
 export function VoucherEntryBlock({
   entry,
   voucherType,
-  voucherDate,
   coaRecords,
   readOnly = false,
   accountLabel,
   accountPlaceholder = "Select an account…",
   ledgerFilter,
   quickAddScope,
+  enableQuickAdd = true,
   showEntryType = false,
   showAmount = true,
+  showLineRemark = true,
+  compact = false,
+  rowAction,
   onQuickAddSuccess,
   onChange,
   className,
@@ -192,23 +208,51 @@ export function VoucherEntryBlock({
     });
   };
 
+  const inputClass = compact ? RECEIPT_INPUT_CLASS : VOUCHER_INPUT_CLASS;
+  const moneyInputClass = compact ? RECEIPT_MONEY_INPUT_CLASS : VOUCHER_MONEY_INPUT_CLASS;
+  const previewClass = compact ? RECEIPT_PREVIEW_TEXT_CLASS : VOUCHER_PREVIEW_TEXT_CLASS;
+  const labelClass = compact ? RECEIPT_LABEL_CLASS : undefined;
+  const fieldSpacing = compact ? "space-y-1" : "space-y-1";
+  const previewHeight = compact ? "h-9" : "h-8";
+  const selectItemClass = compact ? "text-[12px]" : "text-xs";
+  const ledgerSelectProps = compact ? RECEIPT_LEDGER_SELECT : VOUCHER_LEDGER_SELECT_COMPACT;
+  const rowGap = compact ? RECEIPT_ROW_GAP : undefined;
+
   return (
-    <div className={cn("rounded-lg border border-border bg-muted/10 px-3 py-2.5 space-y-2", className)}>
+    <div
+      className={cn(
+        compact
+          ? "space-y-1.5"
+          : "rounded-lg border border-border bg-muted/10 px-3 py-2.5 space-y-2",
+        className,
+      )}
+    >
       <div className="overflow-x-auto -mx-1 px-1">
       <div
         className={cn(
           "min-w-[640px]",
           showEntryType
-            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start"
+            ? cn(
+                "grid grid-cols-1 sm:grid-cols-2 gap-3 items-start",
+                rowAction
+                  ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(100px,0.7fr)_minmax(120px,0.9fr)_minmax(120px,0.9fr)_minmax(110px,0.8fr)_40px]"
+                  : "lg:grid-cols-5",
+              )
             : showAmount
-              ? VOUCHER_ROW_EQUAL_4
-              : VOUCHER_ROW_EQUAL_3,
+              ? cn(VOUCHER_ROW_EQUAL_4, rowGap)
+              : cn(VOUCHER_ROW_EQUAL_3, rowGap),
         )}
       >
         <div className={cn("min-w-0", showEntryType ? "lg:col-span-1" : "")}>
-          <VoucherFormField label={accountLabel} required className="min-w-0">
+          <VoucherFormField
+            label={accountLabel}
+            required
+            className="min-w-0"
+            labelClassName={labelClass}
+            spacingClassName={fieldSpacing}
+          >
             {readOnly ? (
-              <p className={cn("h-8 flex items-center text-xs", VOUCHER_PREVIEW_TEXT_CLASS)}>
+              <p className={cn(previewHeight, "flex items-center", previewClass)}>
                 {entry.accountName || "—"}
               </p>
             ) : (
@@ -219,18 +263,24 @@ export function VoucherEntryBlock({
                 placeholder={accountPlaceholder}
                 ledgerFilter={ledgerFilter}
                 quickAddScope={quickAddScope as never}
+                enableQuickAdd={enableQuickAdd}
                 onQuickAddSuccess={onQuickAddSuccess ? () => onQuickAddSuccess() : undefined}
-                {...VOUCHER_LEDGER_SELECT_COMPACT}
+                {...ledgerSelectProps}
               />
             )}
           </VoucherFormField>
-          <VoucherLedgerCurBalance ledger={ledger} asOfDate={voucherDate} />
         </div>
 
         {showEntryType && (
-          <VoucherFormField label="Entry Type" required className="min-w-0">
+          <VoucherFormField
+            label="Entry Type"
+            required
+            className="min-w-0"
+            labelClassName={labelClass}
+            spacingClassName={fieldSpacing}
+          >
             {readOnly ? (
-              <p className={cn("h-8 flex items-center text-xs", VOUCHER_PREVIEW_TEXT_CLASS)}>
+              <p className={cn(previewHeight, "flex items-center", previewClass)}>
                 {entry.entryType === "DEBIT" ? "Debit" : "Credit"}
               </p>
             ) : (
@@ -245,14 +295,14 @@ export function VoucherEntryBlock({
                   })
                 }
               >
-                <SelectTrigger className={cn(VOUCHER_INPUT_CLASS, "h-8 text-xs")}>
+                <SelectTrigger className={cn(inputClass, !compact && "h-8 text-xs")}>
                   <SelectValue />
                 </SelectTrigger>
                 <VoucherSelectContent>
-                  <SelectItem value="DEBIT" className="text-xs">
+                  <SelectItem value="DEBIT" className={selectItemClass}>
                     Debit
                   </SelectItem>
-                  <SelectItem value="CREDIT" className="text-xs">
+                  <SelectItem value="CREDIT" className={selectItemClass}>
                     Credit
                   </SelectItem>
                 </VoucherSelectContent>
@@ -261,9 +311,14 @@ export function VoucherEntryBlock({
           </VoucherFormField>
         )}
 
-        <VoucherFormField label="Reference Type" className="min-w-0">
+        <VoucherFormField
+          label="Reference Type"
+          className="min-w-0"
+          labelClassName={labelClass}
+          spacingClassName={fieldSpacing}
+        >
           {readOnly ? (
-            <p className={cn("h-8 flex items-center text-xs", VOUCHER_PREVIEW_TEXT_CLASS)}>
+            <p className={cn(previewHeight, "flex items-center", previewClass)}>
               {VOUCHER_REFERENCE_TYPE_LABELS[entry.referenceType] ?? entry.referenceType}
             </p>
           ) : (
@@ -271,12 +326,12 @@ export function VoucherEntryBlock({
               value={entry.referenceType}
               onValueChange={(v) => setReferenceType(v as VoucherReferenceType)}
             >
-              <SelectTrigger className={cn(VOUCHER_INPUT_CLASS, "h-8 text-xs")}>
+              <SelectTrigger className={cn(inputClass, !compact && "h-8 text-xs")}>
                 <SelectValue placeholder="Select…" />
               </SelectTrigger>
               <VoucherSelectContent>
                 {refTypes.map((rt) => (
-                  <SelectItem key={rt} value={rt} className="text-xs">
+                  <SelectItem key={rt} value={rt} className={selectItemClass}>
                     {VOUCHER_REFERENCE_TYPE_LABELS[rt]}
                   </SelectItem>
                 ))}
@@ -285,14 +340,19 @@ export function VoucherEntryBlock({
           )}
         </VoucherFormField>
 
-        <VoucherFormField label="Against Reference" className="min-w-0">
+        <VoucherFormField
+          label="Against Reference"
+          className="min-w-0"
+          labelClassName={labelClass}
+          spacingClassName={fieldSpacing}
+        >
           {!showAgainstRef ? (
-            <p className={cn("h-8 flex items-center text-xs text-muted-foreground", VOUCHER_PREVIEW_TEXT_CLASS)}>
+            <p className={cn(previewHeight, "flex items-center text-muted-foreground", previewClass)}>
               —
             </p>
           ) : referenceTypeShowsAllocationPicker(entry.referenceType) ? (
             readOnly ? (
-              <p className={cn("h-8 flex items-center text-xs truncate", VOUCHER_PREVIEW_TEXT_CLASS)}>
+              <p className={cn(previewHeight, "flex items-center truncate", previewClass)}>
                 {multiAllocCount > 1
                   ? `${multiAllocCount} invoices`
                   : selectedDoc?.no ?? entry.allocations[0]?.documentNumber ?? "—"}
@@ -307,12 +367,12 @@ export function VoucherEntryBlock({
                   }}
                   disabled={!allocationMode || openDocuments.length === 0}
                 >
-                  <SelectTrigger className={cn(VOUCHER_INPUT_CLASS, "h-8 text-xs flex-1 min-w-0")}>
+                  <SelectTrigger className={cn(inputClass, !compact && "h-8 text-xs", "flex-1 min-w-0")}>
                     <SelectValue placeholder={openDocuments.length ? "Select…" : "No open docs"} />
                   </SelectTrigger>
                   <VoucherSelectContent>
                     {openDocuments.map((doc) => (
-                      <SelectItem key={doc.id} value={String(doc.id)} className="text-xs">
+                      <SelectItem key={doc.id} value={String(doc.id)} className={selectItemClass}>
                         {doc.no} · {formatMoney(doc.outstanding)}
                       </SelectItem>
                     ))}
@@ -323,7 +383,7 @@ export function VoucherEntryBlock({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 px-2 shrink-0"
+                    className={cn(compact ? "h-[38px]" : "h-8", "px-2 shrink-0")}
                     onClick={() => setAllocOpen(true)}
                     title="Allocate across multiple invoices"
                   >
@@ -333,12 +393,12 @@ export function VoucherEntryBlock({
               </div>
             )
           ) : readOnly ? (
-            <p className={cn("h-8 flex items-center text-xs truncate", VOUCHER_PREVIEW_TEXT_CLASS)}>
+            <p className={cn(previewHeight, "flex items-center truncate", previewClass)}>
               {textReference || "—"}
             </p>
           ) : (
             <Input
-              className={cn(VOUCHER_INPUT_CLASS, "h-8 text-xs")}
+              className={cn(inputClass, !compact && "h-8 text-xs")}
               value={textReference}
               onChange={(e) => setTextReference(e.target.value)}
               placeholder="UTR / cheque / ref…"
@@ -347,38 +407,59 @@ export function VoucherEntryBlock({
         </VoucherFormField>
 
         {showAmount && (
-          <VoucherFormField label="Amount" required className="min-w-0">
+          <VoucherFormField
+            label="Amount"
+            required
+            className="min-w-0"
+            labelClassName={labelClass}
+            spacingClassName={fieldSpacing}
+          >
             {readOnly ? (
-              <p className={cn("h-8 flex items-center tabular-nums text-xs justify-end", VOUCHER_PREVIEW_TEXT_CLASS)}>
+              <p className={cn(previewHeight, "flex items-center tabular-nums justify-end", previewClass)}>
                 {entry.amount > 0 ? formatMoney(entry.amount) : "—"}
               </p>
             ) : (
               <AccountsMoneyInput
                 compact={false}
-                className={cn(VOUCHER_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "h-8 text-xs")}
+                className={cn(inputClass, moneyInputClass, !compact && "h-8 text-xs")}
                 value={entry.amount}
                 onChange={(v) => onChange({ amount: v })}
               />
             )}
           </VoucherFormField>
         )}
+
+        {rowAction && (
+          <VoucherFormField
+            label={compact ? "\u00a0" : " "}
+            labelClassName={cn(labelClass, "select-none")}
+            spacingClassName={fieldSpacing}
+            className="min-w-0"
+          >
+            <div className={cn(compact ? "h-9" : "h-8", "flex items-center justify-center")}>
+              {rowAction}
+            </div>
+          </VoucherFormField>
+        )}
       </div>
       </div>
 
-      <VoucherFormField label="Line Remark" className="min-w-0 w-full">
-        {readOnly ? (
-          <p className={cn("h-8 flex items-center text-xs", VOUCHER_PREVIEW_TEXT_CLASS)}>
-            {entry.remark || "—"}
-          </p>
-        ) : (
-          <Input
-            className={cn(VOUCHER_INPUT_CLASS, "h-8 text-xs w-full")}
-            value={entry.remark}
-            onChange={(e) => onChange({ remark: e.target.value })}
-            placeholder="Line remark…"
-          />
-        )}
-      </VoucherFormField>
+      {showLineRemark && (
+        <VoucherFormField label="Line Remark" className="min-w-0 w-full">
+          {readOnly ? (
+            <p className={cn("h-8 flex items-center text-xs", VOUCHER_PREVIEW_TEXT_CLASS)}>
+              {entry.remark || "—"}
+            </p>
+          ) : (
+            <Input
+              className={cn(VOUCHER_INPUT_CLASS, "h-8 text-xs w-full")}
+              value={entry.remark}
+              onChange={(e) => onChange({ remark: e.target.value })}
+              placeholder="Line remark…"
+            />
+          )}
+        </VoucherFormField>
+      )}
 
       {multiAllocCount > 1 && (
         <p className="text-[11px] text-muted-foreground">
