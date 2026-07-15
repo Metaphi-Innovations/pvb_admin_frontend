@@ -78,6 +78,7 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
     gstAmount: asNumber(raw.tax_amount),
     lineTotal: asNumber(raw.line_total),
     unit: asString(prodSnapshot.base_unit || product.unit || "Unit"),
+    packingUnit: asString(prodSnapshot.packing_unit || product.packing_unit || "Unit"),
     batchNumber: asString(raw.batch_no),
     expiryDate: raw.expiry_date ? asDateOnly(raw.expiry_date) : undefined,
   };
