@@ -34,6 +34,7 @@ import {
   usePurchaseReturnList,
 } from "@/hooks/procurement";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 
 function StatusPill({ status }: { status: PurchaseReturn["status"] }) {
   const cfg = PURCHASE_RETURN_STATUS_CFG[status];
@@ -65,6 +66,7 @@ export function PurchaseReturnListing() {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 
   useFlashToast(setToast);
 
@@ -84,16 +86,23 @@ export function PurchaseReturnListing() {
     apiFilters,
   });
 
-  const statusOptionsQuery = usePurchaseReturnFilterDropdown("status");
-  const returnNoOptionsQuery = usePurchaseReturnFilterDropdown("return_no");
+  const statusOptionsQuery = usePurchaseReturnFilterDropdown("status", {
+    enabled: isFilterOpen("status"),
+  });
+  const returnNoOptionsQuery = usePurchaseReturnFilterDropdown("return_no", {
+    enabled: isFilterOpen("returnNumber"),
+  });
   const supplierOptionsQuery = usePurchaseReturnFilterDropdown(
     "supplier__supplier_name",
+    { enabled: isFilterOpen("supplierName") },
   );
   const poOptionsQuery = usePurchaseReturnFilterDropdown(
     "purchase_order__po_no",
+    { enabled: isFilterOpen("poNumber") },
   );
   const initiatedByOptionsQuery = usePurchaseReturnFilterDropdown(
     "created_by_user__username",
+    { enabled: isFilterOpen("initiatedBy") },
   );
 
   const statusOptions = useMemo(
@@ -298,6 +307,7 @@ export function PurchaseReturnListing() {
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
         onFilterChange={setFilters}
+        onOpenFilter={handleOpenFilter}
         emptyMessage="purchase returns"
         searchPlaceholder="Search return no., PO no., supplier…"
         currentFilters={filters}

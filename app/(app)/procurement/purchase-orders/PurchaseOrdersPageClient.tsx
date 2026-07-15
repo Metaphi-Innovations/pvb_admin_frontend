@@ -33,7 +33,8 @@ import { useFlashToast } from "../hooks/useFlashToast";
 import { formatListingDate } from "../components/listing/ListingCells";
 import {
   getPOStatusLabel,
-  PO_LIST_STATUS_FILTER_OPTIONS,
+  PO_DRAFT_STATUS_FILTER_OPTIONS,
+  PO_MAIN_STATUS_FILTER_OPTIONS,
   type POListStatus,
 } from "@/lib/procurement/po-status";
 import type { PurchaseOrderListItem } from "@/services/purchase-order-list.service";
@@ -53,6 +54,7 @@ import {
   useUploadPOInvoice,
 } from "@/hooks/procurement";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
   getMasterListErrorMessage,
@@ -148,6 +150,7 @@ export default function PurchaseOrdersPageClient() {
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 
   useFlashToast(setToast);
 
@@ -173,11 +176,25 @@ export default function PurchaseOrdersPageClient() {
   );
 
   const isPoTab = tab !== "po_return";
+  const isDraftTab = tab === "draft";
+  const filterScope = {
+    excludeDraft: isPoTab && !isDraftTab,
+    poStatus: isDraftTab ? "Draft" : undefined,
+  };
   const listQuery = usePurchaseOrderList(listParams, isPoTab);
   const summaryQuery = usePurchaseOrderSummary();
-  const poNoOptionsQuery = usePurchaseOrderFilterDropdown("po_no");
-  const supplierOptionsQuery = usePurchaseOrderFilterDropdown("supplier__supplier_name");
-  const prOptionsQuery = usePurchaseOrderFilterDropdown("purchase_requisition__pr_number");
+  const poNoOptionsQuery = usePurchaseOrderFilterDropdown("po_no", {
+    enabled: isPoTab && isFilterOpen("poNumber"),
+    ...filterScope,
+  });
+  const supplierOptionsQuery = usePurchaseOrderFilterDropdown("supplier__supplier_name", {
+    enabled: isPoTab && isFilterOpen("supplierName"),
+    ...filterScope,
+  });
+  const statusOptionsQuery = usePurchaseOrderFilterDropdown("po_status", {
+    enabled: isPoTab && isFilterOpen("status"),
+    ...filterScope,
+  });
   const exportMutation = useExportPurchaseOrders();
   const modalPoQuery = usePurchaseOrder(modalPoId);
   const uploadMutation = useUploadPOInvoice();
@@ -347,17 +364,28 @@ export default function PurchaseOrdersPageClient() {
     () => supplierOptionsQuery.data ?? [],
     [supplierOptionsQuery.data],
   );
-  const prRefs = useMemo(
-    () => prOptionsQuery.data ?? [],
-    [prOptionsQuery.data],
-  );
+  const statusFilterOptions = useMemo(() => {
+    const fallback = isDraftTab
+      ? PO_DRAFT_STATUS_FILTER_OPTIONS
+      : PO_MAIN_STATUS_FILTER_OPTIONS;
+    const fromApi = statusOptionsQuery.data ?? [];
+    if (fromApi.length === 0) {
+      return fallback.map((o) => ({ label: o.label, value: o.value }));
+    }
+    const filtered = isDraftTab
+      ? fromApi.filter((o) => o.value === "draft")
+      : fromApi.filter((o) => o.value !== "draft");
+    return filtered.length > 0
+      ? filtered
+      : fallback.map((o) => ({ label: o.label, value: o.value }));
+  }, [isDraftTab, statusOptionsQuery.data]);
 
   const summary = summaryQuery.data;
 
   const tabCounts = useMemo(() => {
     const c: Partial<Record<TabId, number>> = {};
     if (summary) {
-      c.all = summary.total;
+      c.all = Math.max(0, (summary.total ?? 0) - (summary.draftPo ?? 0));
       c.draft = summary.draftPo;
     }
     c.po_return = purchaseReturnCountQuery.data?.total ?? 0;
@@ -377,6 +405,12 @@ export default function PurchaseOrdersPageClient() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, apiFilters, pageSize, tab]);
+
+  useEffect(() => {
+    setFilters({});
+    setSort({ key: "", direction: "none" });
+    setPage(1);
+  }, [tab]);
 
   useEffect(() => {
     setPage(1);
@@ -520,10 +554,7 @@ export default function PurchaseOrdersPageClient() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: PO_LIST_STATUS_FILTER_OPTIONS.map((o) => ({
-        label: o.label,
-        value: o.value,
-      })),
+      filterOptions: statusFilterOptions,
       render: (_val, row) => <StatusPill status={row.status} />,
     },
     {
@@ -667,6 +698,7 @@ export default function PurchaseOrdersPageClient() {
             onPageSizeChange={setPageSize}
             onSortChange={setSort}
             onFilterChange={setFilters}
+            onOpenFilter={handleOpenFilter}
             onAdd={() => router.push("/procurement/purchase-orders/new")}
             addLabel="Create PO"
             emptyMessage="purchase orders"

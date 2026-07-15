@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   PurchaseOrderListService,
+  type PurchaseOrderFilterDropdownParams,
   type PurchaseOrderFilterField,
   type PurchaseOrderListParams,
 } from "@/services/purchase-order-list.service";
@@ -13,6 +14,7 @@ import {
   purchaseOrderKeys,
   type PurchaseOrderListKeyParams,
 } from "@/lib/procurement/purchase-order-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: PurchaseOrderListKeyParams): PurchaseOrderListParams {
   return {
@@ -43,11 +45,25 @@ export function usePurchaseOrderSummary() {
   });
 }
 
-export function usePurchaseOrderFilterDropdown(fieldName: PurchaseOrderFilterField) {
+export function usePurchaseOrderFilterDropdown(
+  fieldName: PurchaseOrderFilterField,
+  options?: FilterDropdownQueryOptions & PurchaseOrderFilterDropdownParams,
+) {
+  const scope = options?.excludeDraft
+    ? "exclude-draft"
+    : options?.poStatus
+      ? `status:${options.poStatus}`
+      : "all";
+
   return useQuery({
-    queryKey: purchaseOrderKeys.filterDropdown(fieldName),
+    queryKey: purchaseOrderKeys.filterDropdown(fieldName, scope),
     queryFn: ({ signal }) =>
-      PurchaseOrderListService.getFilterDropdown(fieldName, signal),
+      PurchaseOrderListService.getFilterDropdown(fieldName, signal, {
+        excludeDraft: options?.excludeDraft,
+        poStatus: options?.poStatus,
+      }),
+    staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

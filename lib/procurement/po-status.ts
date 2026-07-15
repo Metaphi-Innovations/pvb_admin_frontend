@@ -110,3 +110,24 @@ export const PO_LIST_STATUS_FILTER_OPTIONS: { label: string; value: POListStatus
   { label: "Closed", value: "closed" },
   { label: "Cancelled", value: "cancelled" },
 ];
+
+/** PO main tab — drafts live on the Draft tab only. */
+export const PO_MAIN_STATUS_FILTER_OPTIONS = PO_LIST_STATUS_FILTER_OPTIONS.filter(
+  (o) => o.value !== "draft",
+);
+
+export const PO_DRAFT_STATUS_FILTER_OPTIONS = PO_LIST_STATUS_FILTER_OPTIONS.filter(
+  (o) => o.value === "draft",
+);
+
+/** Backend statuses for the main PO list (excludes Draft). */
+export const PO_MAIN_BACKEND_STATUSES: POBackendStatus[] = [
+  "Pending_Approval",
+  "Approved",
+  "Rejected",
+  "Partially_Received",
+  "Received",
+  "Short_Closed",
+  "Cancelled",
+  "Closed",
+];

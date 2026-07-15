@@ -1,5 +1,4 @@
 import { BRANCH_OPTIONS, COMPANY_BILLING } from "@/lib/procurement/config";
-import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 
 /** Company branch billing addresses (buyer / Bill To). */
@@ -76,31 +75,9 @@ export function getPOBillToAddresses(): SalesOrderCustomerAddress[] {
   });
 }
 
+/** Ship-to addresses come from warehouse API dropdowns in the form — no local mock list. */
 export function getPOShipToAddresses(): SalesOrderCustomerAddress[] {
-  return loadWarehouses()
-    .filter((w) => w.status === "active")
-    .map((w) => {
-      const primary = w.contacts?.find((c) => c.isPrimary) ?? w.contacts?.[0];
-      const phone = primary?.mobileNumber || w.mobileNumber || "—";
-      const email = primary?.emailAddress || w.emailAddress || "—";
-      const phoneFormatted =
-        phone !== "—" && primary?.mobileCountryCode
-          ? `${primary.mobileCountryCode} ${phone}`
-          : phone;
-      return {
-        id: `ship-wh-${w.id}`,
-        label: `${w.warehouseName} — Ship To`,
-        companyName: w.registeredLegalName || COMPANY_BILLING.companyName,
-        addressLine1: w.address,
-        addressLine2: w.addressLine2,
-        city: w.city,
-        state: w.state,
-        pincode: w.pincode,
-        gstin: w.gstApplicable && w.gstNumber ? w.gstNumber : COMPANY_BILLING.gstNumber,
-        phone: phoneFormatted,
-        email,
-      };
-    });
+  return [];
 }
 
 export function getDefaultPOBillShipIds(
