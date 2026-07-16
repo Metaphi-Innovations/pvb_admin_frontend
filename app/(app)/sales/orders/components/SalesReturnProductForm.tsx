@@ -343,6 +343,7 @@ export function flattenSelectedBatchReturns(packingGroups: SalesReturnPackingGro
           returnLooseQty: computation.looseQty,
           returnTotalPieces: computation.totalPieces,
           lineAmount: computation.amount,
+          quantityType: returnEntries[batch.key]?.quantityType || "Piece",
         }];
       }),
     ),

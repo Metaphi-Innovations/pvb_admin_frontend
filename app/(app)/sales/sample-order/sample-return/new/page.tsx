@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-const getDispatchRecords = (): any[] => [];
-const saveDispatchRecords = (r: any): void => {};
+
+import { getDispatches, getDispatchById } from "@/app/(app)/warehouse/dispatch/services";
+import { SampleReturnService } from "@/services/sample-return.service";
 
 import { DispatchDetailsPanel } from "../../../orders/components/DispatchDetailsPanel";
 import {
@@ -18,15 +19,6 @@ import {
   SalesReturnProductForm,
   type BatchReturnInput,
 } from "../../../orders/components/SalesReturnProductForm";
-import {
-  getSampleReturnRecords,
-  saveSampleReturnRecords,
-} from "../../sample-return-data";
-import {
-  enrichDispatchForSampleReturn,
-  getDeliveredSampleOrderDispatches,
-  getSampleOrderNo,
-} from "../../sample-return-utils";
 import { PIECES_PER_CASE } from "../../../orders/sales-return-data";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 
@@ -40,23 +32,103 @@ function parseQty(value?: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
+  const packingNo = backendDispatch.packing_done?.packing_done_no || backendDispatch.packing_done_no || "PKG-2026-001";
+  
+  const products = (backendDispatch.items || []).map((item: any) => {
+    const unitPerPacking = Number(item.product?.unit_per_packing || 1);
+    const baseQty = Number(item.dispatched_base_qty || 0);
+    const cases = baseQty / unitPerPacking;
+    
+    const unitRate = Number(item.unit_price || item.unit_rate || item.product?.unit_price || 0);
+
+    return {
+      product: item.product?.product_name || "Unknown Product",
+      sku: item.product?.sku || item.product?.product_code || "",
+      packedQty: cases,
+      dispatchQty: cases,
+      unitRate: unitRate,
+      batchNo: item.inventory_batch?.batch_no || item.batch_code || "",
+      batchExpiryDate: item.inventory_batch?.expiry_date || null,
+      batchAllocations: [
+        {
+          batchNumber: item.inventory_batch?.batch_no || item.batch_code || "",
+          expiryDate: item.inventory_batch?.expiry_date || null,
+          allocatedQty: cases,
+        }
+      ]
+    };
+  });
+
+  return {
+    id: backendDispatch.id,
+    dispatchNumber: backendDispatch.dispatch_number,
+    salesOrderNumber: backendDispatch.sample_order?.sample_order_no || backendDispatch.source_document_no || "",
+    customer: backendDispatch.customer?.customer_name || backendDispatch.customer_name || "",
+    vehicleNumber: backendDispatch.vehicle_number || "",
+    driverName: backendDispatch.driver_name || "",
+    transporterName: backendDispatch.transporter || "",
+    dispatchDate: backendDispatch.dispatch_date || backendDispatch.created_at || "",
+    deliveryStatus: "Delivered",
+    warehouse: backendDispatch.warehouse?.warehouse_name || "",
+    packingNumbers: [packingNo],
+    products: products,
+    customer_id: backendDispatch.customer_id,
+    warehouse_id: backendDispatch.warehouse_id,
+    packing_list_id: backendDispatch.packing_done?.packing_list_id || null,
+    source_document_id: backendDispatch.source_id,
+    deliveryDetails: {
+      deliveryDate: backendDispatch.dispatch_date 
+        ? new Date(backendDispatch.dispatch_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+      receiverName: "Vikram Mehta",
+      remarks: "Delivered in good condition.",
+    }
+  };
+}
+
 export default function NewSampleReturnPage() {
   const router = useRouter();
   const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState("");
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
-  const [dispatch, setDispatch] = useState<ReturnType<typeof enrichDispatchForSampleReturn> | null>(null);
+  const [dispatch, setDispatch] = useState<ReturnType<typeof mapBackendDispatchToFrontend> | null>(null);
+  const [rawDispatchDetails, setRawDispatchDetails] = useState<any>(null);
   const [returnEntries, setReturnEntries] = useState<Record<string, BatchReturnInput>>({});
   const [returnRemarks, setReturnRemarks] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const deliveredDispatches = useMemo(() => getDeliveredSampleOrderDispatches(), []);
+  const [deliveredDispatches, setDeliveredDispatches] = useState<any[]>([]);
+  const [loadingDispatches, setLoadingDispatches] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function fetchDispatches() {
+      try {
+        setLoadingDispatches(true);
+        const res = await getDispatches({
+          filters: { source_type: "sample" },
+          page: 1,
+          page_size: 1000
+        });
+        const allDispatches = res?.data || [];
+        const eligible = allDispatches.filter((d: any) => d.status === "DELIVERED" || d.status === "DISPATCHED");
+        setDeliveredDispatches(eligible);
+      } catch (err) {
+        console.error("Failed to fetch delivered dispatches:", err);
+      } finally {
+        setLoadingDispatches(false);
+      }
+    }
+    fetchDispatches();
+  }, []);
 
   const salesOrderOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const item of deliveredDispatches) {
-      const soNo = getSampleOrderNo(item);
+      const soNo = item.sample_order?.sample_order_no || item.source_document_no || "";
       if (!soNo || seen.has(soNo)) continue;
-      seen.set(soNo, item.customer || item.customer_name || "");
+      const customerName = item.customer?.customer_name || item.customer_name || (typeof item.customer === 'string' ? item.customer : "");
+      seen.set(soNo, customerName);
     }
     return Array.from(seen.entries())
       .sort(([left], [right]) => left.localeCompare(right))
@@ -69,26 +141,38 @@ export default function NewSampleReturnPage() {
   const dispatchOptions = useMemo(() => {
     if (!selectedSalesOrderNo) return [];
     return deliveredDispatches
-      .filter((item: DispatchRecord) => getSampleOrderNo(item) === selectedSalesOrderNo)
-      .map((item: DispatchRecord) => ({
+      .filter((item: any) => (item.sample_order?.sample_order_no || item.source_document_no || "") === selectedSalesOrderNo)
+      .map((item: any) => ({
         value: item.id,
-        label: `${item.dispatchNumber || item.dispatch_no}${item.customer || item.customer_name ? ` - ${item.customer || item.customer_name}` : ""}`,
+        label: `${item.dispatch_number || item.dispatchNumber || item.dispatch_no}${item.customer || item.customer_name ? ` - ${item.customer || item.customer_name}` : ""}`,
       }));
   }, [deliveredDispatches, selectedSalesOrderNo]);
 
   useEffect(() => {
     if (!selectedDispatchId) {
       setDispatch(null);
+      setRawDispatchDetails(null);
       return;
     }
 
-    const record = deliveredDispatches.find((item: DispatchRecord) => item.id === selectedDispatchId);
-    if (record && getSampleOrderNo(record) === selectedSalesOrderNo) {
-      setDispatch(enrichDispatchForSampleReturn(record));
-      setReturnEntries({});
-      setReturnRemarks("");
+    async function fetchDispatchDetails() {
+      try {
+        const rawDispatch = await getDispatchById(selectedDispatchId);
+        if (rawDispatch) {
+          setRawDispatchDetails(rawDispatch);
+          const mapped = mapBackendDispatchToFrontend(rawDispatch);
+          setDispatch(mapped);
+          setReturnEntries({});
+          setReturnRemarks("");
+        }
+      } catch (err) {
+        console.error("Failed to fetch dispatch details:", err);
+        setToast({ msg: "Failed to fetch dispatch details.", type: "error" });
+      }
     }
-  }, [deliveredDispatches, selectedDispatchId, selectedSalesOrderNo]);
+
+    fetchDispatchDetails();
+  }, [selectedDispatchId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -114,6 +198,7 @@ export default function NewSampleReturnPage() {
       [batchKey]: {
         returnCaseQty: current[batchKey]?.returnCaseQty ?? "",
         returnLooseQty: current[batchKey]?.returnLooseQty ?? "",
+        quantityType: current[batchKey]?.quantityType ?? "Piece",
         ...patch,
       },
     }));
@@ -130,7 +215,7 @@ export default function NewSampleReturnPage() {
   const handleLooseQtyChange = (batchKey: string, value: string) => {
     const sanitized = sanitizeNumericInput(value);
     setReturnEntries((current) => {
-      const existing = current[batchKey] ?? { returnCaseQty: "", returnLooseQty: "" };
+      const existing = current[batchKey] ?? { returnCaseQty: "", returnLooseQty: "", quantityType: "Piece" as const };
       if (!sanitized) {
         return { ...current, [batchKey]: { ...existing, returnLooseQty: "" } };
       }
@@ -159,8 +244,8 @@ export default function NewSampleReturnPage() {
     });
   };
 
-  const handleSave = () => {
-    if (!dispatch) return;
+  const handleSave = async () => {
+    if (!dispatch || !rawDispatchDetails) return;
 
     if (summary.invalidBatchCount > 0) {
       setToast({ msg: "Please fix batch quantity validation errors before saving.", type: "error" });
@@ -172,45 +257,62 @@ export default function NewSampleReturnPage() {
       setToast({ msg: "Please enter at least one batch return quantity.", type: "error" });
       return;
     }
-    
-    const productsToReturn = flatReturns.map(r => ({
-       product: r.product,
-       sku: r.sku,
-       packedQty: r.packedQty ?? 0,
-       dispatchQty: r.dispatchQty ?? 0,
-       returnQty: r.returnTotalPieces,
-       unitRate: r.unitRate ?? 0,
-       batchNo: r.batchNo,
-       lineAmount: r.lineAmount ?? 0,
-    }));
 
-    const existingReturns = getSampleReturnRecords();
-    const returnNumber = `S-RET-${new Date().getFullYear()}-${String(existingReturns.length + 1).padStart(3, "0")}`;
-    const newReturn = {
-      id: `sret-${Date.now()}`,
-      returnNumber,
-      dispatchNumber: dispatch.dispatchNumber || dispatch.dispatch_no || "",
-      salesOrderNumber: dispatch.salesOrderNumber || dispatch.source_document_no || "",
-      customer: dispatch.customer || dispatch.customer_name || "",
-      returnDate: new Date().toISOString().split("T")[0],
-      warehouse: dispatch.warehouse || dispatch.source_warehouse_name || "",
-      products: productsToReturn,
-      totalAmount: summary.totalAmount,
-      remarks: returnRemarks,
-      status: "pending" as const,
-    };
+    try {
+      setSaving(true);
 
-    saveSampleReturnRecords([...existingReturns, newReturn]);
+      const items = flatReturns.map((retItem) => {
+        const matchedItem = rawDispatchDetails.items?.find((di: any) => {
+          const diSku = di.product?.sku || di.product?.product_code || "";
+          const diBatch = di.inventory_batch?.batch_no || di.batch_code || "";
+          return diSku === retItem.sku && diBatch === retItem.batchNo;
+        });
 
-    const allDispatches = getDispatchRecords();
-    const dispatchIndex = allDispatches.findIndex((item) => item.id === dispatch.id);
-    if (dispatchIndex !== -1) {
-      allDispatches[dispatchIndex].deliveryStatus = "Returned";
-      saveDispatchRecords(allDispatches);
+        if (!matchedItem) {
+          throw new Error(`Could not find dispatch item for SKU: ${retItem.sku}, Batch: ${retItem.batchNo}`);
+        }
+
+        const returnedQty = (retItem as any).quantityType === "Piece"
+          ? retItem.returnTotalPieces
+          : retItem.returnCaseQty || 0;
+
+        const baseQty = Number(matchedItem.dispatched_qty || matchedItem.dispatched_base_qty || 0);
+
+        return {
+          sample_order_item_id: matchedItem.source_item_id || null,
+          product_id: matchedItem.product_id,
+          dispatch_item_id: matchedItem.id,
+          packed_qty: baseQty,
+          dispatch_qty: baseQty,
+          returned_qty: returnedQty,
+          unit_price: matchedItem.unit_price || matchedItem.unit_rate || matchedItem.product?.unit_price || 0,
+          return_amount: retItem.lineAmount,
+          remarks: returnRemarks || "",
+          quantity_type: (retItem as any).quantityType,
+        };
+      });
+
+      const payload = {
+        sample_order_id: dispatch.source_document_id,
+        customer_id: dispatch.customer_id,
+        warehouse_id: dispatch.warehouse_id,
+        dispatch_id: dispatch.id,
+        return_date: new Date().toISOString(),
+        remarks: returnRemarks,
+        items,
+      };
+
+      const result = await SampleReturnService.create(payload);
+
+      setToast({ msg: `Sample return ${result?.data?.return_no || ""} saved successfully.`, type: "success" });
+      setTimeout(() => router.push(listHref), 800);
+    } catch (err: any) {
+      console.error("Failed to create sample return:", err);
+      const errMsg = err?.response?.data?.message || err?.message || "Failed to save return.";
+      setToast({ msg: errMsg, type: "error" });
+    } finally {
+      setSaving(false);
     }
-
-    setToast({ msg: `Sample return ${returnNumber} saved successfully.`, type: "success" });
-    setTimeout(() => router.push(listHref), 800);
   };
 
   return (
@@ -226,9 +328,9 @@ export default function NewSampleReturnPage() {
           size="sm"
           className="h-8 gap-1.5 bg-red-600 text-xs text-white hover:bg-red-700"
           onClick={handleSave}
-          disabled={!dispatch || summary.selectedBatchCount === 0 || summary.invalidBatchCount > 0}
+          disabled={saving || !dispatch || summary.selectedBatchCount === 0 || summary.invalidBatchCount > 0}
         >
-          <RotateCcw className="h-3.5 w-3.5" /> Save Return
+          <RotateCcw className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save Return"}
         </Button>
       }
     >
@@ -245,10 +347,10 @@ export default function NewSampleReturnPage() {
                   setSelectedSalesOrderNo(soNo);
                   setSelectedDispatchId("");
                 }}
-                placeholder={salesOrderOptions.length ? "Select sample order..." : "No delivered sample orders available"}
+                placeholder={loadingDispatches ? "Loading..." : salesOrderOptions.length ? "Select sample order..." : "No delivered sample orders available"}
                 searchPlaceholder="Search sample order or customer..."
                 className="h-9 w-full text-xs"
-                disabled={salesOrderOptions.length === 0}
+                disabled={loadingDispatches || salesOrderOptions.length === 0}
               />
             </div>
             <div className="space-y-1.5">
@@ -302,3 +404,4 @@ export default function NewSampleReturnPage() {
     </FormContainer>
   );
 }
+

@@ -107,7 +107,7 @@ function CreateQcForm() {
         setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
         setToWarehouse(qc.toWarehouse ?? qc.warehouse);
         setIsStockTransfer(stMode);
-        setSourceType(stMode ? "stock_transfer" : "purchase_order");
+        setSourceType(getQcSourceType(qc));
         setQcRemarks(qc.qcRemarks ?? "");
         
         setItems(qc.items.map((it) => {
@@ -227,10 +227,18 @@ function CreateQcForm() {
     }
 
     try {
+      const backendSourceType = 
+        sourceType === "purchase_order" ? "PURCHASE_ORDER" :
+        sourceType === "sales_return" ? "SALES_RETURN" :
+        sourceType === "stock_transfer" ? "STOCK_TRANSFER" :
+        sourceType === "sample_return" ? "SAMPLE_RETURN" :
+        "PURCHASE_ORDER";
+
       const payload = {
         grnId: grnRecordId,
         qcDate: new Date().toISOString(),
         remarks: qcRemarks.trim(),
+        source_type: backendSourceType,
         items: items.map((it) => ({
           grnBatchId: it.grnBatchId,
           receivedQty: it.receivedQty,

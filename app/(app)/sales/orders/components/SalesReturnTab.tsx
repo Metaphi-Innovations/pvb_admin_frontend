@@ -1,73 +1,144 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
+import { SalesReturnService } from "@/services/sales-return.service";
 import {
   type SalesReturnRecord,
   formatProductReturnQuantity,
   formatReturnAmount,
   getReturnTotalAmount,
-  getSalesReturnRecords,
 } from "../sales-return-data";
+
+function mapBackendReturnToFrontend(item: any): SalesReturnRecord {
+  const products = (item.items || []).map((p: any, index: number) => {
+    const snap = p.product_snapshot || {};
+    const unitPerPacking = Number(snap.unit_per_packing) || 10;
+    const totalPieces = Number(p.total_return_pieces || p.base_qty || 0);
+    const cases = Math.floor(totalPieces / unitPerPacking);
+    const pieces = totalPieces % unitPerPacking;
+    return {
+      product: snap.product_name || "Unknown Product",
+      sku: snap.sku || snap.product_code || "",
+      packedQty: 0,
+      dispatchQty: 0,
+      returnQty: totalPieces,
+      unitRate: Number(p.amount || 0),
+      batchNo: p.batch_code || "",
+      returnCaseQty: cases,
+      returnLooseQty: pieces,
+      returnTotalPieces: totalPieces,
+      lineAmount: Number(p.amount || 0),
+    };
+  });
+
+  return {
+    id: item.id,
+    returnNumber: item.return_number,
+    dispatchNumber: item.dispatch?.dispatch_number || "",
+    salesOrderNumber: item.sales_order?.so_number || "",
+    customer: item.customer?.customer_name || "",
+    returnDate: item.return_date ? new Date(item.return_date).toISOString().split('T')[0] : "",
+    warehouse: item.warehouse?.warehouse_name || "",
+    products: products,
+    totalAmount: Number(item.return_amount || 0),
+    status: item.status?.toLowerCase() as any,
+  };
+}
 
 export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: number) => void }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [returnFilters, setReturnFilters] = useState<FilterState>({});
   const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
   const [returnPage, setReturnPage] = useState(1);
   const [returnPageSize, setReturnPageSize] = useState(25);
+  
   const [salesReturns, setSalesReturns] = useState<SalesReturnRecord[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  const refreshReturns = useCallback(() => {
-    const records = getSalesReturnRecords();
-    setSalesReturns(records);
-    onCountChange?.(records.length);
-  }, [onCountChange]);
+  const [returnNumberOptions, setReturnNumberOptions] = useState<{ label: string; value: string }[]>([]);
+  const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
-    refreshReturns();
-  }, [pathname, refreshReturns]);
+    SalesReturnService.getFilterDropdown("return_number")
+      .then((res) => {
+        setReturnNumberOptions(res.map((x: any) => ({ label: x.return_number, value: x.return_number })));
+      })
+      .catch((err) => console.error("Failed to load return number filter options", err));
 
-  const returnProcessed = useMemo(() => {
-    let result = [...salesReturns];
-    Object.keys(returnFilters).forEach((key) => {
-      const value = returnFilters[key];
-      if (!value) return;
-      if (key === "search") {
-        const query = (value as string).toLowerCase();
-        result = result.filter(
-          (record) =>
-            record.returnNumber.toLowerCase().includes(query) ||
-            record.dispatchNumber.toLowerCase().includes(query) ||
-            record.salesOrderNumber.toLowerCase().includes(query) ||
-            record.customer.toLowerCase().includes(query),
-        );
+    SalesReturnService.getFilterDropdown("customer__customer_name")
+      .then((res) => {
+        setCustomerOptions(res.map((x: any) => ({ label: x["customer__customer_name"], value: x["customer__customer_name"] })));
+      })
+      .catch((err) => console.error("Failed to load customer filter options", err));
+  }, []);
+
+  const fetchReturns = useCallback(async () => {
+    try {
+      setLoading(true);
+      const apiFilters: Record<string, any> = {};
+      
+      if (returnFilters.returnNumber && Array.isArray(returnFilters.returnNumber) && returnFilters.returnNumber.length > 0) {
+        apiFilters.return_number = returnFilters.returnNumber[0];
+      } else if (returnFilters.returnNumber && typeof returnFilters.returnNumber === "string") {
+        apiFilters.return_number = returnFilters.returnNumber;
       }
-    });
-    if (returnSort.key && returnSort.direction !== "none") {
-      result.sort((left, right) => {
-        const leftValue = String(left[returnSort.key as keyof SalesReturnRecord] || "");
-        const rightValue = String(right[returnSort.key as keyof SalesReturnRecord] || "");
-        return returnSort.direction === "asc" ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+
+      if (returnFilters.customer && Array.isArray(returnFilters.customer) && returnFilters.customer.length > 0) {
+        apiFilters.customer = { customer_name: returnFilters.customer[0] };
+      } else if (returnFilters.customer && typeof returnFilters.customer === "string") {
+        apiFilters.customer = { customer_name: returnFilters.customer };
+      }
+
+      let ordering = undefined;
+      if (returnSort.key && returnSort.direction !== "none") {
+        const fieldMap: Record<string, string> = {
+          returnNumber: "return_number",
+          returnDate: "return_date",
+          dispatchNumber: "dispatch__dispatch_number",
+          salesOrderNumber: "sales_order__so_number",
+          customer: "customer__customer_name",
+          totalAmount: "return_amount",
+        };
+        const backendKey = fieldMap[returnSort.key] || returnSort.key;
+        ordering = returnSort.direction === "desc" ? `-${backendKey}` : backendKey;
+      }
+
+      const res = await SalesReturnService.list({
+        page: returnPage,
+        pageSize: returnPageSize,
+        search: (returnFilters.search as string) || undefined,
+        ordering,
+        apiFilters,
       });
+
+      const mapped = (res.items || []).map(mapBackendReturnToFrontend);
+      setSalesReturns(mapped);
+      setTotalRecords(res.total || 0);
+      onCountChange?.(res.total || 0);
+    } catch (err) {
+      console.error("Failed to load sales returns:", err);
+    } finally {
+      setLoading(false);
     }
-    return result;
-  }, [salesReturns, returnFilters, returnSort]);
+  }, [returnPage, returnPageSize, returnFilters, returnSort, onCountChange]);
 
-  const returnPaginated = useMemo(() => {
-    const start = (returnPage - 1) * returnPageSize;
-    return returnProcessed.slice(start, start + returnPageSize);
-  }, [returnProcessed, returnPage, returnPageSize]);
+  useEffect(() => {
+    fetchReturns();
+  }, [fetchReturns]);
 
-  const returnColumns: ColumnConfig<SalesReturnRecord>[] = [
+  const returnColumns: ColumnConfig<SalesReturnRecord>[] = useMemo(() => [
     {
       key: "returnNumber",
       header: "Return No",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: returnNumberOptions,
       width: "135px",
       render: (value) => <span className="font-mono text-xs font-semibold text-brand-700">{value}</span>,
     },
@@ -85,7 +156,15 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
       width: "140px",
       render: (value) => <span className="font-mono text-xs">{value}</span>,
     },
-    { key: "customer", header: "Customer", sortable: true, width: "160px" },
+    {
+      key: "customer",
+      header: "Customer",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: customerOptions,
+      width: "160px"
+    },
     { key: "returnDate", header: "Return Date", sortable: true, width: "120px" },
     {
       key: "totalAmount",
@@ -110,7 +189,7 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
         </div>
       ),
     },
-  ];
+  ], [returnNumberOptions, customerOptions]);
 
   const returnActions: ActionItemConfig<SalesReturnRecord>[] = [
     {
@@ -124,8 +203,8 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
   return (
     <MasterListing<SalesReturnRecord>
       columns={returnColumns}
-      data={returnPaginated}
-      totalRecords={returnProcessed.length}
+      data={salesReturns}
+      totalRecords={totalRecords}
       page={returnPage}
       pageSize={returnPageSize}
       onPageChange={setReturnPage}

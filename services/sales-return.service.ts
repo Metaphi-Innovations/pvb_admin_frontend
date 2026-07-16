@@ -67,6 +67,7 @@ export interface SalesReturnLineItem {
   /** From backend; missing → UI defaults to CASE. */
   quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
+  amount: number;
 }
 
 export interface SalesReturnDetail {
@@ -80,6 +81,9 @@ export interface SalesReturnDetail {
   warehouseId: string;
   warehouseName: string;
   items: SalesReturnLineItem[];
+  dispatchNumber: string;
+  salesOrderNumber: string;
+  packingNumber: string;
 }
 
 function mapDropdownOption(raw: Record<string, unknown>): SalesReturnDropdownOption {
@@ -173,12 +177,16 @@ function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
       packing_unit: asString(product.packing_unit),
       sku: asString(product.sku),
     },
+    amount: asNumber(raw.amount),
   };
 }
 
 function mapDetail(raw: Record<string, unknown>): SalesReturnDetail {
   const customer = asRecord(raw.customer);
   const warehouse = asRecord(raw.warehouse);
+  const dispatch = asRecord(raw.dispatch);
+  const salesOrder = asRecord(raw.sales_order);
+  const packingList = asRecord(raw.packing_list);
   const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
 
   return {
@@ -192,6 +200,9 @@ function mapDetail(raw: Record<string, unknown>): SalesReturnDetail {
     warehouseId: asString(raw.warehouse_id) || asString(warehouse.warehouse_id),
     warehouseName: asString(warehouse.warehouse_name),
     items: itemsRaw.map((item) => mapLineItem(asRecord(item))),
+    dispatchNumber: asString(dispatch.dispatch_number),
+    salesOrderNumber: asString(salesOrder.so_number),
+    packingNumber: asString(packingList.packing_number),
   };
 }
 
@@ -225,5 +236,46 @@ export const SalesReturnService = {
       throw new Error("Unexpected response shape: 'data' must be an object.");
     }
     return mapDetail(data as Record<string, unknown>);
+  },
+
+  async create(payload: any): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SALES_RETURN.CREATE,
+      payload
+    );
+    return response.data;
+  },
+
+  async list(payload: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    ordering?: string;
+    apiFilters?: Record<string, unknown>;
+  }): Promise<{ items: any[]; total: number }> {
+    const params: any = {
+      page: payload.page,
+      page_size: payload.pageSize,
+    };
+    if (payload.search) params.search = payload.search;
+    if (payload.ordering) params.ordering = payload.ordering;
+
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SALES_RETURN.LIST,
+      { filters: payload.apiFilters || {} },
+      { params }
+    );
+
+    return {
+      items: response.data?.data || [],
+      total: response.data?.totalRecords || response.data?.count || 0,
+    };
+  },
+
+  async getFilterDropdown(fieldName: string): Promise<Array<Record<string, string>>> {
+    const response = await axiosInstance.get(
+      `${API_ENDPOINTS.SALES.SALES_RETURN.FILTER}?field_name=${fieldName}`
+    );
+    return response.data?.data || [];
   },
 };
