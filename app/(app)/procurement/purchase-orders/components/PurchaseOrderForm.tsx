@@ -12,15 +12,11 @@ import {
 	enrichProductForProcurement,
 } from "@/lib/procurement/procurement-line-utils";
 import {
+	applyTaxSupplyToRates,
 	lineNeedsTaxSupplyUpdate,
 	resolveTaxSupplyType,
 	type TaxSupplyType,
 } from "@/lib/procurement/utils";
-import {
-	applyGstMasterToTaxRates,
-	findGstMasterIdByTotalPct,
-	getDefaultGstMasterId,
-} from "@/lib/procurement/gst-master-utils";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
@@ -598,9 +594,7 @@ export function PurchaseOrderForm({
 		patch({
 			additionalCharges: form.additionalCharges.map((c) => {
 				const totalGst = (c.cgstPct ?? 0) + (c.sgstPct ?? 0) + (c.igstPct ?? 0);
-				const gstMasterId =
-					c.gstMasterId ?? findGstMasterIdByTotalPct(totalGst) ?? getDefaultGstMasterId();
-				return { ...c, ...applyGstMasterToTaxRates(gstMasterId, taxSupplyType) };
+				return { ...c, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
 			}),
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
