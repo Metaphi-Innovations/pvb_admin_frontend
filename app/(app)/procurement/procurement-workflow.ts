@@ -1,6 +1,5 @@
 import { listPurchaseInvoicesByPO } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { loadDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
-import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import {
   computeThreeWayMatch,
   THREE_WAY_MATCH_LABELS,
@@ -58,26 +57,21 @@ export const MATCH_STATUS_CFG: Record<ThreeWayMatchStatus, { label: string; bg: 
   mismatch: { label: "Mismatch", bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
 };
 
-function grnReferenceStatus(warehouseStatus: string, hasGrn: boolean): POGrnDisplayStatus {
-  if (!hasGrn) return "grn_pending";
-  if (warehouseStatus === "qc_pending") return "qc_pending";
-  if (warehouseStatus === "qc_completed") return "qc_completed";
-  return "grn_created";
-}
-
 export function getPOWorkflowSummary(po: PurchaseOrder): POWorkflowSummary {
   const threeWayMatch = computeThreeWayMatch(po);
   const invoices = listPurchaseInvoicesByPO(Number(po.id));
   const invoiceStatus: POInvoiceDisplayStatus = invoices.length > 0 ? "uploaded" : "pending";
   const totalInvoiceAmount = invoices.reduce((s, i) => s + i.grandTotal, 0);
 
-  const grns = getGrnRecords().filter((g) => g.poNumber === po.poNumber);
-  let grnReceivedQty = 0;
-  let grnStatus: POGrnDisplayStatus = "grn_pending";
-  grns.forEach((g) => {
-    grnReceivedQty += g.items.reduce((s, it) => s + (it.receivedQty ?? 0), 0);
-    grnStatus = grnReferenceStatus(g.status, true);
-  });
+  const grnReceivedQty = po.lines.reduce((s, l) => s + (l.receivedQty ?? 0), 0);
+  const grnStatus: POGrnDisplayStatus =
+    threeWayMatch.grnNos.length > 0
+      ? threeWayMatch.qcNos.length > 0
+        ? "qc_completed"
+        : "grn_created"
+      : grnReceivedQty > 0
+        ? "grn_created"
+        : "grn_pending";
 
   const debitNotes: PODebitNoteRef[] = loadDebitNotes()
     .filter((d) => d.sourcePoId === Number(po.id) || d.sourcePoNo === po.poNumber)

@@ -4,6 +4,7 @@ import {
   getPOStatusLabel,
   mapBackendStatusToFrontend,
   mapFrontendStatusToBackend,
+  PO_MAIN_BACKEND_STATUSES,
   type POListStatus,
 } from "@/lib/procurement/po-status";
 import type { FilterState } from "@/components/listing/types";
@@ -63,6 +64,11 @@ export type PurchaseOrderFilterField =
   | "supplier__supplier_name"
   | "purchase_requisition__pr_number"
   | "po_status";
+
+export type PurchaseOrderFilterDropdownParams = {
+  excludeDraft?: boolean;
+  poStatus?: string;
+};
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -216,14 +222,16 @@ export function buildPurchaseOrderApiFilters(
   }
 
   const columnStatus = firstFilterValue(filters.status);
-  const statusToken =
-    columnStatus ||
-    (tabStatus && tabStatus !== "all" && tabStatus !== "po_return"
-      ? tabStatus
-      : "");
-  const backendStatus = mapFrontendStatusToBackend(statusToken);
-  if (backendStatus) {
-    apiFilters.po_status = backendStatus;
+  if (columnStatus) {
+    const backendStatus = mapFrontendStatusToBackend(columnStatus);
+    if (backendStatus) {
+      apiFilters.po_status = backendStatus;
+    }
+  } else if (tabStatus === "draft") {
+    apiFilters.po_status = "Draft";
+  } else if (!tabStatus || tabStatus === "all") {
+    // Main PO tab never includes drafts (those live on the Draft tab).
+    apiFilters.po_status = [...PO_MAIN_BACKEND_STATUSES];
   }
 
   const poDate = filters.poDate;
@@ -314,11 +322,16 @@ export const PurchaseOrderListService = {
   async getFilterDropdown(
     fieldName: PurchaseOrderFilterField,
     signal?: AbortSignal,
+    options?: PurchaseOrderFilterDropdownParams,
   ): Promise<PurchaseOrderFilterOption[]> {
     const response = await axiosInstance.get(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.FILTER_DROPDOWN,
       {
-        params: { field_name: fieldName },
+        params: {
+          field_name: fieldName,
+          ...(options?.excludeDraft ? { exclude_draft: "true" } : {}),
+          ...(options?.poStatus ? { po_status: options.poStatus } : {}),
+        },
         signal,
       },
     );

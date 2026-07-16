@@ -1,4 +1,3 @@
-import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import type { PurchaseOrder, POLineItem, POStatus } from "./po-data";
 
 export type ShortCloseReason =
@@ -39,21 +38,7 @@ export interface POQtySummary {
   pendingQty: number;
 }
 
-export function getLineReceivedQty(po: PurchaseOrder, line: POLineItem): number {
-  // API-backed lines carry received_qty on the product row.
-  if (line.purchaseOrderProductId && line.receivedQty != null) {
-    return line.receivedQty;
-  }
-  const grns = getGrnRecords().filter((g) => g.poNumber === po.poNumber);
-  let fromGrn = 0;
-  for (const g of grns) {
-    for (const it of g.items) {
-      if (it.productCode === line.productCode) {
-        fromGrn += it.receivedQty ?? 0;
-      }
-    }
-  }
-  if (fromGrn > 0) return fromGrn;
+export function getLineReceivedQty(_po: PurchaseOrder, line: POLineItem): number {
   return line.receivedQty ?? 0;
 }
 

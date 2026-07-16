@@ -6,8 +6,10 @@ import {
   type CreateGrnPayload,
   type UpdateGrnPayload,
 } from "@/services/grn.service";
+import { GrnListService } from "@/services/grn-list.service";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 import { purchaseOrderKeys } from "@/lib/procurement/purchase-order-query-keys";
+import type { BackendGrnSourceType } from "@/lib/warehouse/grn-status";
 import {
   salesReturnKeys,
   sampleReturnKeys,
@@ -21,6 +23,22 @@ export function useGrnPreviewNumber(enabled = true) {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+  });
+}
+
+export function useGrnSummary(
+  sourceType: BackendGrnSourceType,
+  warehouseId?: string,
+  enabled = true,
+) {
+  const warehouseKey =
+    warehouseId && warehouseId !== "All" ? warehouseId : undefined;
+
+  return useQuery({
+    queryKey: grnKeys.summary(sourceType, warehouseKey),
+    queryFn: ({ signal }) =>
+      GrnListService.getSummary(sourceType, warehouseKey, signal),
+    enabled,
   });
 }
 
@@ -40,6 +58,7 @@ export function useCreateGrn() {
       const createdId = typeof data?.id === "string" ? data.id : undefined;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
         queryClient.invalidateQueries({ queryKey: grnKeys.previewNumber() }),
         queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
         queryClient.invalidateQueries({ queryKey: salesReturnKeys.all }),
@@ -62,6 +81,7 @@ export function useUpdateGrn() {
         (typeof data?.id === "string" ? data.id : undefined) || variables.id;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
         queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
         queryClient.invalidateQueries({ queryKey: salesReturnKeys.all }),
         queryClient.invalidateQueries({ queryKey: sampleReturnKeys.all }),

@@ -4,6 +4,10 @@ import { getDispatchById, getDispatches, getDispatchFilterDropdown } from "@/app
 import { GrnListService } from "@/services/grn-list.service";
 import { StockTransferService } from "@/services/stock-transfer.service";
 import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
+import {
+  normalizeGrnQuantityType,
+  type GrnQuantityType,
+} from "@/lib/warehouse/grn-quantity";
 
 /** Pending ST GRN eligible dispatches use DELIVERY_DONE (distinct from DISPATCHED). */
 export const ST_DISPATCH_ELIGIBLE_STATUS = "DELIVERY_DONE";
@@ -287,6 +291,8 @@ export type StockTransferLineFromDispatch = {
   expDate: string;
   maxQty: number;
   caseSize: number;
+  /** From dispatch / packing; missing → UI defaults to CASE. */
+  quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
 };
 
@@ -356,6 +362,14 @@ export async function buildStockTransferLinesFromDispatch(
         new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       maxQty: asNumber(item.dispatched_base_qty),
       caseSize: conversion > 0 ? conversion : 1,
+      quantityType: normalizeGrnQuantityType(
+        asString(item.quantity_type) ||
+          asString(item.quantityType) ||
+          asString(pdProduct?.quantity_type) ||
+          asString(pdProduct?.quantityType) ||
+          asString(productSnapshot.quantity_type) ||
+          asString(productSnapshot.quantityType),
+      ),
       productSnapshot: {
         ...productSnapshot,
         product_id: asString(item.product_id || product.product_id),

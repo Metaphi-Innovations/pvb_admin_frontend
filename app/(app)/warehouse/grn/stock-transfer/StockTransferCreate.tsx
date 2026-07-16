@@ -5,10 +5,24 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Field, TextField } from "@/components/ui/FormFields";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import {
+  fromBaseQuantity,
+  GRN_QUANTITY_TYPE_OPTIONS,
+  resolveGrnQuantityType,
+  toBaseQuantity,
+  type GrnQuantityType,
+} from "@/lib/warehouse/grn-quantity";
 import {
   useCreateGrn,
   useGrn,
@@ -28,7 +42,11 @@ import {
 
 interface LineInputState extends StockTransferLineFromDispatch {
   previousReceivedQty: number;
+  /** Stored / API base quantity. */
   receivedQty: number;
+  /** User-entered qty in quantityType units (cases or pieces). */
+  displayQty: number;
+  quantityType: GrnQuantityType;
   batchLocked: boolean;
 }
 
@@ -169,12 +187,31 @@ export function StockTransferCreate({
         setWarehouseName(toName || matchedWarehouse?.warehouseName || "");
         setWarehouseId(matchedWarehouse?.warehouse_id || "");
         setLines(
-          builtLines.map((line) => ({
-            ...line,
-            previousReceivedQty: 0,
-            receivedQty: line.maxQty,
-            batchLocked: Boolean(line.batchNo),
-          })),
+          builtLines.map((line) => {
+            const caseSize = line.caseSize > 0 ? line.caseSize : 1;
+            const quantityType = resolveGrnQuantityType(line.quantityType);
+            const receivedQty = line.maxQty;
+            const displayQty = round2(
+              fromBaseQuantity({
+                baseQty: receivedQty,
+                quantityType,
+                packingSize: caseSize,
+              }),
+            );
+            return {
+              ...line,
+              caseSize,
+              previousReceivedQty: 0,
+              receivedQty,
+              displayQty,
+              quantityType,
+              batchLocked: Boolean(line.batchNo),
+              productSnapshot: {
+                ...line.productSnapshot,
+                unit_per_packing: caseSize,
+              },
+            };
+          }),
         );
       } catch (err) {
         if (!active) return;
@@ -214,6 +251,19 @@ export function StockTransferCreate({
               b.productId === item.productId ||
               b.productCode === item.productCode,
           );
+        const caseSize =
+          item.unitPerPacking != null && item.unitPerPacking > 0
+            ? item.unitPerPacking
+            : 1;
+        const quantityType = resolveGrnQuantityType(item.quantityType);
+        const receivedQty = item.receivedQty;
+        const displayQty = round2(
+          fromBaseQuantity({
+            baseQty: receivedQty,
+            quantityType,
+            packingSize: caseSize,
+          }),
+        );
         return {
           sourceItemId: item.sourceItemId || item.productId,
           productId: item.productId,
@@ -225,20 +275,32 @@ export function StockTransferCreate({
           expDate: batch?.expDate || "",
           maxQty: item.orderedQty || item.receivedQty || 0,
           previousReceivedQty: item.alreadyReceivedQty || 0,
-          receivedQty: item.receivedQty,
-          caseSize: item.unitPerPacking || 1,
+          receivedQty,
+          displayQty,
+          quantityType,
+          caseSize,
           batchLocked: Boolean(batch?.batchNumber),
           productSnapshot: {
             product_id: item.productId,
             product_name: item.productName,
             product_code: item.productCode,
             base_unit: item.unit || "Unit",
+            unit_per_packing: caseSize,
           },
         };
       }),
     );
     setHydratedEdit(true);
   }, [isEdit, existingGrn, hydratedEdit]);
+
+  const clearLineError = (index: number) => {
+    setFieldErrors((prev) => {
+      if (!prev.lines?.[index]) return prev;
+      const nextLines = { ...prev.lines };
+      delete nextLines[index];
+      return { ...prev, lines: nextLines };
+    });
+  };
 
   const updateLineField = <K extends keyof LineInputState>(
     index: number,
@@ -250,12 +312,51 @@ export function StockTransferCreate({
       copy[index] = { ...copy[index], [field]: val };
       return copy;
     });
-    setFieldErrors((prev) => {
-      if (!prev.lines?.[index]) return prev;
-      const nextLines = { ...prev.lines };
-      delete nextLines[index];
-      return { ...prev, lines: nextLines };
+    clearLineError(index);
+  };
+
+  const handleQuantityTypeChange = (index: number, nextType: GrnQuantityType) => {
+    setLines((prev) => {
+      const copy = [...prev];
+      const line = copy[index];
+      const packingSize = line.caseSize > 0 ? line.caseSize : 1;
+      const displayQty = round2(
+        fromBaseQuantity({
+          baseQty: line.receivedQty,
+          quantityType: nextType,
+          packingSize,
+        }),
+      );
+      copy[index] = { ...line, quantityType: nextType, displayQty };
+      return copy;
     });
+    clearLineError(index);
+  };
+
+  const handleDisplayQtyChange = (index: number, raw: string) => {
+    setLines((prev) => {
+      const copy = [...prev];
+      const line = copy[index];
+      const packingSize = line.caseSize > 0 ? line.caseSize : 1;
+      const displayQty = Math.max(0, parseFloat(raw) || 0);
+      let receivedQty = displayQty;
+      try {
+        receivedQty = toBaseQuantity({
+          quantity: displayQty,
+          quantityType: line.quantityType,
+          packingSize,
+        });
+      } catch {
+        receivedQty = displayQty;
+      }
+      copy[index] = {
+        ...line,
+        displayQty,
+        receivedQty: round2(receivedQty),
+      };
+      return copy;
+    });
+    clearLineError(index);
   };
 
   const validate = (): boolean => {
@@ -273,12 +374,16 @@ export function StockTransferCreate({
 
     lines.forEach((line, idx) => {
       if (line.receivedQty > 0) hasPositiveReceive = true;
-      if (line.receivedQty < 0) {
+      if (line.receivedQty < 0 || line.displayQty < 0) {
         lineErrors[idx] = "Received quantity cannot be negative.";
         return;
       }
+      if (line.quantityType === "CASE" && !(line.caseSize > 0)) {
+        lineErrors[idx] = "Packing size is required when quantity type is Case.";
+        return;
+      }
       if (line.receivedQty > line.maxQty) {
-        lineErrors[idx] = `Received qty exceeds dispatched qty (${line.maxQty}).`;
+        lineErrors[idx] = `Received qty exceeds dispatched qty (${line.maxQty} base).`;
         return;
       }
       if (line.receivedQty > 0) {
@@ -330,15 +435,19 @@ export function StockTransferCreate({
         const current = round2(line.receivedQty);
         const previous = round2(line.previousReceivedQty);
         const ordered = round2(line.maxQty);
+        const caseSize = line.caseSize > 0 ? line.caseSize : 1;
         return {
           source_item_id: line.sourceItemId,
           ordered_base_qty: ordered,
           previous_received_base_qty: previous,
           current_received_base_qty: current,
           pending_base_qty: Math.max(0, round2(ordered - previous - current)),
-          quantity_type: "PIECE" as const,
+          quantity_type: line.quantityType,
           remarks: null,
-          productSnapshot: line.productSnapshot,
+          productSnapshot: {
+            ...line.productSnapshot,
+            unit_per_packing: caseSize,
+          },
           batches: [
             {
               batchNumber: line.batchNo.trim(),
@@ -598,51 +707,56 @@ export function StockTransferCreate({
         {lines.length > 0 && (
           <SectionCard
             title="Items to Receive"
-            description="Enter received quantities. Batch details are prefilled from packing / inventory."
+            description="Full dispatched quantity is received by default (quantity locked). Manufacture and expiry dates can be updated if needed."
           >
             <div className="border border-border rounded-xl overflow-hidden bg-white shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[1100px]">
+                <table className="w-full text-left border-collapse min-w-[1280px]">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[200px]">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[180px]">
                         Product & SKU
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-32">
                         Batch No.
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-32">
                         MFG Date
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-32">
                         Expiry Date
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-20">
                         Case Size
                       </th>
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
                         Dispatched
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-28">
-                        Received Qty
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[120px] min-w-[120px]">
+                        Quantity Type
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-36">
-                        Case Breakdown
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[110px] min-w-[110px]">
+                        Quantity
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[110px] min-w-[110px]">
+                        Total Base Qty
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {lines.map((line, idx) => {
-                      const cases = Math.floor(line.receivedQty / line.caseSize);
-                      const loose = line.receivedQty % line.caseSize;
-                      const breakdownText =
-                        cases > 0
-                          ? `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`
-                          : `${loose} Loose`;
+                      const caseSize = line.caseSize > 0 ? line.caseSize : 1;
+                      const displayDispatched = round2(
+                        fromBaseQuantity({
+                          baseQty: line.maxQty,
+                          quantityType: line.quantityType,
+                          packingSize: caseSize,
+                        }),
+                      );
                       const lineError = fieldErrors.lines?.[idx];
 
                       return (
-                        <tr key={`${line.sourceItemId}-${idx}`} className="hover:bg-muted/10">
+                        <tr key={`${line.sourceItemId}-${idx}`} className="hover:bg-muted/10 align-top">
                           <td className="p-3">
                             <p className="text-xs font-semibold text-foreground">{line.productName}</p>
                             <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
@@ -682,35 +796,45 @@ export function StockTransferCreate({
                             />
                           </td>
                           <td className="p-3 text-center text-xs font-medium text-muted-foreground tabular-nums">
-                            {line.caseSize}
+                            {caseSize}
                           </td>
                           <td className="p-3 text-center text-xs font-medium tabular-nums">
-                            {line.maxQty}
+                            {displayDispatched}
+                          </td>
+                          <td className="p-3 align-middle w-[120px] min-w-[120px]">
+                            <Select value={line.quantityType} disabled>
+                              <SelectTrigger className="h-8 w-full text-xs rounded-lg bg-muted opacity-100">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GRN_QUANTITY_TYPE_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="p-3">
                             <div className="flex justify-center">
                               <Input
                                 type="number"
-                                value={line.receivedQty || ""}
-                                onChange={(e) =>
-                                  updateLineField(
-                                    idx,
-                                    "receivedQty",
-                                    Math.max(0, parseFloat(e.target.value) || 0),
-                                  )
-                                }
-                                className={cn(
-                                  "h-8 text-center text-xs font-medium w-20 focus:ring-brand-500",
-                                  line.receivedQty > line.maxQty &&
-                                    "border-red-500 text-red-600 focus:ring-red-500",
-                                )}
+                                readOnly
+                                disabled
+                                value={line.displayQty === 0 ? "" : line.displayQty}
+                                placeholder={line.quantityType === "CASE" ? "Cases" : "Pcs"}
+                                className="h-8 text-center text-xs font-medium w-24 bg-muted opacity-100 cursor-not-allowed"
                               />
                             </div>
                           </td>
                           <td className="p-3">
-                            <span className="text-[10px] font-semibold text-brand-700 bg-brand-50/50 border border-brand-100/80 px-2.5 py-1 rounded-lg block text-center min-w-[100px] leading-tight">
-                              {breakdownText}
-                            </span>
+                            <Input
+                              type="number"
+                              readOnly
+                              value={line.receivedQty === 0 ? "" : line.receivedQty}
+                              placeholder="0"
+                              className="h-8 w-full text-xs text-center tabular-nums font-semibold rounded-lg bg-muted focus-visible:ring-0"
+                            />
                           </td>
                         </tr>
                       );

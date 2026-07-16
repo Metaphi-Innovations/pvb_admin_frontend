@@ -1,8 +1,8 @@
 import type { GrnBatch, GrnItem } from "../types";
 import {
   fromBaseQuantity,
+  resolveGrnQuantityType,
   resolvePackingSize,
-  resolvePoGrnQuantityType,
 } from "@/lib/warehouse/grn-quantity";
 import { round2 } from "@/lib/procurement/utils";
 
@@ -95,7 +95,7 @@ export function BatchDetailsReadOnlyTable({
                   resolvePackingSize({
                     unitPerPacking: item?.unitPerPacking ?? b.unitPerPacking,
                   }) || 1;
-                const quantityType = resolvePoGrnQuantityType(
+                const quantityType = resolveGrnQuantityType(
                   item?.quantityType ?? b.quantityType,
                 );
                 const baseQty = b.quantity ?? b.invoiceQty ?? 0;

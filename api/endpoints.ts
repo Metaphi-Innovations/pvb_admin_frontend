@@ -404,6 +404,7 @@ export const API_ENDPOINTS = {
     GRN: {
       LIST: "/warehouse/grnqc/grn/list",
       FILTER: "/warehouse/grnqc/grn/filter",
+      SUMMARY: "/warehouse/grnqc/grn/summary",
       DETAILS: (id: string) => `/warehouse/grnqc/grn/${id}`,
       CREATE: "/warehouse/grnqc/grn/create",
       UPDATE: (id: string) => `/warehouse/grnqc/grn/update/${id}`,

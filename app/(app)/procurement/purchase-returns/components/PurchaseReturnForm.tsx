@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,6 @@ import {
   AdditionalChargesEditor,
   ProcurementTotalSummary,
 } from "@/components/procurement/AdditionalChargesEditor";
-import { getPOById } from "../../purchase-orders/po-data";
 import { recalcPurchaseReturn } from "../purchase-return-calc";
 import {
   type PurchaseReturn,
@@ -61,13 +60,12 @@ export function PurchaseReturnForm({
   editMode?: boolean;
 }) {
   const detailsGridCls = "grid grid-cols-4 gap-3";
-  const po = useMemo(() => getPOById(record.poId), [record.poId]);
   const taxSupplyType = record.taxSupplyType ?? "intra";
   const summary = record.summary;
   const taxTotal = summary.totalCgst + summary.totalSgst + summary.totalIgst;
 
   const patch = (p: Partial<PurchaseReturn>) => {
-    onChange(recalcPurchaseReturn({ ...record, ...p }, po));
+    onChange(recalcPurchaseReturn({ ...record, ...p }));
   };
 
   const setItem = (id: string, itemPatch: Partial<PurchaseReturnItem>) => {

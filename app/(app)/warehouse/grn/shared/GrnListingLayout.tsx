@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { GrnListingKpiRow } from "./components/GrnListingKpiRow";
@@ -8,8 +8,26 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useWarehousesDropdown } from "@/hooks/masters";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { computeGrnListingKpis } from "./grn-listing-kpis";
+import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
+import { useGrnSummary } from "@/hooks/warehouse/use-grn";
+import type { BackendGrnSourceType } from "@/lib/warehouse/grn-status";
 
 const EMPTY_KPIS = computeGrnListingKpis([]);
+
+type GrnLayoutTab = "purchase" | "stock-transfer" | "sales-return" | "sample-return";
+
+function tabToSourceType(tab: GrnLayoutTab): BackendGrnSourceType {
+  switch (tab) {
+    case "stock-transfer":
+      return getGrnTabApiContext("stock_transfer").sourceType;
+    case "sales-return":
+      return getGrnTabApiContext("sales_return").sourceType;
+    case "sample-return":
+      return getGrnTabApiContext("sample_return").sourceType;
+    default:
+      return getGrnTabApiContext("purchase").sourceType;
+  }
+}
 
 export function GrnListingLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -22,7 +40,7 @@ export function GrnListingLayout({ children }: { children: React.ReactNode }) {
     isError: warehousesError,
   } = useWarehousesDropdown();
 
-  const activeTab = pathname.includes("/warehouse/grn/stock-transfer")
+  const activeTab: GrnLayoutTab = pathname.includes("/warehouse/grn/stock-transfer")
     ? "stock-transfer"
     : pathname.includes("/warehouse/grn/sales-return")
       ? "sales-return"
@@ -31,6 +49,24 @@ export function GrnListingLayout({ children }: { children: React.ReactNode }) {
         : "purchase";
 
   const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
+  const sourceType = tabToSourceType(activeTab);
+  const warehouseForSummary =
+    activeTab === "purchase" ? undefined : destinationWarehouse;
+
+  const { data: summary } = useGrnSummary(sourceType, warehouseForSummary);
+
+  const kpis = useMemo(
+    () =>
+      summary
+        ? {
+            pendingQc: summary.pendingQc,
+            qcInProgress: summary.qcInProgress,
+            qcCompleted: summary.qcCompleted,
+            totalGrns: summary.totalGrns,
+          }
+        : EMPTY_KPIS,
+    [summary],
+  );
 
   const warehouseOptions = [
     { value: "All", label: "All Warehouses" },
@@ -88,7 +124,7 @@ export function GrnListingLayout({ children }: { children: React.ReactNode }) {
     <ListingContainer
       title="Goods Receipt Note (GRN)"
       titleIcon={FileText}
-      metrics={<GrnListingKpiRow kpis={EMPTY_KPIS} />}
+      metrics={<GrnListingKpiRow kpis={kpis} />}
       actions={warehouseSelector}
       tabs={[
         { value: "purchase", label: "Purchase" },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 import {
   buildPurchaseReturnApiFilters,
   buildPurchaseReturnOrdering,
@@ -33,10 +34,15 @@ export function usePurchaseReturnList(params: PurchaseReturnListKeyParams, enabl
   });
 }
 
-export function usePurchaseReturnFilterDropdown(fieldName: PurchaseReturnFilterField) {
+export function usePurchaseReturnFilterDropdown(
+  fieldName: PurchaseReturnFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: purchaseReturnKeys.filterDropdown(fieldName),
     queryFn: ({ signal }) => PurchaseReturnService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }
 

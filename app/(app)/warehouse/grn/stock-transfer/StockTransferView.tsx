@@ -17,6 +17,13 @@ import { useRouter } from "next/navigation";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
 import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
+import {
+  formatDisplayQuantity,
+  fromBaseQuantity,
+  resolveGrnQuantityType,
+  resolvePackingSize,
+} from "@/lib/warehouse/grn-quantity";
+import { round2 } from "@/lib/procurement/utils";
 
 const STATUS_CONFIG = {
   pending_qc: {
@@ -231,30 +238,56 @@ export function StockTransferView({ id }: { id: string }) {
                   <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
                     Ordered
                   </th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
+                    Quantity Type
+                  </th>
                   <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
                     Received
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {grn.items.map((item, idx) => (
-                  <tr key={`${item.productId}-${idx}`} className="hover:bg-muted/10">
-                    <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
-                    <td className="p-2 text-xs font-mono text-muted-foreground">
-                      {item.productCode || "—"}
-                    </td>
-                    <td className="p-2 text-xs text-right tabular-nums">{item.orderedQty}</td>
-                    <td className="p-2 text-xs text-right tabular-nums font-semibold text-brand-600">
-                      {item.receivedQty}
-                    </td>
-                  </tr>
-                ))}
+                {grn.items.map((item, idx) => {
+                  const packingSize =
+                    resolvePackingSize({ unitPerPacking: item.unitPerPacking }) || 1;
+                  const quantityType = resolveGrnQuantityType(item.quantityType);
+                  const display = formatDisplayQuantity({
+                    baseQty: item.receivedQty,
+                    quantityType,
+                    packingSize,
+                  });
+                  const displayOrdered = round2(
+                    fromBaseQuantity({
+                      baseQty: item.orderedQty || 0,
+                      quantityType,
+                      packingSize,
+                    }),
+                  );
+                  return (
+                    <tr key={`${item.productId}-${idx}`} className="hover:bg-muted/10">
+                      <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
+                      <td className="p-2 text-xs font-mono text-muted-foreground">
+                        {item.productCode || "—"}
+                      </td>
+                      <td className="p-2 text-xs text-right tabular-nums">{displayOrdered}</td>
+                      <td className="p-2 text-xs text-center text-muted-foreground">
+                        {display.label}
+                      </td>
+                      <td className="p-2 text-xs text-right tabular-nums font-semibold text-brand-600">
+                        {round2(display.quantity)}
+                        <span className="block text-[10px] font-normal text-muted-foreground">
+                          ({item.receivedQty} base)
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
 
-        <BatchDetailsReadOnlyTable batches={grn.batches} />
+        <BatchDetailsReadOnlyTable batches={grn.batches} items={grn.items} />
       </div>
     </RecordDetailPage>
   );
