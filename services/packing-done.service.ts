@@ -74,6 +74,7 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
 
   return {
     id: raw.packing_done_id,
+    packingListId: raw.packing_list_id || raw.packing_list?.packing_list_id,
     packingNo: raw.packing_done_no,
     salesOrderNo: raw.packing_list?.packing_number || "",
     customer: customer,
@@ -103,6 +104,7 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
         orderBaseQty,
         packedBaseQty,
         packSize,
+        lineId: p.packing_list_product_id,
         batchAllocations: p.batch_code ? [{
           batchNumber: p.batch_code,
           allocatedQty: Math.floor(packedBaseQty / packSize),
@@ -286,6 +288,38 @@ export const PackingDoneService = {
     const response = await axiosInstance.post(
       API_ENDPOINTS.WAREHOUSE.PACKING_DONE.CREATE,
       transformedPayload
+    );
+    return response.data;
+  },
+
+  async update(id: string, payload: {
+    packing_date?: string;
+    remarks?: string;
+    products: {
+      packing_list_product_id: string;
+      base_qty: number;
+      remarks?: string;
+    }[];
+  }): Promise<any> {
+    const transformedPayload = {
+      ...payload,
+      products: payload.products.map(p => ({
+        packing_list_product_id: p.packing_list_product_id,
+        base_qty: p.base_qty,
+        remarks: p.remarks,
+      }))
+    };
+
+    const response = await axiosInstance.put(
+      API_ENDPOINTS.WAREHOUSE.PACKING_DONE.UPDATE(id),
+      transformedPayload
+    );
+    return response.data;
+  },
+
+  async revert(id: string): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_DONE.REVERT(id)
     );
     return response.data;
   }

@@ -1,5 +1,9 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import {
+  normalizeGrnQuantityType,
+  type GrnQuantityType,
+} from "@/lib/warehouse/grn-quantity";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -61,7 +65,14 @@ export interface SampleReturnLineItem {
   expDate: string;
   /** Returned quantity converted to base units (pieces). */
   returnedBaseQty: number;
+  /** From backend; missing → UI defaults to CASE. */
+  quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
+  packedQty: number;
+  dispatchQty: number;
+  returnedQty: number;
+  amount?: number;
+  remarks?: string;
 }
 
 export interface SampleReturnDetail {
@@ -75,6 +86,8 @@ export interface SampleReturnDetail {
   warehouseId: string;
   warehouseName: string;
   items: SampleReturnLineItem[];
+  dispatchNumber: string;
+  salesOrderNumber: string;
 }
 
 function mapDropdownOption(raw: Record<string, unknown>): SampleReturnDropdownOption {
@@ -95,13 +108,17 @@ function mapDropdownOption(raw: Record<string, unknown>): SampleReturnDropdownOp
 function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
   const product = asRecord(raw.product);
   const snapshot = asRecord(raw.product_snapshot);
+  const dispatchItem = asRecord(raw.dispatch_item);
+  const inventoryBatch = asRecord(dispatchItem.inventory_batch);
   const unitPerPacking =
     asNumber(snapshot.unit_per_packing) ||
     asNumber(product.unit_per_packing) ||
     1;
   const packingFactor = unitPerPacking > 0 ? unitPerPacking : 1;
   const returnedPackingQty = asNumber(raw.returned_qty);
-  const returnedBaseQty = returnedPackingQty * packingFactor;
+  const qtyType = asString(raw.quantity_type).toLowerCase();
+  const isPieceType = qtyType === "piece" || qtyType === "pieces";
+  const returnedBaseQty = isPieceType ? returnedPackingQty : returnedPackingQty * packingFactor;
 
   return {
     id: asString(raw.sample_return_item_id) || asString(raw.id),
@@ -133,10 +150,18 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
       asString(product.packing_unit) ||
       "",
     unitPerPacking: packingFactor,
-    batchNumber: "",
-    mfgDate: "",
-    expDate: "",
+    batchNumber: asString(inventoryBatch.batch_no) || asString(inventoryBatch.batchNumber) || "",
+    mfgDate: asDateOnly(inventoryBatch.manufactureDate) || asDateOnly(inventoryBatch.manufacture_date) || "",
+    expDate: asDateOnly(inventoryBatch.expiryDate) || asDateOnly(inventoryBatch.expiry_date) || "",
     returnedBaseQty,
+    quantityType: normalizeGrnQuantityType(
+      asString(raw.quantity_type) ||
+      asString(raw.quantityType) ||
+      asString(dispatchItem.quantity_type) ||
+      asString(dispatchItem.quantityType) ||
+      asString(snapshot.quantity_type) ||
+      asString(snapshot.quantityType),
+    ),
     productSnapshot: Object.keys(snapshot).length > 0 ? snapshot : {
       product_id: asString(product.product_id) || asString(raw.product_id),
       product_code: asString(product.product_code),
@@ -145,12 +170,19 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
       packing_unit: asString(product.packing_unit),
       sku: asString(product.sku),
     },
+    packedQty: asNumber(raw.packed_qty) / packingFactor,
+    dispatchQty: asNumber(raw.dispatch_qty) / packingFactor,
+    returnedQty: returnedPackingQty,
+    amount: asNumber(raw.return_amount) || asNumber(raw.amount),
+    remarks: asString(raw.remarks),
   };
 }
 
 function mapDetail(raw: Record<string, unknown>): SampleReturnDetail {
   const customer = asRecord(raw.customer);
   const warehouse = asRecord(raw.warehouse);
+  const dispatch = asRecord(raw.dispatch);
+  const sampleOrder = asRecord(raw.sample_order);
   const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
 
   return {
@@ -164,6 +196,8 @@ function mapDetail(raw: Record<string, unknown>): SampleReturnDetail {
     warehouseId: asString(raw.warehouse_id) || asString(warehouse.warehouse_id),
     warehouseName: asString(warehouse.warehouse_name),
     items: itemsRaw.map((item) => mapLineItem(asRecord(item))),
+    dispatchNumber: asString(dispatch.dispatch_number),
+    salesOrderNumber: asString(sampleOrder.order_no) || asString(sampleOrder.sample_order_no),
   };
 }
 
@@ -197,5 +231,46 @@ export const SampleReturnService = {
       throw new Error("Unexpected response shape: 'data' must be an object.");
     }
     return mapDetail(data as Record<string, unknown>);
+  },
+
+  async create(payload: any): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SAMPLE_RETURN.CREATE,
+      payload
+    );
+    return response.data;
+  },
+
+  async list(payload: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    ordering?: string;
+    apiFilters?: Record<string, unknown>;
+  }): Promise<{ items: any[]; total: number }> {
+    const params: any = {
+      page: payload.page,
+      page_size: payload.pageSize,
+    };
+    if (payload.search) params.search = payload.search;
+    if (payload.ordering) params.ordering = payload.ordering;
+
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SAMPLE_RETURN.LIST,
+      { filters: payload.apiFilters || {} },
+      { params }
+    );
+
+    return {
+      items: response.data?.data || [],
+      total: response.data?.totalRecords || response.data?.count || 0,
+    };
+  },
+
+  async getFilterDropdown(fieldName: string): Promise<Array<Record<string, string>>> {
+    const response = await axiosInstance.get(
+      `${API_ENDPOINTS.SALES.SAMPLE_RETURN.FILTER}?field_name=${fieldName}`
+    );
+    return response.data?.data || [];
   },
 };

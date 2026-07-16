@@ -48,14 +48,34 @@ export function mapBackendRecordToFrontend(item: any): QcRecord {
 }
 
 export function mapBackendGrnToPendingQc(grn: any): QcRecord {
-  const totalReceived = (grn.receivedQty ?? grn.items?.reduce((sum: number, it: any) => sum + Number(it.current_received_base_qty || 0), 0)) || 0;
+  const qcItems: QcItem[] = [];
+  grn.items?.forEach((item: any) => {
+    const product = item.productSnapshot || {};
+    item.batches?.forEach((batch: any) => {
+      qcItems.push({
+        productId: product.product_id || "",
+        productName: product.product_name || "",
+        productCode: product.product_code || "",
+        batchNumber: batch.batchNumber,
+        receivedQty: Number(batch.quantity_base_qty || batch.quantity_base_unit || batch.quantity || 0),
+        acceptedQty: 0,
+        rejectedQty: 0,
+        holdQty: 0,
+        grnBatchId: batch.id,
+        unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
+      });
+    });
+  });
+
+  const totalReceived = qcItems.reduce((sum, it) => sum + it.receivedQty, 0) || (grn.receivedQty ?? 0);
+
   return {
     id: grn.id,
     qcNo: "—",
     grnId: grn.id,
     grnNo: grn.grnNumber,
-    poNumber: grn.poNumber || "",
-    vendorName: grn.supplier?.supplier_name || "",
+    poNumber: grn.sales_return_no || grn.sample_return_no || grn.poNumber || grn.po_no || "",
+    vendorName: grn.customer_name || grn.supplier?.supplier_name || "",
     warehouse: grn.warehouse?.warehouse_name || "",
     inspectionDate: "",
     totalReceivedQty: totalReceived,
@@ -64,7 +84,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
     totalHoldQty: 0,
     status: "pending",
     sourceType: mapSourceType(grn.source_type),
-    items: [],
+    items: qcItems,
   };
 }
 
@@ -82,7 +102,7 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
       rejectedQty: Number(item.rejected_base_qty || item.rejectedQty_base_unit || item.rejectedQty || 0),
       holdQty: 0,
       grnBatchId: batch.id || item.source_batch_id,
-      unitPerPacking: Number(product.packaging_ratio || 10),
+      unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
       rejectionReason: item.remarks || "",
     };
   }) || [];
@@ -128,7 +148,7 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
         rejectedQty: 0,
         holdQty: 0,
         grnBatchId: batch.id,
-        unitPerPacking: Number(product.packaging_ratio || 10),
+        unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
       });
     });
   });
@@ -208,16 +228,16 @@ export const QcService = {
     };
   },
 
-  async getFilterDropdown(fieldName: string): Promise<Array<Record<string, string>>> {
+  async getFilterDropdown(fieldName: string, sourceType?: string): Promise<Array<Record<string, string>>> {
     const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.QC.FILTER_DROPDOWN}?field_name=${fieldName}`
+      `${API_ENDPOINTS.WAREHOUSE.QC.FILTER_DROPDOWN}?field_name=${fieldName}${sourceType ? `&source_type=${sourceType}` : ""}&_t=${Date.now()}`
     );
     return response.data?.data || [];
   },
 
-  async getGrnFilterDropdown(fieldName: string): Promise<Array<Record<string, string>>> {
+  async getGrnFilterDropdown(fieldName: string, sourceType?: string, status?: string): Promise<Array<Record<string, string>>> {
     const response = await axiosInstance.get(
-      `/warehouse/grnqc/grn/filter-dropdown?field_name=${fieldName}`
+      `/warehouse/grnqc/grn/filter?field_name=${fieldName}${sourceType ? `&source_type=${sourceType}` : ""}${status ? `&status=${status}` : ""}&_t=${Date.now()}`
     );
     return response.data?.data || [];
   },
@@ -233,12 +253,12 @@ export const QcService = {
   },
 
   async create(payload: { grnId: string; qcDate: string; remarks?: string; items: any[] }): Promise<any> {
-    const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.QC.CREATE, payload);
+    const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.QC.CREATE, payload, { timeout: 120000 });
     return response.data;
   },
 
   async update(id: string, payload: { grnId: string; qcDate: string; remarks?: string; items: any[] }): Promise<any> {
-    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.QC.UPDATE(id), payload);
+    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.QC.UPDATE(id), payload, { timeout: 120000 });
     return response.data;
   },
   

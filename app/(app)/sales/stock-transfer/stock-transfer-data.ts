@@ -25,6 +25,7 @@ export type TransferStatus =
   | "pending_approval"
   | "confirmed"
   | "pending_packing"
+  | "ready_for_packing"
   | "packing_in_progress"
   | "packed"
   | "ready_to_dispatch"

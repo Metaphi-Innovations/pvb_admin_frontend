@@ -306,6 +306,13 @@ export const PackingListService = {
     );
     return response.data;
   },
+
+  async revert(id: string): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.REVERT(id)
+    );
+    return response.data;
+  },
 };
 
 function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
@@ -334,7 +341,7 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
                          raw.source_type === "purchase_return" ? "Purchase Return" : raw.source_type) as any,
     sourceDocumentNo: raw.packing_number,
     sourceWarehouse: warehouse,
-    targetWarehouse: "—",
+    targetWarehouse: raw.target_warehouse?.warehouse_name || "—",
     products: products.map((p: any) => {
       const snap = p.batch_snapshot && typeof p.batch_snapshot === "object" ? p.batch_snapshot : {};
       const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;

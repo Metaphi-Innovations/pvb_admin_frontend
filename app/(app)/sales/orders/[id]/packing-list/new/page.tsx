@@ -108,10 +108,18 @@ export default function NewPackingListPage() {
 
           const allocations = batches.map((b: any) => {
             const availQty = Number(b.available_qty || 0);
+            
+            const availCases = Math.floor(availQty / unitsPerPacking);
+            const availLoose = availQty % unitsPerPacking;
 
-            const takeBase = Math.min(remaining, availQty);
-            const takePacking = Math.floor(takeBase / unitsPerPacking);
-            const autoBase = takePacking * unitsPerPacking;
+            const neededCases = Math.floor(remaining / unitsPerPacking);
+            const takeCases = Math.min(neededCases, availCases);
+            
+            const pendingLoose = remaining - (takeCases * unitsPerPacking);
+            const takeLoose = Math.min(pendingLoose, availLoose);
+
+            const autoBase = (takeCases * unitsPerPacking) + takeLoose;
+            const takePacking = takeCases;
 
             if (autoBase > 0) {
               initialChecked[`${line.id}-${b.available_inventory_id}`] = true;
@@ -126,7 +134,7 @@ export default function NewPackingListPage() {
               packingUnit: config.packingUnit,
               baseUnit: config.baseUnit,
               unitsPerPackingUnit: unitsPerPacking,
-              availablePackingQty: Math.floor(availQty / unitsPerPacking),
+              availablePackingQty: availCases,
               availableBaseQty: availQty,
               inventoryType: "original" as InventoryType,
               suggestedPackingQty: takePacking,
@@ -196,8 +204,18 @@ export default function NewPackingListPage() {
             .reduce((sum, x) => sum + x.allocatedBaseQty, 0);
 
           const pending = Math.max(0, line.orderedBaseQty - totalAlreadyAllocated);
-          const autoFillBase = Math.min(a.availableBaseQty, pending);
-          const autoFillPacking = Math.floor(autoFillBase / a.unitsPerPackingUnit);
+          
+          const availCases = Math.floor(a.availableBaseQty / a.unitsPerPackingUnit);
+          const availLoose = a.availableBaseQty % a.unitsPerPackingUnit;
+
+          const neededCases = Math.floor(pending / a.unitsPerPackingUnit);
+          const takeCases = Math.min(neededCases, availCases);
+          
+          const pendingLoose = pending - (takeCases * a.unitsPerPackingUnit);
+          const takeLoose = Math.min(pendingLoose, availLoose);
+
+          const autoFillPacking = takeCases;
+          const autoFillBase = (takeCases * a.unitsPerPackingUnit) + takeLoose;
 
           return {
             ...a,
@@ -218,7 +236,8 @@ export default function NewPackingListPage() {
     field: "cases" | "loose",
     value: string,
   ) => {
-    const numValue = parseInt(value, 10) || 0;
+    let numValue = parseInt(value, 10);
+    if (isNaN(numValue)) numValue = 0;
     const key = `${lineItemId}-${cartonId}`;
     
     setLines(prev =>
@@ -232,10 +251,13 @@ export default function NewPackingListPage() {
             let c = alloc.allocatedPackingQty;
             let p = alloc.allocatedBaseQty - (c * alloc.unitsPerPackingUnit);
 
+            const availCases = Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit);
+            const availLoose = alloc.availableBaseQty % alloc.unitsPerPackingUnit;
+
             if (field === "cases") {
-              c = numValue;
+              c = Math.min(numValue, availCases);
             } else {
-              p = numValue;
+              p = Math.min(numValue, availLoose);
             }
 
             const totalBase = (c * alloc.unitsPerPackingUnit) + p;
@@ -474,22 +496,24 @@ export default function NewPackingListPage() {
                               <Input
                                 type="number"
                                 min="0"
+                                max={Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)}
                                 value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
                                 onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "cases", e.target.value)}
                                 className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
                                 placeholder="0"
-                                disabled={!isChecked}
+                                disabled={!isChecked || Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) === 0}
                               />
                             </td>
                             <td className="px-3 py-2.5">
                               <Input
                                 type="number"
                                 min="0"
+                                max={alloc.availableBaseQty % alloc.unitsPerPackingUnit}
                                 value={isChecked ? alloc.allocatedBaseQty - (alloc.allocatedPackingQty * alloc.unitsPerPackingUnit) : (isChecked ? 0 : "")}
                                 onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "loose", e.target.value)}
                                 className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
                                 placeholder="0"
-                                disabled={!isChecked}
+                                disabled={!isChecked || (alloc.availableBaseQty % alloc.unitsPerPackingUnit) === 0}
                               />
                             </td>
                             <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-muted-foreground">

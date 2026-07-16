@@ -35,7 +35,7 @@ function buildInitialSelection(products: SalesOrderRecord["products"]): Record<s
   }, {});
 }
 
-export default function CreatePackingPage({ params }: { params: { id: string } }) {
+export default function EditPackingPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<SalesOrderRecord | null>(null);
@@ -67,27 +67,40 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     async function loadRecord() {
       setLoading(true);
       try {
-        const record = await PackingListService.getById(params.id);
+        const pd = await PackingDoneService.getById(params.id);
+        if (!pd.packingListId) throw new Error("Missing packingListId");
+        const record = await PackingListService.getById(pd.packingListId);
         if (!active) return;
         setOrder(record);
         
-        try {
-          const previewResponse = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.PREVIEW_NUMBER);
-          const previewNo = previewResponse.data?.data?.next_number || previewResponse.data?.data || `PKG-2026-${Math.floor(100 + Math.random() * 900)}`;
-          setPackingNo(previewNo);
-        } catch {
-          setPackingNo(`PKG-2026-${Math.floor(100 + Math.random() * 900)}`);
-        }
-        
-        setPackingDate(new Date().toISOString().split("T")[0]);
+        setPackingNo(pd.packingNo);
+        setPackingDate(pd.packingDate);
 
         const initialQty: Record<string, number> = {};
+        const initialSel: Record<string, boolean> = {};
+
+        const pdPacked = new Map<string, number>();
+        pd.products.forEach(p => {
+          if (p.lineId) pdPacked.set(p.lineId, p.packedBaseQty);
+        });
+
         record.products.forEach((p) => {
-          initialQty[getLineKey(p)] = p.pendingBaseQty;
+          const lineId = getLineKey(p);
+          const previouslyPacked = pdPacked.get(lineId) || 0;
+          
+          p.pendingBaseQty += previouslyPacked;
+          
+          if (previouslyPacked > 0) {
+            initialQty[lineId] = previouslyPacked;
+            initialSel[lineId] = true;
+          } else {
+            initialQty[lineId] = 0;
+            initialSel[lineId] = false;
+          }
         });
 
         setPackingQty(initialQty);
-        setSelectedLines(buildInitialSelection(record.products));
+        setSelectedLines(initialSel);
 
       } catch (err) {
         console.error("API loading failed:", err);
@@ -124,14 +137,12 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     }
 
     try {
-      await PackingDoneService.create({
-        packing_list_id: order.id,
-        packing_done_no: packingNo || undefined,
+      await PackingDoneService.update(params.id, {
         packing_date: packingDate || undefined,
         products: productsPayload,
       });
 
-      showToast("Packing created successfully!", "success");
+      showToast("Packing updated successfully!", "success");
       setTimeout(() => {
         router.push("/warehouse/packing");
       }, 1000);
@@ -221,7 +232,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
   if (loading) {
     return (
-      <FormContainer title="Create Packing List" onBack={() => router.push("/warehouse/packing")}>
+      <FormContainer title="Edit Packing List" onBack={() => router.push("/warehouse/packing")}>
         <div className="max-w-[800px] mx-auto text-center py-24 space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto" />
           <p className="text-xs text-muted-foreground">Loading packing details...</p>
@@ -261,7 +272,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         </div>
       )}
       <FormContainer
-        title="Create Packing List"
+        title="Edit Packing List"
         description={`Generate packing allocations for ${order.salesOrderNo}`}
         onBack={() => router.push("/warehouse/packing")}
         onCancel={() => router.push("/warehouse/packing")}

@@ -175,6 +175,19 @@ export interface PurchaseOrder {
 }
 
 const STORAGE_KEY = "ds_procurement_purchase_orders_v2";
+const LEGACY_STORAGE_KEY = "ds_procurement_purchase_orders";
+let purchaseOrderLocalStorageCleared = false;
+
+function clearPurchaseOrderLocalStorage(): void {
+  if (typeof window === "undefined" || purchaseOrderLocalStorageCleared) return;
+  purchaseOrderLocalStorageCleared = true;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // ignore quota / private-mode errors
+  }
+}
 
 function parseGstRate(gstRate?: string): number {
   const n = parseFloat(String(gstRate ?? "").replace(/%/g, ""));
@@ -400,219 +413,18 @@ export function recalcPO(po: PurchaseOrder): PurchaseOrder {
   return { ...po, lines, summary, otherCharges: summary.additionalChargesTotal };
 }
 
-const RAW_SEED = [
-  {
-    id: 1,
-    poNumber: "PO-2024-0001",
-    poDate: "2024-01-25",
-    supplierId: 1,
-    supplierName: "Agro Chem Distributors",
-    supplierType: "distributor",
-    supplierContactPerson: "Ramesh Patil",
-    supplierMobile: "9876501234",
-    supplierEmail: "ramesh@agrochem.in",
-    supplierGstin: "27AABCA1234F1Z2",
-    referenceNumber: "REF/AC/25",
-    currency: "INR",
-    paymentType: "Credit",
-    creditDays: 30,
-    deliveryTerms: "door-delivery",
-    expectedDeliveryDate: "2024-02-10",
-    notes: "Against PR-2024-0003",
-    sourcePrId: 3,
-    sourcePrNumber: "PR-2024-0003",
-    billing: COMPANY_BILLING,
-    shipping: {
-      shipToLocation: "Pune Warehouse",
-      branch: "hq-pune",
-      address: "Warehouse 2, Hinjawadi, Pune",
-      contactPerson: "Warehouse Manager",
-      contactNumber: "9876500000",
-      sameAsBilling: false,
-    },
-    lines: [
-      {
-        uid: "pl1",
-        productId: 4,
-        productCode: "PRD-004",
-        productName: "Chlorpyrifos 20 EC",
-        description: "Insecticide",
-        uom: "LTR",
-        orderedQty: 100,
-        receivedQty: 60,
-        unitPrice: 310,
-        discountPct: 2,
-        cgstPct: 9,
-        sgstPct: 9,
-        igstPct: 0,
-        grossAmount: 31000,
-        taxAmount: 5464.8,
-        netAmount: 35824.8,
-        deliverySchedule: "2024-02-05",
-        prLineUid: "l1",
-      },
-    ] as POLineItem[],
-    terms: [],
-    attachments: [],
-    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "", gstMasterId: 4, cgstPct: 9, sgstPct: 9, igstPct: 0 }],
-    otherCharges: 500,
-    summary: buildSummary(
-      [
-        {
-          uid: "pl1",
-          productId: 4,
-          productCode: "PRD-004",
-          productName: "Chlorpyrifos 20 EC",
-          description: "",
-          uom: "LTR",
-          orderedQty: 100,
-          unitPrice: 310,
-          discountPct: 2,
-          cgstPct: 9,
-          sgstPct: 9,
-          igstPct: 0,
-          grossAmount: 31000,
-          taxAmount: 5464.8,
-          netAmount: 35824.8,
-          deliverySchedule: "",
-        },
-      ] as POLineItem[],
-      [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
-    ),
-    status: "approved",
-    createdBy: "Admin",
-    createdDate: "2024-01-25",
-    updatedBy: "Admin",
-    updatedDate: "2024-01-28",
-    approvedBy: "Admin",
-    approvedDate: "2024-01-26",
-    activity: [
-      { date: "2024-01-25", action: "Created", by: "Admin" },
-      { date: "2024-01-26", action: "Approved", by: "Admin" },
-      { date: "2024-01-28", action: "Sent to Supplier", by: "Admin" },
-    ],
-  },
-  {
-    id: 2,
-    poNumber: "PO-2024-0002",
-    poDate: "2024-02-12",
-    supplierId: 2,
-    supplierName: "Seed Corp India Pvt Ltd",
-    supplierType: "manufacturer",
-    supplierContactPerson: "Priya Nair",
-    supplierMobile: "9988776655",
-    supplierEmail: "priya@seedcorp.in",
-    supplierGstin: "29AABCS5678G1Z9",
-    referenceNumber: "",
-    currency: "INR",
-    paymentType: "Credit",
-    creditDays: 15,
-    deliveryTerms: "ex-works",
-    expectedDeliveryDate: "2024-03-01",
-    notes: "Direct PO — hybrid seeds",
-    sourcePrId: null,
-    sourcePrNumber: "",
-    billing: COMPANY_BILLING,
-    shipping: {
-      shipToLocation: "HQ",
-      branch: "hq-pune",
-      address: COMPANY_BILLING.billingAddress,
-      contactPerson: "Admin",
-      contactNumber: "9876500001",
-      sameAsBilling: true,
-    },
-    lines: [
-      {
-        uid: "pl1",
-        productId: 6,
-        productCode: "PRD-006",
-        productName: "Hybrid Tomato Seeds",
-        description: "",
-        uom: "PKT",
-        orderedQty: 500,
-        unitPrice: 90,
-        discountPct: 0,
-        cgstPct: 0,
-        sgstPct: 0,
-        igstPct: 0,
-        grossAmount: 45000,
-        taxAmount: 0,
-        netAmount: 45000,
-        deliverySchedule: "",
-      },
-    ] as POLineItem[],
-    terms: [],
-    attachments: [],
-    additionalCharges: [],
-    otherCharges: 0,
-    summary: buildSummary(
-      [
-        {
-          uid: "pl1",
-          productId: 6,
-          productCode: "PRD-006",
-          productName: "Hybrid Tomato Seeds",
-          description: "",
-          uom: "PKT",
-          orderedQty: 500,
-          unitPrice: 90,
-          discountPct: 0,
-          cgstPct: 0,
-          sgstPct: 0,
-          igstPct: 0,
-          grossAmount: 45000,
-          taxAmount: 0,
-          netAmount: 45000,
-          deliverySchedule: "",
-        },
-      ] as POLineItem[],
-      [],
-    ),
-    status: "pending_approval",
-    createdBy: "Admin",
-    createdDate: "2024-02-12",
-    updatedBy: "Admin",
-    updatedDate: "2024-02-12",
-    approvedBy: "",
-    approvedDate: "",
-    activity: [
-      { date: "2024-02-12", action: "Created", by: "Admin" },
-      { date: "2024-02-12", action: "Submitted", by: "Admin" },
-    ],
-  },
-];
-
-const SEED = (RAW_SEED as unknown as PurchaseOrder[]).map(migratePO);
-
+/** Local mock storage removed — purchase orders are API-backed. */
 export function loadPurchaseOrders(): PurchaseOrder[] {
-  if (typeof window === "undefined") return SEED.map(normalizePO);
-  try {
-    const legacy = localStorage.getItem("ds_procurement_purchase_orders");
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw && legacy) {
-      const migrated = (JSON.parse(legacy) as PurchaseOrder[]).map(normalizePO);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    }
-    if (!raw) {
-      const seeded = SEED.map(normalizePO);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-      return seeded;
-    }
-    return (JSON.parse(raw) as PurchaseOrder[]).map(normalizePO);
-  } catch {
-    return SEED.map(normalizePO);
-  }
+  clearPurchaseOrderLocalStorage();
+  return [];
 }
 
-export function savePurchaseOrders(list: PurchaseOrder[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+export function savePurchaseOrders(_list: PurchaseOrder[]): void {
+  clearPurchaseOrderLocalStorage();
 }
 
-export function getPOById(id: string | number): PurchaseOrder | undefined {
-  const key = String(id);
-  return loadPurchaseOrders().find((p) => String(p.id) === key);
+export function getPOById(_id: string | number): PurchaseOrder | undefined {
+  return undefined;
 }
 
 export function generatePONumber(list: PurchaseOrder[]): string {

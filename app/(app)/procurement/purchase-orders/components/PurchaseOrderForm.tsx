@@ -11,9 +11,7 @@ import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
 } from "@/lib/procurement/procurement-line-utils";
-import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
 import {
-	applyTaxSupplyToRates,
 	lineNeedsTaxSupplyUpdate,
 	resolveTaxSupplyType,
 	type TaxSupplyType,
@@ -23,11 +21,9 @@ import {
 	findGstMasterIdByTotalPct,
 	getDefaultGstMasterId,
 } from "@/lib/procurement/gst-master-utils";
-import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
-import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
 import { useSupplierDropdown, useSupplierDetail } from "@/hooks/masters/use-suppliers";
 import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
 import { axiosInstance } from "@/api/axios";
@@ -35,11 +31,10 @@ import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
 import { applyTaxSupplyToPOLines, enrichPOLineItem, recalcPO } from "../po-data";
 import {
-	findPOAddressById,
 	getDefaultPOBillShipIds,
 	getPOBillToAddresses,
-	getPOShipToAddresses,
 } from "../po-address-utils";
+import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import { POLineItemsSection } from "./POLineItemsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,7 +168,6 @@ export function emptyPOLine(): POLineItem {
 
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
-	const supplier = null;
 
 	const lines =
 		pr?.lines.map((l) => {
@@ -206,8 +200,7 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 			};
 		}) ?? [];
 
-	const wh = pr?.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
-	const addressStr = wh ? [wh.address, wh.addressLine2].filter(Boolean).join(", ") : "";
+	const hasWarehouse = Boolean(pr?.warehouseId);
 
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
@@ -227,47 +220,29 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		expectedDeliveryDate: "",
 		state: pr?.state ?? "",
 		warehouseId: pr?.warehouseId ?? null,
-		warehouseName: pr?.warehouseName ?? wh?.warehouseName ?? "",
-		deliveryAddress: addressStr,
+		warehouseName: pr?.warehouseName ?? "",
+		deliveryAddress: "",
 		notes: pr?.remarks ?? "",
 		sourcePrId: pr?.id ?? null,
 		sourcePrNumber: pr?.prNumber ?? "",
-		billToAddressId: wh ? `bill-wh-${wh.id}` : "",
-		shipToAddressId: wh ? `ship-wh-${wh.id}` : "",
-		billing: wh
-			? {
-					companyName: COMPANY_BILLING.companyName,
-					billingAddress: addressStr,
-					gstNumber: COMPANY_BILLING.gstNumber,
-					state: wh.state || "",
-					city: wh.city || "",
-					pincode: wh.pincode || "",
-				}
-			: {
-					companyName: COMPANY_BILLING.companyName,
-					billingAddress: "",
-					gstNumber: "",
-					state: "",
-					city: "",
-					pincode: "",
-				},
-		shipping: wh
-			? {
-					shipToLocation: wh.warehouseName || "",
-					branch: "",
-					address: addressStr,
-					contactPerson: "Warehouse Manager",
-					contactNumber: wh.mobileNumber || "",
-					sameAsBilling: false,
-				}
-			: {
-					shipToLocation: "",
-					branch: "",
-					address: "",
-					contactPerson: "",
-					contactNumber: "",
-					sameAsBilling: false,
-				},
+		billToAddressId: hasWarehouse ? `bill-wh-${pr!.warehouseId}` : "",
+		shipToAddressId: hasWarehouse ? `ship-wh-${pr!.warehouseId}` : "",
+		billing: {
+			companyName: COMPANY_BILLING.companyName,
+			billingAddress: "",
+			gstNumber: "",
+			state: "",
+			city: "",
+			pincode: "",
+		},
+		shipping: {
+			shipToLocation: pr?.warehouseName ?? "",
+			branch: "",
+			address: "",
+			contactPerson: "",
+			contactNumber: "",
+			sameAsBilling: false,
+		},
 		lines,
 		terms: [],
 		attachments: [],
@@ -412,7 +387,6 @@ export function PurchaseOrderForm({
 	const loadFromPR = (prId: number) => {
 		const pr = getPRById(prId);
 		if (!pr) return;
-		const wh = pr.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 		const lines = pr.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
 			const localSupplierId =
@@ -450,7 +424,8 @@ export function PurchaseOrderForm({
 			state: pr.state,
 			warehouseId: pr.warehouseId,
 			warehouseName: pr.warehouseName,
-			deliveryAddress: wh?.address ?? form.deliveryAddress,
+			billToAddressId: pr.warehouseId ? `bill-wh-${pr.warehouseId}` : "",
+			shipToAddressId: pr.warehouseId ? `ship-wh-${pr.warehouseId}` : "",
 			notes: pr.remarks,
 			lines,
 			deliveryTerms: `From ${pr.requestedBy} (${pr.prDate})`,
@@ -473,56 +448,40 @@ export function PurchaseOrderForm({
 
 	const stateOptions = useMemo(() => INDIAN_STATES.map((s) => ({ value: s, label: s })), []);
 	const { data: dbWarehouses } = useWarehouseDropdown(form.state || undefined);
-	const warehouseOptions = useMemo(() => {
-		const list = (dbWarehouses || []).map((w) => ({
-			value: String(w.warehouse_id),
-			label: w.warehouse_name,
-		}));
-		if (list.length === 0) {
-			return loadWarehouses().map((w) => ({
-				value: String(w.id),
-				label: w.warehouseName,
-			}));
-		}
-		return list;
-	}, [dbWarehouses]);
-
-	const billToAddresses = useMemo(() => getPOBillToAddresses(), []);
-	const shipToAddresses = useMemo(() => getPOShipToAddresses(), []);
-
-	const billToAddress = useMemo(
-		() => findPOAddressById(billToAddresses, form.billToAddressId ?? ""),
-		[billToAddresses, form.billToAddressId],
+	const warehouseOptions = useMemo(
+		() =>
+			(dbWarehouses || []).map((w) => ({
+				value: String(w.warehouse_id),
+				label: w.warehouse_name,
+			})),
+		[dbWarehouses],
 	);
 
-	const selectedWarehouse = useMemo(
-		() => (form.warehouseId ? (dbWarehouses || []).find((w) => String(w.warehouse_id) === String(form.warehouseId)) ?? (() => {
-			const staticWh = loadWarehouses().find((w) => String(w.id) === String(form.warehouseId));
-			if (!staticWh) return null;
+	const billToAddresses = useMemo(() => getPOBillToAddresses(), []);
+	const shipToAddresses = useMemo((): SalesOrderCustomerAddress[] => {
+		return (dbWarehouses || []).map((w) => {
+			const primary = w.contacts?.find((c) => c.is_primary) ?? w.contacts?.[0];
 			return {
-				warehouse_id: String(staticWh.id),
-				warehouse_name: staticWh.warehouseName,
-				address: staticWh.address,
-				address_1: staticWh.addressLine2 || "",
-				state: staticWh.state,
-				district: staticWh.district,
-				city: staticWh.city,
-				town: staticWh.town || "",
-				pincode: staticWh.pincode || "",
-				gst_applicable: staticWh.gstApplicable,
-				gst_number: staticWh.gstNumber,
-				registered_legal_name: staticWh.registeredLegalName || "",
-				contacts: [
-					{
-						warehouse_contact_id: "1",
-						contact_person: staticWh.contactPerson,
-						mobile_number: staticWh.mobileNumber,
-						email_address: staticWh.emailAddress,
-						is_primary: true,
-					}
-				],
+				id: `ship-wh-${w.warehouse_id}`,
+				label: `${w.warehouse_name} — Ship To`,
+				companyName: w.registered_legal_name || COMPANY_BILLING.companyName,
+				addressLine1: w.address || "",
+				addressLine2: w.address_1 || "",
+				city: w.city || "",
+				state: w.state || "",
+				pincode: w.pincode || "",
+				gstin: w.gst_number || COMPANY_BILLING.gstNumber,
+				phone: primary?.mobile_number || "—",
+				email: primary?.email_address || "—",
 			};
-		})() : null),
+		});
+	}, [dbWarehouses]);
+
+	const selectedWarehouse = useMemo(
+		() =>
+			form.warehouseId
+				? (dbWarehouses || []).find((w) => String(w.warehouse_id) === String(form.warehouseId)) ?? null
+				: null,
 		[form.warehouseId, dbWarehouses],
 	);
 
@@ -564,8 +523,6 @@ export function PurchaseOrderForm({
 
 	const selectedSupplier = useMemo(() => {
 		if (!form.supplierId) return null;
-		const local = getActiveSuppliers().find((s) => String(s.id) === String(form.supplierId));
-		if (local) return local;
 		const dbSup = (dbSuppliers || []).find((s) => String(s.supplier_id) === String(form.supplierId));
 		if (dbSup) {
 			return {
@@ -729,33 +686,7 @@ export function PurchaseOrderForm({
 	};
 
 	const onWarehouseChange = async (val: string) => {
-		const wh = (dbWarehouses || []).find((w) => String(w.warehouse_id) === val) || (() => {
-			const staticWh = loadWarehouses().find((w) => String(w.id) === val);
-			if (!staticWh) return null;
-			return {
-				warehouse_id: String(staticWh.id),
-				warehouse_name: staticWh.warehouseName,
-				address: staticWh.address,
-				address_1: staticWh.addressLine2 || "",
-				state: staticWh.state,
-				district: staticWh.district,
-				city: staticWh.city,
-				town: staticWh.town || "",
-				pincode: staticWh.pincode || "",
-				gst_applicable: staticWh.gstApplicable,
-				gst_number: staticWh.gstNumber,
-				registered_legal_name: staticWh.registeredLegalName || "",
-				contacts: [
-					{
-						warehouse_contact_id: "1",
-						contact_person: staticWh.contactPerson,
-						mobile_number: staticWh.mobileNumber,
-						email_address: staticWh.emailAddress,
-						is_primary: true,
-					}
-				],
-			};
-		})();
+		const wh = (dbWarehouses || []).find((w) => String(w.warehouse_id) === val) ?? null;
 		const addressStr = wh ? [wh.address, wh.address_1].filter(Boolean).join(", ") : "";
 		const primaryContact = wh?.contacts?.find((c) => c.is_primary) ?? wh?.contacts?.[0];
 		const nextState = wh?.state || form.state || "";
@@ -825,42 +756,6 @@ export function PurchaseOrderForm({
 			return;
 		}
 
-		// Try to find if it is a local mock supplier first (for backwards compatibility/safety)
-		const localMock = getActiveSuppliers().find((x) => String(x.id) === idStr);
-		if (localMock) {
-			const localWarehouseId =
-				typeof form.warehouseId === "number"
-					? form.warehouseId
-					: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
-						? Number(form.warehouseId)
-						: null;
-			const defaults = getDefaultPOBillShipIds(
-				billToAddresses,
-				shipToAddresses,
-				localWarehouseId,
-			);
-			const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
-			const nextTaxSupplyType = resolveTaxSupplyType(warehouseState, localMock.state ?? "");
-			const updatedLines =
-				form.lines.length > 0
-					? applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType)
-					: form.lines;
-			patch({
-				supplierId: localMock.id,
-				supplierName: localMock.supplierName,
-				supplierType: localMock.supplierType,
-				supplierContactPerson: localMock.contactPerson || "",
-				supplierMobile: localMock.mobile || localMock.phone || "",
-				supplierEmail: localMock.email || "",
-				supplierGstin: localMock.gstNumber || "",
-				billToAddressId: form.billToAddressId || defaults.billToAddressId,
-				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
-				lines: updatedLines,
-			});
-			return;
-		}
-
-		// Otherwise, fetch detailed supplier info from backend
 		try {
 			const response = await axiosInstance.get(`/master/supplier/details/${idStr}`);
 			const s = response.data?.data;

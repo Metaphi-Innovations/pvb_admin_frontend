@@ -28,15 +28,16 @@ function asDateOnly(value: unknown): string {
 }
 
 export function mapBackendStatusToFrontend(status: string): any {
-  const s = asString(status).toUpperCase();
+  const s = asString(status).toUpperCase().replace(/[\s_]+/g, "_");
   if (s === "PENDING_APPROVAL" || s === "SUBMITTED") return "pending_approval";
   if (s === "APPROVED") return "approved";
   if (s === "REJECTED") return "rejected";
   if (s === "CONFIRMED") return "confirmed";
+  if (s === "READY_FOR_PACKING") return "ready_for_packing";
   if (s === "CANCELLED") return "cancelled";
   if (s === "DISPATCHED") return "dispatched";
   if (s === "DELIVERED") return "delivered";
-  if (s === "PACKED" || s === "PICKING") return "packed";
+  if (s === "PACKED" || s === "FULLY_PACKED" || s === "PICKING") return "fully_packed";
   return "draft";
 }
 
@@ -78,6 +79,7 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
     gstAmount: asNumber(raw.tax_amount),
     lineTotal: asNumber(raw.line_total),
     unit: asString(prodSnapshot.base_unit || product.unit || "Unit"),
+    packingUnit: asString(prodSnapshot.packing_unit || product.packing_unit || "Unit"),
     batchNumber: asString(raw.batch_no),
     expiryDate: raw.expiry_date ? asDateOnly(raw.expiry_date) : undefined,
   };
@@ -158,7 +160,7 @@ function buildBackendWriteBody(
     order_date: form.orderDate ? new Date(form.orderDate).toISOString() : new Date().toISOString(),
     status: mapFrontendStatusToBackend(options.status),
     remarks: form.remarks || null,
-    customer_id: "1a15aac2-1e1d-4337-8642-0d1cd6e1366c",
+    customer_id: form.customerId,
     warehouse_id: form.warehouseId,
     salesperson_id: form.salesManId,
     ...totals,

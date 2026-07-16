@@ -36,12 +36,22 @@ export interface GrnFilterOption {
   value: string;
 }
 
+export interface GrnListSummary {
+  pendingQc: number;
+  qcInProgress: number;
+  qcCompleted: number;
+  totalGrns: number;
+}
+
 export type GrnFilterField =
   | "grnNumber"
   | "status"
   | "supplier__supplier_name"
   | "warehouse__warehouse_name"
-  | "po_no";
+  | "po_no"
+  | "sales_return_no"
+  | "sample_return_no"
+  | "customer_name";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -139,10 +149,14 @@ function mapListItem(
     asString(purchaseOrder.poNumber) ||
     "";
 
+  const sourceId =
+    asString(raw.source_id) || asString(raw.sourceId) || undefined;
+
   return {
     id: asString(raw.id),
     grnNo,
     poNumber,
+    sourceId,
     vendorName: supplierName,
     warehouse: warehouseName,
     warehouseId: asNumber(warehouse.sr_no) || undefined,
@@ -250,6 +264,21 @@ export function buildGrnApiFilters(
     apiFilters.po_no = poNumber;
   }
 
+  const salesReturnNo = firstFilterValue(filters.salesReturnNo);
+  if (salesReturnNo) {
+    apiFilters.sales_return_no = salesReturnNo;
+  }
+
+  const sampleReturnNo = firstFilterValue(filters.sampleReturnNo);
+  if (sampleReturnNo) {
+    apiFilters.sample_return_no = sampleReturnNo;
+  }
+
+  const customerName = firstFilterValue(filters.customerName);
+  if (customerName) {
+    apiFilters.customer_name = customerName;
+  }
+
   const warehouseFilter = filters.warehouse;
   if (warehouseFilter) {
     const warehouseName = firstFilterValue(warehouseFilter);
@@ -304,9 +333,9 @@ export function buildGrnOrdering(
     acceptedQty: "grnNumber",
     rejectedQty: "grnNumber",
     totalQty: "grnNumber",
-    salesReturnNo: "grnNumber",
-    sampleReturnNo: "grnNumber",
-    customerName: "supplier__supplier_name",
+    salesReturnNo: "sales_return_no",
+    sampleReturnNo: "sample_return_no",
+    customerName: "customer_name",
     stockTransferNo: "grnNumber",
     fromWarehouse: "supplier__supplier_name",
     toWarehouse: "warehouse__warehouse_name",
@@ -328,9 +357,44 @@ export const GRN_FILTER_COLUMN_MAP: Record<string, GrnFilterField> = {
   vendorName: "supplier__supplier_name",
   warehouse: "warehouse__warehouse_name",
   poNumber: "po_no",
+  salesReturnNo: "sales_return_no",
+  sampleReturnNo: "sample_return_no",
+  customerName: "customer_name",
 };
 
+function mapSummary(raw: Record<string, unknown>): GrnListSummary {
+  return {
+    pendingQc: asNumber(raw.pendingQc),
+    qcInProgress: asNumber(raw.qcInProgress),
+    qcCompleted: asNumber(raw.qcCompleted),
+    totalGrns: asNumber(raw.totalGrns),
+  };
+}
+
 export const GrnListService = {
+  async getSummary(
+    sourceType: BackendGrnSourceType,
+    warehouseId?: string,
+    signal?: AbortSignal,
+  ): Promise<GrnListSummary> {
+    const response = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.GRN.SUMMARY, {
+      params: {
+        source_type: sourceType,
+        ...(warehouseId && warehouseId !== "All" ? { warehouse_id: warehouseId } : {}),
+      },
+      signal,
+    });
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an object.");
+    }
+
+    return mapSummary(data as Record<string, unknown>);
+  },
+
   async list(params: GrnListParams): Promise<GrnListResult> {
     const response = await axiosInstance.post(
       `${API_ENDPOINTS.WAREHOUSE.GRN.LIST}?${buildListQueryString(params)}`,
@@ -357,10 +421,14 @@ export const GrnListService = {
 
   async getFilterDropdown(
     fieldName: GrnFilterField,
+    sourceType?: BackendGrnSourceType,
     signal?: AbortSignal,
   ): Promise<GrnFilterOption[]> {
     const response = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.GRN.FILTER, {
-      params: { field_name: fieldName },
+      params: {
+        field_name: fieldName,
+        ...(sourceType ? { source_type: sourceType } : {}),
+      },
       signal,
     });
 

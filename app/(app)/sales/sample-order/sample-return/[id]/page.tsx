@@ -1,29 +1,21 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useParams } from "next/navigation";
 import { Package } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
-import {
-  getSampleReturnById,
-  formatReturnAmount,
-  getReturnTotalAmount,
-  type SampleReturnRecord,
-} from "../../sample-return-data";
+import { useSampleReturn } from "@/hooks/sales/use-return-documents";
+import { formatReturnAmount } from "../../sample-return-data";
 import { calcReturnLineAmount } from "../../sample-return-utils";
 
 export default function SampleReturnViewPage() {
   const params = useParams();
   const id = params?.id as string;
-  const [record, setRecord] = useState<SampleReturnRecord | null>(null);
-
-  useEffect(() => {
-    if (id) setRecord(getSampleReturnById(id));
-  }, [id]);
+  const { data: record, isLoading } = useSampleReturn(id);
 
   const listHref = "/sales/sample-order?tab=sales_return";
 
-  if (!record) {
+  if (isLoading) {
     return (
       <RecordDetailPage
         listHref={listHref}
@@ -33,22 +25,51 @@ export default function SampleReturnViewPage() {
         statusVariant="neutral"
       >
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-          {id ? "Sample return record not found." : "Loading…"}
+          Loading…
         </div>
       </RecordDetailPage>
     );
   }
 
-  const displayStatus = record.status || "pending";
-  const statusLabelMap = {
-    pending: "Pending",
-    approved: "Approved",
-    processed: "Processed",
+  if (!record) {
+    return (
+      <RecordDetailPage
+        listHref={listHref}
+        listLabel="Sample Returns"
+        recordName="Sample Return"
+        statusLabel="Not Found"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+          Sample return record not found.
+        </div>
+      </RecordDetailPage>
+    );
+  }
+
+  const displayStatus = record.status || "DRAFT";
+  const statusLabelMap: Record<string, string> = {
+    DRAFT: "Draft",
+    SUBMITTED: "Submitted",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    RECEIVED: "Received",
+    CANCELLED: "Cancelled",
   };
-  const statusVariantMap = {
-    pending: "neutral" as const,
-    approved: "neutral" as const,
-    processed: "active" as const,
+  const statusVariantMap: Record<string, "neutral" | "active" | "inactive"> = {
+    DRAFT: "neutral",
+    SUBMITTED: "neutral",
+    APPROVED: "active",
+    REJECTED: "inactive",
+    RECEIVED: "active",
+    CANCELLED: "inactive",
+  };
+
+  const getReturnTotalAmount = (r: typeof record) => {
+    return r.items.reduce(
+      (sum, p) => sum + (p.amount ?? p.returnedQty * (p.unitPerPacking * (p.amount ?? 0))),
+      0,
+    );
   };
 
   return (
@@ -57,10 +78,10 @@ export default function SampleReturnViewPage() {
       listLabel="Sample Returns"
       recordName={record.returnNumber}
       recordCode={record.salesOrderNumber}
-      statusLabel={statusLabelMap[displayStatus]}
-      statusVariant={statusVariantMap[displayStatus]}
+      statusLabel={statusLabelMap[displayStatus] || displayStatus}
+      statusVariant={statusVariantMap[displayStatus] || "neutral"}
       metaItems={[
-        { label: record.customer },
+        { label: record.customerName },
         { label: record.dispatchNumber },
         { label: record.returnDate },
       ]}
@@ -68,7 +89,7 @@ export default function SampleReturnViewPage() {
         summary: [
           { label: "Dispatch No", value: record.dispatchNumber, highlight: true },
           { label: "Sample Order", value: record.salesOrderNumber },
-          { label: "Warehouse", value: record.warehouse },
+          { label: "Warehouse", value: record.warehouseName },
           { label: "Return Value", value: formatReturnAmount(getReturnTotalAmount(record)) },
         ],
       }}
@@ -79,7 +100,7 @@ export default function SampleReturnViewPage() {
             { label: "Return Date", value: record.returnDate },
             { label: "Dispatch No", value: record.dispatchNumber },
             { label: "Sample Order No", value: record.salesOrderNumber },
-            { label: "Customer / Farmer", value: record.customer },
+            { label: "Customer / Farmer", value: record.customerName },
           ].map((card) => (
             <div key={card.label} className="bg-white border border-border rounded-xl p-3 shadow-sm">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{card.label}</p>
@@ -105,15 +126,19 @@ export default function SampleReturnViewPage() {
                 </tr>
               </thead>
               <tbody>
-                {record.products.map((p, idx) => (
+                {record.items.map((p, idx) => (
                   <tr key={idx} className="border-b border-border/60">
-                    <td className="py-3 px-3 text-xs font-bold">{p.product}</td>
+                    <td className="py-3 px-3 text-xs font-bold">{p.productName}</td>
                     <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
-                    <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty}</td>
-                    <td className="py-3 px-3 text-xs font-bold text-center text-red-600">{p.returnQty}</td>
+                    <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty} Cases</td>
+                    <td className="py-3 px-3 text-xs font-bold text-center text-red-600">
+                      {p.quantityType === "PIECE"
+                        ? `${p.returnedBaseQty} Pieces`
+                        : `${p.returnedQty} Cases`}
+                    </td>
                     <td className="py-3 px-3 text-xs text-right text-muted-foreground">{p.remarks || "—"}</td>
                     <td className="py-3 px-3 text-xs font-semibold text-right">
-                      {formatReturnAmount(p.lineAmount ?? calcReturnLineAmount(p.returnQty, p.unitRate ?? 0))}
+                      {formatReturnAmount(p.amount ?? calcReturnLineAmount(p.returnedBaseQty, p.unitPerPacking ?? 0))}
                     </td>
                   </tr>
                 ))}

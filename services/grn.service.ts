@@ -7,6 +7,11 @@ import type {
   GrnSupplierInvoice,
 } from "@/app/(app)/warehouse/grn/shared/types";
 import { mapBackendGrnStatus } from "@/lib/warehouse/grn-status";
+import {
+  DEFAULT_NEW_GRN_QUANTITY_TYPE,
+  normalizeGrnQuantityType,
+  resolvePackingSize,
+} from "@/lib/warehouse/grn-quantity";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -81,6 +86,7 @@ export interface CreateGrnBatchPayload {
   quantity_base_qty: number;
   rate?: number | null;
   gst?: number | null;
+  gstAmount?: number | null;
   remarks?: string | null;
 }
 
@@ -90,6 +96,7 @@ export interface CreateGrnItemPayload {
   previous_received_base_qty: number;
   current_received_base_qty: number;
   pending_base_qty: number;
+  quantity_type?: "CASE" | "PIECE" | null;
   remarks?: string | null;
   productSnapshot?: Record<string, unknown> | null;
   batches: CreateGrnBatchPayload[];
@@ -204,6 +211,13 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     const alreadyReceivedQty = asNumber(item.previous_received_base_qty);
     const receivedQty = asNumber(item.current_received_base_qty);
     const pendingQty = asNumber(item.pending_base_qty);
+    const packingSize = resolvePackingSize({
+      productSnapshot: snapshot,
+    });
+    const quantityType =
+      normalizeGrnQuantityType(
+        asString(item.quantity_type) || asString(item.quantityType),
+      ) ?? DEFAULT_NEW_GRN_QUANTITY_TYPE;
 
     items.push({
       productId,
@@ -214,6 +228,8 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       alreadyReceivedQty,
       pendingQty,
       receivedQty,
+      quantityType,
+      unitPerPacking: packingSize || undefined,
       unit: asString(snapshot.base_unit) || "Unit",
       poNumber: poNumber || undefined,
       remarks: asString(item.remarks) || undefined,
@@ -228,9 +244,16 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       const rate = asNumber(batch.rate);
       const gstPct = asNumber(batch.gst);
       const taxable = qty * rate;
-      const gstAmount = asNumber(batch.totalPrice)
-        ? Math.max(0, asNumber(batch.totalPrice) - taxable)
-        : (taxable * gstPct) / 100;
+      const hasStoredGstAmount =
+        batch.gstAmount !== null &&
+        batch.gstAmount !== undefined &&
+        String(batch.gstAmount).trim() !== "";
+      const storedGstAmount = asNumber(batch.gstAmount);
+      const gstAmount = hasStoredGstAmount
+        ? storedGstAmount
+        : asNumber(batch.totalPrice)
+          ? Math.max(0, asNumber(batch.totalPrice) - taxable)
+          : (taxable * gstPct) / 100;
       const totalAmount = asNumber(batch.totalPrice) || taxable + gstAmount;
 
       batches.push({
@@ -248,6 +271,8 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
         gstAmount: gstAmount || undefined,
         totalAmount: totalAmount || undefined,
         poNumber: poNumber || undefined,
+        quantityType,
+        unitPerPacking: packingSize || undefined,
       });
     }
   }
@@ -271,6 +296,12 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     asString(raw.customer_name) ||
     asString(asRecord(raw.customer).customer_name) ||
     "";
+
+  const mappedSourceType = mapSourceType(asString(raw.source_type));
+  const toWarehouseName =
+    warehouseName ||
+    asString(warehouseSnapshot.warehouse_name) ||
+    asString(warehouseSnapshot.name);
 
   return {
     id: asString(raw.id),
@@ -297,11 +328,23 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     invoiceFileNames: supplierInvoices.map((inv) => inv.fileName),
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
-    sourceType: mapSourceType(asString(raw.source_type)),
+    sourceType: mappedSourceType,
     salesReturnNo: salesReturnNo || undefined,
     sampleReturnNo: sampleReturnNo || undefined,
     customerName: customerName || undefined,
     receiptRemarks: asString(raw.remarks) || undefined,
+    stockTransferNo:
+      mappedSourceType === "stock_transfer"
+        ? asString(raw.transfer_no) ||
+          asString(raw.stockTransferNo) ||
+          asString(raw.grnNumber)
+        : undefined,
+    fromWarehouse:
+      mappedSourceType === "stock_transfer"
+        ? asString(raw.fromWarehouse) || vendorName || "—"
+        : undefined,
+    toWarehouse:
+      mappedSourceType === "stock_transfer" ? toWarehouseName || undefined : undefined,
   };
 }
 

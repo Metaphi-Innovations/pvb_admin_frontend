@@ -19,6 +19,13 @@ import { useRouter } from "next/navigation";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
 import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
+import {
+  formatDisplayQuantity,
+  fromBaseQuantity,
+  resolveGrnQuantityType,
+  resolvePackingSize,
+} from "@/lib/warehouse/grn-quantity";
+import { round2 } from "@/lib/procurement/utils";
 
 const STATUS_CONFIG = {
   pending_qc: {
@@ -258,6 +265,9 @@ export function SalesReturnView({ id }: { id: string }) {
                   <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
                     Returned Qty
                   </th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
+                    Quantity Type
+                  </th>
                   <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
                     Received Qty
                   </th>
@@ -267,21 +277,44 @@ export function SalesReturnView({ id }: { id: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {grn.items.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-muted/10">
-                    <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
-                    <td className="p-2 text-xs font-mono text-muted-foreground">
-                      {item.productCode}
-                    </td>
-                    <td className="p-2 text-xs text-right tabular-nums">
-                      {(item.orderedQty || 0).toLocaleString()}
-                    </td>
-                    <td className="p-2 text-xs font-semibold text-right tabular-nums text-brand-600">
-                      {item.receivedQty.toLocaleString()}
-                    </td>
-                    <td className="p-2 text-xs text-muted-foreground">{item.unit || "Unit"}</td>
-                  </tr>
-                ))}
+                {grn.items.map((item, idx) => {
+                  const packingSize =
+                    resolvePackingSize({ unitPerPacking: item.unitPerPacking }) || 1;
+                  const quantityType = resolveGrnQuantityType(item.quantityType);
+                  const display = formatDisplayQuantity({
+                    baseQty: item.receivedQty,
+                    quantityType,
+                    packingSize,
+                  });
+                  const displayReturned = round2(
+                    fromBaseQuantity({
+                      baseQty: item.orderedQty || 0,
+                      quantityType,
+                      packingSize,
+                    }),
+                  );
+                  return (
+                    <tr key={idx} className="hover:bg-muted/10">
+                      <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
+                      <td className="p-2 text-xs font-mono text-muted-foreground">
+                        {item.productCode}
+                      </td>
+                      <td className="p-2 text-xs text-right tabular-nums">
+                        {displayReturned.toLocaleString()}
+                      </td>
+                      <td className="p-2 text-xs text-center text-muted-foreground">
+                        {display.label}
+                      </td>
+                      <td className="p-2 text-xs font-semibold text-right tabular-nums text-brand-600">
+                        {round2(display.quantity).toLocaleString()}
+                        <span className="block text-[10px] font-normal text-muted-foreground">
+                          ({item.receivedQty} base)
+                        </span>
+                      </td>
+                      <td className="p-2 text-xs text-muted-foreground">{item.unit || "Unit"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -292,7 +325,7 @@ export function SalesReturnView({ id }: { id: string }) {
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
               Batch Details
             </h3>
-            <BatchDetailsReadOnlyTable batches={grn.batches} />
+            <BatchDetailsReadOnlyTable batches={grn.batches} items={grn.items} />
           </div>
         )}
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { QcService } from "@/services/qc.service";
 import { QcItem, QcRecord, QcResult } from "../types";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,8 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { onQcCompleted } from "@/lib/warehouse/inventory-movement";
 import { completeStockTransferQc } from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
+import { showToast } from "@/lib/toast";
+import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -39,6 +42,7 @@ function qtyInputValue(qty: number): string {
 
 function CreateQcForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const qcIdParam = searchParams.get("qcId") || "";
   const grnIdParam = searchParams.get("grnId") || "";
@@ -103,7 +107,7 @@ function CreateQcForm() {
         setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
         setToWarehouse(qc.toWarehouse ?? qc.warehouse);
         setIsStockTransfer(stMode);
-        setSourceType(stMode ? "stock_transfer" : "purchase_order");
+        setSourceType(getQcSourceType(qc));
         setQcRemarks(qc.qcRemarks ?? "");
         
         setItems(qc.items.map((it) => {
@@ -209,23 +213,32 @@ function CreateQcForm() {
 
   const handleSubmit = async () => {
     if (!grnNo || !qcRecordId) {
-      alert("Missing QC / GRN reference.");
+      showToast("Missing QC / GRN reference.", "error");
       return;
     }
     if (hasErrors || hasEmptyRows) {
-      alert(
+      showToast(
         isStockTransfer
           ? "Enter accepted, rejected, or hold qty for each batch. Sum must equal received qty."
           : "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
+        "error"
       );
       return;
     }
 
     try {
+      const backendSourceType = 
+        sourceType === "purchase_order" ? "PURCHASE_ORDER" :
+        sourceType === "sales_return" ? "SALES_RETURN" :
+        sourceType === "stock_transfer" ? "STOCK_TRANSFER" :
+        sourceType === "sample_return" ? "SAMPLE_RETURN" :
+        "PURCHASE_ORDER";
+
       const payload = {
         grnId: grnRecordId,
         qcDate: new Date().toISOString(),
         remarks: qcRemarks.trim(),
+        source_type: backendSourceType,
         items: items.map((it) => ({
           grnBatchId: it.grnBatchId,
           receivedQty: it.receivedQty,
@@ -239,19 +252,24 @@ function CreateQcForm() {
       const editParam = searchParams.get("edit") === "true";
       if (editParam) {
         await QcService.update(qcRecordId, payload);
-        alert("QC Record updated successfully.");
+        showToast("QC Record updated successfully.", "success");
       } else {
         await QcService.create(payload);
-        alert(
+        showToast(
           isStockTransfer
             ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
             : "QC completed — stock moved to Available / Rejected.",
+          "success"
         );
       }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
+      ]);
       router.push("/warehouse/qc");
     } catch (err: any) {
       console.error("Failed to submit QC Record:", err);
-      alert(err.response?.data?.message || "Failed to submit QC Record.");
+      showToast(err.response?.data?.message || "Failed to submit QC Record.", "error");
     }
   };
 

@@ -42,7 +42,7 @@ import CancelOrderDialog from "./components/CancelOrderDialog";
 import ApproveOrderDialog from "./components/ApproveOrderDialog";
 import RejectOrderDialog from "./components/RejectOrderDialog";
 import { SampleReturnTab } from "./components/SampleReturnTab";
-import { getSampleReturnRecords } from "./sample-return-data";
+import { useSampleReturns } from "@/hooks/sales/use-return-documents";
 import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
@@ -318,6 +318,7 @@ export default function SalesOrdersPage() {
 
   const { data: orderNoFilterRaw } = useSampleOrderFilterOptions("order_no");
   const { data: salespersonFilterRaw } = useSampleOrderFilterOptions("salesperson__username");
+  const { data: statusFilterRaw } = useSampleOrderFilterOptions("status");
 
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
@@ -377,15 +378,20 @@ export default function SalesOrdersPage() {
     totalValue: 0,
   };
 
+  const { data: returnsCountData } = useSampleReturns({
+    page: 1,
+    pageSize: 1,
+  });
+
   const tabCounts = useMemo(() => {
     return {
       all: allCountData?.total ?? 0,
       draft: draftCountData?.total ?? 0,
       pending_approval: approvalCountData?.total ?? 0,
       rejected: rejectedCountData?.total ?? 0,
-      sales_return: isMounted ? getSampleReturnRecords().length : 0,
+      sales_return: returnsCountData?.total ?? 0,
     };
-  }, [allCountData, draftCountData, approvalCountData, rejectedCountData, isMounted]);
+  }, [allCountData, draftCountData, approvalCountData, rejectedCountData, returnsCountData]);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
@@ -416,6 +422,19 @@ export default function SalesOrdersPage() {
       .filter(Boolean)
       .map((t) => ({ label: t, value: t }));
   }, [ordersList]);
+
+  const statusOptions = useMemo(() => {
+    if (!statusFilterRaw || statusFilterRaw.length === 0) {
+      return ORDER_STATUS_OPTIONS.map((o) => ({
+        label: o.label,
+        value: o.value.toUpperCase(),
+      }));
+    }
+    return statusFilterRaw.map((item: any) => ({
+      label: formatOrderStatus((item.status || "").toLowerCase() as OrderStatus) || item.status,
+      value: item.status,
+    }));
+  }, [statusFilterRaw]);
 
   const columns: ColumnConfig<SalesOrder>[] = [
     {
@@ -480,9 +499,9 @@ export default function SalesOrdersPage() {
       key: "status",
       header: "Status",
       sortable: true,
-      filterable: true,
+      filterable: activeTab === "all",
       filterType: "dropdown",
-      filterOptions: FILTER_STATUSES.map(s => ({ label: formatOrderStatus(s), value: s })),
+      filterOptions: statusOptions,
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />

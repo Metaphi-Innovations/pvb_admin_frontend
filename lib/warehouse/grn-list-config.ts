@@ -4,6 +4,7 @@ export type GrnListingTab =
   | "purchase"
   | "sales_return"
   | "sample_return"
+  | "stock_transfer"
   | "stock_transfer_pending"
   | "stock_transfer_completed";
 
@@ -20,6 +21,8 @@ export function getGrnTabApiContext(tab: GrnListingTab): GrnTabApiContext {
       return { sourceType: "SALES_RETURN" };
     case "sample_return":
       return { sourceType: "SAMPLE_RETURN" };
+    case "stock_transfer":
+      return { sourceType: "STOCK_TRANSFER" };
     case "stock_transfer_pending":
       return { sourceType: "STOCK_TRANSFER", status: "QC_PENDING" };
     case "stock_transfer_completed":
@@ -27,10 +30,7 @@ export function getGrnTabApiContext(tab: GrnListingTab): GrnTabApiContext {
   }
 }
 
-export function getStockTransferSubTabApiContext(
-  subTab: "pending" | "received",
-): GrnTabApiContext {
-  return subTab === "pending"
-    ? getGrnTabApiContext("stock_transfer_pending")
-    : getGrnTabApiContext("stock_transfer_completed");
+/** Received tab lists all Stock Transfer GRNs (any QC status). */
+export function getStockTransferReceivedApiContext(): GrnTabApiContext {
+  return getGrnTabApiContext("stock_transfer");
 }

@@ -88,6 +88,7 @@ export interface PackingNearExpirySchemeEntry {
 
 export interface PackingRecord {
   id: string;
+  packingListId?: string;
   packingNo: string;
   salesOrderNo: string;
   customer: string;
@@ -95,7 +96,7 @@ export interface PackingRecord {
   packedQuantity: number;
   packingDate: string;
   packedBy: string;
-  status: "Packed" | "Dispatched" | "Cancelled";
+  status: "Packed" | "Dispatched" | "Cancelled" | "Ready For Dispatch";
   warehouse: string;
   products: PackedProduct[];
   nearExpirySchemes?: PackingNearExpirySchemeEntry[];

@@ -28,12 +28,15 @@ function asDateOnly(value: unknown): string {
 }
 
 export function mapBackendStatusToFrontend(status: string): TransferStatus {
-  const s = status ? status.toUpperCase() : "";
+  const s = status ? status.toUpperCase().replace(/[\s_]+/g, "_") : "";
   switch (s) {
     case "DRAFT": return "draft";
     case "SUBMITTED": return "pending_approval";
     case "APPROVED": return "approved";
+    case "READY_FOR_PACKING": return "ready_for_packing";
     case "PICKING": return "packing_in_progress";
+    case "FULLY_PACKED": return "packed";
+    case "PACKED": return "packed";
     case "IN_TRANSIT": return "in_transit";
     case "RECEIVED": return "received";
     case "CANCELLED": return "cancelled";
@@ -48,6 +51,7 @@ export function mapFrontendStatusToBackend(status: string): string {
     case "pending_approval": return "SUBMITTED";
     case "approved": return "APPROVED";
     case "confirmed": return "APPROVED";
+    case "ready_for_packing": return "READY_FOR_PACKING";
     case "packing_in_progress": return "PICKING";
     case "in_transit": return "IN_TRANSIT";
     case "received": return "RECEIVED";

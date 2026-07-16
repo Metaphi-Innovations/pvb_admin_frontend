@@ -4,70 +4,49 @@ import React, { useEffect, useState, useMemo, Fragment } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Truck, CheckSquare, Check, RotateCcw } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { getPreviewNumber, getPackingDoneList, createDispatch, getPackingDoneById } from "../services";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pencil, CheckSquare } from "lucide-react";
+import { useRouter, useParams } from "next/navigation";
+import { getDispatchById, updateDispatch } from "../../services";
 
-export default function CreateDispatchPage() {
+export default function EditDispatchPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const packingIdFromUrl = searchParams ? searchParams.get("packingId") : null;
-  const sourceTypeFromUrl = searchParams ? searchParams.get("sourceType") : null;
+  const params = useParams();
+  const id = params?.id as string;
 
-  const [sourceType, setSourceType] = useState<string>(sourceTypeFromUrl || "sales_order");
-
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [dispatchNumber, setDispatchNumber] = useState("");
-  const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split("T")[0]);
+  
+  const [dispatchDate, setDispatchDate] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [driverName, setDriverName] = useState("");
   const [transporterName, setTransporterName] = useState("");
   const [lrNumber, setLrNumber] = useState("");
   const [ewayBillNumber, setEwayBillNumber] = useState("");
 
-  const [availablePackings, setAvailablePackings] = useState<any[]>([]);
-  const [selectedPackingId, setSelectedPackingId] = useState<string>("");
-  const [packingDetails, setPackingDetails] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [dispatchDetails, setDispatchDetails] = useState<any>(null);
 
   useEffect(() => {
-    getPreviewNumber().then((num) => setDispatchNumber(num)).catch(console.error);
-
-    // Fetch available packing done records (assume status=Ready For Dispatch implies ready for dispatch)
-    const mappedSourceType = sourceType === "sales_order" ? "normal_sales" : sourceType;
-    getPackingDoneList({ filters: { status: "Ready For Dispatch", source_type: mappedSourceType }, page: 1, page_size: 100 })
-      .then((res) => {
-        const items = res?.data?.items || res?.data || [];
-        setAvailablePackings(items);
-        if (packingIdFromUrl && items.some((p: any) => p.packing_done_id === packingIdFromUrl)) {
-          setSelectedPackingId(packingIdFromUrl);
-        } else {
-          setSelectedPackingId(""); // reset if type changes
+    if (!id) return;
+    setInitialLoading(true);
+    getDispatchById(id)
+      .then((data) => {
+        setDispatchNumber(data.dispatch_no || data.dispatchNumber || data.dispatch_number || "");
+        if (data.dispatch_date || data.dispatchDate) {
+          setDispatchDate(new Date(data.dispatch_date || data.dispatchDate).toISOString().split("T")[0]);
         }
+        setVehicleNumber(data.vehicleNumber || data.vehicle_number || "");
+        setDriverName(data.driverName || data.driver_name || "");
+        setTransporterName(data.transporter || "");
+        setLrNumber(data.lrNumber || data.lr_number || "");
+        setEwayBillNumber(data.ewayBillNumber || data.eway_bill_number || "");
+        setDispatchDetails(data);
       })
-      .catch(console.error);
-  }, [packingIdFromUrl, sourceType]);
-
-  useEffect(() => {
-    if (!selectedPackingId) {
-      setPackingDetails(null);
-      return;
-    }
-    getPackingDoneById(selectedPackingId)
-      .then((data) => setPackingDetails(data))
-      .catch(console.error);
-  }, [selectedPackingId]);
-
-  const selectedPacking = useMemo(() => {
-    return availablePackings.find((p) => p.packing_done_id === selectedPackingId);
-  }, [availablePackings, selectedPackingId]);
+      .catch(console.error)
+      .finally(() => setInitialLoading(false));
+  }, [id]);
 
   const handleSubmit = async () => {
-    if (!selectedPackingId) {
-      alert("Please select a Packing record to dispatch.");
-      return;
-    }
     if (!vehicleNumber.trim()) {
       alert("Vehicle Number is required.");
       return;
@@ -80,8 +59,6 @@ export default function CreateDispatchPage() {
     setLoading(true);
     try {
       const payload = {
-        packing_done_id: selectedPackingId,
-        warehouse_id: selectedPacking?.warehouse_id || selectedPacking?.source_warehouse_id || selectedPacking?.warehouse?.id || selectedPacking?.source_warehouse?.id,
         vehicle_number: vehicleNumber,
         driver_name: driverName,
         transporter: transporterName || null,
@@ -90,33 +67,29 @@ export default function CreateDispatchPage() {
         eway_bill_number: ewayBillNumber || null,
       };
 
-      await createDispatch(payload);
-      alert("Dispatch created successfully");
+      await updateDispatch(id, payload);
+      alert("Dispatch updated successfully");
       router.push("/warehouse/dispatch");
     } catch (err: any) {
-      alert(err?.response?.data?.message || "Failed to create Dispatch");
+      alert(err?.response?.data?.message || "Failed to update Dispatch");
     } finally {
       setLoading(false);
     }
   };
 
-  const packingOptions = availablePackings.map((p) => ({
-    value: p.packing_done_id,
-    label: `${p.packing_done_no} - ${p.customer_name || p.source_type} (Qty: ${p.total_packed_qty})`
-  }));
-
-  const groupedPackingProducts = useMemo(() => {
-    if (!packingDetails?.products) return [];
+  const groupedDispatchItems = useMemo(() => {
+    if (!dispatchDetails?.items) return [];
     const map = new Map<string, any>();
-    packingDetails.products.forEach((item: any) => {
+    dispatchDetails.items.forEach((item: any) => {
       const pId = item.product_id;
       if (!map.has(pId)) {
         map.set(pId, {
           product_id: pId,
-          product_name: item.product_name || item.product_id,
+          product_name: item.product?.product_name || item.product_id,
           unit_price: item.unit_price || 0,
           total_order_qty: 0,
           total_packed_qty: 0,
+          total_dispatched_qty: 0,
           total_discount: 0,
           total_gst: 0,
           total_amount: 0,
@@ -124,32 +97,55 @@ export default function CreateDispatchPage() {
         });
       }
       const group = map.get(pId);
-      group.total_order_qty = Math.max(group.total_order_qty, Number(item.order_qty || 0));
-      group.total_packed_qty += Number(item.packed_qty || 0);
+      
+      const packSizeRaw = item.product?.unit_per_packing ?? item.product?.conversion_qty ?? item.product_snapshot?.conversion_qty ?? 1;
+      const packSize = Number(packSizeRaw) || 1;
+      
+      const dispQty = Number(item.dispatched_base_qty || item.dispatched_qty || item.quantity || 0) / packSize;
+      
+      group.total_dispatched_qty += dispQty;
       group.total_discount += Number(item.discount_amount || 0);
       group.total_gst += Number(item.gst_amount || 0);
       group.total_amount += Number(item.item_total || 0);
+      group.total_order_qty = Math.max(group.total_order_qty, Number(item.order_qty || 0) / packSize);
+      group.total_packed_qty = Math.max(group.total_packed_qty, Number(item.packed_qty || 0) / packSize);
       
-      const batchCode = item.batch_code || "Unknown";
+      const batchCode = item.batch_snapshot?.batch_code || item.inventory_batch?.batch_code || item.batch_code || "Unknown";
       const existingBatch = group.batches.find((b: any) => b.batch_code === batchCode);
       if (existingBatch) {
-        existingBatch.qty += Number(item.packed_qty || 0);
+        existingBatch.qty += dispQty;
       } else {
         group.batches.push({
-          id: item.packing_done_product_id,
+          id: item.id || item.dispatch_item_id,
           batch_code: batchCode,
-          qty: Number(item.packed_qty || 0),
+          qty: dispQty,
           remarks: item.remarks
         });
       }
     });
     return Array.from(map.values());
-  }, [packingDetails]);
+  }, [dispatchDetails]);
+
+  if (initialLoading) {
+    return (
+      <FormContainer
+        title="Edit Dispatch"
+        description="Loading dispatch details..."
+        onBack={() => router.push("/warehouse/dispatch")}
+        onCancel={() => router.push("/warehouse/dispatch")}
+        cancelLabel="Cancel"
+      >
+        <div className="h-40 flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">Loading...</p>
+        </div>
+      </FormContainer>
+    );
+  }
 
   return (
     <FormContainer
-      title="Create Dispatch"
-      description="Record a new outbound shipment dispatch session from packed orders"
+      title="Edit Dispatch"
+      description={`Update logistics details for dispatch: ${dispatchNumber}`}
       onBack={() => router.push("/warehouse/dispatch")}
       onCancel={() => router.push("/warehouse/dispatch")}
       cancelLabel="Cancel"
@@ -157,50 +153,22 @@ export default function CreateDispatchPage() {
         <div className="flex gap-2">
           <Button
             size="sm"
-            disabled={!selectedPackingId || !vehicleNumber || !driverName || loading}
+            disabled={!vehicleNumber || !driverName || loading}
             onClick={handleSubmit}
             className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
           >
-            <Truck className="w-3.5 h-3.5" /> {loading ? "Dispatching..." : "Dispatch"}
+            <Pencil className="w-3.5 h-3.5" /> {loading ? "Updating..." : "Update Dispatch"}
           </Button>
         </div>
       }
       noCard={false}
     >
-      <Tabs value={sourceType} onValueChange={setSourceType} className="mb-6 w-full">
-        <TabsList>
-          <TabsTrigger value="sales_order" className="text-xs">Normal Sales</TabsTrigger>
-          <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
-          <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
-          <TabsTrigger value="purchase_return" className="text-xs">Purchase Return</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
       <div className="space-y-6">
         <div className="space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-            <Truck className="w-4 h-4 text-brand-600" /> Dispatch Header Details
+            <Pencil className="w-4 h-4 text-brand-600" /> Logistics Details
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Number</p>
-              <Input value={dispatchNumber} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
-            </div>
-
-            <div className="md:col-span-2">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                Select Packing List *
-              </p>
-              <AutocompleteSelect
-                options={packingOptions}
-                value={selectedPackingId}
-                onChange={setSelectedPackingId}
-                placeholder="Search and select Packing List to Dispatch..."
-                searchPlaceholder="Search packing list..."
-                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
-              />
-            </div>
-
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Date *</p>
               <Input
@@ -258,53 +226,52 @@ export default function CreateDispatchPage() {
           </div>
         </div>
 
-        {selectedPacking && (
+        {dispatchDetails && (
           <div className="border-t border-border/80 pt-6 mt-6 space-y-6">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-              <CheckSquare className="w-4 h-4 text-brand-600" /> Selected Packing Details
+              <CheckSquare className="w-4 h-4 text-brand-600" /> Dispatch Source Details
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-border">
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Packing No</p>
-                <p className="text-sm font-bold text-foreground font-mono">{selectedPacking.packing_done_no}</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Source Document No</p>
+                <p className="text-sm font-bold text-foreground font-mono">{dispatchDetails.source_document_no || "—"}</p>
               </div>
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Customer / Destination</p>
-                <p className="text-sm font-bold text-foreground">{selectedPacking.customer_name || selectedPacking.target_warehouse_name || "—"}</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Customer / Target Warehouse</p>
+                <p className="text-sm font-bold text-foreground">{dispatchDetails.customer?.customer_name || dispatchDetails.target_warehouse_name || "—"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Items</p>
-                <p className="text-sm font-bold text-foreground">{selectedPacking.total_items}</p>
+                <p className="text-sm font-bold text-foreground">{dispatchDetails.total_items}</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Quantity</p>
-                <p className="text-sm font-bold text-foreground">{selectedPacking.total_packed_qty}</p>
+                <p className="text-sm font-bold text-foreground">{dispatchDetails.total_qty}</p>
               </div>
             </div>
 
-            {packingDetails && packingDetails.customer_snapshot && packingDetails.source_type !== "stock_transfer" && (
-              <div className="bg-slate-50 p-4 rounded-lg border border-border">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
-                <div className="text-xs text-foreground space-y-1">
-                  <p className="font-semibold">{packingDetails.customer_snapshot.customer_name}</p>
-                  <p>{packingDetails.customer_snapshot.shipping_address || packingDetails.customer_snapshot.billing_address || "No address provided."}</p>
-                  {packingDetails.customer_snapshot.city && <p>{packingDetails.customer_snapshot.city}, {packingDetails.customer_snapshot.state} {packingDetails.customer_snapshot.pincode}</p>}
+            {dispatchDetails.packing_done && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-border">
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Packing Done No</p>
+                  <p className="text-sm font-bold text-foreground font-mono">{dispatchDetails.packing_done.packing_done_no}</p>
                 </div>
+                {dispatchDetails.customer && dispatchDetails.source_type !== "stock_transfer" && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
+                    <div className="text-xs text-foreground space-y-1">
+                      <p className="font-semibold">{dispatchDetails.customer.customer_name}</p>
+                      <p>{dispatchDetails.customer.shipping_address || dispatchDetails.customer.billing_address || "No address provided."}</p>
+                      {dispatchDetails.customer.city && <p>{dispatchDetails.customer.city}, {dispatchDetails.customer.state} {dispatchDetails.customer.pincode}</p>}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {packingDetails && packingDetails.target_warehouse_name && packingDetails.source_type === "stock_transfer" && (
-              <div className="bg-slate-50 p-4 rounded-lg border border-border">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Destination Warehouse</p>
-                <div className="text-xs text-foreground space-y-1">
-                  <p className="font-semibold">{packingDetails.target_warehouse_name}</p>
-                </div>
-              </div>
-            )}
-
-            {packingDetails && packingDetails.products && packingDetails.products.length > 0 && (
+            {dispatchDetails.items && dispatchDetails.items.length > 0 && (
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Packed Products</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dispatched Products</p>
                 <div className="border border-border rounded-lg overflow-hidden">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 border-b border-border">
@@ -312,6 +279,7 @@ export default function CreateDispatchPage() {
                         <th className="px-3 py-2 font-semibold text-muted-foreground">Product</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Order Qty</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Packed Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Dispatched Qty</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Unit Price</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Discount</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground text-right">GST</th>
@@ -320,12 +288,13 @@ export default function CreateDispatchPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {groupedPackingProducts.map((group: any) => (
+                      {groupedDispatchItems.map((group: any) => (
                         <Fragment key={group.product_id}>
                           <tr className="bg-slate-50/50">
                             <td className="px-3 py-2 font-medium">{group.product_name}</td>
                             <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{group.total_order_qty}</td>
-                            <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">{group.total_packed_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{group.total_packed_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">{group.total_dispatched_qty}</td>
                             <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.unit_price).toFixed(2)}</td>
                             <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.total_discount).toFixed(2)}</td>
                             <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.total_gst).toFixed(2)}</td>
@@ -334,7 +303,7 @@ export default function CreateDispatchPage() {
                           </tr>
                           {group.batches.map((b: any) => (
                             <tr key={b.id} className="text-muted-foreground bg-white">
-                              <td colSpan={2} className="px-3 py-1.5 pl-6 flex items-center gap-2">
+                              <td colSpan={3} className="px-3 py-1.5 pl-6 flex items-center gap-2">
                                 <div className="w-1.5 h-1.5 rounded-full bg-border" />
                                 Batch: <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">{b.batch_code}</span>
                               </td>

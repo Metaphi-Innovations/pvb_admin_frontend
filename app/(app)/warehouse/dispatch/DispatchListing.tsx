@@ -22,7 +22,7 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus } from "./services";
 import {
   DELIVERY_STATUS_BADGE_CONFIG,
   TRANSPORTER_OPTIONS,
@@ -52,12 +52,13 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer" | "purchase_return">("sales_order");
+  const [subTab, setSubTab] = useState<"sales_order" | "sample" | "stock_transfer" | "purchase_return">("sales_order");
 
   // Modal states
-  const [revertTarget, setRevertTarget] = useState<DispatchRecord | null>(null);
-  const [challanTarget, setChallanTarget] = useState<DispatchRecord | null>(null);
-  const [deliveryTarget, setDeliveryTarget] = useState<DispatchRecord | null>(null);
+  const [revertTarget, setRevertTarget] = useState<any>(null);
+  const [challanTarget, setChallanTarget] = useState<any>(null);
+  const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
+  const [closeTarget, setCloseTarget] = useState<any>(null);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
 
   useEffect(() => {
@@ -71,10 +72,21 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   const [customerOptions, setCustomerOptions] = useState<{label: string, value: string}[]>([]);
   const [statusOptions, setStatusOptions] = useState<{label: string, value: string}[]>([]);
 
+  const [dispatchNoOptions, setDispatchNoOptions] = useState<{label: string, value: string}[]>([]);
+  const [sourceDocOptions, setSourceDocOptions] = useState<{label: string, value: string}[]>([]);
+  const [vehicleOptions, setVehicleOptions] = useState<{label: string, value: string}[]>([]);
+  const [driverOptions, setDriverOptions] = useState<{label: string, value: string}[]>([]);
+  const [sourceWarehouseOptions, setSourceWarehouseOptions] = useState<{label: string, value: string}[]>([]);
+
   const loadedFiltersRef = useRef<Set<string>>(new Set());
 
   const FILTER_FIELD_MAP: Record<string, { field: string; setter: (opts: { label: string; value: string }[]) => void }> = useMemo(() => ({
+    "dispatch_number": { field: "dispatch_number", setter: setDispatchNoOptions },
+    "source_document_no": { field: "source_document_no", setter: setSourceDocOptions },
     "customer.customer_name": { field: "customer__customer_name", setter: setCustomerOptions },
+    "source_warehouse_name": { field: "warehouse__warehouse_name", setter: setSourceWarehouseOptions },
+    "vehicleNumber": { field: "vehicle_number", setter: setVehicleOptions },
+    "driverName": { field: "transporter", setter: setDriverOptions },
     "status": { field: "status", setter: setStatusOptions },
   }), []);
 
@@ -86,11 +98,12 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
     try {
       let apiSourceType;
       if (subTab === "sales_order") apiSourceType = "normal_sales";
-      else if (subTab === "sample_order") apiSourceType = "sample_order";
+      else if (subTab === "sample") apiSourceType = "sample";
       else if (subTab === "stock_transfer") apiSourceType = "stock_transfer";
       else if (subTab === "purchase_return") apiSourceType = "purchase_return";
 
       const res = await getDispatchFilterDropdown(mapping.field, apiSourceType);
+      console.log(`Filter dropdown response for ${columnKey} (${mapping.field}):`, res);
       mapping.setter(res.map((x: any) => ({ label: x[mapping.field] || x.status || x.customer__customer_name, value: x[mapping.field] || x.status || x.customer__customer_name })));
     } catch (err) {
       console.error(`Failed to fetch filter options for ${columnKey}`, err);
@@ -120,14 +133,22 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       }
       
       if (subTab === "sales_order") queryFilters.source_type = "normal_sales";
-      else if (subTab === "sample_order") queryFilters.source_type = "sample_order";
+      else if (subTab === "sample") queryFilters.source_type = "sample";
       else if (subTab === "stock_transfer") queryFilters.source_type = "stock_transfer";
       else if (subTab === "purchase_return") queryFilters.source_type = "purchase_return";
 
       Object.entries(filters).forEach(([k, v]) => {
         if (k === "search") return;
         if (v !== undefined && v !== "") {
-           queryFilters[k] = v;
+          if (typeof v === "object" && v !== null && ("fromDate" in v || "toDate" in v)) {
+            queryFilters.range = queryFilters.range || {};
+            queryFilters.range[k] = {
+              from: (v as any).fromDate,
+              to: (v as any).toDate,
+            };
+          } else {
+            queryFilters[k] = v;
+          }
         }
       });
       
@@ -151,7 +172,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
 
 
   const partyHeader =
-    subTab === "sample_order"
+    subTab === "sample"
       ? "Issued To Employee"
       : subTab === "stock_transfer"
         ? "Target Warehouse"
@@ -164,33 +185,14 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   // Columns
   const salesOrderColumns = useMemo(() => {
     return [
-      {
-        key: "orderType",
-        header: "Order Type",
-        width: "100px",
-        render: (_: unknown, row: DispatchRecord) => {
-          const type = resolveWarehouseOrderType({
-            sourceDocumentType: row.sourceDocumentType,
-            source_type: row.source_type,
-            salesOrderNo: row.salesOrderNumber,
-            source_document_no: row.source_document_no,
-          });
-          const cfg = ORDER_TYPE_BADGE_CONFIG[type];
-          return (
-            <span
-              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
-            >
-              {cfg.label}
-            </span>
-          );
-        },
-      },
+
       {
         key: "dispatch_number",
         header: "Dispatch No",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: dispatchNoOptions,
         width: "135px",
         render: (_: unknown, row: DispatchRecord) => (
           <Link
@@ -206,7 +208,8 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         header: orderNoHeader,
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: sourceDocOptions,
         width: "140px",
         render: (_: unknown, row: DispatchRecord) => (
           <span className="font-mono text-xs font-semibold">
@@ -229,12 +232,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          const label =
-            type === "stock_transfer"
-              ? row.target_warehouse_name || row.targetWarehouse || (row.customer as any)?.customer_name || row.customer
-              : type === "purchase_return"
-                ? row.customer_name || (row.customer as any)?.customer_name || row.customer
-                : row.customer_name || (row.customer as any)?.customer_name || row.customer;
+          const label = row.customer_name || (row.customer as any)?.customer_name || row.customer || "Unknown";
           return (
             <div className="min-w-0">
               <span className="text-xs font-bold text-foreground block truncate">{label}</span>
@@ -249,6 +247,9 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         key: "source_warehouse_name",
         header: "Source Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: sourceWarehouseOptions,
         width: "150px",
         render: (_: unknown, row: DispatchRecord) => (
           <span className="text-xs text-foreground font-medium">
@@ -268,7 +269,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          if (type === "sample_order") {
+          if ((type as any) === "sample_order" || (type as any) === "sample") {
             return (
               <span className="font-mono text-xs tabular-nums">
                 {formatWarehouseOrderAmount(type, 0)}
@@ -283,11 +284,20 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         header: "Vehicle No",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: vehicleOptions,
         width: "120px",
         render: (_: unknown, row: DispatchRecord) => <span className="font-mono text-xs">{(row.vehicleNumber || row.vehicle_number || "—") as string}</span>,
       },
-      { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
+      { 
+        key: "driverName", 
+        header: "Driver / Transporter", 
+        sortable: true, 
+        filterable: true, 
+        filterType: "dropdown",
+        filterOptions: driverOptions,
+        render: (_: unknown, row: DispatchRecord) => <span className="text-xs text-muted-foreground">{(row.driverName || row.transporter || "—") as string}</span>
+      },
       {
         key: "dispatch_date",
         header: "Dispatch Date",
@@ -295,9 +305,17 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         filterable: true,
         filterType: "date",
         width: "135px",
-        render: (_: unknown, row: DispatchRecord) => (
-          <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
-        ),
+        render: (_: unknown, row: DispatchRecord) => {
+          const dateStr = row.dispatch_date || row.dispatchDate;
+          if (!dateStr) return <span className="text-xs">—</span>;
+          const date = new Date(dateStr);
+          const formatted = date.toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+          });
+          return <span className="text-xs">{formatted}</span>;
+        }
       },
       {
         key: "status",
@@ -330,7 +348,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         },
       },
     ] as ColumnConfig<DispatchRecord>[];
-  }, [partyHeader, orderNoHeader]);
+  }, [partyHeader, orderNoHeader, dispatchNoOptions, sourceDocOptions, customerOptions, sourceWarehouseOptions, vehicleOptions, driverOptions, statusOptions]);
 
   const columns = salesOrderColumns;
 
@@ -347,14 +365,14 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       action: "edit",
       icon: Pencil,
       onClick: (row) => router.push(`/warehouse/dispatch/edit/${row.id}`),
-      hide: (row) => row.deliveryStatus === "Delivered" || row.deliveryStatus === "Returned" || row.deliveryStatus === "Cancelled",
+      hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
     {
       label: "Revert",
       action: "revert",
       icon: RotateCcw,
       onClick: (row) => setRevertTarget(row),
-      hide: (row) => row.deliveryStatus === "Delivered" || row.deliveryStatus === "Returned" || row.deliveryStatus === "Cancelled",
+      hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
     {
       label: "Download Challan",
@@ -394,7 +412,14 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         setDeliveryTarget(row);
         setDeliveryForm({ deliveryDate: new Date().toISOString().split("T")[0], receiverName: "", remarks: "" });
       },
-      hide: (row) => row.deliveryStatus === "Delivered" || row.deliveryStatus === "Returned" || row.deliveryStatus === "Cancelled",
+      hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
+    },
+    {
+      label: "Close Dispatch",
+      action: "close_dispatch",
+      icon: X,
+      onClick: (row) => setCloseTarget(row),
+      hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
   ];
 
@@ -410,19 +435,36 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
     }
   };
 
-  const handleDeliveryConfirm = useCallback(() => {
+  const handleDeliveryConfirm = async () => {
     if (!deliveryTarget) return;
-    // Delivery tracking is currently mocked/unsupported in backend
-    console.log("Delivery confirmed for", deliveryTarget.id);
-    setDeliveryTarget(null);
-  }, [deliveryTarget]);
+    try {
+      await updateDispatchStatus(deliveryTarget.id, "DELIVERED");
+      fetchData();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setDeliveryTarget(null);
+    }
+  };
+
+  const handleCloseConfirm = async () => {
+    if (!closeTarget) return;
+    try {
+      await updateDispatchStatus(closeTarget.id, "CLOSED");
+      fetchData();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setCloseTarget(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
         <TabsList>
-          <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
-          <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
+          <TabsTrigger value="sales_order" className="text-xs">Normal Sales</TabsTrigger>
+          <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
           <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
           <TabsTrigger value="purchase_return" className="text-xs">Purchase Return</TabsTrigger>
         </TabsList>
@@ -501,7 +543,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
                 <div className="p-4 grid grid-cols-2 gap-4 text-xs">
                   <div className="space-y-2.5">
                     <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Sales Order No</p><p className="font-bold">{challanTarget.source_document_no || challanTarget.packing_done?.packing_done_no || "—"}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{((challanTarget as any).customer)?.customer_name || challanTarget.target_warehouse_name || challanTarget.customer_name || "—"}</p></div>
+                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{((challanTarget as any).customer)?.customer_name || challanTarget.customer_name || "--"}</p></div>
                     <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Dispatch Date</p><p className="font-bold">{challanTarget.dispatch_date ? new Date(challanTarget.dispatch_date).toLocaleDateString() : new Date(challanTarget.created_at).toLocaleDateString()}</p></div>
                   </div>
                   <div className="space-y-2.5">
@@ -611,6 +653,33 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               onClick={handleDeliveryConfirm}
             >
               <CheckCircle2 className="w-3.5 h-3.5" /> Confirm Delivery
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── CLOSE DISPATCH DIALOG ── */}
+      <Dialog open={!!closeTarget} onOpenChange={() => setCloseTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
+                <X className="w-4 h-4 text-red-500" />
+              </div>
+              Close Dispatch?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to close{" "}
+            <span className="font-semibold text-foreground">{closeTarget?.dispatchNumber || closeTarget?.dispatch_no}</span>? 
+            You will no longer be able to edit or revert it.
+          </p>
+          <DialogFooter className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCloseTarget(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={handleCloseConfirm}>
+              Confirm Close
             </Button>
           </DialogFooter>
         </DialogContent>

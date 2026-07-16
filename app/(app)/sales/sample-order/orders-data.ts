@@ -1,5 +1,6 @@
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
+import { resolveSalesOrderDealerPrice } from "@/app/(app)/masters/scheme/product-discount-scheme";
 
 export const SAMPLE_ORDER_APPROVAL_ENABLED = true;
 export const SAMPLE_BILLING_PARTY = "Paramverse Bio Head Office";
@@ -109,6 +110,7 @@ export interface SalesOrderLineItem {
   gstAmount: number;
   lineTotal: number;
   unit?: string;
+  packingUnit?: string;
   batchNumber?: string;
   expiryDate?: string;
 }
@@ -342,17 +344,21 @@ export function getSampleOrderDisplayRecipient(order: SalesOrder): string {
 
 export interface SalesOrderFormValues {
   orderDate: string;
+  customerId?: string | number | null;
   salesManId: string | number | null;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
   warehouseId?: string | number | null;
   warehouseName?: string;
   remarks?: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
 }
 
 export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
   return {
     orderDate: order.orderDate,
+    customerId: order.customerId ?? null,
     salesManId: order.salesManId,
     remarks: order.remarks || "",
     status: order.status,
@@ -361,6 +367,8 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     })),
     warehouseId: order.warehouseId ?? null,
     warehouseName: order.warehouseName || "",
+    billToAddressId: "", // will be set based on default if loading
+    shipToAddressId: "",
   };
 }
 
@@ -487,9 +495,19 @@ export function recalculateExpense(
 export function applyProductToLine(
   line: SalesOrderLineItem,
   product: ProductCatalogItem,
+  context?: { stateName: string; customerMasterType: string } | null,
 ): SalesOrderLineItem {
   const quantity = line.quantity > 0 ? line.quantity : 1;
-  const unitPrice = product.sellingPrice;
+  const resolved =
+    context?.stateName && context.customerMasterType
+      ? resolveSalesOrderDealerPrice({
+        productId: product.id as any,
+        stateName: context.stateName,
+        customerMasterType: context.customerMasterType,
+      })
+      : 0;
+  const dealerPrice = resolved > 0 ? resolved : product.sellingPrice;
+  const unitPrice = dealerPrice;
   const discount = SAMPLE_ORDER_LINE_DISCOUNT_PERCENT;
   const discountValue = calculateLineDiscountValue(quantity, unitPrice, discount);
   return {
@@ -505,6 +523,18 @@ export function applyProductToLine(
     gstAmount: 0,
     lineTotal: 0,
   };
+}
+
+export function repriceSampleOrderLineItems(
+  lines: SalesOrderLineItem[],
+  context: { stateName: string; customerMasterType: string } | null,
+): SalesOrderLineItem[] {
+  return lines.map((line) => {
+    if (!line.productId) return line;
+    const product = getProductById(line.productId);
+    if (!product) return line;
+    return applyProductToLine(line, product, context);
+  });
 }
 
 export function getOrderById(id: string | number): SalesOrder | undefined {

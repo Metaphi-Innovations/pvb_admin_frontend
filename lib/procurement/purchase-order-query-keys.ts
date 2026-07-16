@@ -14,8 +14,8 @@ export const purchaseOrderKeys = {
   summaries: () => [...purchaseOrderKeys.all, "summary"] as const,
   summary: () => [...purchaseOrderKeys.summaries()] as const,
   filterDropdowns: () => [...purchaseOrderKeys.all, "filter-dropdown"] as const,
-  filterDropdown: (fieldName: string) =>
-    [...purchaseOrderKeys.filterDropdowns(), fieldName] as const,
+  filterDropdown: (fieldName: string, scope?: string) =>
+    [...purchaseOrderKeys.filterDropdowns(), fieldName, scope ?? "all"] as const,
   supplierDropdown: () => [...purchaseOrderKeys.all, "supplier-dropdown"] as const,
   warehouseDropdown: (supplierId: string) =>
     [...purchaseOrderKeys.all, "warehouse-dropdown", supplierId] as const,

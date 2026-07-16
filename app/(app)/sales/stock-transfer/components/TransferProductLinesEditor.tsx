@@ -165,6 +165,7 @@ export default function TransferProductLinesEditor({
             expiryDate: b.expiry_date || null,
             availableQty: 0,
             status: b.expiry_date ? getStockStatus(b.expiry_date) : "Good",
+            costPrice: Number(b.unit_cost || 0),
           };
         }
         grouped[code].availableQty += Number(b.available_qty || 0);
@@ -254,9 +255,10 @@ export default function TransferProductLinesEditor({
     newLine.mfgDate = topSelectedBatch.mfgDate;
     newLine.expiryDate = topSelectedBatch.expiryDate;
     newLine.availableStock = topSelectedBatch.availableQty;
-    newLine.dealerPrice = topSelectedProduct.sellingPrice;
-    newLine.unitPrice = topSelectedProduct.sellingPrice;
-    newLine.finalRate = topSelectedProduct.sellingPrice;
+    const cp = topSelectedBatch.costPrice || 0;
+    newLine.dealerPrice = cp;
+    newLine.unitPrice = cp;
+    newLine.finalRate = cp;
     newLine.gstRate = topSelectedProduct.gstRate;
     newLine.quantityType = topQuantityType;
     newLine.caseQuantity = topCaseQuantity;
@@ -491,12 +493,16 @@ export default function TransferProductLinesEditor({
                       .map((l) => l.batchNumber)
                       .filter((bn): bn is string => typeof bn === "string")}
                     onSelect={(batch) => {
+                      const cp = batch.costPrice || 0;
                       updateLine(line.id, {
                         batchNumber: batch.batchNumber,
                         batchInventoryId: batch.batchInventoryId,
                         mfgDate: batch.mfgDate ?? undefined,
                         expiryDate: batch.expiryDate ?? undefined,
                         availableStock: batch.availableQty,
+                        dealerPrice: cp,
+                        unitPrice: cp,
+                        finalRate: cp,
                       });
                     }}
                   />
@@ -801,7 +807,7 @@ function BatchSelect({
 }: {
   productName: string;
   productCode: string;
-  batches: { productName: string; batchInventoryId: string; batchNumber: string; mfgDate: string | null; expiryDate: string | null; availableQty: number; status: string }[];
+  batches: { productName: string; batchInventoryId: string; batchNumber: string; mfgDate: string | null; expiryDate: string | null; availableQty: number; status: string; costPrice?: number }[];
   value?: string;
   disabled?: boolean;
   alreadyAddedBatchNumbers?: string[];

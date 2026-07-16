@@ -5,11 +5,25 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Field, TextField } from "@/components/ui/FormFields";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import {
+  fromBaseQuantity,
+  GRN_QUANTITY_TYPE_OPTIONS,
+  resolveGrnQuantityType,
+  toBaseQuantity,
+  type GrnQuantityType,
+} from "@/lib/warehouse/grn-quantity";
 import {
   useCreateGrn,
   useGrn,
@@ -40,7 +54,11 @@ interface LineInputState {
   expDate: string;
   maxQty: number;
   previousReceivedQty: number;
+  /** Stored / API base quantity. */
   receivedQty: number;
+  /** User-entered qty in quantityType units (cases or pieces). */
+  displayQty: number;
+  quantityType: GrnQuantityType;
   caseSize: number;
   batchLocked: boolean;
   productSnapshot: Record<string, unknown>;
@@ -119,6 +137,7 @@ export function ReturnGrnCreate({
     isLoading: previewLoading,
     isError: previewError,
     error: previewLoadError,
+    refetch: refetchPreviewNumber,
   } = useGrnPreviewNumber(!isEdit);
 
   const {
@@ -133,14 +152,17 @@ export function ReturnGrnCreate({
     isLoading: salesDropdownLoading,
     isError: salesDropdownError,
     error: salesDropdownLoadError,
-  } = useSalesReturnDropdown(undefined, isSales && !isEdit);
+  } = useSalesReturnDropdown(["Processed"], isSales && !isEdit);
 
   const {
     data: sampleDropdown = [],
     isLoading: sampleDropdownLoading,
     isError: sampleDropdownError,
     error: sampleDropdownLoadError,
-  } = useSampleReturnDropdown(undefined, !isSales && !isEdit);
+  } = useSampleReturnDropdown(
+    ["DRAFT", "SUBMITTED", "APPROVED"],
+    !isSales && !isEdit,
+  );
 
   const {
     data: salesReturnDetail,
@@ -196,6 +218,19 @@ export function ReturnGrnCreate({
               b.productId === item.productId ||
               b.productCode === item.productCode,
           );
+        const caseSize =
+          item.unitPerPacking != null && item.unitPerPacking > 0
+            ? item.unitPerPacking
+            : 1;
+        const quantityType = resolveGrnQuantityType(item.quantityType);
+        const receivedQty = item.receivedQty;
+        const displayQty = round2(
+          fromBaseQuantity({
+            baseQty: receivedQty,
+            quantityType,
+            packingSize: caseSize,
+          }),
+        );
         return {
           sourceItemId: item.sourceItemId || "",
           productId: item.productId,
@@ -207,14 +242,17 @@ export function ReturnGrnCreate({
           expDate: batch?.expDate || item.expDate || "",
           maxQty: item.orderedQty || item.receivedQty,
           previousReceivedQty: item.alreadyReceivedQty || 0,
-          receivedQty: item.receivedQty,
-          caseSize: item.unitPerPacking || 1,
+          receivedQty,
+          displayQty,
+          quantityType,
+          caseSize,
           batchLocked: Boolean(batch?.batchNumber || item.batchNumber),
           productSnapshot: {
             product_id: item.productId,
             product_code: item.productCode,
             product_name: item.productName,
             base_unit: item.unit || "Unit",
+            unit_per_packing: caseSize,
           },
         };
       }),
@@ -241,25 +279,52 @@ export function ReturnGrnCreate({
     }
 
     setLines(
-      activeReturn.items.map((item) => ({
-        sourceItemId: item.id,
-        productId: item.productId,
-        sku: item.sku || item.productCode,
-        productName: item.productName,
-        unit: item.unit || "Unit",
-        batchNo: item.batchNumber || "",
-        mfgDate: item.mfgDate || "",
-        expDate: item.expDate || "",
-        maxQty: item.returnedBaseQty,
-        previousReceivedQty: 0,
-        receivedQty: item.returnedBaseQty,
-        caseSize: item.unitPerPacking > 0 ? item.unitPerPacking : 1,
-        batchLocked: Boolean(item.batchNumber),
-        productSnapshot: item.productSnapshot,
-      })),
+      activeReturn.items.map((item) => {
+        const caseSize = item.unitPerPacking > 0 ? item.unitPerPacking : 1;
+        // Prefer source return quantity_type (PIECE/CASE); default CASE if missing.
+        const quantityType = resolveGrnQuantityType(item.quantityType);
+        const receivedQty = item.returnedBaseQty;
+        const displayQty = round2(
+          fromBaseQuantity({
+            baseQty: receivedQty,
+            quantityType,
+            packingSize: caseSize,
+          }),
+        );
+        return {
+          sourceItemId: item.id,
+          productId: item.productId,
+          sku: item.sku || item.productCode,
+          productName: item.productName,
+          unit: item.unit || "Unit",
+          batchNo: item.batchNumber || "",
+          mfgDate: item.mfgDate || "",
+          expDate: item.expDate || "",
+          maxQty: item.returnedBaseQty,
+          previousReceivedQty: 0,
+          receivedQty,
+          displayQty,
+          quantityType,
+          caseSize,
+          batchLocked: Boolean(item.batchNumber),
+          productSnapshot: {
+            ...item.productSnapshot,
+            unit_per_packing: caseSize,
+          },
+        };
+      }),
     );
     setFieldErrors((prev) => ({ ...prev, selectedReturnId: undefined, lines: undefined }));
   }, [isEdit, activeReturn, selectedReturnId]);
+
+  const clearLineError = (index: number) => {
+    setFieldErrors((prev) => {
+      if (!prev.lines?.[index]) return prev;
+      const nextLines = { ...prev.lines };
+      delete nextLines[index];
+      return { ...prev, lines: nextLines };
+    });
+  };
 
   const updateLineField = <K extends keyof LineInputState>(
     index: number,
@@ -271,12 +336,51 @@ export function ReturnGrnCreate({
       copy[index] = { ...copy[index], [field]: val };
       return copy;
     });
-    setFieldErrors((prev) => {
-      if (!prev.lines?.[index]) return prev;
-      const nextLines = { ...prev.lines };
-      delete nextLines[index];
-      return { ...prev, lines: nextLines };
+    clearLineError(index);
+  };
+
+  const handleQuantityTypeChange = (index: number, nextType: GrnQuantityType) => {
+    setLines((prev) => {
+      const copy = [...prev];
+      const line = copy[index];
+      const packingSize = line.caseSize > 0 ? line.caseSize : 1;
+      const displayQty = round2(
+        fromBaseQuantity({
+          baseQty: line.receivedQty,
+          quantityType: nextType,
+          packingSize,
+        }),
+      );
+      copy[index] = { ...line, quantityType: nextType, displayQty };
+      return copy;
     });
+    clearLineError(index);
+  };
+
+  const handleDisplayQtyChange = (index: number, raw: string) => {
+    setLines((prev) => {
+      const copy = [...prev];
+      const line = copy[index];
+      const packingSize = line.caseSize > 0 ? line.caseSize : 1;
+      const displayQty = Math.max(0, parseFloat(raw) || 0);
+      let receivedQty = displayQty;
+      try {
+        receivedQty = toBaseQuantity({
+          quantity: displayQty,
+          quantityType: line.quantityType,
+          packingSize,
+        });
+      } catch {
+        receivedQty = displayQty;
+      }
+      copy[index] = {
+        ...line,
+        displayQty,
+        receivedQty: round2(receivedQty),
+      };
+      return copy;
+    });
+    clearLineError(index);
   };
 
   const validate = (): boolean => {
@@ -296,12 +400,16 @@ export function ReturnGrnCreate({
 
     lines.forEach((line, idx) => {
       if (line.receivedQty > 0) hasPositiveReceive = true;
-      if (line.receivedQty < 0) {
+      if (line.receivedQty < 0 || line.displayQty < 0) {
         lineErrors[idx] = "Received quantity cannot be negative.";
         return;
       }
+      if (line.quantityType === "CASE" && !(line.caseSize > 0)) {
+        lineErrors[idx] = "Packing size is required when quantity type is Case.";
+        return;
+      }
       if (line.receivedQty > line.maxQty) {
-        lineErrors[idx] = `Received qty exceeds returned qty (${line.maxQty}).`;
+        lineErrors[idx] = `Received qty exceeds returned qty (${line.maxQty} base).`;
         return;
       }
       if (line.receivedQty > 0) {
@@ -358,12 +466,14 @@ export function ReturnGrnCreate({
       previous_received_base_qty: line.previousReceivedQty,
       current_received_base_qty: line.receivedQty,
       pending_base_qty: Math.max(0, round2(line.maxQty - line.previousReceivedQty - line.receivedQty)),
+      quantity_type: line.quantityType,
       productSnapshot: {
         ...line.productSnapshot,
         product_id: line.productId,
         product_code: line.sku,
         product_name: line.productName,
         base_unit: line.unit,
+        unit_per_packing: line.caseSize || 1,
       },
       batches: [
         {
@@ -374,6 +484,7 @@ export function ReturnGrnCreate({
           quantity_base_qty: line.receivedQty,
           rate: null,
           gst: null,
+          gstAmount: null,
         },
       ],
     }));
@@ -409,12 +520,27 @@ export function ReturnGrnCreate({
         router.push(basePath);
       }
     } catch (err) {
-      setFormError(
-        getErrorMessage(
-          err,
-          isEdit ? "Failed to update GRN." : "Failed to create GRN.",
-        ),
+      const message = getErrorMessage(
+        err,
+        isEdit ? "Failed to update GRN." : "Failed to create GRN.",
       );
+
+      if (!isEdit && /grn number .+ already exists/i.test(message)) {
+        try {
+          const { data: nextNumber } = await refetchPreviewNumber();
+          if (nextNumber) {
+            setGrnNo(nextNumber);
+            setFormError(
+              `${message} A new GRN number (${nextNumber}) has been loaded. Please submit again.`,
+            );
+            return;
+          }
+        } catch {
+          // Fall through to the original error if preview refresh fails.
+        }
+      }
+
+      setFormError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -629,48 +755,52 @@ export function ReturnGrnCreate({
         {lines.length > 0 && (
           <SectionCard
             title="Items to Receive"
-            description="Enter received quantities. Batch details are required for each received line."
+            description="Full return quantity is received by default (quantity locked). Manufacture and expiry dates can be updated if needed."
           >
             <div className="border border-border rounded-xl overflow-hidden bg-white shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[1100px]">
+                <table className="w-full text-left border-collapse min-w-[1280px]">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[200px]">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[180px]">
                         Product & SKU
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-32">
                         Batch No.
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-32">
                         MFG Date
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-36">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-32">
                         Expiry Date
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-20">
                         Case Size
                       </th>
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
                         Returned
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-28">
-                        Received Qty (Pcs)
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[120px] min-w-[120px]">
+                        Quantity Type
                       </th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-36">
-                        Case Breakdown
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[110px] min-w-[110px]">
+                        Quantity
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[110px] min-w-[110px]">
+                        Total Base Qty
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {lines.map((line, idx) => {
                       const caseSize = line.caseSize > 0 ? line.caseSize : 1;
-                      const cases = Math.floor(line.receivedQty / caseSize);
-                      const loose = line.receivedQty % caseSize;
-                      const breakdownText =
-                        cases > 0
-                          ? `${cases} Case${cases > 1 ? "s" : ""} + ${loose} Loose`
-                          : `${loose} Loose`;
+                      const displayReturned = round2(
+                        fromBaseQuantity({
+                          baseQty: line.maxQty,
+                          quantityType: line.quantityType,
+                          packingSize: caseSize,
+                        }),
+                      );
                       const lineError = fieldErrors.lines?.[idx];
 
                       return (
@@ -706,76 +836,71 @@ export function ReturnGrnCreate({
                             )}
                           </td>
                           <td className="p-3">
-                            {line.batchLocked && line.mfgDate ? (
-                              <span className="text-xs text-muted-foreground">{line.mfgDate}</span>
-                            ) : (
-                              <Input
-                                type="date"
-                                value={line.mfgDate}
-                                onChange={(e) =>
-                                  updateLineField(idx, "mfgDate", e.target.value)
-                                }
-                                className={cn(
-                                  "h-8 text-xs",
-                                  lineError?.includes("MFG") && "border-red-500",
-                                )}
-                              />
-                            )}
+                            <Input
+                              type="date"
+                              value={line.mfgDate}
+                              onChange={(e) =>
+                                updateLineField(idx, "mfgDate", e.target.value)
+                              }
+                              className={cn(
+                                "h-8 text-xs",
+                                lineError?.includes("MFG") && "border-red-500",
+                              )}
+                            />
                           </td>
                           <td className="p-3">
-                            {line.batchLocked && line.expDate ? (
-                              <span className="text-xs text-muted-foreground">{line.expDate}</span>
-                            ) : (
-                              <Input
-                                type="date"
-                                value={line.expDate}
-                                onChange={(e) =>
-                                  updateLineField(idx, "expDate", e.target.value)
-                                }
-                                className={cn(
-                                  "h-8 text-xs",
-                                  lineError?.includes("Expiry") && "border-red-500",
-                                )}
-                              />
-                            )}
+                            <Input
+                              type="date"
+                              value={line.expDate}
+                              onChange={(e) =>
+                                updateLineField(idx, "expDate", e.target.value)
+                              }
+                              className={cn(
+                                "h-8 text-xs",
+                                lineError?.includes("Expiry") && "border-red-500",
+                              )}
+                            />
                           </td>
                           <td className="p-3 text-center text-xs font-medium text-muted-foreground tabular-nums">
                             {caseSize}
                           </td>
                           <td className="p-3 text-center text-xs font-medium tabular-nums">
-                            {line.maxQty}
+                            {displayReturned}
+                          </td>
+                          <td className="p-3 align-middle w-[120px] min-w-[120px]">
+                            <Select value={line.quantityType} disabled>
+                              <SelectTrigger className="h-8 w-full text-xs rounded-lg bg-muted opacity-100">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GRN_QUANTITY_TYPE_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="p-3">
                             <div className="flex justify-center">
                               <Input
                                 type="number"
-                                min={0}
-                                max={line.maxQty}
-                                value={line.receivedQty || ""}
-                                onChange={(e) =>
-                                  updateLineField(
-                                    idx,
-                                    "receivedQty",
-                                    Math.max(0, Number(e.target.value) || 0),
-                                  )
-                                }
-                                className={cn(
-                                  "h-8 text-center text-xs font-medium w-20 focus:ring-brand-500",
-                                  line.receivedQty > line.maxQty &&
-                                    "border-red-500 text-red-600 focus:ring-red-500",
-                                )}
+                                readOnly
+                                disabled
+                                value={line.displayQty === 0 ? "" : line.displayQty}
+                                placeholder={line.quantityType === "CASE" ? "Cases" : "Pcs"}
+                                className="h-8 text-center text-xs font-medium w-24 bg-muted opacity-100 cursor-not-allowed"
                               />
                             </div>
-                            {line.receivedQty > line.maxQty && (
-                              <span className="block text-[8px] text-red-500 font-semibold text-center mt-1">
-                                Exceeds Return
-                              </span>
-                            )}
                           </td>
                           <td className="p-3">
-                            <span className="text-[10px] font-semibold text-brand-700 bg-brand-50/50 border border-brand-100/80 px-2.5 py-1 rounded-lg block text-center min-w-[100px] leading-tight">
-                              {breakdownText}
-                            </span>
+                            <Input
+                              type="number"
+                              readOnly
+                              value={line.receivedQty === 0 ? "" : line.receivedQty}
+                              placeholder="0"
+                              className="h-8 w-full text-xs text-center tabular-nums font-semibold rounded-lg bg-muted focus-visible:ring-0"
+                            />
                           </td>
                         </tr>
                       );

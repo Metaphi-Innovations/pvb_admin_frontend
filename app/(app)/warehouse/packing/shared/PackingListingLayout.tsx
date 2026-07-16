@@ -65,7 +65,7 @@ export function PackingListingLayout({ children }: { children: React.ReactNode }
         </div>
       }
       tabs={[
-        { value: "sales", label: "Sales" },
+        { value: "sales", label: "Normal Sales" },
         { value: "sample", label: "Sample" },
         { value: "stock-transfer", label: "Stock Transfer" },
         { value: "purchase-return", label: "Purchase Return" },

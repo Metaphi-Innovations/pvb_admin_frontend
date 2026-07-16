@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-const getDispatchRecords = (): any[] => [];
-const saveDispatchRecords = (r: any): void => {};
+
+import { getDispatches, getDispatchById } from "@/app/(app)/warehouse/dispatch/services";
+import { SalesReturnService } from "@/services/sales-return.service";
 
 import { DispatchDetailsPanel } from "../../components/DispatchDetailsPanel";
 import {
@@ -19,17 +20,13 @@ import {
   type BatchReturnInput,
 } from "../../components/SalesReturnProductForm";
 import {
-  getSalesReturnRecords,
   PIECES_PER_CASE,
-  saveSalesReturnRecords,
 } from "../../sales-return-data";
 import {
-  enrichDispatchForReturn,
-  getDeliveredSalesOrderDispatches,
   getSalesOrderNo,
+  enrichDispatchForReturn,
 } from "../../sales-return-utils";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
-import { processSalesReturnOnSave } from "@/lib/accounts/sales-return-credit-bridge";
 
 function sanitizeNumericInput(value: string): string {
   return value.replace(/\D/g, "");
@@ -41,23 +38,103 @@ function parseQty(value?: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
+  const packingNo = backendDispatch.packing_done?.packing_done_no || backendDispatch.packing_done_no || "PKG-2026-001";
+  
+  const products = (backendDispatch.items || []).map((item: any) => {
+    const unitPerPacking = Number(item.product?.unit_per_packing || 1);
+    const baseQty = Number(item.dispatched_base_qty || 0);
+    const cases = baseQty / unitPerPacking;
+    
+    const unitRate = Number(item.unit_price || item.unit_rate || item.product?.unit_price || 0);
+
+    return {
+      product: item.product?.product_name || "Unknown Product",
+      sku: item.product?.sku || item.product?.product_code || "",
+      packedQty: cases,
+      dispatchQty: cases,
+      unitRate: unitRate,
+      batchNo: item.inventory_batch?.batch_no || item.batch_code || "",
+      batchExpiryDate: item.inventory_batch?.expiry_date || null,
+      batchAllocations: [
+        {
+          batchNumber: item.inventory_batch?.batch_no || item.batch_code || "",
+          expiryDate: item.inventory_batch?.expiry_date || null,
+          allocatedQty: cases,
+        }
+      ]
+    };
+  });
+
+  return {
+    id: backendDispatch.id,
+    dispatchNumber: backendDispatch.dispatch_number,
+    salesOrderNumber: backendDispatch.sales_order?.so_number || backendDispatch.source_document_no || "",
+    customer: backendDispatch.customer?.customer_name || backendDispatch.customer_name || "",
+    vehicleNumber: backendDispatch.vehicle_number || "",
+    driverName: backendDispatch.driver_name || "",
+    transporterName: backendDispatch.transporter || "",
+    dispatchDate: backendDispatch.dispatch_date || backendDispatch.created_at || "",
+    deliveryStatus: "Delivered",
+    warehouse: backendDispatch.warehouse?.warehouse_name || "",
+    packingNumbers: [packingNo],
+    products: products,
+    customer_id: backendDispatch.customer_id,
+    warehouse_id: backendDispatch.warehouse_id,
+    packing_list_id: backendDispatch.packing_done?.packing_list_id || null,
+    source_document_id: backendDispatch.source_id,
+    deliveryDetails: {
+      deliveryDate: backendDispatch.dispatch_date 
+        ? new Date(backendDispatch.dispatch_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+      receiverName: "Vikram Mehta",
+      remarks: "Delivered in good condition.",
+    }
+  };
+}
+
 export default function NewSalesReturnPage() {
   const router = useRouter();
   const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState("");
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
   const [dispatch, setDispatch] = useState<ReturnType<typeof enrichDispatchForReturn> | null>(null);
+  const [rawDispatchDetails, setRawDispatchDetails] = useState<any>(null);
   const [returnEntries, setReturnEntries] = useState<Record<string, BatchReturnInput>>({});
   const [returnRemarks, setReturnRemarks] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const deliveredDispatches = useMemo(() => getDeliveredSalesOrderDispatches(), []);
+  const [deliveredDispatches, setDeliveredDispatches] = useState<any[]>([]);
+  const [loadingDispatches, setLoadingDispatches] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function fetchDispatches() {
+      try {
+        setLoadingDispatches(true);
+        const res = await getDispatches({
+          filters: { source_type: "normal_sales" },
+          page: 1,
+          page_size: 1000
+        });
+        const allDispatches = res?.data || [];
+        const eligible = allDispatches.filter((d: any) => d.status === "DELIVERED" || d.status === "DISPATCHED");
+        setDeliveredDispatches(eligible);
+      } catch (err) {
+        console.error("Failed to fetch delivered dispatches:", err);
+      } finally {
+        setLoadingDispatches(false);
+      }
+    }
+    fetchDispatches();
+  }, []);
 
   const salesOrderOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const item of deliveredDispatches) {
       const soNo = getSalesOrderNo(item);
       if (!soNo || seen.has(soNo)) continue;
-      seen.set(soNo, item.customer || item.customer_name || "");
+      const customerName = item.customer?.customer_name || item.customer_name || (typeof item.customer === 'string' ? item.customer : "");
+      seen.set(soNo, customerName);
     }
     return Array.from(seen.entries())
       .sort(([left], [right]) => left.localeCompare(right))
@@ -73,23 +150,35 @@ export default function NewSalesReturnPage() {
       .filter((item: DispatchRecord) => getSalesOrderNo(item) === selectedSalesOrderNo)
       .map((item: DispatchRecord) => ({
         value: item.id,
-        label: `${item.dispatchNumber || item.dispatch_no}${item.customer || item.customer_name ? ` - ${item.customer || item.customer_name}` : ""}`,
+        label: `${item.dispatchNumber || item.dispatch_no || item.dispatch_number}${item.customer || item.customer_name ? ` - ${item.customer || item.customer_name}` : ""}`,
       }));
   }, [deliveredDispatches, selectedSalesOrderNo]);
 
   useEffect(() => {
     if (!selectedDispatchId) {
       setDispatch(null);
+      setRawDispatchDetails(null);
       return;
     }
 
-    const record = deliveredDispatches.find((item: DispatchRecord) => item.id === selectedDispatchId);
-    if (record && getSalesOrderNo(record) === selectedSalesOrderNo) {
-      setDispatch(enrichDispatchForReturn(record));
-      setReturnEntries({});
-      setReturnRemarks("");
+    async function fetchDispatchDetails() {
+      try {
+        const rawDispatch = await getDispatchById(selectedDispatchId);
+        if (rawDispatch) {
+          setRawDispatchDetails(rawDispatch);
+          const mapped = mapBackendDispatchToFrontend(rawDispatch);
+          setDispatch(mapped);
+          setReturnEntries({});
+          setReturnRemarks("");
+        }
+      } catch (err) {
+        console.error("Failed to fetch dispatch details:", err);
+        setToast({ msg: "Failed to fetch dispatch details.", type: "error" });
+      }
     }
-  }, [deliveredDispatches, selectedDispatchId, selectedSalesOrderNo]);
+
+    fetchDispatchDetails();
+  }, [selectedDispatchId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -160,8 +249,8 @@ export default function NewSalesReturnPage() {
     });
   };
 
-  const handleSave = () => {
-    if (!dispatch) return;
+  const handleSave = async () => {
+    if (!dispatch || !rawDispatchDetails) return;
 
     if (summary.invalidBatchCount > 0) {
       setToast({ msg: "Please fix batch quantity validation errors before saving.", type: "error" });
@@ -174,37 +263,84 @@ export default function NewSalesReturnPage() {
       return;
     }
 
-    const existingReturns = getSalesReturnRecords();
-    const returnNumber = `RET-${new Date().getFullYear()}-${String(existingReturns.length + 1).padStart(3, "0")}`;
-    const newReturn = {
-      id: `ret-${Date.now()}`,
-      returnNumber,
-      dispatchNumber: dispatch.dispatchNumber || dispatch.dispatch_no || "",
-      salesOrderNumber: dispatch.salesOrderNumber || dispatch.source_document_no || "",
-      customer: dispatch.customer || dispatch.customer_name || "",
-      returnDate: new Date().toISOString().split("T")[0],
-      warehouse: dispatch.warehouse || dispatch.source_warehouse_name || "",
-      products: productsToReturn,
-      totalAmount: summary.totalAmount,
-      remarks: returnRemarks,
-    };
+    try {
+      setSaving(true);
 
-    const cnResult = processSalesReturnOnSave({ ...newReturn, status: "pending_approval" });
+      const items = productsToReturn.map((retItem) => {
+        const matchedItem = rawDispatchDetails.items?.find((di: any) => {
+          const diSku = di.product?.sku || di.product?.product_code || "";
+          const diBatch = di.inventory_batch?.batch_no || di.batch_code || "";
+          return diSku === retItem.sku && diBatch === retItem.batchNo;
+        });
 
-    const allDispatches = getDispatchRecords();
-    const dispatchIndex = allDispatches.findIndex((item) => item.id === dispatch.id);
-    if (dispatchIndex !== -1) {
-      allDispatches[dispatchIndex].deliveryStatus = "Returned";
-      saveDispatchRecords(allDispatches);
+        if (!matchedItem) {
+          throw new Error(`Could not find dispatch item for SKU: ${retItem.sku}, Batch: ${retItem.batchNo}`);
+        }
+
+        let batchKey = "";
+        for (const pg of packingGroups) {
+          if (pg.packingNumber === retItem.packingNumber) {
+            for (const prod of pg.products) {
+              if (prod.sku === retItem.sku) {
+                const matchedBatch = prod.batches.find((b) => b.batchNo === retItem.batchNo);
+                if (matchedBatch) {
+                  batchKey = matchedBatch.key;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        const qtyType = returnEntries[batchKey]?.quantityType || "Piece";
+
+        return {
+          product_id: matchedItem.product_id,
+          dispatch_item_id: matchedItem.id,
+          batch_code: retItem.batchNo,
+          dispatched_qty: retItem.dispatchQty,
+          total_return_pieces: retItem.returnTotalPieces,
+          amount: retItem.lineAmount,
+          status: "Returned",
+          qty: retItem.returnCaseQty || 0,
+          base_qty: retItem.returnTotalPieces,
+          reason: returnRemarks || "Sales Return",
+          remarks: returnRemarks || "",
+          quantity_type: qtyType,
+          cases: retItem.returnCaseQty || 0,
+          pieces: retItem.returnLooseQty || 0,
+        };
+      });
+
+      const payload = {
+        sales_order_id: dispatch.source_document_id,
+        customer_id: dispatch.customer_id,
+        warehouse_id: dispatch.warehouse_id,
+        dispatch_id: dispatch.id,
+        packing_list_id: dispatch.packing_list_id || null,
+        return_date: new Date().toISOString(),
+        remarks: returnRemarks,
+        vehicle_number: dispatch.vehicleNumber || null,
+        driver_name: dispatch.driverName || null,
+        transporter_name: dispatch.transporterName || null,
+        delivery_date: dispatch.dispatchDate || new Date().toISOString(),
+        received_by: "Vikram Mehta",
+        items,
+      };
+
+      const result = await SalesReturnService.create(payload);
+
+      setToast({
+        msg: `Sales return ${result?.data?.return_number || ""} saved successfully.`,
+        type: "success",
+      });
+      setTimeout(() => router.push(listHref), 800);
+    } catch (err: any) {
+      console.error("Failed to create sales return:", err);
+      const errMsg = err?.response?.data?.message || err?.message || "Failed to save return.";
+      setToast({ msg: errMsg, type: "error" });
+    } finally {
+      setSaving(false);
     }
-
-    setToast({
-      msg: cnResult.creditNoteNo
-        ? `${cnResult.message}`
-        : `Sales return ${returnNumber} saved successfully.`,
-      type: "success",
-    });
-    setTimeout(() => router.push(listHref), 800);
   };
 
   return (
@@ -220,9 +356,9 @@ export default function NewSalesReturnPage() {
           size="sm"
           className="h-8 gap-1.5 bg-red-600 text-xs text-white hover:bg-red-700"
           onClick={handleSave}
-          disabled={!dispatch || summary.selectedBatchCount === 0 || summary.totalAmount <= 0 || summary.invalidBatchCount > 0}
+          disabled={saving || !dispatch || summary.selectedBatchCount === 0 || summary.totalAmount <= 0 || summary.invalidBatchCount > 0}
         >
-          <RotateCcw className="h-3.5 w-3.5" /> Save Return
+          <RotateCcw className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save Return"}
         </Button>
       }
     >
@@ -239,10 +375,10 @@ export default function NewSalesReturnPage() {
                   setSelectedSalesOrderNo(soNo);
                   setSelectedDispatchId("");
                 }}
-                placeholder={salesOrderOptions.length ? "Select sales order..." : "No delivered sales orders available"}
+                placeholder={loadingDispatches ? "Loading..." : salesOrderOptions.length ? "Select sales order..." : "No delivered sales orders available"}
                 searchPlaceholder="Search sales order or customer..."
                 className="h-9 w-full text-xs"
-                disabled={salesOrderOptions.length === 0}
+                disabled={loadingDispatches || salesOrderOptions.length === 0}
               />
             </div>
             <div className="space-y-1.5">

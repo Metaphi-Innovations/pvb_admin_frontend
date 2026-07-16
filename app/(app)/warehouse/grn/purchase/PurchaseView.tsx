@@ -20,6 +20,13 @@ import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsRead
 import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
 import { getGrnDocumentStatus } from "@/lib/warehouse/document-status";
+import {
+  formatDisplayQuantity,
+  fromBaseQuantity,
+  resolvePackingSize,
+  resolvePoGrnQuantityType,
+} from "@/lib/warehouse/grn-quantity";
+import { round2 } from "@/lib/procurement/utils";
 
 const STATUS_CONFIG = {
   pending_qc: {
@@ -291,12 +298,47 @@ export function PurchaseView({ id }: { id: string }) {
                       Pending
                     </th>
                     <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">
+                      Quantity Type
+                    </th>
+                    <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">
                       Current Received
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {grn.items.map((it, idx) => (
+                  {grn.items.map((it, idx) => {
+                    const packingSize =
+                      resolvePackingSize({
+                        unitPerPacking: it.unitPerPacking,
+                      }) || 1;
+                    const quantityType = resolvePoGrnQuantityType(it.quantityType);
+                    const display = formatDisplayQuantity({
+                      baseQty: it.receivedQty,
+                      quantityType,
+                      packingSize,
+                    });
+                    const displayOrdered = round2(
+                      fromBaseQuantity({
+                        baseQty: it.orderedQty,
+                        quantityType,
+                        packingSize,
+                      }),
+                    );
+                    const displayPrevReceived = round2(
+                      fromBaseQuantity({
+                        baseQty: it.alreadyReceivedQty ?? 0,
+                        quantityType,
+                        packingSize,
+                      }),
+                    );
+                    const displayPending = round2(
+                      fromBaseQuantity({
+                        baseQty: it.pendingQty ?? 0,
+                        quantityType,
+                        packingSize,
+                      }),
+                    );
+                    return (
                     <tr
                       key={`${it.productId}-${it.poNumber}-${idx}`}
                       className="border-b border-border/50"
@@ -308,19 +350,26 @@ export function PurchaseView({ id }: { id: string }) {
                         {it.productCode || "—"}
                       </td>
                       <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
-                        {it.orderedQty}
+                        {displayOrdered}
                       </td>
                       <td className="px-4 py-2 text-xs text-center text-muted-foreground">
-                        {it.alreadyReceivedQty ?? 0}
+                        {displayPrevReceived}
                       </td>
                       <td className="px-4 py-2 text-xs text-center font-medium text-amber-700">
-                        {it.pendingQty ?? 0}
+                        {displayPending}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
+                        {display.label}
                       </td>
                       <td className="px-4 py-2 text-xs text-center font-bold text-brand-700 bg-brand-50/20">
-                        {it.receivedQty}
+                        {round2(display.quantity)}
+                        <span className="block text-[10px] font-normal text-muted-foreground">
+                          ({it.receivedQty} base)
+                        </span>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -335,7 +384,11 @@ export function PurchaseView({ id }: { id: string }) {
             <p className="text-[11px] text-muted-foreground">
               Read-only — batch and invoice line details captured at GRN creation.
             </p>
-            <BatchDetailsReadOnlyTable batches={grn.batches} invoiceMeta={invoiceMeta} />
+            <BatchDetailsReadOnlyTable
+              batches={grn.batches}
+              items={grn.items}
+              invoiceMeta={invoiceMeta}
+            />
           </div>
         )}
       </div>

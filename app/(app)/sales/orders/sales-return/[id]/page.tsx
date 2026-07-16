@@ -4,36 +4,89 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Package } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
+import { SalesReturnService, type SalesReturnDetail } from "@/services/sales-return.service";
 import {
   formatProductReturnQuantity,
   formatReturnAmount,
   getReturnTotalAmount,
-  getSalesReturnById,
   type SalesReturnRecord,
 } from "../../sales-return-data";
+
+function mapBackendReturnToFrontend(detail: SalesReturnDetail): SalesReturnRecord {
+  const products = (detail.items || []).map((item) => {
+    const unitPerPacking = Number(item.unitPerPacking) || 10;
+    const totalPieces = Number(item.returnedBaseQty || 0);
+    const cases = Math.floor(totalPieces / unitPerPacking);
+    const pieces = totalPieces % unitPerPacking;
+
+    return {
+      product: item.productName || "Unknown Product",
+      sku: item.sku || item.productCode || "",
+      packedQty: 0,
+      dispatchQty: 0,
+      returnQty: totalPieces,
+      unitRate: Number(item.amount || 0) / (totalPieces || 1),
+      batchNo: item.batchNumber || "",
+      returnCaseQty: cases,
+      returnLooseQty: pieces,
+      returnTotalPieces: totalPieces,
+      lineAmount: Number(item.amount || 0),
+      packingNumber: detail.packingNumber || "",
+    };
+  });
+
+  const totalAmount = products.reduce((acc, p) => acc + p.lineAmount, 0);
+
+  return {
+    id: detail.id,
+    returnNumber: detail.returnNumber,
+    dispatchNumber: detail.dispatchNumber || "",
+    salesOrderNumber: detail.salesOrderNumber || "",
+    customer: detail.customerName || "",
+    returnDate: detail.returnDate || "",
+    warehouse: detail.warehouseName || "",
+    products: products,
+    totalAmount: totalAmount,
+    remarks: detail.remarks || "",
+    status: detail.status?.toLowerCase() as any,
+  };
+}
 
 export default function SalesReturnViewPage() {
   const params = useParams();
   const id = params?.id as string;
   const [record, setRecord] = useState<SalesReturnRecord | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (id) setRecord(getSalesReturnById(id));
+    if (id) {
+      setLoading(true);
+      SalesReturnService.getById(id)
+        .then((data) => {
+          setRecord(mapBackendReturnToFrontend(data));
+        })
+        .catch((err) => {
+          console.error("Failed to load sales return details:", err);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
   }, [id]);
 
   const listHref = "/sales/orders?tab=sales_return";
 
-  if (!record) {
+  if (loading || !record) {
     return (
       <RecordDetailPage
         listHref={listHref}
         listLabel="Sales Returns"
         recordName="Sales Return"
-        statusLabel="Loading"
+        statusLabel={loading ? "Loading" : "Not Found"}
         statusVariant="neutral"
       >
         <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-          {id ? "Sales return record not found." : "Loading..."}
+          {loading ? "Loading sales return details..." : "Sales return record not found."}
         </div>
       </RecordDetailPage>
     );
@@ -125,4 +178,3 @@ export default function SalesReturnViewPage() {
     </RecordDetailPage>
   );
 }
-
