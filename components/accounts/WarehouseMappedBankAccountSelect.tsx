@@ -89,14 +89,24 @@ export function WarehouseMappedBankAccountSelect({
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
-            {options.map((opt) => (
-              <SelectItem key={opt.id} value={String(opt.id)} className="text-xs">
-                {opt.label}
-                {opt.bankName ? (
-                  <span className="text-muted-foreground ml-1">· {opt.bankName}</span>
-                ) : null}
-              </SelectItem>
-            ))}
+            {options.map((opt) => {
+              const ending = opt.accountNumber
+                ? String(opt.accountNumber).slice(-4)
+                : "";
+              const master = getBankAccountById(opt.id);
+              const branch = master?.branchName?.trim() || "";
+              return (
+                <SelectItem key={opt.id} value={String(opt.id)} className="text-xs">
+                  <span className="font-medium">{opt.bankName || opt.label}</span>
+                  {ending ? (
+                    <span className="text-muted-foreground ml-1">· …{ending}</span>
+                  ) : null}
+                  {branch ? (
+                    <span className="text-muted-foreground ml-1">· {branch}</span>
+                  ) : null}
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
       )}

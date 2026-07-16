@@ -327,6 +327,7 @@ export function isAccountingGroupNode(
 export function canAddSubGroupUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
   if (node.nodeLevel === "ledger") return false;
   if (node.nodeLevel !== "primary_head" && node.nodeLevel !== "account_group") return false;
+  if (resolveCoaAddLedgerPolicy(node, records).blocked) return false;
   const level = getCoaHierarchyLevel(records, node.id);
   return level <= 2;
 }

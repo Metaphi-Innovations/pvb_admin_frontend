@@ -332,8 +332,10 @@ function isPurchaseOrInventoryLedger(ledger: ChartOfAccount, records: ChartOfAcc
 function isDutiesTaxesLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
   const names = ledgerPathNamesLower(ledger, records);
   return (
+    ledgerHasAncestorNamed(ledger, "Duties & Taxes", records) ||
     ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records) ||
     ledgerHasAncestorNamed(ledger, "GST Payable", records) ||
+    ledgerHasAncestorNamed(ledger, "GST Input Credit", records) ||
     ledgerHasAncestorNamed(ledger, "GST Input", records) ||
     ledgerHasAncestorNamed(ledger, "GST Output", records) ||
     ledgerHasAncestorNamed(ledger, "TDS Payable", records) ||
@@ -461,8 +463,9 @@ function isGstPayableLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): 
   }
   return (
     ledgerHasAncestorNamed(ledger, "GST Payable", records) ||
+    ledgerHasAncestorNamed(ledger, "Duties & Taxes", records) ||
     ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records) ||
-    namesIncludeAny(names, ["gst payable", "cgst payable", "sgst payable", "igst payable", "output cgst", "output sgst", "output igst"])
+    namesIncludeAny(names, ["gst payable", "cgst payable", "sgst payable", "igst payable", "cgst output", "sgst output", "igst output", "output cgst", "output sgst", "output igst"])
   );
 }
 
@@ -752,7 +755,10 @@ export function ledgerMatchesVoucherScope(
     case "income":
       return ledger.accountType === "Income" || ledgerUnderIncome(ledger, records);
     case "tax":
-      return ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records);
+      return (
+        ledgerHasAncestorNamed(ledger, "Duties & Taxes", records) ||
+        ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records)
+      );
     case "loan_advance":
       return (
         ledgerHasAncestorNamed(ledger, "Loans & Advances", records) ||

@@ -10,6 +10,11 @@ import {
   parseTaxPct,
   loadInvoices,
 } from "@/app/(app)/accounts/invoices/invoices-data";
+import {
+  createEmptyAdditionalExpense,
+  mapSalesOrderExpenseNameToHead,
+  type InvoiceAdditionalExpense,
+} from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import { loadCustomers, type Customer } from "@/app/(app)/masters/customers/customer-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { findActivePricingForStock } from "@/app/(app)/masters/pricing/pricing-data";
@@ -42,7 +47,10 @@ import {
   getDispatchInvoiceType,
   getDispatchPartyName,
   type InvoiceDocumentType,
+  type SalesInvoiceSourceType,
 } from "@/lib/accounts/invoice-type";
+import { getQcPassedStockRecords } from "@/app/(app)/warehouse/stockoverview/mock-data";
+import { resolveWarehouseOrderType } from "@/app/(app)/warehouse/lib/order-document-type";
 
 const INVOICE_READY_STATUSES = new Set<DispatchRecord["deliveryStatus"]>([
   "Delivered",
@@ -194,10 +202,29 @@ export function buildInvoiceLineFromDispatchProduct(
   );
 
   const hasScheme = soLine?.schemeApplied === "Yes";
-  const effectiveRate = soLine?.finalRate || unitPrice;
-  const discountPct = hasScheme
-    ? soLine.schemeDiscountPercent || soLine.discount || 0
-    : soLine?.discount || 0;
+  /**
+   * Use list/dealer rate + commercial discount once.
+   * Do not set unitPrice to scheme finalRate AND re-apply scheme % (double discount).
+   */
+  const originalRate =
+    soLine?.originalDealerPrice ||
+    soLine?.dealerPrice ||
+    soLine?.unitPrice ||
+    unitPrice;
+  const discountPct = soLine?.discount || 0;
+  const batchNo =
+    dp.batchNo?.trim() ||
+    dp.batchAllocations?.[0]?.batchNumber?.trim() ||
+    "";
+  const expiryDate =
+    dp.batchExpiryDate?.trim() ||
+    dp.batchAllocations?.[0]?.expiryDate?.trim() ||
+    "";
+  const manufacturingDate = resolveBatchManufacturingDate(
+    master.sku ?? master.productCode ?? dp.sku,
+    dp.product,
+    batchNo,
+  );
 
   const line = recalculateLineItem({
     id: `dispatch-${dispatch.id}-${lineIndex}`,
@@ -206,7 +233,7 @@ export function buildInvoiceLineFromDispatchProduct(
     productCode: master.sku ?? master.productCode ?? dp.sku,
     description: [
       dispatch.dispatchNumber,
-      dp.batchNo ? `Batch ${dp.batchNo}` : "",
+      batchNo ? `Batch ${batchNo}` : "",
       dispatch.warehouse,
     ]
       .filter(Boolean)
@@ -214,12 +241,15 @@ export function buildInvoiceLineFromDispatchProduct(
     hsn: master.hsnCode ?? "",
     qty: dp.dispatchQty,
     unit,
-    unitPrice: effectiveRate,
+    unitPrice: originalRate,
     discountPct,
     taxPct,
     amount: 0,
-    dealerPrice: soLine?.dealerPrice ?? unitPrice,
-    finalRate: effectiveRate,
+    batchNo: batchNo || undefined,
+    manufacturingDate: manufacturingDate || undefined,
+    expiryDate: expiryDate || undefined,
+    dealerPrice: soLine?.dealerPrice ?? originalRate,
+    finalRate: soLine?.finalRate || originalRate,
     schemeApplied: hasScheme ? "Yes" : soLine?.schemeApplied ?? "No",
     schemeCode: soLine?.appliedSchemeCode ?? soLine?.schemeCode,
     schemeName: soLine?.appliedSchemeName ?? soLine?.schemeName,
@@ -229,6 +259,74 @@ export function buildInvoiceLineFromDispatchProduct(
   });
 
   return { line };
+}
+
+function resolveBatchManufacturingDate(
+  productCode: string,
+  productName: string,
+  batchNo: string,
+): string {
+  if (!batchNo.trim()) return "";
+  try {
+    const rows = getQcPassedStockRecords();
+    const hit = rows.find(
+      (r) =>
+        r.batchNumber.trim().toLowerCase() === batchNo.trim().toLowerCase() &&
+        (r.product.trim().toLowerCase() === productName.trim().toLowerCase() ||
+          !productCode ||
+          r.product.toLowerCase().includes(productCode.toLowerCase())),
+    );
+    return hit?.manufacturingDate?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function parseExpenseGstPct(rate: string | number | undefined): number {
+  if (typeof rate === "number") return Number.isFinite(rate) ? rate : 0;
+  const n = parseFloat(String(rate ?? "").replace("%", "").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Prorate Sales Order expenses by dispatched product taxable share. */
+export function mapProratedSalesOrderExpenses(
+  order: SalesOrder | undefined,
+  dispatchLineItems: InvoiceLineItem[],
+): InvoiceAdditionalExpense[] {
+  if (!order?.additionalExpenses?.length) return [];
+
+  const orderProductTaxable = (order.lineItems ?? []).reduce((sum, l) => {
+    const base = Math.max(0, (l.quantity || 0) * (l.unitPrice || l.dealerPrice || 0));
+    const disc = Math.max(0, l.discountValue || 0);
+    return sum + Math.max(0, base - disc);
+  }, 0);
+
+  const dispatchTaxable = dispatchLineItems.reduce((sum, l) => {
+    const { taxable } = calcLineAmounts(l);
+    return sum + taxable;
+  }, 0);
+
+  const ratio =
+    orderProductTaxable > 0
+      ? Math.min(1, dispatchTaxable / orderProductTaxable)
+      : 1;
+
+  return order.additionalExpenses
+    .filter((e) => (e.amount || 0) > 0 || (e.expenseName || "").trim())
+    .map((e) => {
+      const amount = Math.round((e.amount || 0) * ratio * 100) / 100;
+      const gstPct = parseExpenseGstPct(e.gstRate);
+      return {
+        ...createEmptyAdditionalExpense("sales_order"),
+        id: `so-exp-${order.id}-${e.id}`,
+        expenseHead: mapSalesOrderExpenseNameToHead(e.expenseName),
+        amount,
+        gstApplicable: gstPct > 0 || (e.gstAmount || 0) > 0,
+        gstPct: gstPct > 0 ? gstPct : 0,
+        remarks: e.remarks || `From Sales Order ${order.soNumber}`,
+        origin: "sales_order" as const,
+      };
+    });
 }
 
 export function computeDispatchInvoiceTotals(dispatch: DispatchRecord, customerId?: number | null) {
@@ -393,10 +491,12 @@ function dueDateFromTerms(baseDate: string, creditDays: number): string {
 
 export interface DispatchSalesInvoicePrefill {
   invoiceType: InvoiceDocumentType;
+  sourceType?: SalesInvoiceSourceType;
   salesOrderId: number | null;
   salesOrderNo: string;
   sourceDispatchId: string;
   dispatchNo: string;
+  dispatchDate: string;
   branch: string;
   warehouse: string;
   salesperson: string;
@@ -423,6 +523,7 @@ export interface DispatchSalesInvoicePrefill {
   receivableLedger: string;
   lineItems: InvoiceLineItem[];
   lineErrors: string[];
+  additionalExpenses: InvoiceAdditionalExpense[];
   nearExpirySchemes: DispatchNearExpirySchemeEntry[];
 }
 
@@ -481,7 +582,15 @@ export function buildSalesInvoicePrefillFromDispatch(
 
   const ledger = customer ? ensureCustomerLedgerFromMaster(customer) : null;
   const creditDays = custFields.creditDays ?? (isStockTransfer ? 0 : 30);
-  const invoiceDate = dispatch.dispatchDate || new Date().toISOString().slice(0, 10);
+  const warehouseOrderType = resolveWarehouseOrderType(dispatch);
+  const isSalesOrderSource =
+    !isStockTransfer && (warehouseOrderType === "sales_order" || Boolean(order));
+  const today = new Date().toISOString().slice(0, 10);
+  /** Sales Order generation: Invoice Date defaults to today; other flows keep dispatch date. */
+  const invoiceDate = isSalesOrderSource
+    ? today
+    : dispatch.dispatchDate || today;
+  const dispatchDate = dispatch.dispatchDate || dispatch.dispatch_date || "";
   const stockTransferDocNo =
     dispatch.source_document_no?.trim() || dispatch.salesOrderNumber;
 
@@ -501,12 +610,26 @@ export function buildSalesInvoicePrefillFromDispatch(
     else lineItems.push(result.line);
   });
 
+  const additionalExpenses = isSalesOrderSource
+    ? mapProratedSalesOrderExpenses(order, lineItems)
+    : [];
+
+  const sourceType: SalesInvoiceSourceType | undefined = isStockTransfer
+    ? "stock_transfer"
+    : warehouseOrderType === "sample_order"
+      ? "sample_order"
+      : isSalesOrderSource
+        ? "sales_order"
+        : undefined;
+
   return {
     invoiceType,
+    sourceType,
     salesOrderId: order?.id ?? null,
     salesOrderNo: isStockTransfer ? stockTransferDocNo : dispatch.salesOrderNumber,
     sourceDispatchId: dispatch.id,
     dispatchNo: dispatch.dispatchNumber,
+    dispatchDate,
     branch: "Head Office",
     warehouse: sourceWarehouse,
     salesperson: order?.salesManName ?? "",
@@ -533,6 +656,7 @@ export function buildSalesInvoicePrefillFromDispatch(
     receivableLedger: ledger?.accountName ?? custFields.receivableLedger,
     lineItems,
     lineErrors,
+    additionalExpenses,
     nearExpirySchemes: getEligibleNearExpirySchemes(dispatch),
   };
 }

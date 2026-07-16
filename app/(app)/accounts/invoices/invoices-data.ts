@@ -34,8 +34,14 @@ import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
-import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
-import { nextInvoiceDocumentNo } from "@/lib/accounts/invoice-type";
+import type {
+	InvoiceDocumentType,
+	SalesInvoiceSourceType,
+} from "@/lib/accounts/invoice-type";
+import {
+	nextInvoiceDocumentNo,
+	nextPvbSalesOrderInvoiceNo,
+} from "@/lib/accounts/invoice-type";
 import {
   mergeSalesInvoiceSeed,
   buildSalesInvoiceSeed,
@@ -110,6 +116,10 @@ export interface InvoiceLineItem {
 	amount: number;
 	creditedQty?: number;
 	creditedAmount?: number;
+	/** Dispatch batch snapshot (Sales Order generation). */
+	batchNo?: string;
+	manufacturingDate?: string;
+	expiryDate?: string;
 	/** Product Discount Scheme — carried from sales order / dispatch */
 	schemeApplied?: "Yes" | "No";
 	schemeCode?: string;
@@ -191,6 +201,13 @@ export interface InvoiceRecord {
 	/** Future: sales order link */
 	salesOrderId?: number | null;
 	sourceDispatchId?: string;
+	/** Persisted dispatch date (survives if dispatch record is later removed). */
+	dispatchDate?: string;
+	/**
+	 * Upstream generation source — preferred by Sales Invoice listing tabs.
+	 * Optional for backward compatibility with older localStorage records.
+	 */
+	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
 	dispatchNo?: string;
 	branch?: string;
@@ -827,6 +844,8 @@ export type InvoiceFormInput = {
 	salesOrderNo?: string;
 	salesOrderId?: number | null;
 	sourceDispatchId?: string;
+	dispatchDate?: string;
+	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
 	dispatchNo?: string;
 	branch?: string;
@@ -849,6 +868,23 @@ export type InvoiceFormInput = {
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 };
 
+/** True when a non-cancelled Sales Order invoice already exists for this dispatch. */
+export function findExistingSalesOrderInvoiceForDispatch(
+	records: InvoiceRecord[],
+	opts: { sourceDispatchId?: string; dispatchNo?: string },
+): InvoiceRecord | undefined {
+	const dispatchId = opts.sourceDispatchId?.trim();
+	const dispatchNo = opts.dispatchNo?.trim();
+	if (!dispatchId && !dispatchNo) return undefined;
+	return records.find((inv) => {
+		if (inv.invoiceStatus === "cancelled") return false;
+		if (inv.sourceType && inv.sourceType !== "sales_order") return false;
+		if (dispatchId && inv.sourceDispatchId?.trim() === dispatchId) return true;
+		if (dispatchNo && inv.dispatchNo?.trim() === dispatchNo) return true;
+		return false;
+	});
+}
+
 export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	for (const line of input.lineItems) {
 		if (!line.productId) continue;
@@ -859,9 +895,29 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 		}
 	}
 	const all = loadInvoices();
+	if (input.sourceType === "sales_order") {
+		const dup = findExistingSalesOrderInvoiceForDispatch(all, {
+			sourceDispatchId: input.sourceDispatchId,
+			dispatchNo: input.dispatchNo,
+		});
+		if (dup) {
+			throw new Error(
+				`Invoice already generated for this dispatch (${dup.invoiceNo}). Open the existing invoice instead.`,
+			);
+		}
+		if (!input.invoiceDate?.trim()) {
+			throw new Error("Invoice Date is required.");
+		}
+		if (input.bankAccountId == null) {
+			throw new Error("Select a Bank Account for the invoice.");
+		}
+	}
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
 	const invoiceType = input.invoiceType ?? "sales";
-	const invoiceNo = nextInvoiceNo(all, invoiceType, input.invoiceDate);
+	const invoiceNo =
+		input.sourceType === "sales_order"
+			? nextPvbSalesOrderInvoiceNo(all, input.invoiceDate)
+			: nextInvoiceNo(all, invoiceType, input.invoiceDate);
 	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
 		? input.nearExpirySchemeSettlements.map((entry) => ({
 				...entry,

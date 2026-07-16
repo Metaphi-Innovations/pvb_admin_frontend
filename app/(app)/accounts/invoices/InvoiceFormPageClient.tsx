@@ -16,6 +16,7 @@ import {
 } from "@/lib/settings/gst-tax-config";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
+  InvoiceFormAddress,
   InvoiceFormCard,
   InvoiceFormField,
   InvoiceFormInput,
@@ -38,6 +39,7 @@ import type { DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispat
 import { InvoiceApplicableSchemesPanel } from "./components/InvoiceApplicableSchemesPanel";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
 import { InvoiceProductLinesReadOnly } from "./components/InvoiceProductLinesReadOnly";
+import { SalesOrderInvoiceLinesEditor } from "./components/SalesOrderInvoiceLinesEditor";
 import { InvoiceAdditionalExpensesEditor } from "./components/InvoiceAdditionalExpensesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
 import { SalesInvoiceDocumentInfoSection } from "./components/SalesInvoiceDocumentInfoSection";
@@ -51,6 +53,7 @@ import {
   getCustomersForInvoice,
   getInvoiceById,
   getProductsForInvoice,
+  loadInvoices,
   updateInvoice,
   type InvoiceAttachment,
   type InvoiceNearExpirySchemeSettlement,
@@ -86,6 +89,12 @@ import {
   WarehouseMappedBankAccountSelect,
   getBankAccountPrintDetails,
 } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import {
+  peekNextPvbSalesOrderInvoiceNo,
+  type SalesInvoiceSourceType,
+} from "@/lib/accounts/invoice-type";
+import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
+import "./sales-order-invoice-form-compact.css";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -144,6 +153,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [roundOff, setRoundOff] = useState(0);
   const [salesOrderId, setSalesOrderId] = useState<number | null>(null);
   const [invoiceType, setInvoiceType] = useState<InvoiceDocumentType>("sales");
+  const [sourceType, setSourceType] = useState<SalesInvoiceSourceType | "">("");
   const [sourceDispatchId, setSourceDispatchId] = useState("");
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
   const [customerLedgerId, setCustomerLedgerId] = useState<number | null>(null);
@@ -157,6 +167,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [warehouse, setWarehouse] = useState("Central Warehouse");
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [remarks, setRemarks] = useState("");
+  const [narration, setNarration] = useState("");
   const [lines, setLines] = useState([createEmptyLine()]);
   const [attachments] = useState<InvoiceAttachment[]>([]);
   const [schemeSettlementEntries, setSchemeSettlementEntries] = useState<
@@ -165,6 +176,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [previewInvoiceNo, setPreviewInvoiceNo] = useState("");
+
+  const searchParams = useSearchParams();
+  const routeSourceType = searchParams.get("sourceType");
+  /** Create flow opened from Pending → Sales Order Invoices → Generate. */
+  const isSalesOrderGeneration =
+    !isEdit && (routeSourceType === "sales_order" || sourceType === "sales_order");
+  /** Create or edit of a Sales Order–sourced invoice (locked layout / output tax). */
+  const isSalesOrderInvoice = isSalesOrderGeneration || sourceType === "sales_order";
 
   const products = useMemo(
     () => getProductsForInvoice(customerId ? Number(customerId) : undefined),
@@ -177,7 +197,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
   }, [invoiceDate, creditDays]);
 
-  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (!isSalesOrderGeneration || isEdit) return;
+    if (!invoiceDate?.trim()) {
+      setPreviewInvoiceNo("");
+      return;
+    }
+    setPreviewInvoiceNo(peekNextPvbSalesOrderInvoiceNo(loadInvoices(), invoiceDate));
+  }, [isSalesOrderGeneration, isEdit, invoiceDate]);
 
   const applyCustomerTransactionFields = (fields: CustomerTransactionFields) => {
     setCustomerFields(fields);
@@ -230,13 +257,19 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
     setSalesOrderId(prefill.salesOrderId);
     setInvoiceType(prefill.invoiceType ?? "sales");
+    if (prefill.sourceType) setSourceType(prefill.sourceType);
     setSourceDispatchId(prefill.sourceDispatchId);
     setSelectedDispatchId(prefill.sourceDispatchId);
     setCustomerLedgerId(prefill.customerLedgerId);
     setSalesOrderRef(prefill.salesOrderNo);
     setDispatchRef(prefill.dispatchNo);
     const dispatch = prefill.sourceDispatchId ? getDispatchById(prefill.sourceDispatchId) : null;
-    setDispatchDate(dispatch?.dispatchDate ?? "");
+    setDispatchDate(
+      prefill.dispatchDate ||
+        dispatch?.dispatchDate ||
+        dispatch?.dispatch_date ||
+        "",
+    );
     setReferenceNo(prefill.referenceNo);
     setBranch(prefill.branch);
     setWarehouse(prefill.warehouse);
@@ -266,9 +299,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       : undefined;
     if (customer) {
       applyCustomerFields(customerToInvoiceFields(customer), customerMasterToTransactionFields(customer));
+      // Keep prefilled credit days / payment terms after master re-apply for SO generation.
+      if (prefill.sourceType === "sales_order") {
+        setCreditDays(prefill.creditDays);
+        setPaymentTerms(prefill.paymentTerms);
+        setDueDate(prefill.dueDate);
+        if (prefill.billingAddress) setBillingAddress(prefill.billingAddress);
+        if (prefill.shippingAddress) setShippingAddress(prefill.shippingAddress);
+        if (prefill.placeOfSupply) setPlaceOfSupply(prefill.placeOfSupply);
+        if (prefill.customerGst) setCustomerGst(prefill.customerGst);
+        if (prefill.customerCode) setCustomerCode(prefill.customerCode);
+      }
     }
 
     if (prefill.lineItems.length) setLines(prefill.lineItems);
+    if (prefill.additionalExpenses?.length) {
+      setAdditionalExpenses(prefill.additionalExpenses);
+    }
     setSchemeSettlementEntries(prefill.nearExpirySchemes);
   };
 
@@ -352,6 +399,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     const dispatchId = searchParams.get("dispatchId");
     const soId = searchParams.get("so");
     const dispatchNo = searchParams.get("dispatch");
+    const routeSource = searchParams.get("sourceType");
+    if (routeSource === "sales_order") setSourceType("sales_order");
+    else if (routeSource === "stock_transfer") setSourceType("stock_transfer");
+    else if (routeSource === "sample_order") setSourceType("sample_order");
     if (!dispatchId && !soId) return;
 
     const prefill = buildSalesInvoicePrefill(
@@ -367,6 +418,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setSalesOrderRef(order.soNumber);
         setReferenceNo(order.soNumber);
         setSalesOrderId(order.id);
+        if (routeSource === "sales_order") setSourceType("sales_order");
         if (order.customerId) {
           setCustomerId(String(order.customerId));
           const c = customers.find((x) => x.id === order.customerId);
@@ -378,6 +430,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return;
     }
 
+    if (routeSource === "sales_order" && !prefill.sourceType) {
+      prefill.sourceType = "sales_order";
+    }
     applySalesInvoicePrefill(prefill);
   }, [isEdit, searchParams, customers]);
 
@@ -424,19 +479,21 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setSalesOrderRef(rec.salesOrderNo ?? rec.referenceNo ?? "");
     setDispatchRef(rec.dispatchNo ?? "");
     const dispatch = rec.sourceDispatchId ? getDispatchById(rec.sourceDispatchId) : null;
-    setDispatchDate(dispatch?.dispatchDate ?? "");
+    setDispatchDate(rec.dispatchDate || dispatch?.dispatchDate || "");
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
     setBankAccountId(rec.bankAccountId ?? null);
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
     setInvoiceType(rec.invoiceType ?? (rec.invoiceNo.startsWith("STI-") ? "stock_transfer" : "sales"));
+    setSourceType(rec.sourceType ?? "");
     setSourceDispatchId(rec.sourceDispatchId ?? "");
     setSelectedDispatchId(rec.sourceDispatchId ?? "");
     setCustomerLedgerId(rec.customerLedgerId ?? null);
     setCustomerNotes(rec.customerNotes ?? "");
     setTermsAndConditions(rec.termsAndConditions ?? "");
     setInternalRemarks(rec.internalRemarks ?? rec.remarks ?? "");
+    setNarration(rec.internalRemarks || rec.remarks || rec.customerNotes || "");
     const expenses = resolveInvoiceAdditionalExpenses(
       rec.additionalExpenses,
       rec.shippingCharges,
@@ -470,11 +527,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       referenceNo,
       branch,
       warehouse,
+      bankAccountId,
       remarks,
+      narration,
       lines,
       additionalExpenses,
       roundOff,
       invoiceType,
+      sourceType,
       selectedDispatchId,
       customerNotes,
       termsAndConditions,
@@ -490,11 +550,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       referenceNo,
       branch,
       warehouse,
+      bankAccountId,
       remarks,
+      narration,
       lines,
       additionalExpenses,
       roundOff,
       invoiceType,
+      sourceType,
       selectedDispatchId,
       customerNotes,
       termsAndConditions,
@@ -596,69 +659,83 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setLutDeclaration("");
   }, [showSezSupply, sezLutResolution.appliesLut, sezLutResolution.lutNumber, sezLutResolution.declaration, invoiceDate]);
 
-  const buildInput = (invoiceStatus: InvoiceStatus) => ({
-    invoiceDate,
-    dueDate,
-    referenceNo: referenceNo.trim() || salesOrderRef.trim(),
-    remarks: internalRemarks.trim() || remarks.trim(),
-    customerId: customerId ? Number(customerId) : null,
-    customerName: customerName.trim(),
-    customerMobile: customerMobile.trim(),
-    customerEmail: customerEmail.trim(),
-    customerGst: customerGst.trim(),
-    customerGstCategory: customerGstCategory || undefined,
-    sezSupplyType: showSezSupply && sezSupplyType
-      ? (sezSupplyType as "lut_bond" | "with_igst")
-      : undefined,
-    lutNumber: sezLutResolution.appliesLut ? lutNumber : undefined,
-    lutDeclaration: sezLutResolution.appliesLut ? lutDeclaration : undefined,
-    billingAddress: billingAddress.trim(),
-    shippingAddress: shippingAddress.trim(),
-    pan: pan.trim(),
-    contactPerson: contactPerson.trim(),
-    paymentTerms,
-    creditDays,
-    placeOfSupply,
-    state: stateName,
-    gstTreatment,
-    receivableLedger,
-    salesOrderNo: salesOrderRef.trim(),
-    salesOrderId,
-    sourceDispatchId: sourceDispatchId || undefined,
-    customerLedgerId,
-    dispatchNo: dispatchRef.trim(),
-    branch: branch.trim(),
-    warehouse: warehouse.trim(),
-    bankAccountId,
-    salesperson: salesperson.trim(),
-    customerNotes: customerNotes.trim(),
-    termsAndConditions: termsAndConditions.trim(),
-    internalRemarks: internalRemarks.trim(),
-    ...deriveLegacyChargeFields(additionalExpenses),
-    additionalExpenses: additionalExpenses.filter(
-      (e) => e.expenseHead.trim() || e.amount > 0,
-    ),
-    roundOff,
-    adjustment: 0,
-    tdsTcs: 0,
-    lineItems: lines.filter((l) => l.productName || l.productId),
-    attachments,
-    invoiceStatus,
-    invoiceType,
-    nearExpirySchemeSettlements: schemeSettlementEntries.length
-      ? schemeSettlementEntries.map((entry) =>
-          "settlementMethod" in entry
-            ? entry
-            : mapDispatchSchemeToInvoiceSettlement(entry),
-        )
-      : undefined,
-  });
+  const buildInput = (invoiceStatus: InvoiceStatus) => {
+    const soMode = isSalesOrderGeneration || sourceType === "sales_order";
+    const narrationText = soMode ? narration.trim() : internalRemarks.trim() || remarks.trim();
+    return {
+      invoiceDate,
+      dueDate,
+      referenceNo: referenceNo.trim() || salesOrderRef.trim(),
+      remarks: narrationText,
+      customerId: customerId ? Number(customerId) : null,
+      customerName: customerName.trim(),
+      customerMobile: customerMobile.trim(),
+      customerEmail: customerEmail.trim(),
+      customerGst: customerGst.trim(),
+      customerGstCategory: customerGstCategory || undefined,
+      sezSupplyType: showSezSupply && sezSupplyType
+        ? (sezSupplyType as "lut_bond" | "with_igst")
+        : undefined,
+      lutNumber: sezLutResolution.appliesLut ? lutNumber : undefined,
+      lutDeclaration: sezLutResolution.appliesLut ? lutDeclaration : undefined,
+      billingAddress: billingAddress.trim(),
+      shippingAddress: shippingAddress.trim(),
+      pan: pan.trim(),
+      contactPerson: contactPerson.trim(),
+      paymentTerms,
+      creditDays,
+      placeOfSupply,
+      state: stateName,
+      gstTreatment,
+      receivableLedger,
+      salesOrderNo: salesOrderRef.trim(),
+      salesOrderId,
+      sourceDispatchId: sourceDispatchId || undefined,
+      dispatchDate: dispatchDate || undefined,
+      sourceType: (sourceType || (soMode ? "sales_order" : undefined)) as
+        | SalesInvoiceSourceType
+        | undefined,
+      customerLedgerId,
+      dispatchNo: dispatchRef.trim(),
+      branch: branch.trim(),
+      warehouse: warehouse.trim(),
+      bankAccountId,
+      salesperson: salesperson.trim(),
+      customerNotes: soMode ? "" : customerNotes.trim(),
+      termsAndConditions: soMode ? "" : termsAndConditions.trim(),
+      internalRemarks: soMode ? narrationText : internalRemarks.trim(),
+      ...deriveLegacyChargeFields(additionalExpenses),
+      additionalExpenses: additionalExpenses.filter(
+        (e) => e.expenseHead.trim() || e.amount > 0,
+      ),
+      roundOff,
+      adjustment: 0,
+      tdsTcs: 0,
+      lineItems: lines.filter((l) => l.productName || l.productId),
+      attachments,
+      invoiceStatus,
+      invoiceType,
+      nearExpirySchemeSettlements: schemeSettlementEntries.length
+        ? schemeSettlementEntries.map((entry) =>
+            "settlementMethod" in entry
+              ? entry
+              : mapDispatchSchemeToInvoiceSettlement(entry),
+          )
+        : undefined,
+    };
+  };
 
   const isManualInvoice = !sourceDispatchId;
 
   const isStockTransferInvoice = invoiceType === "stock_transfer";
 
+  const outputGstSplit = useMemo(
+    () => splitInvoiceGst(totals.taxAmount, interstateGst),
+    [totals.taxAmount, interstateGst],
+  );
+
   const submit = (asDraft: boolean) => {
+    if (saving) return;
     setError(null);
     setSuccess(null);
     if (!customerName.trim()) {
@@ -668,6 +745,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           : "Select a customer from Customer Master.",
       );
       return;
+    }
+    if (isSalesOrderGeneration || sourceType === "sales_order") {
+      if (!invoiceDate?.trim()) {
+        setError("Invoice Date is required.");
+        return;
+      }
+      if (bankAccountId == null) {
+        setError("Select a Bank Account for the invoice PDF.");
+        return;
+      }
     }
     const validLines = lines.filter((l) => l.productName || l.productId);
     if (validLines.length === 0) {
@@ -700,7 +787,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setSuccess(
           asDraft
             ? "Invoice saved as draft."
-            : "Invoice saved and posted to ledger successfully.",
+            : isSalesOrderGeneration
+              ? "Sales Invoice generated successfully."
+              : "Invoice saved and posted to ledger successfully.",
         );
         router.push(`${INVOICES_LIST_PATH}/${rec.id}`);
         router.refresh();
@@ -712,12 +801,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
   };
 
+  const soGen = isSalesOrderInvoice;
+
   return (
-    <>
+    <div className={cn(soGen && "sales-order-invoice-form-compact")}>
     <InvoiceFormLayout
-      title={isEdit ? "Edit Sales Invoice" : "Create Sales Invoice"}
-      subtitle="Select customer and dispatch to auto-fill invoice details, or create a manual invoice."
-      breadcrumb={accountsBreadcrumb("Transactions", isEdit ? "Edit Invoice" : "Create Invoice", INVOICES_LIST_PATH)}
+      title={
+        isEdit
+          ? "Edit Sales Invoice"
+          : soGen
+            ? "Generate Sales Invoice"
+            : "Create Sales Invoice"
+      }
+      subtitle={
+        soGen
+          ? "Details auto-fetched from linked Sales Order and Dispatch."
+          : "Select customer and dispatch to auto-fill invoice details, or create a manual invoice."
+      }
+      breadcrumb={accountsBreadcrumb(
+        "Transactions",
+        isEdit ? "Edit Invoice" : soGen ? "Generate Invoice" : "Create Invoice",
+        INVOICES_LIST_PATH,
+      )}
       backHref={INVOICES_LIST_PATH}
       onBackClick={requestCancel}
       actions={
@@ -731,22 +836,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           >
             Cancel
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs font-medium"
-            onClick={() => submit(true)}
-            disabled={saving}
-          >
-            Save Draft
-          </Button>
+          {!isSalesOrderGeneration && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-medium"
+              onClick={() => submit(true)}
+              disabled={saving}
+            >
+              Save Draft
+            </Button>
+          )}
           <Button
             size="sm"
             className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white border-0"
             onClick={() => submit(false)}
             disabled={saving}
           >
-            {saving ? "Saving…" : "Post Invoice"}
+            {saving
+              ? "Saving…"
+              : isSalesOrderGeneration
+                ? "Generate Invoice"
+                : "Post Invoice"}
           </Button>
         </div>
       }
@@ -762,7 +873,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className={cn(soGen ? "space-y-2.5" : "space-y-4")}>
         <InvoiceFormCard title={isStockTransferInvoice ? "Destination Warehouse" : "Customer"}>
           {isStockTransferInvoice ? (
             <div className={INVOICE_FORM_GRID_CLASS}>
@@ -770,6 +881,17 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               <InvoiceFormReadOnly label="Source Warehouse" value={warehouse} />
               <InvoiceFormReadOnly label="Dispatch No." value={dispatchRef} mono />
               <InvoiceFormReadOnly label="Stock Transfer No." value={salesOrderRef} mono />
+            </div>
+          ) : soGen ? (
+            <div className="so-inv-grid">
+              <InvoiceFormReadOnly label="Customer Name" value={customerName} />
+              <InvoiceFormReadOnly label="Customer Code" value={customerCode} mono />
+              <InvoiceFormReadOnly label="Customer GSTIN" value={customerGst} mono />
+              <InvoiceFormReadOnly label="Place of Supply" value={placeOfSupply} />
+              <InvoiceFormAddress label="Billing Address" value={billingAddress} className="sm:col-span-2" />
+              <InvoiceFormAddress label="Shipping Address" value={shippingAddress} className="sm:col-span-2" />
+              <InvoiceFormReadOnly label="Branch" value={branch} />
+              <InvoiceFormReadOnly label="Payment Terms" value={`${paymentTerms} · Net ${creditDays} days`} />
             </div>
           ) : (
             <SalesInvoiceCustomerSection
@@ -805,7 +927,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             customerId={customerId}
             selectedDispatchId={selectedDispatchId}
             onDispatchSelect={onDispatchSelect}
-            showDispatchSelect={!isStockTransferInvoice}
+            showDispatchSelect={!isStockTransferInvoice && !soGen}
+            previewInvoiceNo={soGen ? previewInvoiceNo : undefined}
+            compactGrid={soGen}
+            invoiceDateRequired={soGen}
           />
           {showSezSupply && (
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
@@ -819,24 +944,25 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               )}
             </div>
           )}
-          <div className="mt-3 max-w-md">
+          <div className={cn("mt-3", soGen ? "max-w-lg" : "max-w-md")}>
             <WarehouseMappedBankAccountSelect
               warehouseRef={warehouse}
               value={bankAccountId}
               onChange={(id) => setBankAccountId(id)}
-              label="Bank Account (for payment / print)"
+              label={soGen ? "Bank Account (on invoice PDF)" : "Bank Account (for payment / print)"}
+              required={soGen}
             />
             {bankAccountId != null && getBankAccountPrintDetails(bankAccountId) && (
               <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-                {getBankAccountPrintDetails(bankAccountId)!.bankName} ·{" "}
-                {getBankAccountPrintDetails(bankAccountId)!.accountNumber} · IFSC{" "}
-                {getBankAccountPrintDetails(bankAccountId)!.ifsc}
+                {getBankAccountPrintDetails(bankAccountId)!.bankName} · A/c ending{" "}
+                {String(getBankAccountPrintDetails(bankAccountId)!.accountNumber).slice(-4)} ·{" "}
+                {getBankAccountPrintDetails(bankAccountId)!.branchName || "—"}
               </p>
             )}
           </div>
         </InvoiceFormCard>
 
-        {!isStockTransferInvoice && (
+        {!isStockTransferInvoice && !soGen && (
           <InvoiceApplicableSchemesPanel
             lines={lines}
             nearExpiryEntries={schemeSettlementEntries}
@@ -844,7 +970,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         )}
 
         <Section title="Product Details">
-          {isManualInvoice && !isStockTransferInvoice ? (
+          {soGen ? (
+            <SalesOrderInvoiceLinesEditor
+              lines={lines}
+              onChange={setLines}
+              interstate={interstateGst}
+            />
+          ) : isManualInvoice && !isStockTransferInvoice ? (
             <InvoiceLinesEditor
               lines={lines}
               products={products}
@@ -866,80 +998,143 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           />
         </Section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
-          <Section title="Customer Notes &amp; Terms">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-            <InvoiceFormField label="Customer Notes">
-              <Textarea
-                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
-                value={customerNotes}
-                onChange={(e) => setCustomerNotes(e.target.value)}
-                placeholder="Thanks for your business."
-              />
-            </InvoiceFormField>
-            <InvoiceFormField label="Terms &amp; Conditions">
-              <Textarea
-                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
-                value={termsAndConditions}
-                onChange={(e) => setTermsAndConditions(e.target.value)}
-              />
-            </InvoiceFormField>
-            <InvoiceFormField label="Internal Remarks">
-              <Textarea
-                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
-                value={internalRemarks}
-                onChange={(e) => setInternalRemarks(e.target.value)}
-                placeholder="Internal use only"
-              />
-            </InvoiceFormField>
-          </div>
-        </Section>
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4 items-start",
+            soGen ? "lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5" : "lg:grid-cols-[minmax(0,1fr)_340px]",
+          )}
+        >
+          <Section title={soGen ? "Narration" : "Customer Notes &amp; Terms"}>
+            <div
+              className={cn(
+                "rounded-lg border border-slate-200 bg-white space-y-3",
+                soGen ? "p-3" : "p-4",
+              )}
+            >
+              {soGen ? (
+                <InvoiceFormField label="Narration">
+                  <Textarea
+                    className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[60px] max-h-28 resize-y text-xs")}
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                    placeholder="Optional narration for this invoice…"
+                    maxLength={500}
+                  />
+                </InvoiceFormField>
+              ) : (
+                <>
+                  <InvoiceFormField label="Customer Notes">
+                    <Textarea
+                      className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
+                      value={customerNotes}
+                      onChange={(e) => setCustomerNotes(e.target.value)}
+                      placeholder="Thanks for your business."
+                    />
+                  </InvoiceFormField>
+                  <InvoiceFormField label="Terms &amp; Conditions">
+                    <Textarea
+                      className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
+                      value={termsAndConditions}
+                      onChange={(e) => setTermsAndConditions(e.target.value)}
+                    />
+                  </InvoiceFormField>
+                  <InvoiceFormField label="Internal Remarks">
+                    <Textarea
+                      className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
+                      value={internalRemarks}
+                      onChange={(e) => setInternalRemarks(e.target.value)}
+                      placeholder="Internal use only"
+                    />
+                  </InvoiceFormField>
+                </>
+              )}
+            </div>
+          </Section>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
-          <h2 className="accounts-card-title">Invoice Summary</h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between gap-4 py-1">
-                <span className="text-muted-foreground">Product Sub Total</span>
+          <div
+            className={cn(
+              "rounded-lg border border-slate-200 bg-white space-y-2 lg:sticky lg:top-3 lg:z-10 shadow-sm",
+              soGen ? "p-3" : "p-4 space-y-3",
+            )}
+          >
+            <h2 className="accounts-card-title">Invoice Summary</h2>
+            <div className={cn("space-y-1.5", soGen ? "text-xs" : "text-sm space-y-2")}>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="text-muted-foreground">Gross Amount</span>
                 <span className="font-medium tabular-nums">{formatINR(totals.productSubtotal)}</span>
               </div>
-              {totals.expenseTaxable > 0 && (
-                <div className="flex items-center justify-between gap-4 py-1">
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="font-medium tabular-nums text-amber-800">
+                  {formatINR(totals.discountTotal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="text-muted-foreground">Taxable Amount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(
+                    Math.max(0, totals.productSubtotal - totals.discountTotal + totals.expenseTaxable),
+                  )}
+                </span>
+              </div>
+              {soGen ? (
+                interstateGst ? (
+                  <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
+                    <span className="text-muted-foreground">Output IGST</span>
+                    <span className="font-medium tabular-nums">{formatINR(outputGstSplit.igst)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
+                      <span className="text-muted-foreground">Output CGST</span>
+                      <span className="font-medium tabular-nums">{formatINR(outputGstSplit.cgst)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="text-muted-foreground">Output SGST</span>
+                      <span className="font-medium tabular-nums">{formatINR(outputGstSplit.sgst)}</span>
+                    </div>
+                  </>
+                )
+              ) : (
+                <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
+                  <span className="text-muted-foreground">GST Total</span>
+                  <span className="font-medium tabular-nums">{formatINR(totals.taxAmount)}</span>
+                </div>
+              )}
+              {(totals.expenseTaxable > 0 || soGen) && (
+                <div className="flex items-center justify-between gap-4 py-0.5">
                   <span className="text-muted-foreground">Additional Expenses</span>
                   <span className="font-medium tabular-nums">{formatINR(totals.expenseTaxable)}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between gap-4 py-1">
-                <span className="text-muted-foreground">Discount</span>
-                <span className="font-medium tabular-nums text-amber-800">{formatINR(totals.discountTotal)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-1 border-t border-border/60 pt-2">
-                <span className="text-muted-foreground">GST Total</span>
-                <span className="font-medium tabular-nums">{formatINR(totals.taxAmount)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-1">
-                <Label className="text-muted-foreground font-normal">Round Off</Label>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <Label className="text-muted-foreground font-normal text-xs">Round Off</Label>
                 <AccountsMoneyInput
                   className={CHARGE_INPUT_CLASS}
                   value={roundOff || ""}
                   onChange={(v) => setRoundOff(v)}
                 />
               </div>
-              <div className="flex items-center justify-between gap-4 py-2 border-t border-border/60">
-                <span className="font-semibold text-base">Total (₹)</span>
-                <span className="font-bold text-base tabular-nums text-brand-700">{formatINR(totals.grandTotal)}</span>
+              <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
+                <span className="font-semibold text-sm">Grand Total</span>
+                <span className="font-bold text-sm tabular-nums text-brand-700">
+                  {formatINR(totals.grandTotal)}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        <Section title="Ledger Impact Preview">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <SalesInvoiceAccountingPanel invoice={accountingPreview} />
-          </div>
-        </Section>
+        {!soGen && (
+          <Section title="Ledger Impact Preview">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <SalesInvoiceAccountingPanel invoice={accountingPreview} />
+            </div>
+          </Section>
+        )}
       </div>
     </InvoiceFormLayout>
     {discardDialog}
-  </>
+    </div>
   );
 }

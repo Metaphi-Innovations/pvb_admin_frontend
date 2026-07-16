@@ -1,56 +1,48 @@
 /**
- * TDS Master → Chart of Accounts synchronization (Accounts module only).
- * Reads TDS Master from localStorage; creates / updates / deactivates section-specific TDS ledgers.
+ * TDS Master → Chart of Accounts synchronization.
  *
- * Assets → Current Assets → TDS Receivable → Sec {code} - {name}
- * Liabilities → Current Liabilities → Duties & Taxes Payable → TDS Payable → Sec {code} - {name}
+ * Section rates and applicability remain in ERP TDS Master. Chart of Accounts
+ * exposes only one system-managed posting ledger per accounting side.
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import {
   loadChartOfAccounts,
-  nextId,
   saveChartOfAccounts,
 } from "@/app/(app)/accounts/data";
-import {
-  getTdsSectionCode,
-  loadTDSMasters,
-  type TDSMaster,
-} from "@/app/(app)/masters/tds/tds-data";
-import { ledgerHasVoucherPostings } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
-import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
-import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
 
 export const TDS_ERP_SOURCE = "tds_master";
 export const TDS_RECEIVABLE_GROUP = "TDS Receivable";
 export const TDS_PAYABLE_GROUP = "TDS Payable";
-export const TDS_DUTIES_GROUP = "Duties & Taxes Payable";
+export const TDS_DUTIES_GROUP = "Duties & Taxes";
 
 export type TdsLedgerKind = "payable" | "receivable";
 
-const TDS_KINDS: TdsLedgerKind[] = ["payable", "receivable"];
-
-const TDS_SYNC_META_KEY = "ds_tds_coa_sync_v2";
+const TDS_SYNC_META_KEY = "ds_tds_coa_sync_v3";
 
 export function tdsLedgerKindAlias(kind: TdsLedgerKind): string {
   return `tds:${kind}`;
 }
 
-/** Standard section ledger name: Sec 194C - Contractor Payment */
+/** Legacy section-ledger label retained only for old record recognition. */
 export function formatTdsSectionLedgerName(sectionCode: string, sectionName: string): string {
   const code = sectionCode.trim().toUpperCase();
   const name = sectionName.trim();
   return name ? `Sec ${code} - ${name}` : `Sec ${code}`;
 }
 
-/** @deprecated Use formatTdsSectionLedgerName */
+/** @deprecated TDS sections no longer create Chart of Accounts ledgers. */
 export function formatTdsLedgerName(_kind: TdsLedgerKind, sectionCode: string): string {
   return `Sec ${sectionCode.toUpperCase()}`;
 }
 
 export function isTdsCoaLedger(ledger: ChartOfAccount): boolean {
+  if (ledger.nodeLevel !== "ledger") return false;
+  if (ledger.accountName === TDS_PAYABLE_GROUP || ledger.accountName === TDS_RECEIVABLE_GROUP) {
+    return true;
+  }
   if (ledger.erpSourceModule === TDS_ERP_SOURCE) return true;
   if (!ledger.isSystemGenerated) return false;
   if (/^Sec \d+/i.test(ledger.accountName.trim()) && parseTdsSectionCode(ledger.accountName)) {
@@ -59,339 +51,91 @@ export function isTdsCoaLedger(ledger: ChartOfAccount): boolean {
   return /TDS (Payable|Receivable) - Sec \d+/i.test(ledger.accountName.trim());
 }
 
-function findAccountGroup(records: ChartOfAccount[], name: string): ChartOfAccount | undefined {
-  return records.find((r) => r.nodeLevel === "account_group" && r.accountName === name);
-}
-
-function findTdsLedgerByMaster(
-  records: ChartOfAccount[],
-  masterId: number,
-  kind: TdsLedgerKind,
-): ChartOfAccount | undefined {
-  return records.find(
-    (r) =>
-      r.nodeLevel === "ledger" &&
-      r.erpSourceModule === TDS_ERP_SOURCE &&
-      r.erpSourceId === masterId &&
-      r.alias === tdsLedgerKindAlias(kind),
+function isCanonicalTdsLedger(record: ChartOfAccount): boolean {
+  return (
+    record.nodeLevel === "ledger" &&
+    (record.accountName === TDS_PAYABLE_GROUP ||
+      record.accountName === TDS_RECEIVABLE_GROUP) &&
+    (record.alias === tdsLedgerKindAlias("payable") ||
+      record.alias === tdsLedgerKindAlias("receivable"))
   );
 }
 
-function findTdsLedgerByName(records: ChartOfAccount[], name: string): ChartOfAccount | undefined {
-  return records.find(
-    (r) => r.nodeLevel === "ledger" && r.accountName.toLowerCase() === name.toLowerCase(),
+/**
+ * Removes legacy per-section TDS COA records. ERP TDS Master remains the source
+ * for section-wise rates and reporting configuration.
+ */
+function removeLegacySectionLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
+  return records.filter((record) => !isTdsCoaLedger(record) || isCanonicalTdsLedger(record));
+}
+
+function migrateLegacyTdsVoucherLines(records: ChartOfAccount[]): boolean {
+  const payable = records.find(
+    (record) =>
+      isCanonicalTdsLedger(record) &&
+      record.alias === tdsLedgerKindAlias("payable"),
   );
-}
-
-function ledgerUnderGroupNamed(
-  ledger: ChartOfAccount,
-  records: ChartOfAccount[],
-  groupName: string,
-): boolean {
-  const target = groupName.toLowerCase();
-  return getAncestorPath(records, ledger.id).some(
-    (n) => n.accountName.toLowerCase() === target,
+  const receivable = records.find(
+    (record) =>
+      isCanonicalTdsLedger(record) &&
+      record.alias === tdsLedgerKindAlias("receivable"),
   );
-}
+  if (!payable || !receivable) return false;
 
-function findLegacyTdsLedgerBySection(
-  records: ChartOfAccount[],
-  sectionCode: string,
-  kind: TdsLedgerKind,
-): ChartOfAccount | undefined {
-  const code = sectionCode.toUpperCase();
-  const parentGroup = kind === "receivable" ? TDS_RECEIVABLE_GROUP : TDS_PAYABLE_GROUP;
-
-  return records.find((r) => {
-    if (r.nodeLevel !== "ledger") return false;
-    const parsed = parseTdsSectionCode(r.accountName);
-    if (parsed !== code) return false;
-
-    if (r.erpSourceModule === TDS_ERP_SOURCE && r.alias === tdsLedgerKindAlias(kind)) {
-      return true;
-    }
-
-    if (ledgerUnderGroupNamed(r, records, parentGroup)) return true;
-
-    const lower = r.accountName.toLowerCase();
-    const legacyPrefix = kind === "receivable" ? "tds receivable" : "tds payable";
-    return lower.includes(legacyPrefix) || lower.startsWith(`sec ${code.toLowerCase()}`);
-  });
-}
-
-function parentGroupForKind(
-  records: ChartOfAccount[],
-  kind: TdsLedgerKind,
-): ChartOfAccount | undefined {
-  if (kind === "receivable") {
-    return findAccountGroup(records, TDS_RECEIVABLE_GROUP);
+  const replacements = new Map<number, ChartOfAccount>();
+  for (const record of records) {
+    if (!isTdsCoaLedger(record) || isCanonicalTdsLedger(record)) continue;
+    const receivableKind =
+      record.alias === tdsLedgerKindAlias("receivable") ||
+      record.accountType === "Asset" ||
+      record.accountName.toLowerCase().includes("receivable");
+    replacements.set(record.id, receivableKind ? receivable : payable);
   }
-  return findAccountGroup(records, TDS_PAYABLE_GROUP);
-}
+  if (replacements.size === 0) return false;
 
-function ensureTdsPayableGroupStructure(records: ChartOfAccount[]): ChartOfAccount[] {
-  let next = records;
-  const duties = findAccountGroup(next, TDS_DUTIES_GROUP);
-  if (!duties) return next;
-
-  let tdsPayableGroup = findAccountGroup(next, TDS_PAYABLE_GROUP);
-  const legacyLedger = next.find(
-    (r) =>
-      r.nodeLevel === "ledger" &&
-      r.accountName === TDS_PAYABLE_GROUP &&
-      r.parentAccountId === duties.id,
-  );
-
-  if (!tdsPayableGroup && legacyLedger) {
-    const groupId = nextId(next);
-    const group: ChartOfAccount = {
-      ...legacyLedger,
-      id: groupId,
-      accountCode: "23112",
-      accountName: TDS_PAYABLE_GROUP,
-      nodeLevel: "account_group",
-      parentAccountId: duties.id,
-      parentAccount: duties.accountName,
-      specializedGroupType: "tds_payable",
-      openingBalance: 0,
-      balanceType: "Credit",
-      description: "System standard group",
-      isSystem: true,
-      isSystemGenerated: undefined,
-      erpSourceModule: undefined,
-      erpSourceId: undefined,
-      alias: "",
-    };
-    next = [...next.filter((r) => r.id !== legacyLedger.id), group];
-    tdsPayableGroup = group;
+  try {
+    const { loadVouchers, saveVouchers } =
+      require("@/app/(app)/accounts/vouchers/voucher-data") as typeof import("@/app/(app)/accounts/vouchers/voucher-data");
+    const vouchers = loadVouchers();
+    let changed = false;
+    const migrated = vouchers.map((voucher) => ({
+      ...voucher,
+      lines: voucher.lines.map((line) => {
+        if (line.ledgerId == null) return line;
+        const replacement = replacements.get(line.ledgerId);
+        if (!replacement) return line;
+        changed = true;
+        return {
+          ...line,
+          ledgerId: replacement.id,
+          ledgerName: replacement.accountName,
+        };
+      }),
+    }));
+    if (changed) saveVouchers(migrated);
+    return changed;
+  } catch {
+    return false;
   }
-
-  if (tdsPayableGroup && !tdsPayableGroup.specializedGroupType) {
-    next = patchLedger(next, tdsPayableGroup.id, { specializedGroupType: "tds_payable" });
-  }
-
-  const receivableGroup = findAccountGroup(next, TDS_RECEIVABLE_GROUP);
-  if (receivableGroup && !receivableGroup.specializedGroupType) {
-    next = patchLedger(next, receivableGroup.id, { specializedGroupType: "tds_receivable" });
-  }
-
-  tdsPayableGroup = findAccountGroup(next, TDS_PAYABLE_GROUP);
-  if (!duties || !tdsPayableGroup || tdsPayableGroup.parentAccountId === duties.id) {
-    return next;
-  }
-  return next.map((r) =>
-    r.id === tdsPayableGroup!.id
-      ? {
-          ...r,
-          parentAccountId: duties.id,
-          parentAccount: duties.accountName,
-          updatedBy: ACCOUNTS_CURRENT_USER,
-        }
-      : r,
-  );
 }
 
-function ledgerSpecForKind(
-  master: TDSMaster,
-  kind: TdsLedgerKind,
-  records: ChartOfAccount[],
-): {
-  parent: ChartOfAccount;
-  name: string;
-  accountType: ChartOfAccount["accountType"];
-  balanceType: ChartOfAccount["balanceType"];
-  sectionCode: string;
-} | null {
-  const parent = parentGroupForKind(records, kind);
-  const sectionCode = getTdsSectionCode(master).toUpperCase();
-  if (!parent || !sectionCode) return null;
-  return {
-    parent,
-    name: formatTdsSectionLedgerName(sectionCode, master.sectionName),
-    accountType: kind === "receivable" ? "Asset" : "Liability",
-    balanceType: kind === "receivable" ? "Debit" : "Credit",
-    sectionCode,
-  };
-}
-
-function createTdsLedger(
-  records: ChartOfAccount[],
-  master: TDSMaster,
-  kind: TdsLedgerKind,
-  spec: NonNullable<ReturnType<typeof ledgerSpecForKind>>,
-): ChartOfAccount[] {
-  const id = nextId(records);
-  const ledger: ChartOfAccount = {
-    id,
-    accountCode: `LED-${String(id).padStart(4, "0")}`,
-    accountName: spec.name,
-    alias: tdsLedgerKindAlias(kind),
-    accountType: spec.accountType,
-    nodeLevel: "ledger",
-    parentAccountId: spec.parent.id,
-    parentAccount: spec.parent.accountName,
-    description: `TDS Section ${spec.sectionCode} — ${master.sectionName} (auto-synced from TDS Master)`,
-    status: master.status,
-    usedIn: kind === "receivable" ? ["payments", "journal"] : ["procurement", "payments", "journal"],
-    isSystem: false,
-    isSystemGenerated: true,
-    erpSourceModule: TDS_ERP_SOURCE,
-    erpSourceId: master.id,
-    openingBalance: 0,
-    balanceType: spec.balanceType,
-    gstApplicable: false,
-    tdsApplicable: true,
-    costCenterApplicable: false,
-    bankAccountFlag: false,
-    createdBy: ACCOUNTS_CURRENT_USER,
-    updatedBy: ACCOUNTS_CURRENT_USER,
-  };
-  return [...records, ledger];
-}
-
-function patchLedger(
-  records: ChartOfAccount[],
-  ledgerId: number,
-  patch: Partial<ChartOfAccount>,
-): ChartOfAccount[] {
-  return records.map((r) =>
-    r.id === ledgerId ? { ...r, ...patch, updatedBy: ACCOUNTS_CURRENT_USER } : r,
-  );
-}
-
-function adoptLegacyLedger(
-  records: ChartOfAccount[],
-  ledger: ChartOfAccount,
-  master: TDSMaster,
-  kind: TdsLedgerKind,
-  spec: NonNullable<ReturnType<typeof ledgerSpecForKind>>,
-): ChartOfAccount[] {
-  return patchLedger(records, ledger.id, {
-    alias: tdsLedgerKindAlias(kind),
-    erpSourceModule: TDS_ERP_SOURCE,
-    erpSourceId: master.id,
-    isSystemGenerated: true,
-    status: master.status,
-    accountName: spec.name,
-    parentAccountId: spec.parent.id,
-    parentAccount: spec.parent.accountName,
-    accountType: spec.accountType,
-    balanceType: spec.balanceType,
-    tdsApplicable: true,
-    description: `TDS Section ${spec.sectionCode} — ${master.sectionName} (auto-synced from TDS Master)`,
-  });
-}
-
-function syncMasterLedgers(records: ChartOfAccount[], master: TDSMaster): ChartOfAccount[] {
-  let next = records;
-  const sectionCode = getTdsSectionCode(master).toUpperCase();
-  if (!sectionCode) return next;
-
-  const targetStatus = master.status;
-
-  for (const kind of TDS_KINDS) {
-    const spec = ledgerSpecForKind(master, kind, next);
-    if (!spec) continue;
-
-    let existing =
-      findTdsLedgerByMaster(next, master.id, kind) ??
-      findLegacyTdsLedgerBySection(next, sectionCode, kind);
-
-    if (!existing) {
-      const byName = findTdsLedgerByName(next, spec.name);
-      if (byName) {
-        existing = byName;
-        next = adoptLegacyLedger(next, byName, master, kind, spec);
-      }
-    } else if (existing.erpSourceModule !== TDS_ERP_SOURCE || existing.accountName !== spec.name) {
-      next = adoptLegacyLedger(next, existing, master, kind, spec);
-    }
-
-    if (!existing) {
-      next = createTdsLedger(next, master, kind, spec);
-      continue;
-    }
-
-    existing = findTdsLedgerByMaster(next, master.id, kind) ?? existing;
-    const nameSection = parseTdsSectionCode(existing.accountName);
-    const sectionChanged = nameSection != null && nameSection !== spec.sectionCode;
-
-    if (sectionChanged || existing.accountName !== spec.name) {
-      if (ledgerHasVoucherPostings(existing.id)) {
-        if (existing.status === "active") {
-          next = patchLedger(next, existing.id, { status: "inactive" });
-        }
-        const replacement = findTdsLedgerByName(next, spec.name);
-        if (!replacement) {
-          next = createTdsLedger(next, master, kind, spec);
-        } else if (replacement.status !== targetStatus) {
-          next = patchLedger(next, replacement.id, { status: targetStatus });
-        }
-      } else {
-        next = patchLedger(next, existing.id, {
-          accountName: spec.name,
-          parentAccountId: spec.parent.id,
-          parentAccount: spec.parent.accountName,
-          accountType: spec.accountType,
-          balanceType: spec.balanceType,
-          status: targetStatus,
-          description: `TDS Section ${spec.sectionCode} — ${master.sectionName} (auto-synced from TDS Master)`,
-        });
-      }
-      continue;
-    }
-
-    if (existing.parentAccountId !== spec.parent.id && !ledgerHasVoucherPostings(existing.id)) {
-      next = patchLedger(next, existing.id, {
-        parentAccountId: spec.parent.id,
-        parentAccount: spec.parent.accountName,
-        accountType: spec.accountType,
-        balanceType: spec.balanceType,
-      });
-    }
-
-    if (existing.status !== targetStatus) {
-      next = patchLedger(next, existing.id, { status: targetStatus });
-    }
-  }
-
-  return next;
-}
-
-/** Sync all TDS Master sections to COA ledgers under TDS Receivable & TDS Payable. */
+/**
+ * Ensures the canonical system ledgers are the only TDS nodes in the COA.
+ * System hierarchy merging recreates the two canonical ledgers when required.
+ */
 export function syncTdsCoaFromMaster(): boolean {
   if (typeof window === "undefined") return false;
 
-  let records = loadChartOfAccounts();
-  records = ensureTdsPayableGroupStructure(records);
+  const records = loadChartOfAccounts();
+  const vouchersChanged = migrateLegacyTdsVoucherLines(records);
+  const cleaned = removeLegacySectionLedgers(records);
+  const changed = cleaned.length !== records.length;
 
-  const receivableGroup = findAccountGroup(records, TDS_RECEIVABLE_GROUP);
-  const payableGroup = findAccountGroup(records, TDS_PAYABLE_GROUP);
-  if (!receivableGroup || !payableGroup) return false;
-
-  const masters = loadTDSMasters();
-  const before = JSON.stringify(
-    records
-      .filter((r) => r.erpSourceModule === TDS_ERP_SOURCE || isTdsCoaLedger(r))
-      .map((r) => ({ id: r.id, name: r.accountName, status: r.status, parent: r.parentAccountId })),
-  );
-
-  for (const master of masters) {
-    records = syncMasterLedgers(records, master);
-  }
-
-  const after = JSON.stringify(
-    records
-      .filter((r) => r.erpSourceModule === TDS_ERP_SOURCE || isTdsCoaLedger(r))
-      .map((r) => ({ id: r.id, name: r.accountName, status: r.status, parent: r.parentAccountId })),
-  );
-
-  if (before !== after) {
-    saveChartOfAccounts(records);
+  if (changed) {
+    saveChartOfAccounts(cleaned);
     localStorage.setItem(TDS_SYNC_META_KEY, new Date().toISOString());
     dispatchCoaChanged();
-    return true;
   }
 
-  return false;
+  return changed || vouchersChanged;
 }

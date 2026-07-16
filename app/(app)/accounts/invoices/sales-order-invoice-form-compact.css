@@ -1,0 +1,54 @@
+/* Sales Order Pending → Generate Invoice only (module-scoped). */
+
+.sales-order-invoice-form-compact {
+  --so-inv-gap: 0.5rem;
+}
+
+.sales-order-invoice-form-compact .accounts-invoice-form-main,
+.sales-order-invoice-form-compact [class*="space-y-4"] {
+  gap: 0.625rem;
+}
+
+.sales-order-invoice-form-compact .invoice-form-card,
+.sales-order-invoice-form-compact .rounded-lg.border.border-slate-200,
+.sales-order-invoice-form-compact .rounded-lg.border.border-border {
+  padding: 0.625rem 0.75rem;
+}
+
+.sales-order-invoice-form-compact label,
+.sales-order-invoice-form-compact .accounts-form-label {
+  font-size: 12px;
+  margin-bottom: 0.125rem;
+}
+
+.sales-order-invoice-form-compact input,
+.sales-order-invoice-form-compact select,
+.sales-order-invoice-form-compact button[role="combobox"],
+.sales-order-invoice-form-compact .accounts-filter-control {
+  height: 36px !important;
+  font-size: 12px !important;
+}
+
+.sales-order-invoice-form-compact textarea {
+  min-height: 60px;
+  max-height: 7rem;
+  font-size: 12px;
+}
+
+.sales-order-invoice-form-compact .so-inv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+@media (max-width: 1024px) {
+  .sales-order-invoice-form-compact .so-inv-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-order-invoice-form-compact .so-inv-grid {
+    grid-template-columns: 1fr;
+  }
+}

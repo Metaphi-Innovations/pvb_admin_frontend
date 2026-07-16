@@ -63,7 +63,7 @@ const LIABILITY_SUBGROUP_BASE: Record<string, number> = {
   "NBFC Loans": 680000,
   "Director / Related Party Loans": 320000,
   "Trade Payables / Sundry Creditors": 0,
-  "Duties & Taxes Payable": 85000,
+  "Duties & Taxes": 85000,
   "TDS Payable": 42000,
   "GST Payable": 95000,
   "PF / ESIC Payable": 78000,

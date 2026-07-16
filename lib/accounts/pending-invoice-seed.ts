@@ -17,7 +17,7 @@ import {
   ensureNearExpiryPendingDemoCustomer,
 } from "@/lib/accounts/pending-invoice-near-expiry-demo";
 
-export const PENDING_INVOICE_SEED_VERSION = 4;
+export const PENDING_INVOICE_SEED_VERSION = 7;
 
 export const PENDING_SEED_DISPATCH_IDS = {
   ne001: NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID,
@@ -25,6 +25,9 @@ export const PENDING_SEED_DISPATCH_IDS = {
   se011: "dp-pi-se-011",
   st004: "dp-pi-st-004",
   st007: "dp-pi-st-007",
+  sm003: "dp-pi-sm-003",
+  sm006: "dp-pi-sm-006",
+  sm009: "dp-pi-sm-009",
 } as const;
 
 type SeedRowDef = {
@@ -99,6 +102,79 @@ const STOCK_TRANSFER_DISPATCHES: DispatchRecord[] = [
   },
 ];
 
+const SAMPLE_ORDER_DISPATCHES: DispatchRecord[] = [
+  {
+    id: PENDING_SEED_DISPATCH_IDS.sm003,
+    dispatchNumber: "DSP-SM-2026-003",
+    salesOrderNumber: "SM-2026-003",
+    customer: "Krishi Seva Kendra",
+    vehicleNumber: "MH-12-SM-3303",
+    driverName: "Vijay More",
+    transporterName: "Local Van",
+    dispatchDate: demoDateAt(1),
+    deliveryStatus: "Delivered",
+    warehouse: "Central Warehouse",
+    packingNumbers: ["PKG-SM-2026-003"],
+    products: [
+      { product: "Hybrid Maize Seed", sku: "SKU-MZ-12", packedQty: 40, dispatchQty: 40, unitRate: 0 },
+    ],
+    dispatch_id: PENDING_SEED_DISPATCH_IDS.sm003,
+    dispatch_no: "DSP-SM-2026-003",
+    source_type: "sample_order",
+    sourceDocumentType: "Sample Order",
+    source_document_no: "SM-2026-003",
+    customer_name: "Krishi Seva Kendra",
+    dispatch_status: "Delivered",
+  },
+  {
+    id: PENDING_SEED_DISPATCH_IDS.sm006,
+    dispatchNumber: "DSP-SM-2026-006",
+    salesOrderNumber: "SM-2026-006",
+    customer: "Field Demo — Nashik Cluster",
+    vehicleNumber: "MH-15-SM-6606",
+    driverName: "Amit Deshmukh",
+    transporterName: "Company Vehicle",
+    dispatchDate: demoDateAt(2),
+    deliveryStatus: "Delivered",
+    warehouse: "West Zone Hub",
+    packingNumbers: ["PKG-SM-2026-006"],
+    products: [
+      { product: "Bio Fertilizer 1L", sku: "SKU-BF-1L", packedQty: 25, dispatchQty: 25, unitRate: 0 },
+    ],
+    dispatch_id: PENDING_SEED_DISPATCH_IDS.sm006,
+    dispatch_no: "DSP-SM-2026-006",
+    source_type: "sample_order",
+    sourceDocumentType: "Sample Order",
+    source_document_no: "SM-2026-006",
+    customer_name: "Field Demo — Nashik Cluster",
+    dispatch_status: "Delivered",
+  },
+  {
+    id: PENDING_SEED_DISPATCH_IDS.sm009,
+    dispatchNumber: "DSP-SM-2026-009",
+    salesOrderNumber: "SM-2026-009",
+    customer: "Green Valley Agro",
+    vehicleNumber: "KA-09-SM-9909",
+    driverName: "Arun Yadav",
+    transporterName: "Blue Dart Logistics",
+    dispatchDate: demoDateAt(0),
+    deliveryStatus: "Delivered",
+    warehouse: "North Zone Hub",
+    packingNumbers: ["PKG-SM-2026-009"],
+    products: [
+      { product: "Hybrid Tomato Seeds", sku: "SKU-TM-06", packedQty: 60, dispatchQty: 60, unitRate: 0 },
+      { product: "Vermicompost", sku: "SKU-VC-08", packedQty: 30, dispatchQty: 30, unitRate: 0 },
+    ],
+    dispatch_id: PENDING_SEED_DISPATCH_IDS.sm009,
+    dispatch_no: "DSP-SM-2026-009",
+    source_type: "sample_order",
+    sourceDocumentType: "Sample Order",
+    source_document_no: "SM-2026-009",
+    customer_name: "Green Valley Agro",
+    dispatch_status: "Delivered",
+  },
+];
+
 const SALES_DISPATCHES: DispatchRecord[] = [
   {
     id: PENDING_SEED_DISPATCH_IDS.we008,
@@ -108,7 +184,7 @@ const SALES_DISPATCHES: DispatchRecord[] = [
     vehicleNumber: "MH-12-AB-1234",
     driverName: "Ramesh Kumar",
     transporterName: "Blue Dart Logistics",
-    dispatchDate: demoDateAt(2),
+    dispatchDate: demoDateAt(0),
     deliveryStatus: "Delivered",
     warehouse: "Central Warehouse",
     packingNumbers: ["PKG-2026-WE-008"],
@@ -131,7 +207,7 @@ const SALES_DISPATCHES: DispatchRecord[] = [
     vehicleNumber: "GJ-01-CD-5678",
     driverName: "Sunil Patil",
     transporterName: "DTDC Cargo",
-    dispatchDate: demoDateAt(3),
+    dispatchDate: demoDateAt(1),
     deliveryStatus: "Delivered",
     warehouse: "Central Warehouse",
     packingNumbers: ["PKG-2026-SE-011"],
@@ -155,7 +231,7 @@ const SEED_ROW_DEFS: SeedRowDef[] = [
     sourceNo: NEAR_EXPIRY_PENDING_DEMO_SO,
     invoiceType: "sales",
     party: NEAR_EXPIRY_PENDING_DEMO_CUSTOMER,
-    dispatchDate: demoDateAt(4),
+    dispatchDate: demoDateAt(2),
     taxableValue: 12600,
     gstAmount: 1512,
     invoiceValue: 14112,
@@ -171,7 +247,7 @@ const SEED_ROW_DEFS: SeedRowDef[] = [
     sourceNo: "SO-2026-WE-014",
     invoiceType: "sales",
     party: "Reliance Agri",
-    dispatchDate: demoDateAt(5),
+    dispatchDate: demoDateAt(0),
     taxableValue: 93000,
     gstAmount: 4650,
     invoiceValue: 97650,
@@ -187,7 +263,7 @@ const SEED_ROW_DEFS: SeedRowDef[] = [
     sourceNo: "SO-2026-SE-021",
     invoiceType: "sales",
     party: "Mahindra Farms",
-    dispatchDate: demoDateAt(6),
+    dispatchDate: demoDateAt(1),
     taxableValue: 145000,
     gstAmount: 17400,
     invoiceValue: 162400,
@@ -229,6 +305,54 @@ const SEED_ROW_DEFS: SeedRowDef[] = [
     warehouse: "West Zone Hub",
     dispatch: STOCK_TRANSFER_DISPATCHES[1],
   },
+  {
+    dispatchId: PENDING_SEED_DISPATCH_IDS.sm003,
+    dispatchNo: "DSP-SM-2026-003",
+    sourceNo: "SM-2026-003",
+    invoiceType: "sales",
+    party: "Krishi Seva Kendra",
+    dispatchDate: demoDateAt(3),
+    taxableValue: 0,
+    gstAmount: 0,
+    invoiceValue: 0,
+    interstate: false,
+    status: "Delivered",
+    salesOrderId: null,
+    warehouse: "Central Warehouse",
+    dispatch: SAMPLE_ORDER_DISPATCHES[0],
+  },
+  {
+    dispatchId: PENDING_SEED_DISPATCH_IDS.sm006,
+    dispatchNo: "DSP-SM-2026-006",
+    sourceNo: "SM-2026-006",
+    invoiceType: "sales",
+    party: "Field Demo — Nashik Cluster",
+    dispatchDate: demoDateAt(4),
+    taxableValue: 0,
+    gstAmount: 0,
+    invoiceValue: 0,
+    interstate: false,
+    status: "Delivered",
+    salesOrderId: null,
+    warehouse: "West Zone Hub",
+    dispatch: SAMPLE_ORDER_DISPATCHES[1],
+  },
+  {
+    dispatchId: PENDING_SEED_DISPATCH_IDS.sm009,
+    dispatchNo: "DSP-SM-2026-009",
+    sourceNo: "SM-2026-009",
+    invoiceType: "sales",
+    party: "Green Valley Agro",
+    dispatchDate: demoDateAt(5),
+    taxableValue: 0,
+    gstAmount: 0,
+    invoiceValue: 0,
+    interstate: false,
+    status: "Delivered",
+    salesOrderId: null,
+    warehouse: "North Zone Hub",
+    dispatch: SAMPLE_ORDER_DISPATCHES[2],
+  },
 ];
 
 function isDispatchInvoiced(dispatchNo: string): boolean {
@@ -242,6 +366,7 @@ export function getPendingInvoiceSeedDispatches(): DispatchRecord[] {
     NEAR_EXPIRY_PENDING_DEMO_DISPATCH,
     ...SALES_DISPATCHES,
     ...STOCK_TRANSFER_DISPATCHES,
+    ...SAMPLE_ORDER_DISPATCHES,
   ];
 }
 
@@ -255,7 +380,7 @@ export function getPendingInvoiceSeedDispatch(
     ensureNearExpiryPendingDemoCustomer();
     return NEAR_EXPIRY_PENDING_DEMO_DISPATCH;
   }
-  const all = [...SALES_DISPATCHES, ...STOCK_TRANSFER_DISPATCHES];
+  const all = [...SALES_DISPATCHES, ...STOCK_TRANSFER_DISPATCHES, ...SAMPLE_ORDER_DISPATCHES];
   return (
     (dispatchId ? all.find((d) => d.id === dispatchId) : undefined) ??
     (dispatchNo ? all.find((d) => d.dispatchNumber === dispatchNo) : undefined)
@@ -286,6 +411,7 @@ function mapSeedDefToRow(def: SeedRowDef, index: number): PendingTaxInvoiceRow {
     invoiceType: def.invoiceType,
     customerName: def.party,
     dispatchDate: def.dispatchDate,
+    branch: def.warehouse,
     taxableValue: def.taxableValue,
     gstAmount: def.gstAmount,
     invoiceValue: def.invoiceValue,

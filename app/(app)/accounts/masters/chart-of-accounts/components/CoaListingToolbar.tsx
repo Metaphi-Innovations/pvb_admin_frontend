@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Plus, FolderPlus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingFilterCard } from "@/components/accounts/AccountsListingHeader";
@@ -28,8 +28,6 @@ interface CoaListingToolbarProps {
   exportDisabled?: boolean;
   canCreate?: boolean;
   onNewLedger?: () => void;
-  showAddSubGroup?: boolean;
-  onAddSubGroup?: () => void;
   searchPlaceholder?: string;
   hideDateRange?: boolean;
   /** When false, the New Ledger action is not rendered at all. */
@@ -52,31 +50,15 @@ export function CoaListingToolbar({
   exportDisabled,
   canCreate,
   onNewLedger,
-  onAddSubGroup,
   searchPlaceholder = "Search accounts…",
   hideDateRange = false,
   showNewLedger = true,
-  showAddSubGroup = false,
   newLedgerLabel = "New Ledger",
 }: CoaListingToolbarProps) {
-  const hasRowActions =
-    Boolean(showAddSubGroup && canCreate && onAddSubGroup) ||
-    Boolean(showNewLedger && canCreate && onNewLedger);
+  const hasRowActions = Boolean(showNewLedger && canCreate && onNewLedger);
 
   const rowEnd = hasRowActions ? (
       <>
-        {showAddSubGroup && canCreate && onAddSubGroup ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "px-2.5")}
-            onClick={onAddSubGroup}
-          >
-            <FolderPlus className="w-4 h-4" />
-            Add Sub-Group
-          </Button>
-        ) : null}
         {showNewLedger && canCreate && onNewLedger ? (
           <Button
             type="button"

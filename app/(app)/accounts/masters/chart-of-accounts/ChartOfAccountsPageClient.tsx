@@ -30,7 +30,6 @@ import type { ChartOfAccount } from "../../data";
 import { loadChartOfAccounts } from "../../data";
 import {
   canAddLedgerUnder,
-  canAddSubGroupUnder,
   getAncestorPath,
   isAccountingGroupNode,
   showCoaMaxHierarchyMessage,
@@ -56,10 +55,7 @@ import {
   requestCoaAddLedger,
   requestCoaGlobalAddLedger,
 } from "./coa-add-ledger-bridge";
-import {
-  requestCoaAddSubGroup,
-  requestCoaGlobalAddSubGroup,
-} from "./coa-add-group-bridge";
+import { requestCoaAddSubGroup } from "./coa-add-group-bridge";
 import { registerSundryDebtorCustomerFormHandler } from "./coa-sundry-debtor-form-bridge";
 import { registerSundryCreditorVendorFormHandler } from "./coa-sundry-creditor-form-bridge";
 import { registerWarehouseFormHandler } from "./coa-warehouse-form-bridge";
@@ -456,16 +452,6 @@ export default function ChartOfAccountsPageClient() {
         ? ledgerListingRows.length === 0
         : listingRows.length === 0);
 
-  const handleNewSubGroup = useCallback(() => {
-    const parentId =
-      selectedNode &&
-      !showRoot &&
-      canAddSubGroupUnder(selectedNode, records)
-        ? selectedNode.id
-        : null;
-    requestCoaGlobalAddSubGroup(parentId);
-  }, [selectedNode, showRoot, records]);
-
   const handleNewLedger = useCallback(() => {
     if (
       selectedNode &&
@@ -581,29 +567,19 @@ export default function ChartOfAccountsPageClient() {
       showCoaMaxHierarchyMessage(selectedNode, records),
   );
 
-  const canShowAddSubGroup =
-    canCreate &&
-    !isLedgerStatementView &&
-    !showEmptyState &&
-    !showMaxHierarchyNotice &&
-    selectedNode?.nodeLevel !== "ledger" &&
-    (selectedNode == null ||
-      showRoot ||
-      canAddSubGroupUnder(selectedNode, records));
-
   const canShowNewLedger =
     canCreate &&
     !isLedgerStatementView &&
     !showEmptyState &&
     !showMaxHierarchyNotice &&
     selectedNode?.nodeLevel !== "primary_head" &&
+    (!selectedNode || !resolveCoaAddLedgerPolicy(selectedNode, records).blocked) &&
     (isAccountingGroupLedgerListing ||
       isGroupingLedgerView ||
       showRoot ||
       !selectedNode ||
       (selectedNode &&
-        canAddLedgerUnder(selectedNode, records) &&
-        !resolveCoaAddLedgerPolicy(selectedNode, records).blocked));
+        canAddLedgerUnder(selectedNode, records)));
 
   if (sundryDebtorFormParentId != null) {
     return (
@@ -715,10 +691,8 @@ export default function ChartOfAccountsPageClient() {
             onPdf={handlePdfExport}
             exportDisabled={exportDisabled}
             showNewLedger={canShowNewLedger}
-            showAddSubGroup={canShowAddSubGroup}
             canCreate={canCreate}
             onNewLedger={canShowNewLedger ? handleNewLedger : undefined}
-            onAddSubGroup={canShowAddSubGroup ? handleNewSubGroup : undefined}
             newLedgerLabel={newLedgerLabel}
           />
           )}

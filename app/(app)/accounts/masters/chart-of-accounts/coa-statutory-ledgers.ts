@@ -9,21 +9,23 @@ export interface CoaStatutoryLedgerSeed {
   balanceType: "Debit" | "Credit";
   gstApplicable?: boolean;
   tdsApplicable?: boolean;
-  /** Optional component (e.g. Cess) — still seeded for a complete chart */
+  /** Reserved component used only to preserve legacy system ID allocation. */
   optional?: boolean;
 }
 
 export const GST_INPUT_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
-  { name: "Input CGST", code: "231101", balanceType: "Debit", gstApplicable: true },
-  { name: "Input SGST", code: "231102", balanceType: "Debit", gstApplicable: true },
-  { name: "Input IGST", code: "231103", balanceType: "Debit", gstApplicable: true },
+  { name: "CGST Input", code: "231101", balanceType: "Debit", gstApplicable: true },
+  { name: "SGST Input", code: "231102", balanceType: "Debit", gstApplicable: true },
+  { name: "IGST Input", code: "231103", balanceType: "Debit", gstApplicable: true },
+  // Reserved legacy slot. Removed after ID allocation so later system IDs remain stable.
   { name: "Input Cess", code: "231104", balanceType: "Debit", gstApplicable: true, optional: true },
 ];
 
 export const GST_OUTPUT_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
-  { name: "Output CGST", code: "231111", balanceType: "Credit", gstApplicable: true },
-  { name: "Output SGST", code: "231112", balanceType: "Credit", gstApplicable: true },
-  { name: "Output IGST", code: "231113", balanceType: "Credit", gstApplicable: true },
+  { name: "CGST Output", code: "231111", balanceType: "Credit", gstApplicable: true },
+  { name: "SGST Output", code: "231112", balanceType: "Credit", gstApplicable: true },
+  { name: "IGST Output", code: "231113", balanceType: "Credit", gstApplicable: true },
+  // Reserved legacy slot. Removed after ID allocation so later system IDs remain stable.
   { name: "Output Cess", code: "231114", balanceType: "Credit", gstApplicable: true, optional: true },
 ];
 
@@ -53,12 +55,12 @@ export function isRateSpecificGstLedgerName(name: string): boolean {
 
 /** Flat statutory ledger name for voucher posting (rate applied on transaction, not per ledger). */
 export const GST_STATUTORY_LEDGER_BY_KIND = {
-  input_cgst: "Input CGST",
-  input_sgst: "Input SGST",
-  input_igst: "Input IGST",
-  output_cgst: "Output CGST",
-  output_sgst: "Output SGST",
-  output_igst: "Output IGST",
+  input_cgst: "CGST Input",
+  input_sgst: "SGST Input",
+  input_igst: "IGST Input",
+  output_cgst: "CGST Output",
+  output_sgst: "SGST Output",
+  output_igst: "IGST Output",
 } as const;
 
 /** Legacy demo / generic names replaced by the statutory chart */
@@ -79,4 +81,12 @@ export const LEGACY_GST_LEDGER_NAMES = new Set([
   "state cess payable",
   "income tax payable - advance",
   "professional tax payable",
+  "input cgst",
+  "input sgst",
+  "input igst",
+  "output cgst",
+  "output sgst",
+  "output igst",
+  "input cess",
+  "output cess",
 ]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { Button } from "@/components/ui/button";
@@ -18,18 +18,31 @@ import {
   AccountsTableEmpty,
   AccountsTableListing,
   AccountsTablePagination,
-  AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
 import {
+  ReportBranchMultiFilter,
   ReportDateRangeFilter,
+  ReportFilterRow,
+  ReportFinancialYearFilter,
+  ReportFromDateFilter,
+  ReportMoreFilters,
+  ReportSearchFilter,
+  ReportToDateFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { formatMoney } from "@/lib/accounts/money-format";
+import {
+  AccountsTableActionCell,
+  ACCOUNTS_ACTION_BTN_CLASS,
+  ACCOUNTS_ACTION_ICON_CLASS,
+} from "@/components/accounts/AccountsTableActions";
+import { cn } from "@/lib/utils";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { accountsDataService } from "@/lib/accounts/accounts-data-service";
-import { listPendingTaxInvoices } from "@/lib/accounts/sales-workflow-data";
-import { InvoiceTypeBadge } from "@/components/accounts/InvoiceTypeBadge";
-import { INVOICE_TYPE_LABELS } from "@/lib/accounts/invoice-type";
 import {
   formatInvoiceGstBreakup,
   getPendingRowGstBreakup,
@@ -41,77 +54,262 @@ import {
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
+import { PendingInvoicesTabs } from "./PendingInvoicesTabs";
+import {
+  getPendingInvoiceBranchOptions,
+  listPendingInvoicesByTab,
+  PENDING_INVOICE_TAB_META,
+  type PendingInvoiceListRow,
+  type PendingInvoiceTabId,
+} from "./pending-invoice-tab-data";
+import "./pending-invoices-compact.css";
 
-type PendingRow = ReturnType<typeof listPendingTaxInvoices>[number];
+type TabCache = {
+  loaded: boolean;
+  loading: boolean;
+  error: string | null;
+  rows: PendingInvoiceListRow[];
+  search: string;
+  page: number;
+  pageSize: number;
+};
 
-function buildGenerateInvoiceHref(row: PendingRow) {
-  const params = new URLSearchParams();
-  params.set("dispatchId", row.dispatchId);
-  if (row.salesOrderId) params.set("so", String(row.salesOrderId));
-  params.set("dispatch", row.dispatchNo);
-  return `/accounts/transactions/invoices/new?${params.toString()}`;
+function createEmptyTabCache(): TabCache {
+  return {
+    loaded: false,
+    loading: false,
+    error: null,
+    rows: [],
+    search: "",
+    page: 1,
+    pageSize: 25,
+  };
 }
 
-function exportPendingCsv(rows: PendingRow[]) {
-  const headers = [
-    "Type",
-    "Source No",
-    "Dispatch No",
-    "Party",
-    "Dispatch Date",
-    "Taxable Value",
-    "CGST",
-    "SGST",
-    "IGST",
-    "Invoice Value",
-    "Status",
-  ];
-  const lines = rows.map((r) => {
-    const formatted = formatInvoiceGstBreakup(getPendingRowGstBreakup(r));
-    return [
-      INVOICE_TYPE_LABELS[r.invoiceType],
-      r.soNumber,
+function applyToolbarFilters(
+  rows: PendingInvoiceListRow[],
+  opts: { search: string; dateFrom: string; dateTo: string; branches: string[] },
+): PendingInvoiceListRow[] {
+  let list = [...rows];
+  if (opts.search.trim()) {
+    const q = opts.search.toLowerCase();
+    list = list.filter(
+      (r) =>
+        r.sourceNo.toLowerCase().includes(q) ||
+        r.dispatchNo.toLowerCase().includes(q) ||
+        r.partyName.toLowerCase().includes(q) ||
+        r.customerCode.toLowerCase().includes(q) ||
+        r.salesperson.toLowerCase().includes(q) ||
+        r.fromWarehouse.toLowerCase().includes(q) ||
+        r.toWarehouse.toLowerCase().includes(q) ||
+        r.status.toLowerCase().includes(q) ||
+        (r.generatedBy?.toLowerCase().includes(q) ?? false),
+    );
+  }
+  if (opts.dateFrom || opts.dateTo) {
+    list = list.filter((r) => {
+      // Prefer order date for SO/ST tabs; fall back to dispatch date
+      const dateKey = (r.orderDate || r.dispatchDate || "").trim();
+      if (!dateKey) return true;
+      if (opts.dateFrom && dateKey < opts.dateFrom) return false;
+      if (opts.dateTo && dateKey > opts.dateTo) return false;
+      return true;
+    });
+  }
+  if (opts.branches.length) list = list.filter((r) => opts.branches.includes(r.branch));
+  return list;
+}
+
+function exportPendingTabCsv(tab: PendingInvoiceTabId, rows: PendingInvoiceListRow[]) {
+  const meta = PENDING_INVOICE_TAB_META[tab];
+  let headers: string[];
+  let toRow: (r: PendingInvoiceListRow) => (string | number)[];
+
+  if (tab === "sales_order") {
+    headers = [
+      "Order Date",
+      "Order No.",
+      "Dispatch No.",
+      "Customer Name",
+      "Customer Code",
+      "Total Amount",
+      "Total Item Count",
+    ];
+    toRow = (r) => [
+      r.orderDate || "—",
+      r.sourceNo,
       r.dispatchNo,
-      r.customerName,
-      r.dispatchDate,
-      formatted.taxableValue,
-      formatted.cgst,
-      formatted.sgst,
-      formatted.igst,
-      formatted.invoiceTotal,
-      r.status,
-    ]
+      r.partyName,
+      r.customerCode || "—",
+      formatMoney(r.totalAmount),
+      r.itemCount,
+    ];
+  } else if (tab === "sample_order") {
+    headers = [
+      "Order Date",
+      "Order No.",
+      "Dispatch No.",
+      "Customer Name",
+      "Customer Code",
+      "Total Amount",
+      "Total Item Count",
+    ];
+    toRow = (r) => [
+      r.orderDate || "—",
+      r.sourceNo,
+      r.dispatchNo,
+      r.partyName,
+      r.customerCode || "—",
+      formatMoney(0),
+      r.itemCount,
+    ];
+  } else if (tab === "stock_transfer") {
+    headers = [
+      "Order Date",
+      "Order No.",
+      "Dispatch No.",
+      "From Warehouse",
+      "To Warehouse",
+      "Total Item Count",
+      "Total Amount",
+    ];
+    toRow = (r) => [
+      r.orderDate || "—",
+      r.sourceNo,
+      r.dispatchNo,
+      r.fromWarehouse || "—",
+      r.toWarehouse || "—",
+      r.itemCount,
+      formatMoney(r.totalAmount),
+    ];
+  } else {
+    headers = [
+      meta.sourceNoLabel,
+      "Dispatch Reference",
+      meta.partyLabel,
+      "Invoice Date",
+      "Taxable Value",
+      "CGST",
+      "SGST",
+      "IGST",
+      "Invoice Amount",
+      "Status",
+      "Generated By",
+    ];
+    toRow = (r) => {
+      const formatted = formatInvoiceGstBreakup(getPendingRowGstBreakup(r));
+      return [
+        r.sourceNo,
+        r.dispatchNo,
+        r.partyName,
+        r.dispatchDate,
+        formatted.taxableValue,
+        formatted.cgst,
+        formatted.sgst,
+        formatted.igst,
+        formatted.invoiceTotal,
+        r.status,
+        r.generatedBy ?? "—",
+      ];
+    };
+  }
+
+  const lines = rows.map((r) =>
+    toRow(r)
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(",");
-  });
+      .join(","),
+  );
   const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "pending-invoices.csv";
+  a.download = meta.exportFileName;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function PendingTaxInvoicesTable({
+function PendingInvoicesListing({
+  tab,
   mounted,
   toolbarRows,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
+  loading,
+  error,
   clearFilters,
   hasToolbarFilters,
 }: {
+  tab: PendingInvoiceTabId;
   mounted: boolean;
-  toolbarRows: PendingRow[];
+  toolbarRows: PendingInvoiceListRow[];
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
+  loading: boolean;
+  error: string | null;
   clearFilters?: () => void;
   hasToolbarFilters: boolean;
 }) {
+  const visible = useAccountsFilteredRows(toolbarRows);
+  return (
+    <AccountsTableListing
+      footer={
+        mounted && !loading && visible.length > 0 ? (
+          <AccountsTablePagination
+            page={page}
+            pageSize={pageSize}
+            totalRecords={visible.length}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+            recordLabel="invoices"
+          />
+        ) : null
+      }
+    >
+      <PendingInvoicesTable
+        tab={tab}
+        mounted={mounted}
+        toolbarRows={toolbarRows}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        loading={loading}
+        error={error}
+        clearFilters={clearFilters}
+        hasToolbarFilters={hasToolbarFilters}
+      />
+    </AccountsTableListing>
+  );
+}
+
+function PendingInvoicesTable({
+  tab,
+  mounted,
+  toolbarRows,
+  page,
+  pageSize,
+  onPageChange,
+  loading,
+  error,
+  clearFilters,
+  hasToolbarFilters,
+}: {
+  tab: PendingInvoiceTabId;
+  mounted: boolean;
+  toolbarRows: PendingInvoiceListRow[];
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  loading: boolean;
+  error: string | null;
+  clearFilters?: () => void;
+  hasToolbarFilters: boolean;
+}) {
+  const meta = PENDING_INVOICE_TAB_META[tab];
   const ctx = useAccountsColumnFilterContext();
   const visible = useAccountsFilteredRows(toolbarRows);
   const pagedRows = useMemo(
@@ -123,263 +321,536 @@ function PendingTaxInvoicesTable({
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  return (
-    <AccountsTable minWidth={1240}>
-      <AccountsTableHead>
-        <AccountsTableHeadRow>
-          <SortTh label="Type" colKey="invoiceType" />
-          <SortTh label="Source No" colKey="soNumber" />
-          <SortTh label="Dispatch No" colKey="dispatchNo" />
-          <SortTh label="Party" colKey="customerName" className="accounts-col-party" />
-          <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" />
-          <SortTh label="Taxable Value" colKey="taxableValue" filterType="amount" align="right" />
-          <SortTh label="CGST" colKey="cgst" filterType="amount" align="right" />
-          <SortTh label="SGST" colKey="sgst" filterType="amount" align="right" />
-          <SortTh label="IGST" colKey="igst" filterType="amount" align="right" />
-          <SortTh label="Invoice Value" colKey="invoiceTotal" filterType="amount" align="right" />
-          <AccountsColumnHeader
-            label=""
-            colKey="_actions"
-            sortable={false}
-            filterable={false}
-            align="right"
-            className="accounts-col-actions-wide"
-          />
-        </AccountsTableHeadRow>
-      </AccountsTableHead>
-      <AccountsTableBody>
-        {!mounted ? (
-          <AccountsTableEmpty colSpan={11} message="Loading pending invoices…" />
-        ) : toolbarRows.length === 0 ? (
-          <AccountsTableEmpty
-            colSpan={11}
-            message="No dispatch-ready orders pending invoice generation."
-            onClear={hasToolbarFilters ? clearFilters : undefined}
-          />
-        ) : visible.length === 0 ? (
-          <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
-        ) : (
-          pagedRows.map((r) => {
-            const formatted = formatInvoiceGstBreakup(getPendingRowGstBreakup(r));
-            return (
-              <AccountsTableRow key={r.dispatchId}>
-                <AccountsTableCell>
-                  <InvoiceTypeBadge type={r.invoiceType} />
-                </AccountsTableCell>
-                <AccountsTableCell mono className="font-semibold text-brand-700">
-                  {r.soNumber}
-                </AccountsTableCell>
-                <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
-                <AccountsTableCell className="accounts-col-party">{r.customerName}</AccountsTableCell>
-                <AccountsTableCell className="tabular-nums">{r.dispatchDate}</AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  {formatted.taxableValue}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  {formatted.cgst}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  {formatted.sgst}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  {formatted.igst}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money className="font-semibold">
-                  {formatted.invoiceTotal}
-                </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <Button
-                    asChild
-                    size="sm"
-                    className="h-7 text-sm bg-brand-600 hover:bg-brand-700 text-white gap-1"
-                  >
-                    <Link href={buildGenerateInvoiceHref(r)}>
-                      <FileText className="w-3 h-3" />
-                      Generate Invoice
-                    </Link>
-                  </Button>
-                </AccountsTableCell>
-              </AccountsTableRow>
-            );
-          })
-        )}
-      </AccountsTableBody>
-    </AccountsTable>
-  );
-}
+  const isSalesOrder = tab === "sales_order";
+  const isSampleOrder = tab === "sample_order";
+  const isStockTransfer = tab === "stock_transfer";
+  const isOrderStyleTab = isSalesOrder || isSampleOrder;
+  const tabColSpan = isOrderStyleTab ? 7 : 8;
+  const colSpan = isOrderStyleTab || isStockTransfer ? tabColSpan : 9;
 
-function PendingTaxInvoicesContent({
-  mounted,
-  toolbarRows,
-  search,
-  setSearch,
-  preset,
-  setPreset,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-}: {
-  mounted: boolean;
-  toolbarRows: PendingRow[];
-  search: string;
-  setSearch: (s: string) => void;
-  preset: ReturnType<typeof useReportDateRange>["preset"];
-  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
-  dateFrom: string;
-  setDateFrom: (v: string) => void;
-  dateTo: string;
-  setDateTo: (v: string) => void;
-}) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const visible = useAccountsFilteredRows(toolbarRows);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, dateFrom, dateTo, pageSize]);
-
-  const clearFilters = () => {
-    setSearch("");
-    setPreset("last_month");
-    const { from, to } = resolveDateRangePreset("last_month");
-    setDateFrom(from);
-    setDateTo(to);
+  const generateAction = (r: PendingInvoiceListRow) => {
+    const alreadyInvoiced = Boolean(r.invoiceId);
+    if (isOrderStyleTab) {
+      return (
+        <Button
+          asChild={!alreadyInvoiced}
+          size="sm"
+          disabled={alreadyInvoiced}
+          className="h-7 px-2.5 text-xs bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50"
+        >
+          {alreadyInvoiced ? (
+            <span>Generate</span>
+          ) : (
+            <Link href={r.generateHref}>Generate</Link>
+          )}
+        </Button>
+      );
+    }
+    return (
+      <AccountsTableActionCell variant="single">
+        <Link
+          href={r.generateHref}
+          title="Generate Invoice"
+          aria-label="Generate Invoice"
+          className={cn(ACCOUNTS_ACTION_BTN_CLASS)}
+        >
+          <FileText className={cn(ACCOUNTS_ACTION_ICON_CLASS, "text-brand-600")} />
+        </Link>
+      </AccountsTableActionCell>
+    );
   };
 
-  const hasToolbarFilters = Boolean(search.trim()) || preset !== "last_month";
+  const emptyStates =
+    !mounted || loading ? (
+      <AccountsTableEmpty colSpan={colSpan} message="Loading pending invoices…" />
+    ) : error ? (
+      <AccountsTableEmpty colSpan={colSpan} message={error} />
+    ) : toolbarRows.length === 0 ? (
+      <AccountsTableEmpty
+        colSpan={colSpan}
+        message={meta.emptyMessage}
+        onClear={hasToolbarFilters ? clearFilters : undefined}
+      />
+    ) : visible.length === 0 ? (
+      <AccountsTableEmpty colSpan={colSpan} message="No records match the column filters." />
+    ) : null;
 
-  return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Transactions", "Pending Invoices")}
-      title="Pending Invoices"
-      description="Dispatch-completed orders from Warehouse — generate tax invoice and post to ledger."
-      hideDescription
-      layout="split"
-      className="h-full min-h-0"
-    >
-      <AccountsTableListing
-        toolbar={
-          <AccountsTableToolbar
-            search={{
-              value: search,
-              onChange: setSearch,
-              placeholder: "Search source, dispatch, party…",
-            }}
-            filters={
-              <ReportDateRangeFilter
-                preset={preset}
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                onPresetChange={setPreset}
-                onDateFromChange={setDateFrom}
-                onDateToChange={setDateTo}
-              />
-            }
-            onExcel={() => exportPendingCsv(visible)}
-            onPdf={() => exportPendingCsv(visible)}
-            exportDisabled={visible.length === 0}
-          />
-        }
-        footer={
-          mounted && visible.length > 0 ? (
-            <AccountsTablePagination
-              page={page}
-              pageSize={pageSize}
-              totalRecords={visible.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              recordLabel="invoices"
+  if (isOrderStyleTab) {
+    return (
+      <AccountsTable minWidth={1080}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Order Date" colKey="orderDate" filterType="date" />
+            <SortTh label="Order No." colKey="sourceNo" />
+            <SortTh label="Dispatch No." colKey="dispatchNo" />
+            <SortTh label="Customer" colKey="partyName" className="accounts-col-party" />
+            <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
+            <SortTh label="Total Item Count" colKey="itemCount" filterType="amount" align="right" />
+            <AccountsColumnHeader
+              label="Generate"
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="right"
+              className="accounts-col-actions"
             />
-          ) : null
-        }
-      >
-        <PendingTaxInvoicesTable
-          mounted={mounted}
-          toolbarRows={toolbarRows}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          clearFilters={clearFilters}
-          hasToolbarFilters={hasToolbarFilters}
-        />
-      </AccountsTableListing>
-    </AccountsPageShell>
-  );
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {emptyStates ??
+            pagedRows.map((r) => (
+              <AccountsTableRow key={r.id}>
+                <AccountsTableCell className="tabular-nums">{r.orderDate || "—"}</AccountsTableCell>
+                <AccountsTableCell mono className="font-semibold text-brand-700">
+                  {r.detailHref ? (
+                    <Link href={r.detailHref} className="hover:underline">
+                      {r.sourceNo}
+                    </Link>
+                  ) : (
+                    r.sourceNo
+                  )}
+                </AccountsTableCell>
+                <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
+                <AccountsTableCell className="accounts-col-party">
+                  <div className="min-w-0 leading-tight">
+                    <p className="text-xs font-semibold text-foreground truncate">{r.partyName}</p>
+                    {r.customerCode ? (
+                      <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                        {r.customerCode}
+                      </p>
+                    ) : null}
+                  </div>
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money className="font-semibold">
+                  <MoneyAmount amount={isSampleOrder ? 0 : r.totalAmount} />
+                </AccountsTableCell>
+                <AccountsTableCell align="right" className="tabular-nums">
+                  {r.itemCount}
+                </AccountsTableCell>
+                <AccountsTableCell align="right">{generateAction(r)}</AccountsTableCell>
+              </AccountsTableRow>
+            ))}
+        </AccountsTableBody>
+      </AccountsTable>
+    );
+  }
+
+  if (isStockTransfer) {
+    return (
+      <AccountsTable minWidth={1180}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Order Date" colKey="orderDate" filterType="date" />
+            <SortTh label="Order No." colKey="sourceNo" />
+            <SortTh label="Dispatch No." colKey="dispatchNo" />
+            <SortTh label="From Warehouse" colKey="fromWarehouse" />
+            <SortTh label="To Warehouse" colKey="toWarehouse" />
+            <SortTh label="Total Item Count" colKey="itemCount" filterType="amount" align="right" />
+            <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
+            <AccountsColumnHeader
+              label=""
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="right"
+              className="accounts-col-actions"
+            />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {emptyStates ??
+            pagedRows.map((r) => (
+              <AccountsTableRow key={r.id}>
+                <AccountsTableCell className="tabular-nums">{r.orderDate || "—"}</AccountsTableCell>
+                <AccountsTableCell mono className="font-semibold text-brand-700">
+                  {r.detailHref ? (
+                    <Link href={r.detailHref} className="hover:underline">
+                      {r.sourceNo}
+                    </Link>
+                  ) : (
+                    r.sourceNo
+                  )}
+                </AccountsTableCell>
+                <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
+                <AccountsTableCell>{r.fromWarehouse || "—"}</AccountsTableCell>
+                <AccountsTableCell>{r.toWarehouse || "—"}</AccountsTableCell>
+                <AccountsTableCell align="right" className="tabular-nums">
+                  {r.itemCount}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money className="font-semibold">
+                  <MoneyAmount amount={r.totalAmount} />
+                </AccountsTableCell>
+                <AccountsTableCell align="right">{generateAction(r)}</AccountsTableCell>
+              </AccountsTableRow>
+            ))}
+        </AccountsTableBody>
+      </AccountsTable>
+    );
+  }
+
+  return null;
 }
 
 export default function PendingTaxInvoicesClient() {
   const mounted = useClientMounted();
-  const [search, setSearch] = useState("");
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("last_month");
+  const [activeTab, setActiveTab] = useState<PendingInvoiceTabId>("sales_order");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [branches, setBranches] = useState<string[]>([]);
 
-  const allRows = useMemo(
-    () => (mounted ? accountsDataService.getPendingInvoices() : []),
-    [mounted],
+  const [tabState, setTabState] = useState<Record<PendingInvoiceTabId, TabCache>>({
+    sales_order: createEmptyTabCache(),
+    stock_transfer: createEmptyTabCache(),
+    sample_order: createEmptyTabCache(),
+  });
+
+  const filterKey = `${financialYearId}|${dateFrom}|${dateTo}|${branches.join(",")}`;
+  const prevFilterKey = useRef(filterKey);
+
+  const fetchTab = useCallback((tab: PendingInvoiceTabId) => {
+    setTabState((prev) => ({
+      ...prev,
+      [tab]: { ...prev[tab], loading: true, error: null },
+    }));
+    try {
+      // Drop any cached pending-invoice snapshot so post-generate refreshes see fresh data
+      accountsDataService.invalidate();
+      const rows = listPendingInvoicesByTab(tab);
+      setTabState((prev) => ({
+        ...prev,
+        [tab]: {
+          ...prev[tab],
+          loaded: true,
+          loading: false,
+          error: null,
+          rows,
+        },
+      }));
+    } catch (e) {
+      setTabState((prev) => ({
+        ...prev,
+        [tab]: {
+          ...prev[tab],
+          loaded: true,
+          loading: false,
+          error: e instanceof Error ? e.message : "Failed to load pending invoices.",
+          rows: [],
+        },
+      }));
+    }
+  }, []);
+
+  // Load default tab first; other tabs load on open
+  useEffect(() => {
+    if (!mounted) return;
+    fetchTab("sales_order");
+  }, [mounted, fetchTab]);
+
+  // Refresh active tab when returning from invoice generation
+  useEffect(() => {
+    if (!mounted) return;
+    const refresh = () => fetchTab(activeTab);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [mounted, activeTab, fetchTab]);
+
+  // Shared filter change → invalidate inactive caches; refetch active
+  useEffect(() => {
+    if (!mounted) return;
+    if (prevFilterKey.current === filterKey) return;
+    prevFilterKey.current = filterKey;
+    setTabState((prev) => {
+      const next = { ...prev };
+      (Object.keys(next) as PendingInvoiceTabId[]).forEach((tab) => {
+        next[tab] = {
+          ...next[tab],
+          loaded: false,
+          rows: [],
+          page: 1,
+        };
+      });
+      return next;
+    });
+    fetchTab(activeTab);
+  }, [filterKey, mounted, activeTab, fetchTab]);
+
+  const handleTabChange = (tab: PendingInvoiceTabId) => {
+    setActiveTab(tab);
+    setTabState((prev) => {
+      if (prev[tab].loaded || prev[tab].loading) return prev;
+      return prev;
+    });
+    if (!tabState[tab].loaded && !tabState[tab].loading) {
+      fetchTab(tab);
+    }
+  };
+
+  const active = tabState[activeTab];
+
+  const branchOptions = useMemo(() => {
+    if (!mounted) return [];
+    const set = new Set<string>();
+    (Object.keys(tabState) as PendingInvoiceTabId[]).forEach((tab) => {
+      if (tabState[tab].loaded) {
+        for (const r of tabState[tab].rows) if (r.branch) set.add(r.branch);
+      } else if (tab === activeTab) {
+        for (const b of getPendingInvoiceBranchOptions(tab)) set.add(b);
+      }
+    });
+    // Prefer options from active tab source so Branch filter stays useful before other tabs load
+    if (set.size === 0 && mounted) {
+      return getPendingInvoiceBranchOptions(activeTab);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [mounted, tabState, activeTab]);
+
+  const handleFinancialYearChange = useCallback(
+    (fyId: string) => {
+      setFinancialYearId(fyId);
+      if (fyId !== "all") {
+        const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
+        if (fy) {
+          const today = new Date().toISOString().slice(0, 10);
+          setDateFrom(fy.startDate);
+          setDateTo(today < fy.endDate ? today : fy.endDate);
+          setPreset("custom");
+        }
+      }
+    },
+    [setDateFrom, setDateTo, setPreset],
   );
 
-  const toolbarRows = useMemo(() => {
-    let list = [...allRows];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (r) =>
-          r.soNumber.toLowerCase().includes(q) ||
-          r.dispatchNo.toLowerCase().includes(q) ||
-          r.customerName.toLowerCase().includes(q) ||
-          r.status.toLowerCase().includes(q) ||
-          INVOICE_TYPE_LABELS[r.invoiceType].toLowerCase().includes(q),
-      );
-    }
-    if (dateFrom) list = list.filter((r) => r.dispatchDate >= dateFrom);
-    if (dateTo) list = list.filter((r) => r.dispatchDate <= dateTo);
-    return list;
-  }, [allRows, search, dateFrom, dateTo]);
+  const clearFilters = useCallback(() => {
+    setTabState((prev) => ({
+      ...prev,
+      [activeTab]: { ...prev[activeTab], search: "", page: 1 },
+    }));
+    setFinancialYearId("all");
+    setBranches([]);
+    setPreset("this_month");
+    const { from, to } = resolveDateRangePreset("this_month");
+    setDateFrom(from);
+    setDateTo(to);
+  }, [activeTab, setDateFrom, setDateTo, setPreset]);
 
-  const getCellValue = useCallback((row: PendingRow, key: string) => {
-    if (key === "invoiceType") return INVOICE_TYPE_LABELS[row.invoiceType];
+  const hasToolbarFilters =
+    Boolean(active.search.trim()) ||
+    preset !== "this_month" ||
+    financialYearId !== "all" ||
+    branches.length > 0;
+
+  const toolbarRows = useMemo(
+    () =>
+      applyToolbarFilters(active.rows, {
+        search: active.search,
+        dateFrom,
+        dateTo,
+        branches,
+      }),
+    [active.rows, active.search, dateFrom, dateTo, branches],
+  );
+
+  // Tab counts — filtered with shared filters + each tab's own search
+  const tabCounts = useMemo(() => {
+    const counts: Record<PendingInvoiceTabId, number | null> = {
+      sales_order: null,
+      stock_transfer: null,
+      sample_order: null,
+    };
+    if (!mounted) return counts;
+    (Object.keys(counts) as PendingInvoiceTabId[]).forEach((tab) => {
+      const cache = tabState[tab];
+      if (!cache.loaded) {
+        // Lightweight count for unloaded tabs so labels stay useful
+        try {
+          counts[tab] = applyToolbarFilters(listPendingInvoicesByTab(tab), {
+            search: cache.search,
+            dateFrom,
+            dateTo,
+            branches,
+          }).length;
+        } catch {
+          counts[tab] = null;
+        }
+        return;
+      }
+      counts[tab] = applyToolbarFilters(cache.rows, {
+        search: cache.search,
+        dateFrom,
+        dateTo,
+        branches,
+      }).length;
+    });
+    return counts;
+  }, [mounted, tabState, dateFrom, dateTo, branches]);
+
+  const setActiveSearch = (search: string) => {
+    setTabState((prev) => ({
+      ...prev,
+      [activeTab]: { ...prev[activeTab], search, page: 1 },
+    }));
+  };
+
+  const setActivePage = useCallback(
+    (page: number) => {
+      setTabState((prev) => ({
+        ...prev,
+        [activeTab]: { ...prev[activeTab], page },
+      }));
+    },
+    [activeTab],
+  );
+
+  const setActivePageSize = (pageSize: number) => {
+    setTabState((prev) => ({
+      ...prev,
+      [activeTab]: { ...prev[activeTab], pageSize, page: 1 },
+    }));
+  };
+
+  useEffect(() => {
+    setActivePage(1);
+  }, [active.search, dateFrom, dateTo, financialYearId, branches, active.pageSize, setActivePage]);
+
+  const handlePresetChange = (value: ReturnType<typeof useReportDateRange>["preset"]) => {
+    setPreset(value);
+    if (value !== "custom") {
+      const { from, to } = resolveDateRangePreset(value);
+      setDateFrom(from);
+      setDateTo(to);
+    }
+  };
+
+  const getCellValue = useCallback((row: PendingInvoiceListRow, key: string) => {
     const gst = getPendingRowGstBreakup(row);
     const formatted = formatInvoiceGstBreakup(gst);
     if (key === "taxableValue") return formatted.taxableValue;
-    if (key === "cgst") return formatted.cgst;
-    if (key === "sgst") return formatted.sgst;
-    if (key === "igst") return formatted.igst;
-    if (key === "invoiceTotal") return formatted.invoiceTotal;
+    if (key === "invoiceValue") return formatted.invoiceTotal;
+    if (key === "totalAmount") {
+      return formatMoney(activeTab === "sample_order" ? 0 : row.totalAmount);
+    }
+    if (key === "generatedBy") return row.generatedBy ?? "";
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
+  const columnConfig: AccountsColumnFilterConfig =
+    activeTab === "sales_order" || activeTab === "sample_order"
+      ? {
+          orderDate: { type: "date" },
+          sourceNo: { type: "text" },
+          dispatchNo: { type: "text" },
+          partyName: { type: "text" },
+          totalAmount: { type: "amount" },
+          itemCount: { type: "amount" },
+        }
+      : activeTab === "stock_transfer"
+        ? {
+            orderDate: { type: "date" },
+            sourceNo: { type: "text" },
+            dispatchNo: { type: "text" },
+            fromWarehouse: { type: "text" },
+            toWarehouse: { type: "text" },
+            itemCount: { type: "amount" },
+            totalAmount: { type: "amount" },
+          }
+        : {
+            sourceNo: { type: "text" },
+            dispatchNo: { type: "text" },
+            partyName: { type: "text" },
+            dispatchDate: { type: "date" },
+            taxableValue: { type: "amount" },
+            invoiceValue: { type: "amount" },
+            status: { type: "text" },
+          };
+
   return (
-    <AccountsColumnFilterProvider
-      rows={toolbarRows}
-      getCellValue={getCellValue}
-      columnConfig={{
-        invoiceType: { type: "text" },
-        soNumber: { type: "text" },
-        dispatchNo: { type: "text" },
-        customerName: { type: "text" },
-        dispatchDate: { type: "date" },
-        taxableValue: { type: "amount" },
-        cgst: { type: "amount" },
-        sgst: { type: "amount" },
-        igst: { type: "amount" },
-        invoiceTotal: { type: "amount" },
-      }}
-      defaultSortKey="dispatchDate"
-      defaultSortDir="desc"
-    >
-      <PendingTaxInvoicesContent
-        mounted={mounted}
-        toolbarRows={toolbarRows}
-        search={search}
-        setSearch={setSearch}
-        preset={preset}
-        setPreset={setPreset}
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-      />
-    </AccountsColumnFilterProvider>
+    <div className="pending-invoices-compact h-full min-h-0">
+      <AccountsColumnFilterProvider
+        key={activeTab}
+        rows={toolbarRows}
+        getCellValue={getCellValue}
+        columnConfig={columnConfig}
+        defaultSortKey={
+          activeTab === "sales_order" || activeTab === "sample_order" ? "orderDate" : "dispatchDate"
+        }
+        defaultSortDir="desc"
+      >
+        <AccountsPageShell
+          breadcrumbs={accountsBreadcrumb("Transactions", "Pending Invoices")}
+          title="Pending Invoices"
+          description="Dispatch-completed orders from Warehouse — generate tax invoice and post to ledger."
+          hideDescription
+          layout="split"
+          className="h-full min-h-0"
+          subHeader={
+            <PendingInvoicesTabs
+              value={activeTab}
+              onChange={handleTabChange}
+              counts={tabCounts}
+            />
+          }
+          filters={
+            <ReportFilterRow
+              end={
+                <AccountsExportMenu
+                  onExcel={() => exportPendingTabCsv(activeTab, toolbarRows)}
+                  onPdf={() => exportPendingTabCsv(activeTab, toolbarRows)}
+                  disabled={toolbarRows.length === 0}
+                />
+              }
+            >
+              <ReportFinancialYearFilter
+                value={financialYearId}
+                onChange={handleFinancialYearChange}
+              />
+              <ReportDateRangeFilter
+                preset={preset}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onPresetChange={handlePresetChange}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+                inlineCustomDates={false}
+              />
+              <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} />
+              <ReportToDateFilter value={dateTo} onChange={setDateTo} />
+              <ReportBranchMultiFilter
+                values={branches}
+                onChange={setBranches}
+                options={branchOptions}
+              />
+              <ReportMoreFilters activeCount={active.search.trim() ? 1 : 0}>
+                <ReportSearchFilter
+                  value={active.search}
+                  onChange={setActiveSearch}
+                  placeholder={`Search ${PENDING_INVOICE_TAB_META[activeTab].sourceNoLabel.toLowerCase()}, dispatch, party…`}
+                />
+              </ReportMoreFilters>
+            </ReportFilterRow>
+          }
+        >
+          <PendingInvoicesListing
+            tab={activeTab}
+            mounted={mounted}
+            toolbarRows={toolbarRows}
+            page={active.page}
+            pageSize={active.pageSize}
+            onPageChange={setActivePage}
+            onPageSizeChange={setActivePageSize}
+            loading={active.loading}
+            error={active.error}
+            clearFilters={clearFilters}
+            hasToolbarFilters={hasToolbarFilters}
+          />
+        </AccountsPageShell>
+      </AccountsColumnFilterProvider>
+    </div>
   );
 }

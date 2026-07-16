@@ -1,6 +1,6 @@
 /**
  * Removes misplaced duplicate GST ledgers from stored COA.
- * Statutory input GST belongs under GST Input; output GST under GST Output (both under Duties & Taxes Payable).
+ * Statutory input GST belongs under GST Input Credit; output GST under GST Payable.
  * Rate-suffixed ledgers (e.g. Input CGST (GST 5%)) from legacy GST Master sync are removed.
  */
 
@@ -33,6 +33,10 @@ function isUnderGstInput(pathNames: string[]): boolean {
   return pathNames.includes("GST Input") || pathNames.includes("GST Input Credit");
 }
 
+function isUnderGstOutput(pathNames: string[]): boolean {
+  return pathNames.includes("GST Output") || pathNames.includes("GST Payable");
+}
+
 /** Drop GST ledgers sitting under the wrong COA groups (e.g. demo bundle duplicates). */
 export function stripMisplacedGstLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
   return records.filter((r) => {
@@ -59,13 +63,14 @@ export function stripMisplacedGstLedgers(records: ChartOfAccount[]): ChartOfAcco
     }
 
     if (GST_OUTPUT_LEDGER_NAMES.has(nameLower)) {
-      return isUnderGroup(pathNames, "GST Output");
+      return isUnderGstOutput(pathNames);
     }
 
     if (DUTIES_DIRECT_STATUTORY_LEDGER_NAMES.has(nameLower)) {
       return (
-        isUnderGroup(pathNames, "Duties & Taxes Payable") &&
-        !isUnderGroup(pathNames, "GST Output")
+        (isUnderGroup(pathNames, "Duties & Taxes") ||
+          isUnderGroup(pathNames, "Duties & Taxes Payable")) &&
+        !isUnderGstOutput(pathNames)
       );
     }
 

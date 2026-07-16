@@ -31,6 +31,10 @@ import { requestCoaEditLedger } from "../coa-edit-ledger-bridge";
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
+  CoaSystemManagedLock,
+  isSystemManagedStatutoryNode,
+} from "./CoaSystemManagedLock";
+import {
   LEVEL_SELECTED_ROW_CLASS,
   COA_TREE_CHEVRON_WIDTH_CLASS,
   coaNodeAccessibleLabel,
@@ -107,6 +111,7 @@ const TreeNode = memo(function TreeNodeComponent({
   const isLedger = node.nodeLevel === "ledger";
   const isPrimaryHead = node.nodeLevel === "primary_head";
   const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
+  const isStatutoryManaged = isSystemManagedStatutoryNode(node);
   const hasChildren = isSidebar
     ? coaSidebarNodeHasChildren(records, node.id)
     : coaTreeNodeHasChildren(records, node.id);
@@ -246,7 +251,7 @@ const TreeNode = memo(function TreeNodeComponent({
                 )}
               >
                 {node.accountName}
-                {isSystemLocked && (
+                {isSystemLocked && !isStatutoryManaged && (
                   <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
                 )}
                 {!isLedger && ledgerCount > 0 && (
@@ -255,6 +260,9 @@ const TreeNode = memo(function TreeNodeComponent({
                   </span>
                 )}
               </span>
+            )}
+            {isStatutoryManaged && (
+              <CoaSystemManagedLock className="mx-0.5 shrink-0" />
             )}
             {!isSidebar && (
               <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0" />

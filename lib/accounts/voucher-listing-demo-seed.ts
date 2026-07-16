@@ -297,10 +297,10 @@ function seedJournalVouchers(): void {
     resolveLedger("Salary Payable - HO Staff", "Salary Payable", "Incentive & Bonus Payable") ??
     null;
   const bonusPayable = resolveLedger("Incentive & Bonus Payable", "Salary Payable") ?? salaryPayable;
-  const cgst = resolveLedger("CGST Payable", "Output CGST") ?? null;
-  const sgst = resolveLedger("SGST Payable", "Output SGST") ?? null;
+  const cgst = resolveLedger("CGST Payable", "CGST Output", "Output CGST") ?? null;
+  const sgst = resolveLedger("SGST Payable", "SGST Output", "Output SGST") ?? null;
   const gstInput =
-    resolveLedger("Input CGST", "GST Input Credit", "Input SGST", "IGST Input") ?? cgst;
+    resolveLedger("CGST Input", "SGST Input", "IGST Input", "Input CGST") ?? cgst;
 
   if (depreciation && accumulated) {
     postVoucher({

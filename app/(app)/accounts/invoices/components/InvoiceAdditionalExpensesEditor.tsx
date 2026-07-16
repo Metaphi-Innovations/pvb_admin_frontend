@@ -84,10 +84,12 @@ export function InvoiceAdditionalExpensesEditor({
 		);
 	};
 
-	const addRow = () => onChange([...expenses, createEmptyAdditionalExpense()]);
+	const addRow = () => onChange([...expenses, createEmptyAdditionalExpense("manual")]);
 	const removeRow = (id: string) => {
+		const target = expenses.find((r) => r.id === id);
+		if (target?.origin === "sales_order") return;
 		const next = expenses.filter((r) => r.id !== id);
-		onChange(next.length ? next : [createEmptyAdditionalExpense()]);
+		onChange(next.length ? next : [createEmptyAdditionalExpense("manual")]);
 	};
 
 	const headers = [
@@ -135,12 +137,13 @@ export function InvoiceAdditionalExpensesEditor({
 						) : (
 							expenses.map((row) => {
 								const calc = calcAdditionalExpenseRow(row);
+								const fromSalesOrder = row.origin === "sales_order";
 								return (
 									<tr key={row.id} className="border-b border-border/40 last:border-b-0">
 										<td className="p-2 min-w-[180px]">
 											<Select
 												value={row.expenseHead || undefined}
-												disabled={disabled}
+												disabled={disabled || fromSalesOrder}
 												onValueChange={(v) =>
 													update(row.id, {
 														expenseHead: v as InvoiceAdditionalExpense["expenseHead"],
@@ -158,6 +161,9 @@ export function InvoiceAdditionalExpensesEditor({
 													))}
 												</SelectContent>
 											</Select>
+											{fromSalesOrder ? (
+												<p className="text-[10px] text-muted-foreground mt-0.5">From Sales Order</p>
+											) : null}
 										</td>
 										<td className="p-2 w-[120px]">
 											<AccountsMoneyInput
@@ -213,7 +219,7 @@ export function InvoiceAdditionalExpensesEditor({
 											/>
 										</td>
 										<td className="p-2 w-10">
-											{!disabled && (
+											{!disabled && !fromSalesOrder && (
 												<button
 													type="button"
 													onClick={() => removeRow(row.id)}
@@ -234,13 +240,18 @@ export function InvoiceAdditionalExpensesEditor({
 
 			{!disabled && (
 				<div className="flex items-center justify-end gap-2">
-					{expenses.length > 1 && (
+					{expenses.some((e) => e.origin !== "sales_order") && (
 						<Button
 							type="button"
 							variant="outline"
 							size="sm"
 							className="h-9 text-sm font-medium gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-							onClick={() => removeRow(expenses[expenses.length - 1].id)}
+							onClick={() => {
+								const lastManual = [...expenses]
+									.reverse()
+									.find((e) => e.origin !== "sales_order");
+								if (lastManual) removeRow(lastManual.id);
+							}}
 						>
 							<Trash2 className="w-4 h-4" /> Delete Expense
 						</Button>

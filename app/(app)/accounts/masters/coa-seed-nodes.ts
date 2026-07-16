@@ -435,6 +435,96 @@ function buildAccountGroups(
   }
 }
 
+const REMOVED_STATUTORY_CODES = new Set(["231104", "231114"]);
+
+/**
+ * Reparents and renames statutory nodes after allocation so existing system IDs
+ * remain stable across the hierarchy migration.
+ */
+function applyStatutoryStructure(nodes: ChartOfAccount[]): ChartOfAccount[] {
+  const currentAssets = nodes.find((node) => node.accountCode === "1200");
+  const duties = nodes.find((node) => node.accountCode === "2311");
+  if (!currentAssets || !duties) return nodes;
+
+  const renamedDuties = "Duties & Taxes";
+  const renamedGstInput = "GST Input Credit";
+  const renamedGstOutput = "GST Payable";
+
+  return nodes
+    .filter((node) => !REMOVED_STATUTORY_CODES.has(node.accountCode))
+    .map((node) => {
+      if (node.accountCode === "2311") {
+        return {
+          ...node,
+          accountName: renamedDuties,
+          parentAccountId: 2,
+          parentAccount: "Liabilities",
+          specializedGroupType: "gst_duties",
+        };
+      }
+
+      if (node.accountCode === "23110") {
+        return {
+          ...node,
+          accountName: renamedGstInput,
+          accountType: "Asset",
+          parentAccountId: currentAssets.id,
+          parentAccount: currentAssets.accountName,
+        };
+      }
+
+      if (GST_INPUT_LEDGER_NAMES.has(node.accountName.toLowerCase())) {
+        return {
+          ...node,
+          accountType: "Asset",
+          parentAccount: renamedGstInput,
+          erpSourceModule: "gst_master",
+        };
+      }
+
+      if (node.accountCode === "23111") {
+        return {
+          ...node,
+          accountName: renamedGstOutput,
+          parentAccountId: duties.id,
+          parentAccount: renamedDuties,
+        };
+      }
+
+      if (GST_OUTPUT_LEDGER_NAMES.has(node.accountName.toLowerCase())) {
+        return {
+          ...node,
+          parentAccount: renamedGstOutput,
+          erpSourceModule: "gst_master",
+        };
+      }
+
+      if (node.accountCode === "1219" || node.accountCode === "23112") {
+        const receivable = node.accountCode === "1219";
+        return {
+          ...node,
+          nodeLevel: "ledger",
+          description: "System Generated - Managed from ERP Masters",
+          usedIn: receivable
+            ? (["payments", "journal"] as ErpUsageModule[])
+            : (["procurement", "payments", "journal"] as ErpUsageModule[]),
+          isSystemGenerated: true,
+          erpSourceModule: "tds_master",
+          alias: receivable ? "tds:receivable" : "tds:payable",
+          parentAccount: receivable ? currentAssets.accountName : renamedDuties,
+          balanceType: receivable ? "Debit" : "Credit",
+          tdsApplicable: true,
+        };
+      }
+
+      if (node.parentAccountId === duties.id) {
+        return { ...node, parentAccount: renamedDuties };
+      }
+
+      return node;
+    });
+}
+
 function buildSystemCoaNodes(): ChartOfAccount[] {
   _nextId = 100;
   const nodes: ChartOfAccount[] = [];
@@ -459,13 +549,13 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
   );
   buildNestedBranches(nodes, INDIRECT_EXPENSE_BRANCHES, indirectExpId, "Indirect Expenses", "Expense");
 
-  return nodes;
+  return applyStatutoryStructure(nodes);
 }
 
 /** System primary heads, account groups, and all sub-groups per CA chart */
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 14;
+export const COA_SYSTEM_REVISION = 15;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;
