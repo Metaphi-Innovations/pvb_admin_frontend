@@ -27,6 +27,10 @@ import {
 import type { CoaLedgerListingRow, CoaListingRow } from "../coa-listing-data";
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaHierarchyLevelIcon } from "./CoaLevelBadge";
+import {
+  CoaSystemManagedLock,
+  isSystemManagedStatutoryNode,
+} from "./CoaSystemManagedLock";
 import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
 import {
   AccountsColumnFilterProvider,
@@ -245,6 +249,7 @@ function CoaHierarchyTableContent({
             const { node } = row;
             const isLedger = node.nodeLevel === "ledger";
             const isSystemLocked = node.isSystem && isStructuralNode(node);
+            const isStatutoryManaged = isSystemManagedStatutoryNode(node);
             const allowAddSubGroup =
               canCreate && onAddSubGroup && canAddSubGroupUnder(node, records);
             const allowAddLedger =
@@ -285,8 +290,11 @@ function CoaHierarchyTableContent({
                       )}
                     >
                       {node.accountName}
-                      {isSystemLocked && (
+                      {isSystemLocked && !isStatutoryManaged && (
                         <Lock className="inline w-3 h-3 ml-1 text-muted-foreground/60" />
+                      )}
+                      {isStatutoryManaged && (
+                        <CoaSystemManagedLock className="ml-1" />
                       )}
                     </p>
                     {allowAddSubGroup || allowAddLedger || allowEdit || allowDelete ? (
@@ -471,8 +479,11 @@ function CoaLedgerTableContent({
                 onClick={() => onSelectLedger(ledger)}
               >
                 <AccountsTableCell wrap className="min-w-[200px]">
-                  <p className="text-xs font-semibold text-foreground leading-snug group-hover:text-brand-700">
+                  <p className="flex items-center gap-1 text-xs font-semibold text-foreground leading-snug group-hover:text-brand-700">
                     {ledger.accountName}
+                    {isSystemManagedStatutoryNode(ledger) && (
+                      <CoaSystemManagedLock className="shrink-0" />
+                    )}
                   </p>
                   {row.tdsSection ? (
                     <p className="text-[11px] text-muted-foreground mt-0.5">

@@ -16,6 +16,7 @@ import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync
 import {
   buildSalesInvoicePrefillFromDispatch,
   findPendingDispatchForCustomer,
+  mapProratedSalesOrderExpenses,
   type DispatchSalesInvoicePrefill,
 } from "@/lib/accounts/dispatch-invoice-bridge";
 
@@ -108,20 +109,23 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
   const ledger = customer ? ensureCustomerLedgerFromMaster(customer) : null;
   const { lines, errors } = linesFromOrder(order);
 
+  const today = new Date().toISOString().slice(0, 10);
   return {
     invoiceType: "sales",
+    sourceType: "sales_order",
     salesOrderId: order.id,
     salesOrderNo: order.soNumber,
     sourceDispatchId: "",
     dispatchNo: "",
+    dispatchDate: "",
     branch: "Head Office",
     warehouse: "Central Warehouse",
     salesperson: order.salesManName ?? "",
     referenceNo: order.soNumber,
     paymentTerms: custFields.paymentTerms ?? "Net 30",
     creditDays,
-    dueDate: dueDateFromTerms(order.orderDate, creditDays),
-    invoiceDate: order.orderDate,
+    dueDate: dueDateFromTerms(today, creditDays),
+    invoiceDate: today,
     customerId: custFields.customerId,
     customerLedgerId: ledger?.id ?? null,
     customerCode: custFields.customerCode ?? "",
@@ -140,6 +144,7 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
     receivableLedger: ledger?.accountName ?? custFields.receivableLedger,
     lineItems: lines,
     lineErrors: errors,
+    additionalExpenses: mapProratedSalesOrderExpenses(order, lines),
     nearExpirySchemes: [],
   };
 }

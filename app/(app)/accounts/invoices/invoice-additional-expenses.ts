@@ -21,6 +21,8 @@ const FREIGHT_EXPENSE_HEADS = new Set<InvoiceExpenseHead>([
 	"Transportation",
 ]);
 
+export type InvoiceExpenseOrigin = "sales_order" | "manual";
+
 export interface InvoiceAdditionalExpense {
 	id: string;
 	expenseHead: InvoiceExpenseHead | "";
@@ -28,6 +30,28 @@ export interface InvoiceAdditionalExpense {
 	gstApplicable: boolean;
 	gstPct: number;
 	remarks: string;
+	/** Prefetched from Sales Order — not removable on the invoice screen. */
+	origin?: InvoiceExpenseOrigin;
+}
+
+export function mapSalesOrderExpenseNameToHead(
+	name: string,
+): InvoiceExpenseHead | "" {
+	const n = name.trim().toLowerCase();
+	if (!n) return "";
+	const hit = INVOICE_EXPENSE_HEAD_OPTIONS.find(
+		(h) => h.toLowerCase() === n || n.includes(h.toLowerCase().replace(" charges", "")),
+	);
+	if (hit) return hit;
+	if (n.includes("freight") || n.includes("transport")) return "Freight Charges";
+	if (n.includes("pack")) return "Packing Charges";
+	if (n.includes("load") && !n.includes("unload")) return "Loading Charges";
+	if (n.includes("unload")) return "Unloading Charges";
+	if (n.includes("insur")) return "Insurance";
+	if (n.includes("handl")) return "Handling Charges";
+	if (n.includes("doc")) return "Documentation Charges";
+	if (n.includes("courier")) return "Courier Charges";
+	return "Other Charges";
 }
 
 export interface InvoiceAdditionalExpenseCalc {
@@ -42,7 +66,9 @@ export interface InvoiceAdditionalExpensesTotals {
 	totalAmount: number;
 }
 
-export function createEmptyAdditionalExpense(): InvoiceAdditionalExpense {
+export function createEmptyAdditionalExpense(
+	origin: InvoiceExpenseOrigin = "manual",
+): InvoiceAdditionalExpense {
 	return {
 		id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
 		expenseHead: "",
@@ -50,6 +76,7 @@ export function createEmptyAdditionalExpense(): InvoiceAdditionalExpense {
 		gstApplicable: false,
 		gstPct: 0,
 		remarks: "",
+		origin,
 	};
 }
 

@@ -15,6 +15,7 @@ export interface PendingTaxInvoiceRow {
   invoiceType: InvoiceDocumentType;
   customerName: string;
   dispatchDate: string;
+  branch: string;
   taxableValue: number;
   gstAmount: number;
   invoiceValue: number;
@@ -39,6 +40,7 @@ export function listPendingTaxInvoices(): PendingTaxInvoiceRow[] {
       invoiceType: row.invoiceType,
       customerName: row.customerName,
       dispatchDate: row.dispatchDate,
+      branch: row.warehouse,
       taxableValue: row.taxableValue,
       gstAmount: row.gstAmount,
       invoiceValue: row.invoiceValue,

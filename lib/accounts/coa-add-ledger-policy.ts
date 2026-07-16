@@ -113,9 +113,14 @@ export function resolveCoaAddLedgerPolicy(
   node: ChartOfAccount,
   records: ChartOfAccount[],
 ): CoaAddLedgerPolicy {
-  // Form ownership is resolved separately by the centralized behavior table.
-  // A specialized group must never silently fall back to the generic form.
-  resolveCoaLedgerBehavior(node, records);
+  const behavior = resolveCoaLedgerBehavior(node, records);
+  if (behavior.kind === "gst" || behavior.kind === "tds") {
+    return {
+      blocked: true,
+      reason: "System Generated - Managed from ERP Masters",
+      alternatives: [],
+    };
+  }
   return { blocked: false, alternatives: [] };
 }
 

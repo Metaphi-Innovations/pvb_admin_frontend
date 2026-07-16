@@ -230,6 +230,24 @@ function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]
   return !isManualSubGroupLedger(record, allNodes);
 }
 
+const LEGACY_STATUTORY_GROUP_NAMES = new Set([
+  "gst input",
+  "gst input credit",
+  "gst output",
+  "gst payable",
+  "tds receivable",
+  "tds payable",
+  "duties & taxes",
+  "duties & taxes payable",
+]);
+
+function isLegacyStatutoryGroup(record: ChartOfAccount): boolean {
+  return (
+    record.nodeLevel === "account_group" &&
+    LEGACY_STATUTORY_GROUP_NAMES.has(record.accountName.trim().toLowerCase())
+  );
+}
+
 function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   const mergedSystem = SYSTEM_COA_NODES.map((sys) => ({
     ...sys,
@@ -247,7 +265,7 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   }));
 
   const rawUserGroups = migratedStored.filter(
-    (r) => r.nodeLevel === "account_group" && !r.isSystem,
+    (r) => r.nodeLevel === "account_group" && !r.isSystem && !isLegacyStatutoryGroup(r),
   );
 
   const rawUserLedgers = migratedStored.filter(

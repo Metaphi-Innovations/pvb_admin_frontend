@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Info } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,9 +38,13 @@ export interface SalesInvoiceDocumentInfoSectionProps {
   selectedDispatchId: string;
   onDispatchSelect: (dispatchId: string, row: PendingDispatchInvoiceRow | null) => void;
   showDispatchSelect?: boolean;
+  /** Sales Order Pending→Generate: show real preview number, not "Auto-generated". */
+  previewInvoiceNo?: string;
+  compactGrid?: boolean;
+  invoiceDateRequired?: boolean;
 }
 
-export function SalesInvoiceDocumentInfoSection({
+function SalesInvoiceDocumentInfoSectionInner({
   isEdit,
   invoiceNo,
   invoiceDate,
@@ -55,25 +59,32 @@ export function SalesInvoiceDocumentInfoSection({
   selectedDispatchId,
   onDispatchSelect,
   showDispatchSelect = false,
+  previewInvoiceNo,
+  compactGrid = false,
+  invoiceDateRequired = false,
 }: SalesInvoiceDocumentInfoSectionProps) {
   const [dispatchInfoOpen, setDispatchInfoOpen] = useState(false);
   const hasDispatch = Boolean(sourceDispatchId || dispatchRef);
+  const displayInvoiceNo = isEdit
+    ? invoiceNo
+    : previewInvoiceNo?.trim() || "Auto-generated";
 
   return (
     <div className="space-y-3">
-      <div className={INVOICE_FORM_GRID_CLASS}>
+      <div className={compactGrid ? "so-inv-grid" : INVOICE_FORM_GRID_CLASS}>
         <InvoiceFormField label="Invoice No.">
           <InvoiceFormInput
             disabled
             className="bg-slate-50 text-slate-700 font-mono"
-            value={isEdit ? invoiceNo : "Auto-generated"}
+            value={displayInvoiceNo}
           />
         </InvoiceFormField>
-        <InvoiceFormField label="Invoice Date">
+        <InvoiceFormField label="Invoice Date" required={invoiceDateRequired}>
           <InvoiceFormInput
             type="date"
             value={invoiceDate}
             onChange={(e) => onInvoiceDateChange(e.target.value)}
+            required={invoiceDateRequired}
           />
         </InvoiceFormField>
         <InvoiceFormField label="Due Date">
@@ -137,3 +148,5 @@ export function SalesInvoiceDocumentInfoSection({
     </div>
   );
 }
+
+export const SalesInvoiceDocumentInfoSection = memo(SalesInvoiceDocumentInfoSectionInner);

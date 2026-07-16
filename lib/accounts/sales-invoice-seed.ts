@@ -22,7 +22,7 @@ import {
   demoTimestamp,
 } from "@/lib/accounts/demo-date-utils";
 
-export const SALES_INVOICE_SEED_VERSION = 5;
+export const SALES_INVOICE_SEED_VERSION = 6;
 
 
 
@@ -538,6 +538,58 @@ export function buildSalesInvoiceSeed(): InvoiceRecord[] {
         updatedAt: demoTimestamp(invoiceDate),
       } satisfies InvoiceRecord;
     })(),
+    // Sample order invoices — distinct dispatch nos so Pending Invoices is unchanged
+    buildSeedInvoice(
+      110,
+      demoDocNo("INV", 10),
+      "sales",
+      demoDateAt(2),
+      "SM-2024-001",
+      `DSP-SM-GEN-${y}-001`,
+      "Rajesh Kumar (TM)",
+      0,
+      0,
+      0,
+      "sent",
+      "Demo Sample Kit A",
+      0,
+      false,
+      "Maharashtra",
+    ),
+    buildSeedInvoice(
+      111,
+      demoDocNo("INV", 11),
+      "sales",
+      demoDateAt(4),
+      "SMP-2024-003",
+      `DSP-SM-GEN-${y}-002`,
+      "Vikram Das (Intern)",
+      0,
+      0,
+      0,
+      "sent",
+      "Training Sample Pack",
+      0,
+      false,
+      "Maharashtra",
+    ),
+    buildSeedInvoice(
+      112,
+      demoDocNo("INV", 12),
+      "sales",
+      demoDateAt(6),
+      "SM-2024-004",
+      `DSP-SM-GEN-${y}-003`,
+      "Priya Singh (ASM)",
+      0,
+      0,
+      0,
+      "sent",
+      "Event Display Samples",
+      0,
+      false,
+      "Maharashtra",
+    ),
   ];
 }
 

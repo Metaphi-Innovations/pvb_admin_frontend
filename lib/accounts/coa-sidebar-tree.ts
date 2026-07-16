@@ -28,12 +28,7 @@ import {
 import type { CoaVisualLevel } from "@/app/(app)/accounts/masters/chart-of-accounts/components/coa-tree-visual";
 
 const CONTAINER_SPECIALIZED_TYPES = new Set<CoaSpecializedGroupType>([
-  "gst_input",
-  "gst_output",
-  "gst_payable",
   "gst_receivable",
-  "gst_duties",
-  "tds_payable",
 ]);
 
 function parentOf(
@@ -186,6 +181,15 @@ export function getCoaSidebarTreeChildren(
   if (parent.nodeLevel === "account_group") {
     if (isCoaSidebarLevel3Subgroup(parent, records)) {
       return collectSidebarLedgers(records, parentId);
+    }
+    if (parent.specializedGroupType === "gst_duties") {
+      const directLedgers = getDirectChildren(records, parentId).filter(
+        (child) => child.nodeLevel === "ledger",
+      );
+      return [
+        ...collectSidebarLevel3Subgroups(records, parentId),
+        ...directLedgers,
+      ].sort((a, b) => a.accountName.localeCompare(b.accountName));
     }
     return collectSidebarLevel3Subgroups(records, parentId);
   }
