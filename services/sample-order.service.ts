@@ -62,6 +62,13 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
 
+  let quantityType = "Piece";
+  if (raw.quantity_type) {
+    quantityType = String(raw.quantity_type).toUpperCase() === "CASE" ? "Case" : "Piece";
+  } else {
+    quantityType = caseQty > 0 ? "Case" : "Piece";
+  }
+
   return {
     id: asString(raw.sample_order_item_id || `line-${idx}`),
     productId: raw.product_id,
@@ -72,7 +79,7 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
     packSize: unitsPerPacking,
-    quantityType: caseQty > 0 ? "Case" : "Piece",
+    quantityType: quantityType as "Case" | "Piece",
     unitPrice: asNumber(raw.dp_price),
     discount: asNumber(raw.discount_percent),
     discountValue: asNumber(raw.discount_amount),
