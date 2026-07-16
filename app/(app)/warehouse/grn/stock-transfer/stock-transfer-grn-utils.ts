@@ -10,7 +10,7 @@ import {
 } from "@/lib/warehouse/grn-quantity";
 
 /** Pending ST GRN eligible dispatches use DELIVERY_DONE (distinct from DISPATCHED). */
-export const ST_DISPATCH_ELIGIBLE_STATUS = "DELIVERY_DONE";
+export const ST_DISPATCH_ELIGIBLE_STATUS = "DELIVERED";
 export const ST_DISPATCH_SOURCE_TYPE = "stock_transfer";
 
 export interface PackingCustomerSnapshot {
