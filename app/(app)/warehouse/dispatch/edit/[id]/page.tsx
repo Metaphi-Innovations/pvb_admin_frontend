@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, Fragment } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Pencil } from "lucide-react";
+import { Pencil, CheckSquare } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { getDispatchById, updateDispatch } from "../../services";
 
@@ -24,6 +24,8 @@ export default function EditDispatchPage() {
   const [lrNumber, setLrNumber] = useState("");
   const [ewayBillNumber, setEwayBillNumber] = useState("");
 
+  const [dispatchDetails, setDispatchDetails] = useState<any>(null);
+
   useEffect(() => {
     if (!id) return;
     setInitialLoading(true);
@@ -38,6 +40,7 @@ export default function EditDispatchPage() {
         setTransporterName(data.transporter || "");
         setLrNumber(data.lrNumber || data.lr_number || "");
         setEwayBillNumber(data.ewayBillNumber || data.eway_bill_number || "");
+        setDispatchDetails(data);
       })
       .catch(console.error)
       .finally(() => setInitialLoading(false));
@@ -73,6 +76,55 @@ export default function EditDispatchPage() {
       setLoading(false);
     }
   };
+
+  const groupedDispatchItems = useMemo(() => {
+    if (!dispatchDetails?.items) return [];
+    const map = new Map<string, any>();
+    dispatchDetails.items.forEach((item: any) => {
+      const pId = item.product_id;
+      if (!map.has(pId)) {
+        map.set(pId, {
+          product_id: pId,
+          product_name: item.product?.product_name || item.product_id,
+          unit_price: item.unit_price || 0,
+          total_order_qty: 0,
+          total_packed_qty: 0,
+          total_dispatched_qty: 0,
+          total_discount: 0,
+          total_gst: 0,
+          total_amount: 0,
+          batches: []
+        });
+      }
+      const group = map.get(pId);
+      
+      const packSizeRaw = item.product?.unit_per_packing ?? item.product?.conversion_qty ?? item.product_snapshot?.conversion_qty ?? 1;
+      const packSize = Number(packSizeRaw) || 1;
+      
+      const dispQty = Number(item.dispatched_base_qty || item.dispatched_qty || item.quantity || 0) / packSize;
+      
+      group.total_dispatched_qty += dispQty;
+      group.total_discount += Number(item.discount_amount || 0);
+      group.total_gst += Number(item.gst_amount || 0);
+      group.total_amount += Number(item.item_total || 0);
+      group.total_order_qty = Math.max(group.total_order_qty, Number(item.order_qty || 0) / packSize);
+      group.total_packed_qty = Math.max(group.total_packed_qty, Number(item.packed_qty || 0) / packSize);
+      
+      const batchCode = item.batch_snapshot?.batch_code || item.inventory_batch?.batch_code || item.batch_code || "Unknown";
+      const existingBatch = group.batches.find((b: any) => b.batch_code === batchCode);
+      if (existingBatch) {
+        existingBatch.qty += dispQty;
+      } else {
+        group.batches.push({
+          id: item.id || item.dispatch_item_id,
+          batch_code: batchCode,
+          qty: dispQty,
+          remarks: item.remarks
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [dispatchDetails]);
 
   if (initialLoading) {
     return (
@@ -173,6 +225,102 @@ export default function EditDispatchPage() {
             </div>
           </div>
         </div>
+
+        {dispatchDetails && (
+          <div className="border-t border-border/80 pt-6 mt-6 space-y-6">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
+              <CheckSquare className="w-4 h-4 text-brand-600" /> Dispatch Source Details
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-border">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Source Document No</p>
+                <p className="text-sm font-bold text-foreground font-mono">{dispatchDetails.source_document_no || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Customer / Target Warehouse</p>
+                <p className="text-sm font-bold text-foreground">{dispatchDetails.customer?.customer_name || dispatchDetails.target_warehouse_name || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Items</p>
+                <p className="text-sm font-bold text-foreground">{dispatchDetails.total_items}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Quantity</p>
+                <p className="text-sm font-bold text-foreground">{dispatchDetails.total_qty}</p>
+              </div>
+            </div>
+
+            {dispatchDetails.packing_done && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-border">
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Packing Done No</p>
+                  <p className="text-sm font-bold text-foreground font-mono">{dispatchDetails.packing_done.packing_done_no}</p>
+                </div>
+                {dispatchDetails.customer && dispatchDetails.source_type !== "stock_transfer" && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
+                    <div className="text-xs text-foreground space-y-1">
+                      <p className="font-semibold">{dispatchDetails.customer.customer_name}</p>
+                      <p>{dispatchDetails.customer.shipping_address || dispatchDetails.customer.billing_address || "No address provided."}</p>
+                      {dispatchDetails.customer.city && <p>{dispatchDetails.customer.city}, {dispatchDetails.customer.state} {dispatchDetails.customer.pincode}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {dispatchDetails.items && dispatchDetails.items.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dispatched Products</p>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-border">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground">Product</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Order Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Packed Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Dispatched Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Unit Price</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Discount</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">GST</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Total</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {groupedDispatchItems.map((group: any) => (
+                        <Fragment key={group.product_id}>
+                          <tr className="bg-slate-50/50">
+                            <td className="px-3 py-2 font-medium">{group.product_name}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{group.total_order_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{group.total_packed_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">{group.total_dispatched_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.unit_price).toFixed(2)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.total_discount).toFixed(2)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.total_gst).toFixed(2)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">₹{Number(group.total_amount).toFixed(2)}</td>
+                            <td className="px-3 py-2"></td>
+                          </tr>
+                          {group.batches.map((b: any) => (
+                            <tr key={b.id} className="text-muted-foreground bg-white">
+                              <td colSpan={3} className="px-3 py-1.5 pl-6 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-border" />
+                                Batch: <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">{b.batch_code}</span>
+                              </td>
+                              <td className="px-3 py-1.5 tabular-nums text-right font-mono">{b.qty}</td>
+                              <td colSpan={4}></td>
+                              <td className="px-3 py-1.5">{b.remarks || "—"}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </FormContainer>
   );

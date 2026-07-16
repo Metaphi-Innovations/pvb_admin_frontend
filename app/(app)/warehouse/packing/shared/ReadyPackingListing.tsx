@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, PlusCircle } from "lucide-react";
+import { Eye, PlusCircle, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -64,6 +65,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Dynamic filter options state
   const [packingNoOptions, setPackingNoOptions] = useState<{ label: string; value: string }[]>([]);
@@ -148,7 +150,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
       active = false;
       controller.abort();
     };
-  }, [page, pageSize, sort, filters, sourceFilter, selectedWarehouse]);
+  }, [page, pageSize, sort, filters, sourceFilter, selectedWarehouse, refreshKey]);
 
   const columns = useMemo(() => {
     const isPurchaseReturn = sourceFilter === "purchase_return";
@@ -295,6 +297,26 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
       icon: PlusCircle,
       onClick: (row) => router.push(`/warehouse/packing/create/${row.id}`),
       disabled: (row) => row.status === "Fully Packed",
+    },
+    {
+      label: "Revert",
+      action: "revert",
+      icon: RotateCcw,
+      onClick: async (row) => {
+        if (!window.confirm("Are you sure you want to revert this Packing List? This will release the reserved inventory back to available stock.")) {
+          return;
+        }
+        try {
+          await PackingListService.revert(row.id);
+          toast.success("Packing List reverted successfully.");
+          setRefreshKey(k => k + 1);
+        } catch (err: any) {
+          console.error("Error reverting packing list:", err);
+          toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to revert Packing List");
+        }
+      },
+      disabled: (row) => row.status !== "Ready For Packing",
+      variant: "destructive",
     },
   ];
 

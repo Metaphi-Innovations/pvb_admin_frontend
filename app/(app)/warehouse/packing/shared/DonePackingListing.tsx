@@ -3,7 +3,8 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, Truck } from "lucide-react";
+import { Eye, Truck, RotateCcw, Pencil } from "lucide-react";
+import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PackingRecord } from "../types";
 import Link from "next/link";
@@ -58,6 +59,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Dynamic filter options state
   const [packingNoOptions, setPackingNoOptions] = useState<{ label: string; value: string }[]>([]);
@@ -146,7 +148,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
       active = false;
       controller.abort();
     };
-  }, [page, pageSize, sort, filters, sourceFilter, selectedWarehouse]);
+  }, [page, pageSize, sort, filters, sourceFilter, selectedWarehouse, refreshKey]);
 
   const isPurchaseReturn = sourceFilter === "purchase_return";
 
@@ -352,11 +354,38 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
       onClick: (row) => router.push(`/warehouse/packing/view/${row.id}`),
     },
     {
+      label: "Edit",
+      action: "edit",
+      icon: Pencil,
+      hide: (row) => row.status !== "Ready For Dispatch",
+      onClick: (row) => router.push(`/warehouse/packing/edit/${row.id}`),
+    },
+    {
       label: "Create Dispatch",
       action: "dispatch",
       icon: Truck,
-      hide: (row) => row.status !== "Packed",
+      hide: (row) => row.status !== "Ready For Dispatch",
       onClick: (row) => router.push(`/warehouse/dispatch/create?packingId=${row.id}`),
+    },
+    {
+      label: "Revert",
+      action: "revert",
+      icon: RotateCcw,
+      onClick: async (row) => {
+        if (!window.confirm("Are you sure you want to revert this Packing Done? This will release the items back to Packing List.")) {
+          return;
+        }
+        try {
+          await PackingDoneService.revert(row.id);
+          toast.success("Packing Done reverted successfully.");
+          setRefreshKey(k => k + 1);
+        } catch (err: any) {
+          console.error("Error reverting packing done:", err);
+          toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to revert Packing Done");
+        }
+      },
+      disabled: (row) => row.status !== "Ready For Dispatch",
+      variant: "destructive",
     },
   ];
 

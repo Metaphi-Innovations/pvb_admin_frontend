@@ -52,7 +52,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer" | "purchase_return">("sales_order");
+  const [subTab, setSubTab] = useState<"sales_order" | "sample" | "stock_transfer" | "purchase_return">("sales_order");
 
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
@@ -98,7 +98,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
     try {
       let apiSourceType;
       if (subTab === "sales_order") apiSourceType = "normal_sales";
-      else if (subTab === "sample_order") apiSourceType = "sample_order";
+      else if (subTab === "sample") apiSourceType = "sample";
       else if (subTab === "stock_transfer") apiSourceType = "stock_transfer";
       else if (subTab === "purchase_return") apiSourceType = "purchase_return";
 
@@ -133,7 +133,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       }
       
       if (subTab === "sales_order") queryFilters.source_type = "normal_sales";
-      else if (subTab === "sample_order") queryFilters.source_type = "sample_order";
+      else if (subTab === "sample") queryFilters.source_type = "sample";
       else if (subTab === "stock_transfer") queryFilters.source_type = "stock_transfer";
       else if (subTab === "purchase_return") queryFilters.source_type = "purchase_return";
 
@@ -172,7 +172,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
 
 
   const partyHeader =
-    subTab === "sample_order"
+    subTab === "sample"
       ? "Issued To Employee"
       : subTab === "stock_transfer"
         ? "Target Warehouse"
@@ -269,7 +269,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          if (type === "sample_order") {
+          if ((type as any) === "sample_order" || (type as any) === "sample") {
             return (
               <span className="font-mono text-xs tabular-nums">
                 {formatWarehouseOrderAmount(type, 0)}
@@ -463,8 +463,8 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
     <div className="space-y-4">
       <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
         <TabsList>
-          <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
-          <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
+          <TabsTrigger value="sales_order" className="text-xs">Normal Sales</TabsTrigger>
+          <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
           <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
           <TabsTrigger value="purchase_return" className="text-xs">Purchase Return</TabsTrigger>
         </TabsList>

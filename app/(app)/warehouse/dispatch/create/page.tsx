@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, Fragment } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,6 +105,47 @@ export default function CreateDispatchPage() {
     label: `${p.packing_done_no} - ${p.customer_name || p.source_type} (Qty: ${p.total_packed_qty})`
   }));
 
+  const groupedPackingProducts = useMemo(() => {
+    if (!packingDetails?.products) return [];
+    const map = new Map<string, any>();
+    packingDetails.products.forEach((item: any) => {
+      const pId = item.product_id;
+      if (!map.has(pId)) {
+        map.set(pId, {
+          product_id: pId,
+          product_name: item.product_name || item.product_id,
+          unit_price: item.unit_price || 0,
+          total_order_qty: 0,
+          total_packed_qty: 0,
+          total_discount: 0,
+          total_gst: 0,
+          total_amount: 0,
+          batches: []
+        });
+      }
+      const group = map.get(pId);
+      group.total_order_qty = Math.max(group.total_order_qty, Number(item.order_qty || 0));
+      group.total_packed_qty += Number(item.packed_qty || 0);
+      group.total_discount += Number(item.discount_amount || 0);
+      group.total_gst += Number(item.gst_amount || 0);
+      group.total_amount += Number(item.item_total || 0);
+      
+      const batchCode = item.batch_code || "Unknown";
+      const existingBatch = group.batches.find((b: any) => b.batch_code === batchCode);
+      if (existingBatch) {
+        existingBatch.qty += Number(item.packed_qty || 0);
+      } else {
+        group.batches.push({
+          id: item.packing_done_product_id,
+          batch_code: batchCode,
+          qty: Number(item.packed_qty || 0),
+          remarks: item.remarks
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [packingDetails]);
+
   return (
     <FormContainer
       title="Create Dispatch"
@@ -128,8 +169,8 @@ export default function CreateDispatchPage() {
     >
       <Tabs value={sourceType} onValueChange={setSourceType} className="mb-6 w-full">
         <TabsList>
-          <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
-          <TabsTrigger value="sample" className="text-xs">Sample Order</TabsTrigger>
+          <TabsTrigger value="sales_order" className="text-xs">Normal Sales</TabsTrigger>
+          <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
           <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
           <TabsTrigger value="purchase_return" className="text-xs">Purchase Return</TabsTrigger>
         </TabsList>
@@ -241,13 +282,13 @@ export default function CreateDispatchPage() {
               </div>
             </div>
 
-            {packingDetails && packingDetails.customer && packingDetails.source_type !== "stock_transfer" && (
+            {packingDetails && packingDetails.customer_snapshot && packingDetails.source_type !== "stock_transfer" && (
               <div className="bg-slate-50 p-4 rounded-lg border border-border">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
                 <div className="text-xs text-foreground space-y-1">
-                  <p className="font-semibold">{packingDetails.customer.customer_name}</p>
-                  <p>{packingDetails.customer.shipping_address || packingDetails.customer.billing_address || "No address provided."}</p>
-                  {packingDetails.customer.city && <p>{packingDetails.customer.city}, {packingDetails.customer.state} {packingDetails.customer.pincode}</p>}
+                  <p className="font-semibold">{packingDetails.customer_snapshot.customer_name}</p>
+                  <p>{packingDetails.customer_snapshot.shipping_address || packingDetails.customer_snapshot.billing_address || "No address provided."}</p>
+                  {packingDetails.customer_snapshot.city && <p>{packingDetails.customer_snapshot.city}, {packingDetails.customer_snapshot.state} {packingDetails.customer_snapshot.pincode}</p>}
                 </div>
               </div>
             )}
@@ -261,7 +302,7 @@ export default function CreateDispatchPage() {
               </div>
             )}
 
-            {packingDetails && packingDetails.items && packingDetails.items.length > 0 && (
+            {packingDetails && packingDetails.products && packingDetails.products.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Packed Products</p>
                 <div className="border border-border rounded-lg overflow-hidden">
@@ -269,17 +310,40 @@ export default function CreateDispatchPage() {
                     <thead className="bg-slate-50 border-b border-border">
                       <tr>
                         <th className="px-3 py-2 font-semibold text-muted-foreground">Product</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Order Qty</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Packed Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Unit Price</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Discount</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">GST</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Total</th>
                         <th className="px-3 py-2 font-semibold text-muted-foreground">Remarks</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {packingDetails.items.map((item: any) => (
-                        <tr key={item.packing_done_product_id}>
-                          <td className="px-3 py-2 font-medium">{item.product?.product_name || item.product_id}</td>
-                          <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{item.packed_qty}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{item.remarks || "—"}</td>
-                        </tr>
+                      {groupedPackingProducts.map((group: any) => (
+                        <Fragment key={group.product_id}>
+                          <tr className="bg-slate-50/50">
+                            <td className="px-3 py-2 font-medium">{group.product_name}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-medium">{group.total_order_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">{group.total_packed_qty}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.unit_price).toFixed(2)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.total_discount).toFixed(2)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono">₹{Number(group.total_gst).toFixed(2)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">₹{Number(group.total_amount).toFixed(2)}</td>
+                            <td className="px-3 py-2"></td>
+                          </tr>
+                          {group.batches.map((b: any) => (
+                            <tr key={b.id} className="text-muted-foreground bg-white">
+                              <td colSpan={2} className="px-3 py-1.5 pl-6 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-border" />
+                                Batch: <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">{b.batch_code}</span>
+                              </td>
+                              <td className="px-3 py-1.5 tabular-nums text-right font-mono">{b.qty}</td>
+                              <td colSpan={4}></td>
+                              <td className="px-3 py-1.5">{b.remarks || "—"}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

@@ -306,6 +306,13 @@ export const PackingListService = {
     );
     return response.data;
   },
+
+  async revert(id: string): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.REVERT(id)
+    );
+    return response.data;
+  },
 };
 
 function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
