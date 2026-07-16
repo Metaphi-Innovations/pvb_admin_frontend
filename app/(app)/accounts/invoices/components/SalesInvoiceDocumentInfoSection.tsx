@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Info } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -44,7 +44,7 @@ export interface SalesInvoiceDocumentInfoSectionProps {
   invoiceDateRequired?: boolean;
 }
 
-export function SalesInvoiceDocumentInfoSection({
+function SalesInvoiceDocumentInfoSectionInner({
   isEdit,
   invoiceNo,
   invoiceDate,
@@ -148,3 +148,5 @@ export function SalesInvoiceDocumentInfoSection({
     </div>
   );
 }
+
+export const SalesInvoiceDocumentInfoSection = memo(SalesInvoiceDocumentInfoSectionInner);

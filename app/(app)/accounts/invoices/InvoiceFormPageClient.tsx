@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
@@ -180,6 +180,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const searchParams = useSearchParams();
   const routeSourceType = searchParams.get("sourceType");
+  const routeDispatchId = searchParams.get("dispatchId");
+  const routeSoId = searchParams.get("so");
+  const routeDispatchNo = searchParams.get("dispatch");
   /** Create flow opened from Pending → Sales Order Invoices → Generate. */
   const isSalesOrderGeneration =
     !isEdit && (routeSourceType === "sales_order" || sourceType === "sales_order");
@@ -187,9 +190,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const isSalesOrderInvoice = isSalesOrderGeneration || sourceType === "sales_order";
 
   const products = useMemo(
-    () => getProductsForInvoice(customerId ? Number(customerId) : undefined),
-    [customerId],
+    () =>
+      isSalesOrderInvoice
+        ? []
+        : getProductsForInvoice(customerId ? Number(customerId) : undefined),
+    [customerId, isSalesOrderInvoice],
   );
+
+  const invoicesCacheRef = useRef<ReturnType<typeof loadInvoices> | null>(null);
+  const prefillKeyRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (invoiceDate && creditDays >= 0) {
@@ -203,7 +213,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setPreviewInvoiceNo("");
       return;
     }
-    setPreviewInvoiceNo(peekNextPvbSalesOrderInvoiceNo(loadInvoices(), invoiceDate));
+    if (!invoicesCacheRef.current) {
+      invoicesCacheRef.current = loadInvoices();
+    }
+    setPreviewInvoiceNo(
+      peekNextPvbSalesOrderInvoiceNo(invoicesCacheRef.current, invoiceDate),
+    );
   }, [isSalesOrderGeneration, isEdit, invoiceDate]);
 
   const applyCustomerTransactionFields = (fields: CustomerTransactionFields) => {
@@ -366,40 +381,49 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     if (customerChanged) clearDispatchLinkedFields();
   };
 
-  const onDispatchSelect = (dispatchId: string, row: PendingDispatchInvoiceRow | null) => {
-    setSelectedDispatchId(dispatchId);
-    if (!dispatchId || !row) {
-      setSourceDispatchId("");
-      setSalesOrderId(null);
-      setSalesOrderRef("");
-      setDispatchRef("");
-      setDispatchDate("");
-      setReferenceNo("");
-      setSalesperson("");
-      setWarehouse("Central Warehouse");
-      setBranch("Head Office");
-      setLines([createEmptyLine()]);
-      setError(null);
-      setSchemeSettlementEntries([]);
-      return;
-    }
+  const onDispatchSelect = useCallback(
+    (dispatchId: string, row: PendingDispatchInvoiceRow | null) => {
+      setSelectedDispatchId(dispatchId);
+      if (!dispatchId || !row) {
+        setSourceDispatchId("");
+        setSalesOrderId(null);
+        setSalesOrderRef("");
+        setDispatchRef("");
+        setDispatchDate("");
+        setReferenceNo("");
+        setSalesperson("");
+        setWarehouse("Central Warehouse");
+        setBranch("Head Office");
+        setLines([createEmptyLine()]);
+        setError(null);
+        setSchemeSettlementEntries([]);
+        return;
+      }
 
-    setDispatchDate(row.dispatchDate);
+      setDispatchDate(row.dispatchDate);
 
-    const prefill = buildSalesInvoicePrefillFromDispatch(
-      dispatchId,
-      row.dispatchNo,
-      row.salesOrderId ?? undefined,
-    );
-    if (prefill) applySalesInvoicePrefill(prefill);
-  };
+      const prefill = buildSalesInvoicePrefillFromDispatch(
+        dispatchId,
+        row.dispatchNo,
+        row.salesOrderId ?? undefined,
+      );
+      if (prefill) applySalesInvoicePrefill(prefill);
+    },
+    // applySalesInvoicePrefill closes over customers; customers is stable (memo once).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customers],
+  );
 
   useEffect(() => {
     if (isEdit) return;
-    const dispatchId = searchParams.get("dispatchId");
-    const soId = searchParams.get("so");
-    const dispatchNo = searchParams.get("dispatch");
-    const routeSource = searchParams.get("sourceType");
+    const dispatchId = routeDispatchId;
+    const soId = routeSoId;
+    const dispatchNo = routeDispatchNo;
+    const routeSource = routeSourceType;
+    const prefillKey = `${routeSource ?? ""}|${dispatchId ?? ""}|${soId ?? ""}|${dispatchNo ?? ""}`;
+    if (prefillKeyRef.current === prefillKey) return;
+    prefillKeyRef.current = prefillKey;
+
     if (routeSource === "sales_order") setSourceType("sales_order");
     else if (routeSource === "stock_transfer") setSourceType("stock_transfer");
     else if (routeSource === "sample_order") setSourceType("sample_order");
@@ -434,7 +458,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       prefill.sourceType = "sales_order";
     }
     applySalesInvoicePrefill(prefill);
-  }, [isEdit, searchParams, customers]);
+  }, [isEdit, routeDispatchId, routeSoId, routeDispatchNo, routeSourceType, customers]);
 
   useEffect(() => {
     if (!isEdit || invoiceId == null) return;
@@ -512,11 +536,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   }, [isEdit, invoiceId, router, customers]);
 
   const [baselineReady, setBaselineReady] = useState(false);
+  const searchParamsKey = `${routeSourceType ?? ""}|${routeDispatchId ?? ""}|${routeSoId ?? ""}|${routeDispatchNo ?? ""}`;
   useEffect(() => {
     setBaselineReady(false);
     const id = window.setTimeout(() => setBaselineReady(true), 350);
     return () => window.clearTimeout(id);
-  }, [isEdit, invoiceId, searchParams.toString()]);
+  }, [isEdit, invoiceId, searchParamsKey]);
+
+  /** Serialize heavy arrays independently so narration/bank edits don't re-stringify them. */
+  const linesDirtyKey = useMemo(() => JSON.stringify(lines), [lines]);
+  const expensesDirtyKey = useMemo(
+    () => JSON.stringify(additionalExpenses),
+    [additionalExpenses],
+  );
+  const schemesDirtyKey = useMemo(
+    () => JSON.stringify(schemeSettlementEntries),
+    [schemeSettlementEntries],
+  );
 
   const formSnapshot = useMemo(
     () => ({
@@ -530,8 +566,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       bankAccountId,
       remarks,
       narration,
-      lines,
-      additionalExpenses,
+      linesDirtyKey,
+      expensesDirtyKey,
       roundOff,
       invoiceType,
       sourceType,
@@ -540,7 +576,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       termsAndConditions,
       internalRemarks,
       salesperson,
-      schemeSettlementEntries,
+      schemesDirtyKey,
     }),
     [
       customerId,
@@ -553,8 +589,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       bankAccountId,
       remarks,
       narration,
-      lines,
-      additionalExpenses,
+      linesDirtyKey,
+      expensesDirtyKey,
       roundOff,
       invoiceType,
       sourceType,
@@ -563,7 +599,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       termsAndConditions,
       internalRemarks,
       salesperson,
-      schemeSettlementEntries,
+      schemesDirtyKey,
     ],
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
@@ -604,8 +640,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     };
   }, [lineTotals, expenseTotals, roundOff]);
 
-  const accountingPreview = useMemo(
-    () => ({
+  const accountingPreview = useMemo(() => {
+    if (isSalesOrderInvoice) return null;
+    return {
       invoiceNo: invoiceNo || "Auto",
       invoiceStatus: "draft" as const,
       customerName: customerName.trim() || "Customer",
@@ -615,9 +652,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       discountTotal: totals.discountTotal,
       lineItems: lines.filter((l) => l.productName || l.productId),
       placeOfSupply,
-    }),
-    [invoiceNo, customerName, totals, lines, placeOfSupply],
-  );
+    };
+  }, [
+    isSalesOrderInvoice,
+    invoiceNo,
+    customerName,
+    totals,
+    lines,
+    placeOfSupply,
+  ]);
 
   const showSezSupply = isSezGstCategory(customerGstCategory);
 
@@ -650,14 +693,33 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSezSupplyType("lut_bond");
       setLutNumber(sezLutResolution.lutNumber ?? "");
       setLutDeclaration(sezLutResolution.declaration ?? LUT_SUPPLY_DECLARATION);
-      setLines((prev) => prev.map((line) => ({ ...line, taxPct: 0 })));
+      setLines((prev) => {
+        if (prev.every((line) => line.taxPct === 0)) return prev;
+        return prev.map((line) =>
+          line.taxPct === 0 ? line : { ...line, taxPct: 0 },
+        );
+      });
       return;
     }
 
     setSezSupplyType("with_igst");
     setLutNumber("");
     setLutDeclaration("");
-  }, [showSezSupply, sezLutResolution.appliesLut, sezLutResolution.lutNumber, sezLutResolution.declaration, invoiceDate]);
+  }, [
+    showSezSupply,
+    sezLutResolution.appliesLut,
+    sezLutResolution.lutNumber,
+    sezLutResolution.declaration,
+  ]);
+
+  const bankPrintDetails = useMemo(
+    () => getBankAccountPrintDetails(bankAccountId),
+    [bankAccountId],
+  );
+
+  const handleBankAccountChange = useCallback((id: number | null) => {
+    setBankAccountId(id);
+  }, []);
 
   const buildInput = (invoiceStatus: InvoiceStatus) => {
     const soMode = isSalesOrderGeneration || sourceType === "sales_order";
@@ -735,7 +797,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   );
 
   const submit = (asDraft: boolean) => {
-    if (saving) return;
+    if (savingRef.current || saving) return;
     setError(null);
     setSuccess(null);
     if (!customerName.trim()) {
@@ -769,6 +831,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return;
     }
     try {
+      savingRef.current = true;
       setSaving(true);
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
       if (isEdit && invoiceId != null) {
@@ -797,6 +860,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save invoice.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -948,15 +1012,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             <WarehouseMappedBankAccountSelect
               warehouseRef={warehouse}
               value={bankAccountId}
-              onChange={(id) => setBankAccountId(id)}
+              onChange={handleBankAccountChange}
               label={soGen ? "Bank Account (on invoice PDF)" : "Bank Account (for payment / print)"}
               required={soGen}
             />
-            {bankAccountId != null && getBankAccountPrintDetails(bankAccountId) && (
+            {bankPrintDetails && (
               <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-                {getBankAccountPrintDetails(bankAccountId)!.bankName} · A/c ending{" "}
-                {String(getBankAccountPrintDetails(bankAccountId)!.accountNumber).slice(-4)} ·{" "}
-                {getBankAccountPrintDetails(bankAccountId)!.branchName || "—"}
+                {bankPrintDetails.bankName} · A/c ending{" "}
+                {String(bankPrintDetails.accountNumber).slice(-4)} ·{" "}
+                {bankPrintDetails.branchName || "—"}
               </p>
             )}
           </div>
@@ -1125,7 +1189,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </div>
         </div>
 
-        {!soGen && (
+        {!soGen && accountingPreview && (
           <Section title="Ledger Impact Preview">
             <div className="rounded-lg border border-slate-200 bg-white p-4">
               <SalesInvoiceAccountingPanel invoice={accountingPreview} />
