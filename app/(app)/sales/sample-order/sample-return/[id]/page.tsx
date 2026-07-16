@@ -132,7 +132,7 @@ export default function SampleReturnViewPage() {
                     <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
                     <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty} Cases</td>
                     <td className="py-3 px-3 text-xs font-bold text-center text-red-600">
-                      {p.quantityType === "Piece" || p.quantityType === "piece"
+                      {p.quantityType === "PIECE"
                         ? `${p.returnedBaseQty} Pieces`
                         : `${p.returnedQty} Cases`}
                     </td>

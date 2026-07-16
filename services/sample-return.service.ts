@@ -73,7 +73,6 @@ export interface SampleReturnLineItem {
   returnedQty: number;
   amount?: number;
   remarks?: string;
-  quantityType?: string;
 }
 
 export interface SampleReturnDetail {
@@ -176,7 +175,6 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
     returnedQty: returnedPackingQty,
     amount: asNumber(raw.return_amount) || asNumber(raw.amount),
     remarks: asString(raw.remarks),
-    quantityType: asString(raw.quantity_type),
   };
 }
 
