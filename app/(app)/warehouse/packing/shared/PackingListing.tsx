@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ReadyPackingListing } from "./ReadyPackingListing";
 import { DonePackingListing } from "./DonePackingListing";
 
@@ -8,7 +9,19 @@ type PackingStatusTab = "ready-for-packing" | "packing-done";
 type PackingSourceTab = "sales" | "sample" | "stock_transfer" | "purchase_return";
 
 export function PackingListing({ sourceFilter }: { sourceFilter: PackingSourceTab }) {
-  const [activeTab, setActiveTab] = useState<PackingStatusTab>("ready-for-packing");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<PackingStatusTab>(
+    tabParam === "packing-done" ? "packing-done" : "ready-for-packing",
+  );
+
+  useEffect(() => {
+    if (tabParam === "packing-done") {
+      setActiveTab("packing-done");
+    } else if (tabParam === "ready-for-packing") {
+      setActiveTab("ready-for-packing");
+    }
+  }, [tabParam]);
 
   return (
     <div className="space-y-4">

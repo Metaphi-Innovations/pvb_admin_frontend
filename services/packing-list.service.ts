@@ -96,12 +96,16 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
       : {};
   const products = Array.isArray(raw.products) ? raw.products : [];
   
+  const sourceType = asString(raw.source_type);
   const totalQty = products.reduce((sum: number, p: any) => {
     if (p && typeof p === "object") {
+      const orderBaseQty = asNumber(p.order_base_qty);
+      if (sourceType === "purchase_return") {
+        return sum + orderBaseQty;
+      }
       const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;
       const packSize = Number(packSizeRaw) || 1;
-      const orderQty = asNumber(p.order_base_qty) / packSize;
-      return sum + Math.floor(orderQty);
+      return sum + Math.floor(orderBaseQty / packSize);
     }
     return sum;
   }, 0);
@@ -318,16 +322,28 @@ export const PackingListService = {
 function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
   const products = Array.isArray(raw.products) ? raw.products : [];
   const warehouse = raw.warehouse?.warehouse_name || "";
-  
+  const customerSnapshot =
+    raw.customer_snapshot && typeof raw.customer_snapshot === "object"
+      ? raw.customer_snapshot
+      : {};
+  const sourceDocumentNo = asString(customerSnapshot.source_document_no);
+  const isPurchaseReturn = raw.source_type === "purchase_return";
+  const sourceDocType = raw.source_type === "normal_sales" ? "Sales Order" :
+                       raw.source_type === "sample" ? "Sample Order" :
+                       raw.source_type === "stock_transfer" ? "Stock Transfer" :
+                       isPurchaseReturn ? "Purchase Return" : raw.source_type;
+
   return {
     id: raw.packing_list_id,
-    salesOrderNo: raw.packing_number,
+    salesOrderNo: isPurchaseReturn && sourceDocumentNo ? sourceDocumentNo : raw.packing_number,
     customer: raw.customer_name || "",
     totalItems: products.length,
     totalQuantity: products.reduce((sum: number, p: any) => {
+      const orderBaseQty = Number(p.order_base_qty || 0);
+      if (isPurchaseReturn) return sum + orderBaseQty;
       const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;
       const packSize = Number(packSizeRaw) || 1;
-      return sum + Math.floor(Number(p.order_base_qty || 0) / packSize);
+      return sum + Math.floor(orderBaseQty / packSize);
     }, 0),
     orderAmount: Number(raw.order_amount || 0),
     orderDate: raw.order_date ? raw.order_date.slice(0, 10) : "",
@@ -335,13 +351,14 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     priority: "Medium",
     status: raw.status as any,
     warehouse: warehouse,
-    sourceDocumentType: (raw.source_type === "normal_sales" ? "Sales Order" : 
-                         raw.source_type === "sample" ? "Sample Order" : 
-                         raw.source_type === "stock_transfer" ? "Stock Transfer" : 
-                         raw.source_type === "purchase_return" ? "Purchase Return" : raw.source_type) as any,
-    sourceDocumentNo: raw.packing_number,
+    sourceDocumentType: sourceDocType as any,
+    sourceDocumentNo: sourceDocumentNo || raw.packing_number,
     sourceWarehouse: warehouse,
     targetWarehouse: raw.target_warehouse?.warehouse_name || "—",
+    poNumber: asString(customerSnapshot.po_no) || undefined,
+    supplierCode: asString(customerSnapshot.supplier_code) || undefined,
+    initiatedBy: asString(customerSnapshot.initiated_by) || undefined,
+    packingListNo: raw.packing_number,
     products: products.map((p: any) => {
       const snap = p.batch_snapshot && typeof p.batch_snapshot === "object" ? p.batch_snapshot : {};
       const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;

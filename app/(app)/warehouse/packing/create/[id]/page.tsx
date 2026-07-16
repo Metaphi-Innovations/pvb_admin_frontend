@@ -133,7 +133,11 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
       showToast("Packing created successfully!", "success");
       setTimeout(() => {
-        router.push("/warehouse/packing");
+        if (order.sourceDocumentType === "Purchase Return") {
+          router.push("/warehouse/packing/purchase-return?tab=packing-done");
+        } else {
+          router.push("/warehouse/packing");
+        }
       }, 1000);
     } catch (err: any) {
       console.error("Error creating packing done:", err);
