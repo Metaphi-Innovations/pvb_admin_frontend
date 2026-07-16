@@ -30,6 +30,8 @@ export interface ProcurementAdditionalCharge {
   chargeName: string;
   amount: number;
   remarks?: string;
+  /** Backend GST master UUID (dropdown selection). */
+  gstId?: string;
   gstMasterId?: number;
   cgstPct?: number;
   sgstPct?: number;
