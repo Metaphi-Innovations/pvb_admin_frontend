@@ -16,6 +16,7 @@ import { completeStockTransferQc } from "@/app/(app)/sales/stock-transfer/wareho
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { showToast } from "@/lib/toast";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -307,6 +308,7 @@ function CreateQcForm() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
+        invalidatePurchaseOrderModuleListingQueries(queryClient),
       ]);
       router.push("/warehouse/qc");
     } catch (err: any) {

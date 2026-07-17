@@ -113,7 +113,9 @@ export default function EditPurchaseReturnPage() {
       {readOnly && (
         <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
           <p className="text-xs font-semibold text-amber-800">
-            This purchase return is already packed or completed and cannot be modified.
+            {record.packingDone || record.packingListStatus
+              ? "This purchase return cannot be edited because packing is done / packing has progressed."
+              : "This purchase return is already packed or completed and cannot be modified."}
           </p>
           <p className="mt-0.5 text-[11px] text-amber-700">
             Quantities, products, and GRN lines are read-only. Use View for full details.

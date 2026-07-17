@@ -6,6 +6,7 @@ import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/compon
 import { Eye, Truck, RotateCcw, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { PackingRecord } from "../types";
 import Link from "next/link";
 import { STATUS_BADGE_CONFIG } from "../constants";
@@ -22,6 +23,7 @@ import {
   buildPackingDoneOrdering,
   type PackingDoneFilterField,
 } from "@/services/packing-done.service";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
@@ -51,6 +53,7 @@ function doneStatusLabel(row: PackingRecord): string {
 
 export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const selectedWarehouse = searchParams.get("warehouse") || "All";
 
@@ -377,6 +380,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         }
         try {
           await PackingDoneService.revert(row.id);
+          await invalidatePurchaseOrderModuleListingQueries(queryClient);
           toast.success("Packing Done reverted successfully.");
           setRefreshKey(k => k + 1);
         } catch (err: any) {

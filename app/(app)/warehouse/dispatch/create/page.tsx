@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Truck, CheckSquare, Check, RotateCcw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { getPreviewNumber, getPackingDoneList, createDispatch, getPackingDoneById } from "../services";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 
 export default function CreateDispatchPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const packingIdFromUrl = searchParams ? searchParams.get("packingId") : null;
   const sourceTypeFromUrl = searchParams ? searchParams.get("sourceType") : null;
@@ -91,6 +94,7 @@ export default function CreateDispatchPage() {
       };
 
       await createDispatch(payload);
+      await invalidatePurchaseOrderModuleListingQueries(queryClient);
       alert("Dispatch created successfully");
       router.push("/warehouse/dispatch");
     } catch (err: any) {
