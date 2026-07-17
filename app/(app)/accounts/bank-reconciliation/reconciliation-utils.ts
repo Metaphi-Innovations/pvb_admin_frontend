@@ -37,12 +37,12 @@ export function bankReconCompletePath(
   return qs ? `${base}?${qs}` : base;
 }
 
-/** Open upload dialog on the reconciliation workspace, or listing account picker */
+/** Full-page statement upload wizard (Tally-style import flow) */
 export function bankReconUploadPath(accountId?: string): string {
   if (accountId) {
-    return `${bankReconWorkspacePath(accountId)}?upload=1`;
+    return `${RECONCILIATION_LIST_PATH}/upload?accountId=${encodeURIComponent(accountId)}`;
   }
-  return `${RECONCILIATION_LIST_PATH}?action=upload`;
+  return `${RECONCILIATION_LIST_PATH}/upload`;
 }
 
 export const BANK_RECON_IMPORT_HISTORY_PATH = `${RECONCILIATION_LIST_PATH}/import-history`;

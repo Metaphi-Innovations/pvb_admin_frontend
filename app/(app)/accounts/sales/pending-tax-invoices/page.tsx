@@ -1,9 +1,9 @@
-import dynamic from "next/dynamic";
-import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
-const PendingTaxInvoicesClient = dynamic(() => import("./PendingTaxInvoicesClient"), {
-  loading: () => <PageContentSkeleton />,
-});
+const PendingTaxInvoicesClient = lazyAccountsPage(
+  () => import("./PendingTaxInvoicesClient"),
+  { pathnameHint: "/accounts/sales/pending-tax-invoices" },
+);
 
 export default function PendingTaxInvoicesPage() {
   return <PendingTaxInvoicesClient />;

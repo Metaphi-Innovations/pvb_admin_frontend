@@ -6,6 +6,7 @@ import {
   type ChartOfAccount,
 } from "@/app/(app)/accounts/data";
 import {
+  DEFAULT_LEDGER_FORM,
   formToLedger,
   generateLedgerCode,
   type LedgerFormValues,
@@ -150,18 +151,9 @@ function defaultLedgerForm(
   flags: Partial<LedgerFormValues>,
 ): LedgerFormValues {
   return {
+    ...DEFAULT_LEDGER_FORM,
     ledgerName: name,
-    alias: "",
-    description: "",
     parentGroupId: parentId,
-    openingBalance: "0",
-    balanceType: "Debit",
-    gstApplicable: false,
-    tdsApplicable: false,
-    costCenterApplicable: false,
-    bankAccountFlag: false,
-    bankGroupFlag: false,
-    status: "active",
     ...flags,
   };
 }
@@ -273,13 +265,17 @@ export function createBankGroup(bankName: string): ChartOfAccount {
   if (dup) return dup;
 
   const form = defaultLedgerForm(bankSub.id, bankName.trim(), {
-    bankGroupFlag: true,
-    bankAccountFlag: false,
     openingBalance: "0",
   });
   const code = generateLedgerCode(records);
   const row = formToLedger(form, nextId(records), code, records);
-  const withFlag: ChartOfAccount = { ...row, bankGroupFlag: true, bankAccountFlag: false };
+  const withFlag: ChartOfAccount = {
+    ...row,
+    bankGroupFlag: true,
+    bankAccountFlag: false,
+    ledgerKind: "MASTER",
+    masterType: "bank_master",
+  };
   saveChartOfAccounts([...records, withFlag]);
   return withFlag;
 }
@@ -338,8 +334,6 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
 
   const ledgerName = ledgerDisplayName(input.accountNickname.trim(), input.accountNumber.trim());
   const form = defaultLedgerForm(bankGroup.id, ledgerName, {
-    bankAccountFlag: true,
-    bankGroupFlag: false,
     openingBalance: String(input.openingBalance),
     balanceType: input.balanceType ?? "Debit",
     status: input.status ?? "active",
@@ -352,6 +346,9 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     bankAccountFlag: true,
     bankGroupFlag: false,
     isSystemGenerated: true,
+    ledgerKind: "MASTER",
+    masterType: "bank_master",
+    masterId: undefined,
     erpSourceModule: "bank_master",
   };
   saveChartOfAccounts([...records, ledgerRow]);

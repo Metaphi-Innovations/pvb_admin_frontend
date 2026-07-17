@@ -99,7 +99,7 @@ export default function CustomerOutstandingReportClient() {
   return (
     <AccountsReportShell
       title="Customer Outstanding"
-      description="Report view of open receivables from Trade Receivables ledgers."
+      description="Report view of open receivables from Sundry Debtors ledgers."
       filters={
         <>
           <ReportFilterRow>

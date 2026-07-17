@@ -1,4 +1,4 @@
-/** Lets COA UI open the edit-ledger drawer owned by CoaAddLedgerHost. */
+/** Lets COA UI open the full-page edit Generic Ledger form via CoaAddLedgerHost. */
 
 type EditLedgerHandler = ((ledgerId: number) => void) | null;
 

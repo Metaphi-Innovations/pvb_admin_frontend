@@ -1,5 +1,6 @@
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import {
+  DEFAULT_LEDGER_FORM,
   generateLedgerCode,
   ledgerHasVoucherPostings,
   type LedgerFormValues,
@@ -182,6 +183,9 @@ export function tdsFormToLedger(
     usedIn: kind === "receivable" ? ["payments", "journal"] : ["procurement", "payments", "journal"],
     isSystem: false,
     isSystemGenerated: true,
+    ledgerKind: "MASTER",
+    masterType: TDS_ERP_SOURCE,
+    masterId: master.id,
     erpSourceModule: TDS_ERP_SOURCE,
     erpSourceId: master.id,
     openingBalance: opening,
@@ -189,6 +193,7 @@ export function tdsFormToLedger(
     gstApplicable: false,
     tdsApplicable: true,
     costCenterApplicable: false,
+    billWiseAccounting: false,
     bankAccountFlag: false,
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -257,16 +262,12 @@ function getAncestorPathSafe(records: ChartOfAccount[], nodeId: number): ChartOf
 /** @deprecated bridge to generic ledger form values if needed */
 export function tdsFormToLegacyLedgerForm(form: TdsLedgerFormValues): LedgerFormValues {
   return {
+    ...DEFAULT_LEDGER_FORM,
     ledgerName: form.ledgerName,
-    alias: "",
-    description: "",
     parentGroupId: form.parentGroupId,
     openingBalance: form.openingBalance,
     balanceType: form.balanceType,
-    gstApplicable: false,
     tdsApplicable: true,
-    costCenterApplicable: false,
-    bankAccountFlag: false,
     status: form.status,
   };
 }

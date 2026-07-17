@@ -130,44 +130,6 @@ export default function StockRegisterPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const drilldownApplied = useRef(false);
-  // #region agent log
-  const debugMountAt = useRef(typeof performance !== "undefined" ? performance.now() : Date.now());
-  useEffect(() => {
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-      body: JSON.stringify({
-        sessionId: "8fbc9e",
-        runId: "post-fix",
-        hypothesisId: "H3_H4",
-        location: "StockRegisterPageClient.tsx:mount",
-        message: "Stock Register client mounted",
-        data: {
-          tab: searchParams.get("tab"),
-          href: typeof window !== "undefined" ? window.location.href : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    const onErr = (event: ErrorEvent) => {
-      fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-        body: JSON.stringify({
-          sessionId: "8fbc9e",
-          runId: "post-fix",
-          hypothesisId: "H4",
-          location: "StockRegisterPageClient.tsx:window.error",
-          message: "Stock Register window error",
-          data: { msg: String(event.message ?? ""), file: String(event.filename ?? "") },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    };
-    window.addEventListener("error", onErr);
-    return () => window.removeEventListener("error", onErr);
-  }, [searchParams]);
-  // #endregion
 
   const [tab, setTab] = useState<StockRegisterTab>(() => parseTab(searchParams.get("tab")));
   const [preset, setPreset] = useState<DateRangePresetId>("custom");
@@ -341,83 +303,17 @@ export default function StockRegisterPageClient() {
 
   const summaryReport = useMemo(() => {
     if (!mounted || !datesReady || tab !== "summary") return emptySummary;
-    // #region agent log
-    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-    // #endregion
-    const result = buildStockRegisterSummary(filters);
-    // #region agent log
-    const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-      body: JSON.stringify({
-        sessionId: "8fbc9e",
-        runId: "post-fix",
-        hypothesisId: "H3",
-        location: "StockRegisterPageClient.tsx:summaryReport",
-        message: "buildStockRegisterSummary timing",
-        data: {
-          ms: Math.round(ms),
-          rows: result.rows.length,
-          sinceMountMs: Math.round(
-            (typeof performance !== "undefined" ? performance.now() : Date.now()) - debugMountAt.current,
-          ),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return result;
+    return buildStockRegisterSummary(filters);
   }, [mounted, datesReady, filters, tab, emptySummary]);
 
   const detailedReport = useMemo(() => {
     if (!mounted || !datesReady || tab !== "detailed") return emptyDetailed;
-    // #region agent log
-    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-    // #endregion
-    const result = buildStockRegisterDetailed(filters);
-    // #region agent log
-    const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-      body: JSON.stringify({
-        sessionId: "8fbc9e",
-        runId: "post-fix",
-        hypothesisId: "H3",
-        location: "StockRegisterPageClient.tsx:detailedReport",
-        message: "buildStockRegisterDetailed timing",
-        data: { ms: Math.round(ms), rows: result.rows.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return result;
+    return buildStockRegisterDetailed(filters);
   }, [mounted, datesReady, filters, tab, emptyDetailed]);
 
   const batchReport = useMemo(() => {
     if (!mounted || !datesReady || tab !== "batch-wise") return emptyBatch;
-    // #region agent log
-    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-    // #endregion
-    const result = buildStockRegisterBatchWise(filters);
-    // #region agent log
-    const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-      body: JSON.stringify({
-        sessionId: "8fbc9e",
-        runId: "post-fix",
-        hypothesisId: "H3",
-        location: "StockRegisterPageClient.tsx:batchReport",
-        message: "buildStockRegisterBatchWise timing",
-        data: { ms: Math.round(ms), rows: result.rows.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return result;
+    return buildStockRegisterBatchWise(filters);
   }, [mounted, datesReady, filters, tab, emptyBatch]);
 
   const handleSummaryTotals = useCallback((totals: StockRegisterSummaryTotals) => {

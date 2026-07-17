@@ -1109,9 +1109,11 @@ export function formatPayable(amount: number): string {
 // ── Legacy payables helpers (due payments, employee claims) ───────────────────
 
 function payableLedgerIds(): Set<number> {
-  return new Set(
-    getLedgersUnderSubGroupName("Trade Payables / Sundry Creditors").map((l) => l.id),
-  );
+  return new Set([
+    ...getLedgersUnderSubGroupName("Sundry Creditors").map((l) => l.id),
+    ...getLedgersUnderSubGroupName("Trade Payables / Sundry Creditors").map((l) => l.id),
+    ...getLedgersUnderSubGroupName("Accounts Payable").map((l) => l.id),
+  ]);
 }
 
 function expensesPayableLedgerIds(): Set<number> {

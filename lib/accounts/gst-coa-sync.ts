@@ -17,7 +17,7 @@ import {
 } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-statutory-ledgers";
 
 export const GST_ERP_SOURCE = "gst_master";
-export const GST_INPUT_GROUP = "GST Input Credit";
+export const GST_INPUT_GROUP = "Duties & Taxes";
 export const GST_INPUT_CREDIT_GROUP = GST_INPUT_GROUP;
 export const GST_DUTIES_SUBGROUP = "Duties & Taxes";
 
@@ -96,7 +96,8 @@ export function isGstCoaLedger(ledger: ChartOfAccount, records?: ChartOfAccount[
     pathNames.includes(GST_INPUT_GROUP) ||
     pathNames.includes(GST_INPUT_CREDIT_GROUP) ||
     pathNames.includes(GST_DUTIES_SUBGROUP) ||
-    pathNames.includes("GST Payable");
+    pathNames.includes("GST Payable") ||
+    pathNames.includes("GST Input Credit");
 
   if (underGstGroups && LEGACY_GENERIC_GST_LEDGER_NAMES.has(name.toLowerCase())) {
     return true;

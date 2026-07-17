@@ -147,7 +147,6 @@ export function AccountsMasterLinkedLedgerForm({
       parentGroupId,
       openingBalance,
       balanceType,
-      gstApplicable: kind === "gst",
     };
     const ledger = {
       ...formToLedger(
@@ -156,7 +155,11 @@ export function AccountsMasterLinkedLedgerForm({
         generateLedgerCode(latest),
         latest,
       ),
+      gstApplicable: kind === "gst",
       isSystemGenerated: true,
+      ledgerKind: "MASTER" as const,
+      masterType: config.module,
+      masterId: selected.id,
       erpSourceModule: config.module,
       erpSourceId: selected.id,
     };

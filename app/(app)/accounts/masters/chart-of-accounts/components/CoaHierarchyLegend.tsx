@@ -31,14 +31,6 @@ const LEGEND_LEVEL_NUM: Record<CoaVisualLevel, number> = {
   sub_ledger: 5,
 };
 
-const LEGEND_COLOR_HINT: Record<CoaVisualLevel, string> = {
-  primary_head: "Blue · Database",
-  account_group: "Orange · Folder",
-  sub_group: "Purple · Open folder",
-  ledger: "Teal · File text",
-  sub_ledger: "Red · File",
-};
-
 function LegendRow({ level }: { level: CoaVisualLevel }) {
   const Icon = VISUAL_ICON[level] ?? FileText;
   const num = LEGEND_LEVEL_NUM[level];
@@ -55,7 +47,6 @@ function LegendRow({ level }: { level: CoaVisualLevel }) {
       <span className="min-w-0">
         <span className="font-medium text-foreground">Level {num}</span>
         <span className="text-muted-foreground"> — {VISUAL_BADGE_LABEL[level]}</span>
-        <span className="block text-[10px] text-muted-foreground">{LEGEND_COLOR_HINT[level]}</span>
       </span>
     </div>
   );

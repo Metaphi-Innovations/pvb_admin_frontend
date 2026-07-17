@@ -482,7 +482,9 @@ function matchCustomerMasterHref(ledgerId: number, ledgerName: string): string |
 const ENTRY_NOTES: Record<string, string> = {
   "Capital Account": "Journal Voucher · Profit transfer · Drawings entry · Year-end closing",
   "Loans / Borrowings": "Loan receipt voucher · Payment voucher · Journal voucher · Interest accrual",
+  "Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
   "Trade Payables / Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
+  "Accounts Payable": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
   "Duties & Taxes": "Sales Invoice · Purchase Bill · Payment Voucher · Journal Voucher",
   "Duties & Taxes Payable": "Sales Invoice · Purchase Bill · Payment Voucher · Journal Voucher",
   "GST Payable": "Sales Invoice · Purchase Bill · Credit Note · Debit Note · GST Payment Voucher",
@@ -852,7 +854,11 @@ export function resolveCoaGroupContext(
       ledgers,
     };
   }
-  if (name === "Trade Receivables / Sundry Debtors") {
+  if (
+    name === "Sundry Debtors" ||
+    name === "Accounts Receivable" ||
+    name === "Trade Receivables / Sundry Debtors"
+  ) {
     const asOf = new Date().toISOString().slice(0, 10);
     const outstandingRows = computeCustomerOutstanding().map((r) => ({
       ...r,
@@ -884,7 +890,11 @@ export function resolveCoaGroupContext(
       recentReceipts,
     };
   }
-  if (name === "Trade Payables / Sundry Creditors") {
+  if (
+    name === "Sundry Creditors" ||
+    name === "Accounts Payable" ||
+    name === "Trade Payables / Sundry Creditors"
+  ) {
     const asOf = new Date().toISOString().slice(0, 10);
     const outstandingRows = computeVendorOutstanding().map((r) => {
       const due = purchaseDueDate(r.lastTransactionDate);

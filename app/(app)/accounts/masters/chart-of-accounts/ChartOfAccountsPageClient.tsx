@@ -13,14 +13,6 @@ import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-d
 import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
 import {
-  isLandBuildingGroup,
-  isSundryCreditorsGroup,
-  isSundryDebtorsGroup,
-  isTdsSpecializedGroup,
-  resolveCoaAddActionLabel,
-  resolveCoaAddLedgerPolicy,
-} from "@/lib/accounts/coa-add-ledger-policy";
-import {
   getCoaDisplayPath,
 } from "@/lib/accounts/coa-tree-children";
 import { useFY } from "@/lib/fy-store";
@@ -70,6 +62,8 @@ import { CoaListingTable } from "./components/CoaListingTable";
 import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
 import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
+import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
+import type { CoaLedgerDetailRow } from "./coa-demo-accounting";
 import { CoaGroupDetailHeader } from "./components/CoaGroupDetailHeader";
 import { CoaTdsLedgerDetailHeader } from "./components/CoaTdsLedgerDetailHeader";
 import { CoaDrillDownEmptyState } from "./components/CoaDrillDownEmptyState";
@@ -154,6 +148,12 @@ export default function ChartOfAccountsPageClient() {
 
   const canCreate = useCanCoa("create");
   const canEdit = useCanCoa("edit");
+  const { openTransaction, drawer: voucherDetailDrawer } = useTransactionDetailsDrawer();
+
+  const handleLedgerStatementVoucherClick = useCallback((row: CoaLedgerDetailRow) => {
+    if (row.isOpeningRow) return;
+    openTransaction({ type: "general_ledger", row });
+  }, [openTransaction]);
 
   useEffect(() => {
     ensureCoaPostingLedgerTransactionsOnPageLoad();
@@ -287,9 +287,10 @@ export default function ChartOfAccountsPageClient() {
 
   const ledgerListingRows = useMemo(() => {
     if (!selectedNode || !isAccountingGroupLedgerListing) return [];
-    return buildCoaLedgerListingRows(deferredRecords, selectedNode.id, {
+    const rows = buildCoaLedgerListingRows(deferredRecords, selectedNode.id, {
       search: contentSearch,
     });
+    return rows;
   }, [deferredRecords, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
 
   const listingRows = useMemo(() => {
@@ -453,53 +454,13 @@ export default function ChartOfAccountsPageClient() {
         : listingRows.length === 0);
 
   const handleNewLedger = useCallback(() => {
-    if (
-      selectedNode &&
-      !showRoot &&
-      selectedNode.nodeLevel === "account_group" &&
-      isSundryDebtorsGroup(selectedNode, records)
-    ) {
-      setSundryDebtorFormParentId(selectedNode.id);
-      return;
-    }
-
-    if (
-      selectedNode &&
-      !showRoot &&
-      selectedNode.nodeLevel === "account_group" &&
-      isSundryCreditorsGroup(selectedNode, records)
-    ) {
-      setSundryCreditorFormParentId(selectedNode.id);
-      return;
-    }
-
-    if (
-      selectedNode &&
-      !showRoot &&
-      selectedNode.nodeLevel === "account_group" &&
-      isLandBuildingGroup(selectedNode, records)
-    ) {
-      setWarehouseFormParentId(selectedNode.id);
-      return;
-    }
-
-    if (
-      selectedNode &&
-      !showRoot &&
-      selectedNode.nodeLevel === "account_group" &&
-      isTdsSpecializedGroup(selectedNode, records)
-    ) {
-      setTdsFormParentId(selectedNode.id);
-      return;
-    }
-
     const parentId =
       selectedNode &&
       !showRoot &&
-      canAddLedgerUnder(selectedNode, records) &&
-      !resolveCoaAddLedgerPolicy(selectedNode, records).blocked
+      canAddLedgerUnder(selectedNode, records)
         ? selectedNode.id
         : null;
+    if (parentId == null) return;
     requestCoaGlobalAddLedger(parentId);
   }, [selectedNode, showRoot, records]);
 
@@ -549,15 +510,7 @@ export default function ChartOfAccountsPageClient() {
     [handlePartyLedgerSaved],
   );
 
-  const newLedgerLabel = useMemo(() => {
-    if (selectedNode && !showRoot && selectedNode.nodeLevel === "ledger") {
-      return "Add Sub-Ledger";
-    }
-    if (selectedNode && !showRoot && selectedNode.nodeLevel === "account_group") {
-      return resolveCoaAddActionLabel(selectedNode, records);
-    }
-    return "New Ledger";
-  }, [selectedNode, showRoot, records]);
+  const newLedgerLabel = useMemo(() => "Add Ledger", []);
 
   const showMaxHierarchyNotice = Boolean(
     canCreate &&
@@ -567,19 +520,15 @@ export default function ChartOfAccountsPageClient() {
       showCoaMaxHierarchyMessage(selectedNode, records),
   );
 
+  /** Add Ledger only when a Level 3 Sub Group is selected. */
   const canShowNewLedger =
     canCreate &&
     !isLedgerStatementView &&
     !showEmptyState &&
     !showMaxHierarchyNotice &&
-    selectedNode?.nodeLevel !== "primary_head" &&
-    (!selectedNode || !resolveCoaAddLedgerPolicy(selectedNode, records).blocked) &&
-    (isAccountingGroupLedgerListing ||
-      isGroupingLedgerView ||
-      showRoot ||
-      !selectedNode ||
-      (selectedNode &&
-        canAddLedgerUnder(selectedNode, records)));
+    Boolean(selectedNode) &&
+    !showRoot &&
+    canAddLedgerUnder(selectedNode!, records);
 
   if (sundryDebtorFormParentId != null) {
     return (
@@ -740,6 +689,7 @@ export default function ChartOfAccountsPageClient() {
               datesReady && ledgerDataReady ? (
                 <CoaLedgerDetailTable
                   rows={filteredTransactions}
+                  onVoucherClick={handleLedgerStatementVoucherClick}
                   footer={{
                     totalDebit: ledgerAccounting!.totalDebit,
                     totalCredit: ledgerAccounting!.totalCredit,
@@ -850,6 +800,7 @@ export default function ChartOfAccountsPageClient() {
           </AccountsListingTableCard>
         </div>
       </AccountsPageShell>
+      {voucherDetailDrawer}
     </>
   );
 }

@@ -309,11 +309,6 @@ export default function BalanceSheetPageClient() {
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
       [
-        {
-          id: "period",
-          label: "As on",
-          value: asOnDate,
-        },
         buildBranchFilterSummary(branches, () => setBranches([])),
         buildEntityFilterSummary(
           "party",

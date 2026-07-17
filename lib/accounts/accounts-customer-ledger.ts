@@ -181,7 +181,7 @@ export function createAccountsCustomerLedger(
     throw new Error("Sundry Debtors group was not found in Chart of Accounts.");
   }
   if (!isSundryDebtorsGroup(parent, records)) {
-    throw new Error("Parent group must be Trade Receivables / Sundry Debtors.");
+    throw new Error("Parent group must be Sundry Debtors.");
   }
 
   const list = readAll();
@@ -225,8 +225,14 @@ export function createAccountsCustomerLedger(
     gstApplicable: customerRecord.gstApplicable,
     tdsApplicable: customerRecord.tdsApplicable,
     costCenterApplicable: false,
+    billWiseAccounting: true,
     bankAccountFlag: false,
+    ledgerKind: "MASTER",
+    masterType: "customer",
+    masterId: customerRecord.id,
     isSystemGenerated: false,
+    erpSourceModule: "customer_master",
+    erpSourceId: customerRecord.id,
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
   };

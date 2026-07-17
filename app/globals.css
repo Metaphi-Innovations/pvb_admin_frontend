@@ -47,14 +47,18 @@
   }
 
   html {
-    font-family: var(--font-plus-jakarta), var(--font-inter), "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+    /* var() without a fallback invalidates the whole font-family when next/font
+       CSS vars are missing (common after a stale .next cache) → Times New Roman.
+       Always keep an inner fallback so the stack degrades to sans-serif. */
+    font-family: var(--font-plus-jakarta, "Plus Jakarta Sans"), var(--font-inter, Inter), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-family: var(--font-plus-jakarta, "Plus Jakarta Sans"), var(--font-inter, Inter), system-ui, sans-serif;
     font-size: 13px;
     line-height: 1.5;
     background-image: radial-gradient(circle at 0% 0%, rgb(244 121 32 / 0.04) 0%, transparent 45%),

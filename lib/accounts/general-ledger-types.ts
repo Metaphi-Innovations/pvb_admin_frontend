@@ -64,6 +64,12 @@ export interface GeneralLedgerDisplayRow {
   tdsAmount: number | null;
   gstAmount: number | null;
   referenceNo: string;
+  /** Additive bill-wise fields when ledger has Bill-wise Accounting ON */
+  billWiseReferenceNo?: string;
+  billWiseReferenceType?: string;
+  billWiseOriginalAmount?: number | null;
+  billWiseAdjustedAmount?: number | null;
+  billWiseOutstandingAmount?: number | null;
   runningBalance: number;
   runningBalanceType: BalanceSide;
   voucherId?: number;

@@ -9,28 +9,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { isLockedSystemLedger } from "../coa-statutory-ledgers";
 
 export const COA_SYSTEM_MANAGED_TOOLTIP =
-  "System Generated - Managed from ERP Masters";
+  "System ledger — locked (cannot edit, delete, rename, move, or deactivate)";
 
-const STATUTORY_GROUP_TYPES = new Set([
-  "gst_input",
-  "gst_output",
-  "gst_payable",
-  "gst_receivable",
-  "gst_duties",
-  "tds_payable",
-  "tds_receivable",
-]);
-
+/** True only for permanently locked statutory Level-4 ledgers. */
 export function isSystemManagedStatutoryNode(node: ChartOfAccount): boolean {
-  return Boolean(
-    (node.specializedGroupType &&
-      STATUTORY_GROUP_TYPES.has(node.specializedGroupType)) ||
-      node.erpSourceModule === "gst_master" ||
-      node.erpSourceModule === "tds_master" ||
-      (node.isSystemGenerated && (node.gstApplicable || node.tdsApplicable)),
-  );
+  return isLockedSystemLedger(node);
 }
 
 export function CoaSystemManagedLock({

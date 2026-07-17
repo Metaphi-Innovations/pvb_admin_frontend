@@ -30,7 +30,7 @@ import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
 import { X, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsFilterDateRangeSection";
 import { Switch } from "@/components/ui/switch";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";

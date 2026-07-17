@@ -75,6 +75,7 @@ import {
   rowsToImport,
 } from "@/lib/accounts/bank-statement-import/validate-preview";
 import { executeStatementImport } from "@/lib/accounts/bank-statement-import/import-engine";
+import { refreshTallySuggestions } from "@/lib/accounts/bank-recon-tally-service";
 import {
   DATE_FORMAT_OPTIONS,
   SYSTEM_FIELDS,
@@ -443,6 +444,7 @@ export default function BankStatementUploadPageClient() {
           : undefined,
     });
     setImportResult(result);
+    refreshTallySuggestions(accountId);
     setBusy(false);
     setConfirmOpen(false);
     setStep(5);
@@ -937,11 +939,8 @@ export default function BankStatementUploadPageClient() {
                 />
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button asChild size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white">
-                    <Link href={bankReconWorkspacePath(accountId)}>View Imported Transactions</Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline" className="h-8 text-xs gap-1.5">
-                    <Link href={`${bankReconWorkspacePath(accountId)}?tab=auto-match&runMatch=1`}>
-                      Run Auto Match
+                    <Link href={bankReconWorkspacePath(accountId)}>
+                      Open Bank Reconciliation
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline" className="h-8 text-xs">

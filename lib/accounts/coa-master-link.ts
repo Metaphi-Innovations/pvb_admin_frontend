@@ -47,8 +47,8 @@ export interface CoaMasterLink {
 
 const CATEGORY_LABELS: Record<CoaMasterLinkCategory, string> = {
   bank: "Bank Accounts",
-  customer: "Trade Receivables / Sundry Debtors",
-  vendor: "Trade Payables / Sundry Creditors",
+  customer: "Sundry Debtors",
+  vendor: "Sundry Creditors",
   employee: "Employee Related Ledgers",
   inventory: "Inventory Ledgers",
   fixed_asset: "Fixed Asset Ledgers",
@@ -347,6 +347,27 @@ export function isMasterLinkedLedger(
   records?: ChartOfAccount[],
 ): boolean {
   return resolveCoaMasterLink(ledger, records) != null;
+}
+
+/** Customer / Supplier party ledgers under Sundry Debtors / Creditors — editable in COA. */
+export function isCustomerOrSupplierLinkedLedger(
+  ledger: ChartOfAccount,
+  records?: ChartOfAccount[],
+): boolean {
+  const link = resolveCoaMasterLink(ledger, records);
+  return link?.category === "customer" || link?.category === "vendor";
+}
+
+/**
+ * Master-linked ledgers that stay locked in COA (bank, employee, inventory, fixed asset).
+ * Party (customer/supplier) ledgers are excluded — they may be edited/deleted from COA.
+ */
+export function isLockedMasterLinkedLedger(
+  ledger: ChartOfAccount,
+  records?: ChartOfAccount[],
+): boolean {
+  if (!isMasterLinkedLedger(ledger, records)) return false;
+  return !isCustomerOrSupplierLinkedLedger(ledger, records);
 }
 
 export function coaHrefForLedger(ledgerId: number): string {

@@ -46,6 +46,14 @@ export interface VoucherLine {
   remarks: string;
   contactId?: number | null;
   contactName?: string;
+  /** Cost centre master id when ledger.costCenterApplicable is ON */
+  costCenterId?: number | null;
+  costCenterName?: string;
+  /** Bill-wise reference metadata (additive; optional for legacy vouchers) */
+  billWiseReferenceType?: string;
+  billWiseReferenceId?: number | null;
+  billWiseReferenceNo?: string;
+  billWiseDueDate?: string;
 }
 
 export type VoucherEntryMode = "simple" | "double";
@@ -968,6 +976,13 @@ export function validatePaymentVoucherGridForPost(
 }
 
 export function canEditVoucher(voucher: AccountingVoucher): boolean {
+  // Frontend mock ledger-statement vouchers remain editable for UI validation.
+  if (
+    voucher.referenceNo === "COA-LEDGER-STMT-DEMO" ||
+    voucher.voucherNumber.startsWith("COA-DMO-")
+  ) {
+    return true;
+  }
   return canEditAccountsDocument(voucher.workflow, voucher.status);
 }
 

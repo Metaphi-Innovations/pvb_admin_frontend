@@ -41,10 +41,12 @@ function CoaLedgerDetailTableBody({
   rows,
   footer,
   emptyLabel,
+  onVoucherClick,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
   emptyLabel: string;
+  onVoucherClick?: (row: CoaLedgerDetailRow) => void;
 }) {
   const visible = useAccountsFilteredRows(rows);
 
@@ -81,43 +83,62 @@ function CoaLedgerDetailTableBody({
                 </AccountsTableCell>
               </AccountsTableRow>
             ) : (
-              visible.map((r, i) => (
-                <AccountsTableRow
-                  key={`${r.voucherNo}-${r.date}-${i}`}
-                  className={cn(r.isOpeningRow && "font-medium bg-muted/10")}
-                >
-                  <AccountsTableCell className="whitespace-nowrap tabular-nums">
-                    {r.date ? isoToDisplayDate(r.date) : "—"}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
-                  <AccountsTableCell className="whitespace-nowrap font-mono text-xs text-brand-700 font-semibold">
-                    {r.voucherNo || "—"}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="max-w-[200px] truncate" title={particularsLabel(r)}>
-                    {particularsLabel(r)}
-                  </AccountsTableCell>
-                  <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
-                  <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
-                  <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-                    {r.runningBalance > 0 ? formatMoney(r.runningBalance) : "—"}
-                  </AccountsTableCell>
-                  <AccountsTableCell align="center" className="whitespace-nowrap">
-                    {r.runningBalance > 0 ? (
-                      <DrCrSideBadge
-                        debit={r.debit}
-                        credit={r.credit}
-                        runningBalanceType={r.runningBalanceType}
-                        isBalanceRow={Boolean(r.isOpeningRow)}
-                      />
-                    ) : (
-                      "—"
-                    )}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="max-w-[220px] truncate text-muted-foreground" title={r.narration}>
-                    {r.narration || "—"}
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))
+              visible.map((r, i) => {
+                const canOpen =
+                  !r.isOpeningRow && Boolean(r.voucherId || r.voucherNo) && Boolean(onVoucherClick);
+                return (
+                  <AccountsTableRow
+                    key={`${r.voucherNo}-${r.date}-${i}`}
+                    className={cn(r.isOpeningRow && "font-medium bg-muted/10")}
+                  >
+                    <AccountsTableCell className="whitespace-nowrap tabular-nums">
+                      {r.date ? isoToDisplayDate(r.date) : "—"}
+                    </AccountsTableCell>
+                    <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
+                    <AccountsTableCell className="whitespace-nowrap font-mono text-xs font-semibold">
+                      {canOpen ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onVoucherClick?.(r);
+                          }}
+                          className="text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-sm"
+                        >
+                          {r.voucherNo}
+                        </button>
+                      ) : (
+                        <span className={r.isOpeningRow ? "text-muted-foreground" : "text-brand-700"}>
+                          {r.voucherNo || "—"}
+                        </span>
+                      )}
+                    </AccountsTableCell>
+                    <AccountsTableCell className="max-w-[200px] truncate" title={particularsLabel(r)}>
+                      {particularsLabel(r)}
+                    </AccountsTableCell>
+                    <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
+                    <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
+                    <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
+                      {r.runningBalance > 0 ? formatMoney(r.runningBalance) : "—"}
+                    </AccountsTableCell>
+                    <AccountsTableCell align="center" className="whitespace-nowrap">
+                      {r.runningBalance > 0 ? (
+                        <DrCrSideBadge
+                          debit={r.debit}
+                          credit={r.credit}
+                          runningBalanceType={r.runningBalanceType}
+                          isBalanceRow={Boolean(r.isOpeningRow)}
+                        />
+                      ) : (
+                        "—"
+                      )}
+                    </AccountsTableCell>
+                    <AccountsTableCell className="max-w-[220px] truncate text-muted-foreground" title={r.narration}>
+                      {r.narration || "—"}
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                );
+              })
             )}
           </AccountsTableBody>
         </AccountsTable>
@@ -152,10 +173,12 @@ export function CoaLedgerDetailTable({
   rows,
   footer,
   emptyLabel = "No transactions found for this ledger.",
+  onVoucherClick,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
   emptyLabel?: string;
+  onVoucherClick?: (row: CoaLedgerDetailRow) => void;
 }) {
   const getCellValue = useCallback((row: CoaLedgerDetailRow, key: string) => {
     switch (key) {
@@ -194,7 +217,12 @@ export function CoaLedgerDetailTable({
       defaultSortKey="date"
       defaultSortDir="asc"
     >
-      <CoaLedgerDetailTableBody rows={rows} footer={footer} emptyLabel={emptyLabel} />
+      <CoaLedgerDetailTableBody
+        rows={rows}
+        footer={footer}
+        emptyLabel={emptyLabel}
+        onVoucherClick={onVoucherClick}
+      />
     </AccountsColumnFilterProvider>
   );
 }

@@ -4,7 +4,7 @@ import {
   EXPECTED_SYSTEM_NODE_COUNT,
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
-import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
+import { isBundledCoaDemoLedger, mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
 import { stripMisplacedGstLedgers } from "./masters/chart-of-accounts/coa-gst-duplicate-cleanup";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
@@ -38,6 +38,12 @@ export type ErpUsageModule =
   | "payments"
   | "journal";
 
+/**
+ * Ledger origin for COA architecture:
+ * SYSTEM — statutory / seed ledgers; MASTER — linked to an ERP master; GENERIC — accounting-only.
+ */
+export type CoaLedgerKind = "SYSTEM" | "MASTER" | "GENERIC";
+
 export interface ChartOfAccount {
   id: number;
   accountCode: string;
@@ -56,9 +62,30 @@ export interface ChartOfAccount {
   gstApplicable: boolean;
   tdsApplicable: boolean;
   costCenterApplicable: boolean;
+  /** Bill-wise / party bill tracking for this ledger */
+  billWiseAccounting?: boolean;
+  /** Generic ledger tax defaults (accounting config only — not legal entity data) */
+  tcsApplicable?: boolean;
+  defaultGstRate?: string;
+  defaultHsnSac?: string;
+  /** Generic ledger GST registration details (same shape as party masters). */
+  gstRegistrationType?: string;
+  gstin?: string;
+  registeredLegalName?: string;
+  registeredGstAddress?: string;
+  /** TDS master section id or section code */
+  defaultTdsSection?: string;
+  /** TCS section code / label */
+  defaultTcsSection?: string;
   bankAccountFlag: boolean;
   /** Bank name container under Bank Accounts — grouping only, not postable */
   bankGroupFlag?: boolean;
+  /** SYSTEM | MASTER | GENERIC — only meaningful for nodeLevel === "ledger" */
+  ledgerKind?: CoaLedgerKind;
+  /** When ledgerKind is MASTER: customer | vendor | bank | product | warehouse | employee | gst | tds | … */
+  masterType?: string | null;
+  /** When ledgerKind is MASTER: foreign key into the source master */
+  masterId?: number | null;
   /** ERP auto-created ledger — edit via source master only */
   isSystemGenerated?: boolean;
   erpSourceModule?: string;
@@ -168,19 +195,40 @@ const REMOVED_SEED_LEDGER_NAMES = new Set([
   "marketing expense",
   "professional fees",
   "bank charges",
+  // v17 — Sundry Debtors/Creditors are L3 groups; remove former control ledgers
+  "sundry debtors control",
+  "sundry creditors control",
 ]);
 
+function inferLedgerKind(r: ChartOfAccount): CoaLedgerKind | undefined {
+  if (r.nodeLevel !== "ledger") return undefined;
+  if (r.ledgerKind) return r.ledgerKind;
+  if (r.isSystem) return "SYSTEM";
+  if (r.isSystemGenerated || r.erpSourceModule) return "MASTER";
+  return "GENERIC";
+}
+
 function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
+  const ledgerKind = inferLedgerKind(r);
   return {
     ...r,
     alias: r.alias ?? "",
     costCenterApplicable: r.costCenterApplicable ?? false,
+    billWiseAccounting: r.billWiseAccounting ?? false,
     bankAccountFlag: r.bankAccountFlag ?? false,
     bankGroupFlag: r.bankGroupFlag ?? false,
     openingBalance: r.openingBalance ?? 0,
     balanceType: r.balanceType ?? "Debit",
     gstApplicable: r.gstApplicable ?? false,
     tdsApplicable: r.tdsApplicable ?? false,
+    tcsApplicable: r.tcsApplicable ?? false,
+    defaultGstRate: r.defaultGstRate ?? "",
+    defaultHsnSac: r.defaultHsnSac ?? "",
+    defaultTdsSection: r.defaultTdsSection ?? "",
+    defaultTcsSection: r.defaultTcsSection ?? "",
+    ledgerKind,
+    masterType: r.masterType ?? r.erpSourceModule ?? null,
+    masterId: r.masterId ?? r.erpSourceId ?? null,
   };
 }
 
@@ -212,6 +260,7 @@ function normalizeStructuralNode(
     gstApplicable: false,
     tdsApplicable: false,
     costCenterApplicable: false,
+    billWiseAccounting: false,
     bankAccountFlag: false,
     isSystem: false,
   };
@@ -225,8 +274,14 @@ function isManualSubGroupLedger(record: ChartOfAccount, allNodes: ChartOfAccount
   );
 }
 
+/**
+ * User Level-4 ledgers only. ERP party/product/warehouse/bank/GST-rate/TDS-section
+ * ledgers and demo bundle entries are not retained — those belong in Masters.
+ */
 function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (record.isSystemGenerated || record.erpSourceModule) return true;
+  if (record.isSystem || record.isSystemGenerated) return false;
+  if (record.erpSourceModule) return false;
+  if (isBundledCoaDemoLedger(record)) return false;
   return !isManualSubGroupLedger(record, allNodes);
 }
 
@@ -359,9 +414,10 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     remaining = next;
   }
 
-  return stripMisplacedGstLedgers(
+  const combined = stripMisplacedGstLedgers(
     mergeBundledCoaDemoLedgers([...mergedSystem, ...userGroups, ...userLedgers]),
   );
+  return combined;
 }
 
 function readCoaMeta(): { revision: number } | null {
@@ -402,7 +458,7 @@ function coaStorageNeedsReset(stored: ChartOfAccount[]): boolean {
 
 const LEDGER_SEED: Ledger[] = [
   { id: 1, ledgerName: "Main Cash", ledgerCode: "LED-001", accountType: "Asset", linkedAccount: "Cash in Hand", openingBalance: 250000, balanceType: "Debit", currentBalance: 250000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 2, ledgerName: "Trade Creditors", ledgerCode: "LED-002", accountType: "Liability", linkedAccount: "Accounts Payable", openingBalance: 180000, balanceType: "Credit", currentBalance: 180000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
+  { id: 2, ledgerName: "Trade Creditors", ledgerCode: "LED-002", accountType: "Liability", linkedAccount: "Sundry Creditors", openingBalance: 180000, balanceType: "Credit", currentBalance: 180000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
 ];
 
 const TXN_SEED: AccountTxn[] = [
