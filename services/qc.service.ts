@@ -63,6 +63,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
         holdQty: 0,
         grnBatchId: batch.id,
         unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
+        quantityType: item.quantity_type || null,
       });
     });
   });
@@ -104,6 +105,7 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
       grnBatchId: batch.id || item.source_batch_id,
       unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
       rejectionReason: item.remarks || "",
+      quantityType: item.quantity_type || null,
     };
   }) || [];
 
@@ -149,6 +151,7 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
         holdQty: 0,
         grnBatchId: batch.id,
         unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
+        quantityType: item.quantity_type || null,
       });
     });
   });

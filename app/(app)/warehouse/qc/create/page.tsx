@@ -111,25 +111,44 @@ function CreateQcForm() {
         setQcRemarks(qc.qcRemarks ?? "");
         
         setItems(qc.items.map((it) => {
+          const unitPerPacking = it.unitPerPacking || 10;
+          const quantityType = (it.quantityType || "PIECE").toUpperCase();
+          const acceptedQty = editParam ? (it.acceptedQty || 0) : 0;
+          const rejectedQty = editParam ? (it.rejectedQty || 0) : 0;
+          const holdQty = editParam ? (it.holdQty || 0) : 0;
+
+          let acceptedInput = "";
+          let rejectedInput = "";
+          let holdInput = "";
+
           if (editParam) {
-            const unitPerPacking = it.unitPerPacking || 10;
-            const acceptedQty = it.acceptedQty || 0;
-            const rejectedQty = it.rejectedQty || 0;
-            const holdQty = it.holdQty || 0;
-            return {
-              ...it,
-              acceptedQty,
-              acceptedCases: it.acceptedCases ?? Math.floor(acceptedQty / unitPerPacking),
-              acceptedLooseQty: it.acceptedLooseQty ?? (acceptedQty % unitPerPacking),
-              rejectedQty,
-              rejectedCases: it.rejectedCases ?? Math.floor(rejectedQty / unitPerPacking),
-              rejectedLooseQty: it.rejectedLooseQty ?? (rejectedQty % unitPerPacking),
-              holdQty,
-              holdCases: it.holdCases ?? Math.floor(holdQty / unitPerPacking),
-              holdLooseQty: it.holdLooseQty ?? (holdQty % unitPerPacking),
-            };
+            if (quantityType === "CASE") {
+              acceptedInput = String(acceptedQty / unitPerPacking);
+              rejectedInput = String(rejectedQty / unitPerPacking);
+              holdInput = String(holdQty / unitPerPacking);
+            } else {
+              acceptedInput = String(acceptedQty);
+              rejectedInput = String(rejectedQty);
+              holdInput = String(holdQty);
+            }
           }
-          return { ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 };
+
+          return {
+            ...it,
+            quantityType,
+            acceptedQty,
+            rejectedQty,
+            holdQty,
+            acceptedInput,
+            rejectedInput,
+            holdInput,
+            acceptedCases: editParam ? (it.acceptedCases ?? Math.floor(acceptedQty / unitPerPacking)) : 0,
+            acceptedLooseQty: editParam ? (it.acceptedLooseQty ?? (acceptedQty % unitPerPacking)) : 0,
+            rejectedCases: editParam ? (it.rejectedCases ?? Math.floor(rejectedQty / unitPerPacking)) : 0,
+            rejectedLooseQty: editParam ? (it.rejectedLooseQty ?? (rejectedQty % unitPerPacking)) : 0,
+            holdCases: editParam ? (it.holdCases ?? Math.floor(holdQty / unitPerPacking)) : 0,
+            holdLooseQty: editParam ? (it.holdLooseQty ?? (holdQty % unitPerPacking)) : 0,
+          };
         }));
       } catch (err) {
         console.error("Failed to load QC or GRN details:", err);
@@ -146,31 +165,62 @@ function CreateQcForm() {
     type: "cases" | "loose",
     raw: string
   ) => {
-    const val = parseQtyInput(raw);
     setItems((prev) =>
       prev.map((item, i) => {
         if (i !== idx) return item;
         
         const unitPerPacking = item.unitPerPacking || 10;
-        
-        const newCases = type === "cases" ? val : (item[`${field}Cases`] || 0);
-        const newLoose = type === "loose" ? val : (item[`${field}LooseQty`] || 0);
-        const total = newCases * unitPerPacking + newLoose;
+        const quantityType = (item.quantityType || "PIECE").toUpperCase();
 
-        const updated = {
-          ...item,
-          [`${field}Cases`]: newCases,
-          [`${field}LooseQty`]: newLoose,
-          [`${field}Qty`]: total,
-        };
+        let updated = { ...item };
 
-        // If not stock transfer, auto-calculate rejected if accepted changes
-        if (!isStockTransfer && field === "accepted") {
-          const received = item.receivedQty ?? 0;
-          updated.rejectedQty = Math.max(0, received - total);
-          updated.rejectedCases = Math.floor(updated.rejectedQty / unitPerPacking);
-          updated.rejectedLooseQty = updated.rejectedQty % unitPerPacking;
-          updated.holdQty = 0;
+        if (quantityType === "CASE") {
+          const cleanRaw = raw.replace(/[^0-9.]/g, "");
+          const parsed = parseFloat(cleanRaw) || 0;
+          const totalBase = Math.round(parsed * unitPerPacking);
+
+          updated[`${field}Input`] = cleanRaw;
+          updated[`${field}Qty`] = totalBase;
+          updated.acceptedQty = field === "accepted" ? totalBase : (updated.acceptedQty || 0);
+          updated.rejectedQty = field === "rejected" ? totalBase : (updated.rejectedQty || 0);
+          updated.holdQty = field === "hold" ? totalBase : (updated.holdQty || 0);
+
+          updated[`${field}Cases`] = parsed;
+          updated[`${field}LooseQty`] = 0;
+          
+          if (field === "accepted") {
+            const received = item.receivedQty ?? 0;
+            const rejectedBase = Math.max(0, received - totalBase);
+            updated.rejectedQty = rejectedBase;
+            updated.rejectedInput = String(rejectedBase / unitPerPacking);
+            updated.rejectedCases = rejectedBase / unitPerPacking;
+            updated.rejectedLooseQty = 0;
+            updated.holdQty = 0;
+            updated.holdInput = "0";
+          }
+        } else {
+          const cleanRaw = raw.replace(/\D/g, "");
+          const parsed = parseInt(cleanRaw, 10) || 0;
+
+          updated[`${field}Input`] = cleanRaw;
+          updated[`${field}Qty`] = parsed;
+          updated.acceptedQty = field === "accepted" ? parsed : (updated.acceptedQty || 0);
+          updated.rejectedQty = field === "rejected" ? parsed : (updated.rejectedQty || 0);
+          updated.holdQty = field === "hold" ? parsed : (updated.holdQty || 0);
+
+          updated[`${field}Cases`] = 0;
+          updated[`${field}LooseQty`] = parsed;
+
+          if (field === "accepted") {
+            const received = item.receivedQty ?? 0;
+            const rejectedBase = Math.max(0, received - parsed);
+            updated.rejectedQty = rejectedBase;
+            updated.rejectedInput = String(rejectedBase);
+            updated.rejectedCases = 0;
+            updated.rejectedLooseQty = rejectedBase;
+            updated.holdQty = 0;
+            updated.holdInput = "0";
+          }
         }
 
         return updated;
@@ -185,12 +235,8 @@ function CreateQcForm() {
   const validationErrors = useMemo(() => {
     return items
       .map((item) => {
-        const hold = item.holdQty ?? 0;
-        const sum = item.acceptedQty + item.rejectedQty + hold;
+        const sum = item.acceptedQty + item.rejectedQty;
         if (sum !== item.receivedQty) {
-          if (isStockTransfer) {
-            return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) + Hold (${hold}) = ${sum}, but received qty is ${item.receivedQty}.`;
-          }
           return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) = ${sum}, but GRN Received Qty is ${item.receivedQty}.`;
         }
         if (sum > item.receivedQty) {
@@ -199,16 +245,14 @@ function CreateQcForm() {
         return null;
       })
       .filter(Boolean);
-  }, [items, isStockTransfer]);
+  }, [items]);
 
   const hasErrors = validationErrors.length > 0;
   const hasEmptyRows = items.some((it) => {
-    const hold = it.holdQty ?? 0;
-    if (isStockTransfer) return it.acceptedQty === 0 && it.rejectedQty === 0 && hold === 0;
     return it.acceptedQty === 0 && it.rejectedQty === 0;
   });
   const hasStartedEntry = items.some(
-    (it) => it.acceptedQty > 0 || it.rejectedQty > 0 || (it.holdQty ?? 0) > 0,
+    (it) => it.acceptedQty > 0 || it.rejectedQty > 0,
   );
 
   const handleSubmit = async () => {
@@ -218,9 +262,7 @@ function CreateQcForm() {
     }
     if (hasErrors || hasEmptyRows) {
       showToast(
-        isStockTransfer
-          ? "Enter accepted, rejected, or hold qty for each batch. Sum must equal received qty."
-          : "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
+        "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
         "error"
       );
       return;
@@ -364,11 +406,9 @@ function CreateQcForm() {
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-36">Batch No.</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-32">Received</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Qty Type</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-36">Accepted</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-36">Rejected</th>
-                  {isStockTransfer && (
-                    <th className="px-4 py-2 text-center text-[11px] font-semibold text-amber-800 w-36">Hold</th>
-                  )}
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Remarks</th>
                 </tr>
               </thead>
@@ -377,6 +417,7 @@ function CreateQcForm() {
                   const hold = item.holdQty ?? 0;
                   const sum = item.acceptedQty + item.rejectedQty + (isStockTransfer ? hold : 0);
                   const isRowValid = sum === item.receivedQty;
+                  const isCase = item.quantityType === "CASE";
 
                   return (
                     <tr key={idx} className={cn("border-b border-border/50 transition-colors", !isRowValid && "bg-red-50/20")}>
@@ -386,88 +427,70 @@ function CreateQcForm() {
                       </td>
                       <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{item.batchNumber}</td>
                       <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
-                        <div className="font-semibold text-foreground">
-                          {item.receivedCases ?? Math.floor(item.receivedQty / (item.unitPerPacking || 10))} Cs / {item.receivedLooseQty ?? (item.receivedQty % (item.unitPerPacking || 10))} Ls
-                        </div>
-                        <div className="text-[10px] text-muted-foreground/80">Total: {item.receivedQty}</div>
+                        {isCase ? (
+                          <>
+                            <div className="font-semibold text-foreground">
+                              {Number((item.receivedQty / (item.unitPerPacking || 10)).toFixed(4))} Cs
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/80">Total: {item.receivedQty}</div>
+                          </>
+                        ) : (
+                          <div className="font-semibold text-foreground">
+                            {item.receivedQty} Pcs
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground uppercase">
+                        {item.quantityType || "PIECE"}
                       </td>
                       <td className="px-4 py-2 text-xs">
-                        <div className="flex gap-1 mb-1">
+                        {isCase ? (
                           <Input
                             type="text"
-                            inputMode="numeric"
-                            placeholder="Cs"
-                            value={qtyInputValue(item.acceptedCases ?? 0)}
+                            inputMode="decimal"
+                            placeholder="Cases"
+                            value={item.acceptedInput ?? ""}
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleQtyChange(idx, "accepted", "cases", e.target.value)}
                             className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                            title="Cases"
                           />
+                        ) : (
                           <Input
                             type="text"
                             inputMode="numeric"
-                            placeholder="Ls"
-                            value={qtyInputValue(item.acceptedLooseQty ?? 0)}
+                            placeholder="Pieces"
+                            value={item.acceptedInput ?? ""}
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleQtyChange(idx, "accepted", "loose", e.target.value)}
                             className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                            title="Loose Qty"
                           />
-                        </div>
+                        )}
                         <div className="text-center text-[10px] text-muted-foreground">Total: {item.acceptedQty}</div>
                       </td>
                       <td className="px-4 py-2 text-xs">
-                        <div className="flex gap-1 mb-1">
+                        {isCase ? (
                           <Input
                             type="text"
-                            inputMode="numeric"
-                            placeholder="Cs"
-                            value={qtyInputValue(item.rejectedCases ?? 0)}
+                            inputMode="decimal"
+                            placeholder="Cases"
+                            value={item.rejectedInput ?? ""}
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleQtyChange(idx, "rejected", "cases", e.target.value)}
                             className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                            title="Cases"
                           />
+                        ) : (
                           <Input
                             type="text"
                             inputMode="numeric"
-                            placeholder="Ls"
-                            value={qtyInputValue(item.rejectedLooseQty ?? 0)}
+                            placeholder="Pieces"
+                            value={item.rejectedInput ?? ""}
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleQtyChange(idx, "rejected", "loose", e.target.value)}
                             className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                            title="Loose Qty"
                           />
-                        </div>
+                        )}
                         <div className="text-center text-[10px] text-muted-foreground">Total: {item.rejectedQty}</div>
                       </td>
-                      {isStockTransfer && (
-                        <td className="px-4 py-2 text-xs">
-                          <div className="flex gap-1 mb-1">
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="Cs"
-                              value={qtyInputValue(item.holdCases ?? 0)}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleQtyChange(idx, "hold", "cases", e.target.value)}
-                              className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                              title="Cases"
-                            />
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="Ls"
-                              value={qtyInputValue(item.holdLooseQty ?? 0)}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleQtyChange(idx, "hold", "loose", e.target.value)}
-                              className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                              title="Loose Qty"
-                            />
-                          </div>
-                          <div className="text-center text-[10px] text-muted-foreground">Total: {hold}</div>
-                        </td>
-                      )}
                       <td className="px-4 py-2 text-xs">
                         <Input
                           placeholder="Remarks…"
