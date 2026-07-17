@@ -83,7 +83,14 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
   const product = (raw.product || {}) as Record<string, any>;
   
   const packSize = asNumber(product.unit_per_packing ?? snapshot.conversion_qty ?? 1);
-  const isCaseType = (raw.per_case_qty && asNumber(raw.per_case_qty) > 0) || false;
+  
+  let quantityType = "Piece";
+  if (raw.quantity_type) {
+    quantityType = String(raw.quantity_type).toUpperCase() === "CASE" ? "Case" : "Piece";
+  } else {
+    const isCaseType = (raw.per_case_qty && asNumber(raw.per_case_qty) > 0) || false;
+    quantityType = isCaseType ? "Case" : "Piece";
+  }
   
   const caseQuantity = Math.floor(quantity / packSize);
   const pieceQuantity = quantity % packSize;
@@ -94,7 +101,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     productCode: asString(raw.product_code || product.product_code || product.code || (raw.product as any)?.product_code),
     productName: asString(raw.product_name || product.product_name || product.name || (raw.product as any)?.product_name),
     availableStock: asNumber(raw.available_stock ?? 0),
-    quantityType: isCaseType ? "Case" : "Piece",
+    quantityType: quantityType as "Case" | "Piece",
     caseQuantity: caseQuantity,
     pieceQuantity: pieceQuantity,
     packSize: packSize,
@@ -286,6 +293,7 @@ function buildBackendWriteBody(
     items: form.lineItems.map((line) => ({
       product_id: line.productId,
       base_qty: line.quantity,
+      quantity_type: line.quantityType,
       unit_price: line.unitPrice,
       discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
       discount_percentage: line.schemeDiscountPercent || 0,
@@ -471,6 +479,7 @@ export const SalesOrderService = {
       items: form.lineItems.map((line) => ({
         product_id: line.productId,
         base_qty: line.quantity,
+        quantity_type: line.quantityType,
         unit_price: line.unitPrice,
         discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
         discount_percentage: line.schemeDiscountPercent || 0,
@@ -527,10 +536,12 @@ export const SalesOrderService = {
     return response.data?.data || {};
   },
 
-  async getBatches(productId: string | number, warehouseId: string | number): Promise<any[]> {
-    const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`
-    );
+  async getBatches(productId: string | number, warehouseId: string | number, quantityType?: string): Promise<any[]> {
+    let url = `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`;
+    if (quantityType) {
+      url += `&quantity_type=${quantityType}`;
+    }
+    const response = await axiosInstance.get(url);
     return response.data?.data || [];
   },
 };

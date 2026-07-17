@@ -165,21 +165,37 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
                 <tr className="bg-muted/40 border-b border-border">
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Received Qty</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Qty Type</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-28">Accepted Qty</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-28">Rejected Qty</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-amber-800 w-28">Hold Qty</th>
                 </tr>
               </thead>
               <tbody>
-                {qc.items.map((it, idx) => (
-                  <tr key={idx} className="border-b border-border/50">
-                    <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
-                    <td className="px-4 py-2 text-xs text-center tabular-nums">{it.receivedQty}</td>
-                    <td className="px-4 py-2 text-xs text-center tabular-nums text-emerald-700">{it.acceptedQty}</td>
-                    <td className="px-4 py-2 text-xs text-center tabular-nums text-red-700">{it.rejectedQty}</td>
-                    <td className="px-4 py-2 text-xs text-center tabular-nums text-amber-700">{it.holdQty ?? 0}</td>
-                  </tr>
-                ))}
+                {qc.items.map((it, idx) => {
+                  const isCase = it.quantityType === "CASE";
+                  const divisor = it.unitPerPacking || 10;
+                  return (
+                    <tr key={idx} className="border-b border-border/50">
+                      <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
+                      <td className="px-4 py-2 text-xs text-center tabular-nums">
+                        {isCase ? `${Number((it.receivedQty / divisor).toFixed(4))} Cs` : `${it.receivedQty} Pcs`}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground uppercase">
+                        {it.quantityType || "PIECE"}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center tabular-nums text-emerald-700">
+                        {isCase ? `${Number((it.acceptedQty / divisor).toFixed(4))} Cs` : `${it.acceptedQty} Pcs`}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center tabular-nums text-red-700">
+                        {isCase ? `${Number((it.rejectedQty / divisor).toFixed(4))} Cs` : `${it.rejectedQty} Pcs`}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center tabular-nums text-amber-700">
+                        {isCase ? `${Number(((it.holdQty ?? 0) / divisor).toFixed(4))} Cs` : `${it.holdQty ?? 0} Pcs`}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

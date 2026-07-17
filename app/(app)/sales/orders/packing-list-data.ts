@@ -76,6 +76,7 @@ export interface PackingListLine {
   orderedBaseQty: number;
   hasPackingConfig: boolean;
   allocations: CartonAllocation[];
+  quantityType?: "Case" | "Piece";
 }
 
 export interface PackingList {

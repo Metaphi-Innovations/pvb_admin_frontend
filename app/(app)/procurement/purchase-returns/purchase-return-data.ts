@@ -16,6 +16,8 @@ export type PurchaseReturnStatus =
 
 export type PurchaseReturnUnit = "CASE" | "PIECE";
 
+export type PurchaseReturnRejectionSource = "QC_REJECTED" | "SALES_RETURN" | "SAMPLE_RETURN";
+
 export interface PurchaseReturnItem {
   id: string;
   purchaseOrderProductId?: string;
@@ -23,8 +25,18 @@ export interface PurchaseReturnItem {
   productCode: string;
   productName: string;
   batchNumber: string;
+  /** Origin purchase GRN (backward-compatible primary GRN display). */
   grnNo: string;
   grnId: string;
+  originGrnNo?: string;
+  originGrnId?: string;
+  originGrnItemId?: string;
+  originGrnBatchId?: string;
+  latestGrnNo?: string;
+  latestGrnId?: string;
+  latestGrnItemId?: string;
+  latestGrnBatchId?: string;
+  rejectionSource?: PurchaseReturnRejectionSource | string;
   qcId?: string;
   qcNo?: string;
   grnItemId?: string;
@@ -96,6 +108,8 @@ export interface PurchaseReturn {
   activity: PurchaseReturnActivity[];
   debitNoteId?: number | null;
   debitNoteNo?: string;
+  packingListId?: string;
+  packingListNo?: string;
 }
 
 export const PURCHASE_RETURN_STATUS_CFG: Record<
