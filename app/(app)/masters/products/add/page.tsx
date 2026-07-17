@@ -7,11 +7,10 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  buildProductApiAssets,
+  collectNewProductImageFiles,
   loadProducts,
-  nextProductId,
   resolveProductCodeForSave,
-  saveProducts,
-  todayStr,
   type ProductImage,
   type ProductUrl,
   getProductApiValidationToastMessage,
@@ -80,10 +79,10 @@ export default function NewProductPage() {
       supplier_code: resolvedForm.supplierCode || null,
       hsn_id: resolvedForm.hsnId || resolvedForm.hsnCode || null,
       gst_rate_id: resolvedForm.gstId || null,
-      category_id: resolvedForm.category,
-      segment_id: resolvedForm.segment,
-      formulation_id: resolvedForm.form,
-      cfu_id: resolvedForm.cfu || null,
+      category_id: resolvedForm.categoryId || resolvedForm.category,
+      segment_id: resolvedForm.segmentId || resolvedForm.segment,
+      formulation_id: resolvedForm.formId || resolvedForm.form,
+      cfu_id: resolvedForm.cfuId || resolvedForm.cfu || null,
       authority: resolvedForm.authority || null,
       pack_size: parseNum(resolvedForm.packSize),
       base_unit: resolvedForm.baseUnit,
@@ -96,18 +95,13 @@ export default function NewProductPage() {
       mrp: parseNum(resolvedForm.mrp),
       is_active: resolvedForm.status === "active",
       status: resolvedForm.status === "active" ? "Active" : "Inactive",
-      assets: productUrls.map((u) => ({
-        asset_type: "LINK",
-        link_url: u.url,
-      })),
+      assets: buildProductApiAssets(productImages, productUrls),
     };
 
     createMutation.mutate(
       {
         payload,
-        images: productImages
-          .map((img) => img.file)
-          .filter((f): f is File => !!f),
+        images: collectNewProductImageFiles(productImages),
       },
       {
         onSuccess: () => {

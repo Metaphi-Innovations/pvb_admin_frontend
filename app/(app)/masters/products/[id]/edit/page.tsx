@@ -8,23 +8,22 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  buildProductApiAssets,
+  collectNewProductImageFiles,
   getProductImages,
   getProductUrls,
-  loadProducts,
+  mapApiMediaAssetToProductImage,
   Product,
-  saveProducts,
   type ProductImage,
   type ProductUrl,
 } from "../../product-data";
 import {
-  formValuesToProduct,
   ProductForm,
   productToFormValues,
   type ProductFormValues,
   validateProductForm,
 } from "../../components/ProductForm";
-import { useProduct, useUpdateProduct } from "@/hooks/masters";
-import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
+import { useProduct, useUpdateProduct, useProductPreviewNumber } from "@/hooks/masters";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -77,12 +76,7 @@ export default function EditProductPage() {
       updatedDate: apiProduct.updatedAt || "",
       productImages: (apiProduct.assets ?? [])
         .filter((a) => a.asset_type === "MEDIA")
-        .map((a) => ({
-          id: a.product_asset_id ?? crypto.randomUUID(),
-          name: a.file_name ?? "image",
-          url: a.file_url ?? "",
-          size: a.file_size,
-        })),
+        .map(mapApiMediaAssetToProductImage),
       productUrls: (apiProduct.assets ?? [])
         .filter((a) => a.asset_type === "LINK")
         .map((a) => ({
@@ -131,7 +125,7 @@ export default function EditProductPage() {
       supplier_code: form.supplierCode || null,
       hsn_id: form.hsnId || form.hsnCode || null,
       gst_rate_id: form.gstId || null,
-      category_id: form.category,
+      category_id: form.categoryId || null,
       segment_id: form.segmentId || null,
       formulation_id: form.formId || null,
       cfu_id: form.cfuId || null,
@@ -147,17 +141,14 @@ export default function EditProductPage() {
       mrp: parseNum(form.mrp),
       is_active: form.status === "active",
       status: form.status === "active" ? "Active" : "Inactive",
-      assets: productUrls.map((u) => ({
-        asset_type: "LINK",
-        link_url: u.url,
-      })),
+      assets: buildProductApiAssets(productImages, productUrls),
     };
 
     updateMutation.mutate(
       {
         id,
         payload,
-        images: productImages.map((img) => img.file).filter((f): f is File => !!f),
+        images: collectNewProductImageFiles(productImages),
       },
       {
         onSuccess: () => {

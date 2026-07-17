@@ -363,8 +363,91 @@ export function getProductUrls(product: Pick<Product, "productUrls" | "assets" |
     .filter((item): item is ProductUrl => item !== null);
 }
 
+function resolveBackendAssetUrl(path: string): string {
+  const raw = path.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
+    return raw;
+  }
+
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+  const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+
+  return `${origin}${normalizedPath}`;
+}
+
+/** Resolve `/uploads/...` paths to the backend host from `NEXT_PUBLIC_API_URL`. */
+export function resolveProductAssetUrl(path: string): string {
+  return resolveBackendAssetUrl(path);
+}
+
+/** Keep API payload paths relative (`/uploads/...`) even if UI holds absolute URLs. */
+export function toRelativeUploadPath(path: string): string {
+  const raw = path.trim();
+  if (!raw || raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+  if (raw.startsWith("/uploads/")) return raw;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.pathname.startsWith("/uploads/")) return parsed.pathname;
+  } catch {
+    /* ignore invalid URLs */
+  }
+  return raw;
+}
+
+export function mapApiMediaAssetToProductImage(asset: ApiProductAsset): ProductImage {
+  const rawUrl = asset.file_url ?? "";
+  return {
+    id: asset.product_asset_id ?? crypto.randomUUID(),
+    name: asset.file_name ?? "image",
+    url: rawUrl,
+    previewUrl: resolveBackendAssetUrl(rawUrl),
+    size: asset.file_size ?? undefined,
+  };
+}
+
 export function getImagePreviewUrl(image: ProductImage): string {
-  return image.previewUrl ?? image.url;
+  return resolveBackendAssetUrl(image.previewUrl ?? image.url);
+}
+
+export type ProductApiAssetPayload = {
+  asset_type: "MEDIA" | "LINK";
+  file_name?: string | null;
+  file_url?: string | null;
+  file_size?: string | null;
+  link_url?: string | null;
+  status?: string;
+};
+
+/** JSON assets for create/update: links + existing server media (not new file blobs). */
+export function buildProductApiAssets(
+  productImages: ProductImage[],
+  productUrls: ProductUrl[],
+): ProductApiAssetPayload[] {
+  const linkAssets: ProductApiAssetPayload[] = productUrls.map((item) => ({
+    asset_type: "LINK",
+    link_url: item.url,
+  }));
+
+  const existingMediaAssets: ProductApiAssetPayload[] = productImages
+    .filter((image) => !image.file && image.url.trim())
+    .map((image) => ({
+      asset_type: "MEDIA",
+      file_name: image.name,
+      file_url: toRelativeUploadPath(image.url),
+      file_size: image.size ?? null,
+      status: "Active",
+    }));
+
+  return [...linkAssets, ...existingMediaAssets];
+}
+
+/** New uploads only — sent as binary `product_image` parts in multipart/form-data. */
+export function collectNewProductImageFiles(productImages: ProductImage[]): File[] {
+  return productImages
+    .filter((image): image is ProductImage & { file: File } => image.file instanceof File)
+    .map((image) => image.file);
 }
 
 export interface Product {

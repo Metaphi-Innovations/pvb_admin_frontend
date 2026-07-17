@@ -311,7 +311,8 @@ export function ProductForm({
 
 		const newNumber = `${weightNum}${nextDigit}`;
 
-		return `${prefix}${newNumber}`;
+		// Keep existing generation; only omit the PROD- prefix from the stored code.
+		return `${prefix}${newNumber}`.replace(/^PROD-/i, "");
 	};
 
 	const set = <K extends keyof ProductFormValues>(
@@ -350,12 +351,6 @@ export function ProductForm({
 		}
 	}, [previewNumber, form.netWeightPerPackagingUnit]);
 
-	const handleCategoryChange = (category: string) => {
-		const next = { ...form, category, categoryId: category };
-		onChange(next);
-		onClearError("category");
-	};
-
 	const handleSupplierChange = (supplierId: string) => {
 		const supplierItem = suppliersData?.find((s) => s.supplier_id === supplierId);
 		onChange({
@@ -383,6 +378,13 @@ export function ProductForm({
 		if (!categoriesData) return [];
 		return categoriesData.map((c) => ({ value: c.id, label: c.categoryName }));
 	}, [categoriesData]);
+
+	const handleCategoryChange = (categoryId: string) => {
+		const label =
+			categoryOptions.find((option) => option.value === categoryId)?.label ?? "";
+		onChange({ ...form, categoryId, category: label });
+		onClearError("category");
+	};
 
 	const cfuOptions = useMemo(() => {
 		if (!cfuData) return [];
@@ -594,9 +596,12 @@ export function ProductForm({
 					<SelectField
 						label='Segment'
 						required
-						value={form.segment || form.segmentId || ""}
-						onChange={(v) => {
-							onChange({ ...form, segment: v, segmentId: v });
+						value={form.segmentId || ""}
+						onChange={(segmentId) => {
+							const label =
+								segmentOptions.find((option) => option.value === segmentId)
+									?.label ?? "";
+							onChange({ ...form, segmentId, segment: label });
 							onClearError("segment");
 						}}
 						options={segmentOptions}
@@ -608,7 +613,7 @@ export function ProductForm({
 					<SelectField
 						label='Category'
 						required
-						value={form.category || form.categoryId || ""}
+						value={form.categoryId || ""}
 						onChange={handleCategoryChange}
 						options={categoryOptions}
 						placeholder='Select category…'
@@ -619,9 +624,11 @@ export function ProductForm({
 					<SelectField
 						label='Form'
 						required
-						value={form.form || form.formId || ""}
-						onChange={(v) => {
-							onChange({ ...form, form: v, formId: v });
+						value={form.formId || ""}
+						onChange={(formId) => {
+							const label =
+								formOptions.find((option) => option.value === formId)?.label ?? "";
+							onChange({ ...form, formId, form: label });
 							onClearError("form");
 						}}
 						options={formOptions}
@@ -632,9 +639,11 @@ export function ProductForm({
 
 					<SelectField
 						label='CFU'
-						value={form.cfu || form.cfuId || ""}
-						onChange={(v) => {
-							onChange({ ...form, cfu: v, cfuId: v });
+						value={form.cfuId || ""}
+						onChange={(cfuId) => {
+							const label =
+								cfuOptions.find((option) => option.value === cfuId)?.label ?? "";
+							onChange({ ...form, cfuId, cfu: label });
 							onClearError("cfu");
 						}}
 						options={cfuOptions}
@@ -893,6 +902,7 @@ export function ProductForm({
 												src={preview}
 												alt={image.name}
 												className='object-cover w-full h-full'
+												crossOrigin='anonymous'
 											/>
 										) : (
 											<ImageIcon className='w-5 h-5 m-auto text-muted-foreground' />
@@ -1032,6 +1042,7 @@ export function ProductForm({
 							src={getImagePreviewUrl(previewImage)}
 							alt={previewImage.name}
 							className='max-h-[70vh] w-full object-contain'
+							crossOrigin='anonymous'
 						/>
 					)}
 				</DialogContent>
@@ -1080,9 +1091,9 @@ export function validateProductForm(
 	const productCode = resolveProductCodeForSave(form.category, form.productCode);
 
 	if (!form.productName.trim()) errors.productName = "Product name is required";
-	if (!form.segment) errors.segment = "Segment is required";
-	if (!form.category) errors.category = "Category is required";
-	if (!form.form) errors.form = "Form is required";
+	if (!form.segmentId) errors.segment = "Segment is required";
+	if (!form.categoryId) errors.category = "Category is required";
+	if (!form.formId) errors.form = "Form is required";
 	if (!productCode) {
 		errors.productCode = "Product code is required";
 	}

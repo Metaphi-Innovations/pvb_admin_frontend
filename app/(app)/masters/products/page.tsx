@@ -22,14 +22,15 @@ import {
   useProducts,
   useToggleProductStatus,
   useExportProducts,
+  useProductFilterDropdown,
 } from "@/hooks/masters";
 import { sortStateToOrdering, type ProductListRecord } from "@/app/(app)/masters/products/apis";
 import {
+  buildListApiFilters,
   MASTER_FILTER_FIELD_MAPS,
-  mergeListRequestFilters,
-  resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -102,6 +103,7 @@ export default function ProductsPage() {
     applyFilters,
     appliedSearch,
   } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "productName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -114,13 +116,7 @@ export default function ProductsPage() {
   );
 
   const apiFilters = useMemo(
-    () =>
-      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.product, {}),
-    [appliedFilters],
-  );
-
-  const listStatus = useMemo(
-    () => resolveListStatus(appliedFilters, "all"),
+    () => buildListApiFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.product, ["search"]),
     [appliedFilters],
   );
 
@@ -129,11 +125,90 @@ export default function ProductsPage() {
       page,
       pageSize,
       search: appliedSearch,
-      status: listStatus,
+      status: "all",
       apiFilters,
       ordering,
     }),
-    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, apiFilters, ordering],
+  );
+
+  const productCodeOptionsQuery = useProductFilterDropdown("product_code", {
+    enabled: isFilterOpen("productCode"),
+  });
+  const productNameOptionsQuery = useProductFilterDropdown("product_name", {
+    enabled: isFilterOpen("productName"),
+  });
+  const skuOptionsQuery = useProductFilterDropdown("sku", {
+    enabled: isFilterOpen("sku"),
+  });
+  const supplierCodeOptionsQuery = useProductFilterDropdown("supplier_code", {
+    enabled: isFilterOpen("supplierCode"),
+  });
+  const supplierNameOptionsQuery = useProductFilterDropdown("supplier_name", {
+    enabled: isFilterOpen("supplier"),
+  });
+  const hsnCodeOptionsQuery = useProductFilterDropdown("hsnCode", {
+    enabled: isFilterOpen("hsnCode"),
+  });
+  const categoryOptionsQuery = useProductFilterDropdown("categoryName", {
+    enabled: isFilterOpen("category"),
+  });
+  const packSizeOptionsQuery = useProductFilterDropdown("pack_size", {
+    enabled: isFilterOpen("packSize"),
+  });
+  const baseUnitOptionsQuery = useProductFilterDropdown("unit", {
+    enabled: isFilterOpen("baseUnit"),
+  });
+  const mrpOptionsQuery = useProductFilterDropdown("mrp", {
+    enabled: isFilterOpen("mrp"),
+  });
+  const statusOptionsQuery = useProductFilterDropdown("status", {
+    enabled: isFilterOpen("status"),
+  });
+
+  const productCodeOptions = useMemo(
+    () => productCodeOptionsQuery.data ?? [],
+    [productCodeOptionsQuery.data],
+  );
+  const productNameOptions = useMemo(
+    () => productNameOptionsQuery.data ?? [],
+    [productNameOptionsQuery.data],
+  );
+  const skuOptions = useMemo(() => skuOptionsQuery.data ?? [], [skuOptionsQuery.data]);
+  const supplierCodeOptions = useMemo(
+    () => supplierCodeOptionsQuery.data ?? [],
+    [supplierCodeOptionsQuery.data],
+  );
+  const supplierNameOptions = useMemo(
+    () => supplierNameOptionsQuery.data ?? [],
+    [supplierNameOptionsQuery.data],
+  );
+  const hsnCodeOptions = useMemo(
+    () => hsnCodeOptionsQuery.data ?? [],
+    [hsnCodeOptionsQuery.data],
+  );
+  const categoryOptions = useMemo(
+    () => categoryOptionsQuery.data ?? [],
+    [categoryOptionsQuery.data],
+  );
+  const packSizeOptions = useMemo(
+    () => packSizeOptionsQuery.data ?? [],
+    [packSizeOptionsQuery.data],
+  );
+  const baseUnitOptions = useMemo(
+    () => baseUnitOptionsQuery.data ?? [],
+    [baseUnitOptionsQuery.data],
+  );
+  const mrpOptions = useMemo(() => mrpOptionsQuery.data ?? [], [mrpOptionsQuery.data]);
+  const statusOptions = useMemo(
+    () =>
+      statusOptionsQuery.data?.length
+        ? statusOptionsQuery.data
+        : [
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+          ],
+    [statusOptionsQuery.data],
   );
 
   // ---- queries / mutations ----
@@ -192,7 +267,7 @@ export default function ProductsPage() {
   // ---- export ----
   const handleExport = () => {
     exportMutation.mutate(
-      { search: appliedSearch, status: listStatus, ordering, apiFilters },
+      { search: appliedSearch, status: "all", ordering, apiFilters },
       {
         onError: (error) =>
           setToast({
@@ -206,16 +281,34 @@ export default function ProductsPage() {
   // ---- add ----
   const handleAdd = () => router.push("/masters/products/add");
 
+  const handleFilterChange = (next: FilterState) => {
+    const normalized: FilterState = { ...next };
+    const statusVal = normalized.status;
+    const statusToken = Array.isArray(statusVal)
+      ? String(statusVal[0] ?? "").toLowerCase()
+      : String(statusVal ?? "").toLowerCase();
+    if (statusToken === "all") {
+      delete normalized.status;
+    }
+    setFilters(normalized);
+    applyFilters(normalized);
+    setPage(1);
+  };
+
   // ---- KPIs ----
   const active = records.filter((r) => r.status === "active").length;
   const inactive = records.filter((r) => r.status === "inactive").length;
 
   // ---- columns ----
-  const columns: ColumnConfig<ProductListRecord>[] = [
+  const columns: ColumnConfig<ProductListRecord>[] = useMemo(
+    () => [
     {
       key: "productCode",
       header: "Product Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: productCodeOptions,
       width: "120px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.productCode || "—"}</span>
@@ -225,6 +318,9 @@ export default function ProductsPage() {
       key: "productName",
       header: "Product Name",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: productNameOptions,
       width: "180px",
       render: (_val, row) => (
         <Link href={`/masters/products/${row.productUuid}`} className="block group/name">
@@ -238,6 +334,9 @@ export default function ProductsPage() {
       key: "sku",
       header: "SKU",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: skuOptions,
       width: "120px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.sku || "—"}</span>
@@ -247,6 +346,9 @@ export default function ProductsPage() {
       key: "supplierCode",
       header: "Supplier Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierCodeOptions,
       width: "110px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.supplierCode || "—"}</span>
@@ -256,6 +358,9 @@ export default function ProductsPage() {
       key: "supplier",
       header: "Supplier Name",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierNameOptions,
       width: "140px",
       render: (_val, row) => (
         <span className="text-xs">{row.supplier || "—"}</span>
@@ -265,6 +370,9 @@ export default function ProductsPage() {
       key: "hsnCode",
       header: "HSN Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: hsnCodeOptions,
       width: "90px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.hsnCode || "—"}</span>
@@ -274,6 +382,9 @@ export default function ProductsPage() {
       key: "category",
       header: "Category",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: categoryOptions,
       width: "110px",
       render: (_val, row) => row.category || "—",
     },
@@ -281,6 +392,9 @@ export default function ProductsPage() {
       key: "packSize",
       header: "Pack Size",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: packSizeOptions,
       width: "90px",
       render: (_val, row) =>
         row.packSize !== null && row.packSize !== undefined ? String(row.packSize) : "—",
@@ -289,6 +403,9 @@ export default function ProductsPage() {
       key: "baseUnit",
       header: "Base Unit",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: baseUnitOptions,
       width: "90px",
       render: (_val, row) => row.baseUnit || "—",
     },
@@ -296,6 +413,9 @@ export default function ProductsPage() {
       key: "mrp",
       header: "MRP",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: mrpOptions,
       width: "100px",
       align: "right",
       render: (_val, row) => (
@@ -312,10 +432,7 @@ export default function ProductsPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "100px",
       render: (_val, row) => (
         <ListingStatusToggle
@@ -324,7 +441,21 @@ export default function ProductsPage() {
         />
       ),
     },
-  ];
+  ],
+    [
+      productCodeOptions,
+      productNameOptions,
+      skuOptions,
+      supplierCodeOptions,
+      supplierNameOptions,
+      hsnCodeOptions,
+      categoryOptions,
+      packSizeOptions,
+      baseUnitOptions,
+      mrpOptions,
+      statusOptions,
+    ],
+  );
 
   const actions: ActionItemConfig<ProductListRecord>[] = [
     {
@@ -372,7 +503,7 @@ export default function ProductsPage() {
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={(f) => { setFilters(f); setPage(1); }}
+          onFilterChange={handleFilterChange}
           actions={actions}
           onAdd={handleAdd}
           addLabel="Add Product"
@@ -381,6 +512,7 @@ export default function ProductsPage() {
           searchPlaceholder="Search product code, name, supplier, SKU, HSN..."
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 

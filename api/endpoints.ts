@@ -158,6 +158,7 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/product/export",
       PREVIEW_NUMBER: "/master/product/preview-number",
       DROPDOWN: "/master/product/dropdown",
+      FILTER_DROPDOWN: "/master/product/filter-dropdown",
       PRICING: "/master/product/pricing",
     },
     PRICING: {
@@ -205,6 +206,7 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/master/supplier-type/details/${id}`,
       EXPORT: "/master/supplier-type/export",
       DROPDOWN: "/master/supplier-type/dropdown",
+      FILTER_DROPDOWN: "/master/supplier-type/filter-dropdown",
     },
   },
   PROCUREMENT: {

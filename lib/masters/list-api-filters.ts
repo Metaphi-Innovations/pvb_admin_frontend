@@ -461,7 +461,24 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
   product: {
-    status: statusColumnMapper,
+    productCode: "product_code",
+    productName: "product_name",
+    sku: "sku",
+    supplierCode: "supplier_code",
+    supplier: "supplier.supplier_name",
+    hsnCode: "hsn.hsnCode",
+    category: "category.categoryName",
+    packSize: "pack_size",
+    baseUnit: "unit",
+    mrp: "mrp",
+    status: (value) => {
+      const token = normalizeStatusToken(value);
+      if (token === "active") return { status: "Active" };
+      if (token === "inactive") return { status: "Inactive" };
+      const raw = Array.isArray(value) ? value[0] : value;
+      const label = String(raw ?? "").trim();
+      return label ? { status: label } : null;
+    },
     ...AUDIT_FILTER_FIELDS,
   },
   supplierType: {

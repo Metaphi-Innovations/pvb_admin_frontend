@@ -28,8 +28,7 @@ import {
 	getProductCode,
 	getProductImages,
 	getProductUrls,
-	loadProducts,
-	saveProducts,
+	mapApiMediaAssetToProductImage,
 	type Product,
 	type ProductImage,
 	type ProductStatus,
@@ -87,6 +86,7 @@ function MediaSection({ product }: { product: Product }) {
 										src={getImagePreviewUrl(image)}
 										alt={image.name}
 										className='object-cover w-full h-full'
+										crossOrigin='anonymous'
 									/>
 								</button>
 								<div className='px-2 py-1.5 border-t border-border/40'>
@@ -167,6 +167,7 @@ function MediaSection({ product }: { product: Product }) {
 							src={getImagePreviewUrl(previewImage)}
 							alt={previewImage.name}
 							className='max-h-[70vh] w-full object-contain'
+							crossOrigin='anonymous'
 						/>
 					)}
 				</DialogContent>
@@ -218,12 +219,7 @@ export default function ProductDetailPage() {
 			updatedDate: apiProduct.updatedAt || "",
 			productImages: (apiProduct.assets ?? [])
 				.filter((a) => a.asset_type === "MEDIA")
-				.map((a) => ({
-					id: a.product_asset_id ?? crypto.randomUUID(),
-					name: a.file_name ?? "image",
-					url: a.file_url ?? "",
-					size: a.file_size,
-				})),
+				.map(mapApiMediaAssetToProductImage),
 			productUrls: (apiProduct.assets ?? [])
 				.filter((a) => a.asset_type === "LINK")
 				.map((a) => ({
