@@ -168,8 +168,8 @@ function buildBackendWriteBody(
     const sgstAmount = line.lineTotal ? Number(line.lineTotal) * 0.09 : 0;
     return {
       product_id: line.productId,
-      inventory_batch_id: line.batchInventoryId || (line.id && line.id.toString().includes("-") && !line.id.toString().startsWith("line-") ? line.id : undefined),
-      available_base_qty: line.availableStock,
+      quantity_type: line.quantityType || "Piece",
+      available_base_qty: line.availableStock || 0,
       transfer_base_qty: line.quantity,
       cp_price: line.unitPrice,
       cgst_percent: 9,

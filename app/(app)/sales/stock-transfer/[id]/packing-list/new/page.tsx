@@ -65,8 +65,7 @@ export default function TransferNewPackingListPage() {
           if (!line.productId || line.quantity <= 0) continue;
 
           // Fetch available inventory batches from the backend
-          const allBatches = await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType);
-          const batches = allBatches.filter((b: any) => b.batch_code === line.batchNumber);
+          const batches = await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType);
 
           const config = {
             packingUnit: line.packingUnit || "Unit",

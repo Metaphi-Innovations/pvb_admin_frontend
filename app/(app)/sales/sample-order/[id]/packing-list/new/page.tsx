@@ -423,11 +423,17 @@ export default function NewSampleOrderPackingListPage() {
                   <div className="flex items-center gap-4">
                     <div className="text-right text-sm">
                       <span className="text-muted-foreground">Ordered: </span>
-                      <span className="font-semibold">{line.orderedBaseQty} {line.baseUnit}</span>
+                      <span className="font-semibold">
+                        {line.quantityType?.toUpperCase() === "CASE" 
+                          ? `${Math.floor(line.orderedBaseQty / line.unitsPerPackingUnit)} Case` 
+                          : `${line.orderedBaseQty} Unit`}
+                      </span>
                       <span className="mx-3 text-muted-foreground">|</span>
                       <span className="text-muted-foreground">Allocated: </span>
                       <span className={cn("font-semibold", insufficient && "text-amber-600")}>
-                        {allocated} {line.baseUnit}
+                        {line.quantityType?.toUpperCase() === "CASE" 
+                          ? `${Math.floor(allocated / line.unitsPerPackingUnit)} Case` 
+                          : `${allocated} Unit`}
                       </span>
                       {!isExpanded && selectedCount > 0 && (
                         <span className="ml-2 text-muted-foreground">({selectedCount} batch{selectedCount !== 1 ? "es" : ""} selected)</span>
@@ -435,11 +441,6 @@ export default function NewSampleOrderPackingListPage() {
                     </div>
                     {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-4 mt-2 text-xs text-muted-foreground">
-                  <span>Packing: <span className="font-medium text-foreground">{line.packingUnit}</span></span>
-                  <span>Base: <span className="font-medium text-foreground">{line.baseUnit}</span></span>
-                  <span>Conversion: <span className="font-medium text-foreground">1 {line.packingUnit} = {line.unitsPerPackingUnit} {line.baseUnit}</span></span>
                 </div>
               </button>
 
