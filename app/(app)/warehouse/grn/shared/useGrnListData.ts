@@ -22,6 +22,8 @@ interface UseGrnListDataParams {
   page: number;
   pageSize: number;
   destinationWarehouse?: string;
+  /** When false, skip fetching (e.g. inactive sub-tab). Default true. */
+  enabled?: boolean;
 }
 
 export function useGrnListData({
@@ -31,6 +33,7 @@ export function useGrnListData({
   page,
   pageSize,
   destinationWarehouse,
+  enabled = true,
 }: UseGrnListDataParams) {
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [items, setItems] = useState<GrnListItem[]>([]);
@@ -49,6 +52,8 @@ export function useGrnListData({
   );
 
   useEffect(() => {
+    if (!enabled) return;
+
     let active = true;
     const controller = new AbortController();
 
@@ -90,6 +95,7 @@ export function useGrnListData({
       controller.abort();
     };
   }, [
+    enabled,
     page,
     pageSize,
     debouncedSearch,
@@ -102,58 +108,47 @@ export function useGrnListData({
   return {
     items,
     total,
-    loading: loading || isDebouncing,
+    loading: enabled && (loading || isDebouncing),
     error,
     debouncedFilters,
   };
-}
-
-const filterOptionsCache = new Map<string, GrnFilterOption[]>();
-const filterLoadingFields = new Set<string>();
-
-function filterCacheKey(fieldName: GrnFilterField, sourceType?: BackendGrnSourceType) {
-  return `${sourceType ?? "ALL"}:${fieldName}`;
 }
 
 export function useGrnLazyFilters(sourceType?: BackendGrnSourceType) {
   const [filterOptions, setFilterOptions] = useState<
     Partial<Record<GrnFilterField, GrnFilterOption[]>>
   >({});
-  const loadedColumnsRef = useRef<Set<string>>(new Set());
+  const inFlightRef = useRef<Set<string>>(new Set());
 
   const handleOpenFilter = useCallback(async (columnKey: string) => {
-    if (loadedColumnsRef.current.has(columnKey)) return;
-
     const fieldName = GRN_FILTER_COLUMN_MAP[columnKey];
     if (!fieldName) return;
 
-    const cacheKey = filterCacheKey(fieldName, sourceType);
+    const requestKey = `${sourceType ?? "ALL"}:${fieldName}`;
+    // Avoid stacking identical in-flight requests from a double onOpen
+    if (inFlightRef.current.has(requestKey)) return;
+    inFlightRef.current.add(requestKey);
 
-    if (filterOptionsCache.has(cacheKey)) {
-      loadedColumnsRef.current.add(columnKey);
-      setFilterOptions((prev) => ({
-        ...prev,
-        [fieldName]: filterOptionsCache.get(cacheKey),
-      }));
-      return;
-    }
+    // Clear so popover shows loading until fresh data arrives
+    setFilterOptions((prev) => ({
+      ...prev,
+      [fieldName]: [],
+    }));
 
-    if (filterLoadingFields.has(cacheKey)) return;
-
-    filterLoadingFields.add(cacheKey);
     try {
       const options = await GrnListService.getFilterDropdown(fieldName, sourceType);
-      filterOptionsCache.set(cacheKey, options);
-      loadedColumnsRef.current.add(columnKey);
       setFilterOptions((prev) => ({
         ...prev,
         [fieldName]: options,
       }));
     } catch (err) {
       console.error(`Error loading GRN filter options for ${columnKey}:`, err);
-      loadedColumnsRef.current.delete(columnKey);
+      setFilterOptions((prev) => ({
+        ...prev,
+        [fieldName]: [],
+      }));
     } finally {
-      filterLoadingFields.delete(cacheKey);
+      inFlightRef.current.delete(requestKey);
     }
   }, [sourceType]);
 

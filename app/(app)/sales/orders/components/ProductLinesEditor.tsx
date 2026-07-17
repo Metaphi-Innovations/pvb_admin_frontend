@@ -465,6 +465,10 @@ export default function ProductLinesEditor({
 				patch.pieceQuantity = 0;
 				next.pieceQuantity = 0;
 			}
+			if (patch.quantityType === "Piece") {
+				patch.caseQuantity = 0;
+				next.caseQuantity = 0;
+			}
 
 			// If user manually changed total quantity
 			if (patch.quantity !== undefined && patch.caseQuantity === undefined && patch.pieceQuantity === undefined && patch.quantityType === undefined) {
@@ -592,11 +596,11 @@ export default function ProductLinesEditor({
 			setLocalError("Please select a product.");
 			return;
 		}
-		// Check for duplicate products
+		// Check for duplicate products with same quantity type
 		for (const prod of topSelectedProds) {
-			const exists = lines.some((l) => l.productId === prod.id);
+			const exists = lines.some((l) => l.productId === prod.id && l.quantityType === topQuantityType);
 			if (exists) {
-				setLocalError(`Product "${prod.name}" is already added to this order.`);
+				setLocalError(`Product "${prod.name}" is already added as ${topQuantityType} to this order.`);
 				return;
 			}
 		}
@@ -680,7 +684,10 @@ export default function ProductLinesEditor({
 						products={products}
 						value={null}
 						selectedValues={topSelectedProds.map((p) => p.id)}
-						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is any => id !== null)}
+						alreadyAddedProductIds={lines
+							.filter((l) => l.quantityType === topQuantityType)
+							.map((l) => l.productId)
+							.filter((id): id is any => id !== null)}
 						onSelectMultiple={(selected) => setTopSelectedProds(selected)}
 					/>
 				}
@@ -695,6 +702,8 @@ export default function ProductLinesEditor({
 									setTopQuantityType(type);
 									if (type === "Case") {
 										setTopPieceQuantity(0);
+									} else {
+										setTopCaseQuantity(0);
 									}
 								}}
 							>
@@ -712,9 +721,10 @@ export default function ProductLinesEditor({
 							<Input
 								type="number"
 								min={0}
+								disabled={topQuantityType === "Piece"}
 								value={topCaseQuantity || ""}
 								onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
-								className="h-8 text-xs w-20 bg-white"
+								className="h-8 text-xs w-20 bg-white disabled:opacity-50"
 							/>
 						</div>
 						<div className="space-y-1">
@@ -828,7 +838,7 @@ export default function ProductLinesEditor({
 											value={line.productId}
 											selectedValues={line.productId ? [line.productId] : []}
 											alreadyAddedProductIds={lines
-												.filter((l) => l.id !== line.id)
+												.filter((l) => l.id !== line.id && l.quantityType === line.quantityType)
 												.map((l) => l.productId)
 												.filter((id): id is any => id !== null)}
 											onSelectMultiple={(selectedProds) =>
@@ -875,12 +885,13 @@ export default function ProductLinesEditor({
 										<Input
 											type="number"
 											min={0}
+											disabled={draftLine.quantityType === "Piece"}
 											value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
 											onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
-											className="h-7 text-xs w-full"
+											className="h-7 text-xs w-full disabled:opacity-50"
 										/>
 									) : (
-										<span className="text-xs">{line.caseQuantity || 0}</span>
+										<span className="text-xs">{line.quantityType === "Piece" ? "—" : (line.caseQuantity || 0)}</span>
 									)}
 								</td>
 								<td className='px-2 py-1.5 w-20'>

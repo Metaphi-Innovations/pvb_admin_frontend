@@ -293,11 +293,14 @@ export const PackingListService = {
   async getBatches(
     productId: string,
     warehouseId: string,
+    quantityType?: string,
     signal?: AbortSignal,
   ): Promise<any[]> {
-    const response = await axiosInstance.get(
-      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`,
-      { signal },
+    let url = `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`;
+    if (quantityType) {
+      url += `&quantity_type=${quantityType}`;
+    }
+    const response = await axiosInstance.get(url, { signal },
     );
     const payload = response.data as Record<string, unknown>;
     return Array.isArray(payload.data) ? payload.data : [];

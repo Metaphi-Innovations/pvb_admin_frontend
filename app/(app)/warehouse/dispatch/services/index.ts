@@ -39,9 +39,18 @@ export async function updateDispatchStatus(id: string, status: string) {
   return response.data;
 }
 
-export async function getDispatchFilterDropdown(fieldName: string, sourceType?: string) {
+export async function getDispatchFilterDropdown(
+  fieldName: string,
+  sourceType?: string,
+  options?: {
+    status?: string;
+    excludeExistingStGrn?: boolean;
+  },
+) {
   const params: any = { field_name: fieldName };
   if (sourceType) params.source_type = sourceType;
+  if (options?.status) params.status = options.status;
+  if (options?.excludeExistingStGrn) params.exclude_existing_st_grn = "true";
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.FILTER_DROPDOWN, { params });
   return response.data?.data || [];
 }
