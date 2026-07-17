@@ -63,7 +63,6 @@ export default function EditTDSPage() {
       setForm(tdsApiToForm({
         id: detailQuery.data.id,
         tdsUuid: detailQuery.data.tdsUuid,
-        sectionCode: detailQuery.data.sectionCode,
         sectionName: detailQuery.data.sectionName,
         tdsRate: detailQuery.data.tdsRate,
         applicableTo: detailQuery.data.applicableTo,
@@ -142,12 +141,9 @@ export default function EditTDSPage() {
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold leading-none">Edit TDS Section</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Masters → TDS → {record.sectionCode}
+              Masters → TDS → {record.sectionName || "Edit"}
             </p>
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            {record.sectionCode}
-          </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
           </Button>
@@ -167,16 +163,6 @@ export default function EditTDSPage() {
 
         <div className="flex-1 overflow-y-auto px-5 py-4 max-w-2xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">TDS Code</Label>
-              <Input
-                value={record.sectionCode}
-                disabled
-                readOnly
-                className="h-8 text-xs font-mono bg-muted/30 cursor-not-allowed"
-              />
-            </div>
-
             <div className="space-y-1">
               <Label className="text-xs font-medium">
                 TDS Rate % <span className="text-red-500">*</span>

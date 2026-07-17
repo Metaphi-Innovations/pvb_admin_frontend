@@ -398,7 +398,6 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
   tds: {
-    sectionCode: "tds_code",
     sectionName: "tds_section_name",
     tdsRate: (value) => {
       const raw = Array.isArray(value) ? value[0] : value;
@@ -424,7 +423,6 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
   unit: {
-    unitCode: "unit_code",
     unitName: "unit_name",
     shortName: "short_name",
     parentUomName: "uom.unit_name",
@@ -438,7 +436,6 @@ export const MASTER_FILTER_FIELD_MAPS = {
   },
   formulation: {
     formulationName: "formulation_name",
-    formulationCode: "formulation_code",
     description: "description",
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
@@ -471,6 +468,16 @@ export const MASTER_FILTER_FIELD_MAPS = {
     supplierTypeName: "supplier_type_name",
     initialCode: "initial_code",
     description: "description",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  supplier: {
+    supplierCode: "supplier_code",
+    supplierName: "supplier_name",
+    supplierType: "supplier_type.supplier_type_name",
+    contactPerson: "contact_person",
+    mobile: "mobile_number",
+    gstNumber: "gstin_number",
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },

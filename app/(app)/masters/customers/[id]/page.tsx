@@ -46,10 +46,7 @@ import { useCustomer, useToggleCustomerStatus } from "@/hooks/masters";
 import { readCustomerPermissions } from "../customer-permissions";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import { formatMoney } from "@/lib/accounts/money-format";
-import {
-  deriveGstRegistered,
-  getGstCategoryLabel,
-} from "@/lib/masters/gst-compliance";
+import { getGstCategoryLabel } from "@/lib/masters/gst-compliance";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -392,21 +389,9 @@ export default function CustomerDetailPage() {
               <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
                 <RecordKvRow
                   label="GST Registered"
-                  value={
-                    deriveGstRegistered(
-                      customer.gstApplicable,
-                      customer.gstinNo ?? "",
-                      customer.registrationType ?? "",
-                    )
-                      ? "Yes"
-                      : "No"
-                  }
+                  value={customer.gstApplicable ? "Yes" : "No"}
                 />
-                {deriveGstRegistered(
-                  customer.gstApplicable,
-                  customer.gstinNo ?? "",
-                  customer.registrationType ?? "",
-                ) && (
+                {customer.gstApplicable && (
                     <>
                       <RecordKvRow
                         label="GST Registration Type"

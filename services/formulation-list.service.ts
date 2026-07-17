@@ -15,7 +15,8 @@ export interface FormulationListRecord {
   id: number;
   formulationUuid: string;
   formulationName: string;
-  formulationCode: string;
+  /** Present on view/detail only; omitted from list API. */
+  formulationCode?: string;
   description: string;
   status: "active" | "inactive";
   createdAt: string;
@@ -68,7 +69,6 @@ export type FormulationFilterField =
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
   formulationName: "formulationName",
-  formulationCode: "formulationCode",
   description: "description",
   status: "isActive",
   createdAt: "createdAt",
@@ -114,7 +114,6 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): Formulati
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     formulationUuid: asString(raw.formulation_id),
     formulationName: asString(raw.formulation_name),
-    formulationCode: asString(raw.formulation_code),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
     createdAt: formatDate(raw.created_at),

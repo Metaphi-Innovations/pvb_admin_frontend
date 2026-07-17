@@ -221,6 +221,22 @@ export interface SupplierDropdownItem {
     supplierCode: string;
 }
 
+export interface SupplierFilterOption {
+    label: string;
+    value: string;
+}
+
+export type SupplierFilterField =
+    | "supplier_code"
+    | "supplier_name"
+    | "supplier_type__supplier_type_name"
+    | "contact_person"
+    | "mobile_number"
+    | "gstin_number"
+    | "is_active"
+    | "created_by_user__username"
+    | "updated_by_user__username";
+
 // ---------------------------------------------------------------------------
 // Sort-key → API ordering field map
 // ---------------------------------------------------------------------------
@@ -470,6 +486,36 @@ function extractErrorMessage(error: unknown, fallback: string): string {
     );
 }
 
+function mapFilterOptions(
+    data: unknown[],
+    fieldName: SupplierFilterField,
+): SupplierFilterOption[] {
+    const options: SupplierFilterOption[] = [];
+    const seen = new Set<string>();
+
+    for (const row of data) {
+        if (!row || typeof row !== "object") continue;
+        const record = row as Record<string, unknown>;
+        const raw = record[fieldName];
+        const value = asString(raw).trim();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+
+        if (fieldName === "is_active") {
+            const active = raw === true || value.toLowerCase() === "true";
+            options.push({
+                label: active ? "Active" : "Inactive",
+                value: active ? "active" : "inactive",
+            });
+            continue;
+        }
+
+        options.push({ label: value, value });
+    }
+
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function buildFormData(payload: Record<string, unknown>): FormData {
     const formData = new FormData();
 
@@ -521,38 +567,9 @@ export const SupplierListService = {
     async list(params: SupplierListParams): Promise<SupplierListResult> {
         const ordering = encodeURIComponent(params.ordering ?? "");
 
-        // Map frontend camelCase array filters to backend snake_case single values
-        const backendFilters: Record<string, unknown> = {};
-        if (params.apiFilters) {
-            for (const [key, value] of Object.entries(params.apiFilters)) {
-                let realVal: unknown = value;
-                if (Array.isArray(value)) {
-                    if (value.length === 0) continue;
-                    realVal = value[0];
-                }
-                if (realVal === undefined || realVal === null || realVal === "") continue;
-
-                if (key === "supplierName") {
-                    backendFilters["supplier_name"] = realVal;
-                } else if (key === "mobileNumber") {
-                    backendFilters["mobile_number"] = realVal;
-                } else if (key === "email") {
-                    backendFilters["email"] = realVal;
-                } else if (key === "gstinNumber") {
-                    backendFilters["gst_number"] = realVal;
-                } else if (key === "registeredGstAddress") {
-                    backendFilters["registered_gst_address"] = realVal;
-                } else if (key === "status") {
-                    backendFilters["is_active"] = realVal === "active";
-                } else {
-                    backendFilters[key] = realVal;
-                }
-            }
-        }
-
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.SUPPLIER.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
-            { filters: backendFilters },
+            { filters: params.apiFilters ?? {} },
             { signal: params.signal },
         );
 
@@ -595,6 +612,27 @@ export const SupplierListService = {
         const payload = response.data as Record<string, unknown>;
         const data = payload.data as Record<string, unknown> | undefined;
         return asString(data?.supplier_code);
+    },
+
+    async getFilterDropdown(
+        fieldName: SupplierFilterField,
+        signal?: AbortSignal,
+    ): Promise<SupplierFilterOption[]> {
+        const response = await axiosInstance.get(
+            API_ENDPOINTS.MASTER.SUPPLIER.FILTER_DROPDOWN,
+            {
+                params: { field_name: fieldName },
+                signal,
+            },
+        );
+
+        const payload = response.data as Record<string, unknown>;
+        const data = payload.data;
+        if (!Array.isArray(data)) {
+            throw new Error("Unexpected response shape: 'data' must be an array.");
+        }
+
+        return mapFilterOptions(data, fieldName);
     },
 
     async create(payload: SupplierCreatePayload): Promise<void> {

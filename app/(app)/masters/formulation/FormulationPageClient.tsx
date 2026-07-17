@@ -108,7 +108,7 @@ function toFormulationRow(item: {
   id: number;
   formulationUuid: string;
   formulationName: string;
-  formulationCode: string;
+  formulationCode?: string;
   description: string;
   status: "active" | "inactive";
   createdAt: string;
@@ -120,7 +120,7 @@ function toFormulationRow(item: {
     id: item.id,
     formulationUuid: item.formulationUuid,
     formulationName: item.formulationName,
-    formulationCode: item.formulationCode,
+    formulationCode: item.formulationCode ?? "",
     description: item.description,
     status: item.status,
     createdBy: item.createdBy || "—",
@@ -191,9 +191,6 @@ export default function FormulationMasterPage() {
   const nameOptionsQuery = useFormulationFilterDropdown("formulation_name", {
     enabled: isFilterOpen("formulationName"),
   });
-  const codeOptionsQuery = useFormulationFilterDropdown("formulation_code", {
-    enabled: isFilterOpen("formulationCode"),
-  });
   const descriptionOptionsQuery = useFormulationFilterDropdown("description", {
     enabled: isFilterOpen("description"),
   });
@@ -210,10 +207,6 @@ export default function FormulationMasterPage() {
   const formulationNameOptions = useMemo(
     () => nameOptionsQuery.data ?? [],
     [nameOptionsQuery.data],
-  );
-  const formulationCodeOptions = useMemo(
-    () => codeOptionsQuery.data ?? [],
-    [codeOptionsQuery.data],
   );
   const descriptionOptions = useMemo(
     () => descriptionOptionsQuery.data ?? [],
@@ -379,18 +372,6 @@ export default function FormulationMasterPage() {
         ),
       },
       {
-        key: "formulationCode",
-        header: "Form Code",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: formulationCodeOptions,
-        width: "120px",
-        render: (val) => (
-          <span className="font-mono text-xs text-muted-foreground">{String(val || "—")}</span>
-        ),
-      },
-      {
         key: "description",
         header: "Description",
         sortable: true,
@@ -444,7 +425,6 @@ export default function FormulationMasterPage() {
     ],
     [
       formulationNameOptions,
-      formulationCodeOptions,
       descriptionOptions,
       statusOptions,
       createdByOptions,
@@ -665,7 +645,7 @@ export default function FormulationMasterPage() {
                 }
                 errors={{ name: errors.formulationName }}
                 labels={{ name: "Form Name", code: "Form Code" }}
-                hideCode={sheetMode === "add"}
+                hideCode
                 codeDisabled
               />
             </MasterFormGrid>

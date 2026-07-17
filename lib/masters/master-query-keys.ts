@@ -195,6 +195,9 @@ export const masterKeys = {
     details: () => [...masterKeys.suppliers.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.suppliers.details(), id] as const,
     dropdown: () => [...masterKeys.suppliers.all(), "dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.suppliers.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.suppliers.filterDropdowns(), fieldName] as const,
     previewNumber: (supplierTypeId?: string) => [...masterKeys.suppliers.all(), "preview-number", supplierTypeId] as const,
     export: () => [...masterKeys.suppliers.all(), "export"] as const,
   },
