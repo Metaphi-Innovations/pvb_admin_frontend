@@ -26,7 +26,7 @@ import {
   PURCHASE_RETURN_STATUS_CFG,
   type PurchaseReturn,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
-import { purchaseReturnRoutes } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import { purchaseReturnRoutes, canEditPurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
 import {
   buildPurchaseReturnApiFilters,
   buildPurchaseReturnOrdering,
@@ -61,8 +61,8 @@ export function PurchaseReturnListing() {
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({
-    key: "returnDate",
-    direction: "desc",
+    key: "",
+    direction: "none",
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -272,13 +272,15 @@ export function PurchaseReturnListing() {
               >
                 <Eye className="w-3.5 h-3.5" /> View
               </button>
-              <button
-                type="button"
-                onClick={() => router.push(purchaseReturnRoutes.edit(row.id))}
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
-              >
-                <Edit2 className="w-3.5 h-3.5" /> Edit
-              </button>
+              {canEditPurchaseReturn(row) && (
+                <button
+                  type="button"
+                  onClick={() => router.push(purchaseReturnRoutes.edit(row.id))}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </button>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ),

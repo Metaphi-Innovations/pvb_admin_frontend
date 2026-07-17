@@ -10,6 +10,9 @@ export type PurchaseReturnStatus =
   | "returned"
   | "Draft"
   | "PO_return"
+  | "Ready For Packing"
+  | "Partially Packed"
+  | "Fully Packed"
   | "Dispatched"
   | "Received_By_Supplier"
   | "Cancelled";
@@ -51,8 +54,19 @@ export interface PurchaseReturnItem {
   qcRejectedQty: number;
   alreadyReturnedQty: number;
   balanceRejectedQty: number;
+  /** CASE or PIECE — one row per batch + quantity type. */
+  quantityType: PurchaseReturnUnit;
+  returnUnit: PurchaseReturnUnit;
+  /** User-entered qty in returnUnit (cases or pieces). */
+  returnValue: number;
+  /** Balance in display unit (cases or pieces). */
+  balanceDisplayQty?: number;
+  /** Edit mode: max return base qty allowed on this line (eligible pool + current line qty). */
+  editableMaxReturnBaseQty?: number;
   returnQty: number;
+  /** @deprecated use returnValue when quantityType is CASE */
   returnCases?: number;
+  /** @deprecated use returnValue when quantityType is PIECE */
   returnLooseQty?: number;
   lineRemark: string;
   selected: boolean;
@@ -110,6 +124,10 @@ export interface PurchaseReturn {
   debitNoteNo?: string;
   packingListId?: string;
   packingListNo?: string;
+  /** Packing list status (e.g. Ready For Packing / Partially Packed / Fully Packed). */
+  packingListStatus?: string;
+  /** True when at least one Packing Done exists for the linked packing list. */
+  packingDone?: boolean;
 }
 
 export const PURCHASE_RETURN_STATUS_CFG: Record<
@@ -133,10 +151,28 @@ export const PURCHASE_RETURN_STATUS_CFG: Record<
     dot: "bg-blue-500",
     label: "PO Return",
   },
+  "Ready For Packing": {
+    bg: "bg-amber-50",
+    text: "text-amber-700",
+    dot: "bg-amber-500",
+    label: "Ready for Packing",
+  },
+  "Partially Packed": {
+    bg: "bg-orange-50",
+    text: "text-orange-700",
+    dot: "bg-orange-500",
+    label: "Partially Packed",
+  },
+  "Fully Packed": {
+    bg: "bg-violet-50",
+    text: "text-violet-700",
+    dot: "bg-violet-500",
+    label: "Fully Packed",
+  },
   Dispatched: {
-    bg: "bg-sky-50",
-    text: "text-sky-700",
-    dot: "bg-sky-500",
+    bg: "bg-teal-50",
+    text: "text-teal-700",
+    dot: "bg-teal-500",
     label: "Dispatched",
   },
   Received_By_Supplier: {

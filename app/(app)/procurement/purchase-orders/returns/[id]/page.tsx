@@ -15,6 +15,7 @@ import {
   type PurchaseReturn,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import {
+  canEditPurchaseReturn,
   purchaseReturnListHref,
   purchaseReturnRoutes,
   validateReturnItems,
@@ -48,6 +49,7 @@ export default function PurchaseReturnDetailPage() {
   const statusCfg = PURCHASE_RETURN_STATUS_CFG[record.status];
   // View page draft branch is Draft-only (Edit permissions for PO Return live on the Edit page).
   const isDraft = record.status === "Draft" || record.status === "draft";
+  const canEdit = canEditPurchaseReturn(record);
 
   const handleSubmit = () => {
     const e = validateReturnItems(record.items);
@@ -74,21 +76,25 @@ export default function PurchaseReturnDetailPage() {
         }
       >
         <div className="flex justify-end gap-2 mb-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => router.push(purchaseReturnRoutes.edit(id))}
-          >
-            Edit Draft
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={handleSubmit}
-          >
-            <Send className="w-3.5 h-3.5" /> Submit
-          </Button>
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => router.push(purchaseReturnRoutes.edit(id))}
+            >
+              Edit Draft
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              onClick={handleSubmit}
+            >
+              <Send className="w-3.5 h-3.5" /> Submit
+            </Button>
+          )}
         </div>
         <PurchaseReturnForm record={record} onChange={() => {}} readOnly errors={errors} />
       </PReturnFormLayout>
@@ -114,13 +120,19 @@ export default function PurchaseReturnDetailPage() {
           <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
             <Link
               href={
-                record.status === "PO_return" || record.status === "Draft"
+                record.status === "Ready For Packing" ||
+                record.status === "PO_return" ||
+                record.status === "Draft" ||
+                record.status === "Partially Packed"
                   ? `/warehouse/packing/create/${record.packingListId}`
                   : "/warehouse/packing/purchase-return"
               }
             >
               <Package className="h-3.5 w-3.5" />
-              {record.status === "PO_return" || record.status === "Draft"
+              {record.status === "Ready For Packing" ||
+              record.status === "PO_return" ||
+              record.status === "Draft" ||
+              record.status === "Partially Packed"
                 ? "Continue to Packing"
                 : `View Packing (${record.packingListNo || "PL"})`}
             </Link>

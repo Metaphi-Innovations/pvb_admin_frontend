@@ -13,6 +13,7 @@ import {
   purchaseReturnKeys,
   type PurchaseReturnListKeyParams,
 } from "@/lib/procurement/purchase-return-query-keys";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import type { FilterState } from "@/components/listing/types";
 import type { PurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 
@@ -26,11 +27,20 @@ function toListParams(params: PurchaseReturnListKeyParams): PurchaseReturnListPa
   };
 }
 
+/** POR listing/filters change from packing, dispatch, and PO updates — never serve stale cache. */
+const POR_LIVE_QUERY_OPTIONS = {
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnMount: "always" as const,
+  refetchOnWindowFocus: true,
+};
+
 export function usePurchaseReturnList(params: PurchaseReturnListKeyParams, enabled = true) {
   return useQuery({
     queryKey: purchaseReturnKeys.list(params),
     queryFn: ({ signal }) => PurchaseReturnService.list({ ...toListParams(params), signal }),
     enabled,
+    ...POR_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -41,8 +51,8 @@ export function usePurchaseReturnFilterDropdown(
   return useQuery({
     queryKey: purchaseReturnKeys.filterDropdown(fieldName),
     queryFn: ({ signal }) => PurchaseReturnService.getFilterDropdown(fieldName, signal),
-    staleTime: 5 * 60 * 1000,
     enabled: options?.enabled ?? true,
+    ...POR_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -89,8 +99,11 @@ async function invalidatePurchaseReturnQueries(
   id?: string,
 ) {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: purchaseReturnKeys.lists() }),
-    id ? queryClient.invalidateQueries({ queryKey: purchaseReturnKeys.detail(id) }) : Promise.resolve(),
+    // POR + default PO tab listing/filters (status/counts can change together).
+    invalidatePurchaseOrderModuleListingQueries(queryClient),
+    id
+      ? queryClient.invalidateQueries({ queryKey: purchaseReturnKeys.detail(id) })
+      : Promise.resolve(),
   ]);
 }
 
@@ -117,4 +130,9 @@ export function useUpdatePurchaseReturn() {
 
 export { buildPurchaseReturnApiFilters, buildPurchaseReturnOrdering };
 export type { PurchaseReturnListKeyParams, FilterState };
+export {
+  invalidatePurchaseOrderListingQueries,
+  invalidatePurchaseReturnListingQueries,
+  invalidatePurchaseOrderModuleListingQueries,
+} from "@/lib/procurement/invalidate-po-listing-queries";
 

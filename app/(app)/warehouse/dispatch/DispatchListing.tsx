@@ -8,6 +8,7 @@ import {
   Clock, XCircle, Download, Printer, X
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +28,7 @@ import {
   DELIVERY_STATUS_BADGE_CONFIG,
   TRANSPORTER_OPTIONS,
 } from "./constants";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 
 import Link from "next/link";
 import {
@@ -46,6 +48,7 @@ interface DispatchListingProps {
 
 export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Table state for Dispatches
   const [filters, setFilters] = useState<FilterState>({});
@@ -427,6 +430,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
     if (!revertTarget) return;
     try {
       await revertDispatch(revertTarget.id);
+      await invalidatePurchaseOrderModuleListingQueries(queryClient);
       fetchData();
     } catch (error) {
       console.error(error);

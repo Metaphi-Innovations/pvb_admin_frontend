@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building, Layers, Info, Check, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { SalesOrderRecord, SalesOrderProduct } from "../../types";
 import { PackingAllocationSummaryDialog } from "../../components/PackingAllocationSummaryDialog";
 import { PackingProductLinesSection } from "../../components/PackingProductLinesSection";
@@ -13,6 +14,7 @@ import { PackingListService } from "@/services/packing-list.service";
 import { PackingDoneService } from "@/services/packing-done.service";
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import {
   getPackingDocumentNo,
   getPackingDocumentNoLabel,
@@ -37,6 +39,7 @@ function buildInitialSelection(products: SalesOrderRecord["products"]): Record<s
 
 export default function CreatePackingPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<SalesOrderRecord | null>(null);
   const [packingNo, setPackingNo] = useState("");
@@ -131,6 +134,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         products: productsPayload,
       });
 
+      await invalidatePurchaseOrderModuleListingQueries(queryClient);
       showToast("Packing created successfully!", "success");
       setTimeout(() => {
         if (order.sourceDocumentType === "Purchase Return") {

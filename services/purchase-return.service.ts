@@ -10,6 +10,10 @@ import type {
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import { PURCHASE_RETURN_STATUS_CFG } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import { emptyReturnSummary, recalcPurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-calc";
+import {
+  normalizeQuantityType,
+  resolveDisplayQtyFromBase,
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
 import type { PurchaseOrder } from "@/app/(app)/procurement/purchase-orders/po-data";
 
 function asString(value: unknown): string {
@@ -63,6 +67,27 @@ function mapAdditionalCharges(raw: unknown): ProcurementAdditionalCharge[] {
   });
 }
 
+function mapPackingFields(raw: Record<string, unknown>): {
+  packingListId?: string;
+  packingListNo?: string;
+  packingListStatus?: string;
+  packingDone?: boolean;
+} {
+  const packingList = (raw.packing_list ?? {}) as Record<string, unknown>;
+  const packingDones = Array.isArray(packingList.packing_dones)
+    ? packingList.packing_dones
+    : [];
+  const packingListId = asString(raw.packing_list_id) || undefined;
+  const packingListNo = asString(packingList.packing_number) || undefined;
+  const packingListStatus = asString(packingList.status) || undefined;
+  return {
+    packingListId,
+    packingListNo,
+    packingListStatus,
+    packingDone: packingDones.length > 0,
+  };
+}
+
 function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
   const supplier = (raw.supplier ?? {}) as Record<string, unknown>;
   const warehouse = (raw.warehouse ?? {}) as Record<string, unknown>;
@@ -104,6 +129,7 @@ function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
     updatedBy: toDisplayName(raw.updated_by_user),
     updatedDate: asDateOnly(raw.updated_at),
     activity: [],
+    ...mapPackingFields(raw),
   };
 }
 
@@ -111,6 +137,21 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
   const balanceQty = asNumber(raw.balance_base_qty ?? raw.balance_qty);
   const returnQty = asNumber(raw.return_base_qty);
   const selected = returnQty > 0;
+  const caseSize = asNumber(raw.case_size);
+  const quantityType = normalizeQuantityType(
+    asString(raw.quantity_type) || asString(raw.return_unit),
+  );
+  const returnUnit = normalizeQuantityType(
+    asString(raw.return_unit) || asString(raw.quantity_type),
+  );
+  const returnValue =
+    raw.return_value != null
+      ? asNumber(raw.return_value)
+      : resolveDisplayQtyFromBase(returnQty, returnUnit, caseSize);
+  const balanceDisplayQty =
+    raw.balance_display_qty != null
+      ? asNumber(raw.balance_display_qty)
+      : resolveDisplayQtyFromBase(balanceQty, quantityType, caseSize);
   const originGrn = (raw.origin_grn ?? {}) as Record<string, unknown>;
   const latestGrn = (raw.latest_grn ?? {}) as Record<string, unknown>;
   const originGrnNo = asString(raw.origin_grn_no) || asString(originGrn.grnNumber);
@@ -118,8 +159,21 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
   const originGrnId = asString(raw.origin_grn_id) || asString(raw.grn_id);
   const latestGrnId = asString(raw.latest_grn_id) || originGrnId;
   const grnNo = originGrnNo || asString(raw.grn_no);
+  const stableLineId =
+    asString(raw.purchase_order_return_product_id) ||
+    asString(raw.batch_group_key) ||
+    [
+      asString(raw.inventory_rejected_item_id),
+      asString(raw.inventory_detail_id),
+      asString(raw.product_id),
+      asString(raw.batch_no),
+      quantityType,
+    ]
+      .filter(Boolean)
+      .join("::");
+
   return {
-    id: asString(raw.purchase_order_return_product_id) || asString(raw.inventory_rejected_item_id),
+    id: stableLineId,
     purchaseOrderProductId: asString(raw.purchase_order_product_id) || undefined,
     productId: asString(raw.product_id),
     productCode: asString(raw.product_code),
@@ -138,19 +192,26 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     rejectionSource: asString(raw.rejection_source) || undefined,
     grnItemId: asString(raw.grn_item_id) || undefined,
     grnBatchId: asString(raw.grn_batch_id) || undefined,
+    batchGroupKey: asString(raw.batch_group_key) || undefined,
     inventoryDetailId: asString(raw.inventory_detail_id),
     inventoryRejectedItemId: asString(raw.inventory_rejected_item_id),
     mfgDate: asDateOnly(raw.manufacture_date),
     expDate: asDateOnly(raw.expiry_date),
-    caseSize: asNumber(raw.case_size),
+    caseSize,
     grnReceivedQty: asNumber(raw.grn_received_base_qty),
     qcRejectedQty: asNumber(raw.qc_rejected_base_qty),
     alreadyReturnedQty: asNumber(raw.already_returned_base_qty),
     balanceRejectedQty: balanceQty,
+    quantityType,
+    returnUnit,
+    returnValue,
+    balanceDisplayQty,
+    editableMaxReturnBaseQty:
+      raw.max_editable_qty != null ? asNumber(raw.max_editable_qty) : undefined,
     returnQty,
     lineRemark: asString(raw.line_remark),
     selected,
-    lineStatus: balanceQty <= 0 ? "fully_returned" : "available",
+    lineStatus: balanceQty <= 0 && returnQty <= 0 ? "fully_returned" : "available",
     unitPrice: asNumber(raw.rate),
     gstPct: asNumber(raw.gst_percent),
     cgstPct: asNumber(raw.cgst_percent),
@@ -180,7 +241,7 @@ function mapDetail(raw: Record<string, unknown>): PurchaseReturn {
   const po = (raw.purchase_order ?? {}) as Record<string, unknown>;
   const products = Array.isArray(raw.products) ? raw.products : [];
   const items = products.map((row) => mapDetailItem((row ?? {}) as Record<string, unknown>));
-  const packingList = (raw.packing_list ?? {}) as Record<string, unknown>;
+  const packingFields = mapPackingFields(raw);
   const base: PurchaseReturn = {
     id: asString(raw.purchase_order_return_id),
     returnNumber: asString(raw.return_no),
@@ -219,8 +280,7 @@ function mapDetail(raw: Record<string, unknown>): PurchaseReturn {
     updatedBy: toDisplayName(raw.updated_by_user),
     updatedDate: asDateOnly(raw.updated_at),
     activity: [],
-    packingListId: asString(raw.packing_list_id) || undefined,
-    packingListNo: asString(packingList.packing_number) || undefined,
+    ...packingFields,
   };
   return recalcPurchaseReturn(base);
 }
@@ -442,6 +502,11 @@ export const PurchaseReturnService = {
       return {
         ...item,
         balanceRejectedQty: balanceQty,
+        balanceDisplayQty:
+          raw.balance_display_qty != null
+            ? asNumber(raw.balance_display_qty)
+            : resolveDisplayQtyFromBase(balanceQty, item.quantityType, item.caseSize),
+        returnValue: 0,
         returnQty: 0,
         lineRemark: "",
         selected: false,
@@ -543,6 +608,10 @@ export const PurchaseReturnService = {
           already_returned_base_qty: item.alreadyReturnedQty,
           balance_base_qty: item.balanceRejectedQty,
           return_base_qty: item.returnQty,
+          return_unit: item.returnUnit,
+          return_value: item.returnValue,
+          quantity_type: item.quantityType,
+          batch_group_key: item.batchGroupKey || undefined,
           rate: item.unitPrice,
           gst_percent: item.gstPct || round2(item.cgstPct + item.sgstPct + item.igstPct),
           cgst_percent: item.cgstPct,
