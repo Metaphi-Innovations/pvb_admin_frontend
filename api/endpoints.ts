@@ -181,6 +181,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/supplier/toggle-status/${id}`,
       VIEW: (id: string) => `/master/supplier/details/${id}`,
       EXPORT: "/master/supplier/export",
+      FILTER_DROPDOWN: "/master/supplier/filter-dropdown",
       PREVIEW_NUMBER: "/master/supplier/preview-number",
       DROPDOWN: "/master/supplier/dropdown",
       DETAILS: (id: string) => `/master/supplier/details/${id}`,

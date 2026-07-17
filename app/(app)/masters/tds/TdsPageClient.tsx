@@ -114,7 +114,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 function toTdsRow(item: {
   id: number;
   tdsUuid: string;
-  sectionCode: string;
   sectionName: string;
   tdsRate: string;
   applicableTo: string;
@@ -128,7 +127,6 @@ function toTdsRow(item: {
   return {
     id: item.id,
     tdsUuid: item.tdsUuid,
-    sectionCode: item.sectionCode,
     sectionName: item.sectionName,
     tdsRate: item.tdsRate,
     applicableTo: item.applicableTo,
@@ -160,7 +158,7 @@ export default function TdsPageClient() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "sectionCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "sectionName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -211,7 +209,6 @@ export default function TdsPageClient() {
   const toggleStatusMutation = useToggleTdsStatus();
   const exportMutation = useExportTds();
 
-  const sectionCodeOptionsQuery = useTdsFilterDropdown("tds_code", { enabled: isFilterOpen("sectionCode") });
   const sectionNameOptionsQuery = useTdsFilterDropdown("tds_section_name", {
     enabled: isFilterOpen("sectionName"),
   });
@@ -230,10 +227,6 @@ export default function TdsPageClient() {
     enabled: isFilterOpen("updatedBy"),
   });
 
-  const sectionCodeOptions = useMemo(
-    () => sectionCodeOptionsQuery.data ?? [],
-    [sectionCodeOptionsQuery.data],
-  );
   const sectionNameOptions = useMemo(
     () => sectionNameOptionsQuery.data ?? [],
     [sectionNameOptionsQuery.data],
@@ -409,24 +402,6 @@ export default function TdsPageClient() {
   const columns: ColumnConfig<TdsApiRecord>[] = useMemo(
     () => [
       {
-        key: "sectionCode",
-        header: "TDS Code",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: sectionCodeOptions,
-        width: "110px",
-        render: (_val, row) => (
-          <button
-            type="button"
-            onClick={() => openView(row)}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.sectionCode}
-          </button>
-        ),
-      },
-      {
         key: "sectionName",
         header: "Section Name",
         sortable: true,
@@ -435,7 +410,13 @@ export default function TdsPageClient() {
         filterOptions: sectionNameOptions,
         width: "200px",
         render: (_val, row) => (
-          <span className="text-xs font-medium text-foreground">{row.sectionName || "—"}</span>
+          <button
+            type="button"
+            onClick={() => openView(row)}
+            className="text-xs font-medium text-brand-700 hover:underline text-left"
+          >
+            {row.sectionName || "—"}
+          </button>
         ),
       },
       {
@@ -521,7 +502,6 @@ export default function TdsPageClient() {
       },
     ],
     [
-      sectionCodeOptions,
       sectionNameOptions,
       tdsRateOptions,
       applicableToFilterOptions,
@@ -622,11 +602,10 @@ export default function TdsPageClient() {
 
   const viewDrawer = active
     ? {
-        title: active.sectionCode,
-        subtitle: active.sectionName || "Read-only TDS details",
+        title: active.sectionName || "TDS Section",
+        subtitle: formatTdsRateDisplay(active.tdsRate),
         status: active.status,
         basicInfo: [
-          { label: "TDS Code", value: active.sectionCode, mono: true },
           { label: "Section Name", value: active.sectionName || "—" },
           { label: "TDS Rate", value: formatTdsRateDisplay(active.tdsRate) },
           {
@@ -692,7 +671,7 @@ export default function TdsPageClient() {
         addLabel="Add TDS"
         onExport={handleExport}
         emptyMessage="TDS sections"
-        searchPlaceholder="Search TDS code, section name, rate..."
+        searchPlaceholder="Search section name, rate, category..."
         currentFilters={filters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
@@ -712,17 +691,6 @@ export default function TdsPageClient() {
         formContent={
           sheetMode !== "view" ? (
             <MasterFormGrid>
-              {sheetMode === "edit" && active ? (
-                <MasterField label="TDS Code" className="sm:col-span-2">
-                  <Input
-                    className={cn(compactInput(), "font-mono bg-muted/30")}
-                    value={active.sectionCode}
-                    disabled
-                    readOnly
-                  />
-                </MasterField>
-              ) : null}
-
               <MasterField label="TDS Rate %" required error={errors.tdsRate}>
                 <TdsRateInput
                   className={compactInput()}
@@ -792,8 +760,8 @@ export default function TdsPageClient() {
             <DialogDescription className="text-xs pt-1">
               {statusTarget && (
                 <>
-                  <strong className="text-foreground font-mono">{statusTarget.sectionCode}</strong>{" "}
-                  — {statusTarget.sectionName || "TDS section"} will be marked as{" "}
+                  <strong className="text-foreground">{statusTarget.sectionName || "TDS section"}</strong>{" "}
+                  will be marked as{" "}
                   {statusTarget.status === "active" ? "inactive" : "active"}.
                 </>
               )}

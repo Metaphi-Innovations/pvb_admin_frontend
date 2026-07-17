@@ -245,6 +245,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {
+    customerNumber: "customer_code",
     customerCode: "customer_code",
     customerName: "customer_name",
     mobileNo: "mobile_no",
@@ -254,7 +255,9 @@ const FILTER_FIELD_MAP: Record<string, string> = {
     salesMan: "sales_man_id",
 
     gstApplicable: "gst_applicable",
-    gstinNo: "gstin",
+    gstin: "gstin_no",
+    gstinNo: "gstin_no",
+    gstNumber: "gstin_no",
 
     tdsApplicable: "tds_applicable",
     tdsSectionId: "tds_section_id",
@@ -262,7 +265,11 @@ const FILTER_FIELD_MAP: Record<string, string> = {
     paymentType: "payment_type",
     creditLimit: "credit_limit",
 
-    address: "address",
+    address: "billing_address",
+    state: "billing_state",
+    stateName: "billing_state",
+    district: "district",
+    districtName: "district",
 
     status: "status",
 };
@@ -271,7 +278,35 @@ function mapFilters(filters: Record<string, unknown> = {}) {
     const mapped: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(filters)) {
+        if (key === "search") {
+            continue;
+        }
+
         if (value === undefined || value === null || value === "") {
+            continue;
+        }
+
+        if (
+            (key === "createdBy" || key === "updatedBy") &&
+            typeof value === "object" &&
+            value !== null &&
+            !Array.isArray(value)
+        ) {
+            const audit = value as { user?: string; fromDate?: string; toDate?: string };
+            const user = String(audit.user ?? "").trim();
+            const fromDate = String(audit.fromDate ?? "").trim();
+            const toDate = String(audit.toDate ?? "").trim();
+
+            if (user) {
+                mapped["sales_man.username"] = user;
+            }
+            if (key === "createdBy") {
+                if (fromDate) mapped.created_at_from = fromDate;
+                if (toDate) mapped.created_at_to = toDate;
+            } else {
+                if (fromDate) mapped.updated_at_from = fromDate;
+                if (toDate) mapped.updated_at_to = toDate;
+            }
             continue;
         }
 
@@ -609,7 +644,7 @@ export const CustomerListService = {
 
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.CUSTOMER.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
-            { filters: params.apiFilters ?? {} },
+            { filters: mapFilters(params.apiFilters) },
             { responseType: "blob" },
         );
 

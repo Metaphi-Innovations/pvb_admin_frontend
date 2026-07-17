@@ -14,7 +14,6 @@ export interface TdsListParams {
 export interface TdsListRecord {
   id: number;
   tdsUuid: string;
-  sectionCode: string;
   sectionName: string;
   tdsRate: string;
   applicableTo: string;
@@ -63,7 +62,6 @@ export interface TdsDropdownItem {
 }
 
 export type TdsFilterField =
-  | "tds_code"
   | "tds_rate"
   | "tds_section_name"
   | "applicable_to"
@@ -75,7 +73,6 @@ export type TdsFilterField =
   | "updated_by_user__first_name";
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
-  sectionCode: "tdsCode",
   sectionName: "tdsSectionName",
   tdsRate: "tdsRate",
   applicableTo: "applicableTo",
@@ -134,7 +131,6 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): TdsListRe
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     tdsUuid: asString(raw.tds_id),
-    sectionCode: asString(raw.tds_code),
     sectionName: asString(raw.tds_section_name),
     tdsRate: formatRate(raw.tds_rate),
     applicableTo: asString(raw.applicable_to),
@@ -152,7 +148,6 @@ function mapDetail(raw: Record<string, unknown>): TdsListRecord {
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
     tdsUuid: asString(raw.tds_id),
-    sectionCode: asString(raw.tds_code),
     sectionName: asString(raw.tds_section_name),
     tdsRate: formatRate(raw.tds_rate),
     applicableTo: asString(raw.applicable_to),

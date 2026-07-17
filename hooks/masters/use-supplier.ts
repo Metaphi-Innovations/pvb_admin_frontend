@@ -5,11 +5,13 @@ import {
     SupplierListService,
     type SupplierCreatePayload,
     type SupplierExportParams,
+    type SupplierFilterField,
     type SupplierListParams,
     type SupplierUpdatePayload,
     type SupplierDropdownItem,
 } from "@/services/supplier-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): SupplierListParams {
     return {
@@ -104,5 +106,17 @@ export function useSupplierPreviewNumber(supplierTypeId?: string, enabled = fals
 export function useExportSuppliers() {
     return useMutation({
         mutationFn: (params: SupplierExportParams) => SupplierListService.export(params),
+    });
+}
+
+export function useSupplierFilterDropdown(
+    fieldName: SupplierFilterField,
+    options?: FilterDropdownQueryOptions,
+) {
+    return useQuery({
+        queryKey: masterKeys.suppliers.filterDropdown(fieldName),
+        queryFn: ({ signal }) => SupplierListService.getFilterDropdown(fieldName, signal),
+        staleTime: 5 * 60 * 1000,
+        enabled: options?.enabled ?? true,
     });
 }

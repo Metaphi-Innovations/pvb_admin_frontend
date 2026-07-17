@@ -100,7 +100,13 @@ export function AutocompleteSelect({
         ? `${currentValues.length} selected`
         : placeholder;
     } else {
-      const selectedOpt = options.find((o) => o.value === value);
+      const selectedOpt =
+        options.find((o) => o.value === value) ||
+        options.find(
+          (o) =>
+            typeof value === "string" &&
+            o.value.toLowerCase() === value.trim().toLowerCase(),
+        );
       if (selectedOpt) {
         if (renderTriggerLabel) return renderTriggerLabel(selectedOpt);
         return (
@@ -109,6 +115,9 @@ export function AutocompleteSelect({
             <span className="truncate">{selectedOpt.label}</span>
           </span>
         );
+      }
+      if (typeof value === "string" && value.trim()) {
+        return <span className="truncate">{value}</span>;
       }
       return placeholder;
     }

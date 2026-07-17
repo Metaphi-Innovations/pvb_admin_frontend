@@ -110,7 +110,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 function toUnitRow(item: {
   id: number;
   unitUuid: string;
-  unitCode: string;
   unitName: string;
   shortName: string;
   uomId: string | null;
@@ -125,7 +124,6 @@ function toUnitRow(item: {
   return {
     id: item.id,
     unitUuid: item.unitUuid,
-    unitCode: item.unitCode,
     unitName: item.unitName,
     shortName: item.shortName,
     uomId: item.uomId,
@@ -210,7 +208,6 @@ export default function UomPageClient() {
   const excludeUomId = sheetMode === "edit" ? active?.unitUuid : undefined;
   const parentUomQuery = useParentUomDropdown(excludeUomId);
 
-  const unitCodeOptionsQuery = useUnitFilterDropdown("unit_code", { enabled: isFilterOpen("unitCode") });
   const unitNameOptionsQuery = useUnitFilterDropdown("unit_name", { enabled: isFilterOpen("unitName") });
   const shortNameOptionsQuery = useUnitFilterDropdown("short_name", { enabled: isFilterOpen("shortName") });
   const parentUomOptionsQuery = useUnitFilterDropdown("uom__unit_name", {
@@ -227,7 +224,6 @@ export default function UomPageClient() {
     enabled: isFilterOpen("updatedBy"),
   });
 
-  const unitCodeOptions = useMemo(() => unitCodeOptionsQuery.data ?? [], [unitCodeOptionsQuery.data]);
   const unitNameOptions = useMemo(() => unitNameOptionsQuery.data ?? [], [unitNameOptionsQuery.data]);
   const shortNameOptions = useMemo(() => shortNameOptionsQuery.data ?? [], [shortNameOptionsQuery.data]);
   const parentUomFilterOptions = useMemo(
@@ -406,18 +402,6 @@ export default function UomPageClient() {
         ),
       },
       {
-        key: "unitCode",
-        header: "Unit Code",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: unitCodeOptions,
-        width: "110px",
-        render: (val) => (
-          <span className="font-mono text-xs text-muted-foreground">{String(val || "—")}</span>
-        ),
-      },
-      {
         key: "shortName",
         header: "Short Name",
         sortable: true,
@@ -488,7 +472,6 @@ export default function UomPageClient() {
     ],
     [
       unitNameOptions,
-      unitCodeOptions,
       shortNameOptions,
       parentUomFilterOptions,
       conversionOptions,
@@ -593,10 +576,9 @@ export default function UomPageClient() {
   const viewDrawer = active
     ? {
         title: active.unitName,
-        subtitle: active.unitCode || "Read-only unit details",
+        subtitle: "Read-only unit details",
         status: active.status,
         basicInfo: [
-          { label: "Unit Code", value: active.unitCode || "—", mono: true },
           { label: "Short Name", value: active.shortName || "—" },
           { label: "Parent UOM", value: active.parentUomName || "—" },
           { label: "Conversion Factor", value: active.conversionFactor || "—", mono: true },

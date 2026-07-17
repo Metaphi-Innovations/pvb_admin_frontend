@@ -296,9 +296,28 @@ function mapDetail(raw: Record<string, unknown>): ProductListRecord {
 
 function extractErrorMessage(error: unknown, fallback: string): string {
   const err = error as {
-    response?: { data?: { message?: string; error?: string } };
+    response?: {
+      data?: {
+        message?: string;
+        error?: string;
+        validation_errors?: Array<{ path?: string; message?: string }>;
+      };
+    };
     message?: string;
+    validation_errors?: Array<{ path?: string; message?: string }>;
   };
+
+  const validationErrors =
+    err?.validation_errors ?? err?.response?.data?.validation_errors;
+
+  if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+    const messages = validationErrors
+      .map((issue) => String(issue?.message ?? "").trim())
+      .filter(Boolean)
+      .filter((msg, idx, arr) => arr.indexOf(msg) === idx);
+    if (messages.length > 0) return messages.join(" • ");
+  }
+
   return (
     err?.response?.data?.message ||
     err?.response?.data?.error ||

@@ -884,77 +884,231 @@ export function formToVendor(
   };
 }
 
-export function validateVendorForm(form: VendorFormValues): string | null {
-  if (!form.vendorName.trim()) return "Supplier name is required.";
-  if (!form.vendorType.trim()) return "Supplier type is required.";
+export function collectVendorFormFieldErrors(
+  form: VendorFormValues,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  if (!form.vendorName.trim()) {
+    errors.vendorName = "Supplier name is required.";
+  }
+  if (!form.vendorType.trim()) {
+    errors.vendorType = "Supplier type is required.";
+  }
 
   if (form.gstRegistered) {
-    if (!form.gstNumber.trim()) return "GSTIN is required when GST registered.";
-    if (!validateVendorGSTIN(form.gstNumber)) return "Enter a valid 15-character GSTIN.";
+    if (!form.gstNumber.trim()) {
+      errors.gstin = "GSTIN is required when GST registered.";
+    } else if (!validateVendorGSTIN(form.gstNumber)) {
+      errors.gstin = "Enter a valid 15-character GSTIN.";
+    }
   }
 
   if (form.tanNumber.trim() && !validateTAN(form.tanNumber)) {
-    return "Enter a valid TAN number.";
+    errors.tanNumber = "Enter a valid TAN number.";
   }
 
   if (form.msmeRegistered) {
     if (!form.msmeNumber.trim() || !validateMSMENumber(form.msmeNumber)) {
-      return MSME_NUMBER_ERROR;
+      errors.msmeNumber = MSME_NUMBER_ERROR;
     }
   }
 
   if (form.tdsApplicable && !form.tdsMasterId) {
-    return "Select TDS section from master.";
+    errors.tdsMasterId = "Select TDS section from master.";
   }
 
-  if (!form.panNumber.trim()) return "PAN number is required.";
-  if (!validateVendorPAN(form.panNumber)) {
-    return "Enter a valid PAN number.";
+  if (!form.panNumber.trim()) {
+    errors.panNumber = "PAN number is required.";
+  } else if (!validateVendorPAN(form.panNumber)) {
+    errors.panNumber = "Enter a valid PAN number.";
   }
 
-  const paymentErrors = validatePaymentTermsForm({
-    paymentType: form.paymentType,
-    creditDays: form.creditDays,
-    advancePercentage: form.advancePercentage,
-  });
-  const paymentError = Object.values(paymentErrors)[0];
-  if (paymentError) return paymentError;
+  Object.assign(
+    errors,
+    validatePaymentTermsForm({
+      paymentType: form.paymentType,
+      creditDays: form.creditDays,
+      advancePercentage: form.advancePercentage,
+    }),
+  );
 
   if (!form.billingAddress.line1.trim()) {
-    return "Address Line 1 is required.";
+    errors.address = "Address Line 1 is required.";
   }
   if (!form.billingAddress.pincode.trim()) {
-    return "Pincode is required.";
+    errors.pincode = "Pincode is required.";
+  } else if (!validateVendorPincode(form.billingAddress.pincode)) {
+    errors.pincode = "Enter a valid 6-digit pincode.";
   }
 
   if (form.mobile.trim() && !validateVendorMobile(form.mobile)) {
-    return "Enter a valid 10-digit mobile number.";
+    errors.mobile = "Enter a valid 10-digit mobile number.";
   }
   if (form.email.trim() && !validateVendorEmail(form.email)) {
-    return "Enter a valid email address.";
-  }
-  if (
-    form.billingAddress.pincode.trim() &&
-    !validateVendorPincode(form.billingAddress.pincode)
-  ) {
-    return "Enter a valid 6-digit pincode.";
-  }
-  if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
-    return "Enter a valid IFSC code.";
-  }
-  if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
-    return "Account number and confirmation do not match.";
+    errors.email = "Enter a valid email address.";
   }
 
-  for (let i = 0; i < form.contacts.length; i++) {
-    const contact = form.contacts[i];
+  if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
+    errors.ifscCode = "Enter a valid IFSC code.";
+  }
+  if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
+    errors.confirmAccountNumber = "Account number and confirmation do not match.";
+  }
+
+  form.contacts.forEach((contact, i) => {
     if (contact.mobile.trim() && !validateVendorMobile(contact.mobile)) {
-      return `Enter a valid 10-digit mobile number for contact row ${i + 1}.`;
+      errors[`contact_${i}_mobile`] =
+        `Enter a valid 10-digit mobile number for contact row ${i + 1}.`;
     }
     if (contact.email.trim() && !validateVendorEmail(contact.email)) {
-      return `Enter a valid email address for contact row ${i + 1}.`;
+      errors[`contact_${i}_email`] =
+        `Enter a valid email address for contact row ${i + 1}.`;
     }
+  });
+
+  return errors;
+}
+
+export function validateVendorForm(form: VendorFormValues): string | null {
+  const errors = collectVendorFormFieldErrors(form);
+  return Object.values(errors)[0] ?? null;
+}
+
+export type SupplierApiValidationError = {
+  status?: number;
+  message?: string;
+  validation_errors?: Array<{ path?: string; message?: string }>;
+};
+
+const SUPPLIER_API_FIELD_MAP: Record<string, string> = {
+  supplier_type_id: "vendorType",
+  supplier_name: "vendorName",
+  contact_person: "vendorName",
+  mobile_number: "mobile",
+  email: "email",
+  gstin_number: "gstin",
+  registration_type: "gstin",
+  registered_legal_name: "vendorName",
+  registered_gst_address: "address",
+  pan_number: "panNumber",
+  tan_number: "tanNumber",
+  tds_section_id: "tdsMasterId",
+  msme_reg_no: "msmeNumber",
+  address_1: "address",
+  address_2: "address",
+  pincode_id: "pincode",
+  supplier_code: "vendorType",
+};
+
+const SUPPLIER_CONTACT_API_FIELD_MAP: Record<string, string> = {
+  contact_name: "name",
+  designation: "name",
+  mobile_number: "mobile",
+  email: "email",
+};
+
+const SUPPLIER_BANK_API_FIELD_MAP: Record<string, string> = {
+  account_holder_name: "accountHolderName",
+  bank_name: "bankName",
+  branch_name: "branch",
+  account_number: "accountNumber",
+  ifsc_code: "ifscCode",
+  payment_type: "paymentType",
+  credit_days: "creditDays",
+};
+
+const SUPPLIER_API_MESSAGE_FIELD_HINTS: Array<{ pattern: RegExp; field: string }> = [
+  { pattern: /gstin/i, field: "gstin" },
+  { pattern: /pan number/i, field: "panNumber" },
+  { pattern: /tan number/i, field: "tanNumber" },
+  { pattern: /tds section/i, field: "tdsMasterId" },
+  { pattern: /msme/i, field: "msmeNumber" },
+  { pattern: /pincode/i, field: "pincode" },
+  { pattern: /supplier type/i, field: "vendorType" },
+  { pattern: /supplier name/i, field: "vendorName" },
+  { pattern: /supplier code/i, field: "vendorType" },
+  { pattern: /mobile number/i, field: "mobile" },
+  { pattern: /\bemail\b/i, field: "email" },
+  { pattern: /ifsc/i, field: "ifscCode" },
+  { pattern: /account number/i, field: "accountNumber" },
+  { pattern: /payment type/i, field: "paymentType" },
+  { pattern: /credit days/i, field: "creditDays" },
+  { pattern: /address/i, field: "address" },
+  { pattern: /contact name/i, field: "contact_0_name" },
+  { pattern: /document/i, field: "_form" },
+  { pattern: /product/i, field: "_form" },
+  { pattern: /duplicate product/i, field: "_form" },
+];
+
+function mapSupplierApiPathToFormField(path: string): string | null {
+  if (!path) return null;
+
+  const direct = SUPPLIER_API_FIELD_MAP[path];
+  if (direct) return direct;
+
+  const contactMatch = path.match(/^contacts\.(\d+)\.(.+)$/);
+  if (contactMatch) {
+    const [, index, field] = contactMatch;
+    const suffix = SUPPLIER_CONTACT_API_FIELD_MAP[field];
+    if (suffix) return `contact_${index}_${suffix}`;
+  }
+
+  const bankMatch = path.match(/^bank_accounts\.(\d+)\.(.+)$/);
+  if (bankMatch) {
+    return SUPPLIER_BANK_API_FIELD_MAP[bankMatch[2]] ?? null;
   }
 
   return null;
+}
+
+function inferSupplierFormFieldFromApiMessage(message: string): string | null {
+  const normalized = message.trim();
+  if (!normalized) return null;
+
+  for (const hint of SUPPLIER_API_MESSAGE_FIELD_HINTS) {
+    if (hint.pattern.test(normalized)) return hint.field;
+  }
+
+  return null;
+}
+
+export function isSupplierApiValidationError(error: unknown): boolean {
+  const status = (error as SupplierApiValidationError | undefined)?.status;
+  return status === 400 || status === 422;
+}
+
+/** Maps 400/422 supplier API errors to VendorForm field keys. */
+export function mapSupplierApiErrorsToVendorFormFields(
+  error: unknown,
+): Record<string, string> {
+  const err = error as SupplierApiValidationError;
+  if (!isSupplierApiValidationError(err)) return {};
+
+  const mapped: Record<string, string> = {};
+
+  const add = (field: string | null, message: string) => {
+    const trimmed = message.trim();
+    if (!field || !trimmed || mapped[field]) return;
+    mapped[field] = trimmed;
+  };
+
+  if (Array.isArray(err.validation_errors)) {
+    for (const issue of err.validation_errors) {
+      const path = issue.path ?? "";
+      const message = issue.message ?? err.message ?? "Validation failed.";
+      const field =
+        mapSupplierApiPathToFormField(path) ??
+        inferSupplierFormFieldFromApiMessage(message) ??
+        "_form";
+      add(field, message);
+    }
+  }
+
+  const topMessage = err.message?.trim();
+  if (!Object.keys(mapped).length && topMessage) {
+    add(inferSupplierFormFieldFromApiMessage(topMessage) ?? "_form", topMessage);
+  }
+
+  return mapped;
 }
