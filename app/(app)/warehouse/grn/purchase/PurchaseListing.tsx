@@ -111,7 +111,7 @@ export function PurchaseListing() {
       header: "GRN No",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
       width: "130px",
       render: (_val, row) => (
         <Link href={`/warehouse/grn/view/${row.id}`} className="block group/name">
@@ -126,16 +126,16 @@ export function PurchaseListing() {
       header: "PO No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
       width: "120px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.poNumber}</span>,
     },
     {
-      key: "vendorName",
+      key: "supplierName",
       header: "Supplier",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
       width: "130px",
       render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
     },
@@ -151,30 +151,30 @@ export function PurchaseListing() {
         </span>
       ),
     },
-    {
-      key: "acceptedQty",
-      header: "Accepted Qty",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => (
-        <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? val.toLocaleString() : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "rejectedQty",
-      header: "Rejected Qty",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => (
-        <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? val.toLocaleString() : "—"}
-        </span>
-      ),
-    },
+    // {
+    //   key: "acceptedQty",
+    //   header: "Accepted Qty",
+    //   sortable: true,
+    //   align: "right",
+    //   width: "110px",
+    //   render: (val) => (
+    //     <span className="text-xs font-medium tabular-nums text-foreground">
+    //       {val != null ? val.toLocaleString() : "—"}
+    //     </span>
+    //   ),
+    // },
+    // {
+    //   key: "rejectedQty",
+    //   header: "Rejected Qty",
+    //   sortable: true,
+    //   align: "right",
+    //   width: "110px",
+    //   render: (val) => (
+    //     <span className="text-xs font-medium tabular-nums text-foreground">
+    //       {val != null ? val.toLocaleString() : "—"}
+    //     </span>
+    //   ),
+    // },
     {
       key: "grnDate",
       header: "GRN Date",

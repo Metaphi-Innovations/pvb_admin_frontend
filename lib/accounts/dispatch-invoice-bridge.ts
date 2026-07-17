@@ -19,9 +19,7 @@ import { loadCustomers, type Customer } from "@/app/(app)/masters/customers/cust
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { findActivePricingForStock } from "@/app/(app)/masters/pricing/pricing-data";
 import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
-import {
-  getDispatchRecords,
-} from "@/app/(app)/warehouse/dispatch/mock-data";
+const getDispatchRecords = (): any[] => [];
 import type { DispatchRecord, DispatchProduct, DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
 import {
   filterActiveNearExpirySchemeEntries,
@@ -458,7 +456,7 @@ export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
   const warehouseRows = getDispatchRecords()
     .filter((d) => INVOICE_READY_STATUSES.has(d.deliveryStatus))
     .filter((d) => !isDispatchInvoiced(d.dispatchNumber))
-    .filter((d) => d.products.some((p) => p.dispatchQty > 0))
+    .filter((d) => d.products.some((p: any) => p.dispatchQty > 0))
     .filter((d) => !seedIds.has(d.id))
     .map(mapDispatchToPendingRow);
 

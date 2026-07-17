@@ -1,68 +1,130 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import React, { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
+import { useSampleReturns, useSampleReturnFilterOptions } from "@/hooks/sales/use-return-documents";
 import {
   type SampleReturnRecord,
-  getSampleReturnRecords,
   formatReturnAmount,
   getReturnTotalAmount,
 } from "../sample-return-data";
 
+function mapBackendReturnToFrontend(item: any): SampleReturnRecord {
+  const products = (item.items || []).map((p: any, index: number) => {
+    const snap = p.product_snapshot || {};
+    const unitPerPacking = Number(snap.unit_per_packing) || 10;
+    const returnedQtyVal = Number(p.returned_qty || 0);
+    const isPieceType = p.quantity_type === "Piece" || p.quantity_type === "piece";
+    
+    const totalPieces = isPieceType 
+      ? returnedQtyVal 
+      : Math.round(returnedQtyVal * unitPerPacking);
+
+    const cases = isPieceType 
+      ? Math.floor(returnedQtyVal / unitPerPacking) 
+      : Math.floor(returnedQtyVal);
+
+    const pieces = isPieceType 
+      ? Math.floor(returnedQtyVal % unitPerPacking) 
+      : Math.round((returnedQtyVal - cases) * unitPerPacking);
+
+    const dispatchQtyVal = Number(p.dispatch_qty || 0);
+    const dispatchCases = Math.floor(dispatchQtyVal / unitPerPacking);
+
+    return {
+      product: snap.product_name || "Unknown Product",
+      sku: snap.sku || snap.product_code || "",
+      packedQty: dispatchQtyVal,
+      dispatchQty: dispatchCases > 0 ? dispatchCases : dispatchQtyVal,
+      returnQty: totalPieces,
+      unitRate: Number(p.unit_price || 0),
+      batchNo: p.batch_code || p.dispatch_item?.inventory_batch?.batch_no || "",
+      returnCaseQty: cases,
+      returnLooseQty: pieces,
+      returnTotalPieces: totalPieces,
+      lineAmount: Number(p.return_amount || 0),
+      quantityType: p.quantity_type || "Piece",
+    };
+  });
+
+  return {
+    id: item.sample_return_id || item.id,
+    returnNumber: item.return_no,
+    dispatchNumber: item.dispatch?.dispatch_number || "",
+    salesOrderNumber: item.sample_order?.order_no || item.sample_order?.sample_order_no || "",
+    customer: item.customer?.customer_name || "",
+    returnDate: item.return_date ? new Date(item.return_date).toISOString().split('T')[0] : "",
+    warehouse: item.warehouse?.warehouse_name || "",
+    products: products,
+    totalAmount: Number(item.return_value || 0),
+    status: item.status?.toLowerCase() as any,
+  };
+}
+
 export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: number) => void }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [returnFilters, setReturnFilters] = useState<FilterState>({});
   const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
   const [returnPage, setReturnPage] = useState(1);
-  const [returnPageSize, setReturnPageSize] = useState(10);
-  const [sampleReturns, setSampleReturns] = useState<SampleReturnRecord[]>([]);
+  const [returnPageSize, setReturnPageSize] = useState(25);
 
-  const refreshReturns = useCallback(() => {
-    const records = getSampleReturnRecords();
-    setSampleReturns(records);
-    onCountChange?.(records.length);
-  }, [onCountChange]);
+  const { data: customerFilterRaw } = useSampleReturnFilterOptions("customer__customer_name");
+  
+  const customerOptions = useMemo(() => {
+    return (customerFilterRaw || []).map((x: any) => ({
+      label: x["customer__customer_name"],
+      value: x["customer__customer_name"],
+    }));
+  }, [customerFilterRaw]);
+
+  const apiFilters = useMemo(() => {
+    const f: Record<string, any> = {};
+    if (returnFilters.customer && Array.isArray(returnFilters.customer) && returnFilters.customer.length > 0) {
+      f.customer = { customer_name: returnFilters.customer[0] };
+    } else if (returnFilters.customer && typeof returnFilters.customer === "string") {
+      f.customer = { customer_name: returnFilters.customer };
+    }
+    return f;
+  }, [returnFilters]);
+
+  const ordering = useMemo(() => {
+    if (!returnSort.key || returnSort.direction === "none") return undefined;
+    const fieldMap: Record<string, string> = {
+      returnNumber: "return_no",
+      returnDate: "return_date",
+      dispatchNumber: "dispatch__dispatch_number",
+      salesOrderNumber: "sample_order__sample_order_no",
+      customer: "customer__customer_name",
+      totalAmount: "return_value",
+    };
+    const backendKey = fieldMap[returnSort.key] || returnSort.key;
+    return returnSort.direction === "desc" ? `-${backendKey}` : backendKey;
+  }, [returnSort]);
+
+  const { data: listData, isLoading } = useSampleReturns({
+    page: returnPage,
+    pageSize: returnPageSize,
+    search: (returnFilters.search as string) || undefined,
+    ordering,
+    apiFilters,
+  });
+
+  const sampleReturnsList = useMemo(() => {
+    return (listData?.items || []).map(mapBackendReturnToFrontend);
+  }, [listData]);
+
+  const totalRecords = listData?.total || 0;
 
   useEffect(() => {
-    refreshReturns();
-  }, [pathname, refreshReturns]);
-
-  const returnProcessed = useMemo(() => {
-    let result = [...sampleReturns];
-    Object.keys(returnFilters).forEach((key) => {
-      const val = returnFilters[key];
-      if (!val) return;
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(
-          (r) =>
-            r.returnNumber.toLowerCase().includes(q) ||
-            r.dispatchNumber.toLowerCase().includes(q) ||
-            r.salesOrderNumber.toLowerCase().includes(q) ||
-            r.customer.toLowerCase().includes(q),
-        );
-      }
-    });
-    if (returnSort.key && returnSort.direction !== "none") {
-      result.sort((a, b) => {
-        const valA = String(a[returnSort.key as keyof SampleReturnRecord] || "");
-        const valB = String(b[returnSort.key as keyof SampleReturnRecord] || "");
-        return returnSort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      });
+    if (onCountChange) {
+      onCountChange(totalRecords);
     }
-    return result;
-  }, [sampleReturns, returnFilters, returnSort]);
+  }, [totalRecords, onCountChange]);
 
-  const returnPaginated = useMemo(() => {
-    const start = (returnPage - 1) * returnPageSize;
-    return returnProcessed.slice(start, start + returnPageSize);
-  }, [returnProcessed, returnPage, returnPageSize]);
-
-  const returnColumns: ColumnConfig<SampleReturnRecord>[] = [
+  const returnColumns: ColumnConfig<SampleReturnRecord>[] = useMemo(() => [
     {
       key: "returnNumber",
       header: "Return No",
@@ -84,7 +146,15 @@ export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: num
       width: "140px",
       render: (val) => <span className="font-mono text-xs">{val}</span>,
     },
-    { key: "customer", header: "Customer / Farmer", sortable: true, width: "160px" },
+    {
+      key: "customer",
+      header: "Customer / Farmer",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: customerOptions,
+      width: "160px"
+    },
     { key: "returnDate", header: "Return Date", sortable: true, width: "120px" },
     {
       key: "totalAmount",
@@ -105,14 +175,16 @@ export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: num
             <div key={idx} className="text-foreground font-medium">
               {p.product}{" "}
               <span className="text-muted-foreground font-semibold">
-                ({p.returnQty} / {p.dispatchQty})
+                ({p.quantityType === "Piece" || p.quantityType === "piece"
+                  ? `${p.returnTotalPieces} Pieces`
+                  : `${p.returnCaseQty} Cases`} / {p.dispatchQty} Cases)
               </span>
             </div>
           ))}
         </div>
       ),
     },
-  ];
+  ], [customerOptions]);
 
   const returnActions: ActionItemConfig<SampleReturnRecord>[] = [
     {
@@ -126,8 +198,8 @@ export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: num
   return (
     <MasterListing<SampleReturnRecord>
       columns={returnColumns}
-      data={returnPaginated}
-      totalRecords={returnProcessed.length}
+      data={sampleReturnsList}
+      totalRecords={totalRecords}
       page={returnPage}
       pageSize={returnPageSize}
       onPageChange={setReturnPage}

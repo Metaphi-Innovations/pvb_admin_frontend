@@ -30,6 +30,7 @@ import {
 	getCustomerAddressesForSalesOrder,
 	getDefaultBillShipAddressIds,
 } from "../sales-order-address-utils";
+import { useCustomerDetails, useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
 import {
 	type SalesOrder,
 	type SalesOrderLineItem,
@@ -57,12 +58,12 @@ import {
 	resolveSezLutSupply,
 } from "@/lib/settings/gst-tax-config";
 import { calculateCustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
-import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
+
 import CreditLimitSummaryCard from "./CreditLimitSummaryCard";
 
 export type { SalesOrderFormValues };
 
-function SearchableDropdown<T extends { id: number }>({
+function SearchableDropdown<T extends { id: number | string }>({
 	label,
 	required,
 	value,
@@ -77,8 +78,8 @@ function SearchableDropdown<T extends { id: number }>({
 }: {
 	label: string;
 	required?: boolean;
-	value: number | null;
-	onChange: (id: number) => void;
+	value: number | string | null;
+	onChange: (id: any) => void;
 	options: T[];
 	placeholder: string;
 	error?: string;
@@ -435,31 +436,85 @@ export default function SalesOrderForm({
 }: SalesOrderFormProps) {
 	const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
 
-	useEffect(() => {
-		seedAccountsDemoData();
-	}, []);
+
+
+	const { data: customerDetails } = useCustomerDetails(
+		form.customerId ? String(form.customerId) : null,
+	);
+	const { data: backendWarehousesData } = useWarehousesDropdown();
 
 	const warehouses = useMemo(() => {
-		return loadWarehouses().filter((w) => w.status === "active");
-	}, []);
+		return (backendWarehousesData || []).map((w: any) => ({
+			id: w.warehouse_id,
+			name: w.warehouse_name,
+			code: w.warehouse_code,
+			status: w.status?.toLowerCase() || "active",
+			state: w.state || "",
+		})).filter((w) => w.status === "active") as any;
+	}, [backendWarehousesData]);
 
 	const set = <K extends keyof SalesOrderFormValues>(
 		key: K,
 		val: SalesOrderFormValues[K],
 	) => onChange({ ...form, [key]: val });
 
-	const selectedCustomer = useMemo(
-		() => customers.find((c) => c.id === form.customerId) ?? null,
-		[customers, form.customerId],
-	);
+	const selectedCustomer = useMemo(() => {
+		const base = customers.find((c) => String(c.id) === String(form.customerId)) ?? null;
+		if (!base) return null;
+		if (customerDetails) {
+			const branches = (customerDetails.branches || []).map((b: any, index: number) => ({
+				branchName: b.branch_name,
+				isMain: b.is_main_branch,
+				billingAddress: {
+					address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
+					city: b.billing_city || "",
+					state: b.billing_state || "",
+					pincode: b.billing_pincode || "",
+					gstin: customerDetails.gstin_no || "",
+				},
+				shippingAddress: {
+					address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
+					city: b.shipping_city || "",
+					state: b.shipping_state || "",
+					pincode: b.shipping_pincode || "",
+					gstin: customerDetails.gstin_no || "",
+				},
+			}));
+			const mainBranch = branches.find((br: any) => br.isMain) || branches[0] || null;
+			const stateName = mainBranch?.billingAddress.state || base.stateName || "";
+			return {
+				...base,
+				branches,
+				stateName,
+				mobile: customerDetails.mobile_no || base.mobile,
+				email: customerDetails.email || base.email,
+				gstApplicable: customerDetails.gst_applicable ?? base.gstApplicable,
+				gstin: customerDetails.gstin_no || base.gstin,
+				registeredLegalName: customerDetails.registered_legal_name || base.registeredLegalName,
+				registeredAddress: customerDetails.registered_gst_address || base.registeredAddress,
+				pan: customerDetails.pan_no || base.pan,
+				creditLimit: Number(customerDetails.credit_limit ?? base.creditLimit),
+				creditDays: Number(customerDetails.credit_days ?? base.creditDays),
+			};
+		}
+		return base;
+	}, [customers, form.customerId, customerDetails]);
 
 	const customerAddresses = useMemo(
 		() => (selectedCustomer ? getCustomerAddressesForSalesOrder(selectedCustomer) : []),
 		[selectedCustomer],
 	);
 
+	const billToAddresses = useMemo(() => {
+		return customerAddresses.filter((a) => a.id.includes("billing") || a.id.includes("registered") || a.id.includes("main"));
+	}, [customerAddresses]);
+
+	const shipToAddresses = useMemo(() => {
+		return customerAddresses.filter((a) => a.id.includes("shipping") || a.id.includes("registered") || a.id.includes("main"));
+	}, [customerAddresses]);
+
 	const selectedWarehouse = useMemo(
-		() => warehouses.find((w) => w.id === form.warehouseId) ?? null,
+		() => warehouses.find((w: any) => String(w.id) === String(form.warehouseId)) ?? null,
 		[warehouses, form.warehouseId],
 	);
 
@@ -481,9 +536,9 @@ export default function SalesOrderForm({
 
 	const taxSupplyType = useMemo((): TaxSupplyType => {
 		const sourceState = selectedWarehouse?.state ?? "";
-		const destState = shipToAddress?.state ?? "";
+		const destState = shipToAddress?.state ?? selectedCustomer?.stateName ?? "";
 		return resolveTaxSupplyType(sourceState, destState);
-	}, [selectedWarehouse, shipToAddress]);
+	}, [selectedWarehouse, selectedCustomer, shipToAddress]);
 
 	useEffect(() => {
 		if (!selectedCustomer || customerAddresses.length === 0) return;
@@ -500,15 +555,16 @@ export default function SalesOrderForm({
 	}, [selectedCustomer?.id, customerAddresses.length]);
 
 	const pricingContext = useMemo((): SalesOrderPricingContext | null => {
-		if (!selectedCustomer?.stateName || !selectedCustomer.customerType || !form.orderDate) {
+		const activeState = shipToAddress?.state ?? selectedCustomer?.stateName;
+		if (!activeState || !selectedCustomer?.customerType || !form.orderDate) {
 			return null;
 		}
 		return {
-			stateName: selectedCustomer.stateName,
+			stateName: activeState,
 			customerMasterType: selectedCustomer.customerType,
 			orderDate: form.orderDate,
 		};
-	}, [selectedCustomer, form.orderDate]);
+	}, [selectedCustomer, shipToAddress, form.orderDate]);
 
 	const totalsSummary = useMemo(
 		() =>
@@ -604,7 +660,11 @@ export default function SalesOrderForm({
 							<StatusSelect
 								value={form.status}
 								onChange={(s) => set("status", s)}
-								allowedStatuses={EDITABLE_ORDER_STATUSES}
+								allowedStatuses={
+									form.status === "draft"
+										? ["draft", "pending_approval", "approved", "rejected"]
+										: EDITABLE_ORDER_STATUSES
+								}
 							/>
 						</div>
 					) : null}
@@ -692,8 +752,8 @@ export default function SalesOrderForm({
 							options={warehouses}
 							placeholder='Select source warehouse…'
 							error={errors.warehouseId}
-							getLabel={(w) => `${w.warehouseCode} — ${w.warehouseName}`}
-							getSublabel={(w) => w.state}
+							getLabel={(w: any) => w.name}
+							getSublabel={(w: any) => w.state}
 						/>
 					</div>
 				</div>
@@ -754,7 +814,8 @@ export default function SalesOrderForm({
 
 				<SectionDivider title='Bill To / Ship To' />
 				<BillToShipToSection
-					addresses={customerAddresses}
+					billOptions={billToAddresses}
+					shipOptions={shipToAddresses}
 					billToAddressId={form.billToAddressId ?? ""}
 					shipToAddressId={form.shipToAddressId ?? ""}
 					onBillToChange={(id) => set("billToAddressId", id)}

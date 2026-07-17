@@ -6,37 +6,31 @@ import {
 	Upload,
 	Trash2,
 } from "lucide-react";
-import { COMPANY_BILLING, PAYMENT_TERMS_OPTIONS } from "@/lib/procurement/config";
+import { COMPANY_BILLING, PAYMENT_TYPE_OPTIONS } from "@/lib/procurement/config";
 import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
 } from "@/lib/procurement/procurement-line-utils";
-import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
 import {
 	applyTaxSupplyToRates,
 	lineNeedsTaxSupplyUpdate,
 	resolveTaxSupplyType,
 	type TaxSupplyType,
 } from "@/lib/procurement/utils";
-import {
-	applyGstMasterToTaxRates,
-	findGstMasterIdByTotalPct,
-	getDefaultGstMasterId,
-} from "@/lib/procurement/gst-master-utils";
-import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
-import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
+import { useSupplierDropdown, useSupplierDetail } from "@/hooks/masters/use-suppliers";
+import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
+import { axiosInstance } from "@/api/axios";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
-import { enrichPOLineItem, recalcPO } from "../po-data";
+import { applyTaxSupplyToPOLines, enrichPOLineItem, recalcPO } from "../po-data";
 import {
-	findPOAddressById,
 	getDefaultPOBillShipIds,
 	getPOBillToAddresses,
-	getPOShipToAddresses,
 } from "../po-address-utils";
+import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import { POLineItemsSection } from "./POLineItemsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +38,76 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
+
+const INDIAN_STATES = [
+	"Maharashtra",
+	"Gujarat",
+	"Karnataka",
+	"Tamil Nadu",
+	"Delhi",
+	"Telangana",
+	"Uttar Pradesh",
+	"West Bengal",
+	"Rajasthan",
+	"Madhya Pradesh",
+	"Punjab",
+	"Haryana",
+	"Bihar",
+	"Kerala",
+	"Andhra Pradesh",
+];
+
+export type POFormErrors = Partial<
+	Record<"supplierId" | "warehouseId" | "poDate" | "lines", string>
+>;
+
+function isSupplierSelected(supplierId: POFormValues["supplierId"]): boolean {
+	if (supplierId === null || supplierId === undefined) return false;
+	if (supplierId === 0 || supplierId === "0" || supplierId === "") return false;
+	return true;
+}
+
+function getValidPOLines(lines: POLineItem[]) {
+	return lines.filter(
+		(l) => l.productId && l.productId !== 0 && l.productId !== "0",
+	);
+}
+
+export function validatePOForm(form: POFormValues): POFormErrors {
+	const e: POFormErrors = {};
+	if (!isSupplierSelected(form.supplierId)) {
+		e.supplierId = "Supplier is required";
+	}
+	if (!form.warehouseId) {
+		e.warehouseId = "Warehouse is required";
+	}
+	if (!form.poDate?.trim()) {
+		e.poDate = "PO date is required";
+	}
+	const validLines = getValidPOLines(form.lines);
+	if (validLines.length === 0) {
+		e.lines = "At least one product is required";
+	} else if (validLines.some((l) => (l.orderedQtyPack ?? 0) <= 0)) {
+		e.lines = "Each line must have a quantity greater than zero";
+	}
+	return e;
+}
+
+const PO_ERROR_FIELD_ORDER = ["supplierId", "poDate", "warehouseId", "lines"] as const;
+
+export function focusFirstPOError(errors: POFormErrors) {
+	for (const key of PO_ERROR_FIELD_ORDER) {
+		if (!errors[key]) continue;
+		const el = document.getElementById(`po-field-${key}`);
+		if (!el) continue;
+		el.scrollIntoView({ behavior: "smooth", block: "center" });
+		const focusable = el.querySelector<HTMLElement>("button, input, textarea, select");
+		if (focusable) {
+			focusable.focus({ preventScroll: true });
+		}
+		break;
+	}
+}
 
 export type POFormValues = Omit<
 	PurchaseOrder,
@@ -58,7 +122,11 @@ export type POFormValues = Omit<
 	| "approvedDate"
 	| "activity"
 	| "status"
->;
+	| "attachments"
+> & {
+	attachments: File[];
+	existingAttachments?: POAttachment[];
+};
 
 export function emptyPOLine(): POLineItem {
 	return {
@@ -94,19 +162,13 @@ export function emptyPOLine(): POLineItem {
 	};
 }
 
-function paymentTermDays(term: string): number {
-	const m = term.match(/(\d+)/);
-	return m ? Number(m[1]) : 0;
-}
-
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
-	const supplier = getActiveSuppliers()[0];
 
 	const lines =
 		pr?.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, supplier?.id);
+			const cp = resolvePurchaseCostPrice(l.productId, undefined);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
 			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
@@ -134,52 +196,53 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 			};
 		}) ?? [];
 
-	const paymentTerms = "net-30";
-	const wh = pr?.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
-	const billToAddresses = getPOBillToAddresses();
-	const shipToAddresses = getPOShipToAddresses();
-	const addressDefaults = getDefaultPOBillShipIds(
-		billToAddresses,
-		shipToAddresses,
-		pr?.warehouseId,
-	);
+	const hasWarehouse = Boolean(pr?.warehouseId);
+
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
-		supplierId: supplier?.id ?? 0,
-		supplierName: supplier?.supplierName ?? "",
-		supplierType: supplier?.supplierType ?? "",
-		supplierContactPerson: supplier?.contactPerson ?? "",
-		supplierMobile: supplier?.mobile || supplier?.phone || "",
+		supplierId: "",
+		supplierName: "",
+		supplierType: "",
+		supplierContactPerson: "",
+		supplierMobile: "",
 		supplierMobileCountry: "+91",
-		supplierEmail: supplier?.email ?? "",
-		supplierGstin: supplier?.gstNumber ?? "",
+		supplierEmail: "",
+		supplierGstin: "",
 		referenceNumber: "",
 		currency: "INR",
-		paymentTerms,
-		creditDays: paymentTermDays(paymentTerms),
+		paymentType: "Credit",
+		creditDays: 30,
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
 		state: pr?.state ?? "",
 		warehouseId: pr?.warehouseId ?? null,
-		warehouseName: pr?.warehouseName ?? wh?.warehouseName ?? "",
-		deliveryAddress: wh?.address ?? "",
+		warehouseName: pr?.warehouseName ?? "",
+		deliveryAddress: "",
 		notes: pr?.remarks ?? "",
 		sourcePrId: pr?.id ?? null,
 		sourcePrNumber: pr?.prNumber ?? "",
-		billToAddressId: addressDefaults.billToAddressId,
-		shipToAddressId: addressDefaults.shipToAddressId,
-		billing: { ...COMPANY_BILLING },
+		billToAddressId: hasWarehouse ? `bill-wh-${pr!.warehouseId}` : "",
+		shipToAddressId: hasWarehouse ? `ship-wh-${pr!.warehouseId}` : "",
+		billing: {
+			companyName: COMPANY_BILLING.companyName,
+			billingAddress: "",
+			gstNumber: "",
+			state: "",
+			city: "",
+			pincode: "",
+		},
 		shipping: {
-			shipToLocation: "Pune Warehouse",
-			branch: "hq-pune",
-			address: "Warehouse 2, Hinjawadi, Pune",
-			contactPerson: "Warehouse Manager",
-			contactNumber: "9876500000",
+			shipToLocation: pr?.warehouseName ?? "",
+			branch: "",
+			address: "",
+			contactPerson: "",
+			contactNumber: "",
 			sameAsBilling: false,
 		},
 		lines,
 		terms: [],
 		attachments: [],
+		existingAttachments: [],
 		additionalCharges: [],
 		otherCharges: 0,
 	};
@@ -198,6 +261,7 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 		approvedBy: _ab,
 		approvedDate: _ad,
 		activity: _activity,
+		attachments,
 		...rest
 	} = po;
 	return {
@@ -208,6 +272,8 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 		supplierMobileCountry: po.supplierMobileCountry ?? "+91",
 		supplierEmail: po.supplierEmail ?? "",
 		supplierGstin: po.supplierGstin ?? "",
+		attachments: [],
+		existingAttachments: attachments || [],
 	};
 }
 
@@ -239,10 +305,6 @@ function formatDisplayDate(iso: string): string {
 	return `${d}-${m}-${y}`;
 }
 
-function paymentTermLabel(value: string): string {
-	return PAYMENT_TERMS_OPTIONS.find((o) => o.value === value)?.label ?? (value || "—");
-}
-
 export function PurchaseOrderForm({
 	form,
 	onChange,
@@ -250,6 +312,7 @@ export function PurchaseOrderForm({
 	poNumber = "",
 	status,
 	submittedDate,
+	errors = {},
 }: {
 	form: POFormValues;
 	onChange: (f: POFormValues) => void;
@@ -257,10 +320,16 @@ export function PurchaseOrderForm({
 	readOnly?: boolean;
 	status?: string;
 	submittedDate?: string;
+	errors?: POFormErrors;
 }) {
 	const fileRef = useRef<HTMLInputElement>(null);
 
-	const suppliers = getActiveSuppliers();
+	const { data: dbSuppliers } = useSupplierDropdown();
+	const suppliers = dbSuppliers || [];
+	const isDbSupplier = Boolean(form.supplierId && typeof form.supplierId === "string" && !/^\d+$/.test(form.supplierId));
+	const { data: dbSupplierDetail } = useSupplierDetail(
+		isDbSupplier ? String(form.supplierId) : null
+	);
 	const prList = loadPurchaseRequests().filter((p) =>
 		["approved", "partially_converted"].includes(p.status),
 	);
@@ -270,9 +339,10 @@ export function PurchaseOrderForm({
 	const preview = useMemo(
 		() =>
 			recalcPO({
-				id: 0,
+				id: "preview",
 				poNumber: "",
 				...form,
+				attachments: form.existingAttachments || [],
 				summary: {
 					grossAmount: 0,
 					totalDiscount: 0,
@@ -313,10 +383,11 @@ export function PurchaseOrderForm({
 	const loadFromPR = (prId: number) => {
 		const pr = getPRById(prId);
 		if (!pr) return;
-		const wh = pr.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 		const lines = pr.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, form.supplierId || undefined);
+			const localSupplierId =
+				typeof form.supplierId === "number" ? form.supplierId : Number(form.supplierId) || undefined;
+			const cp = resolvePurchaseCostPrice(l.productId, localSupplierId);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
 			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
@@ -349,7 +420,8 @@ export function PurchaseOrderForm({
 			state: pr.state,
 			warehouseId: pr.warehouseId,
 			warehouseName: pr.warehouseName,
-			deliveryAddress: wh?.address ?? form.deliveryAddress,
+			billToAddressId: pr.warehouseId ? `bill-wh-${pr.warehouseId}` : "",
+			shipToAddressId: pr.warehouseId ? `ship-wh-${pr.warehouseId}` : "",
 			notes: pr.remarks,
 			lines,
 			deliveryTerms: `From ${pr.requestedBy} (${pr.prDate})`,
@@ -358,42 +430,133 @@ export function PurchaseOrderForm({
 
 	const previewLines = preview.lines;
 
-	const linkedPr = form.sourcePrId ? getPRById(form.sourcePrId) ?? null : null;
+	const linkedPr =
+		form.sourcePrId && typeof form.sourcePrId === "number"
+			? getPRById(form.sourcePrId) ?? null
+			: form.sourcePrId && /^\d+$/.test(String(form.sourcePrId))
+				? getPRById(Number(form.sourcePrId)) ?? null
+				: null;
 	const displayPoNo = poNumber || "Auto-generated";
 	const totalGst =
 		preview.summary.totalCgst +
 		preview.summary.totalSgst +
 		preview.summary.totalIgst;
 
-	const stateOptions = useMemo(() => stateSelectOptions(), []);
+	const stateOptions = useMemo(() => INDIAN_STATES.map((s) => ({ value: s, label: s })), []);
+	const { data: dbWarehouses } = useWarehouseDropdown(form.state || undefined);
 	const warehouseOptions = useMemo(
-		() => warehouseSelectOptions(form.state),
-		[form.state],
+		() =>
+			(dbWarehouses || []).map((w) => ({
+				value: String(w.warehouse_id),
+				label: w.warehouse_name,
+			})),
+		[dbWarehouses],
 	);
 
 	const billToAddresses = useMemo(() => getPOBillToAddresses(), []);
-	const shipToAddresses = useMemo(() => getPOShipToAddresses(), []);
-
-	const billToAddress = useMemo(
-		() => findPOAddressById(billToAddresses, form.billToAddressId ?? ""),
-		[billToAddresses, form.billToAddressId],
-	);
+	const shipToAddresses = useMemo((): SalesOrderCustomerAddress[] => {
+		return (dbWarehouses || []).map((w) => {
+			const primary = w.contacts?.find((c) => c.is_primary) ?? w.contacts?.[0];
+			return {
+				id: `ship-wh-${w.warehouse_id}`,
+				label: `${w.warehouse_name} — Ship To`,
+				companyName: w.registered_legal_name || COMPANY_BILLING.companyName,
+				addressLine1: w.address || "",
+				addressLine2: w.address_1 || "",
+				city: w.city || "",
+				state: w.state || "",
+				pincode: w.pincode || "",
+				gstin: w.gst_number || COMPANY_BILLING.gstNumber,
+				phone: primary?.mobile_number || "—",
+				email: primary?.email_address || "—",
+			};
+		});
+	}, [dbWarehouses]);
 
 	const selectedWarehouse = useMemo(
-		() => (form.warehouseId ? loadWarehouses().find((w) => w.id === form.warehouseId) ?? null : null),
-		[form.warehouseId],
+		() =>
+			form.warehouseId
+				? (dbWarehouses || []).find((w) => String(w.warehouse_id) === String(form.warehouseId)) ?? null
+				: null,
+		[form.warehouseId, dbWarehouses],
 	);
+
+	const selectedBillAddress = useMemo(() => {
+		if (!form.warehouseId || !form.billing.billingAddress) return null;
+		const primaryContact = selectedWarehouse?.contacts?.find((c) => c.is_primary) ?? selectedWarehouse?.contacts?.[0];
+		return {
+			id: `bill-wh-${form.warehouseId}`,
+			label: `${form.warehouseName} — Bill To`,
+			companyName: form.billing.companyName || COMPANY_BILLING.companyName,
+			addressLine1: form.billing.billingAddress,
+			addressLine2: "",
+			city: form.billing.city || "",
+			state: form.billing.state || "",
+			pincode: form.billing.pincode || "",
+			gstin: form.billing.gstNumber || COMPANY_BILLING.gstNumber,
+			phone: primaryContact?.mobile_number || "—",
+			email: primaryContact?.email_address || "—",
+		};
+	}, [form.warehouseId, form.warehouseName, form.billing, selectedWarehouse]);
+
+	const selectedShipAddress = useMemo(() => {
+		if (!form.warehouseId || !form.shipping.address) return null;
+		const primaryContact = selectedWarehouse?.contacts?.find((c) => c.is_primary) ?? selectedWarehouse?.contacts?.[0];
+		return {
+			id: `ship-wh-${form.warehouseId}`,
+			label: `${form.warehouseName} — Ship To`,
+			companyName: form.billing.companyName || COMPANY_BILLING.companyName,
+			addressLine1: form.shipping.address,
+			addressLine2: "",
+			city: form.billing.city || form.shipping.address.split(",").slice(-3, -2)[0]?.trim() || "",
+			state: form.state || "",
+			pincode: form.billing.pincode || form.shipping.address.split(",").slice(-1)[0]?.trim() || "",
+			gstin: form.billing.gstNumber || COMPANY_BILLING.gstNumber,
+			phone: form.shipping.contactNumber || primaryContact?.mobile_number || "—",
+			email: primaryContact?.email_address || "—",
+		};
+	}, [form.warehouseId, form.warehouseName, form.shipping, form.state, form.billing, selectedWarehouse]);
+
+	const selectedSupplier = useMemo(() => {
+		if (!form.supplierId) return null;
+		const dbSup = (dbSuppliers || []).find((s) => String(s.supplier_id) === String(form.supplierId));
+		if (dbSup) {
+			return {
+				id: dbSup.supplier_id,
+				supplierName: dbSup.supplier_name,
+				state: dbSup.state || "",
+			};
+		}
+		if (dbSupplierDetail) {
+			return {
+				id: dbSupplierDetail.supplier_id,
+				supplierName: dbSupplierDetail.supplier_name,
+				state: dbSupplierDetail.state || "",
+			};
+		}
+		return null;
+	}, [form.supplierId, dbSuppliers, dbSupplierDetail]);
 
 	const taxSupplyType = useMemo((): TaxSupplyType => {
 		const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
-		const billToState = billToAddress?.state ?? "";
-		return resolveTaxSupplyType(warehouseState, billToState);
-	}, [selectedWarehouse, billToAddress, form.state]);
+		const supplierState = selectedSupplier?.state ?? "";
+		return resolveTaxSupplyType(warehouseState, supplierState);
+	}, [selectedWarehouse, selectedSupplier, form.state]);
 
 	useEffect(() => {
 		if (!form.supplierId) return;
-		const billValid = billToAddresses.some((a) => a.id === form.billToAddressId);
-		const shipValid = shipToAddresses.some((a) => a.id === form.shipToAddressId);
+		if (!form.warehouseId) {
+			if (form.billToAddressId || form.shipToAddressId) {
+				onChange({
+					...form,
+					billToAddressId: "",
+					shipToAddressId: "",
+				});
+			}
+			return;
+		}
+		const billValid = billToAddresses.some((a) => a.id === form.billToAddressId) || form.billToAddressId?.startsWith("bill-wh-");
+		const shipValid = shipToAddresses.some((a) => a.id === form.shipToAddressId) || form.shipToAddressId?.startsWith("ship-wh-");
 		if (billValid && shipValid) return;
 		const defaults = getDefaultPOBillShipIds(
 			billToAddresses,
@@ -406,23 +569,21 @@ export function PurchaseOrderForm({
 			shipToAddressId: shipValid ? form.shipToAddressId : defaults.shipToAddressId,
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when supplier addresses load
-	}, [form.supplierId, billToAddresses.length, shipToAddresses.length]);
+	}, [form.supplierId, form.warehouseId, billToAddresses.length, shipToAddresses.length]);
 
 	useEffect(() => {
-		if (!form.supplierId || form.lines.length === 0) return;
-		const needsUpdate = form.lines.some((l) =>
-			lineNeedsTaxSupplyUpdate(l.cgstPct, l.sgstPct, l.igstPct, taxSupplyType),
+		if (form.lines.length === 0) return;
+		const nextLines = applyTaxSupplyToPOLines(form.lines, taxSupplyType);
+		const changed = nextLines.some(
+			(line, index) =>
+				line.cgstPct !== form.lines[index]?.cgstPct ||
+				line.sgstPct !== form.lines[index]?.sgstPct ||
+				line.igstPct !== form.lines[index]?.igstPct,
 		);
-		if (!needsUpdate) return;
-		onChange({
-			...form,
-			lines: form.lines.map((l) => {
-				const totalGst = l.cgstPct + l.sgstPct + l.igstPct;
-				return { ...l, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
-			}),
-		});
+		if (!changed) return;
+		onChange({ ...form, lines: nextLines });
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
-	}, [taxSupplyType, form.supplierId]);
+	}, [taxSupplyType, form.warehouseId, selectedSupplier?.state, form.state]);
 
 	useEffect(() => {
 		if (!form.additionalCharges?.length) return;
@@ -433,65 +594,199 @@ export function PurchaseOrderForm({
 		patch({
 			additionalCharges: form.additionalCharges.map((c) => {
 				const totalGst = (c.cgstPct ?? 0) + (c.sgstPct ?? 0) + (c.igstPct ?? 0);
-				const gstMasterId =
-					c.gstMasterId ?? findGstMasterIdByTotalPct(totalGst) ?? getDefaultGstMasterId();
-				return { ...c, ...applyGstMasterToTaxRates(gstMasterId, taxSupplyType) };
+				return { ...c, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
 			}),
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
 	}, [taxSupplyType]);
 
-	const onStateChange = (state: string) => {
-		patch({ state, warehouseId: null, warehouseName: "", deliveryAddress: "" });
+	const getUpdatedLinesForState = async (
+		state: string,
+		currentLines: POLineItem[],
+		supplyType: TaxSupplyType = taxSupplyType,
+	) => {
+		const targetState = selectedSupplier?.state || state;
+		let lines = currentLines;
+		if (currentLines.length > 0 && targetState) {
+			try {
+				const pricingPromises = currentLines.map(async (line) => {
+					try {
+						const res = await axiosInstance.post("/master/product/pricing", {
+							product_id: line.productId,
+							state_name: targetState,
+						});
+						if (res.data?.success && res.data?.data) {
+							return {
+								productId: line.productId,
+								cost_price: res.data.data.cost_price,
+								success: true,
+							};
+						}
+					} catch (err) {
+						console.error(`Failed to fetch pricing for state ${state}:`, err);
+					}
+					return { productId: line.productId, success: false };
+				});
+
+				const resolvedPricings = await Promise.all(pricingPromises);
+				const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
+
+				lines = currentLines.map((line) => {
+					const apiPricing = pricingMap.get(line.productId);
+					if (apiPricing && apiPricing.success) {
+						return {
+							...line,
+							unitPrice: apiPricing.cost_price,
+							cpSource: "pricing_master" as const,
+						};
+					}
+					return line;
+				});
+			} catch (err) {
+				console.error("Failed to update line items pricing:", err);
+			}
+		}
+		return applyTaxSupplyToPOLines(lines, supplyType);
 	};
 
-	const onWarehouseChange = (val: string) => {
-		const wh = loadWarehouses().find((w) => String(w.id) === val);
-		const shipId = wh ? `ship-wh-${wh.id}` : form.shipToAddressId;
-		const shipValid = shipToAddresses.some((a) => a.id === shipId);
+	const onStateChange = async (state: string) => {
+		const nextTaxSupplyType = resolveTaxSupplyType(state, selectedSupplier?.state ?? "");
+		const updatedLines = await getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
 		patch({
-			warehouseId: wh?.id ?? null,
-			warehouseName: wh?.warehouseName ?? "",
-			deliveryAddress: wh?.address ?? form.deliveryAddress,
-			shipToAddressId: shipValid ? shipId : form.shipToAddressId,
-			shipping: {
-				...form.shipping,
-				shipToLocation: wh?.warehouseName ?? form.shipping.shipToLocation,
-				address: wh?.address ?? form.shipping.address,
+			state,
+			warehouseId: null,
+			warehouseName: "",
+			deliveryAddress: "",
+			billToAddressId: "",
+			shipToAddressId: "",
+			billing: {
+				companyName: COMPANY_BILLING.companyName,
+				billingAddress: "",
+				gstNumber: "",
+				state: "",
+				city: "",
+				pincode: "",
 			},
+			shipping: {
+				shipToLocation: "",
+				branch: "",
+				address: "",
+				contactPerson: "",
+				contactNumber: "",
+				sameAsBilling: false,
+			},
+			lines: updatedLines,
+		});
+	};
+
+	const onWarehouseChange = async (val: string) => {
+		const wh = (dbWarehouses || []).find((w) => String(w.warehouse_id) === val) ?? null;
+		const addressStr = wh ? [wh.address, wh.address_1].filter(Boolean).join(", ") : "";
+		const primaryContact = wh?.contacts?.find((c) => c.is_primary) ?? wh?.contacts?.[0];
+		const nextState = wh?.state || form.state || "";
+		const nextTaxSupplyType = resolveTaxSupplyType(nextState, selectedSupplier?.state ?? "");
+		const updatedLines = await getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
+
+		patch({
+			warehouseId: wh ? wh.warehouse_id : null,
+			warehouseName: wh?.warehouse_name || "",
+			deliveryAddress: addressStr,
+			state: nextState,
+			billToAddressId: wh ? `bill-wh-${wh.warehouse_id}` : "",
+			shipToAddressId: wh ? `ship-wh-${wh.warehouse_id}` : "",
+			billing: wh
+				? {
+						companyName: wh.registered_legal_name || COMPANY_BILLING.companyName,
+						billingAddress: addressStr,
+						gstNumber: wh.gst_number || COMPANY_BILLING.gstNumber,
+						state: wh.state || "",
+						city: wh.city || "",
+						pincode: wh.pincode || "",
+					}
+				: {
+						companyName: COMPANY_BILLING.companyName,
+						billingAddress: "",
+						gstNumber: "",
+						state: "",
+						city: "",
+						pincode: "",
+					},
+			shipping: wh
+				? {
+						shipToLocation: wh.warehouse_name || "",
+						branch: "",
+						address: addressStr,
+						contactPerson: primaryContact?.contact_person || "Warehouse Manager",
+						contactNumber: primaryContact?.mobile_number || "",
+						sameAsBilling: false,
+					}
+				: {
+						shipToLocation: "",
+						branch: "",
+						address: "",
+						contactPerson: "",
+						contactNumber: "",
+						sameAsBilling: false,
+					},
+			lines: updatedLines,
 		});
 	};
 
 	const productTotal = preview.summary.productTotal ?? preview.summary.taxableValue;
 
-	const selectSupplier = (idStr: string) => {
+	const selectSupplier = async (idStr: string) => {
 		if (!idStr) {
 			patch({
 				supplierId: 0,
 				supplierName: "",
+				supplierType: "",
+				supplierContactPerson: "",
+				supplierMobile: "",
+				supplierEmail: "",
+				supplierGstin: "",
 				billToAddressId: "",
 				shipToAddressId: "",
 			});
 			return;
 		}
-		const s = suppliers.find((x) => x.id === Number(idStr));
-		if (!s) return;
-		const defaults = getDefaultPOBillShipIds(
-			billToAddresses,
-			shipToAddresses,
-			form.warehouseId,
-		);
-		patch({
-			supplierId: s.id,
-			supplierName: s.supplierName,
-			supplierType: s.supplierType,
-			supplierContactPerson: s.contactPerson || "",
-			supplierMobile: s.mobile || s.phone || "",
-			supplierEmail: s.email || "",
-			supplierGstin: s.gstNumber || "",
-			billToAddressId: form.billToAddressId || defaults.billToAddressId,
-			shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
-		});
+
+		try {
+			const response = await axiosInstance.get(`/master/supplier/details/${idStr}`);
+			const s = response.data?.data;
+			if (!s) return;
+
+			const localWarehouseId =
+				typeof form.warehouseId === "number"
+					? form.warehouseId
+					: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+						? Number(form.warehouseId)
+						: null;
+			const defaults = getDefaultPOBillShipIds(
+				billToAddresses,
+				shipToAddresses,
+				localWarehouseId,
+			);
+			const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
+			const nextTaxSupplyType = resolveTaxSupplyType(warehouseState, s.state || "");
+			const updatedLines =
+				form.lines.length > 0
+					? applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType)
+					: form.lines;
+			patch({
+				supplierId: s.supplier_id,
+				supplierName: s.supplier_name,
+				supplierType: s.supplier_type?.supplier_type_name || "",
+				supplierContactPerson: s.contact_person || "",
+				supplierMobile: s.mobile_number || "",
+				supplierEmail: s.email || "",
+				supplierGstin: s.gstin_number || "",
+				billToAddressId: form.billToAddressId || defaults.billToAddressId,
+				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
+				lines: updatedLines,
+			});
+		} catch (err) {
+			console.error("Failed to fetch supplier details:", err);
+		}
 	};
 
 	const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -500,13 +795,7 @@ export function PurchaseOrderForm({
 		patch({
 			attachments: [
 				...form.attachments,
-				{
-					uid: `att-${Date.now()}`,
-					name: file.name,
-					size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-					uploadedAt: new Date().toISOString().slice(0, 10),
-					uploadedBy: "Admin",
-				} as POAttachment,
+				file,
 			],
 		});
 		e.target.value = "";
@@ -516,10 +805,10 @@ export function PurchaseOrderForm({
 		value: String(p.id),
 		label: p.prNumber,
 	}));
-	const supplierOptions = suppliers.map((s) => ({
-		value: String(s.id),
-		label: `${s.supplierCode} | ${s.supplierName}`,
-		sublabel: `Supplier Type: ${s.supplierType || "—"}`,
+	const supplierOptions = (suppliers || []).map((s: any) => ({
+		value: String(s.supplier_id || s.id || ""),
+		label: `${s.supplier_code || s.supplierCode || ""} | ${s.supplier_name || s.supplierName || ""}`,
+		sublabel: `Supplier Type: ${s.supplier_type?.supplier_type_name || s.supplierType || "—"}`,
 	}));
 
 	const detailsGridCls = readOnly
@@ -541,6 +830,8 @@ export function PurchaseOrderForm({
 
 				{!readOnly && (
 					<div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+						<span className="font-medium text-foreground">Direct Purchase Order</span>
+						{/* Phase 1: PO type selector disabled — direct PO only for now
 						<label className="flex items-center gap-2 cursor-pointer font-medium text-foreground">
 							<input
 								type="radio"
@@ -557,6 +848,7 @@ export function PurchaseOrderForm({
 							/>
 							Direct Purchase Order
 						</label>
+						*/}
 					</div>
 				)}
 
@@ -574,7 +866,7 @@ export function PurchaseOrderForm({
 								className={cn(inputCls, "bg-muted/30 font-mono text-muted-foreground")}
 							/>
 						</div>
-						<div className="space-y-1">
+						{/* <div className="space-y-1">
 							<Label className="text-xs font-medium">PR Reference</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.sourcePrNumber} />
@@ -589,9 +881,11 @@ export function PurchaseOrderForm({
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Supplier</Label>
+						</div> */}
+						<div id="po-field-supplierId" className="space-y-1">
+							<Label className="text-xs font-medium">
+								Supplier <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.supplierName} />
 							) : (
@@ -601,12 +895,22 @@ export function PurchaseOrderForm({
 									onChange={selectSupplier}
 									placeholder="Select supplier..."
 									searchPlaceholder="Search supplier..."
+									error={!!errors.supplierId}
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
+							{errors.supplierId && (
+								<p className="text-[11px] text-red-500">{errors.supplierId}</p>
+							)}
 						</div>
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">PO Date</Label>
+							<Label className="text-xs font-medium">Supplier Type</Label>
+							<ReadOnlyField value={form.supplierType} />
+						</div>
+						<div id="po-field-poDate" className="space-y-1">
+							<Label className="text-xs font-medium">
+								PO Date <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={formatDisplayDate(form.poDate)} />
 							) : (
@@ -614,8 +918,11 @@ export function PurchaseOrderForm({
 									type="date"
 									value={form.poDate}
 									onChange={(e) => patch({ poDate: e.target.value })}
-									className={inputCls}
+									className={cn(inputCls, errors.poDate && "border-red-400")}
 								/>
+							)}
+							{errors.poDate && (
+								<p className="text-[11px] text-red-500">{errors.poDate}</p>
 							)}
 						</div>
 						<div className="space-y-1">
@@ -631,25 +938,42 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div>
+						
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">Supplier Type</Label>
-							<ReadOnlyField value={form.supplierType} />
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Payment Terms</Label>
+							<Label className="text-xs font-medium">Payment Type</Label>
 							{readOnly ? (
-								<ReadOnlyField value={paymentTermLabel(form.paymentTerms)} />
+								<ReadOnlyField value={form.paymentType} />
 							) : (
 								<AutocompleteSelect
-									options={PAYMENT_TERMS_OPTIONS}
-									value={form.paymentTerms}
+									options={PAYMENT_TYPE_OPTIONS}
+									value={form.paymentType}
 									onChange={(v) =>
 										patch({
-											paymentTerms: String(v),
-											creditDays: paymentTermDays(String(v)),
+											paymentType: String(v),
+											creditDays:
+												String(v) === "Credit" ? form.creditDays || 30 : 0,
 										})
 									}
 									className={inputCls}
+								/>
+							)}
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">Credit Days</Label>
+							{readOnly ? (
+								<ReadOnlyField value={String(form.creditDays ?? "")} />
+							) : (
+								<Input
+									type="number"
+									min={0}
+									value={form.creditDays}
+									onChange={(e) =>
+										patch({
+											creditDays: Number(e.target.value),
+										})
+									}
+									className={inputCls}
+									placeholder="Enter Credit Days"
 								/>
 							)}
 						</div>
@@ -667,8 +991,10 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Warehouse</Label>
+						<div id="po-field-warehouseId" className="space-y-1">
+							<Label className="text-xs font-medium">
+								Warehouse <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.warehouseName} />
 							) : (
@@ -676,16 +1002,19 @@ export function PurchaseOrderForm({
 									options={warehouseOptions}
 									value={form.warehouseId ? String(form.warehouseId) : ""}
 									onChange={(v) => onWarehouseChange(String(v))}
-									disabled={!form.state}
-									placeholder={form.state ? "Select warehouse" : "Select state first"}
+									placeholder="Select warehouse"
+									error={!!errors.warehouseId}
 									className={inputCls}
 								/>
+							)}
+							{errors.warehouseId && (
+								<p className="text-[11px] text-red-500">{errors.warehouseId}</p>
 							)}
 						</div>
 					</div>
 				</div>
 
-				{form.supplierId > 0 && (
+				{Boolean(form.supplierId) && form.supplierId !== 0 && form.supplierId !== "0" && (
 					<div className="border-t border-border/60 pt-4">
 						<SectionHead label="Bill To / Ship To" required />
 						<BillToShipToSection
@@ -693,49 +1022,11 @@ export function PurchaseOrderForm({
 							shipOptions={shipToAddresses}
 							billToAddressId={form.billToAddressId ?? ""}
 							shipToAddressId={form.shipToAddressId ?? ""}
-							onBillToChange={(id) => {
-								const addr = findPOAddressById(billToAddresses, id);
-								patch({
-									billToAddressId: id,
-									billing: addr
-										? {
-												companyName: addr.companyName,
-												billingAddress: [addr.addressLine1, addr.addressLine2, addr.city, addr.state, addr.pincode]
-													.filter(Boolean)
-													.join(", "),
-												gstNumber: addr.gstin,
-												state: addr.state,
-												city: addr.city,
-												pincode: addr.pincode,
-											}
-										: form.billing,
-								});
-							}}
-							onShipToChange={(id) => {
-								const addr = findPOAddressById(shipToAddresses, id);
-								const whId = id.startsWith("ship-wh-") ? Number(id.replace("ship-wh-", "")) : null;
-								const wh = whId ? loadWarehouses().find((w) => w.id === whId) : null;
-								patch({
-									shipToAddressId: id,
-									...(wh
-										? {
-												warehouseId: wh.id,
-												warehouseName: wh.warehouseName,
-												state: wh.state,
-												deliveryAddress: wh.address,
-											}
-										: {}),
-									shipping: addr
-										? {
-												...form.shipping,
-												shipToLocation: wh?.warehouseName ?? addr.label,
-												address: [addr.addressLine1, addr.addressLine2].filter(Boolean).join(", "),
-												contactPerson: form.shipping.contactPerson,
-												contactNumber: addr.phone !== "—" ? addr.phone : form.shipping.contactNumber,
-											}
-										: form.shipping,
-								});
-							}}
+							billAddress={selectedBillAddress}
+							shipAddress={selectedShipAddress}
+							readOnly={true}
+							onBillToChange={() => {}}
+							onShipToChange={() => {}}
 						/>
 					</div>
 				)}
@@ -748,6 +1039,8 @@ export function PurchaseOrderForm({
 					previewLines={previewLines}
 					linkedPr={linkedPr}
 					taxSupplyType={taxSupplyType}
+					supplierState={selectedSupplier?.state}
+					linesError={errors.lines}
 				/>
 
 				<div className="border-t border-border/60 pt-4">
@@ -803,24 +1096,60 @@ export function PurchaseOrderForm({
 								{!readOnly && (
 									<input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />
 								)}
-								{form.attachments.length === 0 ? (
+								{((form.existingAttachments ?? []).length === 0 && form.attachments.length === 0) ? (
 									<p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
 										No attachments
 									</p>
 								) : (
 									<ul className="space-y-2">
-										{form.attachments.map((a) => (
+										{(form.existingAttachments ?? []).map((a) => (
 											<li
 												key={a.uid}
 												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
 											>
-												<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												{a.url ? (
+													<a
+														href={a.url}
+														target="_blank"
+														rel="noreferrer"
+														className="min-w-0 flex-1 truncate text-foreground hover:text-brand-700 hover:underline"
+														title={a.name}
+													>
+														{a.name}
+													</a>
+												) : (
+													<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												)}
 												{!readOnly && (
 													<button
 														type="button"
 														onClick={() =>
 															patch({
-																attachments: form.attachments.filter((x) => x.uid !== a.uid),
+																existingAttachments: (form.existingAttachments ?? []).filter((x) => x.uid !== a.uid),
+															})
+														}
+														className="text-red-600"
+													>
+														<Trash2 className="h-3.5 w-3.5" />
+													</button>
+												)}
+											</li>
+										))}
+										{form.attachments.map((file, idx) => (
+											<li
+												key={`new-${idx}`}
+												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs bg-slate-50/50"
+											>
+												<span className="min-w-0 flex-1 truncate text-foreground">
+													{file.name}
+													<span className="text-[10px] text-muted-foreground ml-1">(New)</span>
+												</span>
+												{!readOnly && (
+													<button
+														type="button"
+														onClick={() =>
+															patch({
+																attachments: form.attachments.filter((_, i) => i !== idx),
 															})
 														}
 														className="text-red-600"

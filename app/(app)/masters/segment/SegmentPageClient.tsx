@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +9,6 @@ import {
   Eye,
   PieChart,
   X,
-  Trash2,
   AlertTriangle,
 } from "lucide-react";
 import {
@@ -21,32 +20,51 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MasterFormGrid } from "@/components/masters/MasterModule";
-import {
-  MasterListingSheets,
-} from "@/components/masters/MasterListingSheets";
+import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import { NameCodeDescriptionFields } from "@/components/masters/simpleFields";
 import {
   DEFAULT_SEGMENT_FORM,
-  formToSegment,
-  SEGMENT_SEED,
-  SEGMENT_STORAGE_KEY,
   segmentToForm,
-  validateSegmentForm,
+  validateSegmentApiForm,
   type SegmentForm,
   type SegmentRecord,
 } from "./segment-data";
+import { sortStateToOrdering } from "@/services/segment-list.service";
 import {
-  loadMasterRecords,
-  saveMasterRecords,
-  nextMasterCode,
-  masterToday,
-  type MasterStatus,
-} from "@/lib/masters/common";
+  useSegments,
+  useSegment,
+  useCreateSegment,
+  useUpdateSegment,
+  useToggleSegmentStatus,
+  useExportSegments,
+  useSegmentFilterDropdown,
+} from "@/hooks/masters";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+} from "@/lib/masters/list-api-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingUserCell, AuditUserRow, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  ColumnConfig,
+  FilterState,
+  SortState,
+  ActionItemConfig,
+} from "@/components/listing/types";
+import {
+  ListingUserCell,
+  AuditUserRow,
+  ListingStatusToggle,
+  isActiveStatus,
+} from "@/components/listing";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 
 type StatusTab = "all" | "active" | "inactive";
@@ -86,23 +104,146 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function toSegmentRow(item: {
+  id: number;
+  segmentUuid: string;
+  segmentName: string;
+  segmentCode: string;
+  description: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}): SegmentRecord {
+  return {
+    id: item.id,
+    segmentUuid: item.segmentUuid,
+    segmentName: item.segmentName,
+    segmentCode: item.segmentCode,
+    description: item.description,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdAt: item.createdAt,
+    updatedBy: item.updatedBy || "—",
+    updatedAt: item.updatedAt,
+  };
+}
+
 export default function SegmentMasterPage() {
-  const [records, setRecords] = useState<SegmentRecord[]>([]);
-  const [filters, setFilters] = useState<FilterState>({});
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "segmentName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [viewId, setViewId] = useState<string | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<SegmentRecord | null>(null);
   const [form, setForm] = useState<SegmentForm>(DEFAULT_SEGMENT_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<SegmentRecord | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<SegmentRecord | null>(null);
 
-  useEffect(() => {
-    setRecords(loadMasterRecords<SegmentRecord>(SEGMENT_STORAGE_KEY, SEGMENT_SEED));
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
+  const apiFilters = useMemo(
+    () =>
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.segment, {
+        statusTab,
+      }),
+    [appliedFilters, statusTab],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
+  );
+
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: appliedSearch,
+      status: listStatus,
+      apiFilters,
+      ordering,
+    }),
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
+  );
+
+  const listQuery = useSegments(listParams);
+  const detailQuery = useSegment(viewId);
+  const createMutation = useCreateSegment();
+  const updateMutation = useUpdateSegment();
+  const toggleStatusMutation = useToggleSegmentStatus();
+  const exportMutation = useExportSegments();
+
+  const segmentNameOptionsQuery = useSegmentFilterDropdown("segment_name", {
+    enabled: isFilterOpen("segmentName"),
+  });
+  const descriptionOptionsQuery = useSegmentFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useSegmentFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useSegmentFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useSegmentFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
+
+  const segmentNameOptions = useMemo(
+    () => segmentNameOptionsQuery.data ?? [],
+    [segmentNameOptionsQuery.data],
+  );
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toSegmentRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "segments",
+        notFoundMessage: "Segment list endpoint not found.",
+        serverMessage: "Server error while loading segments.",
+      })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -112,6 +253,26 @@ export default function SegmentMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load segment details."),
+        type: "error",
+      });
+      setViewId(null);
+      return;
+    }
+    if (detailQuery.data) {
+      setActive(toSegmentRow(detailQuery.data));
+      setSheetMode("view");
+    }
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
+
   const handleStatusTabChange = (tab: string) => {
     const next = tab as StatusTab;
     setStatusTab(next);
@@ -119,42 +280,83 @@ export default function SegmentMasterPage() {
     setPage(1);
   };
 
-  const toggleStatus = (record: SegmentRecord) => {
-    const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? {
-            ...item,
-            status: nextStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
-        : item,
-    );
-    setRecords(updated);
-    saveMasterRecords(SEGMENT_STORAGE_KEY, updated);
-    setToast({
-      msg: `Segment status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
+  const requestStatusToggle = (record: SegmentRecord) => {
+    setStatusTarget(record);
   };
 
-  const statusTabCounts = useMemo(
-    () => ({
-      all: records.length,
-      active: records.filter((r) => r.status === "active").length,
-      inactive: records.filter((r) => r.status === "inactive").length,
-    }),
-    [records],
-  );
+  const confirmStatusChange = () => {
+    const id = statusTarget?.segmentUuid;
+    if (!statusTarget || !id) {
+      setToast({ msg: "Segment id missing. Unable to update status.", type: "error" });
+      setStatusTarget(null);
+      return;
+    }
 
-  const columns: ColumnConfig<SegmentRecord>[] = [
+    const nextActive = statusTarget.status !== "active";
+
+    toggleStatusMutation.mutate(
+      { id, isActive: nextActive },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: `Segment status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update segment status."),
+            type: "error",
+          });
+        },
+        onSettled: () => {
+          setStatusTarget(null);
+        },
+      },
+    );
+  };
+
+  const openAdd = () => {
+    setForm({ ...DEFAULT_SEGMENT_FORM });
+    setErrors({});
+    setFormError(null);
+    setActive(null);
+    setSheetMode("add");
+  };
+
+  const openEdit = (row: SegmentRecord) => {
+    setForm(segmentToForm(row));
+    setErrors({});
+    setFormError(null);
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = useCallback((row: SegmentRecord) => {
+    if (!row.segmentUuid) {
+      setToast({ msg: "Segment id missing. Unable to load details.", type: "error" });
+      return;
+    }
+    setViewId(row.segmentUuid);
+  }, []);
+
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setViewId(null);
+    setErrors({});
+    setFormError(null);
+  };
+
+  const columns: ColumnConfig<SegmentRecord>[] = useMemo(
+    () => [
     {
       key: "segmentName",
       header: "Segment Name",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: segmentNameOptions,
       width: "200px",
       render: (_val, row) => (
         <button
@@ -171,7 +373,8 @@ export default function SegmentMasterPage() {
       header: "Description",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: descriptionOptions,
       width: "280px",
       render: (val) => (
         <span className="text-xs text-muted-foreground">{val ? String(val) : "—"}</span>
@@ -183,15 +386,12 @@ export default function SegmentMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "100px",
       render: (_val, row) => (
         <ListingStatusToggle
           active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
+          onChange={() => requestStatusToggle(row)}
         />
       ),
     },
@@ -199,6 +399,9 @@ export default function SegmentMasterPage() {
       key: "createdBy",
       header: "Created By",
       sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -208,12 +411,24 @@ export default function SegmentMasterPage() {
       key: "updatedBy",
       header: "Updated By",
       sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
       ),
     },
-  ];
+  ],
+    [
+      segmentNameOptions,
+      descriptionOptions,
+      statusOptions,
+      createdByOptions,
+      updatedByOptions,
+      openView,
+    ],
+  );
 
   const actions: ActionItemConfig<SegmentRecord>[] = [
     {
@@ -221,6 +436,7 @@ export default function SegmentMasterPage() {
       action: "view",
       icon: Eye,
       onClick: (row) => openView(row),
+      disabled: () => viewLoading,
     },
     {
       label: "Edit",
@@ -228,169 +444,90 @@ export default function SegmentMasterPage() {
       icon: Edit2,
       onClick: (row) => openEdit(row),
     },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
-    },
   ];
 
-  const filtered = useMemo(() => {
-    let result = [...records];
-
-    if (statusTab !== "all") {
-      result = result.filter((r) => r.status === statusTab);
-    }
-
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (r) =>
-          r.segmentName.toLowerCase().includes(q) ||
-          (r.description || "").toLowerCase().includes(q),
-      );
-    }
-
-    result = applyFilters(result, filters);
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const aVal = String(a[sort.key as keyof SegmentRecord] ?? "").toLowerCase();
-        const bVal = String(b[sort.key as keyof SegmentRecord] ?? "").toLowerCase();
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort, statusTab]);
-
-  const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
-  }, [filtered, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort, pageSize, statusTab]);
-
-  const openAdd = () => {
-    const codes = records.map((r) => r.segmentCode);
-    const code = nextMasterCode("SEG-", codes);
-    setForm({ ...DEFAULT_SEGMENT_FORM, segmentCode: code });
-    setErrors({});
-    setActive(null);
-    setSheetMode("add");
-  };
-
-  const openEdit = (row: SegmentRecord) => {
-    setForm(segmentToForm(row));
-    setErrors({});
-    setActive(row);
-    setSheetMode("edit");
-  };
-
-  const openView = (row: SegmentRecord) => {
-    setActive(row);
-    setSheetMode("view");
-  };
-
-  const closeSheet = () => {
-    setSheetMode(null);
-    setActive(null);
-    setErrors({});
-  };
+  const displayRecords = useMemo(() => {
+    if (ordering || !sort.key || sort.direction === "none") return records;
+    return [...records].sort((a, b) => {
+      const aVal = String(a[sort.key as keyof SegmentRecord] ?? "").toLowerCase();
+      const bVal = String(b[sort.key as keyof SegmentRecord] ?? "").toLowerCase();
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sort.direction === "asc" ? cmp : -cmp;
+    });
+  }, [records, sort, ordering]);
 
   const persist = () => {
-    const mode = sheetMode === "add" ? "add" : "edit";
-    const list = loadMasterRecords<SegmentRecord>(SEGMENT_STORAGE_KEY, SEGMENT_SEED);
-    const fieldErrors = validateSegmentForm(
-      form,
-      list,
-      mode === "edit" ? active?.id : undefined,
-    );
-    if (Object.keys(fieldErrors).length > 0) {
-      setErrors(fieldErrors);
-      return;
-    }
+    const fieldErrors = validateSegmentApiForm(form);
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
 
-    let updatedList: SegmentRecord[];
-    if (mode === "add") {
-      const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
-      updatedList = [...list, formToSegment(form, id)];
-      setToast({ msg: "Segment added successfully", type: "success" });
-    } else if (active) {
-      updatedList = list.map((r) =>
-        r.id === active.id ? formToSegment(form, active.id, active) : r,
+    if (sheetMode === "add") {
+      setFormError(null);
+      createMutation.mutate(
+        {
+          segment_name: form.segmentName,
+          description: form.description || null,
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "Segment added successfully", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create segment."));
+          },
+        },
       );
-      setToast({ msg: "Segment updated successfully", type: "success" });
-    } else {
       return;
     }
 
-    saveMasterRecords(SEGMENT_STORAGE_KEY, updatedList);
-    setRecords(updatedList);
-    closeSheet();
-  };
+    if (!active?.segmentUuid) {
+      setFormError("Segment id missing. Unable to update.");
+      return;
+    }
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const updated = records.map((r) =>
-      r.id === deleteTarget.id
-        ? {
-            ...r,
-            status: "inactive" as MasterStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
-        : r,
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.segmentUuid,
+        payload: {
+          segment_name: form.segmentName,
+          description: form.description || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Segment updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update segment."));
+        },
+      },
     );
-    saveMasterRecords(SEGMENT_STORAGE_KEY, updated);
-    setRecords(updated);
-    setDeleteTarget(null);
-    setToast({ msg: `"${deleteTarget.segmentName}" marked as inactive`, type: "success" });
   };
 
   const handleExport = () => {
-    try {
-      const headers = [
-        "ID",
-        "Segment Name",
-        "Description",
-        "Status",
-        "Created By",
-        "Updated By",
-        "Created At",
-        "Updated At",
-      ];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        csvRows.push(
-          [
-            r.id,
-            `"${r.segmentName.replace(/"/g, '""')}"`,
-            `"${(r.description || "").replace(/"/g, '""')}"`,
-            r.status,
-            r.createdBy,
-            r.updatedBy,
-            r.createdAt,
-            r.updatedAt,
-          ].join(","),
-        );
-      }
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `segments_export_${masterToday()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setToast({ msg: "Segments exported successfully", type: "success" });
-    } catch {
-      setToast({ msg: "Failed to export segments", type: "error" });
-    }
+    exportMutation.mutate(
+      {
+        search: appliedSearch,
+        status: listStatus,
+        ordering,
+        apiFilters,
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Segments exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export segments"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =
@@ -403,10 +540,10 @@ export default function SegmentMasterPage() {
   const viewDrawer = active
     ? {
         title: active.segmentName,
-        subtitle: "Read-only segment details",
+        subtitle: active.segmentCode || "Read-only segment details",
         status: active.status,
         basicInfo: [
-          { label: "Segment Name", value: active.segmentName },
+          { label: "Segment Code", value: active.segmentCode || "—", mono: true },
           {
             label: "Description",
             value: active.description?.trim() ? active.description : "—",
@@ -442,21 +579,27 @@ export default function SegmentMasterPage() {
       titleIcon={PieChart}
       tabs={STATUS_TABS.map((t) => ({
         value: t.value,
-        label: `${t.label} (${statusTabCounts[t.value]})`,
+        label: t.value === statusTab ? `${t.label} (${totalRecords})` : t.label,
       }))}
       activeTab={statusTab}
       onTabChange={handleStatusTabChange}
     >
+      {listError ? <p className="mb-2 text-xs text-red-600">{listError}</p> : null}
+
       <MasterListing<SegmentRecord>
         columns={columns}
-        data={paginated}
-        totalRecords={filtered.length}
+        data={displayRecords}
+        loading={loading}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add Segment"
@@ -465,6 +608,7 @@ export default function SegmentMasterPage() {
         searchPlaceholder="Search segment name or description..."
         currentFilters={filters}
         currentSort={sort}
+      onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets
@@ -475,17 +619,9 @@ export default function SegmentMasterPage() {
         onSave={persist}
         sheetTitle={sheetTitle}
         icon={PieChart}
+        formError={formError ?? undefined}
+        saving={saving}
         viewDrawer={viewDrawer}
-        statusActive={form.status === "active"}
-        onStatusChange={
-          sheetMode === "add" || sheetMode === "edit"
-            ? (isActive) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: isActive ? "active" : "inactive",
-                }))
-            : undefined
-        }
         formContent={
           sheetMode !== "view" ? (
             <MasterFormGrid>
@@ -517,28 +653,29 @@ export default function SegmentMasterPage() {
                   name: errors.segmentName,
                 }}
                 labels={{ name: "Segment Name", code: "Segment Code" }}
-                hideCode
+                hideCode={sheetMode === "add"}
+                codeDisabled
               />
             </MasterFormGrid>
           ) : null
         }
       />
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
               </div>
-              Deactivate Segment?
+              {statusTarget?.status === "active" ? "Deactivate Segment?" : "Activate Segment?"}
             </DialogTitle>
             <DialogDescription className="text-xs pt-1">
-              {deleteTarget && (
+              {statusTarget && (
                 <>
-                  <strong className="text-foreground">{deleteTarget.segmentName}</strong>{" "}
-                  will be marked as inactive. It will remain
-                  visible in the All and Inactive tabs.
+                  <strong className="text-foreground">{statusTarget.segmentName}</strong>{" "}
+                  will be marked as{" "}
+                  {statusTarget.status === "active" ? "inactive" : "active"}.
                 </>
               )}
             </DialogDescription>
@@ -548,16 +685,16 @@ export default function SegmentMasterPage() {
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => setDeleteTarget(null)}
+              onClick={() => setStatusTarget(null)}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
-              onClick={confirmDelete}
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
             >
-              Mark Inactive
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

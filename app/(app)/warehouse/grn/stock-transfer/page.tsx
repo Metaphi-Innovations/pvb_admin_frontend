@@ -3,7 +3,6 @@
 import React from "react";
 import { StockTransferListing } from "./StockTransferListing";
 import { useSearchParams } from "next/navigation";
-import { DEFAULT_DESTINATION_WAREHOUSE } from "@/lib/warehouse/grn-source";
 import { GrnListingLayout } from "../shared/GrnListingLayout";
 
 export default function StockTransferListingRoutePage() {

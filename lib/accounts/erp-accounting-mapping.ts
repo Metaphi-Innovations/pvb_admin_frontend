@@ -246,6 +246,12 @@ export function resolveProductAccountingDefaults(): {
   };
 }
 
+function toNullableNumericId(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function getProductAccountingConfig(product: Product): ProductAccountingConfig {
   const defaults = resolveProductAccountingDefaults();
   const missingFields: string[] = [];
@@ -260,8 +266,8 @@ export function getProductAccountingConfig(product: Product): ProductAccountingC
     cogsAccount: product.cogsAccount ?? defaults.cogsAccount,
     hsnCode: product.hsnCode ?? "",
     gstRate: product.gstRate ?? "",
-    gstId: product.gstId ?? null,
-    hsnId: product.hsnId ?? null,
+    gstId: toNullableNumericId(product.gstId),
+    hsnId: toNullableNumericId(product.hsnId),
     isComplete: missingFields.length === 0,
     missingFields,
   };

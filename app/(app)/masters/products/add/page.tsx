@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
@@ -22,6 +22,7 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../components/ProductForm";
+import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -30,13 +31,16 @@ export default function NewProductPage() {
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
+  const { data: previewNumber } = useProductPreviewNumber();
+  // console.log("Asdadsd", previewNumber);
   const clearErr = (key: string) =>
     setErrors((prev) => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
+
+  const createMutation = useCreateProduct();
 
   const handleSave = () => {
     const list = loadProducts();
@@ -58,26 +62,66 @@ export default function NewProductPage() {
       return;
     }
 
-    try {
-      const today = todayStr();
-      const record = formValuesToProduct(resolvedForm, {
-        id: nextProductId(list),
-        productImages,
-        productUrls,
-        createdBy: "Admin",
-        createdDate: today,
-      });
+    const parseNum = (val: string) => {
+      const num = Number(val);
+      return isNaN(num) ? null : num;
+    };
 
-      saveProducts([...list, record]);
-      setToast({ msg: "Product created successfully.", type: "success" });
-      setTimeout(() => router.push("/masters/products"), 900);
-    } catch {
-      setToast({
-        msg: "Failed to save product. Storage may be full — try fewer/larger uploads.",
-        type: "error",
-      });
-      setTimeout(() => setToast(null), 4000);
-    }
+    const payload = {
+      product_code: resolvedForm.productCode,
+      product_name: resolvedForm.productName,
+      scientific_name: resolvedForm.scientificName || null,
+      sku: resolvedForm.sku,
+      supplier_id: resolvedForm.supplier || null,
+      supplier_code: resolvedForm.supplierCode || null,
+      hsn_id: resolvedForm.hsnId || resolvedForm.hsnCode || null,
+      gst_rate_id: resolvedForm.gstId || null,
+      category_id: resolvedForm.category,
+      segment_id: resolvedForm.segment,
+      formulation_id: resolvedForm.form,
+      cfu_id: resolvedForm.cfu || null,
+      authority: resolvedForm.authority || null,
+      pack_size: parseNum(resolvedForm.packSize),
+      base_unit: resolvedForm.baseUnit,
+      unit: resolvedForm.baseUnit,
+      mou: resolvedForm.mou || null,
+      unit_per_packing: parseNum(resolvedForm.unitPerCase),
+      packing_unit: resolvedForm.packagingUnit,
+      net_weight: parseNum(resolvedForm.netWeightPerPackagingUnit),
+      gross_weight: parseNum(resolvedForm.grossWeight),
+      mrp: parseNum(resolvedForm.mrp),
+      is_active: resolvedForm.status === "active",
+      status: resolvedForm.status === "active" ? "Active" : "Inactive",
+      assets: productUrls.map((u) => ({
+        asset_type: "LINK",
+        link_url: u.url,
+      })),
+    };
+
+    createMutation.mutate(
+      {
+        payload,
+        images: productImages
+          .map((img) => img.file)
+          .filter((f): f is File => !!f),
+      },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: "Product created successfully.",
+            type: "success",
+          });
+          setTimeout(() => router.push("/masters/products"), 900);
+        },
+        onError: (err) => {
+          setToast({
+            msg: err instanceof Error ? err.message : "Failed to save product.",
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 4000);
+        },
+      }
+    );
   };
 
   return (
@@ -94,6 +138,7 @@ export default function NewProductPage() {
             type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={createMutation.isPending}
           >
             <Save className="w-4 h-4" /> Save
           </Button>
@@ -106,6 +151,7 @@ export default function NewProductPage() {
         errors={errors}
         onClearError={clearErr}
         productImages={productImages}
+        previewNumber={previewNumber}
         productUrls={productUrls}
         onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
         onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}

@@ -10,10 +10,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, AlertCircle, Search } from "lucide-react";
-import {
-  loadWarehouses,
-  type WarehouseMaster,
-} from "@/app/(app)/masters/warehouse/warehouse-data";
 import TransferProductLinesEditor from "./TransferProductLinesEditor";
 import AdditionalExpensesEditor from "@/app/(app)/sales/orders/components/AdditionalExpensesEditor";
 import {
@@ -23,9 +19,21 @@ import {
 import {
   type ProductCatalogItem,
   calculateOrderTotalsSummary,
+  type TaxSupplyType,
+  applyLineTaxFields,
+  recalculateExpense,
 } from "@/app/(app)/sales/orders/orders-data";
+import { useStockTransferDropdowns } from "@/hooks/sales/use-stock-transfers";
+import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 
-function SearchableDropdown<T extends { id: number }>({
+interface WarehouseMaster {
+  id: number | string;
+  warehouseCode: string;
+  warehouseName: string;
+  state?: string;
+}
+
+function SearchableDropdown<T extends { id: number | string }>({
   label,
   required,
   value,
@@ -37,8 +45,8 @@ function SearchableDropdown<T extends { id: number }>({
 }: {
   label: string;
   required?: boolean;
-  value: number | null;
-  onChange: (id: number) => void;
+  value: number | string | null;
+  onChange: (id: any) => void;
   options: T[];
   placeholder: string;
   error?: string;
@@ -194,6 +202,8 @@ function StatusSelect({
   );
 }
 
+
+
 interface StockTransferFormProps {
   mode: "add" | "edit";
   transferNumber: string;
@@ -220,18 +230,71 @@ export default function StockTransferForm({
   showStatus = false,
   auditInfo,
 }: StockTransferFormProps) {
+  const { data: dropdownData } = useStockTransferDropdowns();
+
   const warehouses = useMemo(() => {
-    return loadWarehouses().filter((w) => w.status === "active");
-  }, []);
+    if (!dropdownData?.warehouses) return [];
+    return dropdownData.warehouses.map((w: any) => ({
+      id: w.warehouse_id,
+      warehouseCode: w.warehouse_code || `WH-${String(w.sr_no || "").padStart(4, "0")}`,
+      warehouseName: w.warehouse_name,
+      state: w.state || "",
+    }));
+  }, [dropdownData]);
+
+  const users = useMemo(() => {
+    if (!dropdownData?.users) return [];
+    return dropdownData.users.map((u: any) => ({
+      id: u.user_id,
+      name: `${u.first_name || ""} ${u.last_name || ""}`.trim() || u.username,
+    }));
+  }, [dropdownData]);
 
   const set = <K extends keyof StockTransferFormValues>(
     key: K,
     val: StockTransferFormValues[K],
   ) => onChange({ ...form, [key]: val });
 
+  const handleWarehouseChange = (
+    key: "sourceWarehouseId" | "targetWarehouseId",
+    val: number | string | null,
+  ) => {
+    const nextSourceId = key === "sourceWarehouseId" ? val : form.sourceWarehouseId;
+    const nextTargetId = key === "targetWarehouseId" ? val : form.targetWarehouseId;
+
+    const source = warehouses.find((w) => w.id === nextSourceId);
+    const target = warehouses.find((w) => w.id === nextTargetId);
+    const nextTaxSupplyType: TaxSupplyType =
+      source && target && source.state === target.state ? "intra" : "inter";
+
+    const updatedLineItems = form.lineItems.map((line) => {
+      const product = products.find((p) => p.id === line.productId);
+      if (!product || !product.gstRate) return line;
+      return applyLineTaxFields(line, product.gstRate, nextTaxSupplyType);
+    });
+
+    const updatedExpenses = (form.additionalExpenses || []).map((exp) => {
+      return recalculateExpense(exp, nextTaxSupplyType);
+    });
+
+    onChange({
+      ...form,
+      [key]: val,
+      lineItems: updatedLineItems,
+      additionalExpenses: updatedExpenses,
+    });
+  };
+
+  const taxSupplyType: TaxSupplyType = useMemo(() => {
+    const source = warehouses.find((w) => w.id === form.sourceWarehouseId);
+    const target = warehouses.find((w) => w.id === form.targetWarehouseId);
+    if (!source || !target) return "intra";
+    return source.state === target.state ? "intra" : "inter";
+  }, [form.sourceWarehouseId, form.targetWarehouseId, warehouses]);
+
   const totalsSummary = useMemo(
-    () => calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses || []),
-    [form.lineItems, form.additionalExpenses]
+    () => calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses || [], { taxSupplyType }),
+    [form.lineItems, form.additionalExpenses, taxSupplyType]
   );
 
   const formatRupee = (n: number) =>
@@ -293,7 +356,7 @@ export default function StockTransferForm({
             label="From Warehouse"
             required
             value={form.sourceWarehouseId}
-            onChange={(id) => set("sourceWarehouseId", id)}
+            onChange={(id) => handleWarehouseChange("sourceWarehouseId", id)}
             options={warehouses}
             placeholder="Select from warehouse…"
             error={errors.sourceWarehouseId}
@@ -306,7 +369,7 @@ export default function StockTransferForm({
             label="To Warehouse"
             required
             value={form.targetWarehouseId}
-            onChange={(id) => set("targetWarehouseId", id)}
+            onChange={(id) => handleWarehouseChange("targetWarehouseId", id)}
             options={warehouses}
             placeholder="Select to warehouse…"
             error={errors.targetWarehouseId}
@@ -315,12 +378,15 @@ export default function StockTransferForm({
         </div>
 
         <div className="space-y-1 col-span-1 md:col-span-2">
-          <Label className="text-xs font-medium">Requested By</Label>
-          <Input
+          <SearchableDropdown<any>
+            label="Requested By"
+            required
             value={form.requestedBy}
-            onChange={(e) => set("requestedBy", e.target.value)}
-            placeholder="Employee / user name"
-            className="h-8 text-xs rounded-lg"
+            onChange={(id) => set("requestedBy", id)}
+            options={users}
+            placeholder="Select requester…"
+            error={errors.requestedBy}
+            getLabel={(u) => u.name}
           />
         </div>
 
@@ -380,11 +446,14 @@ export default function StockTransferForm({
         targetWarehouseId={form.targetWarehouseId}
         onChange={(lines) => set("lineItems", lines)}
         error={errors.lineItems}
+        errors={errors}
+        taxSupplyType={taxSupplyType}
       />
 
       <AdditionalExpensesEditor
         expenses={form.additionalExpenses || []}
         onChange={(expenses) => set("additionalExpenses", expenses)}
+        taxSupplyType={taxSupplyType}
       />
 
       <SectionDivider title="Total Summary" />

@@ -59,11 +59,11 @@ export function buildDebitNoteInputFromPurchaseReturn(
   return {
     debitNoteDate: ret.returnDate,
     againstType: "purchase_invoice",
-    vendorId: ret.supplierId,
+    vendorId: Number(ret.supplierId),
     vendorName: ret.supplierName,
     sourceInvoiceId,
     sourceInvoiceNo: preview.sourceInvoiceNo,
-    sourcePoId: ret.poId,
+    sourcePoId: Number(ret.poId),
     sourcePoNo: ret.poNumber,
     sourceGrnNo: preview.sourceGrnNo,
     sourceQcNo: preview.sourceQcNo,
@@ -93,7 +93,7 @@ export function createDebitNoteFromPurchaseReturn(
   const existingByReturn = loadDebitNotes().find((dn) => dn.sourceReturnNo === ret.returnNumber);
   if (existingByReturn) return existingByReturn;
 
-  const pi = findPurchaseInvoiceForPO(ret.poId);
+  const pi = findPurchaseInvoiceForPO(Number(ret.poId));
   if (!pi) return null;
 
   const input = buildDebitNoteInputFromPurchaseReturn(ret, pi.id);

@@ -15,6 +15,7 @@ import {
   type ProcurementAdditionalCharge,
 } from "@/lib/procurement/procurement-line-utils";
 import {
+  applyTaxSupplyToRates,
   formatCurrency,
   type TaxSupplyType,
 } from "@/lib/procurement/utils";
@@ -25,6 +26,14 @@ import {
   getDefaultGstMasterId,
   totalGstPctFromRates,
 } from "@/lib/procurement/gst-master-utils";
+import { useGstDropdown } from "@/hooks/masters/use-gst";
+
+type GstSelectOption = {
+  value: string;
+  label: string;
+  sublabel?: string;
+  gstPercentage: number;
+};
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -123,15 +132,67 @@ export function AdditionalChargesEditor({
   taxSupplyType?: TaxSupplyType;
   className?: string;
 }) {
-  const gstOptions = React.useMemo(() => getActiveGstMasterOptions(), []);
+  const gstDropdownQuery = useGstDropdown();
+  const gstOptions = React.useMemo((): GstSelectOption[] => {
+    const fromApi = (gstDropdownQuery.data ?? [])
+      .map((g) => ({
+        value: g.id,
+        label: `${g.gstPercentage}%`,
+        sublabel: g.remark || undefined,
+        gstPercentage: g.gstPercentage,
+      }))
+      .sort((a, b) => a.gstPercentage - b.gstPercentage);
+    if (fromApi.length > 0) return fromApi;
+
+    return getActiveGstMasterOptions().map((g) => {
+      const gstMaster = applyGstMasterToTaxRates(Number(g.value), "intra");
+      const gstPercentage = totalGstPctFromRates(
+        gstMaster.cgstPct,
+        gstMaster.sgstPct,
+        gstMaster.igstPct,
+      );
+      return {
+        value: g.value,
+        label: g.label,
+        sublabel: g.sublabel,
+        gstPercentage,
+      };
+    });
+  }, [gstDropdownQuery.data]);
+
+  const resolveGstOptionValue = (
+    charge: ProcurementAdditionalCharge,
+    gstPct: number,
+  ): string => {
+    if (charge.gstId && gstOptions.some((o) => o.value === charge.gstId)) {
+      return charge.gstId;
+    }
+    const byPct = gstOptions.find(
+      (o) => Math.abs(o.gstPercentage - gstPct) < 0.001,
+    );
+    if (byPct) return byPct.value;
+    return (
+      gstOptions.find((o) => o.gstPercentage === 18)?.value ??
+      gstOptions[0]?.value ??
+      ""
+    );
+  };
 
   const update = (uid: string, patch: Partial<ProcurementAdditionalCharge>) => {
     onChange(charges.map((c) => (c.uid === uid ? { ...c, ...patch } : c)));
   };
 
-  const updateGstMaster = (uid: string, gstMasterId: number) => {
-    const rates = applyGstMasterToTaxRates(gstMasterId, taxSupplyType);
-    update(uid, rates);
+  const updateGstSelection = (uid: string, gstOptionValue: string) => {
+    const selected = gstOptions.find((o) => o.value === gstOptionValue);
+    if (!selected) return;
+    const rates = applyTaxSupplyToRates(selected.gstPercentage, taxSupplyType);
+    const localGstMasterId =
+      findGstMasterIdByTotalPct(selected.gstPercentage) ?? getDefaultGstMasterId();
+    update(uid, {
+      gstId: gstOptionValue,
+      gstMasterId: localGstMasterId,
+      ...rates,
+    });
   };
 
   return (
@@ -190,10 +251,7 @@ export function AdditionalChargesEditor({
                   migrated.sgstPct,
                   migrated.igstPct,
                 );
-                const gstMasterId =
-                  migrated.gstMasterId ??
-                  findGstMasterIdByTotalPct(gstPct) ??
-                  getDefaultGstMasterId();
+                const selectedGstValue = resolveGstOptionValue(migrated, gstPct);
 
                 return (
                   <tr key={row.uid} className="hover:bg-muted/20 transition-colors">
@@ -223,8 +281,8 @@ export function AdditionalChargesEditor({
                       ) : (
                         <AutocompleteSelect
                           options={gstOptions}
-                          value={String(gstMasterId)}
-                          onChange={(v) => updateGstMaster(row.uid, Number(v))}
+                          value={selectedGstValue}
+                          onChange={(v) => updateGstSelection(row.uid, String(v))}
                           placeholder="Select GST…"
                           className={cn(inputCls, "ml-auto min-w-[88px]")}
                         />

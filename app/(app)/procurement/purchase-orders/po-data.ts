@@ -1,5 +1,5 @@
 import { PROCUREMENT_APPROVAL, CURRENT_USER, COMPANY_BILLING } from "@/lib/procurement/config";
-import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/procurement/utils";
+import { amountInWords, calcLineAmounts, nextId, round2, todayStr, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { POShortCloseInfo } from "./po-qty";
 import type { PackagingUom, ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
@@ -16,6 +16,8 @@ export type POStatus =
   | "pending_approval"
   | "approved"
   | "rejected"
+  | "partially_received"
+  | "received"
   | "invoice_uploaded"
   | "short_closed"
   | "closed"
@@ -46,7 +48,10 @@ function normalizePO(po: PurchaseOrder): PurchaseOrder {
 
 export interface POLineItem {
   uid: string;
-  productId: number;
+  /** Backend purchase_order_product_id (UUID) — required for short-close API. */
+  purchaseOrderProductId?: string;
+  /** Local master id (number) or backend product UUID (string). */
+  productId: number | string;
   productCode: string;
   productName: string;
   description: string;
@@ -86,6 +91,7 @@ export interface POAttachment {
   size: string;
   uploadedAt: string;
   uploadedBy: string;
+  url?: string;
 }
 
 export interface POTerm {
@@ -112,10 +118,12 @@ export interface POSummary {
 }
 
 export interface PurchaseOrder {
-  id: number;
+  /** Backend purchase_order_id (UUID) or legacy localStorage numeric id as string. */
+  id: string;
   poNumber: string;
   poDate: string;
-  supplierId: number;
+  /** Local master id (number) or backend supplier UUID (string). */
+  supplierId: number | string;
   supplierName: string;
   supplierType: string;
   supplierContactPerson?: string;
@@ -125,16 +133,17 @@ export interface PurchaseOrder {
   supplierGstin?: string;
   referenceNumber: string;
   currency: string;
-  paymentTerms: string;
+  /** Backend `payment_type`: Immediate | Credit | Advance */
+  paymentType: string;
   creditDays: number;
   deliveryTerms: string;
   expectedDeliveryDate: string;
   state: string;
-  warehouseId: number | null;
+  warehouseId: number | string | null;
   warehouseName: string;
   deliveryAddress: string;
   notes: string;
-  sourcePrId: number | null;
+  sourcePrId: number | string | null;
   sourcePrNumber: string;
   billToAddressId?: string;
   shipToAddressId?: string;
@@ -166,6 +175,19 @@ export interface PurchaseOrder {
 }
 
 const STORAGE_KEY = "ds_procurement_purchase_orders_v2";
+const LEGACY_STORAGE_KEY = "ds_procurement_purchase_orders";
+let purchaseOrderLocalStorageCleared = false;
+
+function clearPurchaseOrderLocalStorage(): void {
+  if (typeof window === "undefined" || purchaseOrderLocalStorageCleared) return;
+  purchaseOrderLocalStorageCleared = true;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // ignore quota / private-mode errors
+  }
+}
 
 function parseGstRate(gstRate?: string): number {
   const n = parseFloat(String(gstRate ?? "").replace(/%/g, ""));
@@ -178,13 +200,44 @@ function gstSplitFromProduct(productId: number): { cgstPct: number; sgstPct: num
   return { cgstPct: gst / 2, sgstPct: gst / 2, igstPct: 0 };
 }
 
+export function getLineTotalGstPct(line: POLineItem): number {
+  const fromRates = (line.cgstPct ?? 0) + (line.sgstPct ?? 0) + (line.igstPct ?? 0);
+  if (fromRates > 0.001) return fromRates;
+  const localId = asLocalProductId(line.productId);
+  if (!localId) return 0;
+  return parseGstRate(findProductRef(localId)?.gstRate);
+}
+
+export function applyTaxSupplyToPOLines(
+  lines: POLineItem[],
+  taxSupplyType: TaxSupplyType,
+): POLineItem[] {
+  return lines.map((line) => {
+    const totalGst = getLineTotalGstPct(line);
+    if (totalGst <= 0) return line;
+    return { ...line, ...applyTaxSupplyToRates(totalGst, taxSupplyType) };
+  });
+}
+
+function asLocalProductId(productId: unknown): number | null {
+  if (typeof productId === "number" && Number.isFinite(productId) && productId > 0) {
+    return productId;
+  }
+  if (typeof productId === "string" && /^\d+$/.test(productId)) {
+    const n = Number(productId);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
 function migratePOLine(line: Partial<POLineItem>): POLineItem {
-  const enriched = line.productId ? enrichProductForProcurement(line.productId) : null;
+  const localProductId = asLocalProductId(line.productId);
+  const enriched = localProductId ? enrichProductForProcurement(localProductId) : null;
   const orderUom = (line.orderUom ?? (line.uom as PackagingUom) ?? "Unit") as PackagingUom;
   const orderedQtyPack = line.orderedQtyPack ?? line.orderedQty ?? 1;
   const conversionQty = enriched?.conversionQty ?? line.conversionQty ?? 1;
   const orderedQty = calcPackingToBaseQty(orderedQtyPack, conversionQty);
-  const productGst = line.productId ? gstSplitFromProduct(line.productId) : null;
+  const productGst = localProductId ? gstSplitFromProduct(localProductId) : null;
   const discountType = (line.discountType ?? "percentage") as PODiscountType;
   const discountPct = line.discountPct ?? 0;
   const discountFlatAmount = line.discountFlatAmount ?? 0;
@@ -203,6 +256,7 @@ function migratePOLine(line: Partial<POLineItem>): POLineItem {
   });
   return {
     uid: line.uid ?? `pl-${Date.now()}`,
+    purchaseOrderProductId: line.purchaseOrderProductId,
     productId: line.productId ?? 0,
     productCode: line.productCode ?? enriched?.productCode ?? "",
     productName: line.productName ?? enriched?.productName ?? "",
@@ -248,10 +302,24 @@ function migratePO(po: PurchaseOrder): PurchaseOrder {
     (po.otherCharges
       ? [{ uid: "legacy-freight", chargeName: "Other Charges", amount: po.otherCharges, remarks: "" }]
       : []);
+  const legacy = po as PurchaseOrder & { paymentTerms?: string };
+  const paymentType =
+    po.paymentType ||
+    (legacy.paymentTerms
+      ? legacy.paymentTerms.toLowerCase().includes("advance")
+        ? "Advance"
+        : legacy.paymentTerms.toLowerCase().includes("immediate")
+          ? "Immediate"
+          : "Credit"
+      : "Credit");
+
   const normalized: PurchaseOrder = {
     ...po,
+    id: String(po.id),
     status: normalizePOStatus(po.status),
-    state: po.state ?? po.shipping?.branch ? "" : "",
+    paymentType,
+    creditDays: po.creditDays ?? 0,
+    state: po.state ?? "",
     warehouseId: po.warehouseId ?? null,
     warehouseName: po.warehouseName ?? po.shipping?.shipToLocation ?? "",
     deliveryAddress: po.deliveryAddress ?? po.shipping?.address ?? "",
@@ -345,218 +413,18 @@ export function recalcPO(po: PurchaseOrder): PurchaseOrder {
   return { ...po, lines, summary, otherCharges: summary.additionalChargesTotal };
 }
 
-const RAW_SEED = [
-  {
-    id: 1,
-    poNumber: "PO-2024-0001",
-    poDate: "2024-01-25",
-    supplierId: 1,
-    supplierName: "Agro Chem Distributors",
-    supplierType: "distributor",
-    supplierContactPerson: "Ramesh Patil",
-    supplierMobile: "9876501234",
-    supplierEmail: "ramesh@agrochem.in",
-    supplierGstin: "27AABCA1234F1Z2",
-    referenceNumber: "REF/AC/25",
-    currency: "INR",
-    paymentTerms: "net-30",
-    creditDays: 30,
-    deliveryTerms: "door-delivery",
-    expectedDeliveryDate: "2024-02-10",
-    notes: "Against PR-2024-0003",
-    sourcePrId: 3,
-    sourcePrNumber: "PR-2024-0003",
-    billing: COMPANY_BILLING,
-    shipping: {
-      shipToLocation: "Pune Warehouse",
-      branch: "hq-pune",
-      address: "Warehouse 2, Hinjawadi, Pune",
-      contactPerson: "Warehouse Manager",
-      contactNumber: "9876500000",
-      sameAsBilling: false,
-    },
-    lines: [
-      {
-        uid: "pl1",
-        productId: 4,
-        productCode: "PRD-004",
-        productName: "Chlorpyrifos 20 EC",
-        description: "Insecticide",
-        uom: "LTR",
-        orderedQty: 100,
-        receivedQty: 60,
-        unitPrice: 310,
-        discountPct: 2,
-        cgstPct: 9,
-        sgstPct: 9,
-        igstPct: 0,
-        grossAmount: 31000,
-        taxAmount: 5464.8,
-        netAmount: 35824.8,
-        deliverySchedule: "2024-02-05",
-        prLineUid: "l1",
-      },
-    ] as POLineItem[],
-    terms: [],
-    attachments: [],
-    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "", gstMasterId: 4, cgstPct: 9, sgstPct: 9, igstPct: 0 }],
-    otherCharges: 500,
-    summary: buildSummary(
-      [
-        {
-          uid: "pl1",
-          productId: 4,
-          productCode: "PRD-004",
-          productName: "Chlorpyrifos 20 EC",
-          description: "",
-          uom: "LTR",
-          orderedQty: 100,
-          unitPrice: 310,
-          discountPct: 2,
-          cgstPct: 9,
-          sgstPct: 9,
-          igstPct: 0,
-          grossAmount: 31000,
-          taxAmount: 5464.8,
-          netAmount: 35824.8,
-          deliverySchedule: "",
-        },
-      ] as POLineItem[],
-      [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
-    ),
-    status: "approved",
-    createdBy: "Admin",
-    createdDate: "2024-01-25",
-    updatedBy: "Admin",
-    updatedDate: "2024-01-28",
-    approvedBy: "Admin",
-    approvedDate: "2024-01-26",
-    activity: [
-      { date: "2024-01-25", action: "Created", by: "Admin" },
-      { date: "2024-01-26", action: "Approved", by: "Admin" },
-      { date: "2024-01-28", action: "Sent to Supplier", by: "Admin" },
-    ],
-  },
-  {
-    id: 2,
-    poNumber: "PO-2024-0002",
-    poDate: "2024-02-12",
-    supplierId: 2,
-    supplierName: "Seed Corp India Pvt Ltd",
-    supplierType: "manufacturer",
-    supplierContactPerson: "Priya Nair",
-    supplierMobile: "9988776655",
-    supplierEmail: "priya@seedcorp.in",
-    supplierGstin: "29AABCS5678G1Z9",
-    referenceNumber: "",
-    currency: "INR",
-    paymentTerms: "net-15",
-    creditDays: 15,
-    deliveryTerms: "ex-works",
-    expectedDeliveryDate: "2024-03-01",
-    notes: "Direct PO — hybrid seeds",
-    sourcePrId: null,
-    sourcePrNumber: "",
-    billing: COMPANY_BILLING,
-    shipping: {
-      shipToLocation: "HQ",
-      branch: "hq-pune",
-      address: COMPANY_BILLING.billingAddress,
-      contactPerson: "Admin",
-      contactNumber: "9876500001",
-      sameAsBilling: true,
-    },
-    lines: [
-      {
-        uid: "pl1",
-        productId: 6,
-        productCode: "PRD-006",
-        productName: "Hybrid Tomato Seeds",
-        description: "",
-        uom: "PKT",
-        orderedQty: 500,
-        unitPrice: 90,
-        discountPct: 0,
-        cgstPct: 0,
-        sgstPct: 0,
-        igstPct: 0,
-        grossAmount: 45000,
-        taxAmount: 0,
-        netAmount: 45000,
-        deliverySchedule: "",
-      },
-    ] as POLineItem[],
-    terms: [],
-    attachments: [],
-    additionalCharges: [],
-    otherCharges: 0,
-    summary: buildSummary(
-      [
-        {
-          uid: "pl1",
-          productId: 6,
-          productCode: "PRD-006",
-          productName: "Hybrid Tomato Seeds",
-          description: "",
-          uom: "PKT",
-          orderedQty: 500,
-          unitPrice: 90,
-          discountPct: 0,
-          cgstPct: 0,
-          sgstPct: 0,
-          igstPct: 0,
-          grossAmount: 45000,
-          taxAmount: 0,
-          netAmount: 45000,
-          deliverySchedule: "",
-        },
-      ] as POLineItem[],
-      [],
-    ),
-    status: "pending_approval",
-    createdBy: "Admin",
-    createdDate: "2024-02-12",
-    updatedBy: "Admin",
-    updatedDate: "2024-02-12",
-    approvedBy: "",
-    approvedDate: "",
-    activity: [
-      { date: "2024-02-12", action: "Created", by: "Admin" },
-      { date: "2024-02-12", action: "Submitted", by: "Admin" },
-    ],
-  },
-];
-
-const SEED = (RAW_SEED as unknown as PurchaseOrder[]).map(migratePO);
-
+/** Local mock storage removed — purchase orders are API-backed. */
 export function loadPurchaseOrders(): PurchaseOrder[] {
-  if (typeof window === "undefined") return SEED.map(normalizePO);
-  try {
-    const legacy = localStorage.getItem("ds_procurement_purchase_orders");
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw && legacy) {
-      const migrated = (JSON.parse(legacy) as PurchaseOrder[]).map(normalizePO);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    }
-    if (!raw) {
-      const seeded = SEED.map(normalizePO);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-      return seeded;
-    }
-    return (JSON.parse(raw) as PurchaseOrder[]).map(normalizePO);
-  } catch {
-    return SEED.map(normalizePO);
-  }
+  clearPurchaseOrderLocalStorage();
+  return [];
 }
 
-export function savePurchaseOrders(list: PurchaseOrder[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+export function savePurchaseOrders(_list: PurchaseOrder[]): void {
+  clearPurchaseOrderLocalStorage();
 }
 
-export function getPOById(id: number): PurchaseOrder | undefined {
-  return loadPurchaseOrders().find((p) => p.id === id);
+export function getPOById(_id: string | number): PurchaseOrder | undefined {
+  return undefined;
 }
 
 export function generatePONumber(list: PurchaseOrder[]): string {
@@ -643,6 +511,8 @@ export const PO_STATUS_CFG: Record<POStatus, { bg: string; text: string; dot: st
   pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400", label: "Pending Approval" },
   approved: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500", label: "Approved" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400", label: "Rejected" },
+  partially_received: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500", label: "Partially Received" },
+  received: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Received" },
   invoice_uploaded: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Invoice Uploaded" },
   short_closed: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500", label: "Short Closed" },
   closed: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500", label: "Closed" },

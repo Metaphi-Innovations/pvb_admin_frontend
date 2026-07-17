@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,12 +9,11 @@ import {
   AdditionalChargesEditor,
   ProcurementTotalSummary,
 } from "@/components/procurement/AdditionalChargesEditor";
-import { getPOById } from "../../purchase-orders/po-data";
 import { recalcPurchaseReturn } from "../purchase-return-calc";
 import {
   type PurchaseReturn,
   type PurchaseReturnItem,
-} from "../purchase-return-data";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import { PReturnLineItemsSection } from "./PReturnLineItemsSection";
 
 const inputCls = "h-8 rounded-lg text-xs";
@@ -51,20 +50,22 @@ export function PurchaseReturnForm({
   onChange,
   readOnly = false,
   errors = {},
+  editMode = false,
 }: {
   record: PurchaseReturn;
   onChange: (record: PurchaseReturn) => void;
   readOnly?: boolean;
   errors?: Record<string, string>;
+  /** When true, line items are split into existing return lines + additional eligible GRNs. */
+  editMode?: boolean;
 }) {
   const detailsGridCls = "grid grid-cols-4 gap-3";
-  const po = useMemo(() => getPOById(record.poId), [record.poId]);
   const taxSupplyType = record.taxSupplyType ?? "intra";
   const summary = record.summary;
   const taxTotal = summary.totalCgst + summary.totalSgst + summary.totalIgst;
 
   const patch = (p: Partial<PurchaseReturn>) => {
-    onChange(recalcPurchaseReturn({ ...record, ...p }, po));
+    onChange(recalcPurchaseReturn({ ...record, ...p }));
   };
 
   const setItem = (id: string, itemPatch: Partial<PurchaseReturnItem>) => {
@@ -115,6 +116,12 @@ export function PurchaseReturnForm({
               <Label className="text-xs font-medium">Initiated By</Label>
               <ReadOnlyField value={record.initiatedBy} />
             </div>
+            {readOnly && record.packingListNo && (
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Packing List</Label>
+                <ReadOnlyField value={record.packingListNo} mono />
+              </div>
+            )}
             <div className="col-span-4 space-y-1">
               <Label className="text-xs font-medium">Overall Return Reason / Remarks</Label>
               <Textarea
@@ -138,6 +145,8 @@ export function PurchaseReturnForm({
           errors={errors}
           taxSupplyType={taxSupplyType}
           onItemChange={setItem}
+          editMode={editMode}
+          warehouseName={record.warehouseName}
         />
 
         <div className="border-t border-border/60 pt-4">

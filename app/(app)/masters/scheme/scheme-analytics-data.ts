@@ -5,7 +5,8 @@ import {
   loadCustomers,
   getEligibleSchemesForSalesOrderLine,
 } from "@/app/(app)/sales/orders/orders-data";
-import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
+const getDispatchRecords = (): any[] => [];
+
 import { SCHEME_EFFECT_MAP, type SchemeRecord } from "./scheme-data";
 import { isProductDiscountRecord } from "./product-discount-scheme";
 import { isNearExpiryRecord } from "./product-near-expiry-scheme";
@@ -94,13 +95,13 @@ function countEligibleUsageSlots(record: SchemeRecord): number | null {
     let count = 0;
     for (const dispatch of getDispatchRecords()) {
       const entries = (dispatch.nearExpirySchemes ?? []).filter(
-        (e) => e.schemeId === schemeId || e.schemeCode.trim() === schemeCode,
+        (e: any) => e.schemeId === schemeId || e.schemeCode.trim() === schemeCode,
       );
       if (entries.length > 0) {
         count += entries.length;
         continue;
       }
-      if (dispatch.products.some((p) => p.nearExpirySchemeEligible)) {
+      if (dispatch.products.some((p: any) => p.nearExpirySchemeEligible)) {
         count += 1;
       }
     }
@@ -191,10 +192,10 @@ function nearExpiryAndSettlementStats(record: SchemeRecord): Omit<
       const so = dispatch.salesOrderNumber || dispatch.source_document_no || "";
       const invoiced = so
         ? loadInvoices().some(
-            (inv) =>
-              isGeneratedInvoice(inv) &&
-              (inv.salesOrderNo === so || inv.referenceNo === so),
-          )
+          (inv) =>
+            isGeneratedInvoice(inv) &&
+            (inv.salesOrderNo === so || inv.referenceNo === so),
+        )
         : false;
       if (invoiced) continue;
       utilizedCount += 1;

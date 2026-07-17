@@ -8,7 +8,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { AlertTriangle, AlertCircle } from "lucide-react";
-import { type SalesOrder, cancelSalesOrder } from "../orders-data";
+import { type SalesOrder } from "../orders-data";
+import { useCancelSalesOrder } from "@/hooks/sales/use-sales-orders";
 
 interface CancelOrderDialogProps {
   order: SalesOrder | null;
@@ -25,6 +26,7 @@ export default function CancelOrderDialog({
 }: CancelOrderDialogProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const cancelMutation = useCancelSalesOrder();
 
   const handleClose = () => {
     setReason("");
@@ -34,15 +36,24 @@ export default function CancelOrderDialog({
 
   const handleConfirm = () => {
     if (!order) return;
-    const result = cancelSalesOrder(order.id, reason);
-    if ("error" in result) {
-      setError(result.error);
+    if (!reason.trim()) {
+      setError("Cancellation reason is required.");
       return;
     }
-    onSuccess(result);
-    setReason("");
-    setError("");
-    onClose();
+    cancelMutation.mutate(
+      { id: order.id, remarks: reason },
+      {
+        onSuccess: (updatedOrder) => {
+          onSuccess(updatedOrder);
+          setReason("");
+          setError("");
+          onClose();
+        },
+        onError: (err: any) => {
+          setError(err?.message || "Failed to cancel sales order.");
+        },
+      }
+    );
   };
 
   if (!order) return null;
@@ -87,6 +98,7 @@ export default function CancelOrderDialog({
               size="sm"
               className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
               onClick={handleConfirm}
+              disabled={cancelMutation.isPending}
             >
               Confirm Cancel
             </Button>

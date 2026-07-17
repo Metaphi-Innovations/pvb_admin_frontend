@@ -15,7 +15,7 @@ export function getPOListingThreeWayMatchStatus(po: PurchaseOrder): POListingThr
 }
 
 export function getPOTotalItems(po: PurchaseOrder): number {
-  return po.lines.filter((l) => l.productId > 0 || l.productName).length;
+  return po.lines.filter((l) => Boolean(l.productId) || Boolean(l.productName)).length;
 }
 
 export function getPOTotalSkuQty(po: PurchaseOrder): number {

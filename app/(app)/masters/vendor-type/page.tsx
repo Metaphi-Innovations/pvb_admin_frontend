@@ -4,49 +4,35 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   Edit2,
   Eye,
-  X,
-  Trash2,
+  XCircle,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  loadVendorTypes,
-  saveVendorTypes,
-  type VendorTypeRecord,
-} from "./vendor-type-data";
-import { masterToday, type MasterStatus } from "@/lib/masters/common";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  useSupplierTypes,
+  useToggleSupplierTypeStatus,
+  useExportSupplierTypes,
+} from "@/hooks/masters";
+import { sortStateToOrdering, type SupplierTypeListRecord } from "@/services/supplier-type.service";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+  type FieldMapper,
+} from "@/lib/masters/list-api-filters";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
-type StatusTab = "all" | "active" | "inactive";
-const TAB_KEY = "vendor-type-list-status-tab";
-
-const STATUS_TABS: { value: StatusTab; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-];
-
-function readStoredStatusTab(): StatusTab {
-  if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(TAB_KEY);
-  return v === "active" || v === "inactive" ? v : "all";
-}
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
 
 interface ToastState {
   msg: string;
@@ -64,73 +50,125 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
-        <X className="h-3.5 w-3.5" />
+        <XCircle className="h-3.5 w-3.5" />
       </button>
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function VendorTypeMasterPage() {
   const router = useRouter();
-  const [records, setRecords] = useState<VendorTypeRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "vendorTypeName", direction: "asc" });
+  const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
+  const [sort, setSort] = useState<SortState>({ key: "supplierTypeName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [deleteTarget, setDeleteTarget] = useState<VendorTypeRecord | null>(null);
 
+  // ---- ordering / api-filters / status ----
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
+
+  const apiFilters = useMemo(
+    () =>
+      mergeListRequestFilters(debouncedFilters, (MASTER_FILTER_FIELD_MAPS as unknown as Record<string, Record<string, FieldMapper>>).supplierType, {}),
+    [debouncedFilters],
+  );
+
+  const listStatus = useMemo(
+    () => resolveListStatus(debouncedFilters, "all"),
+    [debouncedFilters],
+  );
+
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: debouncedSearch,
+      status: listStatus,
+      apiFilters,
+      ordering,
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+  );
+
+  // ---- queries / mutations ----
+  const listQuery = useSupplierTypes(listParams);
+  const toggleStatusMutation = useToggleSupplierTypeStatus();
+  const exportMutation = useExportSupplierTypes();
+
+  const records = listQuery.data?.items ?? [];
+  const totalRecords = listQuery.data?.total ?? 0;
+
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+      resource: "supplier types",
+      notFoundMessage: "Supplier type list endpoint not found.",
+      serverMessage: "Server error while loading supplier types.",
+    })
+    : null;
+
+  // ---- reset page on filter / sort change ----
   useEffect(() => {
-    setRecords(loadVendorTypes());
-    setStatusTab(readStoredStatusTab());
-  }, []);
+    setPage(1);
+  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
+  // ---- auto-dismiss toast ----
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
+    const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
-  const handleStatusTabChange = (tab: string) => {
-    const next = tab as StatusTab;
-    setStatusTab(next);
-    sessionStorage.setItem(TAB_KEY, next);
-    setPage(1);
-  };
-
-  const statusTabCounts = useMemo(
-    () => ({
-      all: records.length,
-      active: records.filter((r) => r.status === "active").length,
-      inactive: records.filter((r) => r.status === "inactive").length,
-    }),
-    [records],
-  );
-
-  const toggleStatus = (record: VendorTypeRecord) => {
-    const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? {
-            ...item,
-            status: nextStatus,
-            updatedBy: "Admin",
-            updatedAt: masterToday(),
-          }
-        : item,
+  // ---- status toggle ----
+  const updateStatus = (row: SupplierTypeListRecord) => {
+    const uuid = row.supplierTypeUuid;
+    if (!uuid) {
+      setToast({ msg: "Supplier type id missing. Unable to update status.", type: "error" });
+      return;
+    }
+    const nextActive = row.status?.toLowerCase() !== "active";
+    toggleStatusMutation.mutate(
+      { id: uuid, isActive: nextActive },
+      {
+        onSuccess: () =>
+          setToast({
+            msg: `Supplier type status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          }),
+        onError: (error) =>
+          setToast({
+            msg: getErrorMessage(error, "Failed to update supplier type status."),
+            type: "error",
+          }),
+      },
     );
-    saveVendorTypes(updated);
-    setRecords(updated);
-    setToast({
-      msg: `Supplier type status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
   };
 
-  const columns: ColumnConfig<VendorTypeRecord>[] = [
+  // ---- export ----
+  const handleExport = () => {
+    exportMutation.mutate(
+      { search: debouncedSearch, status: listStatus, ordering, apiFilters },
+      {
+        onError: (error) =>
+          setToast({
+            msg: getErrorMessage(error, "Failed to export supplier types."),
+            type: "error",
+          }),
+      },
+    );
+  };
+
+  // ---- columns ----
+  const columns: ColumnConfig<SupplierTypeListRecord>[] = [
     {
-      key: "vendorTypeName",
+      key: "supplierTypeName",
       header: "Supplier Type Name",
       sortable: true,
       filterable: true,
@@ -138,10 +176,10 @@ export default function VendorTypeMasterPage() {
       width: "220px",
       render: (_val, row) => (
         <Link
-          href={`/masters/vendor-type/${row.id}`}
+          href={`/masters/vendor-type/${row.supplierTypeUuid}`}
           className="text-xs font-semibold text-foreground hover:text-brand-700"
         >
-          {row.vendorTypeName}
+          {row.supplierTypeName}
         </Link>
       ),
     },
@@ -168,7 +206,7 @@ export default function VendorTypeMasterPage() {
     {
       key: "status",
       header: "Status",
-      sortable: true,
+      sortable: false,
       filterable: true,
       filterType: "dropdown",
       filterOptions: [
@@ -177,7 +215,7 @@ export default function VendorTypeMasterPage() {
       ],
       width: "120px",
       render: (_val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => updateStatus(row)} />
       ),
     },
     {
@@ -200,110 +238,20 @@ export default function VendorTypeMasterPage() {
     },
   ];
 
-  const actions: ActionItemConfig<VendorTypeRecord>[] = [
+  const actions: ActionItemConfig<SupplierTypeListRecord>[] = [
     {
       label: "View",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/masters/vendor-type/${row.id}`),
+      onClick: (row) => router.push(`/masters/vendor-type/${row.supplierTypeUuid}`),
     },
     {
       label: "Edit",
       action: "edit",
       icon: Edit2,
-      onClick: (row) => router.push(`/masters/vendor-type/${row.id}/edit`),
-    },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
+      onClick: (row) => router.push(`/masters/vendor-type/${row.supplierTypeUuid}/edit`),
     },
   ];
-
-  const filtered = useMemo(() => {
-    let result = [...records];
-
-    if (statusTab !== "all") {
-      result = result.filter((r) => r.status === statusTab);
-    }
-
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (r) =>
-          r.vendorTypeName.toLowerCase().includes(q) ||
-          r.initialCode.toLowerCase().includes(q) ||
-          (r.description || "").toLowerCase().includes(q),
-      );
-    }
-
-    result = applyFilters(result, filters);
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const aVal = String(a[sort.key as keyof VendorTypeRecord] ?? "").toLowerCase();
-        const bVal = String(b[sort.key as keyof VendorTypeRecord] ?? "").toLowerCase();
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort, statusTab]);
-
-  const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
-  }, [filtered, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort, pageSize, statusTab]);
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = loadVendorTypes().filter((r) => r.id !== deleteTarget.id);
-    saveVendorTypes(list);
-    setRecords(list);
-    setDeleteTarget(null);
-    setToast({ msg: "Supplier type deleted successfully", type: "success" });
-  };
-
-  const handleExport = () => {
-    try {
-      const headers = [
-        "ID",
-        "Supplier Type Name",
-        "Initial Code",
-        "Description",
-        "Status",
-      ];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        csvRows.push(
-          [
-            r.id,
-            `"${r.vendorTypeName.replace(/"/g, '""')}"`,
-            r.initialCode,
-            `"${(r.description || "").replace(/"/g, '""')}"`,
-            r.status,
-          ].join(","),
-        );
-      }
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "vendor_types_export.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      setToast({ msg: "Supplier types exported successfully", type: "success" });
-    } catch {
-      setToast({ msg: "Failed to export supplier types", type: "error" });
-    }
-  };
 
   return (
     <AppLayout>
@@ -315,30 +263,22 @@ export default function VendorTypeMasterPage() {
           </p>
         </div>
 
-        <Tabs value={statusTab} onValueChange={handleStatusTabChange}>
-          <TabsList className="bg-muted/50 p-0.5 border border-border/60 rounded-xl inline-flex h-auto">
-            {STATUS_TABS.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
-              >
-                {tab.label} ({statusTabCounts[tab.value]})
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        {listError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {listError}
+          </div>
+        )}
 
-        <MasterListing<VendorTypeRecord>
+        <MasterListing<SupplierTypeListRecord>
           columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
+          data={records}
+          totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={(f) => { setFilters(f); setPage(1); }}
           actions={actions}
           onAdd={() => router.push("/masters/vendor-type/add")}
           addLabel="Add Supplier Type"
@@ -347,27 +287,9 @@ export default function VendorTypeMasterPage() {
           searchPlaceholder="Search supplier type name, initial code, description..."
           currentFilters={filters}
           currentSort={sort}
+
         />
       </div>
-
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>

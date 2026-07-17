@@ -31,7 +31,6 @@ import {
 	removeAppliedSchemeFromLine,
 	applyLineTaxFields,
 	computeLineTaxBreakdown,
-	getProductById,
 	repriceOrderLineItems,
 	isProductDiscountSchemeApplied,
 	getEligibleSchemesForSalesOrderLine,
@@ -91,14 +90,14 @@ function ProductSelect({
 	onSelectMultiple,
 }: {
 	products: ProductCatalogItem[];
-	value: number | null;
-	selectedValues?: number[];
-	alreadyAddedProductIds?: number[];
+	value: any;
+	selectedValues?: any[];
+	alreadyAddedProductIds?: any[];
 	onSelectMultiple: (selectedProducts: ProductCatalogItem[]) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
-	const [checkedIds, setCheckedIds] = useState<number[]>([]);
+	const [checkedIds, setCheckedIds] = useState<any[]>([]);
 
 	const handleOpenChange = (isOpen: boolean) => {
 		setOpen(isOpen);
@@ -115,7 +114,7 @@ function ProductSelect({
 			p.code.toLowerCase().includes(search.toLowerCase()),
 	);
 
-	const toggleProduct = (id: number) => {
+	const toggleProduct = (id: any) => {
 		setCheckedIds((prev) =>
 			prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
 		);
@@ -270,6 +269,10 @@ export default function ProductLinesEditor({
 	pricingContext = null,
 	taxSupplyType = "intra",
 }: ProductLinesEditorProps) {
+	const getProductById = (id: any) => {
+		return products.find((p) => String(p.id) === String(id));
+	};
+
 	const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
 	const [quickQty, setQuickQty] = useState("1");
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -677,7 +680,7 @@ export default function ProductLinesEditor({
 						products={products}
 						value={null}
 						selectedValues={topSelectedProds.map((p) => p.id)}
-						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is number => id !== null)}
+						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is any => id !== null)}
 						onSelectMultiple={(selected) => setTopSelectedProds(selected)}
 					/>
 				}
@@ -827,7 +830,7 @@ export default function ProductLinesEditor({
 											alreadyAddedProductIds={lines
 												.filter((l) => l.id !== line.id)
 												.map((l) => l.productId)
-												.filter((id): id is number => id !== null)}
+												.filter((id): id is any => id !== null)}
 											onSelectMultiple={(selectedProds) =>
 												handleProductSelectMultiple(
 													line.id,

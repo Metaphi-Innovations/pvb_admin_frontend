@@ -1,19 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Activity,
-  CheckCircle2,
   Edit2,
   FileText,
   IndianRupee,
   ListOrdered,
   Scissors,
-  Send,
   Upload,
-  XCircle,
 } from "lucide-react";
 import { RecordDetailPage, type RecordDetailTab } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
@@ -25,28 +22,34 @@ import {
 } from "../components/POClosureSection";
 import { POIntegrationTabs } from "../components/POIntegrationTabs";
 import { VendorFollowUpPanel } from "../components/VendorFollowUpPanel";
-import { POActionConfirmModal, type POActionConfirmType } from "../components/POActionConfirmModal";
-import { ProcurementApprovalModal } from "../../components/ProcurementApprovalModal";
+import {
+  POActionConfirmModal,
+  type POActionConfirmType,
+} from "../components/POActionConfirmModal";
 import { Toast } from "../../components/ProcurementUI";
 import { PurchaseOrderForm, poToFormValues } from "../components/PurchaseOrderForm";
-import {
-  getPOById,
-  loadPurchaseOrders,
-  savePurchaseOrders,
-  submitPO,
-  approvePO,
-  rejectPO,
-  closePO,
-  cancelPO,
-  PO_STATUS_CFG,
-  type POStatus,
-} from "../po-data";
+import { PO_STATUS_CFG, type POStatus } from "../po-data";
 import { getPOTotalItems } from "../po-listing-utils";
 import { canShortClosePO } from "../po-qty";
 import { canUploadPOInvoice } from "../po-invoice-utils";
 import { formatCurrency } from "@/lib/procurement/utils";
-import { CreatePurchaseReturnAction } from "../../purchase-returns/components/CreatePurchaseReturnAction";
-import { purchaseReturnRoutes } from "../../purchase-returns/purchase-return-utils";
+import {
+  useCancelPurchaseOrder,
+  useClosePurchaseOrder,
+  useCreatePOFollowup,
+  usePurchaseOrder,
+  useShortClosePurchaseOrder,
+  useUploadPOInvoice,
+} from "@/hooks/procurement";
+import {
+  mapFollowupsFromDetail,
+  mapInvoicesFromDetail,
+  PurchaseOrderService,
+} from "@/services/purchase-order.service";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { getPOStatusLabel } from "@/lib/procurement/po-status";
+import { shortCloseReasonLabel } from "../po-qty";
+import { PODetailPageSkeleton } from "../components/POSkeletons";
 
 const PO_TABS: RecordDetailTab[] = [
   { value: "overview", label: "Overview" },
@@ -55,7 +58,7 @@ const PO_TABS: RecordDetailTab[] = [
 ];
 
 function poStatusVariant(status: POStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "approved" || status === "invoice_uploaded") return "active";
+  if (status === "approved" || status === "invoice_uploaded" || status === "received") return "active";
   if (status === "draft") return "draft";
   if (status === "rejected" || status === "cancelled") return "blocked";
   if (status === "pending_approval") return "neutral";
@@ -66,37 +69,77 @@ export default function PODetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = Number(params.id);
-  const [po, setPo] = useState(getPOById(id));
+  const id = String(params.id ?? "");
+  const detailQuery = usePurchaseOrder(id);
+  const uploadMutation = useUploadPOInvoice();
+  const followupMutation = useCreatePOFollowup();
+  const shortCloseMutation = useShortClosePurchaseOrder();
+  const closeMutation = useClosePurchaseOrder();
+  const cancelMutation = useCancelPurchaseOrder();
+
+  const po = detailQuery.data;
+  // console.log(po);
   const [activeTab, setActiveTab] = useState("overview");
   const [uploadOpen, setUploadOpen] = useState(searchParams.get("upload") === "1");
-  const [uploadReplace, setUploadReplace] = useState(false);
-  const [approvalOpen, setApprovalOpen] = useState(false);
-  const [shortCloseOpen, setShortCloseOpen] = useState(false);
+  const [shortCloseOpen, setShortCloseOpen] = useState(searchParams.get("shortClose") === "1");
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
-  const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
-  const [invoiceTick, setInvoiceTick] = useState(0);
-  const [followUpTick, setFollowUpTick] = useState(0);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  const refreshInvoices = useCallback(() => setInvoiceTick((t) => t + 1), []);
+  const [rawDetail, setRawDetail] = useState<Record<string, unknown> | null>(null);
+  const [rawLoading, setRawLoading] = useState(false);
 
   useEffect(() => {
-    setPo(getPOById(id));
-  }, [id, invoiceTick, followUpTick]);
+    if (!id) return;
+    let cancelled = false;
+    setRawLoading(true);
+    PurchaseOrderService.getRawById(id)
+      .then((data) => {
+        if (!cancelled) {
+          setRawDetail(data);
+          setRawLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRawDetail(null);
+          setRawLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, detailQuery.dataUpdatedAt]);
+
+  const invoices = useMemo(
+    () => (rawDetail ? mapInvoicesFromDetail(rawDetail) : []),
+    [rawDetail],
+  );
+  const followups = useMemo(
+    () => (rawDetail ? mapFollowupsFromDetail(rawDetail) : []),
+    [rawDetail],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const hash = window.location.hash;
     if (hash === "#follow-up-history") setActiveTab("follow-up");
     if (hash === "#vendor-invoice" || hash === "#three-way-match") setActiveTab("integration");
-  }, [id, followUpTick, invoiceTick]);
+  }, [id]);
 
-  if (!po) {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  if (detailQuery.isLoading) {
+    return <PODetailPageSkeleton />;
+  }
+
+  if (detailQuery.isError || !po) {
     return (
       <div className="p-8 text-sm text-muted-foreground">
-        Purchase order not found.{" "}
+        {getErrorMessage(detailQuery.error, "Purchase order not found.")}{" "}
         <Link href="/procurement/purchase-orders" className="text-brand-600 hover:underline">
           Back
         </Link>
@@ -105,19 +148,7 @@ export default function PODetailPage() {
   }
 
   const canUploadInvoice = canUploadPOInvoice(po);
-  const submittedDate = po.activity.find((a) => a.action.toLowerCase().includes("submit"))?.date ?? po.updatedDate;
-  const statusLabel = PO_STATUS_CFG[po.status]?.label ?? po.status;
-
-  const update = (updated: typeof po, redirectToast?: string) => {
-    savePurchaseOrders(
-      loadPurchaseOrders().map((p) => (p.id === updated.id ? updated : p)),
-    );
-    if (redirectToast) {
-      router.push(`/procurement/purchase-orders?toast=${redirectToast}`);
-      return;
-    }
-    setPo(updated);
-  };
+  const statusLabel = PO_STATUS_CFG[po.status]?.label ?? getPOStatusLabel(po.status);
 
   const headerActions = (
     <>
@@ -131,48 +162,11 @@ export default function PODetailPage() {
           <Edit2 className="w-3.5 h-3.5" /> Edit
         </Button>
       )}
-      {po.status === "draft" && (
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => update(submitPO(po), "po-submitted")}
-        >
-          <Send className="w-3.5 h-3.5" /> Submit
-        </Button>
-      )}
-      {po.status === "pending_approval" && (
-        <>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={() => {
-              setApprovalAction("approve");
-              setApprovalOpen(true);
-            }}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
-            onClick={() => {
-              setApprovalAction("reject");
-              setApprovalOpen(true);
-            }}
-          >
-            <XCircle className="w-3.5 h-3.5" /> Reject
-          </Button>
-        </>
-      )}
       {canUploadInvoice && (
         <Button
           size="sm"
           className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => {
-            setUploadReplace(po.status === "invoice_uploaded");
-            setUploadOpen(true);
-          }}
+          onClick={() => setUploadOpen(true)}
         >
           <Upload className="w-3.5 h-3.5" /> Upload Invoice
         </Button>
@@ -182,12 +176,7 @@ export default function PODetailPage() {
           <Scissors className="w-3.5 h-3.5" /> Short Close PO
         </Button>
       )}
-      <CreatePurchaseReturnAction
-        po={po}
-        variant="button"
-        onCreate={() => router.push(purchaseReturnRoutes.new(po.id))}
-      />
-      {["approved", "invoice_uploaded"].includes(po.status) && (
+      {["approved", "invoice_uploaded", "partially_received", "received"].includes(po.status) && (
         <Button
           variant="outline"
           size="sm"
@@ -265,35 +254,72 @@ export default function PODetailPage() {
               poNumber={po.poNumber}
               readOnly
               status={po.status}
-              submittedDate={submittedDate}
+              submittedDate={po.updatedDate}
             />
             <POClosureInformation po={po} />
           </div>
         )}
         {activeTab === "integration" && (
-          <POIntegrationTabs
-            po={po}
-            refreshKey={invoiceTick}
-            onUpload={() => {
-              setUploadReplace(false);
-              setUploadOpen(true);
-            }}
-            onReplace={() => {
-              setUploadReplace(true);
-              setUploadOpen(true);
-            }}
-          />
+          rawLoading ? (
+            <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
+              <div className="h-8 w-44 rounded bg-muted animate-pulse" />
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={idx} className="h-10 rounded bg-muted/60 animate-pulse" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <POIntegrationTabs
+              po={po}
+              refreshKey={detailQuery.dataUpdatedAt}
+              invoices={invoices}
+              onUpload={() => setUploadOpen(true)}
+            />
+          )
         )}
         {activeTab === "follow-up" && (
-          <VendorFollowUpPanel
-            po={po}
-            onPOUpdated={(updated) => {
-              savePurchaseOrders(loadPurchaseOrders().map((p) => (p.id === updated.id ? updated : p)));
-              setPo(updated);
-              setFollowUpTick((t) => t + 1);
-            }}
-            onToast={(msg) => setToast({ msg, type: "success" })}
-          />
+          rawLoading ? (
+            <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
+              <div className="h-8 w-48 rounded bg-muted animate-pulse" />
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={idx} className="h-10 rounded bg-muted/60 animate-pulse" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <VendorFollowUpPanel
+              po={po}
+              followups={followups}
+              onSubmitFollowUp={(input) => {
+                followupMutation.mutate(
+                  {
+                    purchaseOrderId: po.id,
+                    followupDate: input.followUpAt,
+                    followupType: input.followUpType,
+                    nextFollowupDate: input.nextFollowUpAt,
+                    spokeWith: input.spokeWith,
+                    remarks: input.remarks,
+                  },
+                  {
+                    onSuccess: () => {
+                      setToast({ msg: "Follow-up saved.", type: "success" });
+                      void detailQuery.refetch();
+                    },
+                    onError: (error) => {
+                      setToast({
+                        msg: getErrorMessage(error, "Failed to save follow-up."),
+                        type: "error",
+                      });
+                    },
+                  },
+                );
+              }}
+              submitting={followupMutation.isPending}
+              onToast={(msg) => setToast({ msg, type: "success" })}
+            />
+          )
         )}
       </RecordDetailPage>
 
@@ -301,11 +327,33 @@ export default function PODetailPage() {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         po={po}
-        replaceMode={uploadReplace}
-        onSaved={() => {
-          refreshInvoices();
-          setPo(getPOById(id));
-          setToast({ msg: "Vendor invoice saved.", type: "success" });
+        submitting={uploadMutation.isPending}
+        onSaved={(input) => {
+          uploadMutation.mutate(
+            {
+              purchaseOrderId: po.id,
+              supplierInvoiceNo: input.supplierInvoiceNo,
+              supplierInvoiceDate: input.supplierInvoiceDate,
+              invoiceAmount: input.invoiceAmount,
+              gstAmount: input.gstAmount,
+              totalInvoiceAmount: input.totalInvoiceAmount,
+              remarks: input.remarks,
+              file: input.file,
+            },
+            {
+              onSuccess: () => {
+                setUploadOpen(false);
+                setToast({ msg: "Vendor invoice saved.", type: "success" });
+                void detailQuery.refetch();
+              },
+              onError: (error) => {
+                setToast({
+                  msg: getErrorMessage(error, "Failed to upload invoice."),
+                  type: "error",
+                });
+              },
+            },
+          );
         }}
       />
 
@@ -313,21 +361,28 @@ export default function PODetailPage() {
         open={shortCloseOpen}
         onOpenChange={setShortCloseOpen}
         po={po}
-        onConfirm={(updated) => update(updated, "po-short-closed")}
-      />
-
-      <ProcurementApprovalModal
-        open={approvalOpen}
-        onOpenChange={setApprovalOpen}
-        documentNo={po.poNumber}
-        documentLabel="Purchase Order"
-        action={approvalAction}
-        onConfirm={(remarks) => {
-          update(
-            approvalAction === "approve" ? approvePO(po) : rejectPO(po, remarks),
-            approvalAction === "approve" ? "po-approved" : "po-rejected",
+        submitting={shortCloseMutation.isPending}
+        onConfirm={(payload) => {
+          shortCloseMutation.mutate(
+            {
+              purchaseOrderId: po.id,
+              shortCloseReason: shortCloseReasonLabel(payload.reason),
+              shortCloseRemarks: payload.remarks,
+              products: payload.products,
+            },
+            {
+              onSuccess: () => {
+                setShortCloseOpen(false);
+                router.push("/procurement/purchase-orders?toast=po-short-closed");
+              },
+              onError: (error) => {
+                setToast({
+                  msg: getErrorMessage(error, "Failed to short close PO."),
+                  type: "error",
+                });
+              },
+            },
           );
-          setApprovalOpen(false);
         }}
       />
 
@@ -336,14 +391,29 @@ export default function PODetailPage() {
         onOpenChange={setActionConfirmOpen}
         po={po}
         action={actionConfirmType}
+        submitting={closeMutation.isPending || cancelMutation.isPending}
         onConfirm={() => {
-          update(
-            actionConfirmType === "close" ? closePO(po) : cancelPO(po),
-            "po-saved",
-          );
-          setToast({
-            msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
-            type: "success",
+          const mutation = actionConfirmType === "close" ? closeMutation : cancelMutation;
+          mutation.mutate(po.id, {
+            onSuccess: () => {
+              setActionConfirmOpen(false);
+              setToast({
+                msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
+                type: "success",
+              });
+              void detailQuery.refetch();
+            },
+            onError: (error) => {
+              setToast({
+                msg: getErrorMessage(
+                  error,
+                  actionConfirmType === "close"
+                    ? "Failed to close purchase order."
+                    : "Failed to cancel purchase order.",
+                ),
+                type: "error",
+              });
+            },
           });
         }}
       />

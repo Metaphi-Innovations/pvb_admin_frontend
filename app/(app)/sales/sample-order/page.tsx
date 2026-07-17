@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   TrendingUp,
   ShoppingBag,
-  Split,
   FileText,
   Package,
   XCircle,
@@ -43,7 +42,7 @@ import CancelOrderDialog from "./components/CancelOrderDialog";
 import ApproveOrderDialog from "./components/ApproveOrderDialog";
 import RejectOrderDialog from "./components/RejectOrderDialog";
 import { SampleReturnTab } from "./components/SampleReturnTab";
-import { getSampleReturnRecords } from "./sample-return-data";
+import { useSampleReturns } from "@/hooks/sales/use-return-documents";
 import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
@@ -52,7 +51,6 @@ import {
   formatOrderStatus,
   ORDER_STATUS_OPTIONS,
   canEditOrder,
-  canSplitOrder,
   canCancelOrder,
   canDownloadPI,
   canGeneratePackingList,
@@ -62,6 +60,8 @@ import {
   approveSalesOrder,
   canApproveOrder,
 } from "./orders-data";
+import { useSampleOrders, useUpdateSampleOrderStatus, useSampleOrderFilterOptions } from "@/hooks/sales/use-sample-orders";
+import { mapFrontendStatusToBackend, SampleOrderService } from "@/services/sample-order.service";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -200,13 +200,17 @@ function ActionButton({
 export default function SalesOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [orders, setOrders] = useState<SalesOrder[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<OrderListTab>("all");
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "orderDate", direction: "desc" });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const [returnSearch, setReturnSearch] = useState("");
 
@@ -224,11 +228,121 @@ export default function SalesOrdersPage() {
   const [approveOrder, setApproveOrder] = useState<SalesOrder | null>(null);
   const [rejectOrder, setRejectOrder] = useState<SalesOrder | null>(null);
 
-  const refreshOrders = () => setOrders(loadOrders());
+  const apiFilters = useMemo(() => {
+    const f: Record<string, any> = {};
+    if (activeTab && activeTab !== "all" && activeTab !== "sales_return") {
+      f.status = mapFrontendStatusToBackend(activeTab);
+    }
+    if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
+      f.status = filters.status.map(s => mapFrontendStatusToBackend(s));
+    }
+    if (filters.soNumber && Array.isArray(filters.soNumber) && filters.soNumber.length > 0) {
+      f.order_no = filters.soNumber;
+    }
+    if (filters.customerName && Array.isArray(filters.customerName) && filters.customerName.length > 0) {
+      f.salesperson = { username: filters.customerName };
+    }
+    return f;
+  }, [filters, activeTab]);
 
-  useEffect(() => {
-    refreshOrders();
-  }, []);
+  const SORT_KEY_TO_ORDERING: Record<string, string> = {
+    soNumber: "order_no",
+    customerName: "salesperson__username",
+    orderDate: "order_date",
+    status: "status",
+    totalAmount: "grand_total",
+    items: "items",
+  };
+
+  const ordering = useMemo(() => {
+    if (!sort.key || sort.direction === "none") return undefined;
+    const field = SORT_KEY_TO_ORDERING[sort.key] || sort.key;
+    return sort.direction === "desc" ? `-${field}` : field;
+  }, [sort]);
+
+  const { data: listData, isLoading, refetch } = useSampleOrders({
+    page,
+    pageSize,
+    search: filters.search as string,
+    ordering,
+    apiFilters,
+  });
+
+  const { data: allCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+  });
+
+  const { data: draftCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+    apiFilters: { status: "DRAFT" },
+  });
+
+  const { data: approvalCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+    apiFilters: { status: "SUBMITTED" },
+  });
+
+  const { data: rejectedCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+    apiFilters: { status: "REJECTED" },
+  });
+
+  const { data: confirmedCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+    apiFilters: { status: "APPROVED" },
+  });
+
+  const { data: dispatchedCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+    apiFilters: { status: "DISPATCHED" },
+  });
+
+  const { data: deliveredCountData } = useSampleOrders({
+    page: 1,
+    pageSize: 1,
+    search: filters.search as string,
+    apiFilters: { status: "DELIVERED" },
+  });
+
+  const { data: orderNoFilterRaw } = useSampleOrderFilterOptions("order_no");
+  const { data: salespersonFilterRaw } = useSampleOrderFilterOptions("salesperson__username");
+  const { data: statusFilterRaw } = useSampleOrderFilterOptions("status");
+
+  const updateStatusMutation = useUpdateSampleOrderStatus();
+
+  const handleDownloadNote = async (id: string | number, soNumber: string) => {
+    try {
+      setToast({ msg: "Downloading sample note...", type: "success" });
+      const blob = await SampleOrderService.downloadNote(String(id));
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sample-note-${soNumber.replace(/\//g, "-")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setToast({ msg: "Failed to download note.", type: "error" });
+    }
+  };
+
+  const ordersList = listData?.items || [];
+  const totalRecords = listData?.total || 0;
+
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -252,80 +366,32 @@ export default function SalesOrdersPage() {
     setPage(1);
   }, [activeTab, filters, pageSize]);
 
-  const filtered = useMemo(() => {
-    let d = orders.filter((o) => matchesOrderTab(o, activeTab));
-
-    const searchVal = filters.search as string;
-    if (searchVal?.trim()) {
-      const q = searchVal.toLowerCase();
-      d = d.filter(
-        (o) =>
-          o.soNumber.toLowerCase().includes(q) ||
-          o.customerName.toLowerCase().includes(q) ||
-          (o.issuedToEmployeeName ?? "").toLowerCase().includes(q) ||
-          o.territory.toLowerCase().includes(q)
-      );
-    }
-
-    const soNumberVal = filters.soNumber as string;
-    if (soNumberVal?.trim()) {
-      d = d.filter((o) => o.soNumber.toLowerCase().includes(soNumberVal.toLowerCase()));
-    }
-
-    const customerVal = filters.customerName as string[];
-    if (customerVal && customerVal.length > 0) {
-      d = d.filter((o) => customerVal.includes(getSampleOrderDisplayRecipient(o)));
-    }
-
-    const territoryVal = filters.territory as string[];
-    if (territoryVal && territoryVal.length > 0) {
-      d = d.filter((o) => territoryVal.includes(o.territory));
-    }
-
-    const statusVal = filters.status as string[];
-    if (statusVal && statusVal.length > 0) {
-      d = d.filter((o) => statusVal.includes(o.status));
-    }
-
-    if (sort.key && sort.direction !== "none") {
-      d = [...d].sort((a, b) => {
-        const av = (a as unknown as Record<string, unknown>)[sort.key];
-        const bv = (b as unknown as Record<string, unknown>)[sort.key];
-        const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true });
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-    return d;
-  }, [orders, activeTab, filters, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const paginated = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
-
   const kpi = {
-    total: orders.length,
-    confirmed: orders.filter((o) => o.status === "confirmed").length,
-    dispatched: orders.filter((o) => o.status === "dispatched").length,
-    delivered: orders.filter((o) => o.status === "delivered").length,
+    total: allCountData?.total ?? 0,
+    confirmed: confirmedCountData?.total ?? 0,
+    dispatched: dispatchedCountData?.total ?? 0,
+    delivered: deliveredCountData?.total ?? 0,
     totalValue: 0,
   };
 
+  const { data: returnsCountData } = useSampleReturns({
+    page: 1,
+    pageSize: 1,
+  });
+
   const tabCounts = useMemo(() => {
     return {
-      all: orders.length,
-      draft: orders.filter((o) => o.status === "draft").length,
-      pending_approval: orders.filter((o) => o.status === "pending_approval").length,
-      rejected: orders.filter((o) => o.status === "rejected").length,
-      sales_return: getSampleReturnRecords().length,
+      all: allCountData?.total ?? 0,
+      draft: draftCountData?.total ?? 0,
+      pending_approval: approvalCountData?.total ?? 0,
+      rejected: rejectedCountData?.total ?? 0,
+      sales_return: returnsCountData?.total ?? 0,
     };
-  }, [orders]);
+  }, [allCountData, draftCountData, approvalCountData, rejectedCountData, returnsCountData]);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
@@ -337,17 +403,38 @@ export default function SalesOrdersPage() {
 
   const isApprovalTab = activeTab === "pending_approval";
 
+  const soNumberOptions = useMemo(() => {
+    return (orderNoFilterRaw || []).map((item: any) => ({
+      label: item.order_no,
+      value: item.order_no,
+    }));
+  }, [orderNoFilterRaw]);
+
   const recipientOptions = useMemo(() => {
-    return Array.from(new Set(orders.map((o) => getSampleOrderDisplayRecipient(o))))
-      .filter(Boolean)
-      .map((name) => ({ label: name, value: name }));
-  }, [orders]);
+    return (salespersonFilterRaw || []).map((item: any) => ({
+      label: item.salesperson__username,
+      value: item.salesperson__username,
+    }));
+  }, [salespersonFilterRaw]);
 
   const territoryOptions = useMemo(() => {
-    return Array.from(new Set(orders.map((o) => o.territory)))
+    return Array.from(new Set(ordersList.map((o) => o.territory)))
       .filter(Boolean)
       .map((t) => ({ label: t, value: t }));
-  }, [orders]);
+  }, [ordersList]);
+
+  const statusOptions = useMemo(() => {
+    if (!statusFilterRaw || statusFilterRaw.length === 0) {
+      return ORDER_STATUS_OPTIONS.map((o) => ({
+        label: o.label,
+        value: o.value.toUpperCase(),
+      }));
+    }
+    return statusFilterRaw.map((item: any) => ({
+      label: formatOrderStatus((item.status || "").toLowerCase() as OrderStatus) || item.status,
+      value: item.status,
+    }));
+  }, [statusFilterRaw]);
 
   const columns: ColumnConfig<SalesOrder>[] = [
     {
@@ -355,13 +442,12 @@ export default function SalesOrdersPage() {
       header: "Sample Order No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: soNumberOptions,
       render: (val, row) => (
         <div>
           <span className="font-mono text-xs font-semibold text-brand-700">{row.soNumber}</span>
-          {row.parentOrderNumber && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">Split from {row.parentOrderNumber}</p>
-          )}
+
         </div>
       )
     },
@@ -375,7 +461,7 @@ export default function SalesOrdersPage() {
       render: (val, row) => (
         <div>
           <p className="text-xs font-semibold text-foreground">{getSampleOrderDisplayRecipient(row)}</p>
-          <p className="text-[11px] text-muted-foreground">{row.issuedToEmployeeRole ?? row.customerCode}</p>
+          <p className="text-[11px] text-muted-foreground">{row.salesManCode || row.issuedToEmployeeRole || row.customerCode}</p>
         </div>
       )
     },
@@ -404,16 +490,18 @@ export default function SalesOrdersPage() {
       header: "Amount",
       sortable: true,
       render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">₹0</span>
+        <span className="text-xs font-semibold text-foreground">
+          ₹{row.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
       )
     },
     {
       key: "status",
       header: "Status",
       sortable: true,
-      filterable: true,
+      filterable: activeTab === "all",
       filterType: "dropdown",
-      filterOptions: FILTER_STATUSES.map(s => ({ label: formatOrderStatus(s), value: s })),
+      filterOptions: statusOptions,
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />
@@ -437,7 +525,6 @@ export default function SalesOrdersPage() {
       render: (val, row) => {
         const hydrated = hydrateOrderLineItems(row);
         const editable = canEditOrder(hydrated);
-        const splittable = canSplitOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);
         const piAllowed = canDownloadPI(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
@@ -503,21 +590,11 @@ export default function SalesOrdersPage() {
               >
                 <Edit className="w-3.5 h-3.5 mr-2" /> Edit
               </button>
-              <button
-                type="button"
-                disabled={!splittable}
-                onClick={() => router.push(`/sales/sample-order/${row.id}/split`)}
-                className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
-                  !splittable ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
-                )}
-              >
-                <Split className="w-3.5 h-3.5 mr-2" /> Split Order
-              </button>
+
               <button
                 type="button"
                 disabled={!piAllowed}
-                onClick={() => downloadProformaInvoice(hydrated)}
+                onClick={() => handleDownloadNote(hydrated.id, hydrated.soNumber)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -597,8 +674,8 @@ export default function SalesOrdersPage() {
         <div>
           <MasterListing<SalesOrder>
             columns={columns}
-            data={paginated}
-            totalRecords={filtered.length}
+            data={ordersList}
+            totalRecords={totalRecords}
             page={page}
             pageSize={pageSize}
             onPageChange={setPage}
@@ -611,7 +688,27 @@ export default function SalesOrdersPage() {
             currentSort={sort}
             onAdd={() => router.push("/sales/sample-order/add")}
             addLabel="New Sample Order"
-            onExport={() => console.log("Exporting sample orders...")}
+            onExport={async () => {
+              try {
+                const csvData = await SampleOrderService.export({
+                  search: filters.search as string,
+                  ordering,
+                  apiFilters,
+                });
+                const blob = new Blob([csvData], { type: "text/csv" });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `sample-orders_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                showToast("Exported sample orders successfully.");
+              } catch {
+                showToast("Failed to export sample orders.", "error");
+              }
+            }}
           />
         </div>
       )}
@@ -620,9 +717,20 @@ export default function SalesOrdersPage() {
         order={cancelOrder}
         open={!!cancelOrder}
         onClose={() => setCancelOrder(null)}
-        onSuccess={() => {
-          refreshOrders();
-          showToast("Sample Order cancelled successfully.");
+        onConfirm={(reason) => {
+          if (!cancelOrder) return;
+          updateStatusMutation.mutate(
+            { id: String(cancelOrder.id), status: "cancelled", remarks: reason },
+            {
+              onSuccess: () => {
+                refetch();
+                showToast("Sample Order cancelled successfully.");
+              },
+              onError: () => {
+                showToast("Failed to cancel order.", "error");
+              }
+            }
+          );
         }}
       />
 
@@ -632,14 +740,18 @@ export default function SalesOrdersPage() {
         onClose={() => setApproveOrder(null)}
         onConfirm={() => {
           if (!approveOrder) return;
-          const result = approveSalesOrder(approveOrder.id);
-          if ("error" in result) {
-            showToast(result.error, "error");
-            return;
-          }
-          refreshOrders();
-          showToast("Sample Order approved successfully.");
-          setApproveOrder(null);
+          updateStatusMutation.mutate(
+            { id: String(approveOrder.id), status: "approved" },
+            {
+              onSuccess: () => {
+                refetch();
+                showToast("Sample Order approved successfully.");
+              },
+              onError: () => {
+                showToast("Failed to approve order.", "error");
+              }
+            }
+          );
         }}
       />
 
@@ -647,10 +759,20 @@ export default function SalesOrdersPage() {
         order={rejectOrder}
         open={!!rejectOrder}
         onClose={() => setRejectOrder(null)}
-        onSuccess={() => {
-          refreshOrders();
-          showToast("Sample Order rejected successfully.");
-          setRejectOrder(null);
+        onConfirm={(reason) => {
+          if (!rejectOrder) return;
+          updateStatusMutation.mutate(
+            { id: String(rejectOrder.id), status: "rejected", remarks: reason },
+            {
+              onSuccess: () => {
+                refetch();
+                showToast("Sample Order rejected successfully.");
+              },
+              onError: () => {
+                showToast("Failed to reject order.", "error");
+              }
+            }
+          );
         }}
       />
 

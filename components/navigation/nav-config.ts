@@ -129,7 +129,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Packing", href: "/warehouse/packing" },
       { label: "Dispatch", href: "/warehouse/dispatch" },
       { label: "Reorder Level", href: "/warehouse/reorder-level" },
-      { label: "Stock Overview", href: "/warehouse/stockoverview" },
+      { label: "Stock Overview", href: "/warehouse/stock-overview" },
     ],
   },
   {

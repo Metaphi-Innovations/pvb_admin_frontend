@@ -37,7 +37,7 @@ export const STATUS_BADGE_CONFIG: Record<string, { bg: string; dot: string }> = 
 /**
  * Derive status from current stock vs reorder level qty.
  */
-export function computeStatus(currentStock: number, reorderLevelQty: number): import("../types").ReorderStatus {
+export function computeStatus(currentStock: number, reorderLevelQty: number): import("../types").ReorderStockStatus {
   if (currentStock <= reorderLevelQty) {
     return "Low Stock";
   }

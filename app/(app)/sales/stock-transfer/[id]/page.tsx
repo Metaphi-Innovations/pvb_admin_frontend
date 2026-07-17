@@ -27,45 +27,40 @@ import {
 import {
   type StockTransfer,
   type TransferStatus,
-  getTransferById,
   formatTransferStatus,
   canEditTransfer,
   canCancelTransfer,
   canDownloadNote,
   canGeneratePackingList,
-  approveStockTransfer,
-  rejectStockTransfer,
 } from "../stock-transfer-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
-import { downloadTransferNote, printTransferPackingList } from "../transfer-note-document";
 import CancelTransferDialog from "../components/CancelTransferDialog";
+import {
+  useStockTransfer,
+  useCancelStockTransfer,
+  useUpdateStockTransferStatus,
+} from "@/hooks/sales/use-stock-transfers";
+import { StockTransferService } from "@/services/stock-transfer.service";
 
 function transferStatusVariant(status: TransferStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "approved") return "active";
+  if (status === "approved" || status === "confirmed" || status === "received") return "active";
   if (status === "draft") return "draft";
   if (status === "cancelled" || status === "rejected") return "blocked";
-  if (status === "pending") return "neutral";
-  return "inactive";
+  return "neutral";
 }
 
 export default function ViewStockTransferPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const id = params.id as string;
 
-  const [transfer, setTransfer] = useState<StockTransfer | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
 
-  const refresh = () => {
-    const t = getTransferById(id);
-    if (t) setTransfer(t);
-  };
-
-  useEffect(() => {
-    refresh();
-  }, [id]);
+  const { data: transfer, isLoading, isError, refetch } = useStockTransfer(id);
+  const cancelMutation = useCancelStockTransfer();
+  const statusMutation = useUpdateStockTransferStatus();
 
   useEffect(() => {
     if (!toast) return;
@@ -73,14 +68,19 @@ export default function ViewStockTransferPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  if (!transfer) {
+  if (isLoading) {
+    return <div className="p-8 text-sm">Loading stock transfer...</div>;
+  }
+
+  if (isError || !transfer) {
     return (
-      <div className="p-8 text-sm">
+      <div className="p-8 text-sm text-red-600">
         Stock transfer not found.{" "}
-        <Link href="/sales/stock-transfer" className="text-brand-600">Back to transfers</Link>
+        <Link href="/sales/stock-transfer" className="text-brand-600 font-semibold underline ml-1">Back to transfers</Link>
       </div>
     );
   }
+
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
   const totals = calculateOrderTotalsSummary(transfer.lineItems, transfer.additionalExpenses || []);
@@ -88,28 +88,25 @@ export default function ViewStockTransferPage() {
   const formatRupee = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const handleCancelSuccess = (_updatedTransfer: StockTransfer) => {
-    refresh();
+  const handleCancelConfirm = async (reason: string) => {
+    await cancelMutation.mutateAsync({ id, remarks: reason });
     showToast("Stock transfer cancelled successfully.");
+    refetch();
   };
 
-  const handleApprove = () => {
-    const res = approveStockTransfer(transfer.id);
-    if ("error" in res) {
-      showToast(res.error, "error");
-    } else {
-      showToast("Stock transfer approved successfully.");
-      refresh();
-    }
-  };
-
-  const handleReject = () => {
-    const res = rejectStockTransfer(transfer.id);
-    if ("error" in res) {
-      showToast(res.error, "error");
-    } else {
-      showToast("Stock transfer rejected.");
-      refresh();
+  const handleDownloadNote = async () => {
+    try {
+      const blob = await StockTransferService.downloadNote(id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stock-transfer-${transfer.transferNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showToast("Stock transfer note downloaded.");
+    } catch (err: any) {
+      showToast(err.message || "Failed to download note.", "error");
     }
   };
 
@@ -125,7 +122,7 @@ export default function ViewStockTransferPage() {
     quickActions.push({
       label: "Download Note",
       icon: FileText,
-      onClick: () => downloadTransferNote(transfer),
+      onClick: handleDownloadNote,
     });
   }
   if (canGeneratePackingList(transfer)) {
@@ -156,7 +153,7 @@ export default function ViewStockTransferPage() {
       {
         label: "Status",
         value: formatTransferStatus(transfer.status),
-        tone: transfer.status === "approved" ? "approved" : (transfer.status === "cancelled" || transfer.status === "rejected") ? "rejected" : transfer.status === "pending" ? "pending" : "neutral",
+        tone: (transfer.status === "approved" || transfer.status === "confirmed" || transfer.status === "received") ? "approved" : (transfer.status === "cancelled" || transfer.status === "rejected") ? "rejected" : transfer.status === "pending" ? "pending" : "neutral",
       },
     ],
   };
@@ -274,7 +271,7 @@ export default function ViewStockTransferPage() {
                     <tr className="border-b bg-muted/40 border-border">
                       <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
@@ -284,6 +281,10 @@ export default function ViewStockTransferPage() {
                   <tbody>
                     {transfer.lineItems.map(line => {
                       const product = line.productId ? getProductById(line.productId) : undefined;
+                      const packSize = product?.packSize || 1;
+                      const cases = Math.floor(line.quantity / packSize);
+                      const loose = line.quantity % packSize;
+
                       return (
                         <tr key={line.id} className="border-b border-border/60">
                           <td className="px-4 py-2">
@@ -291,7 +292,12 @@ export default function ViewStockTransferPage() {
                             <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                           </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
-                          <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">
+                            <div className="flex flex-col items-end">
+                              <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
+                              <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">
@@ -355,7 +361,13 @@ export default function ViewStockTransferPage() {
         )}
       </RecordDetailPage>
 
-
+      <CancelTransferDialog
+        transfer={transfer}
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        onConfirm={handleCancelConfirm}
+        isLoading={cancelMutation.isPending}
+      />
 
       {toast && (
         <div
@@ -371,10 +383,3 @@ export default function ViewStockTransferPage() {
     </>
   );
 }
-
-
-
-
-
-
-

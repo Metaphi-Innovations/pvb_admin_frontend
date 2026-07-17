@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,39 +14,52 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   X,
   Edit2,
   Percent,
   Eye,
-  Trash2,
   AlertTriangle,
 } from "lucide-react";
 import {
-  type TDSMaster,
-  type TDSForm,
-  DEFAULT_TDS_FORM,
-  TDS_APPLICABLE_TO_OPTIONS,
-  loadTDSMasters,
-  saveTDSMasters,
-  tdsToForm,
-  formToTds,
-  validateTdsForm,
-  nextTDSId,
-  todayStr,
-  getTdsSectionCode,
+  type TdsApiRecord,
+  type TdsApiForm,
+  DEFAULT_TDS_API_FORM,
+  tdsApiToForm,
+  validateTdsApiForm,
   formatTdsRateDisplay,
-  formatApplicableToLabels,
+  formatApplicableToLabel,
+  mergeApplicableToSelectOptions,
 } from "./tds-data";
 import { TdsRateInput } from "./TdsRateInput";
-import { ensureTdsSectionLedgers } from "@/lib/accounts/tds-section-ledgers";
 import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
 import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
+import { sortStateToOrdering } from "@/services/tds-list.service";
+import {
+  useTdsList,
+  useTds,
+  useCreateTds,
+  useUpdateTds,
+  useToggleTdsStatus,
+  useExportTds,
+  useTdsFilterDropdown,
+  useCategoryDropdown,
+} from "@/hooks/masters";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+} from "@/lib/masters/list-api-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import {
   ColumnConfig,
   FilterState,
@@ -59,7 +73,6 @@ import {
   isActiveStatus,
 } from "@/components/listing";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import type { MasterStatus } from "@/lib/masters/common";
 
 type StatusTab = "all" | "active" | "inactive";
 const TDS_TAB_KEY = "tds-list-status-tab";
@@ -98,35 +111,192 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function toTdsRow(item: {
+  id: number;
+  tdsUuid: string;
+  sectionCode: string;
+  sectionName: string;
+  tdsRate: string;
+  applicableTo: string;
+  description: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}): TdsApiRecord {
+  return {
+    id: item.id,
+    tdsUuid: item.tdsUuid,
+    sectionCode: item.sectionCode,
+    sectionName: item.sectionName,
+    tdsRate: item.tdsRate,
+    applicableTo: item.applicableTo,
+    description: item.description,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdAt: item.createdAt,
+    updatedBy: item.updatedBy || "—",
+    updatedAt: item.updatedAt,
+  };
+}
+
+function buildApiPayload(form: TdsApiForm) {
+  const rate = Number(form.tdsRate.trim().replace(/%$/, ""));
+  return {
+    tds_rate: rate,
+    tds_section_name: form.sectionName.trim() || null,
+    applicable_to: form.applicableTo.trim() || null,
+    description: form.description.trim() || null,
+  };
+}
+
 export default function TdsPageClient() {
-  const [records, setRecords] = useState<TDSMaster[]>([]);
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({
-    key: "sectionCode",
-    direction: "asc",
-  });
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
+  const [sort, setSort] = useState<SortState>({ key: "sectionCode", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [viewId, setViewId] = useState<string | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
-  const [active, setActive] = useState<TDSMaster | null>(null);
-  const [form, setForm] = useState<TDSForm>(DEFAULT_TDS_FORM);
+  const [active, setActive] = useState<TdsApiRecord | null>(null);
+  const [form, setForm] = useState<TdsApiForm>(DEFAULT_TDS_API_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<TDSMaster | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<TdsApiRecord | null>(null);
 
-  const applicableOptions = useMemo(
+  const categoryQuery = useCategoryDropdown();
+
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
+  const apiFilters = useMemo(
     () =>
-      TDS_APPLICABLE_TO_OPTIONS.map((o) => ({
-        value: o.value,
-        label: o.label,
-      })),
-    [],
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.tds, {
+        statusTab,
+      }),
+    [appliedFilters, statusTab],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
   );
 
-  useEffect(() => {
-    setRecords(loadTDSMasters());
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: appliedSearch,
+      status: listStatus,
+      apiFilters,
+      ordering,
+    }),
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
+  );
+
+  const listQuery = useTdsList(listParams);
+  const detailQuery = useTds(viewId);
+  const createMutation = useCreateTds();
+  const updateMutation = useUpdateTds();
+  const toggleStatusMutation = useToggleTdsStatus();
+  const exportMutation = useExportTds();
+
+  const sectionCodeOptionsQuery = useTdsFilterDropdown("tds_code", { enabled: isFilterOpen("sectionCode") });
+  const sectionNameOptionsQuery = useTdsFilterDropdown("tds_section_name", {
+    enabled: isFilterOpen("sectionName"),
+  });
+  const tdsRateOptionsQuery = useTdsFilterDropdown("tds_rate", { enabled: isFilterOpen("tdsRate") });
+  const applicableToOptionsQuery = useTdsFilterDropdown("applicable_to", {
+    enabled: isFilterOpen("applicableTo"),
+  });
+  const descriptionOptionsQuery = useTdsFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useTdsFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useTdsFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useTdsFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
+
+  const sectionCodeOptions = useMemo(
+    () => sectionCodeOptionsQuery.data ?? [],
+    [sectionCodeOptionsQuery.data],
+  );
+  const sectionNameOptions = useMemo(
+    () => sectionNameOptionsQuery.data ?? [],
+    [sectionNameOptionsQuery.data],
+  );
+  const tdsRateOptions = useMemo(
+    () => tdsRateOptionsQuery.data ?? [],
+    [tdsRateOptionsQuery.data],
+  );
+  const applicableOptions = useMemo(
+    () =>
+      mergeApplicableToSelectOptions(
+        categoryQuery.data ?? [],
+        form.applicableTo,
+        applicableToOptionsQuery.data,
+      ),
+    [categoryQuery.data, form.applicableTo, applicableToOptionsQuery.data],
+  );
+
+  const applicableToFilterOptions = useMemo(
+    () =>
+      mergeApplicableToSelectOptions(
+        categoryQuery.data ?? [],
+        undefined,
+        applicableToOptionsQuery.data,
+      ),
+    [categoryQuery.data, applicableToOptionsQuery.data],
+  );
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toTdsRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "TDS records",
+        notFoundMessage: "TDS list endpoint not found.",
+        serverMessage: "Server error while loading TDS records.",
+      })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
+    useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -136,6 +306,31 @@ export default function TdsPageClient() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (page > maxPage) setPage(maxPage);
+  }, [totalRecords, pageSize, page]);
+
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load TDS details."),
+        type: "error",
+      });
+      setViewId(null);
+      return;
+    }
+    if (detailQuery.data) {
+      setActive(toTdsRow(detailQuery.data));
+      setSheetMode("view");
+    }
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
+
   const handleStatusTabChange = (tab: string) => {
     const next = tab as StatusTab;
     setStatusTab(next);
@@ -143,333 +338,279 @@ export default function TdsPageClient() {
     setPage(1);
   };
 
-  const statusTabCounts = useMemo(
-    () => ({
-      all: records.length,
-      active: records.filter((r) => r.status === "active").length,
-      inactive: records.filter((r) => r.status === "inactive").length,
-    }),
-    [records],
-  );
-
-  const toggleStatus = (record: TDSMaster) => {
-    const nextStatus: MasterStatus =
-      record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? {
-            ...item,
-            status: nextStatus,
-            updatedBy: "Admin User",
-            updatedDate: todayStr(),
-          }
-        : item,
-    );
-    setRecords(updated);
-    saveTDSMasters(updated);
-    setToast({
-      msg: `TDS status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
+  const requestStatusToggle = (record: TdsApiRecord) => {
+    setStatusTarget(record);
   };
 
-  const columns: ColumnConfig<TDSMaster>[] = [
-    {
-      key: "sectionCode",
-      header: "Section Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (_val, row) => (
-        <button
-          type="button"
-          onClick={() => openView(row)}
-          className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-        >
-          {getTdsSectionCode(row)}
-        </button>
-      ),
-    },
-    {
-      key: "sectionName",
-      header: "Section Name",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "200px",
-      render: (_val, row) => (
-        <span className="text-xs font-medium text-foreground">{row.sectionName}</span>
-      ),
-    },
-    {
-      key: "tdsRate",
-      header: "TDS Rate",
-      sortable: true,
-      width: "100px",
-      render: (_val, row) => (
-        <span className="text-xs font-semibold text-foreground">
-          {formatTdsRateDisplay(row.tdsRate)}
-        </span>
-      ),
-    },
-    {
-      key: "thresholdAmount",
-      header: "Threshold",
-      width: "110px",
-      render: (_val, row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.thresholdAmount != null
-            ? `₹${row.thresholdAmount.toLocaleString("en-IN")}`
-            : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "applicableTo",
-      header: "Applicable To",
-      width: "180px",
-      render: (_val, row) => (
-        <span className="text-xs text-muted-foreground line-clamp-2">
-          {formatApplicableToLabels(row.applicableTo)}
-        </span>
-      ),
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdDate} />
-      ),
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
-      width: "100px",
-      render: (_val, row) => (
-        <ListingStatusToggle
-          active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
-        />
-      ),
-    },
-  ];
-
-  const actions: ActionItemConfig<TDSMaster>[] = [
-    { label: "View", action: "view", icon: Eye, onClick: (row) => openView(row) },
-    { label: "Edit", action: "edit", icon: Edit2, onClick: (row) => openEdit(row) },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
-    },
-  ];
-
-  const filtered = useMemo(() => {
-    let result = [...records];
-
-    if (statusTab !== "all") {
-      result = result.filter((r) => r.status === statusTab);
+  const confirmStatusChange = () => {
+    const id = statusTarget?.tdsUuid;
+    if (!statusTarget || !id) {
+      setToast({ msg: "TDS id missing. Unable to update status.", type: "error" });
+      setStatusTarget(null);
+      return;
     }
 
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (r) =>
-          getTdsSectionCode(r).toLowerCase().includes(q) ||
-          r.sectionName.toLowerCase().includes(q),
-      );
-    }
+    const nextActive = statusTarget.status !== "active";
 
-    result = applyFilters(result, filters);
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        let aVal: string | number = "";
-        let bVal: string | number = "";
-        if (sort.key === "sectionCode") {
-          aVal = getTdsSectionCode(a).toLowerCase();
-          bVal = getTdsSectionCode(b).toLowerCase();
-        } else {
-          const rawA = a[sort.key as keyof TDSMaster];
-          const rawB = b[sort.key as keyof TDSMaster];
-          aVal =
-            typeof rawA === "string"
-              ? rawA.toLowerCase()
-              : typeof rawA === "number"
-                ? rawA
-                : String(rawA ?? "").toLowerCase();
-          bVal =
-            typeof rawB === "string"
-              ? rawB.toLowerCase()
-              : typeof rawB === "number"
-                ? rawB
-                : String(rawB ?? "").toLowerCase();
-        }
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort, statusTab]);
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort, pageSize, statusTab]);
+    toggleStatusMutation.mutate(
+      { id, isActive: nextActive },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: `TDS status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update TDS status."),
+            type: "error",
+          });
+        },
+        onSettled: () => {
+          setStatusTarget(null);
+        },
+      },
+    );
+  };
 
   const openAdd = () => {
-    setForm({ ...DEFAULT_TDS_FORM });
+    setForm({ ...DEFAULT_TDS_API_FORM });
     setErrors({});
+    setFormError(null);
     setActive(null);
     setSheetMode("add");
   };
 
-  const openEdit = (row: TDSMaster) => {
-    setForm(tdsToForm(row));
+  const openEdit = (row: TdsApiRecord) => {
+    setForm(tdsApiToForm(row));
     setErrors({});
+    setFormError(null);
     setActive(row);
     setSheetMode("edit");
   };
 
-  const openView = (row: TDSMaster) => {
-    setActive(row);
-    setSheetMode("view");
-  };
+  const openView = useCallback((row: TdsApiRecord) => {
+    if (!row.tdsUuid) {
+      setToast({ msg: "TDS id missing. Unable to load details.", type: "error" });
+      return;
+    }
+    setViewId(row.tdsUuid);
+  }, []);
 
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
+    setViewId(null);
     setErrors({});
+    setFormError(null);
   };
+
+  const columns: ColumnConfig<TdsApiRecord>[] = useMemo(
+    () => [
+      {
+        key: "sectionCode",
+        header: "TDS Code",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: sectionCodeOptions,
+        width: "110px",
+        render: (_val, row) => (
+          <button
+            type="button"
+            onClick={() => openView(row)}
+            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+          >
+            {row.sectionCode}
+          </button>
+        ),
+      },
+      {
+        key: "sectionName",
+        header: "Section Name",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: sectionNameOptions,
+        width: "200px",
+        render: (_val, row) => (
+          <span className="text-xs font-medium text-foreground">{row.sectionName || "—"}</span>
+        ),
+      },
+      {
+        key: "tdsRate",
+        header: "TDS Rate",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: tdsRateOptions,
+        width: "100px",
+        render: (_val, row) => (
+          <span className="text-xs font-semibold text-foreground">
+            {formatTdsRateDisplay(row.tdsRate)}
+          </span>
+        ),
+      },
+      {
+        key: "applicableTo",
+        header: "Applicable To",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: applicableToFilterOptions,
+        width: "160px",
+        render: (_val, row) => (
+          <span className="text-xs text-muted-foreground">
+            {formatApplicableToLabel(row.applicableTo)}
+          </span>
+        ),
+      },
+      {
+        key: "description",
+        header: "Description",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: descriptionOptions,
+        width: "200px",
+        render: (val) => (
+          <span className="text-xs text-muted-foreground line-clamp-2">
+            {val ? String(val) : "—"}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: statusOptions,
+        width: "100px",
+        render: (_val, row) => (
+          <ListingStatusToggle
+            active={isActiveStatus(row.status)}
+            onChange={() => requestStatusToggle(row)}
+          />
+        ),
+      },
+      {
+        key: "createdBy",
+        header: "Created By",
+        sortable: true,
+        filterable: true,
+        filterType: "audit",
+        auditUserOptions: createdByOptions,
+        width: "150px",
+        render: (_val, row) => (
+          <ListingUserCell name={row.createdBy} date={row.createdAt} />
+        ),
+      },
+      {
+        key: "updatedBy",
+        header: "Updated By",
+        sortable: true,
+        filterable: true,
+        filterType: "audit",
+        auditUserOptions: updatedByOptions,
+        width: "150px",
+        render: (_val, row) => (
+          <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
+        ),
+      },
+    ],
+    [
+      sectionCodeOptions,
+      sectionNameOptions,
+      tdsRateOptions,
+      applicableToFilterOptions,
+      descriptionOptions,
+      statusOptions,
+      createdByOptions,
+      updatedByOptions,
+      openView,
+    ],
+  );
+
+  const actions: ActionItemConfig<TdsApiRecord>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => openView(row),
+      disabled: () => viewLoading,
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => openEdit(row),
+    },
+  ];
 
   const persist = () => {
-    const mode = sheetMode === "add" ? "add" : "edit";
-    const list = loadTDSMasters();
-    const normalizedForm: TDSForm = {
-      ...form,
-      sectionCode: form.sectionCode.trim().toUpperCase(),
-    };
-    const fieldErrors = validateTdsForm(
-      normalizedForm,
-      list,
-      mode === "edit" ? active?.id : undefined,
-    );
-    if (Object.keys(fieldErrors).length > 0) {
-      setErrors(fieldErrors);
+    const fieldErrors = validateTdsApiForm(form);
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
+
+    const payload = buildApiPayload(form);
+
+    if (sheetMode === "add") {
+      setFormError(null);
+      createMutation.mutate(payload, {
+        onSuccess: () => {
+          setToast({ msg: "TDS section added successfully", type: "success" });
+          setPage(1);
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to create TDS record."));
+        },
+      });
       return;
     }
 
-    let updatedList: TDSMaster[];
-    if (mode === "add") {
-      const id = nextTDSId(list);
-      updatedList = [...list, formToTds(normalizedForm, id)];
-      setToast({ msg: "TDS section added successfully", type: "success" });
-    } else if (active) {
-      updatedList = list.map((r) =>
-        r.id === active.id ? formToTds(normalizedForm, active.id, active) : r,
-      );
-      setToast({ msg: "TDS section updated successfully", type: "success" });
-    } else {
+    if (!active?.tdsUuid) {
+      setFormError("TDS id missing. Unable to update.");
       return;
     }
 
-    saveTDSMasters(updatedList);
-    ensureTdsSectionLedgers();
-    setRecords(updatedList);
-    closeSheet();
-  };
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const updated = records.map((r) =>
-      r.id === deleteTarget.id
-        ? {
-            ...r,
-            status: "inactive" as MasterStatus,
-            updatedBy: "Admin User",
-            updatedDate: todayStr(),
-          }
-        : r,
+    setFormError(null);
+    updateMutation.mutate(
+      { id: active.tdsUuid, payload },
+      {
+        onSuccess: () => {
+          setToast({ msg: "TDS section updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update TDS record."));
+        },
+      },
     );
-    saveTDSMasters(updated);
-    setRecords(updated);
-    setDeleteTarget(null);
-    setToast({
-      msg: `TDS ${getTdsSectionCode(deleteTarget)} marked as inactive`,
-      type: "success",
-    });
   };
 
   const handleExport = () => {
-    try {
-      const headers = [
-        "Section Code",
-        "Section Name",
-        "TDS Rate",
-        "Description",
-        "Applicable To",
-        "Status",
-        "Created By",
-        "Updated By",
-        "Created Date",
-        "Updated Date",
-      ];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        csvRows.push(
-          [
-            getTdsSectionCode(r),
-            `"${r.sectionName.replace(/"/g, '""')}"`,
-            formatTdsRateDisplay(r.tdsRate),
-            `"${(r.description || "").replace(/"/g, '""')}"`,
-            `"${formatApplicableToLabels(r.applicableTo).replace(/"/g, '""')}"`,
-            r.status,
-            r.createdBy,
-            r.updatedBy,
-            r.createdDate,
-            r.updatedDate,
-          ].join(","),
-        );
-      }
-      const blob = new Blob([csvRows.join("\n")], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `tds_export_${todayStr()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setToast({ msg: "TDS records exported successfully", type: "success" });
-    } catch {
-      setToast({ msg: "Failed to export TDS records", type: "error" });
-    }
+    exportMutation.mutate(
+      {
+        search: appliedSearch,
+        status: listStatus,
+        ordering,
+        apiFilters,
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "TDS records exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export TDS records"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =
@@ -481,16 +622,16 @@ export default function TdsPageClient() {
 
   const viewDrawer = active
     ? {
-        title: getTdsSectionCode(active),
-        subtitle: active.sectionName,
+        title: active.sectionCode,
+        subtitle: active.sectionName || "Read-only TDS details",
         status: active.status,
         basicInfo: [
-          { label: "Section Code", value: getTdsSectionCode(active), mono: true },
-          { label: "Section Name", value: active.sectionName },
+          { label: "TDS Code", value: active.sectionCode, mono: true },
+          { label: "Section Name", value: active.sectionName || "—" },
           { label: "TDS Rate", value: formatTdsRateDisplay(active.tdsRate) },
           {
             label: "Applicable To",
-            value: formatApplicableToLabels(active.applicableTo),
+            value: formatApplicableToLabel(active.applicableTo),
           },
         ],
         showDescription: !!active.description?.trim(),
@@ -502,14 +643,14 @@ export default function TdsPageClient() {
               <div className="space-y-1">
                 <p className="text-[11px] text-muted-foreground">Created Date</p>
                 <p className="text-sm font-medium text-foreground font-mono">
-                  {active.createdDate}
+                  {active.createdAt}
                 </p>
               </div>
               <AuditUserRow label="Updated By" name={active.updatedBy} />
               <div className="space-y-1">
                 <p className="text-[11px] text-muted-foreground">Updated Date</p>
                 <p className="text-sm font-medium text-foreground font-mono">
-                  {active.updatedDate}
+                  {active.updatedAt}
                 </p>
               </div>
             </div>
@@ -524,29 +665,37 @@ export default function TdsPageClient() {
       titleIcon={Percent}
       tabs={STATUS_TABS.map((t) => ({
         value: t.value,
-        label: `${t.label} (${statusTabCounts[t.value]})`,
+        label: t.value === statusTab ? `${t.label} (${totalRecords})` : t.label,
       }))}
       activeTab={statusTab}
       onTabChange={handleStatusTabChange}
     >
-      <MasterListing<TDSMaster>
+      {listError ? <p className="mb-2 text-xs text-red-600">{listError}</p> : null}
+
+      <MasterListing<TdsApiRecord>
+        rowKey={(row) => row.tdsUuid || String(row.id)}
         columns={columns}
-        data={paginated}
-        totalRecords={filtered.length}
+        data={records}
+        loading={loading}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
         actions={actions}
         onAdd={openAdd}
         addLabel="Add TDS"
         onExport={handleExport}
         emptyMessage="TDS sections"
-        searchPlaceholder="Search section code or name..."
+        searchPlaceholder="Search TDS code, section name, rate..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets
@@ -557,54 +706,34 @@ export default function TdsPageClient() {
         onSave={persist}
         sheetTitle={sheetTitle}
         icon={Percent}
+        formError={formError ?? undefined}
+        saving={saving}
         viewDrawer={viewDrawer}
-        statusActive={form.status === "active"}
-        onStatusChange={
-          sheetMode === "add" || sheetMode === "edit"
-            ? (isActive) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: isActive ? "active" : "inactive",
-                }))
-            : undefined
-        }
         formContent={
           sheetMode !== "view" ? (
             <MasterFormGrid>
-              <MasterField
-                label="TDS Section Code"
-                required
-                error={errors.sectionCode}
-              >
-                <Input
-                  autoFocus
-                  className={cn(compactInput(), "font-mono uppercase")}
-                  value={form.sectionCode}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      sectionCode: e.target.value.toUpperCase(),
-                    }))
-                  }
-                  placeholder="e.g. 194C"
-                  disabled={sheetMode === "edit"}
-                />
-              </MasterField>
+              {sheetMode === "edit" && active ? (
+                <MasterField label="TDS Code" className="sm:col-span-2">
+                  <Input
+                    className={cn(compactInput(), "font-mono bg-muted/30")}
+                    value={active.sectionCode}
+                    disabled
+                    readOnly
+                  />
+                </MasterField>
+              ) : null}
 
               <MasterField label="TDS Rate %" required error={errors.tdsRate}>
                 <TdsRateInput
                   className={compactInput()}
                   value={form.tdsRate}
-                  onChange={(value) =>
-                    setForm((prev) => ({ ...prev, tdsRate: value }))
-                  }
+                  onChange={(value) => setForm((prev) => ({ ...prev, tdsRate: value }))}
+                  placeholder="e.g. 10"
                 />
               </MasterField>
 
               <MasterField
                 label="TDS Section Name"
-                required
-                error={errors.sectionName}
                 className="sm:col-span-2"
               >
                 <Input
@@ -617,38 +746,33 @@ export default function TdsPageClient() {
                 />
               </MasterField>
 
-              <MasterField label="Applicable To" className="sm:col-span-2">
+              <MasterField label="Category" className="sm:col-span-2">
                 <AutocompleteSelect
-                  multiple
                   options={applicableOptions}
                   value={form.applicableTo}
                   onChange={(value) =>
                     setForm((prev) => ({
                       ...prev,
-                      applicableTo: Array.isArray(value) ? value : [],
+                      applicableTo: typeof value === "string" ? value : "",
                     }))
                   }
-                  placeholder="Select applicable categories…"
-                  searchPlaceholder="Search…"
+                  placeholder={
+                    categoryQuery.isFetching ? "Loading categories…" : "Select category"
+                  }
+                  searchPlaceholder="Search categories…"
+                  disabled={categoryQuery.isFetching}
                   className="h-8 text-xs"
-                  renderTriggerLabel={(selected) => {
-                    const opts = Array.isArray(selected) ? selected : [];
-                    if (!opts.length) return "Select applicable categories…";
-                    return opts.map((o) => o.label).join(", ");
-                  }}
                 />
               </MasterField>
 
-              <MasterField label="Threshold Limit (₹)" className="sm:col-span-2">
-                <Input
-                  className={compactInput()}
-                  type="number"
-                  min={0}
-                  value={form.thresholdAmount}
+              <MasterField label="Description" className="sm:col-span-2">
+                <Textarea
+                  className="min-h-[72px] text-xs"
+                  value={form.description}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, thresholdAmount: e.target.value }))
+                    setForm((prev) => ({ ...prev, description: e.target.value }))
                   }
-                  placeholder="Annual threshold — optional"
+                  placeholder="Optional description"
                 />
               </MasterField>
             </MasterFormGrid>
@@ -656,22 +780,21 @@ export default function TdsPageClient() {
         }
       />
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
               </div>
-              Deactivate TDS Section?
+              {statusTarget?.status === "active" ? "Deactivate TDS?" : "Activate TDS?"}
             </DialogTitle>
             <DialogDescription className="text-xs pt-1">
-              {deleteTarget && (
+              {statusTarget && (
                 <>
-                  <strong className="text-foreground font-mono">
-                    {getTdsSectionCode(deleteTarget)}
-                  </strong>{" "}
-                  — {deleteTarget.sectionName} will be marked as inactive.
+                  <strong className="text-foreground font-mono">{statusTarget.sectionCode}</strong>{" "}
+                  — {statusTarget.sectionName || "TDS section"} will be marked as{" "}
+                  {statusTarget.status === "active" ? "inactive" : "active"}.
                 </>
               )}
             </DialogDescription>
@@ -681,16 +804,16 @@ export default function TdsPageClient() {
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => setDeleteTarget(null)}
+              onClick={() => setStatusTarget(null)}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
-              onClick={confirmDelete}
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
             >
-              Mark Inactive
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

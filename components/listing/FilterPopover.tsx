@@ -14,9 +14,10 @@ interface FilterPopoverProps {
   column: ColumnConfig;
   value?: FilterValue;
   onChange: (value: FilterValue | undefined) => void;
+  onOpen?: () => void;
 }
 
-export function FilterPopover({ column, value, onChange }: FilterPopoverProps) {
+export function FilterPopover({ column, value, onChange, onOpen }: FilterPopoverProps) {
   const [open, setOpen] = useState(false);
   const [tempText, setTempText] = useState("");
   const [selectedDropdownValues, setSelectedDropdownValues] = useState<string[]>([]);
@@ -57,7 +58,10 @@ export function FilterPopover({ column, value, onChange }: FilterPopoverProps) {
   const isFiltered = Array.isArray(value) ? value.length > 0 : !!value;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (isOpen && onOpen) onOpen();
+      }}>
       <PopoverTrigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}

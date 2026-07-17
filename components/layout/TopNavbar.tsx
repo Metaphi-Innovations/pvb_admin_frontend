@@ -18,6 +18,65 @@ import { PrefetchLink } from "@/components/navigation/PrefetchLink";
 import { useNavigationPending } from "@/components/navigation/NavigationPendingContext";
 import { ApprovalsButton } from "./ApprovalsButton";
 import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
+import { usePermissions } from "@/lib/auth/permissions-context";
+import { NAV_PERMISSION_MAP, NAV_MODULE_MAP } from "@/lib/auth/route-permissions";
+import type { WebPermissionTree } from "@/lib/auth/permissions";
+import { canAccessModule, canAny } from "@/lib/auth/permissions";
+
+function canAccessHref(permissions: WebPermissionTree | null, href: string): boolean {
+  const path = href.split("?")[0];
+  const required = NAV_PERMISSION_MAP[path];
+  if (required === undefined) return true; // unmapped routes stay visible
+  if (!required.length) return true;
+  return canAny(permissions, required, "view");
+}
+
+function canAccessNavModule(
+  permissions: WebPermissionTree | null,
+  navId: string,
+): boolean {
+  const modules = NAV_MODULE_MAP[navId];
+  if (modules === undefined) return true;
+  if (!modules.length) return true;
+  return modules.some((m) => canAccessModule(permissions, m));
+}
+
+function filterNavItems(
+  items: NavItem[],
+  permissions: WebPermissionTree | null,
+): NavItem[] {
+  return items
+    .map((item) => {
+      // Top-level module gate (does not grant submodule access by itself)
+      if (!canAccessNavModule(permissions, item.id)) return null;
+
+      if (item.href && !item.children?.length && !item.groupedChildren?.length) {
+        return canAccessHref(permissions, item.href) ? item : null;
+      }
+
+      if (item.groupedChildren?.length) {
+        const groupedChildren = item.groupedChildren
+          .map((group) => ({
+            ...group,
+            children: group.children.filter((c) => canAccessHref(permissions, c.href)),
+          }))
+          .filter((g) => g.children.length > 0);
+        if (!groupedChildren.length) return null;
+        return { ...item, groupedChildren };
+      }
+
+      if (item.children?.length) {
+        const children = item.children.filter((c) => canAccessHref(permissions, c.href));
+        if (!children.length) return null;
+        const href =
+          item.href && canAccessHref(permissions, item.href) ? item.href : children[0]?.href;
+        return { ...item, children, href };
+      }
+
+      return item;
+    })
+    .filter(Boolean) as NavItem[];
+}
 
 // #region agent log
 function debugNavClick(href: string, label?: string) {
@@ -248,14 +307,22 @@ export const TopNavbar = memo(function TopNavbar() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+  const { permissions, isLoading: permsLoading } = usePermissions();
+
+  // Keep filtering against the last known tree while a soft-refresh is in flight
+  // so nav items (and their hooks) are not torn down on every scope change.
+  const visibleNavItems = useMemo(
+    () => (permsLoading && !permissions ? [] : filterNavItems(NAV_ITEMS, permissions)),
+    [permissions, permsLoading],
+  );
 
   const activeById = useMemo(() => {
     const map = new Map<string, boolean>();
-    for (const item of NAV_ITEMS) {
+    for (const item of visibleNavItems) {
       map.set(item.id, computeNavActive(pathname, search, item));
     }
     return map;
-  }, [pathname, search]);
+  }, [pathname, search, visibleNavItems]);
 
   const checkScroll = () => {
     if (scrollRef.current) {
@@ -335,7 +402,7 @@ export const TopNavbar = memo(function TopNavbar() {
             ref={scrollRef}
             className="flex items-center h-full flex-1 min-w-0 px-1 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
           >
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const active = activeById.get(item.id) ?? false;
 
               // Icon-only (Settings)

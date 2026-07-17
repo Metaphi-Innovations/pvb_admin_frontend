@@ -2,22 +2,23 @@
 
 import React, { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getPOById } from "../../po-data";
 import { PReturnFormLayout } from "../../../purchase-returns/components/PReturnFormLayout";
 import { PReturnFormFooter } from "../../../purchase-returns/components/PReturnFormFooter";
 import { PurchaseReturnForm } from "../../../purchase-returns/components/PurchaseReturnForm";
 import {
-  defaultPurchaseReturnFromPO,
-  savePurchaseReturnDraft,
-  submitPurchaseReturn,
   type PurchaseReturn,
-} from "../../../purchase-returns/purchase-return-data";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import {
-  getPurchaseReturnEligibility,
   purchaseReturnListHref,
-  validateReturnBalance,
   validateReturnItems,
-} from "../../../purchase-returns/purchase-return-utils";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import { usePurchaseOrder } from "@/hooks/procurement";
+import {
+  useCreatePurchaseReturn,
+  useEligiblePurchaseReturnItems,
+  usePurchaseReturnPreviewNumber,
+} from "@/hooks/procurement";
+import { PurchaseReturnService } from "@/services/purchase-return.service";
 
 export default function NewPurchaseReturnPage() {
   return (
@@ -30,20 +31,21 @@ export default function NewPurchaseReturnPage() {
 function NewPurchaseReturnContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const poId = Number(searchParams.get("poId"));
+  const poId = searchParams.get("poId") ?? "";
   const [record, setRecord] = useState<PurchaseReturn | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const poQuery = usePurchaseOrder(poId || null);
+  const previewQuery = usePurchaseReturnPreviewNumber(Boolean(poId));
+  const eligibleItemsQuery = useEligiblePurchaseReturnItems(
+    poId || null,
+    poQuery.data?.warehouseId ? String(poQuery.data.warehouseId) : undefined,
+  );
+  const createMutation = useCreatePurchaseReturn();
 
   useEffect(() => {
-    const po = getPOById(poId);
-    if (!po) return;
-    const { eligible } = getPurchaseReturnEligibility(po);
-    if (!eligible) {
-      router.replace(`/procurement/purchase-orders/${poId}`);
-      return;
-    }
-    setRecord(defaultPurchaseReturnFromPO(po));
-  }, [poId, router]);
+    if (!poQuery.data || !previewQuery.data || !eligibleItemsQuery.data) return;
+    setRecord(PurchaseReturnService.buildCreateFromPo(poQuery.data, previewQuery.data, eligibleItemsQuery.data));
+  }, [eligibleItemsQuery.data, poQuery.data, previewQuery.data]);
 
   if (!record) {
     return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
@@ -56,19 +58,15 @@ function NewPurchaseReturnContent() {
       return;
     }
     setErrors({});
-    submitPurchaseReturn(record);
-    router.push(`${purchaseReturnListHref()}&toast=pret-submitted`);
+    createMutation.mutate(record, {
+      onSuccess: () => {
+        router.push(`${purchaseReturnListHref()}&toast=pret-submitted`);
+      },
+    });
   };
 
   const handleSaveDraft = () => {
-    const balanceErrors = validateReturnBalance(record.items);
-    if (Object.keys(balanceErrors).length > 0) {
-      setErrors(balanceErrors);
-      return;
-    }
-    setErrors({});
-    savePurchaseReturnDraft(record);
-    router.push(`${purchaseReturnListHref()}&toast=pret-draft`);
+    handleSubmit();
   };
 
   return (

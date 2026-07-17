@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
   CheckCircle2,
   Edit2,
   Eye,
-  Folder,
+  Tag,
   X,
-  XCircle,
-  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -24,98 +23,68 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
+import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
+import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
+import {
+  DEFAULT_BRAND_FORM,
+  DEFAULT_BRAND_TYPES,
+  brandToForm,
+  toBrandRecord,
+  validateBrandApiForm,
+  type BrandForm,
+  type BrandRecord,
+} from "./brand-data";
+import { sortStateToOrdering } from "@/services/brand-list.service";
+import {
+  useBrands,
+  useBrand,
+  useCreateBrand,
+  useUpdateBrand,
+  useToggleBrandStatus,
+  useExportBrands,
+  useBrandFilterDropdown,
+} from "@/hooks/masters";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+} from "@/lib/masters/list-api-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  ColumnConfig,
+  FilterState,
+  SortState,
+  ActionItemConfig,
+} from "@/components/listing/types";
+import {
+  ListingUserCell,
+  AuditUserRow,
+  ListingStatusToggle,
+  isActiveStatus,
+} from "@/components/listing";
+import { ListingContainer } from "@/components/layout/ListingContainer";
 
-interface Brand {
-  id: number;
-  brandName: string;
-  brandGradeType: string;
-  description: string;
-  status: "active" | "inactive";
-  createdBy: string;
-  createdDate: string;
-  updatedBy: string;
-  updatedDate: string;
-}
+type StatusTab = "all" | "active" | "inactive";
+const BRAND_TAB_KEY = "brand-list-status-tab";
 
-const STORAGE_KEY = "pvb_brands_v1";
-
-const SEED: Brand[] = [
-  {
-    id: 1,
-    brandName: "Mahyco",
-    brandGradeType: "A",
-    description: "Leading seed brand",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-06-19",
-    updatedBy: "Admin",
-    updatedDate: "2026-06-19",
-  },
-  {
-    id: 2,
-    brandName: "Nuziveedu",
-    brandGradeType: "B",
-    description: "Popular cotton seeds provider",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-06-19",
-    updatedBy: "Admin",
-    updatedDate: "2026-06-19",
-  },
+const STATUS_TABS: { value: StatusTab; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
 ];
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+function readStoredStatusTab(): StatusTab {
+  if (typeof window === "undefined") return "all";
+  const v = sessionStorage.getItem(BRAND_TAB_KEY);
+  return v === "active" || v === "inactive" ? v : "all";
 }
-
-function loadBrands(): Brand[] {
-  if (typeof window === "undefined") return SEED;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return SEED;
-    const parsed = JSON.parse(raw) as any[];
-    return parsed.map((item, idx) => ({
-      id: item.id ?? idx + 1,
-      brandName: item.brandName ?? "",
-      brandGradeType: item.brandGradeType ?? "A",
-      description: item.description ?? item.remark ?? "",
-      status: item.status === "inactive" ? "inactive" : "active",
-      createdBy: item.createdBy ?? "Admin",
-      createdDate: item.createdDate ?? todayStr(),
-      updatedBy: item.updatedBy ?? "Admin",
-      updatedDate: item.updatedDate ?? todayStr(),
-    }));
-  } catch {
-    return SEED;
-  }
-}
-
-function saveBrands(items: Brand[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
-
-interface BrandFormValues {
-  brandName: string;
-  brandGradeType: string;
-  description: string;
-  status: "active" | "inactive";
-}
-
-const DEFAULT_BRAND_FORM: BrandFormValues = {
-  brandName: "",
-  brandGradeType: "A",
-  description: "",
-  status: "active",
-};
 
 interface ToastState {
   msg: string;
@@ -132,28 +101,135 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
     >
       <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
-      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
 
 export default function BrandMasterPage() {
-  const [records, setRecords] = useState<Brand[]>([]);
-  const [filters, setFilters] = useState<FilterState>({});
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "brandName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [viewId, setViewId] = useState<string | null>(null);
 
-  // Sheet & Dialog states
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
-  const [active, setActive] = useState<Brand | null>(null);
-  const [form, setForm] = useState<BrandFormValues>(DEFAULT_BRAND_FORM);
+  const [active, setActive] = useState<BrandRecord | null>(null);
+  const [form, setForm] = useState<BrandForm>(DEFAULT_BRAND_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<BrandRecord | null>(null);
+
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
+  const apiFilters = useMemo(
+    () =>
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.brand, {
+        statusTab,
+      }),
+    [appliedFilters, statusTab],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(appliedFilters, statusTab),
+    [appliedFilters, statusTab],
+  );
+
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: appliedSearch,
+      status: listStatus,
+      apiFilters,
+      ordering,
+    }),
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
+  );
+
+  const listQuery = useBrands(listParams);
+  const detailQuery = useBrand(viewId);
+  const createMutation = useCreateBrand();
+  const updateMutation = useUpdateBrand();
+  const toggleStatusMutation = useToggleBrandStatus();
+  const exportMutation = useExportBrands();
+
+  const brandNameOptionsQuery = useBrandFilterDropdown("brand_name", { enabled: isFilterOpen("brandName") });
+  const brandTypeOptionsQuery = useBrandFilterDropdown("brand_type", { enabled: isFilterOpen("brandType") });
+  const remarkOptionsQuery = useBrandFilterDropdown("remark", { enabled: isFilterOpen("remark") });
+  const statusOptionsQuery = useBrandFilterDropdown("is_active", { enabled: isFilterOpen("status") });
+  const createdByOptionsQuery = useBrandFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useBrandFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
+
+  const brandNameOptions = useMemo(
+    () => brandNameOptionsQuery.data ?? [],
+    [brandNameOptionsQuery.data],
+  );
+  const brandTypeOptions = useMemo(() => {
+    if (brandTypeOptionsQuery.data?.length) return brandTypeOptionsQuery.data;
+    return DEFAULT_BRAND_TYPES.map((type) => ({ label: type, value: type }));
+  }, [brandTypeOptionsQuery.data]);
+  const remarkOptions = useMemo(
+    () => remarkOptionsQuery.data ?? [],
+    [remarkOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
+  const formBrandTypeOptions = useMemo(() => {
+    if (form.brandType && !brandTypeOptions.some((o) => o.value === form.brandType)) {
+      return [{ label: form.brandType, value: form.brandType }, ...brandTypeOptions];
+    }
+    return brandTypeOptions;
+  }, [brandTypeOptions, form.brandType]);
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toBrandRecord),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "brands",
+        notFoundMessage: "Brand list endpoint not found.",
+        serverMessage: "Server error while loading brands.",
+      })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
 
   useEffect(() => {
-    setRecords(loadBrands());
+    setStatusTab(readStoredStatusTab());
   }, []);
 
   useEffect(() => {
@@ -162,93 +238,197 @@ export default function BrandMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = (record: Brand) => {
-    const nextStatus: "active" | "inactive" = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? { ...item, status: nextStatus, updatedBy: "Admin", updatedDate: todayStr() }
-        : item,
-    );
-    setRecords(updated);
-    saveBrands(updated);
-    setToast({ msg: `Brand status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
+  useEffect(() => {
+    setPage(1);
+  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load brand details."),
+        type: "error",
+      });
+      setViewId(null);
+      return;
+    }
+    if (detailQuery.data) {
+      setActive(toBrandRecord(detailQuery.data));
+      setSheetMode("view");
+    }
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
+
+  const handleStatusTabChange = (tab: string) => {
+    const next = tab as StatusTab;
+    setStatusTab(next);
+    sessionStorage.setItem(BRAND_TAB_KEY, next);
+    setPage(1);
   };
 
-  const columns: ColumnConfig<Brand>[] = [
-    {
-      key: "brandName",
-      header: "Brand Name",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "250px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.brandName}</span>
-      ),
-    },
-    {
-      key: "brandGradeType",
-      header: "Grade Type",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "A", value: "A" },
-        { label: "B", value: "B" },
-        { label: "C", value: "C" },
-        { label: "Others", value: "Others" },
-      ],
-      width: "120px",
-    },
-    {
-      key: "description",
-      header: "Description",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "350px",
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
-      width: "110px",
-      render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
-      ),
-    },
-    {
-      key: "createdDate",
-      header: "Created",
-      sortable: true,
-      filterable: true,
-      filterType: "date",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
-    },
-    {
-      key: "updatedDate",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "date",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
-    },
-  ];
+  const requestStatusToggle = (record: BrandRecord) => {
+    setStatusTarget(record);
+  };
 
-  const actions: ActionItemConfig<Brand>[] = [
+  const confirmStatusChange = () => {
+    const id = statusTarget?.brandUuid;
+    if (!statusTarget || !id) {
+      setToast({ msg: "Brand id missing. Unable to update status.", type: "error" });
+      setStatusTarget(null);
+      return;
+    }
+
+    const nextActive = statusTarget.status !== "active";
+
+    toggleStatusMutation.mutate(id, {
+      onSuccess: () => {
+        setToast({
+          msg: `Brand status updated to ${nextActive ? "Active" : "Inactive"}`,
+          type: "success",
+        });
+      },
+      onError: (error) => {
+        setToast({
+          msg: getErrorMessage(error, "Failed to update brand status."),
+          type: "error",
+        });
+      },
+      onSettled: () => {
+        setStatusTarget(null);
+      },
+    });
+  };
+
+  const openAdd = () => {
+    setForm({ ...DEFAULT_BRAND_FORM });
+    setErrors({});
+    setFormError(null);
+    setActive(null);
+    setSheetMode("add");
+  };
+
+  const openEdit = (row: BrandRecord) => {
+    setForm(brandToForm(row));
+    setErrors({});
+    setFormError(null);
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = useCallback((row: BrandRecord) => {
+    if (!row.brandUuid) {
+      setToast({ msg: "Brand id missing. Unable to load details.", type: "error" });
+      return;
+    }
+    setViewId(row.brandUuid);
+  }, []);
+
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setViewId(null);
+    setErrors({});
+    setFormError(null);
+  };
+
+  const columns: ColumnConfig<BrandRecord>[] = useMemo(
+    () => [
+      {
+        key: "brandName",
+        header: "Brand Name",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: brandNameOptions,
+        width: "250px",
+        render: (_val, row) => (
+          <button
+            type="button"
+            onClick={() => openView(row)}
+            className="text-xs font-semibold text-brand-700 hover:underline text-left"
+          >
+            {row.brandName}
+          </button>
+        ),
+      },
+      {
+        key: "brandType",
+        header: "Brand Type",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: brandTypeOptions,
+        width: "160px",
+      },
+      {
+        key: "remark",
+        header: "Remark",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: remarkOptions,
+        width: "320px",
+        render: (val) => (
+          <span className="text-xs text-muted-foreground">{val ? String(val) : "—"}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: statusOptions,
+        width: "110px",
+        render: (_val, row) => (
+          <ListingStatusToggle
+            active={isActiveStatus(row.status)}
+            onChange={() => requestStatusToggle(row)}
+          />
+        ),
+      },
+      {
+        key: "createdBy",
+        header: "Created",
+        sortable: true,
+        filterable: true,
+        filterType: "audit",
+        auditUserOptions: createdByOptions,
+        width: "150px",
+        render: (_val, row) => (
+          <ListingUserCell name={row.createdBy} date={row.createdAt} />
+        ),
+      },
+      {
+        key: "updatedBy",
+        header: "Updated",
+        sortable: true,
+        filterable: true,
+        filterType: "audit",
+        auditUserOptions: updatedByOptions,
+        width: "150px",
+        render: (_val, row) => (
+          <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
+        ),
+      },
+    ],
+    [
+      brandNameOptions,
+      brandTypeOptions,
+      remarkOptions,
+      statusOptions,
+      createdByOptions,
+      updatedByOptions,
+      openView,
+    ],
+  );
+
+  const actions: ActionItemConfig<BrandRecord>[] = [
     {
       label: "View",
       action: "view",
       icon: Eye,
       onClick: (row) => openView(row),
+      disabled: () => viewLoading,
     },
     {
       label: "Edit",
@@ -256,221 +436,174 @@ export default function BrandMasterPage() {
       icon: Edit2,
       onClick: (row) => openEdit(row),
     },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
-    },
   ];
 
-  const filtered = useMemo(() => {
-    let result = [...records];
-
-    // Search filter
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (r) =>
-          r.brandName.toLowerCase().includes(q) ||
-          (r.brandGradeType || "").toLowerCase().includes(q) ||
-          r.description.toLowerCase().includes(q)
-      );
-    }
-
-    // Apply column filters
-    result = applyFilters(result, filters);
-
-    // Sorting
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const aVal = String(a[sort.key as keyof Brand] || "").toLowerCase();
-        const bVal = String(b[sort.key as keyof Brand] || "").toLowerCase();
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort]);
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort, pageSize]);
-
-  const openAdd = () => {
-    setForm(DEFAULT_BRAND_FORM);
-    setErrors({});
-    setActive(null);
-    setSheetMode("add");
-  };
-
-  const openEdit = (row: Brand) => {
-    setForm({
-      brandName: row.brandName,
-      brandGradeType: row.brandGradeType ?? "A",
-      description: row.description,
-      status: row.status,
+  const displayRecords = useMemo(() => {
+    if (ordering || !sort.key || sort.direction === "none") return records;
+    return [...records].sort((a, b) => {
+      const aVal = String(a[sort.key as keyof BrandRecord] ?? "").toLowerCase();
+      const bVal = String(b[sort.key as keyof BrandRecord] ?? "").toLowerCase();
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sort.direction === "asc" ? cmp : -cmp;
     });
-    setErrors({});
-    setActive(row);
-    setSheetMode("edit");
-  };
-
-  const openView = (row: Brand) => {
-    setActive(row);
-    setSheetMode("view");
-  };
-
-  const closeSheet = () => {
-    setSheetMode(null);
-    setActive(null);
-    setErrors({});
-  };
-
-  const validateForm = (val: BrandFormValues) => {
-    const errs: Record<string, string> = {};
-    if (!val.brandName.trim()) errs.brandName = "Brand name is required";
-    if (!val.brandGradeType) errs.brandGradeType = "Grade type is required";
-    return errs;
-  };
+  }, [records, sort, ordering]);
 
   const persist = () => {
-    const mode = sheetMode === "add" ? "add" : "edit";
-    const errs = validateForm(form);
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
-      return;
-    }
-    const list = loadBrands();
-    let updatedList: Brand[];
-    if (mode === "add") {
-      const id = list.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-      const newRecord: Brand = {
-        id,
-        brandName: form.brandName.trim(),
-        brandGradeType: form.brandGradeType,
-        description: form.description.trim(),
-        status: form.status,
-        createdBy: "Admin",
-        createdDate: todayStr(),
-        updatedBy: "Admin",
-        updatedDate: todayStr(),
-      };
-      updatedList = [...list, newRecord];
-      setToast({ msg: "Brand added successfully", type: "success" });
-    } else if (active) {
-      updatedList = list.map((r) =>
-        r.id === active.id
-          ? {
-              ...r,
-              brandName: form.brandName.trim(),
-              brandGradeType: form.brandGradeType,
-              description: form.description.trim(),
-              status: form.status,
-              updatedBy: "Admin",
-              updatedDate: todayStr(),
-            }
-          : r,
-      );
-      setToast({ msg: "Brand updated successfully", type: "success" });
-    } else {
-      return;
-    }
-    saveBrands(updatedList);
-    setRecords(updatedList);
-    closeSheet();
-  };
+    const fieldErrors = validateBrandApiForm(form);
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = loadBrands().filter((r) => r.id !== deleteTarget.id);
-    saveBrands(list);
-    setRecords(list);
-    setDeleteTarget(null);
-    setToast({ msg: "Brand deleted successfully", type: "success" });
+    if (sheetMode === "add") {
+      setFormError(null);
+      createMutation.mutate(
+        {
+          brand_name: form.brandName,
+          brand_type: form.brandType,
+          remark: form.remark || null,
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "Brand added successfully", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create brand."));
+          },
+        },
+      );
+      return;
+    }
+
+    if (!active?.brandUuid) {
+      setFormError("Brand id missing. Unable to update.");
+      return;
+    }
+
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.brandUuid,
+        payload: {
+          brand_name: form.brandName,
+          brand_type: form.brandType,
+          remark: form.remark || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Brand updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update brand."));
+        },
+      },
+    );
   };
 
   const handleExport = () => {
-    try {
-      const headers = ["ID", "Brand Name", "Brand Grade Type", "Description", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        const row = [
-          r.id,
-          `"${r.brandName.replace(/"/g, '""')}"`,
-          `"${(r.brandGradeType || "A").replace(/"/g, '""')}"`,
-          `"${(r.description || "").replace(/"/g, '""')}"`,
-          r.status,
-          r.createdBy,
-          r.createdDate,
-          r.updatedBy,
-          r.updatedDate,
-        ];
-        csvRows.push(row.join(","));
-      }
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `brands_export_${todayStr()}.csv`);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setToast({ msg: "Brands exported successfully", type: "success" });
-    } catch {
-      setToast({ msg: "Failed to export brands", type: "error" });
-    }
+    exportMutation.mutate(
+      {
+        search: appliedSearch,
+        status: listStatus,
+        ordering,
+        apiFilters,
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Brands exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export brands"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =
     sheetMode === "add"
       ? "Add Brand"
       : sheetMode === "edit"
-      ? "Edit Brand"
-      : "View Brand";
+        ? "Edit Brand"
+        : "View Brand";
+
+  const viewDrawer = active
+    ? {
+        title: active.brandName,
+        subtitle: active.brandType || "Read-only brand details",
+        status: active.status,
+        basicInfo: [
+          { label: "Brand Type", value: active.brandType || "—" },
+          { label: "Remark", value: active.remark?.trim() ? active.remark : "—" },
+        ],
+        showDescription: false,
+        children: (
+          <MasterDrawerSection title="Audit Information">
+            <div className="space-y-4">
+              <AuditUserRow label="Created By" name={active.createdBy} />
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Created Date</p>
+                <p className="text-sm font-medium text-foreground font-mono">
+                  {active.createdAt}
+                </p>
+              </div>
+              <AuditUserRow label="Updated By" name={active.updatedBy} />
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Updated Date</p>
+                <p className="text-sm font-medium text-foreground font-mono">
+                  {active.updatedAt}
+                </p>
+              </div>
+            </div>
+          </MasterDrawerSection>
+        ),
+      }
+    : { title: "Brand", basicInfo: [] };
+
+  const inputCls = (key: string) =>
+    cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
 
   return (
-    <AppLayout>
-      <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Brand Master</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Manage product brands used in catalog</p>
-        </div>
+    <ListingContainer
+      title="Brand Master"
+      titleIcon={Tag}
+      tabs={STATUS_TABS.map((t) => ({
+        value: t.value,
+        label: t.value === statusTab ? `${t.label} (${totalRecords})` : t.label,
+      }))}
+      activeTab={statusTab}
+      onTabChange={handleStatusTabChange}
+    >
+      {listError ? <p className="mb-2 text-xs text-red-600">{listError}</p> : null}
 
-        <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total Brands" value={records.length} icon={Folder} accent={true} />
-          <MiniKPICard label="Active" value={records.filter((r) => r.status === "active").length} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Inactive" value={records.filter((r) => r.status === "inactive").length} icon={XCircle} accent={false} />
-        </div>
-
-        <MasterListing<Brand>
-          columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          actions={actions}
-          onAdd={openAdd}
-          addLabel="Add Brand"
-          onExport={handleExport}
-          emptyMessage="brands"
-          searchPlaceholder="Search brand name, description..."
-          currentFilters={filters}
-          currentSort={sort}
-        />
-      </div>
+      <MasterListing<BrandRecord>
+        columns={columns}
+        data={displayRecords}
+        loading={loading}
+        totalRecords={totalRecords}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        onSortChange={setSort}
+        onFilterChange={(next) => {
+          setFilters(next);
+          applyFilters(next);
+        }}
+        actions={actions}
+        onAdd={openAdd}
+        addLabel="Add Brand"
+        onExport={handleExport}
+        emptyMessage="brands"
+        searchPlaceholder="Search brand name, type, remark..."
+        currentFilters={filters}
+        currentSort={sort}
+        onOpenFilter={handleOpenFilter}
+      />
 
       <MasterListingSheets
         sheetMode={sheetMode}
@@ -479,121 +612,127 @@ export default function BrandMasterPage() {
         onEdit={() => active && openEdit(active)}
         onSave={persist}
         sheetTitle={sheetTitle}
-        icon={Folder}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<Brand>({
-                drawerTitle: "Brand",
-                getRecordCode: () => "",
-                basicInfo: (r) => [
-                  { label: "Brand Name", value: r.brandName },
-                  { label: "Grade Type", value: r.brandGradeType },
-                  { label: "Description", value: r.description },
-                ],
-                description: () => "",
-                showDescription: false,
-              })(active)
-            : { title: "Brand", basicInfo: [] }
-        }
+        icon={Tag}
+        formError={formError ?? undefined}
+        saving={saving}
+        viewDrawer={viewDrawer}
         formContent={
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Brand Details</p>
-              <p className="text-[11px] text-muted-foreground">Define brand name and description.</p>
+          sheetMode !== "view" ? (
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Brand Details
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Define brand name, type, and remark.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">
+                    Brand Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={form.brandName}
+                    onChange={(e) => {
+                      setForm({ ...form, brandName: e.target.value });
+                      if (errors.brandName) {
+                        setErrors((prev) => {
+                          const copy = { ...prev };
+                          delete copy.brandName;
+                          return copy;
+                        });
+                      }
+                    }}
+                    placeholder="e.g. AgroChem"
+                    className={cn(inputCls("brandName"), "bg-background")}
+                  />
+                  {errors.brandName && (
+                    <p className="text-[11px] text-red-500">{errors.brandName}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">
+                    Brand Type <span className="text-red-500">*</span>
+                  </Label>
+                  <AutocompleteSelect
+                    options={formBrandTypeOptions}
+                    value={form.brandType}
+                    onChange={(v) => {
+                      setForm({ ...form, brandType: v });
+                      if (errors.brandType) {
+                        setErrors((prev) => {
+                          const copy = { ...prev };
+                          delete copy.brandType;
+                          return copy;
+                        });
+                      }
+                    }}
+                    placeholder="Select brand type"
+                    error={!!errors.brandType}
+                    className="h-8 text-xs rounded-lg"
+                  />
+                  {errors.brandType && (
+                    <p className="text-[11px] text-red-500">{errors.brandType}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Remark</Label>
+                  <Textarea
+                    value={form.remark}
+                    onChange={(e) => setForm({ ...form, remark: e.target.value })}
+                    placeholder="Additional remarks..."
+                    className="min-h-[96px] text-xs resize-none rounded-lg"
+                  />
+                </div>
+              </div>
             </div>
-
-            <div className="grid grid-cols-1 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  Brand Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.brandName}
-                  onChange={(e) => {
-                    setForm({ ...form, brandName: e.target.value });
-                    if (errors.brandName) {
-                      setErrors((prev) => {
-                        const copy = { ...prev };
-                        delete copy.brandName;
-                        return copy;
-                      });
-                    }
-                  }}
-                  placeholder="e.g. Mahyco"
-                  className={cn("h-8 text-xs bg-background", errors.brandName && "border-red-400 focus-visible:ring-red-300")}
-                  disabled={sheetMode === "view"}
-                />
-                {errors.brandName && <p className="text-[11px] text-red-500">{errors.brandName}</p>}
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  Brand Grade Type <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.brandGradeType}
-                  onValueChange={(value) => {
-                    setForm({ ...form, brandGradeType: value });
-                    if (errors.brandGradeType) {
-                      setErrors((prev) => {
-                        const copy = { ...prev };
-                        delete copy.brandGradeType;
-                        return copy;
-                      });
-                    }
-                  }}
-                  disabled={sheetMode === "view"}
-                >
-                  <SelectTrigger className={cn("h-8 text-xs bg-background", errors.brandGradeType && "border-red-400 focus-visible:ring-red-300")}>
-                    <SelectValue placeholder="Select Grade Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="A">A</SelectItem>
-                    <SelectItem value="B">B</SelectItem>
-                    <SelectItem value="C">C</SelectItem>
-                    <SelectItem value="Others">Others</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.brandGradeType && <p className="text-[11px] text-red-500">{errors.brandGradeType}</p>}
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Description</Label>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Description..."
-                  className="min-h-[96px] text-xs resize-none rounded-lg"
-                  disabled={sheetMode === "view"}
-                />
-              </div>
-            </div>
-          </div>
+          ) : null
         }
-        statusActive={form.status === "active"}
-        onStatusChange={(v) => setForm((f) => ({ ...f, status: v ? "active" : "inactive" }))}
       />
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              {statusTarget?.status === "active" ? "Deactivate Brand?" : "Activate Brand?"}
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1">
+              {statusTarget && (
+                <>
+                  <strong className="text-foreground">{statusTarget.brandName}</strong> will be
+                  marked as {statusTarget.status === "active" ? "inactive" : "active"}.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setStatusTarget(null)}
+            >
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
+            >
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </ListingContainer>
   );
 }

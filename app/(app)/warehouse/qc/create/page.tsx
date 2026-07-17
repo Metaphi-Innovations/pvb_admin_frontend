@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getGrnById, getGrnByNo, saveGrnRecord } from "@/app/(app)/warehouse/grn/mock-data";
-import { saveQcRecord, getQcById, getQcByGrnNo, createQcFromGrn } from "../mock-data";
+import { useQueryClient } from "@tanstack/react-query";
+import { QcService } from "@/services/qc.service";
 import { QcItem, QcRecord, QcResult } from "../types";
 import { cn } from "@/lib/utils";
 import { TextField, FormSection } from "@/components/ui/FormFields";
@@ -14,6 +14,8 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { onQcCompleted } from "@/lib/warehouse/inventory-movement";
 import { completeStockTransferQc } from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
+import { showToast } from "@/lib/toast";
+import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -40,6 +42,7 @@ function qtyInputValue(qty: number): string {
 
 function CreateQcForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const qcIdParam = searchParams.get("qcId") || "";
   const grnIdParam = searchParams.get("grnId") || "";
@@ -61,72 +64,168 @@ function CreateQcForm() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    let qc: QcRecord | undefined = qcIdParam ? getQcById(qcIdParam) : undefined;
+    const loadRecord = async () => {
+      try {
+        let qc: QcRecord | undefined;
+        if (qcIdParam) {
+          qc = await QcService.get(qcIdParam);
+        } else if (grnIdParam) {
+          qc = await QcService.getGrn(grnIdParam);
+        }
 
-    if (!qc && grnIdParam) {
-      const grn = getGrnById(grnIdParam) ?? getGrnByNo(grnIdParam);
-      if (grn) {
-        qc = getQcByGrnNo(grn.grnNo) ?? createQcFromGrn(grn);
+        if (!qc) {
+          setLoadError("QC record not found. Open inspection from the QC listing.");
+          return;
+        }
+
+        const editParam = searchParams.get("edit") === "true";
+        if (qc.status === "completed" && !editParam) {
+          router.replace(`/warehouse/qc/view/${qc.id}`);
+          return;
+        }
+
+        const stMode = getQcSourceType(qc) === "stock_transfer";
+
+        setQcRecordId(qc.id);
+        
+        let displayQcNo = qc.qcNo;
+        if (!displayQcNo || displayQcNo === "—") {
+          try {
+            const preview = await QcService.getPreviewNumber();
+            displayQcNo = preview.qcNumber;
+          } catch (err) {
+            console.error("Failed to fetch preview QC number:", err);
+          }
+        }
+        setQcNo(displayQcNo || "—");
+        setGrnRecordId(qc.grnId ?? "");
+        setGrnNo(qc.grnNo);
+        setPoNumber(qc.poNumber ?? "");
+        setVendor(qc.vendorName);
+        setWarehouse(qc.warehouse);
+        setStockTransferNo(qc.stockTransferNo ?? qc.poNumber ?? "");
+        setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
+        setToWarehouse(qc.toWarehouse ?? qc.warehouse);
+        setIsStockTransfer(stMode);
+        setSourceType(getQcSourceType(qc));
+        setQcRemarks(qc.qcRemarks ?? "");
+        
+        setItems(qc.items.map((it) => {
+          const unitPerPacking = it.unitPerPacking || 10;
+          const quantityType = (it.quantityType || "PIECE").toUpperCase();
+          const acceptedQty = editParam ? (it.acceptedQty || 0) : 0;
+          const rejectedQty = editParam ? (it.rejectedQty || 0) : 0;
+          const holdQty = editParam ? (it.holdQty || 0) : 0;
+
+          let acceptedInput = "";
+          let rejectedInput = "";
+          let holdInput = "";
+
+          if (editParam) {
+            if (quantityType === "CASE") {
+              acceptedInput = String(acceptedQty / unitPerPacking);
+              rejectedInput = String(rejectedQty / unitPerPacking);
+              holdInput = String(holdQty / unitPerPacking);
+            } else {
+              acceptedInput = String(acceptedQty);
+              rejectedInput = String(rejectedQty);
+              holdInput = String(holdQty);
+            }
+          }
+
+          return {
+            ...it,
+            quantityType,
+            acceptedQty,
+            rejectedQty,
+            holdQty,
+            acceptedInput,
+            rejectedInput,
+            holdInput,
+            acceptedCases: editParam ? (it.acceptedCases ?? Math.floor(acceptedQty / unitPerPacking)) : 0,
+            acceptedLooseQty: editParam ? (it.acceptedLooseQty ?? (acceptedQty % unitPerPacking)) : 0,
+            rejectedCases: editParam ? (it.rejectedCases ?? Math.floor(rejectedQty / unitPerPacking)) : 0,
+            rejectedLooseQty: editParam ? (it.rejectedLooseQty ?? (rejectedQty % unitPerPacking)) : 0,
+            holdCases: editParam ? (it.holdCases ?? Math.floor(holdQty / unitPerPacking)) : 0,
+            holdLooseQty: editParam ? (it.holdLooseQty ?? (holdQty % unitPerPacking)) : 0,
+          };
+        }));
+      } catch (err) {
+        console.error("Failed to load QC or GRN details:", err);
+        setLoadError("QC record not found. Open inspection from the QC listing.");
       }
-    }
+    };
 
-    if (!qc) {
-      setLoadError("QC record not found. Open inspection from the QC listing.");
-      return;
-    }
+    loadRecord();
+  }, [qcIdParam, grnIdParam, router, searchParams]);
 
-    if (qc.status === "completed") {
-      router.replace(`/warehouse/qc/view/${qc.id}`);
-      return;
-    }
-
-    const stMode = getQcSourceType(qc) === "stock_transfer";
-
-    setQcRecordId(qc.id);
-    setQcNo(qc.qcNo);
-    setGrnRecordId(qc.grnId ?? "");
-    setGrnNo(qc.grnNo);
-    setPoNumber(qc.poNumber ?? "");
-    setVendor(qc.vendorName);
-    setWarehouse(qc.warehouse);
-    setStockTransferNo(qc.stockTransferNo ?? qc.poNumber ?? "");
-    setFromWarehouse(qc.fromWarehouse ?? qc.vendorName);
-    setToWarehouse(qc.toWarehouse ?? qc.warehouse);
-    setIsStockTransfer(stMode);
-    setSourceType(stMode ? "stock_transfer" : "purchase_order");
-    setQcRemarks(qc.qcRemarks ?? "");
-    setItems(qc.items.map((it) => ({ ...it, holdQty: 0, rejectedQty: 0, acceptedQty: 0 })));
-  }, [qcIdParam, grnIdParam, router]);
-
-  const handleAcceptedChange = (idx: number, raw: string) => {
-    const received = items[idx]?.receivedQty ?? 0;
-    const accepted = parseQtyInput(raw, received);
-    if (isStockTransfer) {
-      setItems((prev) =>
-        prev.map((item, i) => (i === idx ? { ...item, acceptedQty: accepted } : item)),
-      );
-      return;
-    }
-    const rejected = Math.max(0, received - accepted);
+  const handleQtyChange = (
+    idx: number,
+    field: "accepted" | "rejected" | "hold",
+    type: "cases" | "loose",
+    raw: string
+  ) => {
     setItems((prev) =>
-      prev.map((item, i) =>
-        i === idx ? { ...item, acceptedQty: accepted, rejectedQty: rejected, holdQty: 0 } : item,
-      ),
-    );
-  };
+      prev.map((item, i) => {
+        if (i !== idx) return item;
+        
+        const unitPerPacking = item.unitPerPacking || 10;
+        const quantityType = (item.quantityType || "PIECE").toUpperCase();
 
-  const handleRejectedChange = (idx: number, raw: string) => {
-    const received = items[idx]?.receivedQty ?? 0;
-    const rejected = parseQtyInput(raw, received);
-    setItems((prev) =>
-      prev.map((item, i) => (i === idx ? { ...item, rejectedQty: rejected, holdQty: isStockTransfer ? item.holdQty : 0 } : item)),
-    );
-  };
+        let updated = { ...item };
 
-  const handleHoldChange = (idx: number, raw: string) => {
-    const received = items[idx]?.receivedQty ?? 0;
-    const hold = parseQtyInput(raw, received);
-    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, holdQty: hold } : item)));
+        if (quantityType === "CASE") {
+          const cleanRaw = raw.replace(/[^0-9.]/g, "");
+          const parsed = parseFloat(cleanRaw) || 0;
+          const totalBase = Math.round(parsed * unitPerPacking);
+
+          updated[`${field}Input`] = cleanRaw;
+          updated[`${field}Qty`] = totalBase;
+          updated.acceptedQty = field === "accepted" ? totalBase : (updated.acceptedQty || 0);
+          updated.rejectedQty = field === "rejected" ? totalBase : (updated.rejectedQty || 0);
+          updated.holdQty = field === "hold" ? totalBase : (updated.holdQty || 0);
+
+          updated[`${field}Cases`] = parsed;
+          updated[`${field}LooseQty`] = 0;
+          
+          if (field === "accepted") {
+            const received = item.receivedQty ?? 0;
+            const rejectedBase = Math.max(0, received - totalBase);
+            updated.rejectedQty = rejectedBase;
+            updated.rejectedInput = String(rejectedBase / unitPerPacking);
+            updated.rejectedCases = rejectedBase / unitPerPacking;
+            updated.rejectedLooseQty = 0;
+            updated.holdQty = 0;
+            updated.holdInput = "0";
+          }
+        } else {
+          const cleanRaw = raw.replace(/\D/g, "");
+          const parsed = parseInt(cleanRaw, 10) || 0;
+
+          updated[`${field}Input`] = cleanRaw;
+          updated[`${field}Qty`] = parsed;
+          updated.acceptedQty = field === "accepted" ? parsed : (updated.acceptedQty || 0);
+          updated.rejectedQty = field === "rejected" ? parsed : (updated.rejectedQty || 0);
+          updated.holdQty = field === "hold" ? parsed : (updated.holdQty || 0);
+
+          updated[`${field}Cases`] = 0;
+          updated[`${field}LooseQty`] = parsed;
+
+          if (field === "accepted") {
+            const received = item.receivedQty ?? 0;
+            const rejectedBase = Math.max(0, received - parsed);
+            updated.rejectedQty = rejectedBase;
+            updated.rejectedInput = String(rejectedBase);
+            updated.rejectedCases = 0;
+            updated.rejectedLooseQty = rejectedBase;
+            updated.holdQty = 0;
+            updated.holdInput = "0";
+          }
+        }
+
+        return updated;
+      })
+    );
   };
 
   const handleReasonChange = (idx: number, val: string) => {
@@ -136,12 +235,8 @@ function CreateQcForm() {
   const validationErrors = useMemo(() => {
     return items
       .map((item) => {
-        const hold = item.holdQty ?? 0;
-        const sum = item.acceptedQty + item.rejectedQty + hold;
+        const sum = item.acceptedQty + item.rejectedQty;
         if (sum !== item.receivedQty) {
-          if (isStockTransfer) {
-            return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) + Hold (${hold}) = ${sum}, but received qty is ${item.receivedQty}.`;
-          }
           return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) = ${sum}, but GRN Received Qty is ${item.receivedQty}.`;
         }
         if (sum > item.receivedQty) {
@@ -150,76 +245,74 @@ function CreateQcForm() {
         return null;
       })
       .filter(Boolean);
-  }, [items, isStockTransfer]);
+  }, [items]);
 
   const hasErrors = validationErrors.length > 0;
   const hasEmptyRows = items.some((it) => {
-    const hold = it.holdQty ?? 0;
-    if (isStockTransfer) return it.acceptedQty === 0 && it.rejectedQty === 0 && hold === 0;
     return it.acceptedQty === 0 && it.rejectedQty === 0;
   });
   const hasStartedEntry = items.some(
-    (it) => it.acceptedQty > 0 || it.rejectedQty > 0 || (it.holdQty ?? 0) > 0,
+    (it) => it.acceptedQty > 0 || it.rejectedQty > 0,
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!grnNo || !qcRecordId) {
-      alert("Missing QC / GRN reference.");
+      showToast("Missing QC / GRN reference.", "error");
       return;
     }
     if (hasErrors || hasEmptyRows) {
-      alert(
-        isStockTransfer
-          ? "Enter accepted, rejected, or hold qty for each batch. Sum must equal received qty."
-          : "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
+      showToast(
+        "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
+        "error"
       );
       return;
     }
 
-    const qcResult = deriveQcResult(items);
-    const completedDate = new Date().toISOString().split("T")[0];
-    const updatedQc: QcRecord = {
-      id: qcRecordId,
-      qcNo,
-      grnId: grnRecordId,
-      grnNo,
-      poNumber,
-      vendorName: vendor,
-      warehouse,
-      sourceType,
-      stockTransferNo: isStockTransfer ? stockTransferNo : undefined,
-      fromWarehouse: isStockTransfer ? fromWarehouse : undefined,
-      toWarehouse: isStockTransfer ? toWarehouse : undefined,
-      inspectionDate: completedDate,
-      totalReceivedQty: items.reduce((sum, it) => sum + it.receivedQty, 0),
-      totalAcceptedQty: items.reduce((sum, it) => sum + it.acceptedQty, 0),
-      totalRejectedQty: items.reduce((sum, it) => sum + it.rejectedQty, 0),
-      totalHoldQty: items.reduce((sum, it) => sum + (it.holdQty ?? 0), 0),
-      status: "completed",
-      qcResult,
-      qcRemarks: qcRemarks.trim(),
-      items: items.map((it) => ({ ...it, holdQty: it.holdQty ?? 0, qcResult: deriveQcResult([it]) })),
-    };
+    try {
+      const backendSourceType = 
+        sourceType === "purchase_order" ? "PURCHASE_ORDER" :
+        sourceType === "sales_return" ? "SALES_RETURN" :
+        sourceType === "stock_transfer" ? "STOCK_TRANSFER" :
+        sourceType === "sample_return" ? "SAMPLE_RETURN" :
+        "PURCHASE_ORDER";
 
-    saveQcRecord(updatedQc);
+      const payload = {
+        grnId: grnRecordId,
+        qcDate: new Date().toISOString(),
+        remarks: qcRemarks.trim(),
+        source_type: backendSourceType,
+        items: items.map((it) => ({
+          grnBatchId: it.grnBatchId,
+          receivedQty: it.receivedQty,
+          acceptedQty: it.acceptedQty,
+          rejectedQty: it.rejectedQty,
+          case_size: it.unitPerPacking || 10,
+          remarks: it.rejectionReason || "",
+        })),
+      };
 
-    const grn = getGrnById(grnRecordId) ?? getGrnByNo(grnNo);
-    if (grn) {
-      const updatedGrn = { ...grn, status: "qc_completed" as const };
-      saveGrnRecord(updatedGrn);
-      if (isStockTransfer) {
-        completeStockTransferQc(updatedGrn, updatedQc);
+      const editParam = searchParams.get("edit") === "true";
+      if (editParam) {
+        await QcService.update(qcRecordId, payload);
+        showToast("QC Record updated successfully.", "success");
       } else {
-        onQcCompleted(updatedGrn, updatedQc);
+        await QcService.create(payload);
+        showToast(
+          isStockTransfer
+            ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
+            : "QC completed — stock moved to Available / Rejected.",
+          "success"
+        );
       }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
+      ]);
+      router.push("/warehouse/qc");
+    } catch (err: any) {
+      console.error("Failed to submit QC Record:", err);
+      showToast(err.response?.data?.message || "Failed to submit QC Record.", "error");
     }
-
-    alert(
-      isStockTransfer
-        ? "QC completed — accepted qty added to destination warehouse inventory (Stock Transfer In)."
-        : "QC completed — stock moved to Available / Rejected.",
-    );
-    router.push("/warehouse/qc");
   };
 
   if (loadError) {
@@ -312,12 +405,10 @@ function CreateQcForm() {
                 <tr className="bg-muted/40 border-b border-border">
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-36">Batch No.</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Received</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-24">Accepted</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-24">Rejected</th>
-                  {isStockTransfer && (
-                    <th className="px-4 py-2 text-center text-[11px] font-semibold text-amber-800 w-24">Hold</th>
-                  )}
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-32">Received</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Qty Type</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-36">Accepted</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-36">Rejected</th>
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Remarks</th>
                 </tr>
               </thead>
@@ -326,6 +417,7 @@ function CreateQcForm() {
                   const hold = item.holdQty ?? 0;
                   const sum = item.acceptedQty + item.rejectedQty + (isStockTransfer ? hold : 0);
                   const isRowValid = sum === item.receivedQty;
+                  const isCase = item.quantityType === "CASE";
 
                   return (
                     <tr key={idx} className={cn("border-b border-border/50 transition-colors", !isRowValid && "bg-red-50/20")}>
@@ -334,42 +426,71 @@ function CreateQcForm() {
                         <span className="block text-[10px] font-mono text-muted-foreground">{item.productCode}</span>
                       </td>
                       <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{item.batchNumber}</td>
-                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground">{item.receivedQty}</td>
-                      <td className="px-4 py-2 text-xs">
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={qtyInputValue(item.acceptedQty)}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleAcceptedChange(idx, e.target.value)}
-                          className={cn("h-8 text-xs text-center w-20 mx-auto", !isRowValid && "border-red-300")}
-                        />
+                      <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
+                        {isCase ? (
+                          <>
+                            <div className="font-semibold text-foreground">
+                              {Number((item.receivedQty / (item.unitPerPacking || 10)).toFixed(4))} Cs
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/80">Total: {item.receivedQty}</div>
+                          </>
+                        ) : (
+                          <div className="font-semibold text-foreground">
+                            {item.receivedQty} Pcs
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground uppercase">
+                        {item.quantityType || "PIECE"}
                       </td>
                       <td className="px-4 py-2 text-xs">
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={qtyInputValue(item.rejectedQty)}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleRejectedChange(idx, e.target.value)}
-                          className={cn("h-8 text-xs text-center w-20 mx-auto", !isRowValid && "border-red-300")}
-                        />
-                      </td>
-                      {isStockTransfer && (
-                        <td className="px-4 py-2 text-xs">
+                        {isCase ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Cases"
+                            value={item.acceptedInput ?? ""}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleQtyChange(idx, "accepted", "cases", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                          />
+                        ) : (
                           <Input
                             type="text"
                             inputMode="numeric"
-                            placeholder="0"
-                            value={qtyInputValue(hold)}
+                            placeholder="Pieces"
+                            value={item.acceptedInput ?? ""}
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleHoldChange(idx, e.target.value)}
-                            className={cn("h-8 text-xs text-center w-20 mx-auto", !isRowValid && "border-red-300")}
+                            onChange={(e) => handleQtyChange(idx, "accepted", "loose", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
                           />
-                        </td>
-                      )}
+                        )}
+                        <div className="text-center text-[10px] text-muted-foreground">Total: {item.acceptedQty}</div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {isCase ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Cases"
+                            value={item.rejectedInput ?? ""}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleQtyChange(idx, "rejected", "cases", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                          />
+                        ) : (
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Pieces"
+                            value={item.rejectedInput ?? ""}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleQtyChange(idx, "rejected", "loose", e.target.value)}
+                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
+                          />
+                        )}
+                        <div className="text-center text-[10px] text-muted-foreground">Total: {item.rejectedQty}</div>
+                      </td>
                       <td className="px-4 py-2 text-xs">
                         <Input
                           placeholder="Remarks…"

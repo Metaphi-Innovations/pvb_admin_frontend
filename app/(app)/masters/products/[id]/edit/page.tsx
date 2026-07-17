@@ -11,6 +11,7 @@ import {
   getProductImages,
   getProductUrls,
   loadProducts,
+  Product,
   saveProducts,
   type ProductImage,
   type ProductUrl,
@@ -22,6 +23,8 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../../components/ProductForm";
+import { useProduct, useUpdateProduct } from "@/hooks/masters";
+import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -31,14 +34,67 @@ export default function EditProductPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
+  const { data: previewNumber } = useProductPreviewNumber();
+  const { data: apiProduct, isLoading, isError } = useProduct(id);
+  const updateMutation = useUpdateProduct();
 
   useEffect(() => {
-    const found = loadProducts().find((item) => item.id === Number(id));
-    if (!found) return;
-    setForm(productToFormValues(found));
-    setProductImages(getProductImages(found));
-    setProductUrls(getProductUrls(found));
-  }, [id]);
+    if (!apiProduct) return;
+    const mappedProduct: Product = {
+      id: apiProduct.id,
+      productId: apiProduct.productUuid,
+      productCode: apiProduct.productCode,
+      productName: apiProduct.productName,
+      sku: apiProduct.sku,
+      supplier: apiProduct.supplierId || "",
+      supplierCode: apiProduct.supplierCode || undefined,
+      category: apiProduct.category,
+      categoryId: apiProduct.categoryId,
+      subCategory: apiProduct.subCategory,
+      segment: apiProduct.segment,
+      segmentId: apiProduct.segmentId,
+      form: apiProduct.form || "",
+      formId: apiProduct.formId,
+      cfu: apiProduct.cfu || undefined,
+      cfuId: apiProduct.cfuId,
+      authority: apiProduct.authority || undefined,
+      hsnCode: apiProduct.hsnUuid || apiProduct.hsnCode,
+      hsnId: apiProduct.hsnId ? String(apiProduct.hsnId) : "",
+      gstRate: apiProduct.gstRate || "",
+      gstId: apiProduct.gstUuid || (apiProduct.gstId ? String(apiProduct.gstId) : ""),
+      packSize: apiProduct.packSize ?? undefined,
+      baseUnit: apiProduct.baseUnit,
+      mou: apiProduct.mou || undefined,
+      unitPerCase: apiProduct.unitPerCase ?? undefined,
+      packagingUnit: apiProduct.packagingUnit || "",
+      netWeightPerPackagingUnit: apiProduct.netWeight ?? undefined,
+      grossWeight: apiProduct.grossWeight ?? undefined,
+      mrp: apiProduct.mrp ?? undefined,
+      status: apiProduct.status,
+      createdBy: apiProduct.createdBy || "Admin",
+      createdDate: apiProduct.createdAt || "",
+      updatedBy: apiProduct.updatedBy || "Admin",
+      updatedDate: apiProduct.updatedAt || "",
+      productImages: (apiProduct.assets ?? [])
+        .filter((a) => a.asset_type === "MEDIA")
+        .map((a) => ({
+          id: a.product_asset_id ?? crypto.randomUUID(),
+          name: a.file_name ?? "image",
+          url: a.file_url ?? "",
+          size: a.file_size,
+        })),
+      productUrls: (apiProduct.assets ?? [])
+        .filter((a) => a.asset_type === "LINK")
+        .map((a) => ({
+          id: a.product_asset_id ?? crypto.randomUUID(),
+          url: a.link_url ?? "",
+        })),
+    };
+
+    setForm(productToFormValues(mappedProduct));
+    setProductImages(getProductImages(mappedProduct));
+    setProductUrls(getProductUrls(mappedProduct));
+  }, [apiProduct]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -48,7 +104,7 @@ export default function EditProductPage() {
     });
 
   const handleSave = () => {
-    if (!form) return;
+    if (!form || !id) return;
     const validation = validateProductForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -61,21 +117,73 @@ export default function EditProductPage() {
       return;
     }
 
-    const list = loadProducts();
-    const existing = list.find((item) => item.id === Number(id));
-    if (!existing) return;
+    const parseNum = (val: string) => {
+      const num = Number(val);
+      return isNaN(num) ? null : num;
+    };
 
-    const updated = formValuesToProduct(form, {
-      ...existing,
-      productImages,
-      productUrls,
-    });
-    saveProducts(list.map((item) => (item.id === updated.id ? updated : item)));
-    setToast({ msg: "Product updated successfully.", type: "success" });
-    setTimeout(() => router.push(`/masters/products/${id}`), 900);
+    const payload = {
+      product_code: form.productCode,
+      product_name: form.productName,
+      scientific_name: form.scientificName || null,
+      sku: form.sku,
+      supplier_id: form.supplier || null,
+      supplier_code: form.supplierCode || null,
+      hsn_id: form.hsnId || form.hsnCode || null,
+      gst_rate_id: form.gstId || null,
+      category_id: form.category,
+      segment_id: form.segmentId || null,
+      formulation_id: form.formId || null,
+      cfu_id: form.cfuId || null,
+      authority: form.authority || null,
+      pack_size: parseNum(form.packSize),
+      base_unit: form.baseUnit,
+      unit: form.baseUnit,
+      mou: form.mou || null,
+      unit_per_packing: parseNum(form.unitPerCase),
+      packing_unit: form.packagingUnit,
+      net_weight: parseNum(form.netWeightPerPackagingUnit),
+      gross_weight: parseNum(form.grossWeight),
+      mrp: parseNum(form.mrp),
+      is_active: form.status === "active",
+      status: form.status === "active" ? "Active" : "Inactive",
+      assets: productUrls.map((u) => ({
+        asset_type: "LINK",
+        link_url: u.url,
+      })),
+    };
+
+    updateMutation.mutate(
+      {
+        id,
+        payload,
+        images: productImages.map((img) => img.file).filter((f): f is File => !!f),
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Product updated successfully.", type: "success" });
+          setTimeout(() => router.push(`/masters/products/${id}`), 900);
+        },
+        onError: (err) => {
+          setToast({
+            msg: err instanceof Error ? err.message : "Failed to update product.",
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 4000);
+        },
+      }
+    );
   };
 
-  if (!form) {
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Loading product details...</p>
+      </div>
+    );
+  }
+
+  if (isError || !form) {
     return (
       <div className="py-16 text-center">
         <p className="text-sm text-muted-foreground">Product not found.</p>
@@ -105,6 +213,7 @@ export default function EditProductPage() {
             type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={updateMutation.isPending}
           >
             <Save className="w-4 h-4" /> Update Product
           </Button>
@@ -116,6 +225,7 @@ export default function EditProductPage() {
         onChange={setForm}
         errors={errors}
         onClearError={clearErr}
+        previewNumber={previewNumber}
         productImages={productImages}
         productUrls={productUrls}
         onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}

@@ -7,7 +7,7 @@ import { QcRecord } from "../types";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
-import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
+import { WarehouseService } from "@/services/warehouse.service";
 import {
   Select,
   SelectContent,
@@ -18,6 +18,7 @@ import {
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { computeQcListingKpis } from "./qc-listing-kpis";
 import { QcListingKpiRow } from "./components/QcListingKpiRow";
+import { QcService } from "@/services/qc.service";
 
 export function QcListingLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -26,14 +27,41 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
 
   const [qcList, setQcList] = useState<QcRecord[]>([]);
   const [grnList, setGrnList] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
 
   const [isMounted, setIsMounted] = useState(false);
 
+  const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
+
   useEffect(() => {
     setIsMounted(true);
-    setQcList(getQcRecords());
+
+    const filtersPending: any = {};
+    const filtersCompleted: any = {};
+    if (destinationWarehouse && destinationWarehouse !== "All") {
+      filtersPending.warehouse = { warehouse_name: destinationWarehouse };
+      filtersCompleted.grn = { warehouse: { warehouse_name: destinationWarehouse } };
+    }
+
+    Promise.all([
+      QcService.list({ page: 1, page_size: 100, filters: filtersCompleted }),
+      QcService.listPending({ page: 1, page_size: 100, filters: filtersPending }),
+      WarehouseService.dropdown()
+    ]).then(([completedRes, pendingRes, whList]) => {
+      const completedMap = new Map((completedRes.data || []).map((q: any) => [q.grnNo, q]));
+      const uniquePending = (pendingRes.data || []).filter((q: any) => !completedMap.has(q.grnNo));
+      setQcList([...uniquePending, ...completedMap.values()]);
+      setWarehouses(whList);
+    }).catch((err) => {
+      console.error("Failed to load QC records / warehouses from API:", err);
+      let list = getQcRecords();
+      if (destinationWarehouse && destinationWarehouse !== "All") {
+        list = list.filter(q => q.warehouse.toLowerCase() === destinationWarehouse.toLowerCase());
+      }
+      setQcList(list);
+    });
     setGrnList(getGrnRecords());
-  }, [pathname]);
+  }, [pathname, destinationWarehouse]);
 
   // Determine active tab based on pathname
   const activeTab = pathname.includes("/warehouse/qc/stock-transfer")
@@ -74,8 +102,6 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
 
   const qcListingKpis = useMemo(() => computeQcListingKpis(qcList), [qcList]);
 
-  const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
-
   const handleWarehouseChange = (val: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("destinationWarehouse", val);
@@ -91,9 +117,9 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="All">All Warehouses</SelectItem>
-          {loadWarehouses().map((wh) => (
-            <SelectItem key={wh.warehouseName} value={wh.warehouseName}>
-              {wh.warehouseName}
+          {warehouses.map((wh) => (
+            <SelectItem key={wh.warehouse_id} value={wh.warehouse_name}>
+              {wh.warehouse_name}
             </SelectItem>
           ))}
         </SelectContent>

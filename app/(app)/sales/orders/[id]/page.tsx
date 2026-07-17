@@ -34,8 +34,6 @@ import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-
 import {
   type SalesOrder,
   type OrderStatus,
-  getOrderById,
-  hydrateOrderLineItems,
   formatOrderStatus,
   calculateOrderTotalsSummary,
   canEditOrder,
@@ -43,7 +41,6 @@ import {
   canCancelOrder,
   canDownloadPI,
   canGeneratePackingList,
-  approveSalesOrder,
   canApproveOrder,
   formatApprovalStatus,
   resolveApprovalStatus,
@@ -54,6 +51,7 @@ import {
   formatSchemeRupee,
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { Badge } from "@/components/ui/badge";
+import { useSalesOrder, useApproveRejectSalesOrder, useCancelSalesOrder } from "@/hooks/sales/use-sales-orders";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "delivered", "dispatched"].includes(status)) return "active";
@@ -63,7 +61,7 @@ function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft
   return "inactive";
 }
 
-function approvalTone(status: ReturnType<typeof resolveApprovalStatus>): "pending" | "approved" | "rejected" | "neutral" {
+function approvalTone(status: string): "pending" | "approved" | "rejected" | "neutral" {
   if (status === "pending_approval") return "pending";
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
@@ -74,25 +72,18 @@ export default function ViewSalesOrderPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = Number(params.id);
+  const id = params.id as string;
   const approvalMode = searchParams.get("from") === "approval";
 
-  const [order, setOrder] = useState<SalesOrder | null>(null);
+  const { data: order, isLoading, error: fetchError, refetch } = useSalesOrder(id);
+
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState("overview");
 
-  const refresh = () => {
-    const o = getOrderById(id);
-    if (o) setOrder(hydrateOrderLineItems(o));
-  };
-
-  useEffect(() => {
-    refresh();
-  }, [id]);
+  const approveRejectMutation = useApproveRejectSalesOrder();
 
   useEffect(() => {
     if (!toast) return;
@@ -100,7 +91,15 @@ export default function ViewSalesOrderPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  if (!order) {
+  if (isLoading) {
+    return (
+      <div className="p-8 text-sm">
+        Loading sales order details...
+      </div>
+    );
+  }
+
+  if (fetchError || !order) {
     return (
       <div className="p-8 text-sm">
         Sales order not found.{" "}
@@ -126,15 +125,20 @@ export default function ViewSalesOrderPage() {
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
   const handleApprove = () => {
-    const result = approveSalesOrder(order.id);
-    if ("error" in result) {
-      showToast(result.error, "error");
-      return;
-    }
-    router.push("/sales/orders?tab=approval&toast=approved");
+    approveRejectMutation.mutate(
+      { id, action: "APPROVE" },
+      {
+        onSuccess: () => {
+          router.push("/sales/orders?tab=approval&toast=approved");
+        },
+        onError: (err: any) => {
+          showToast(err?.message || "Failed to approve order.", "error");
+        },
+      }
+    );
   };
 
-  const handleRejectSuccess = (_updated: SalesOrder) => {
+  const handleRejectSuccess = () => {
     router.push("/sales/orders?tab=approval&toast=rejected");
   };
 
@@ -193,9 +197,6 @@ export default function ViewSalesOrderPage() {
   if (order.approvedDate) {
     approvalItems.push({ label: "Approved Date", value: order.approvedDate, tone: "neutral" });
   }
-  if (order.rejectionReason) {
-    approvalItems.push({ label: "Rejection Reason", value: order.rejectionReason, tone: "rejected" });
-  }
 
   const sidebar: RecordDetailSidebarProps = {
     quickActions,
@@ -229,6 +230,7 @@ export default function ViewSalesOrderPage() {
         size="sm"
         className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
         onClick={() => setApproveOpen(true)}
+        disabled={approveRejectMutation.isPending}
       >
         <Check className="w-3.5 h-3.5" /> Approve Order
       </Button>
@@ -305,25 +307,20 @@ export default function ViewSalesOrderPage() {
             </RecordSectionCard>
 
             <div className="space-y-4">
-              {(order.referenceOrderNumber || order.parentOrderNumber || order.splitFromOrderNumber) && (
+              {(order.parentOrderNumber || order.referenceOrderNumber) && (
                 <RecordSectionCard title="Split Reference" accent="purple">
                   {order.referenceOrderNumber && (
                     <RecordKvRow label="Reference Order" value={order.referenceOrderNumber} mono />
                   )}
                   {order.parentOrderNumber && (
-                    <RecordKvRow label="Parent Order" value={order.parentOrderNumber} mono />
-                  )}
-                  {order.splitFromOrderNumber && (
-                    <RecordKvRow label="Split From" value={order.splitFromOrderNumber} mono isLast />
+                    <RecordKvRow label="Parent Order" value={order.parentOrderNumber} mono isLast />
                   )}
                 </RecordSectionCard>
               )}
 
               {order.status === "cancelled" && (
                 <RecordSectionCard title="Cancellation" accent="orange">
-                  <RecordKvRow label="Reason" value={order.cancellationReason} />
-                  <RecordKvRow label="Cancelled By" value={order.cancelledBy} />
-                  <RecordKvRow label="Cancelled Date" value={order.cancelledDate} isLast />
+                  <RecordKvRow label="Remarks" value={order.remarks} isLast />
                 </RecordSectionCard>
               )}
 
@@ -331,29 +328,6 @@ export default function ViewSalesOrderPage() {
                 <RecordSectionCard title="Approval" accent="green">
                   <RecordKvRow label="Approved By" value={order.approvedBy} />
                   <RecordKvRow label="Approved Date" value={order.approvedDate} isLast />
-                </RecordSectionCard>
-              )}
-
-              {(order.approvalStatus === "rejected" || order.status === "rejected") && (
-                <RecordSectionCard title="Rejection" accent="orange">
-                  <RecordKvRow label="Reason" value={order.rejectionReason} />
-                  <RecordKvRow label="Rejected By" value={order.rejectedBy} />
-                  <RecordKvRow label="Rejected Date" value={order.rejectedDate} isLast />
-                </RecordSectionCard>
-              )}
-
-              {(order.packingListNumber || packingList) && (
-                <RecordSectionCard title="Packing List" accent="blue">
-                  <RecordKvRow label="PL Number" value={order.packingListNumber} mono />
-                  <RecordKvRow
-                    label="Packing Status"
-                    value={order.packingStatus ? (PACKING_LIST_STATUS_LABELS[order.packingStatus] ?? order.packingStatus) : "—"}
-                  />
-                  <RecordKvRow
-                    label="Warehouse"
-                    value={order.warehouseName ?? packingList?.warehouseName}
-                    isLast
-                  />
                 </RecordSectionCard>
               )}
 
@@ -378,7 +352,7 @@ export default function ViewSalesOrderPage() {
                   <tr className="border-b bg-muted/40 border-border">
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">DP</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Offer</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">Disc. Amt</th>
@@ -389,8 +363,12 @@ export default function ViewSalesOrderPage() {
                 </thead>
                 <tbody>
                   {order.lineItems.map(line => {
-                    const product = line.productId ? getProductById(line.productId) : undefined;
+                    const product = line.productId ? getProductById(Number(line.productId)) : undefined;
                     const hasScheme = isProductDiscountSchemeApplied(line);
+                    const packSize = product?.packSize || 1;
+                    const cases = Math.floor(line.quantity / packSize);
+                    const loose = line.quantity % packSize;
+                    
                     return (
                       <tr key={line.id} className="border-b border-border/60">
                         <td className="px-4 py-2">
@@ -398,7 +376,12 @@ export default function ViewSalesOrderPage() {
                           <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                         </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">
+                          <div className="flex flex-col items-end">
+                            <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
+                            <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{formatSchemeRupee(line.dealerPrice)}</td>
                         <td className="px-4 py-2">
                           {hasScheme ? (
@@ -445,29 +428,35 @@ export default function ViewSalesOrderPage() {
         )}
       </RecordDetailPage>
 
-      <CancelOrderDialog
-        order={order}
-        open={cancelOpen}
-        onClose={() => setCancelOpen(false)}
-        onSuccess={() => {
-          refresh();
-          showToast("Sales order cancelled successfully.");
-        }}
-      />
+      {cancelOpen && (
+        <CancelOrderDialog
+          order={order}
+          open={cancelOpen}
+          onClose={() => setCancelOpen(false)}
+          onSuccess={() => {
+            refetch();
+            showToast("Sales order cancelled successfully.");
+          }}
+        />
+      )}
 
-      <ApproveOrderDialog
-        order={order}
-        open={approveOpen}
-        onClose={() => setApproveOpen(false)}
-        onConfirm={handleApprove}
-      />
+      {approveOpen && (
+        <ApproveOrderDialog
+          order={order}
+          open={approveOpen}
+          onClose={() => setApproveOpen(false)}
+          onConfirm={handleApprove}
+        />
+      )}
 
-      <RejectOrderDialog
-        order={order}
-        open={rejectOpen}
-        onClose={() => setRejectOpen(false)}
-        onSuccess={handleRejectSuccess}
-      />
+      {rejectOpen && (
+        <RejectOrderDialog
+          order={order}
+          open={rejectOpen}
+          onClose={() => setRejectOpen(false)}
+          onSuccess={handleRejectSuccess}
+        />
+      )}
 
       {toast && (
         <div

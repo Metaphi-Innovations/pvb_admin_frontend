@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { FileText, Scale } from "lucide-react";
+import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PurchaseOrder } from "../po-data";
 import { POVendorInvoiceSection } from "./POVendorInvoiceSection";
-import { ThreeWayMatchSection } from "./ThreeWayMatchSection";
+// import { ThreeWayMatchSection } from "./ThreeWayMatchSection";
+import type { POVendorInvoiceView } from "@/services/purchase-order.service";
 
 type TabId = "invoice" | "match";
 
@@ -13,24 +14,25 @@ export function POIntegrationTabs({
   po,
   refreshKey,
   onUpload,
-  onReplace,
+  invoices = [],
 }: {
   po: PurchaseOrder;
   refreshKey: number;
   onUpload: () => void;
-  onReplace: () => void;
+  invoices?: POVendorInvoiceView[];
 }) {
   const [tab, setTab] = useState<TabId>("invoice");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.location.hash === "#three-way-match") setTab("match");
+    // if (window.location.hash === "#three-way-match") setTab("match");
     if (window.location.hash === "#vendor-invoice") setTab("invoice");
   }, [refreshKey]);
 
   const tabs: { id: TabId; label: string; icon: ReactNode }[] = [
     { id: "invoice", label: "Supplier Invoice", icon: <FileText className="w-3.5 h-3.5" /> },
-    { id: "match", label: "3-Way Match", icon: <Scale className="w-3.5 h-3.5" /> },
+    // 3-Way Match — temporarily hidden until module is ready
+    // { id: "match", label: "3-Way Match", icon: <Scale className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -58,16 +60,18 @@ export function POIntegrationTabs({
         <POVendorInvoiceSection
           po={po}
           refreshKey={refreshKey}
+          invoices={invoices}
           onUpload={onUpload}
-          onReplace={onReplace}
         />
       )}
 
+      {/* 3-Way Match — temporarily hidden
       {tab === "match" && (
         <div id="three-way-match">
           <ThreeWayMatchSection po={po} refreshKey={refreshKey} />
         </div>
       )}
+      */}
     </div>
   );
 }

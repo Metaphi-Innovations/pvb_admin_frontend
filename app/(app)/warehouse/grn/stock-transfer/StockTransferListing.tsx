@@ -1,28 +1,31 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2, PackageCheck } from "lucide-react";
-import { getGrnRecords } from "../shared/mock-data";
-import { GrnRecord } from "../shared/types";
+import { Eye, FileCheck2, FilePlus2, Pencil, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
-  getDispatchedStockTransfersForGrn,
-  getStockTransferDispatchLines,
-} from "@/app/(app)/sales/stock-transfer/warehouse-receipt-sync";
-import {
-  DEFAULT_DESTINATION_WAREHOUSE,
   getStockTransferGrnDisplayStatus,
   ST_GRN_STATUS_BADGE,
 } from "@/lib/warehouse/grn-source";
+import { getStockTransferReceivedApiContext } from "@/lib/warehouse/grn-list-config";
+import { useGrnListData } from "../shared/useGrnListData";
+import { buildGrnApiFilters, GrnListService, type GrnListItem } from "@/services/grn-list.service";
+import { useWarehousesDropdown } from "@/hooks/masters";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  fetchDispatchFilterOptions,
+  fetchPendingStockTransferDispatches,
+  type PendingStockTransferDispatchRow,
+} from "./stock-transfer-grn-utils";
 
-type StockTransferGrnRow = {
+type ReceivedStockTransferGrnRow = {
   id: string;
-  rowType: "pending_transfer" | "grn_record";
-  transferId?: number;
-  grnId?: string;
+  rowType: "grn_record";
+  grnId: string;
   stockTransferNo: string;
   fromWarehouse: string;
   toWarehouse: string;
@@ -31,71 +34,27 @@ type StockTransferGrnRow = {
   dispatchedQty: number;
   receivedQty: number;
   displayStatus: string;
-  grnRecord?: GrnRecord;
+  grnRecord: GrnListItem;
 };
 
-function summarizeProducts(names: string[]): string {
-  const unique = [...new Set(names)];
-  if (unique.length <= 2) return unique.join(", ");
-  return `${unique.slice(0, 2).join(", ")} +${unique.length - 2}`;
-}
-
-function buildStockTransferRows(
-  grns: GrnRecord[],
-  destinationWarehouse: string,
-): { pending: StockTransferGrnRow[]; received: StockTransferGrnRow[] } {
-  const stGrns = grns.filter((g) => g.sourceType === "stock_transfer");
-  const warehouseFilter = destinationWarehouse || "All";
-
-  const pending = getDispatchedStockTransfersForGrn(warehouseFilter).map((transfer) => {
-    const lines = getStockTransferDispatchLines(transfer);
-    const dispatchedQty = lines.reduce((s, l) => s + l.dispatchedQty, 0);
-    return {
-      id: `pending-${transfer.id}`,
-      rowType: "pending_transfer" as const,
-      transferId: transfer.id,
-      stockTransferNo: transfer.transferNumber,
-      fromWarehouse: transfer.sourceWarehouseName,
-      toWarehouse: transfer.targetWarehouseName,
-      dispatchDate: transfer.updatedDate || transfer.transferDate,
-      products: summarizeProducts(lines.map((l) => l.productName)),
-      dispatchedQty,
-      receivedQty: 0,
-      displayStatus: getStockTransferGrnDisplayStatus({ isPendingTransfer: true }),
-    };
-  });
-
-  const received = stGrns
-    .filter((g) => {
-      if (destinationWarehouse === "All") return true;
-      return (g.toWarehouse ?? g.warehouse) === destinationWarehouse;
-    })
-    .map((grn) => {
-      const dispatchedQty = grn.items.reduce((s, it) => s + (it.orderedQty ?? it.pendingQty ?? 0), 0);
-      const receivedQty = grn.items.reduce((s, it) => s + (it.receivedQty ?? 0), 0);
-      const displayStatus = getStockTransferGrnDisplayStatus({
-        isPendingTransfer: false,
-        receiptStatus: grn.receiptStatus,
-        grnStatus: grn.status,
-      });
-
-      return {
-        id: grn.id,
-        rowType: "grn_record" as const,
-        grnId: grn.id,
-        stockTransferNo: grn.stockTransferNo ?? grn.poNumber,
-        fromWarehouse: grn.fromWarehouse ?? grn.vendorName,
-        toWarehouse: grn.toWarehouse ?? grn.warehouse,
-        dispatchDate: grn.dispatchDate ?? grn.grnDate,
-        products: summarizeProducts(grn.items.map((i) => i.productName)),
-        dispatchedQty,
-        receivedQty,
-        displayStatus,
-        grnRecord: grn,
-      };
-    });
-
-  return { pending, received };
+function mapToReceivedRow(item: GrnListItem): ReceivedStockTransferGrnRow {
+  return {
+    id: item.id,
+    rowType: "grn_record",
+    grnId: item.id,
+    stockTransferNo: item.stockTransferNo ?? item.grnNo,
+    fromWarehouse: item.fromWarehouse ?? item.vendorName ?? "—",
+    toWarehouse: item.toWarehouse ?? item.warehouse,
+    dispatchDate: item.dispatchDate ?? item.grnDate,
+    products: "—",
+    dispatchedQty: item.receivedQty,
+    receivedQty: item.receivedQty,
+    displayStatus: getStockTransferGrnDisplayStatus({
+      isPendingTransfer: false,
+      grnStatus: item.status,
+    }),
+    grnRecord: item,
+  };
 }
 
 interface StockTransferListingProps {
@@ -104,77 +63,204 @@ interface StockTransferListingProps {
 
 export function StockTransferListing({ destinationWarehouse }: StockTransferListingProps) {
   const router = useRouter();
-  const [grnList, setGrnList] = useState<GrnRecord[]>([]);
   const [subTab, setSubTab] = useState<"pending" | "received">("pending");
 
+  const { data: warehouses = [] } = useWarehousesDropdown();
+  const destinationWarehouseName = useMemo(() => {
+    if (!destinationWarehouse || destinationWarehouse === "All") return null;
+    const match = warehouses.find((wh) => wh.warehouse_id === destinationWarehouse);
+    return match?.warehouseName || null;
+  }, [destinationWarehouse, warehouses]);
+
+  // ── Pending (Dispatch) state ───────────────────────────────────────────
+  const [pendingFilters, setPendingFilters] = useState<FilterState>({});
+  const [pendingSort, setPendingSort] = useState<SortState>({ key: "", direction: "none" });
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pendingPageSize, setPendingPageSize] = useState(10);
+  const [pendingRows, setPendingRows] = useState<PendingStockTransferDispatchRow[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  const [statusOptions, setStatusOptions] = useState<{ label: string; value: string }[]>([]);
+  const loadedPendingFiltersRef = useRef<Set<string>>(new Set());
+
+  const {
+    debouncedFilters: debouncedPendingFilters,
+    debouncedSearch: debouncedPendingSearch,
+    isDebouncing: pendingDebouncing,
+  } = useDebouncedFilters(pendingFilters);
+
+  // ── Received (GRN) state ───────────────────────────────────────────────
   const [grnFilters, setGrnFilters] = useState<FilterState>({});
   const [grnSort, setGrnSort] = useState<SortState>({ key: "", direction: "none" });
   const [grnPage, setGrnPage] = useState(1);
   const [grnPageSize, setGrnPageSize] = useState(10);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [receivedCount, setReceivedCount] = useState(0);
+
+  const receivedTabContext = useMemo(() => getStockTransferReceivedApiContext(), []);
+
+  const {
+    items: grnItems,
+    total: grnTotal,
+    loading: grnLoading,
+    error: grnError,
+  } = useGrnListData({
+    tabContext: receivedTabContext,
+    filters: grnFilters,
+    sort: grnSort,
+    page: grnPage,
+    pageSize: grnPageSize,
+    destinationWarehouse,
+  });
+
+  const receivedRows = useMemo(() => grnItems.map(mapToReceivedRow), [grnItems]);
+
+  const loadPending = useCallback(async () => {
+    setPendingLoading(true);
+    setPendingError(null);
+    try {
+      const queryFilters: Record<string, unknown> = {};
+      Object.entries(debouncedPendingFilters).forEach(([k, v]) => {
+        if (k === "search") return;
+        if (v !== undefined && v !== "") queryFilters[k] = v;
+      });
+
+      let ordering: string | undefined;
+      if (pendingSort.key && pendingSort.direction !== "none") {
+        const fieldMap: Record<string, string> = {
+          stockTransferNo: "dispatch_number",
+          dispatchDate: "dispatch_date",
+          dispatchedQty: "dispatch_date",
+          fromWarehouse: "dispatch_date",
+          toWarehouse: "dispatch_date",
+        };
+        const backendKey = fieldMap[pendingSort.key] || pendingSort.key;
+        ordering =
+          pendingSort.direction === "desc" ? `-${backendKey}` : backendKey;
+      }
+
+      const result = await fetchPendingStockTransferDispatches({
+        page: pendingPage,
+        pageSize: pendingPageSize,
+        search: debouncedPendingSearch || undefined,
+        ordering,
+        filters: queryFilters,
+        destinationWarehouseId: destinationWarehouse,
+        destinationWarehouseName,
+      });
+
+      setPendingRows(result.items);
+      setPendingTotal(result.total);
+      setPendingCount(result.total);
+    } catch (err) {
+      console.error(err);
+      setPendingError(err instanceof Error ? err.message : "Failed to load pending dispatches.");
+      setPendingRows([]);
+      setPendingTotal(0);
+    } finally {
+      setPendingLoading(false);
+    }
+  }, [
+    pendingPage,
+    pendingPageSize,
+    debouncedPendingFilters,
+    debouncedPendingSearch,
+    pendingSort.key,
+    pendingSort.direction,
+    destinationWarehouse,
+    destinationWarehouseName,
+  ]);
 
   useEffect(() => {
-    setGrnList(getGrnRecords());
-  }, []);
+    if (subTab === "pending") {
+      void loadPending();
+    }
+  }, [subTab, loadPending]);
+
+  useEffect(() => {
+    setPendingPage(1);
+  }, [destinationWarehouse, pendingFilters, pendingPageSize]);
+
+  useEffect(() => {
+    setPendingPage(1);
+  }, [pendingSort.key, pendingSort.direction]);
 
   useEffect(() => {
     setGrnPage(1);
-  }, [destinationWarehouse, subTab]);
+  }, [destinationWarehouse, subTab, grnFilters, grnPageSize]);
 
-  const { pending, received } = useMemo(
-    () => buildStockTransferRows(grnList, destinationWarehouse),
-    [grnList, destinationWarehouse],
-  );
+  useEffect(() => {
+    setGrnPage(1);
+  }, [grnSort.key, grnSort.direction]);
 
-  const activeRows = useMemo(() => {
-    return subTab === "pending" ? pending : received;
-  }, [subTab, pending, received]);
-
-  const processedRows = useMemo(() => {
-    let result = [...activeRows];
-    const search = grnFilters.search as string | undefined;
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (row) =>
-          row.stockTransferNo.toLowerCase().includes(q) ||
-          row.fromWarehouse.toLowerCase().includes(q) ||
-          row.toWarehouse.toLowerCase().includes(q) ||
-          row.products.toLowerCase().includes(q),
-      );
+  useEffect(() => {
+    if (subTab === "received") {
+      setReceivedCount(grnTotal);
     }
+  }, [subTab, grnTotal]);
 
-    if (grnSort.key && grnSort.direction !== "none") {
-      result.sort((a, b) => {
-        const key = grnSort.key as keyof StockTransferGrnRow;
-        const valA = a[key];
-        const valB = b[key];
-        if (typeof valA === "number" && typeof valB === "number") {
-          return grnSort.direction === "asc" ? valA - valB : valB - valA;
-        }
-        const strA = String(valA || "");
-        const strB = String(valB || "");
-        return grnSort.direction === "asc" ? strA.localeCompare(strB) : strB.localeCompare(strA);
-      });
+  // Keep Received tab badge accurate while staying on Pending
+  useEffect(() => {
+    let active = true;
+    async function loadReceivedCount() {
+      if (subTab !== "pending") return;
+      try {
+        const result = await GrnListService.list({
+          page: 1,
+          pageSize: 1,
+          search: "",
+          tabContext: receivedTabContext,
+          apiFilters: buildGrnApiFilters({}, receivedTabContext, destinationWarehouse),
+        });
+        if (active) setReceivedCount(result.total);
+      } catch {
+        // ignore badge errors
+      }
     }
-    return result;
-  }, [activeRows, grnFilters, grnSort]);
+    void loadReceivedCount();
+    return () => {
+      active = false;
+    };
+  }, [subTab, destinationWarehouse, receivedTabContext]);
 
-  const paginatedRows = useMemo(() => {
-    const start = (grnPage - 1) * grnPageSize;
-    return processedRows.slice(start, start + grnPageSize);
-  }, [processedRows, grnPage, grnPageSize]);
+  const handleOpenPendingFilter = useCallback(async (columnKey: string) => {
+    if (loadedPendingFiltersRef.current.has(columnKey)) return;
+    if (columnKey !== "status") return;
+    loadedPendingFiltersRef.current.add(columnKey);
+    try {
+      const options = await fetchDispatchFilterOptions("status");
+      setStatusOptions(options);
+    } catch (err) {
+      console.error(err);
+      loadedPendingFiltersRef.current.delete(columnKey);
+    }
+  }, []);
 
-  const totalRecords = processedRows.length;
-
-  const stockTransferColumns = useMemo(() => {
-    const cols: ColumnConfig<StockTransferGrnRow>[] = [
+  const pendingColumns = useMemo(() => {
+    const cols: ColumnConfig<PendingStockTransferDispatchRow>[] = [
       {
         key: "stockTransferNo",
         header: "Stock Transfer No.",
         sortable: true,
         width: "140px",
         render: (_val, row) => (
-          <span className="font-mono text-xs font-semibold text-brand-700">{row.stockTransferNo}</span>
+          <span className="font-mono text-xs font-semibold text-brand-700">
+            {row.stockTransferNo}
+          </span>
+        ),
+      },
+      {
+        key: "dispatchNumber",
+        header: "Dispatch No.",
+        sortable: true,
+        width: "130px",
+        render: (_val, row) => (
+          <Link href={`/warehouse/grn/stock-transfer/dispatch-view/${row.dispatchId}`}>
+            <span className="font-mono text-xs font-semibold text-brand-700 hover:text-brand-800">
+              {row.dispatchNumber}
+            </span>
+          </Link>
         ),
       },
       {
@@ -193,7 +279,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
       },
       {
         key: "dispatchDate",
-        header: subTab === "pending" ? "Dispatch Date" : "Received Date",
+        header: "Dispatch Date",
         sortable: true,
         width: "120px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.dispatchDate}</span>,
@@ -207,19 +293,79 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
       },
       {
         key: "dispatchedQty",
-        header: subTab === "pending" ? "Dispatched Qty" : "Received Qty",
+        header: "Dispatched Qty",
         sortable: true,
         align: "right",
         width: "110px",
-        render: (_val, row) => {
-          const qty = subTab === "pending" ? row.dispatchedQty : row.receivedQty;
-          return <span className="text-xs font-medium tabular-nums">{qty.toLocaleString()}</span>;
-        },
+        render: (_val, row) => (
+          <span className="text-xs font-medium tabular-nums">{row.dispatchedQty.toLocaleString()}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: statusOptions,
+        width: "120px",
+        render: (_val, row) => (
+          <span className="inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
+            {row.status}
+          </span>
+        ),
       },
     ];
+    return cols;
+  }, [statusOptions]);
 
-    if (subTab === "received") {
-      cols.push({
+  const receivedColumns = useMemo(() => {
+    const cols: ColumnConfig<ReceivedStockTransferGrnRow>[] = [
+      {
+        key: "stockTransferNo",
+        header: "GRN No.",
+        sortable: true,
+        width: "140px",
+        render: (_val, row) => (
+          <Link href={`/warehouse/grn/stock-transfer/${row.grnId}`}>
+            <span className="font-mono text-xs font-semibold text-brand-700 hover:text-brand-800">
+              {row.grnRecord.grnNo}
+            </span>
+          </Link>
+        ),
+      },
+      {
+        key: "fromWarehouse",
+        header: "From Warehouse",
+        sortable: true,
+        width: "140px",
+        render: (_val, row) => <span className="text-xs text-foreground">{row.fromWarehouse}</span>,
+      },
+      {
+        key: "toWarehouse",
+        header: "To Warehouse",
+        sortable: true,
+        width: "140px",
+        render: (_val, row) => <span className="text-xs text-foreground">{row.toWarehouse}</span>,
+      },
+      {
+        key: "dispatchDate",
+        header: "Received Date",
+        sortable: true,
+        width: "120px",
+        render: (_val, row) => <span className="text-xs text-foreground">{row.dispatchDate}</span>,
+      },
+      {
+        key: "receivedQty",
+        header: "Received Qty",
+        sortable: true,
+        align: "right",
+        width: "110px",
+        render: (_val, row) => (
+          <span className="text-xs font-medium tabular-nums">{row.receivedQty.toLocaleString()}</span>
+        ),
+      },
+      {
         key: "displayStatus",
         header: "Status",
         sortable: true,
@@ -229,40 +375,36 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
             ST_GRN_STATUS_BADGE[val as keyof typeof ST_GRN_STATUS_BADGE] ??
             ST_GRN_STATUS_BADGE["Pending Receipt"];
           return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+            <span
+              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+            >
               {cfg.label}
             </span>
           );
         },
-      });
-    }
-
+      },
+    ];
     return cols;
-  }, [subTab]);
+  }, []);
 
-  const stockTransferActions: ActionItemConfig<StockTransferGrnRow>[] = [
+  const pendingActions: ActionItemConfig<PendingStockTransferDispatchRow>[] = [
     {
       label: "Create GRN",
-      action: "receive",
-      icon: PackageCheck,
-      onClick: (row) => {
-        if (row.rowType === "pending_transfer" && row.transferId) {
-          router.push(`/warehouse/grn/stock-transfer/create?dispatchId=${row.transferId}`);
-        }
-      },
-      hide: (row) => row.rowType !== "pending_transfer",
+      action: "create_grn",
+      icon: FilePlus2,
+      onClick: (row) =>
+        router.push(`/warehouse/grn/stock-transfer/create?dispatchId=${row.dispatchId}`),
     },
     {
       label: "View Dispatch",
-      action: "view_dispatch",
-      icon: Eye,
-      onClick: (row) => {
-        if (row.rowType === "pending_transfer" && row.transferId) {
-          router.push(`/warehouse/grn/stock-transfer/dispatch-view/${row.transferId}`);
-        }
-      },
-      hide: (row) => row.rowType !== "pending_transfer",
+      action: "view",
+      icon: Truck,
+      onClick: (row) =>
+        router.push(`/warehouse/grn/stock-transfer/dispatch-view/${row.dispatchId}`),
     },
+  ];
+
+  const receivedActions: ActionItemConfig<ReceivedStockTransferGrnRow>[] = [
     {
       label: "View GRN",
       action: "view",
@@ -270,7 +412,15 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
       onClick: (row) => {
         if (row.grnId) router.push(`/warehouse/grn/stock-transfer/${row.grnId}`);
       },
-      hide: (row) => row.rowType !== "grn_record",
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Pencil,
+      onClick: (row) => {
+        if (row.grnId) router.push(`/warehouse/grn/stock-transfer/${row.grnId}/edit`);
+      },
+      hide: (row) => row.grnRecord?.status === "qc_completed",
     },
     {
       label: "Perform QC",
@@ -283,14 +433,12 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         }
         if (row.grnId) router.push(`/warehouse/qc/create?grnId=${row.grnId}`);
       },
-      hide: (row) =>
-        row.rowType !== "grn_record" || row.grnRecord?.status === "qc_completed",
+      hide: (row) => row.grnRecord?.status === "qc_completed",
     },
   ];
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs switch */}
       <div className="flex gap-2 border-b border-border pb-3">
         <button
           type="button"
@@ -302,7 +450,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
               : "border-border text-muted-foreground hover:bg-muted bg-white",
           )}
         >
-          Pending ({pending.length})
+          Pending ({pendingCount})
         </button>
         <button
           type="button"
@@ -314,24 +462,58 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
               : "border-border text-muted-foreground hover:bg-muted bg-white",
           )}
         >
-          Received ({received.length})
+          Received ({receivedCount})
         </button>
       </div>
 
-      <MasterListing<StockTransferGrnRow>
-        columns={stockTransferColumns}
-        data={paginatedRows}
-        totalRecords={totalRecords}
-        page={grnPage}
-        pageSize={grnPageSize}
-        onPageChange={setGrnPage}
-        onPageSizeChange={setGrnPageSize}
-        onFilterChange={setGrnFilters}
-        onSortChange={setGrnSort}
-        actions={stockTransferActions}
-        emptyMessage={subTab === "pending" ? "No pending stock transfers found" : "No received stock transfers found"}
-        searchPlaceholder="Search stock transfer..."
-      />
+      {subTab === "pending" ? (
+        <div className="space-y-3">
+          {pendingError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {pendingError}
+            </div>
+          )}
+          <MasterListing<PendingStockTransferDispatchRow>
+            columns={pendingColumns}
+            data={pendingRows}
+            loading={pendingLoading || pendingDebouncing}
+            totalRecords={pendingTotal}
+            page={pendingPage}
+            pageSize={pendingPageSize}
+            onPageChange={setPendingPage}
+            onPageSizeChange={setPendingPageSize}
+            onFilterChange={setPendingFilters}
+            onSortChange={setPendingSort}
+            onOpenFilter={handleOpenPendingFilter}
+            actions={pendingActions}
+            emptyMessage="No pending stock transfer dispatches found"
+            searchPlaceholder="Search dispatch / stock transfer..."
+          />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {grnError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {grnError}
+            </div>
+          )}
+          <MasterListing<ReceivedStockTransferGrnRow>
+            columns={receivedColumns}
+            data={receivedRows}
+            loading={grnLoading}
+            totalRecords={grnTotal}
+            page={grnPage}
+            pageSize={grnPageSize}
+            onPageChange={setGrnPage}
+            onPageSizeChange={setGrnPageSize}
+            onFilterChange={setGrnFilters}
+            onSortChange={setGrnSort}
+            actions={receivedActions}
+            emptyMessage="No received stock transfer GRNs found"
+            searchPlaceholder="Search stock transfer GRN..."
+          />
+        </div>
+      )}
     </div>
   );
 }

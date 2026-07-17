@@ -6,8 +6,10 @@ export interface DispatchProduct {
   unitRate?: number;
   batchNo?: string;
   batchExpiryDate?: string;
-  batchAllocations?: { batchNumber: string; expiryDate: string; allocatedQty: number }[];
+  batchAllocations?: { batchNumber: string; expiryDate: string; allocatedQty: number; returnedQtyPieces?: number; unitPerPacking?: number }[];
   nearExpirySchemeEligible?: boolean;
+  returnedQtyPieces?: number;
+  unitPerPacking?: number;
 }
 
 export interface DispatchNearExpirySchemeEntry {
@@ -86,4 +88,6 @@ export interface DispatchRecord {
   total_items?: number;
   total_quantity?: number;
   dispatch_status?: string;
+
+  [key: string]: any; // Allow fallback to raw backend mappings
 }
