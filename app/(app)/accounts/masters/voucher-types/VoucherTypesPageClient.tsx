@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
-import { Lock } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { loadVoucherTypes, saveVoucherTypes, type VoucherTypeMaster } from "../masters-data";
@@ -52,12 +51,7 @@ export default function VoucherTypesPageClient() {
             <tbody>
               {records.map((vt) => (
                 <tr key={vt.id} className="accounts-table-row group">
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <span className="inline-flex items-center gap-1.5">
-                      {vt.name}
-                      <Lock className="w-3 h-3 text-muted-foreground" aria-hidden />
-                    </span>
-                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">{vt.name}</td>
                   <td className="px-4 py-3 text-xs font-mono">{vt.prefix}</td>
                   <td className="px-4 py-3 text-xs capitalize">{vt.numberingType}</td>
                   <td className="px-4 py-3 text-xs tabular-nums">{vt.startingNumber}</td>

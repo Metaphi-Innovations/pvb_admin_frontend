@@ -41,7 +41,11 @@ export type VoucherLedgerScope =
   | "payment_debit";
 
 const VOUCHER_QUICK_ADD_OVERRIDE_BLOCKED = new Set([
+  "Sundry Debtors",
+  "Accounts Receivable",
   "Trade Receivables / Sundry Debtors",
+  "Sundry Creditors",
+  "Accounts Payable",
   "Trade Payables / Sundry Creditors",
   "Bank Accounts",
   "Cash-in-Hand",
@@ -742,11 +746,15 @@ export function ledgerMatchesVoucherScope(
       return ledgerMatchesPaymentCreditScope(ledger, records);
     case "party_receivable":
       return (
+        ledgerHasAncestorNamed(ledger, "Sundry Debtors", records) ||
+        ledgerHasAncestorNamed(ledger, "Accounts Receivable", records) ||
         ledgerHasAncestorNamed(ledger, "Trade Receivables / Sundry Debtors", records) ||
         ledger.erpSourceModule === "customer_master"
       );
     case "party_payable":
       return (
+        ledgerHasAncestorNamed(ledger, "Sundry Creditors", records) ||
+        ledgerHasAncestorNamed(ledger, "Accounts Payable", records) ||
         ledgerHasAncestorNamed(ledger, "Trade Payables / Sundry Creditors", records) ||
         ledger.erpSourceModule === "vendor_master"
       );
@@ -826,7 +834,6 @@ export function createVoucherQuickAddLedger(form: LedgerFormValues): ChartOfAcco
   const normalized: LedgerFormValues = {
     ...form,
     ledgerName: form.ledgerName.trim(),
-    bankAccountFlag: isBankParent || form.bankAccountFlag,
     balanceType:
       form.balanceType ||
       defaultBalanceTypeForParent(records, form.parentGroupId),
@@ -834,7 +841,10 @@ export function createVoucherQuickAddLedger(form: LedgerFormValues): ChartOfAcco
 
   const ledgers = getCoaLedgers();
   const id = nextId(ledgers);
-  const ledger = formToLedger(normalized, id, generateLedgerCode(records), records);
+  const ledger = {
+    ...formToLedger(normalized, id, generateLedgerCode(records), records),
+    bankAccountFlag: isBankParent,
+  };
   saveChartOfAccounts([...records, ledger]);
   dispatchAccountsDataChanged("ledgers", {
     operation: "create",

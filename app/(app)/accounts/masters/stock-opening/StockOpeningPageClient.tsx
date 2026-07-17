@@ -344,19 +344,6 @@ export default function StockOpeningPageClient() {
               options={listItemOptions}
               placeholder="All items"
             />
-            <div className="space-y-1">
-              <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
-                Financial Year
-              </Label>
-              <div
-                className={cn(
-                  ACCOUNTS_FILTER_CONTROL_CLASS,
-                  "flex items-center px-2.5 bg-muted/30 text-xs font-medium mt-0",
-                )}
-              >
-                {selectedFY.label}
-              </div>
-            </div>
             <ReportFilterResetButton
               showOnlyWhenActive
               active={listFiltersActive}

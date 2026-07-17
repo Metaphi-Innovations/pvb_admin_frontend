@@ -439,8 +439,6 @@ export function PurchaseInvoiceDirectForm({
 
   const gstApplicable = lines.some((l) => l.gstRate > 0 || l.cgst + l.sgst + l.igst > 0);
 
-
-
   useEffect(() => {
 
     if (!vendorId || !vendorInvoiceNo.trim()) {

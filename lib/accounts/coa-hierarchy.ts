@@ -49,9 +49,9 @@ export const NODE_LEVEL_LABELS: Record<CoaNodeLevel, string> = {
 };
 
 export const NODE_LEVEL_DESCRIPTIONS: Record<CoaNodeLevel, string> = {
-  primary_head: "Top-level system heads: Assets, Liabilities, Income, Expenses",
-  account_group: "System-defined groups (e.g. Current Assets, Sundry Debtors, Bank Accounts)",
-  ledger: "User or ERP-created account — posting or grouping inferred from children",
+  primary_head: "Top-level system heads: Assets, Liabilities, Income, Expenses (locked)",
+  account_group: "System-defined groups and sub-groups (locked) — e.g. Current Assets, Sundry Debtors",
+  ledger: "Posting account — mandatory system ledgers are locked; all others are user-created",
 };
 
 export function nextHierarchyLevel(level: CoaNodeLevel): CoaNodeLevel | null {
@@ -100,13 +100,14 @@ export function isPostableNode(node: ChartOfAccount, records?: ChartOfAccount[])
   return isPostingLedger(node, list);
 }
 
-/** Primary heads and standard groups are system-locked */
+/** Primary heads, standard groups, and mandatory system ledgers are permanently locked */
 export function isSystemLockedNode(node: ChartOfAccount): boolean {
-  return node.isSystem && isStructuralNode(node);
+  return Boolean(node.isSystem);
 }
 
+/** Users may only create Level-4 ledgers — never L1/L2/L3 structure. */
 export function canUserCreateAtLevel(level: CoaNodeLevel): boolean {
-  return level === "ledger" || level === "account_group";
+  return level === "ledger";
 }
 
 export function isUserCreatedGroup(node: ChartOfAccount): boolean {
@@ -127,9 +128,9 @@ export function canUserDeleteGroup(
 }
 
 export function canUserEditNode(node: ChartOfAccount): boolean {
+  if (node.isSystem) return false;
   if (canUserEditGroup(node)) return true;
-  if (isSystemLockedNode(node)) return false;
-  return isLedgerNode(node) && !node.isSystem;
+  return isLedgerNode(node);
 }
 
 export function canUserDeleteNode(node: ChartOfAccount, records?: ChartOfAccount[]): boolean {

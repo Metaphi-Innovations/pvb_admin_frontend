@@ -89,12 +89,14 @@ export function CoaListingToolbar({
             onDateToChange={onDateToChange}
           />
         )}
-        <ReportSearchFilter
-          value={search}
-          onChange={onSearchChange}
-          placeholder={searchPlaceholder}
-          className="min-w-[140px] w-[200px] max-w-[220px] flex-none shrink-0"
-        />
+        <div>
+          <ReportSearchFilter
+            value={search}
+            onChange={onSearchChange}
+            placeholder={searchPlaceholder}
+            className="min-w-[240px] w-[280px] max-w-[320px] flex-none shrink-0"
+          />
+        </div>
         <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />
       </ReportFilterRow>
     </AccountsListingFilterCard>

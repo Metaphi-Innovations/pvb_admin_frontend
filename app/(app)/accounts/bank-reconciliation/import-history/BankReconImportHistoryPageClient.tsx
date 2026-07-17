@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { History, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,15 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-import { formatMoneyOrDash } from "@/lib/accounts/money-format";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical } from "lucide-react";
 import { getBankReconAccountById } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
 import {
   BANK_RECON_IMPORT_HISTORY_PATH,
@@ -23,7 +31,13 @@ import {
   bankReconWorkspacePath,
   RECONCILIATION_LIST_PATH,
 } from "@/app/(app)/accounts/bank-reconciliation/reconciliation-utils";
-import { loadImportBatches } from "@/lib/accounts/bank-recon-register";
+import { loadImportBatches, loadBankReconTransactions } from "@/lib/accounts/bank-recon-register";
+import {
+  canRollbackImport,
+  rollbackImport,
+} from "@/lib/accounts/bank-recon-tally-service";
+import { loadTallyLinks } from "@/lib/accounts/bank-recon-tally-store";
+import { TALLY_EVENT } from "@/lib/accounts/bank-recon-tally-types";
 import { cn } from "@/lib/utils";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -35,7 +49,66 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default function BankReconImportHistoryPageClient() {
-  const batches = useMemo(() => loadImportBatches(), []);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setTick((t) => t + 1);
+    window.addEventListener(TALLY_EVENT, handler);
+    window.addEventListener("bank-recon-register-updated", handler);
+    return () => {
+      window.removeEventListener(TALLY_EVENT, handler);
+      window.removeEventListener("bank-recon-register-updated", handler);
+    };
+  }, []);
+
+  const batches = useMemo(() => {
+    void tick;
+    return loadImportBatches();
+  }, [tick]);
+
+  const reconciledByBatch = useMemo(() => {
+    void tick;
+    const map = new Map<string, number>();
+    for (const link of loadTallyLinks()) {
+      if (
+        link.importBatchId &&
+        (link.status === "RECONCILED" || link.status === "MARKED_FOR_REVIEW")
+      ) {
+        map.set(link.importBatchId, (map.get(link.importBatchId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [tick]);
+
+  const handleRollback = useCallback((batchId: string) => {
+    const gate = canRollbackImport(batchId);
+    if (!gate.ok) {
+      window.alert(gate.reason ?? "Rollback not allowed.");
+      return;
+    }
+    if (!window.confirm("Rollback this import? Imported statement rows will be removed.")) return;
+    const res = rollbackImport(batchId);
+    if (!res.ok) {
+      window.alert(res.error);
+      return;
+    }
+    setTick((t) => t + 1);
+  }, []);
+
+  const handleDownloadErrors = useCallback((batchId: string) => {
+    const batch = batches.find((b) => b.id === batchId);
+    if (!batch?.errorReportJson) {
+      window.alert("No error file available for this import.");
+      return;
+    }
+    const blob = new Blob([batch.errorReportJson], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${batch.batchNumber}-errors.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [batches]);
 
   return (
     <AccountsPageShell
@@ -59,18 +132,33 @@ export default function BankReconImportHistoryPageClient() {
     >
       <div className="accounts-listing-table-card overflow-hidden flex flex-col flex-1 min-h-0">
         <AccountsTableScroll>
-          <AccountsTable minWidth={1000}>
+          <AccountsTable minWidth={1200}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                {["Batch No.", "Bank Account", "File Name", "Statement Period", "Imported", "Duplicates", "Invalid", "Imported By", "Imported On", "Status", "Action"].map((h) => (
-                  <AccountsTableHeadCell key={h} sticky={h === "Action"}>{h}</AccountsTableHeadCell>
+                {[
+                  "Import Date",
+                  "Bank Account",
+                  "Statement Period",
+                  "File Name",
+                  "Total Rows",
+                  "Imported Rows",
+                  "Duplicate Rows",
+                  "Failed Rows",
+                  "Reconciled Rows",
+                  "Imported By",
+                  "Status",
+                  "Actions",
+                ].map((h) => (
+                  <AccountsTableHeadCell key={h} sticky={h === "Actions"}>
+                    {h}
+                  </AccountsTableHeadCell>
                 ))}
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
               {batches.length === 0 ? (
                 <AccountsTableRow>
-                  <AccountsTableCell colSpan={11} className="text-center py-10 text-muted-foreground text-xs">
+                  <AccountsTableCell colSpan={12} className="text-center py-10 text-muted-foreground text-xs">
                     <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No import batches yet. Upload a bank statement to get started.
                   </AccountsTableCell>
@@ -78,24 +166,72 @@ export default function BankReconImportHistoryPageClient() {
               ) : (
                 batches.map((b) => {
                   const acct = getBankReconAccountById(b.bankAccountId);
+                  const reconciledRows = reconciledByBatch.get(b.id) ?? 0;
+                  const importedTxnCount = loadBankReconTransactions(b.bankAccountId).filter(
+                    (t) => t.importBatchId === b.id,
+                  ).length;
                   return (
-                    <AccountsTableRow key={b.id}>
-                      <AccountsTableCell mono>{b.batchNumber}</AccountsTableCell>
-                      <AccountsTableCell>{acct?.accountNickname ?? b.bankAccountId}</AccountsTableCell>
+                    <AccountsTableRow key={b.id} className="group">
+                      <AccountsTableCell>
+                        {b.importedOn.slice(0, 16).replace("T", " ")}
+                      </AccountsTableCell>
+                      <AccountsTableCell>
+                        {acct?.accountNickname ?? b.bankAccountId}
+                      </AccountsTableCell>
+                      <AccountsTableCell>
+                        {b.statementPeriodFrom} — {b.statementPeriodTo}
+                      </AccountsTableCell>
                       <AccountsTableCell wrap>{b.fileName}</AccountsTableCell>
-                      <AccountsTableCell>{b.statementPeriodFrom} — {b.statementPeriodTo}</AccountsTableCell>
+                      <AccountsTableCell>{b.totalRows}</AccountsTableCell>
                       <AccountsTableCell>{b.importedRows}</AccountsTableCell>
                       <AccountsTableCell>{b.duplicateRows}</AccountsTableCell>
                       <AccountsTableCell>{b.invalidRows}</AccountsTableCell>
+                      <AccountsTableCell>{reconciledRows}</AccountsTableCell>
                       <AccountsTableCell>{b.importedBy}</AccountsTableCell>
-                      <AccountsTableCell>{b.importedOn.slice(0, 16).replace("T", " ")}</AccountsTableCell>
                       <AccountsTableCell>
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", STATUS_CLASS[b.status] ?? "bg-slate-100")}>{b.status}</span>
+                        <span
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                            STATUS_CLASS[b.status] ?? "bg-slate-100",
+                          )}
+                        >
+                          {b.status}
+                        </span>
                       </AccountsTableCell>
-                      <AccountsTableCell>
-                        <Button asChild size="sm" variant="outline" className="h-7 text-[11px]">
-                          <Link href={bankReconWorkspacePath(b.bankAccountId)}>View Transactions</Link>
-                        </Button>
+                      <AccountsTableCell className="accounts-table-td-sticky">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100">
+                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                              Actions
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                              <Link href={bankReconWorkspacePath(b.bankAccountId)}>
+                                View Import / Transactions
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={bankReconWorkspacePath(b.bankAccountId)}>
+                                View Imported Transactions ({importedTxnCount})
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDownloadErrors(b.id)}>
+                              Download Error File
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={b.status === "Cancelled"}
+                              onClick={() => handleRollback(b.id)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              Rollback Import
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </AccountsTableCell>
                     </AccountsTableRow>
                   );

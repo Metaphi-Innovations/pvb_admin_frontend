@@ -1,66 +1,61 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LedgerSheet } from "@/app/(app)/accounts/masters/chart-of-accounts/components/LedgerSheet";
+import { useRouter } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 import {
-  DEFAULT_LEDGER_FORM,
   canAddLedgerUnder,
-  defaultBalanceTypeForParent,
+  canEditLedger,
   describeInvalidLedgerParentMessage,
-  formToLedger,
-  generateLedgerCode,
-  getAncestorPath,
-  ledgerToForm,
-  saveChartOfAccounts,
-  validateLedgerForm,
-  type LedgerFormValues,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import {
   registerCoaAddLedgerHandlers,
   requestCoaSpecializedLedgerForm,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
-import {
-  registerCoaEditLedgerHandler,
-} from "@/app/(app)/accounts/masters/chart-of-accounts/coa-edit-ledger-bridge";
-import { nextId, type ChartOfAccount } from "@/app/(app)/accounts/data";
+import { registerCoaEditLedgerHandler } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-edit-ledger-bridge";
+import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
-import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
+import { isCustomerOrSupplierLinkedLedger } from "@/lib/accounts/coa-master-link";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { useCoaNavigation } from "./CoaNavigationContext";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-type SheetMode = "add" | "edit" | null;
+function genericLedgerNewHref(parentGroupId?: number | null): string {
+  const base = `${CHART_OF_ACCOUNTS_HREF}/ledgers/new`;
+  return parentGroupId != null ? `${base}?parent=${parentGroupId}` : base;
+}
 
-/** Global add/edit-ledger drawer — lives in CoaNavigationProvider so sidebar + toolbar always work. */
+function genericLedgerEditHref(ledgerId: number): string {
+  return `${CHART_OF_ACCOUNTS_HREF}/ledgers/${ledgerId}/edit`;
+}
+
+/**
+ * Routes COA add/edit ledger actions to the full-page Generic Ledger form.
+ * Keeps edit confirmation; no longer opens the side drawer.
+ */
 export function CoaAddLedgerHost() {
+  const router = useRouter();
   const canCreate = useCanCoa("create");
   const canEdit = useCanCoa("edit");
-  const {
-    records,
-    setRecords,
-    selectedId,
-    selectNode,
-    ensureExpanded,
-    setHighlightedLedgerId,
-    coaReady,
-  } = useCoaNavigation();
+  const { records, selectedId, coaReady } = useCoaNavigation();
 
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<SheetMode>(null);
-  const [active, setActive] = useState<ChartOfAccount | null>(null);
-  const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [previewCode, setPreviewCode] = useState("");
-  const [parentGroupLocked, setParentGroupLocked] = useState(false);
+  const [editConfirmTarget, setEditConfirmTarget] = useState<ChartOfAccount | null>(null);
+  const [blockMessage, setBlockMessage] = useState<string | null>(null);
   const selectedIdRef = useRef(selectedId);
 
-  const closeSheet = useCallback(() => {
-    setSheetOpen(false);
-    setSheetMode(null);
-    setActive(null);
-    setFormError(null);
-  }, []);
-
   const openGlobalAdd = useCallback(
-    (preferredParentId?: number | null, initialError?: string | null) => {
+    (preferredParentId?: number | null) => {
+      if (!canCreate) {
+        setBlockMessage("You do not have permission to create ledgers.");
+        return;
+      }
       const parent =
         preferredParentId != null
           ? records.find((r) => r.id === preferredParentId)
@@ -70,66 +65,51 @@ export function CoaAddLedgerHost() {
 
       if (parentGroupId != null && requestCoaSpecializedLedgerForm(parentGroupId)) return;
 
-      setForm({
-        ...DEFAULT_LEDGER_FORM,
-        ...(parentGroupId != null
-          ? {
-              parentGroupId,
-              balanceType: defaultBalanceTypeForParent(records, parentGroupId),
-            }
-          : {}),
-      });
-      setPreviewCode(generateLedgerCode(records));
-      setFormError(
-        initialError ??
-          (parent && parentGroupId == null
-            ? describeInvalidLedgerParentMessage(parent, records)
-            : null),
-      );
-      setParentGroupLocked(false);
-      setSheetMode("add");
-      setActive(null);
-      setSheetOpen(true);
+      if (parent && parentGroupId == null) {
+        setBlockMessage(describeInvalidLedgerParentMessage(parent, records));
+        return;
+      }
+
+      router.push(genericLedgerNewHref(parentGroupId));
     },
-    [records],
+    [canCreate, records, router],
   );
 
   const openAddUnderParent = useCallback(
     (parentGroupId: number) => {
-      const parent = records.find((r) => r.id === parentGroupId);
-      if (requestCoaSpecializedLedgerForm(parentGroupId)) return;
-      if (!parent || !canAddLedgerUnder(parent, records)) {
-        openGlobalAdd(null, parent ? describeInvalidLedgerParentMessage(parent, records) : null);
+      if (!canCreate) {
+        setBlockMessage("You do not have permission to create ledgers.");
         return;
       }
-      setForm({
-        ...DEFAULT_LEDGER_FORM,
-        parentGroupId,
-        balanceType: defaultBalanceTypeForParent(records, parentGroupId),
-      });
-      setPreviewCode(generateLedgerCode(records));
-      setFormError(null);
-      setParentGroupLocked(true);
-      setSheetMode("add");
-      setActive(null);
-      setSheetOpen(true);
+      if (requestCoaSpecializedLedgerForm(parentGroupId)) return;
+      const parent = records.find((r) => r.id === parentGroupId);
+      if (!parent || !canAddLedgerUnder(parent, records)) {
+        setBlockMessage(
+          parent
+            ? describeInvalidLedgerParentMessage(parent, records)
+            : "Please select a valid Parent Group.",
+        );
+        return;
+      }
+      router.push(genericLedgerNewHref(parentGroupId));
     },
-    [records, openGlobalAdd],
+    [canCreate, records, router],
   );
 
   const openEdit = useCallback(
     (ledgerId: number) => {
+      if (!canEdit) {
+        setBlockMessage("You do not have permission to edit ledgers.");
+        return;
+      }
       const row = records.find((r) => r.id === ledgerId);
-      if (!row) return;
-      setActive(row);
-      setForm(ledgerToForm(row));
-      setPreviewCode(row.accountCode);
-      setFormError(null);
-      setParentGroupLocked(true);
-      setSheetMode("edit");
-      setSheetOpen(true);
+      if (!row || !canEditLedger(row, records)) {
+        setBlockMessage("This ledger cannot be edited.");
+        return;
+      }
+      setEditConfirmTarget(row);
     },
-    [records],
+    [canEdit, records],
   );
 
   useEffect(() => {
@@ -146,12 +126,12 @@ export function CoaAddLedgerHost() {
     return () => registerCoaEditLedgerHandler(null);
   }, [openEdit]);
 
-  /** Close the add/edit drawer when the user navigates via the COA tree. */
   useEffect(() => {
     if (selectedIdRef.current === selectedId) return;
     selectedIdRef.current = selectedId;
-    if (sheetOpen) closeSheet();
-  }, [selectedId, sheetOpen, closeSheet]);
+    setEditConfirmTarget(null);
+    setBlockMessage(null);
+  }, [selectedId]);
 
   useEffect(() => {
     if (!coaReady || typeof window === "undefined") return;
@@ -184,81 +164,83 @@ export function CoaAddLedgerHost() {
     }
   }, [coaReady, openAddUnderParent, openGlobalAdd, openEdit]);
 
-  const handleSave = () => {
-    const err = validateLedgerForm(form, records, active?.id);
-    if (err) {
-      setFormError(err);
-      return;
-    }
-
-    const list = [...records];
-    let savedId: number;
-
-    if (sheetMode === "add") {
-      const code = generateLedgerCode(list);
-      const row = formToLedger(form, nextId(list), code, list);
-      list.push(row);
-      savedId = row.id;
-    } else if (sheetMode === "edit" && active) {
-      const idx = list.findIndex((r) => r.id === active.id);
-      if (idx < 0) return;
-      list[idx] = formToLedger(form, active.id, active.accountCode, list, active);
-      savedId = active.id;
-    } else {
-      return;
-    }
-
-    saveChartOfAccounts(list);
-    setRecords(list);
-    dispatchAccountsDataChanged("ledgers", {
-      operation: sheetMode === "add" ? "create" : "update",
-      recordId: savedId,
-    });
-
-    const saved = list.find((r) => r.id === savedId);
-    if (saved?.parentAccountId) {
-      const parent = list.find((r) => r.id === saved.parentAccountId);
-      if (parent) {
-        const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
-        ensureExpanded([...ancestorIds, parent.id]);
-        selectNode(saved);
-      }
-    } else if (saved) {
-      selectNode(saved);
-    }
-
-    setHighlightedLedgerId(savedId);
-    closeSheet();
-  };
-
-  const canOpenSheet =
-    (sheetMode === "add" && canCreate) || (sheetMode === "edit" && canEdit);
-
-  if (!canOpenSheet && !sheetOpen) return null;
-
   return (
-    <LedgerSheet
-      open={sheetOpen && canOpenSheet}
-      mode={sheetMode}
-      form={form}
-      formError={formError}
-      previewCode={previewCode}
-      records={records}
-      active={active}
-      onClose={closeSheet}
-      onSave={handleSave}
-      onFormChange={(next) => {
-        if (next.parentGroupId && sheetMode === "add") {
-          if (requestCoaSpecializedLedgerForm(next.parentGroupId)) {
-            closeSheet();
-            return;
-          }
-          setFormError(null);
-        }
-        setForm(next);
-      }}
-      canEdit={sheetMode === "edit" ? canEdit : canCreate}
-      parentGroupLocked={parentGroupLocked}
-    />
+    <>
+      <Dialog
+        open={blockMessage != null}
+        onOpenChange={(open) => {
+          if (!open) setBlockMessage(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              Cannot continue
+            </DialogTitle>
+            <DialogDescription className="pt-1">{blockMessage}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setBlockMessage(null)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editConfirmTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setEditConfirmTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              Edit ledger?
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              {editConfirmTarget
+                ? isCustomerOrSupplierLinkedLedger(editConfirmTarget, records)
+                  ? `"${editConfirmTarget.accountName}" is linked to a customer/supplier master. You can update accounting fields here; legal entity details remain in the master.`
+                  : `Edit "${editConfirmTarget.accountName}"? You will open the full Generic Ledger form.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setEditConfirmTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+              onClick={() => {
+                if (!editConfirmTarget) return;
+                const id = editConfirmTarget.id;
+                setEditConfirmTarget(null);
+                router.push(genericLedgerEditHref(id));
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

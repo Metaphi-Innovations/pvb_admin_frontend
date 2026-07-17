@@ -67,12 +67,12 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   sales_receivable: {
     module: "sales",
-    subGroupName: "Trade Receivables / Sundry Debtors",
+    subGroupName: "Sundry Debtors",
     description: "Debit customer receivable on sales invoice",
   },
-  sales_cgst: { module: "sales", subGroupName: "GST Payable", description: "CGST Output" },
-  sales_sgst: { module: "sales", subGroupName: "GST Payable", description: "SGST Output" },
-  sales_igst: { module: "sales", subGroupName: "GST Payable", description: "IGST Output" },
+  sales_cgst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output CGST" },
+  sales_sgst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output SGST" },
+  sales_igst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output IGST" },
   sales_cogs: {
     module: "sales",
     subGroupName: "Cost of Goods Sold",
@@ -80,17 +80,17 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   purchase_inventory: {
     module: "procurement",
-    subGroupName: "Inventory / Stock-in-Hand",
+    subGroupName: "Inventory",
     description: "Debit inventory on purchase invoice",
   },
   purchase_payable: {
     module: "procurement",
-    subGroupName: "Trade Payables / Sundry Creditors",
+    subGroupName: "Sundry Creditors",
     description: "Credit vendor payable on purchase invoice",
   },
-  purchase_cgst: { module: "procurement", subGroupName: "GST Input Credit", description: "CGST Input (ITC)" },
-  purchase_sgst: { module: "procurement", subGroupName: "GST Input Credit", description: "SGST Input (ITC)" },
-  purchase_igst: { module: "procurement", subGroupName: "GST Input Credit", description: "IGST Input (ITC)" },
+  purchase_cgst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input CGST (ITC)" },
+  purchase_sgst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input SGST (ITC)" },
+  purchase_igst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input IGST (ITC)" },
   grn_clearing: {
     module: "procurement",
     subGroupName: "Other Current Liabilities",
@@ -123,7 +123,7 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   stock_inventory: {
     module: "journal",
-    subGroupName: "Inventory / Stock-in-Hand",
+    subGroupName: "Inventory",
     description: "Inventory asset on stock adjustment",
   },
   cash_ledger: { module: "payments", subGroupName: "Cash-in-Hand", description: "Default cash ledger" },
@@ -157,7 +157,21 @@ export function loadLedgerMappings(): LedgerMapping[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
       return seed;
     }
-    return JSON.parse(raw) as LedgerMapping[];
+    const list = JSON.parse(raw) as LedgerMapping[];
+    let changed = false;
+    const migrated = list.map((m) => {
+      if (m.mappingKey === "sales_receivable" && m.subGroupName === "Accounts Receivable") {
+        changed = true;
+        return { ...m, subGroupName: "Sundry Debtors" };
+      }
+      if (m.mappingKey === "purchase_payable" && m.subGroupName === "Accounts Payable") {
+        changed = true;
+        return { ...m, subGroupName: "Sundry Creditors" };
+      }
+      return m;
+    });
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+    return migrated;
   } catch {
     return buildSeed();
   }

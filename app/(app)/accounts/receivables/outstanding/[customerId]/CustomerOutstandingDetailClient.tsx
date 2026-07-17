@@ -33,6 +33,8 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import { PartyCrossNavButtons } from "@/components/accounts/PartyCrossNavButtons";
+import { buildReceivablesDetailCrossNavLinks } from "@/lib/accounts/party-cross-nav";
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
@@ -151,6 +153,10 @@ export default function CustomerOutstandingDetailClient() {
 
   const { customer, invoices } = detail;
   const openInvoices = invoices.filter((i) => i.outstanding > 0.009);
+  const crossNav = buildReceivablesDetailCrossNavLinks({
+    customerId: customer.id,
+    ledgerId: detail.ledgerId,
+  });
 
   const openInvoice = useCallback((invoiceId: number) => {
     window.location.href = `/accounts/receivables/outstanding/invoice/${invoiceId}`;
@@ -165,7 +171,7 @@ export default function CustomerOutstandingDetailClient() {
       title="Customer Outstanding Details"
       description={`${customer.customerCode} · ${customer.territoryName || customer.districtName || "—"}`}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href="/accounts/receivables/ageing">
             <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
               <ArrowLeft className="w-4 h-4" /> Back
@@ -202,6 +208,8 @@ export default function CustomerOutstandingDetailClient() {
             ))}
           </div>
         </div>
+
+        <PartyCrossNavButtons items={crossNav} label="Go to" />
 
         <div className="grid grid-cols-3 gap-3 rounded-lg border border-border/60 bg-muted/10 p-3 text-xs">
           <div>

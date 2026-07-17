@@ -18,6 +18,8 @@ import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
 import { formatCreditPeriod } from "@/app/(app)/masters/vendors/vendor-data";
 import { cn } from "@/lib/utils";
+import { PartyCrossNavButtons } from "@/components/accounts/PartyCrossNavButtons";
+import { buildPayablesDetailCrossNavLinks } from "@/lib/accounts/party-cross-nav";
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
@@ -87,6 +89,10 @@ export default function VendorOutstandingDetailClient() {
   const { vendor, bills } = detail;
   const meta = getVendorPayablesMeta(vendor.id);
   const openBills = bills.filter((b) => b.outstanding > 0.009);
+  const crossNav = buildPayablesDetailCrossNavLinks({
+    vendorId: vendor.id,
+    ledgerId: detail.ledgerId,
+  });
 
   return (
     <AccountsPageShell
@@ -128,6 +134,7 @@ export default function VendorOutstandingDetailClient() {
             <InfoBlock label="Purchase Manager" value={meta?.purchaseManager ?? "Purchase Desk"} />
             <InfoBlock label="Mobile" value={vendor.mobile} />
           </div>
+          <PartyCrossNavButtons items={crossNav} label="Go to" />
         </section>
 
         {highlightedBill && (

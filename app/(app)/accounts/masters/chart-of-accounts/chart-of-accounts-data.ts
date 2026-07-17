@@ -6,20 +6,16 @@ import {
 import {
   canUserCreateAtLevel,
   canUserDeleteGroup,
-  canUserDeleteNode,
   canUserEditGroup,
-  canUserEditNode,
   isStructuralNode as hierarchyIsStructural,
   ledgerHasChildLedgers,
   resolveHierarchyPath,
 } from "@/lib/accounts/coa-hierarchy";
-import { isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
-import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
-import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
-import { resolveCoaAddLedgerPolicy, isSundryDebtorsGroup } from "@/lib/accounts/coa-add-ledger-policy";
+import { isCustomerOrSupplierLinkedLedger } from "@/lib/accounts/coa-master-link";
+import { isLockedSystemLedger } from "./coa-statutory-ledgers";
+import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import {
   inheritedSpecializedGroupType,
-  isTdsGroupContext,
 } from "@/lib/accounts/coa-specialized-groups";
 import { getCoaDisplayPath, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import { isCoaSidebarLevel3Subgroup } from "@/lib/accounts/coa-sidebar-tree";
@@ -98,11 +94,19 @@ export interface LedgerFormValues {
   parentGroupId: number | null;
   openingBalance: string;
   balanceType: "Debit" | "Credit";
+  costCenterApplicable: boolean;
+  billWiseAccounting: boolean;
   gstApplicable: boolean;
   tdsApplicable: boolean;
-  costCenterApplicable: boolean;
-  bankAccountFlag: boolean;
-  bankGroupFlag?: boolean;
+  tcsApplicable: boolean;
+  defaultGstRate: string;
+  defaultHsnSac: string;
+  gstRegistrationType: string;
+  gstin: string;
+  registeredLegalName: string;
+  registeredGstAddress: string;
+  defaultTdsSection: string;
+  defaultTcsSection: string;
   status: "active" | "inactive";
 }
 
@@ -113,10 +117,19 @@ export const DEFAULT_LEDGER_FORM: LedgerFormValues = {
   parentGroupId: null,
   openingBalance: "0",
   balanceType: "Debit",
+  costCenterApplicable: false,
+  billWiseAccounting: false,
   gstApplicable: false,
   tdsApplicable: false,
-  costCenterApplicable: false,
-  bankAccountFlag: false,
+  tcsApplicable: false,
+  defaultGstRate: "",
+  defaultHsnSac: "",
+  gstRegistrationType: "regular",
+  gstin: "",
+  registeredLegalName: "",
+  registeredGstAddress: "",
+  defaultTdsSection: "",
+  defaultTcsSection: "",
   status: "active",
 };
 
@@ -156,23 +169,6 @@ export function getAncestorPath(
   let current = byId.get(nodeId);
   while (current) {
     if (visited.has(current.id)) {
-      // #region agent log
-      if (typeof window !== "undefined") {
-        fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "179db4" },
-          body: JSON.stringify({
-            sessionId: "179db4",
-            runId: "tb-oom",
-            hypothesisId: "H1",
-            location: "chart-of-accounts-data.ts:getAncestorPath",
-            message: "COA parent cycle detected",
-            data: { nodeId, cycleAt: current.id, pathLength: path.length },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
       break;
     }
     visited.add(current.id);
@@ -277,17 +273,20 @@ export function hasChildSubGroups(records: ChartOfAccount[], nodeId: number): bo
   return hasChildAccountGroups(records, nodeId);
 }
 
-/** Parent groups where users may manually create ledgers from Chart of Accounts */
+/** Eligible Level-3 parents for user-created ledgers (informational; eligibility uses canAddLedgerUnder). */
 export const COA_MANUAL_LEDGER_PARENT_NAMES = new Set([
   "Bank Accounts",
-  "Trade Receivables / Sundry Debtors",
-  "Trade Payables / Sundry Creditors",
+  "Sundry Debtors",
+  "Sundry Creditors",
   "Sales",
-  "Purchases",
+  "Purchase",
+  "Service Revenue",
   "Administrative Expenses",
   "Employee Costs",
   "Finance Costs",
   "Miscellaneous Expenses",
+  "Miscellaneous Income",
+  "Interest Income",
 ]);
 
 const COA_PROTECTED_PRIMARY_HEADS = new Set([
@@ -321,15 +320,10 @@ export function isAccountingGroupNode(
 }
 
 /**
- * Sub-groups (L3) may be created under Primary Head (L1) or Account Group (L2) only.
- * Deeper nesting is blocked to preserve the 5-level hierarchy.
+ * Level 1–3 structure is permanently system-locked — users cannot create subgroups.
  */
-export function canAddSubGroupUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
-  if (node.nodeLevel === "ledger") return false;
-  if (node.nodeLevel !== "primary_head" && node.nodeLevel !== "account_group") return false;
-  if (resolveCoaAddLedgerPolicy(node, records).blocked) return false;
-  const level = getCoaHierarchyLevel(records, node.id);
-  return level <= 2;
+export function canAddSubGroupUnder(_node: ChartOfAccount, _records: ChartOfAccount[]): boolean {
+  return false;
 }
 
 /**
@@ -567,6 +561,7 @@ export function formToGroup(
     gstApplicable: false,
     tdsApplicable: specializedGroupType === "tds_payable" || specializedGroupType === "tds_receivable",
     costCenterApplicable: false,
+    billWiseAccounting: false,
     bankAccountFlag: false,
     specializedGroupType,
     createdBy: existing?.createdBy ?? ACCOUNTS_CURRENT_USER,
@@ -620,10 +615,19 @@ export function ledgerToForm(record: ChartOfAccount): LedgerFormValues {
     parentGroupId: record.parentAccountId,
     openingBalance: String(record.openingBalance),
     balanceType: record.balanceType,
-    gstApplicable: record.gstApplicable,
-    tdsApplicable: record.tdsApplicable,
     costCenterApplicable: record.costCenterApplicable ?? false,
-    bankAccountFlag: record.bankAccountFlag ?? false,
+    billWiseAccounting: record.billWiseAccounting ?? false,
+    gstApplicable: record.gstApplicable ?? false,
+    tdsApplicable: record.tdsApplicable ?? false,
+    tcsApplicable: record.tcsApplicable ?? false,
+    defaultGstRate: record.defaultGstRate ?? "",
+    defaultHsnSac: record.defaultHsnSac ?? "",
+    gstRegistrationType: record.gstRegistrationType ?? "regular",
+    gstin: record.gstin ?? "",
+    registeredLegalName: record.registeredLegalName ?? "",
+    registeredGstAddress: record.registeredGstAddress ?? "",
+    defaultTdsSection: record.defaultTdsSection ?? "",
+    defaultTcsSection: record.defaultTcsSection ?? "",
     status: record.status,
   };
 }
@@ -658,8 +662,26 @@ export function formToLedger(
     balanceType: form.balanceType,
     gstApplicable: form.gstApplicable,
     tdsApplicable: form.tdsApplicable,
+    tcsApplicable: form.tcsApplicable,
+    defaultGstRate: form.gstApplicable ? form.defaultGstRate.trim() : "",
+    defaultHsnSac: form.gstApplicable ? form.defaultHsnSac.trim() : "",
+    gstRegistrationType: form.gstApplicable ? form.gstRegistrationType.trim() : "",
+    gstin: form.gstApplicable ? form.gstin.trim().toUpperCase() : "",
+    registeredLegalName: form.gstApplicable ? form.registeredLegalName.trim() : "",
+    registeredGstAddress: form.gstApplicable ? form.registeredGstAddress.trim() : "",
+    defaultTdsSection: form.tdsApplicable ? form.defaultTdsSection.trim() : "",
+    defaultTcsSection: form.tcsApplicable ? form.defaultTcsSection.trim() : "",
     costCenterApplicable: form.costCenterApplicable,
-    bankAccountFlag: form.bankAccountFlag,
+    billWiseAccounting: form.billWiseAccounting,
+    bankAccountFlag: existing?.bankAccountFlag ?? false,
+    bankGroupFlag: existing?.bankGroupFlag,
+    isSystemGenerated: existing?.isSystemGenerated,
+    erpSourceModule: existing?.erpSourceModule,
+    erpSourceId: existing?.erpSourceId,
+    specializedGroupType: existing?.specializedGroupType,
+    ledgerKind: existing?.ledgerKind ?? "GENERIC",
+    masterType: existing?.masterType ?? null,
+    masterId: existing?.masterId ?? null,
     createdBy: existing?.createdBy ?? ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
   };
@@ -681,13 +703,7 @@ export function validateLedgerForm(
     if (parent.nodeLevel === "ledger") {
       return LEDGER_UNDER_LEDGER_ERROR;
     }
-    return "Ledgers must be created under a sub-group or leaf account group.";
-  }
-  if (isSundryDebtorsGroup(parent, records)) {
-    return "Customer ledgers under Sundry Debtors must be created with the Customer form.";
-  }
-  if (isTdsGroupContext(parent, records)) {
-    return "TDS section ledgers must be created with the TDS ledger form.";
+    return "Ledgers must be created under a Level 3 Sub Group.";
   }
   const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
   if (addPolicy.blocked) {
@@ -708,20 +724,52 @@ export function ledgerHasVoucherPostings(ledgerId: number): boolean {
   return voucherLedgerHasPostings(ledgerId);
 }
 
+/** Why a ledger cannot be deleted right now, or null if deletion is allowed. */
+export function getLedgerDeleteBlockReason(
+  record: ChartOfAccount,
+  records?: ChartOfAccount[],
+): string | null {
+  const list = records ?? loadChartOfAccounts();
+  if (record.nodeLevel !== "ledger") {
+    return "Only ledgers can be deleted from this action.";
+  }
+  if (isLockedSystemLedger(record)) {
+    return "This is a system ledger and cannot be deleted.";
+  }
+  if (ledgerHasChildLedgers(record.id, list)) {
+    return "Remove child ledgers before deleting this ledger.";
+  }
+  if (ledgerHasVoucherPostings(record.id)) {
+    if (isCustomerOrSupplierLinkedLedger(record, list)) {
+      return "This customer/supplier ledger has existing transactions and cannot be deleted.";
+    }
+    return "This ledger has existing transactions and cannot be deleted.";
+  }
+  return null;
+}
+
+/**
+ * Level-4 ledgers are deletable by default.
+ * Locked system ledgers (Stock in Hand, GST, TDS/TCS Payable) stay locked.
+ * Transaction presence is validated on confirm via getLedgerDeleteBlockReason.
+ */
 export function canDeleteLedger(record: ChartOfAccount, records?: ChartOfAccount[]): boolean {
   const list = records ?? loadChartOfAccounts();
-  if (isGstCoaLedger(record) || isTdsCoaLedger(record)) return false;
-  if (isMasterLinkedLedger(record)) return false;
-  if (!canUserDeleteNode(record, list)) return false;
+  if (record.nodeLevel !== "ledger") return false;
+  if (isLockedSystemLedger(record)) return false;
   if (ledgerHasChildLedgers(record.id, list)) return false;
-  if (ledgerHasVoucherPostings(record.id)) return false;
   return true;
 }
 
-export function canEditLedger(record: ChartOfAccount): boolean {
-  if (isGstCoaLedger(record) || isTdsCoaLedger(record)) return false;
-  if (isMasterLinkedLedger(record)) return false;
-  return canUserEditNode(record);
+/**
+ * Level-4 ledgers are editable by default.
+ * Locked system ledgers cannot be edited, renamed, or re-parented.
+ * Sundry Debtors / Creditors party ledgers are not treated as locked system ledgers.
+ */
+export function canEditLedger(record: ChartOfAccount, _records?: ChartOfAccount[]): boolean {
+  if (record.nodeLevel !== "ledger") return false;
+  if (isLockedSystemLedger(record)) return false;
+  return true;
 }
 
 export function isStructuralNode(record: ChartOfAccount): boolean {

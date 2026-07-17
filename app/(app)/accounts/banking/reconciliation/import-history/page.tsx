@@ -1,9 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const BankReconImportHistoryPageClient = lazyAccountsPage(() =>
-  import("@/app/(app)/accounts/bank-reconciliation/import-history/BankReconImportHistoryPageClient"),
-);
-
+/** Import history is hidden in the manual Bank Reconciliation client phase. */
 export default function BankReconImportHistoryPage() {
-  return <BankReconImportHistoryPageClient />;
+  redirect("/accounts/banking/reconciliation");
 }

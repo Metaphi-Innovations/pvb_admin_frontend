@@ -46,27 +46,6 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  // #region agent log
-  fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-    body: JSON.stringify({
-      sessionId: "8fbc9e",
-      runId: "post-fix",
-      hypothesisId: "H23",
-      location: "AppShell.tsx",
-      message: "AppShell dynamic-chrome render",
-      data: {
-        TopNavbar: typeof TopNavbar,
-        AppHeader: typeof AppHeader,
-        NavigationProgress: typeof NavigationProgress,
-        NavRoutePrefetch: typeof NavRoutePrefetch,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const isChunkError = (reason: unknown) => {

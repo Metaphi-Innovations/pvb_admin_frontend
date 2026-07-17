@@ -19,24 +19,6 @@ import { useNavigationPending } from "@/components/navigation/NavigationPendingC
 import { ApprovalsButton } from "./ApprovalsButton";
 import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
 
-// #region agent log
-function debugNavClick(href: string, label?: string) {
-  fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8fbc9e" },
-    body: JSON.stringify({
-      sessionId: "8fbc9e",
-      runId: "pre-fix",
-      hypothesisId: "H5",
-      location: "TopNavbar.tsx:navigate",
-      message: "Nav click",
-      data: { href, label: label ?? null, t: Date.now() },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-// #endregion
-
 function navPath(href: string): string {
   return href.split("?")[0];
 }
@@ -450,9 +432,6 @@ const NavDropdown = memo(function NavDropdown({
   const navigateFromMenu = useCallback(
     (href: string, e: React.MouseEvent, label?: string) => {
       if (!href || href === "#") return;
-      // #region agent log
-      debugNavClick(href, label);
-      // #endregion
       setIsOpen(false);
       navigateTo(href, label, e);
     },

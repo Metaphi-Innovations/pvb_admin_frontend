@@ -4,7 +4,7 @@ import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--font-plus-jakarta",
   display: "swap",
   preload: true,
@@ -12,7 +12,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["300", "400", "500", "600", "700"],
   variable: "--font-inter",
   display: "swap",
   preload: false,
@@ -35,10 +35,10 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${plusJakarta.variable} ${inter.variable}`}
+      className={`${plusJakarta.variable} ${inter.variable} ${plusJakarta.className}`}
     >
       <body
-        className={`${plusJakarta.className} min-h-screen bg-background text-foreground antialiased`}
+        className={`${plusJakarta.className} min-h-screen bg-background text-foreground antialiased font-sans`}
       >
         {children}
       </body>

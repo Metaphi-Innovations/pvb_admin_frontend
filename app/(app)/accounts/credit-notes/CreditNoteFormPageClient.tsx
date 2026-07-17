@@ -100,12 +100,6 @@ export default function CreditNoteFormPageClient({
   const isReturn = !isEdit && (resolvedMode === "return" || Boolean(returnId));
   const isScheme = !isEdit && (resolvedMode === "scheme" || Boolean(schemeKey));
 
-  useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'db7cdd'},body:JSON.stringify({sessionId:'db7cdd',hypothesisId:'C-E',location:'CreditNoteFormPageClient.tsx:mount',message:'Form mounted',data:{mode,resolvedMode,returnId,schemeKey,isEdit,isFresh,isReturn,isScheme,searchMode:searchParams.get('mode')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }, [mode, resolvedMode, returnId, schemeKey, isEdit, isFresh, isReturn, isScheme, searchParams]);
-
   const customers = useMemo(() => getCustomersForCreditNote(), []);
   const invoices = useMemo(() => listInvoicesForReference(), []);
   const salesReturns = useMemo(() => listSalesReturnsForCreditNote(), []);

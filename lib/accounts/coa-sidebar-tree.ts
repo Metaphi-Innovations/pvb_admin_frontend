@@ -223,9 +223,12 @@ export function canCoaSidebarAddLedgerUnder(
   );
 }
 
-export function canCoaSidebarEditNode(node: ChartOfAccount): boolean {
+export function canCoaSidebarEditNode(
+  node: ChartOfAccount,
+  records?: ChartOfAccount[],
+): boolean {
   if (node.nodeLevel !== "ledger") return false;
-  return canEditLedger(node);
+  return canEditLedger(node, records);
 }
 
 export function canCoaSidebarDeleteNode(

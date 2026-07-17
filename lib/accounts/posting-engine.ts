@@ -34,6 +34,7 @@ import { formatGstPostingLedgerDisplayName } from "@/lib/accounts/gst-coa-sync";
 import { ensureTdsAccountingLedgers, resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
 import { roundMoney } from "@/lib/accounts/money-format";
 import { notifyVoucherPosted } from "@/lib/accounts/voucher-posting-notify";
+import { applyGenericBillWiseFromPostedVoucher } from "@/lib/accounts/generic-bill-wise-store";
 
 export type ErpSourceModule =
   | "procurement"
@@ -51,6 +52,12 @@ export interface PostingLineInput {
   remarks?: string;
   /** Total GST rate (e.g. 18) for rate-specific GST ledger resolution */
   gstRatePct?: number;
+  costCenterId?: number | null;
+  costCenterName?: string;
+  billWiseReferenceType?: string;
+  billWiseReferenceId?: number | null;
+  billWiseReferenceNo?: string;
+  billWiseDueDate?: string;
 }
 
 export interface ErpPostingRequest {
@@ -116,6 +123,12 @@ function buildVoucherLines(inputs: PostingLineInput[]): VoucherLine[] {
       debit: line.debit,
       credit: line.credit,
       remarks: line.remarks ?? "",
+      costCenterId: line.costCenterId ?? null,
+      costCenterName: line.costCenterName ?? "",
+      billWiseReferenceType: line.billWiseReferenceType,
+      billWiseReferenceId: line.billWiseReferenceId ?? null,
+      billWiseReferenceNo: line.billWiseReferenceNo ?? "",
+      billWiseDueDate: line.billWiseDueDate ?? "",
     };
   });
 }
@@ -145,6 +158,7 @@ export function postVoucher(voucherId: number): PostingResult {
   );
   saveVouchers(updated);
   const posted = updated.find((v) => v.id === voucherId)!;
+  applyGenericBillWiseFromPostedVoucher(posted);
   notifyVoucherPosted(posted);
   return {
     success: true,
