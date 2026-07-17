@@ -899,11 +899,12 @@ interface CustomerFormProps {
 	isAdd?: boolean;
 	/** Auto-generated code preview (add) or stored code (edit). */
 	customerCode?: string;
-	customerTypes: {
+	customerTypes?: {
 		id: string;
 		customerType: string;
 		documents: CustomerTypeDocument[];
 	}[];
+	showComplianceValidityDates?: boolean;
 }
 
 function branchDocumentsToPayload(
@@ -962,7 +963,8 @@ export function CustomerForm({
 	readOnly,
 	isAdd,
 	customerCode,
-	customerTypes,
+	customerTypes = [],
+	showComplianceValidityDates = false,
 }: CustomerFormProps) {
 	const { data: gstDropdownItems = [] } = useGstDropdown();
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
@@ -2750,6 +2752,10 @@ export function customerApiRecordToFormValues(
 
 		branches,
 	};
+}
+
+export interface ValidateCustomerFormOptions {
+	requireComplianceValidityDates?: boolean;
 }
 
 export function validateCustomerForm(

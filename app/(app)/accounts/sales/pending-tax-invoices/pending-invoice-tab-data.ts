@@ -5,8 +5,9 @@
  */
 
 import { loadInvoices } from "@/app/(app)/accounts/invoices/invoices-data";
-import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+
+const getDispatchRecords = (): DispatchRecord[] => [];
 import {
   resolveWarehouseOrderType,
   type WarehouseOrderDocType,

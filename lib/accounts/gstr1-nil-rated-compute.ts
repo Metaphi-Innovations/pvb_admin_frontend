@@ -385,7 +385,7 @@ function lineToRow(inv: InvoiceRecord, line: InvoiceLineItem): NilRatedExemptRow
     productName: line.productName || line.description || "—",
     productId: line.productId ?? product?.id ?? null,
     hsn: hsnCode || "—",
-    hsnId: resolveHsn(hsnCode)?.id ?? product?.hsnId ?? null,
+    hsnId: (resolveHsn(hsnCode)?.id ?? product?.hsnId) != null ? Number(resolveHsn(hsnCode)?.id ?? product?.hsnId) : null,
     qty: line.qty,
     unit: line.unit || "—",
     supplyValue: taxable,

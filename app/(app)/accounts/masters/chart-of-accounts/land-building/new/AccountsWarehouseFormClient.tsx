@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/masters/warehouse/components/WarehouseForm";
 import {
   type WarehouseMaster,
+  type WarehouseStatus,
   loadWarehouses,
   saveWarehouses,
   nextWarehouseId,
@@ -82,10 +83,15 @@ export default function AccountsWarehouseFormClient({
     try {
       const current = loadWarehouses();
       const nextIdVal = nextWarehouseId(current);
+      const fields = warehouseFormToRecordFields(form);
       const newRecord: WarehouseMaster = {
         id: nextIdVal,
         warehouseCode: generateWarehouseCode(nextIdVal),
-        ...warehouseFormToRecordFields(form),
+        ...fields,
+        status: (fields.status === "Active" ? "active" :
+                 fields.status === "Inactive" ? "inactive" :
+                 fields.status === "Under Maintenance" ? "under_maintenance" :
+                 "closed") as WarehouseStatus,
         createdBy: "Admin",
         createdDate: todayStr(),
         updatedBy: "Admin",

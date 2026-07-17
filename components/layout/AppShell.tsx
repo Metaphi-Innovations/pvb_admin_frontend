@@ -8,7 +8,7 @@
  * during App Router RSC/SSR in this Next 14.2.35 setup; CSR still mounts them.
  */
 
-import React, { useEffect } from "react";
+import React, { useEffect, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { FYProvider } from "@/lib/fy-store";
 import { NavigationPendingProvider } from "@/components/navigation/NavigationPendingContext";
@@ -95,25 +95,27 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <FYProvider>
-      <NavRoutePrefetch />
-      <NavigationProgress />
-      <div className="min-h-screen bg-background flex flex-col">
-        {/* 56px — sticky, z-50 — persists across all navigations */}
-        <Suspense
-          fallback={
-            <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0" />
-          }
-        >
-          <TopNavbar />
-        </Suspense>
+    <NavigationPendingProvider>
+      <FYProvider>
+        <NavRoutePrefetch />
+        <NavigationProgress />
+        <div className="min-h-screen bg-background flex flex-col">
+          {/* 56px — sticky, z-50 — persists across all navigations */}
+          <Suspense
+            fallback={
+              <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0" />
+            }
+          >
+            <TopNavbar />
+          </Suspense>
 
-        {/* 48px — sticky below navbar — does not re-render on route change */}
-        <AppHeader />
+          {/* 48px — sticky below navbar — does not re-render on route change */}
+          <AppHeader />
 
-        {/* Page content area — only this part swaps on navigation */}
-        <main className="flex-1 min-h-0 w-full bg-muted/30">{children}</main>
-      </div>
-    </FYProvider>
+          {/* Page content area — only this part swaps on navigation */}
+          <main className="flex-1 min-h-0 w-full bg-muted/30">{children}</main>
+        </div>
+      </FYProvider>
+    </NavigationPendingProvider>
   );
 }

@@ -57,7 +57,7 @@ function resolvePoFromGrn(grn: GrnRecord): { poId: number | null; poNumber: stri
   }
   if (grn.poNumber) {
     const po = loadPurchaseOrders().find((p) => p.poNumber === grn.poNumber);
-    return { poId: po?.id ?? null, poNumber: grn.poNumber, poDate: po?.poDate ?? "" };
+    return { poId: po?.id ? Number(po.id) : null, poNumber: grn.poNumber, poDate: po?.poDate ?? "" };
   }
   return { poId: null, poNumber: "", poDate: "" };
 }
