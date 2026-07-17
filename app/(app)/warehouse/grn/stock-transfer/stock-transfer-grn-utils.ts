@@ -1,16 +1,13 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import { getDispatchById, getDispatches, getDispatchFilterDropdown } from "@/app/(app)/warehouse/dispatch/services";
-import { GrnListService } from "@/services/grn-list.service";
-import { StockTransferService } from "@/services/stock-transfer.service";
-import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
+import { getDispatches, getDispatchFilterDropdown } from "@/app/(app)/warehouse/dispatch/services";
 import {
   normalizeGrnQuantityType,
   type GrnQuantityType,
 } from "@/lib/warehouse/grn-quantity";
 
-/** Pending ST GRN eligible dispatches use DELIVERY_DONE (distinct from DISPATCHED). */
-export const ST_DISPATCH_ELIGIBLE_STATUS = "DELIVERY_DONE";
+/** Pending ST GRN eligible dispatches use DELIVERED (distinct from DISPATCHED). */
+export const ST_DISPATCH_ELIGIBLE_STATUS = "DELIVERED";
 export const ST_DISPATCH_SOURCE_TYPE = "stock_transfer";
 
 export interface PackingCustomerSnapshot {
@@ -30,8 +27,10 @@ export interface PendingStockTransferDispatchRow {
   stockTransferNo: string;
   fromWarehouse: string;
   toWarehouse: string;
+  /** Destination warehouse UUID from stock transfer (when available on list). */
+  toWarehouseId?: string;
   dispatchDate: string;
-  products: string;
+  itemCount: number;
   dispatchedQty: number;
   status: string;
 }
@@ -61,6 +60,11 @@ function asDateOnly(value: unknown): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
 export function getCustomerSnapshot(packingDone: unknown): PackingCustomerSnapshot {
   if (!packingDone || typeof packingDone !== "object") return {};
   const raw = packingDone as Record<string, unknown>;
@@ -74,13 +78,23 @@ export function normalizeWarehouseName(name: string): string {
 }
 
 export function matchesDestinationWarehouse(
-  snapshot: PackingCustomerSnapshot,
+  snapshot: PackingCustomerSnapshot & { to_warehouse_id?: string },
   selectedWarehouseName: string | null | undefined,
+  selectedWarehouseId?: string | null,
 ): boolean {
-  if (!selectedWarehouseName || selectedWarehouseName === "All") return true;
+  const hasIdFilter = Boolean(selectedWarehouseId && selectedWarehouseId !== "All");
+  const hasNameFilter = Boolean(selectedWarehouseName && selectedWarehouseName !== "All");
+  if (!hasIdFilter && !hasNameFilter) return true;
+
+  if (hasIdFilter) {
+    const toId = asString(snapshot.to_warehouse_id);
+    if (toId) return toId === selectedWarehouseId;
+  }
+
+  if (!hasNameFilter) return true;
   const toWarehouse = asString(snapshot.to_warehouse);
   if (!toWarehouse) return false;
-  return normalizeWarehouseName(toWarehouse) === normalizeWarehouseName(selectedWarehouseName);
+  return normalizeWarehouseName(toWarehouse) === normalizeWarehouseName(selectedWarehouseName!);
 }
 
 export async function getPackingDoneRaw(
@@ -97,75 +111,27 @@ export async function getPackingDoneRaw(
   return data as Record<string, unknown>;
 }
 
-async function fetchExistingStockTransferSourceIds(signal?: AbortSignal): Promise<Set<string>> {
-  const tabContext = getGrnTabApiContext("stock_transfer");
-  const sourceIds = new Set<string>();
-  let page = 1;
-  const pageSize = 100;
-
-  while (page <= 20) {
-    const result = await GrnListService.list({
-      page,
-      pageSize,
-      search: "",
-      tabContext,
-      apiFilters: { source_type: "STOCK_TRANSFER" },
-      signal,
-    });
-
-    for (const item of result.items) {
-      const sourceId = asString((item as { sourceId?: string }).sourceId);
-      if (sourceId) sourceIds.add(sourceId);
-    }
-
-    if (result.items.length < pageSize || sourceIds.size >= result.total) break;
-    page += 1;
-  }
-
-  return sourceIds;
-}
-
-async function enrichDispatchRow(
+/** Map dispatch LIST payload — display only; no FE filter/sort/search. */
+function mapDispatchListItemToPendingRow(
   listItem: Record<string, unknown>,
-  transferCache: Map<string, string>,
-  signal?: AbortSignal,
-): Promise<PendingStockTransferDispatchRow | null> {
+): PendingStockTransferDispatchRow | null {
   const id = asString(listItem.id);
   if (!id) return null;
 
-  const detail = await getDispatchById(id);
-  if (!detail) return null;
+  const packingDone = asRecord(listItem.packing_done);
+  const snapshot = getCustomerSnapshot(packingDone);
+  const stockTransfer = asRecord(listItem.stock_transfer);
+  const warehouse = asRecord(listItem.warehouse);
+  const stockTransferId = asString(listItem.source_id);
+  const stockTransferNo =
+    asString(listItem.source_document_no) ||
+    asString(stockTransfer.transfer_no) ||
+    asString(packingDone.packing_done_no) ||
+    asString(listItem.dispatch_number);
 
-  const snapshot = getCustomerSnapshot(detail.packing_done);
-  const stockTransferId = asString(detail.source_id || listItem.source_id);
-  let stockTransferNo = transferCache.get(stockTransferId) || "";
-
-  if (stockTransferId && !stockTransferNo) {
-    try {
-      const transfer = await StockTransferService.getById(stockTransferId, signal);
-      stockTransferNo = transfer.transferNumber || "";
-      if (stockTransferNo) transferCache.set(stockTransferId, stockTransferNo);
-    } catch {
-      stockTransferNo = asString(detail.packing_done?.packing_done_no) || asString(detail.dispatch_number);
-    }
-  }
-
-  const items = Array.isArray(detail.items) ? detail.items : [];
-  const productNames = items
-    .map((item: Record<string, unknown>) => {
-      const product = (item.product as Record<string, unknown> | undefined) || {};
-      return asString(product.product_name) || asString(item.product_name);
-    })
-    .filter(Boolean);
-  const productsLabel =
-    productNames.length === 0
-      ? "—"
-      : productNames.length <= 2
-        ? productNames.join(", ")
-        : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2}`;
-
+  const items = Array.isArray(listItem.items) ? (listItem.items as Record<string, unknown>[]) : [];
   const dispatchedQty = items.reduce(
-    (sum: number, item: Record<string, unknown>) => sum + asNumber(item.dispatched_base_qty),
+    (sum, item) => sum + asNumber(item.dispatched_base_qty),
     0,
   );
 
@@ -173,15 +139,25 @@ async function enrichDispatchRow(
     id,
     rowType: "pending_dispatch",
     dispatchId: id,
-    dispatchNumber: asString(detail.dispatch_number) || asString(listItem.dispatch_number),
+    dispatchNumber: asString(listItem.dispatch_number),
     stockTransferId,
-    stockTransferNo: stockTransferNo || asString(detail.dispatch_number),
-    fromWarehouse: asString(snapshot.from_warehouse) || asString(detail.warehouse?.warehouse_name) || "—",
-    toWarehouse: asString(snapshot.to_warehouse) || "—",
-    dispatchDate: asDateOnly(detail.dispatch_date || detail.dispatched_at || detail.created_at),
-    products: productsLabel,
+    stockTransferNo: stockTransferNo || asString(listItem.dispatch_number),
+    fromWarehouse:
+      asString(stockTransfer.from_warehouse) ||
+      asString(snapshot.from_warehouse) ||
+      asString(warehouse.warehouse_name) ||
+      "—",
+    toWarehouse:
+      asString(stockTransfer.to_warehouse) ||
+      asString(snapshot.to_warehouse) ||
+      "—",
+    toWarehouseId: asString(stockTransfer.to_warehouse_id) || undefined,
+    dispatchDate: asDateOnly(
+      listItem.dispatch_date || listItem.dispatched_at || listItem.created_at,
+    ),
+    itemCount: items.length,
     dispatchedQty,
-    status: asString(detail.status) || ST_DISPATCH_ELIGIBLE_STATUS,
+    status: asString(listItem.status) || ST_DISPATCH_ELIGIBLE_STATUS,
   };
 }
 
@@ -191,16 +167,14 @@ export interface FetchPendingStockTransferParams {
   search?: string;
   ordering?: string;
   filters?: Record<string, unknown>;
-  /** Selected destination warehouse UUID ("All" or empty = no name filter). */
+  /** Selected destination warehouse UUID ("All" or empty = no filter). */
   destinationWarehouseId?: string;
-  /** Resolved warehouse name for matching PackingDone.customer_snapshot.to_warehouse. */
-  destinationWarehouseName?: string | null;
   signal?: AbortSignal;
 }
 
 /**
- * Loads DELIVERY_DONE stock_transfer dispatches, enriches via detail (for customer_snapshot),
- * filters by destination warehouse name, and excludes transfers that already have a GRN.
+ * Pending ST GRN: DELIVERED stock_transfer dispatches without an existing GRN.
+ * Page / search / filter / sort are entirely backend-driven.
  */
 export async function fetchPendingStockTransferDispatches(
   params: FetchPendingStockTransferParams,
@@ -211,69 +185,93 @@ export async function fetchPendingStockTransferDispatches(
     search,
     ordering,
     filters = {},
-    destinationWarehouseName,
-    signal,
+    destinationWarehouseId,
   } = params;
 
-  const existingSourceIds = await fetchExistingStockTransferSourceIds(signal);
-  const transferCache = new Map<string, string>();
-  const matched: PendingStockTransferDispatchRow[] = [];
+  const apiFilters: Record<string, unknown> = {
+    source_type: ST_DISPATCH_SOURCE_TYPE,
+    status: ST_DISPATCH_ELIGIBLE_STATUS,
+    exclude_existing_st_grn: true,
+  };
 
-  let apiPage = 1;
-  const apiPageSize = 50;
-  let totalApiRecords = Infinity;
+  const firstValue = (value: unknown): string => {
+    if (Array.isArray(value)) return asString(value[0]).trim();
+    return asString(value).trim();
+  };
 
-  // Full scan required: destination warehouse lives only on PackingDone.customer_snapshot
-  // (not on Dispatch list). Cap pages to avoid runaway requests.
-  while ((apiPage - 1) * apiPageSize < totalApiRecords && apiPage <= 40) {
-    const res = await getDispatches({
-      page: apiPage,
-      page_size: apiPageSize,
-      search: search || undefined,
-      ordering: ordering || "-dispatch_date",
-      filters: {
-        ...filters,
-        source_type: ST_DISPATCH_SOURCE_TYPE,
-        status: ST_DISPATCH_ELIGIBLE_STATUS,
-      },
-    });
+  const stockTransferNo = firstValue(filters.stockTransferNo);
+  if (stockTransferNo) apiFilters.source_document_no = stockTransferNo;
 
-    const rows: Record<string, unknown>[] = Array.isArray(res?.data) ? res.data : [];
-    totalApiRecords = Number(res?.totalRecords ?? res?.count ?? rows.length);
+  const dispatchNumber = firstValue(filters.dispatchNumber);
+  if (dispatchNumber) apiFilters.dispatch_number = dispatchNumber;
 
-    if (rows.length === 0) break;
+  const fromWarehouse = firstValue(filters.fromWarehouse);
+  if (fromWarehouse) apiFilters.from_warehouse = fromWarehouse;
 
-    const enriched = await Promise.all(
-      rows.map((row) => enrichDispatchRow(row, transferCache, signal)),
-    );
+  const toWarehouse = firstValue(filters.toWarehouse);
+  if (toWarehouse) apiFilters.to_warehouse = toWarehouse;
 
-    for (const row of enriched) {
-      if (!row) continue;
-      if (row.stockTransferId && existingSourceIds.has(row.stockTransferId)) continue;
-      if (!matchesDestinationWarehouse(
-        { to_warehouse: row.toWarehouse, from_warehouse: row.fromWarehouse },
-        destinationWarehouseName,
-      )) {
-        continue;
-      }
-      matched.push(row);
+  const status = firstValue(filters.status);
+  if (status) apiFilters.status = status;
+
+  const dispatchDate = filters.dispatchDate;
+  if (dispatchDate && typeof dispatchDate === "object" && !Array.isArray(dispatchDate)) {
+    const range = dispatchDate as { fromDate?: string; toDate?: string; from?: string; to?: string };
+    const from = range.fromDate || range.from;
+    const to = range.toDate || range.to;
+    if (from || to) {
+      apiFilters.range = {
+        dispatch_date: {
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+        },
+      };
     }
-
-    if (rows.length < apiPageSize) break;
-    apiPage += 1;
+  } else {
+    const exactDate = firstValue(dispatchDate);
+    if (exactDate) apiFilters.dispatch_date = exactDate;
   }
 
-  const start = (page - 1) * pageSize;
+  if (destinationWarehouseId && destinationWarehouseId !== "All") {
+    apiFilters.to_warehouse_id = destinationWarehouseId;
+  }
+
+  const res = await getDispatches({
+    page,
+    page_size: pageSize,
+    search: search || undefined,
+    ordering: ordering || "-dispatch_date",
+    filters: apiFilters,
+  });
+
+  const rows: Record<string, unknown>[] = Array.isArray(res?.data) ? res.data : [];
+  const items = rows
+    .map((row) => mapDispatchListItemToPendingRow(row))
+    .filter((row): row is PendingStockTransferDispatchRow => Boolean(row));
+
   return {
-    items: matched.slice(start, start + pageSize),
-    total: matched.length,
+    items,
+    total: Number(res?.totalRecords ?? res?.count ?? items.length),
   };
 }
+
+/** Column key → dispatch filter-dropdown field_name */
+export const PENDING_ST_FILTER_FIELD_MAP: Record<string, string> = {
+  stockTransferNo: "source_document_no",
+  dispatchNumber: "dispatch_number",
+  fromWarehouse: "from_warehouse",
+  toWarehouse: "to_warehouse",
+  dispatchDate: "dispatch_date",
+  status: "status",
+};
 
 export async function fetchDispatchFilterOptions(
   fieldName: string,
 ): Promise<{ label: string; value: string }[]> {
-  const res = await getDispatchFilterDropdown(fieldName, ST_DISPATCH_SOURCE_TYPE);
+  const res = await getDispatchFilterDropdown(fieldName, ST_DISPATCH_SOURCE_TYPE, {
+    status: ST_DISPATCH_ELIGIBLE_STATUS,
+    excludeExistingStGrn: true,
+  });
   return (res || []).map((x: Record<string, unknown>) => {
     const value = asString(x[fieldName] || x.status || Object.values(x)[0]);
     return { label: value, value };

@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Filter, X, Search, Check } from "lucide-react";
@@ -17,10 +21,17 @@ interface FilterPopoverProps {
   onOpen?: () => void;
 }
 
-export function FilterPopover({ column, value, onChange, onOpen }: FilterPopoverProps) {
+export function FilterPopover({
+  column,
+  value,
+  onChange,
+  onOpen,
+}: FilterPopoverProps) {
   const [open, setOpen] = useState(false);
   const [tempText, setTempText] = useState("");
-  const [selectedDropdownValues, setSelectedDropdownValues] = useState<string[]>([]);
+  const [selectedDropdownValues, setSelectedDropdownValues] = useState<
+    string[]
+  >([]);
 
   useEffect(() => {
     if (column.filterType === "text") {
@@ -43,7 +54,9 @@ export function FilterPopover({ column, value, onChange, onOpen }: FilterPopover
 
   const toggleDropdownValue = (val: string) => {
     setSelectedDropdownValues((prev) => {
-      const next = prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val];
+      const next = prev.includes(val)
+        ? prev.filter((v) => v !== val)
+        : [...prev, val];
       onChange(next.length > 0 ? next : undefined);
       return next;
     });
@@ -58,16 +71,20 @@ export function FilterPopover({ column, value, onChange, onOpen }: FilterPopover
   const isFiltered = Array.isArray(value) ? value.length > 0 : !!value;
 
   return (
-    <Popover open={open} onOpenChange={(isOpen) => {
+    <Popover
+      open={open}
+      onOpenChange={(isOpen) => {
         setOpen(isOpen);
         if (isOpen && onOpen) onOpen();
-      }}>
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}
           className={cn(
             "p-1 rounded-md hover:bg-muted text-muted-foreground/50 hover:text-foreground transition-colors outline-none",
-            isFiltered && "text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-700"
+            isFiltered &&
+              "text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-700",
           )}
         >
           <Filter className="w-3.5 h-3.5" />
@@ -78,13 +95,19 @@ export function FilterPopover({ column, value, onChange, onOpen }: FilterPopover
         className="w-60 space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg"
       >
         <div className="flex items-center justify-between border-b pb-2">
-          <span className="text-xs font-semibold text-foreground">Filter by {column.header}</span>
+          <span className="text-xs font-semibold text-foreground">
+            Filter by {column.header}
+          </span>
           {isFiltered && (
             <Button
               variant="ghost"
               size="icon"
               className="h-5 w-5 rounded-md text-muted-foreground hover:text-foreground"
-              onClick={column.filterType === "text" ? handleClearText : handleClearDropdown}
+              onClick={
+                column.filterType === "text"
+                  ? handleClearText
+                  : handleClearDropdown
+              }
             >
               <X className="w-3 h-3" />
             </Button>
@@ -147,7 +170,11 @@ export function FilterPopover({ column, value, onChange, onOpen }: FilterPopover
               <Button
                 size="sm"
                 onClick={() => {
-                  onChange(selectedDropdownValues.length > 0 ? selectedDropdownValues : undefined);
+                  onChange(
+                    selectedDropdownValues.length > 0
+                      ? selectedDropdownValues
+                      : undefined,
+                  );
                   setOpen(false);
                 }}
                 className="h-7 text-[11px] px-3 font-semibold uppercase tracking-wide bg-brand-600 hover:bg-brand-700 text-white rounded-lg"

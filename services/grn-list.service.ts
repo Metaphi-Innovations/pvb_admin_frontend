@@ -51,6 +51,8 @@ export type GrnFilterField =
   | "po_no"
   | "sales_return_no"
   | "sample_return_no"
+  | "stock_transfer_no"
+  | "from_warehouse"
   | "customer_name";
 
 function asString(value: unknown): string {
@@ -152,6 +154,27 @@ function mapListItem(
   const sourceId =
     asString(raw.source_id) || asString(raw.sourceId) || undefined;
 
+  const itemCount =
+    asNumber(raw.itemCount) ||
+    (Array.isArray(raw.items) ? raw.items.length : 0);
+
+  const stockTransferNo =
+    tabContext.sourceType === "STOCK_TRANSFER"
+      ? asString(raw.stockTransferNo) ||
+        asString(raw.stock_transfer_no) ||
+        asString(raw.poNumber) ||
+        asString(raw.po_no) ||
+        ""
+      : undefined;
+
+  const fromWarehouse =
+    tabContext.sourceType === "STOCK_TRANSFER"
+      ? asString(raw.fromWarehouse) ||
+        asString(raw.from_warehouse) ||
+        supplierName ||
+        "—"
+      : undefined;
+
   return {
     id: asString(raw.id),
     grnNo,
@@ -161,7 +184,7 @@ function mapListItem(
     warehouse: warehouseName,
     warehouseId: asNumber(warehouse.sr_no) || undefined,
     grnDate: asDateOnly(raw.grnDate),
-    totalProducts: 0,
+    totalProducts: itemCount,
     totalQty: receivedQty,
     status,
     items: [],
@@ -170,8 +193,8 @@ function mapListItem(
     ocrExtractedInvoices: [],
     ocrExtractionCompleted: false,
     sourceType: mapSourceTypeToFrontend(tabContext.sourceType),
-    stockTransferNo: tabContext.sourceType === "STOCK_TRANSFER" ? grnNo : undefined,
-    fromWarehouse: tabContext.sourceType === "STOCK_TRANSFER" ? supplierName || "—" : undefined,
+    stockTransferNo,
+    fromWarehouse,
     toWarehouse: tabContext.sourceType === "STOCK_TRANSFER" ? warehouseName : undefined,
     dispatchDate: tabContext.sourceType === "STOCK_TRANSFER" ? asDateOnly(raw.grnDate) : undefined,
     salesReturnNo:
@@ -208,7 +231,17 @@ function mapFilterOptions(
   for (const row of data) {
     if (!row || typeof row !== "object") continue;
     const record = row as Record<string, unknown>;
-    const value = asString(record[fieldName]).trim();
+    let value = asString(record[fieldName]).trim();
+    if (!value) {
+      // BE rows are usually `{ [fieldName]: value }` — fall back to first scalar
+      for (const entry of Object.values(record)) {
+        const candidate = asString(entry).trim();
+        if (candidate) {
+          value = candidate;
+          break;
+        }
+      }
+    }
     if (!value || seen.has(value)) continue;
     seen.add(value);
 
@@ -274,6 +307,21 @@ export function buildGrnApiFilters(
     apiFilters.sample_return_no = sampleReturnNo;
   }
 
+  const stockTransferNo = firstFilterValue(filters.stockTransferNo);
+  if (stockTransferNo) {
+    apiFilters.stock_transfer_no = stockTransferNo;
+  }
+
+  const fromWarehouse = firstFilterValue(filters.fromWarehouse);
+  if (fromWarehouse && tabContext.sourceType === "STOCK_TRANSFER") {
+    apiFilters.from_warehouse = fromWarehouse;
+  }
+
+  const toWarehouse = firstFilterValue(filters.toWarehouse);
+  if (toWarehouse && tabContext.sourceType === "STOCK_TRANSFER") {
+    apiFilters.warehouse = { warehouse_name: toWarehouse };
+  }
+
   const customerName = firstFilterValue(filters.customerName);
   if (customerName) {
     apiFilters.customer_name = customerName;
@@ -292,7 +340,7 @@ export function buildGrnApiFilters(
     apiFilters.warehouseId = destinationWarehouse;
   }
 
-  const columnStatus = firstFilterValue(filters.status);
+  const columnStatus = firstFilterValue(filters.status) || firstFilterValue(filters.displayStatus);
   if (columnStatus && !tabContext.status) {
     const backendStatus = mapFrontendGrnStatusToBackend(columnStatus);
     if (backendStatus) {
@@ -300,7 +348,7 @@ export function buildGrnApiFilters(
     }
   }
 
-  const grnDate = filters.grnDate;
+  const grnDate = filters.grnDate || filters.dispatchDate;
   if (grnDate && typeof grnDate === "object" && !Array.isArray(grnDate)) {
     const range = grnDate as { fromDate?: string; toDate?: string };
     if (range.fromDate || range.toDate) {
@@ -329,19 +377,18 @@ export function buildGrnOrdering(
     vendorName: "supplier__supplier_name",
     warehouse: "warehouse__warehouse_name",
     status: "status",
-    receivedQty: "grnNumber",
+    receivedQty: "received_qty",
     acceptedQty: "grnNumber",
     rejectedQty: "grnNumber",
-    totalQty: "grnNumber",
+    totalQty: "received_qty",
     salesReturnNo: "sales_return_no",
     sampleReturnNo: "sample_return_no",
     customerName: "customer_name",
-    stockTransferNo: "grnNumber",
-    fromWarehouse: "supplier__supplier_name",
+    stockTransferNo: "stock_transfer_no",
+    fromWarehouse: "from_warehouse",
     toWarehouse: "warehouse__warehouse_name",
     dispatchDate: "grnDate",
-    products: "grnNumber",
-    dispatchedQty: "grnNumber",
+    itemCount: "item_count",
     displayStatus: "status",
   };
 
@@ -354,11 +401,15 @@ export function buildGrnOrdering(
 export const GRN_FILTER_COLUMN_MAP: Record<string, GrnFilterField> = {
   grnNo: "grnNumber",
   status: "status",
+  displayStatus: "status",
   vendorName: "supplier__supplier_name",
   warehouse: "warehouse__warehouse_name",
+  toWarehouse: "warehouse__warehouse_name",
+  fromWarehouse: "from_warehouse",
   poNumber: "po_no",
   salesReturnNo: "sales_return_no",
   sampleReturnNo: "sample_return_no",
+  stockTransferNo: "stock_transfer_no",
   customerName: "customer_name",
 };
 

@@ -12,13 +12,13 @@ import {
   ST_GRN_STATUS_BADGE,
 } from "@/lib/warehouse/grn-source";
 import { getStockTransferReceivedApiContext } from "@/lib/warehouse/grn-list-config";
-import { useGrnListData } from "../shared/useGrnListData";
-import { buildGrnApiFilters, GrnListService, type GrnListItem } from "@/services/grn-list.service";
-import { useWarehousesDropdown } from "@/hooks/masters";
+import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
+import { type GrnListItem } from "@/services/grn-list.service";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
 import {
   fetchDispatchFilterOptions,
   fetchPendingStockTransferDispatches,
+  PENDING_ST_FILTER_FIELD_MAP,
   type PendingStockTransferDispatchRow,
 } from "./stock-transfer-grn-utils";
 
@@ -30,8 +30,7 @@ type ReceivedStockTransferGrnRow = {
   fromWarehouse: string;
   toWarehouse: string;
   dispatchDate: string;
-  products: string;
-  dispatchedQty: number;
+  itemCount: number;
   receivedQty: number;
   displayStatus: string;
   grnRecord: GrnListItem;
@@ -42,12 +41,11 @@ function mapToReceivedRow(item: GrnListItem): ReceivedStockTransferGrnRow {
     id: item.id,
     rowType: "grn_record",
     grnId: item.id,
-    stockTransferNo: item.stockTransferNo ?? item.grnNo,
+    stockTransferNo: item.stockTransferNo || item.grnNo,
     fromWarehouse: item.fromWarehouse ?? item.vendorName ?? "—",
     toWarehouse: item.toWarehouse ?? item.warehouse,
     dispatchDate: item.dispatchDate ?? item.grnDate,
-    products: "—",
-    dispatchedQty: item.receivedQty,
+    itemCount: item.totalProducts || 0,
     receivedQty: item.receivedQty,
     displayStatus: getStockTransferGrnDisplayStatus({
       isPendingTransfer: false,
@@ -65,13 +63,6 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
   const router = useRouter();
   const [subTab, setSubTab] = useState<"pending" | "received">("pending");
 
-  const { data: warehouses = [] } = useWarehousesDropdown();
-  const destinationWarehouseName = useMemo(() => {
-    if (!destinationWarehouse || destinationWarehouse === "All") return null;
-    const match = warehouses.find((wh) => wh.warehouse_id === destinationWarehouse);
-    return match?.warehouseName || null;
-  }, [destinationWarehouse, warehouses]);
-
   // ── Pending (Dispatch) state ───────────────────────────────────────────
   const [pendingFilters, setPendingFilters] = useState<FilterState>({});
   const [pendingSort, setPendingSort] = useState<SortState>({ key: "", direction: "none" });
@@ -81,8 +72,10 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
   const [pendingTotal, setPendingTotal] = useState(0);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [pendingError, setPendingError] = useState<string | null>(null);
-  const [statusOptions, setStatusOptions] = useState<{ label: string; value: string }[]>([]);
-  const loadedPendingFiltersRef = useRef<Set<string>>(new Set());
+  const [pendingFilterOptions, setPendingFilterOptions] = useState<
+    Partial<Record<string, { label: string; value: string }[]>>
+  >({});
+  const pendingFilterInFlightRef = useRef<Set<string>>(new Set());
 
   const {
     debouncedFilters: debouncedPendingFilters,
@@ -99,6 +92,8 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
   const [receivedCount, setReceivedCount] = useState(0);
 
   const receivedTabContext = useMemo(() => getStockTransferReceivedApiContext(), []);
+  const { handleOpenFilter: handleOpenReceivedFilter, getFilterOptionsForColumn } =
+    useGrnLazyFilters(receivedTabContext.sourceType);
 
   const {
     items: grnItems,
@@ -112,6 +107,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
     page: grnPage,
     pageSize: grnPageSize,
     destinationWarehouse,
+    enabled: subTab === "received",
   });
 
   const receivedRows = useMemo(() => grnItems.map(mapToReceivedRow), [grnItems]);
@@ -120,20 +116,17 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
     setPendingLoading(true);
     setPendingError(null);
     try {
-      const queryFilters: Record<string, unknown> = {};
-      Object.entries(debouncedPendingFilters).forEach(([k, v]) => {
-        if (k === "search") return;
-        if (v !== undefined && v !== "") queryFilters[k] = v;
-      });
-
       let ordering: string | undefined;
       if (pendingSort.key && pendingSort.direction !== "none") {
         const fieldMap: Record<string, string> = {
-          stockTransferNo: "dispatch_number",
+          stockTransferNo: "transfer_no",
+          dispatchNumber: "dispatch_number",
           dispatchDate: "dispatch_date",
-          dispatchedQty: "dispatch_date",
-          fromWarehouse: "dispatch_date",
-          toWarehouse: "dispatch_date",
+          fromWarehouse: "from_warehouse",
+          toWarehouse: "to_warehouse",
+          status: "status",
+          itemCount: "item_count",
+          dispatchedQty: "dispatched_qty",
         };
         const backendKey = fieldMap[pendingSort.key] || pendingSort.key;
         ordering =
@@ -145,9 +138,8 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         pageSize: pendingPageSize,
         search: debouncedPendingSearch || undefined,
         ordering,
-        filters: queryFilters,
+        filters: debouncedPendingFilters as Record<string, unknown>,
         destinationWarehouseId: destinationWarehouse,
-        destinationWarehouseName,
       });
 
       setPendingRows(result.items);
@@ -169,8 +161,12 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
     pendingSort.key,
     pendingSort.direction,
     destinationWarehouse,
-    destinationWarehouseName,
   ]);
+
+  useEffect(() => {
+    if (subTab !== "pending") return;
+    setPendingFilterOptions({});
+  }, [subTab]);
 
   useEffect(() => {
     if (subTab === "pending") {
@@ -188,7 +184,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
 
   useEffect(() => {
     setGrnPage(1);
-  }, [destinationWarehouse, subTab, grnFilters, grnPageSize]);
+  }, [destinationWarehouse, grnFilters, grnPageSize]);
 
   useEffect(() => {
     setGrnPage(1);
@@ -200,40 +196,23 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
     }
   }, [subTab, grnTotal]);
 
-  // Keep Received tab badge accurate while staying on Pending
-  useEffect(() => {
-    let active = true;
-    async function loadReceivedCount() {
-      if (subTab !== "pending") return;
-      try {
-        const result = await GrnListService.list({
-          page: 1,
-          pageSize: 1,
-          search: "",
-          tabContext: receivedTabContext,
-          apiFilters: buildGrnApiFilters({}, receivedTabContext, destinationWarehouse),
-        });
-        if (active) setReceivedCount(result.total);
-      } catch {
-        // ignore badge errors
-      }
-    }
-    void loadReceivedCount();
-    return () => {
-      active = false;
-    };
-  }, [subTab, destinationWarehouse, receivedTabContext]);
-
   const handleOpenPendingFilter = useCallback(async (columnKey: string) => {
-    if (loadedPendingFiltersRef.current.has(columnKey)) return;
-    if (columnKey !== "status") return;
-    loadedPendingFiltersRef.current.add(columnKey);
+    const fieldName = PENDING_ST_FILTER_FIELD_MAP[columnKey];
+    if (!fieldName) return;
+    // Date range picker does not need dropdown options
+    if (columnKey === "dispatchDate") return;
+    if (pendingFilterInFlightRef.current.has(columnKey)) return;
+
+    pendingFilterInFlightRef.current.add(columnKey);
+    setPendingFilterOptions((prev) => ({ ...prev, [columnKey]: [] }));
     try {
-      const options = await fetchDispatchFilterOptions("status");
-      setStatusOptions(options);
+      const options = await fetchDispatchFilterOptions(fieldName);
+      setPendingFilterOptions((prev) => ({ ...prev, [columnKey]: options }));
     } catch (err) {
       console.error(err);
-      loadedPendingFiltersRef.current.delete(columnKey);
+      setPendingFilterOptions((prev) => ({ ...prev, [columnKey]: [] }));
+    } finally {
+      pendingFilterInFlightRef.current.delete(columnKey);
     }
   }, []);
 
@@ -243,6 +222,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "stockTransferNo",
         header: "Stock Transfer No.",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: pendingFilterOptions.stockTransferNo || [],
         width: "140px",
         render: (_val, row) => (
           <span className="font-mono text-xs font-semibold text-brand-700">
@@ -254,6 +236,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "dispatchNumber",
         header: "Dispatch No.",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: pendingFilterOptions.dispatchNumber || [],
         width: "130px",
         render: (_val, row) => (
           <Link href={`/warehouse/grn/stock-transfer/dispatch-view/${row.dispatchId}`}>
@@ -267,6 +252,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "fromWarehouse",
         header: "From Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: pendingFilterOptions.fromWarehouse || [],
         width: "140px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.fromWarehouse}</span>,
       },
@@ -274,6 +262,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "toWarehouse",
         header: "To Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: pendingFilterOptions.toWarehouse || [],
         width: "140px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.toWarehouse}</span>,
       },
@@ -281,15 +272,20 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "dispatchDate",
         header: "Dispatch Date",
         sortable: true,
+        filterable: true,
+        filterType: "date",
         width: "120px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.dispatchDate}</span>,
       },
       {
-        key: "products",
-        header: "Products",
-        sortable: false,
-        width: "160px",
-        render: (_val, row) => <span className="text-xs text-foreground">{row.products}</span>,
+        key: "itemCount",
+        header: "Items",
+        sortable: true,
+        align: "right",
+        width: "80px",
+        render: (_val, row) => (
+          <span className="text-xs font-medium tabular-nums">{row.itemCount.toLocaleString()}</span>
+        ),
       },
       {
         key: "dispatchedQty",
@@ -307,7 +303,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: statusOptions,
+        filterOptions: pendingFilterOptions.status || [],
         width: "120px",
         render: (_val, row) => (
           <span className="inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -317,19 +313,22 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
       },
     ];
     return cols;
-  }, [statusOptions]);
+  }, [pendingFilterOptions]);
 
   const receivedColumns = useMemo(() => {
     const cols: ColumnConfig<ReceivedStockTransferGrnRow>[] = [
       {
         key: "stockTransferNo",
-        header: "GRN No.",
+        header: "Stock Transfer No.",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("stockTransferNo"),
         width: "140px",
         render: (_val, row) => (
           <Link href={`/warehouse/grn/stock-transfer/${row.grnId}`}>
             <span className="font-mono text-xs font-semibold text-brand-700 hover:text-brand-800">
-              {row.grnRecord.grnNo}
+              {row.stockTransferNo || row.grnRecord.grnNo}
             </span>
           </Link>
         ),
@@ -338,6 +337,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "fromWarehouse",
         header: "From Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("fromWarehouse"),
         width: "140px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.fromWarehouse}</span>,
       },
@@ -345,6 +347,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "toWarehouse",
         header: "To Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("toWarehouse"),
         width: "140px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.toWarehouse}</span>,
       },
@@ -352,8 +357,20 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "dispatchDate",
         header: "Received Date",
         sortable: true,
+        filterable: true,
+        filterType: "date",
         width: "120px",
         render: (_val, row) => <span className="text-xs text-foreground">{row.dispatchDate}</span>,
+      },
+      {
+        key: "itemCount",
+        header: "Items",
+        sortable: true,
+        align: "right",
+        width: "80px",
+        render: (_val, row) => (
+          <span className="text-xs font-medium tabular-nums">{row.itemCount.toLocaleString()}</span>
+        ),
       },
       {
         key: "receivedQty",
@@ -369,6 +386,9 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         key: "displayStatus",
         header: "Status",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("displayStatus"),
         width: "140px",
         render: (val: string) => {
           const cfg =
@@ -385,7 +405,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
       },
     ];
     return cols;
-  }, []);
+  }, [getFilterOptionsForColumn]);
 
   const pendingActions: ActionItemConfig<PendingStockTransferDispatchRow>[] = [
     {
@@ -508,6 +528,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
             onPageSizeChange={setGrnPageSize}
             onFilterChange={setGrnFilters}
             onSortChange={setGrnSort}
+            onOpenFilter={handleOpenReceivedFilter}
             actions={receivedActions}
             emptyMessage="No received stock transfer GRNs found"
             searchPlaceholder="Search stock transfer GRN..."

@@ -30,7 +30,7 @@ function enrichGrnRow(grn: GrnRecord, qcs: QcRecord[]): GrnListingRow {
 }
 
 const GRN_STATUS_CONFIG = {
-  pending_qc: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC" },
+  pending_qc: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "QC Pending" },
   qc_in_progress: { bg: "bg-navy-50 text-navy-700 border-navy-200", label: "QC In Progress" },
   qc_completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed" },
 };
