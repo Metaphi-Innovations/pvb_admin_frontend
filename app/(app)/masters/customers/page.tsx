@@ -193,13 +193,105 @@ export default function CustomersPage() {
 		showToast("Draft status is not implemented yet", "error");
 	};
 
+	const {
+		data,
+		isLoading,
+		isFetching,
+	} = useCustomers({
+		page,
+		pageSize,
+		search: String(filters.search ?? ""),
+		ordering: sortStateToOrdering(sort.key, sort.direction),
+		status: "all",
+		apiFilters: filters,
+	});
+
+	const records = data?.items ?? [];
+	const total = data?.total ?? 0;
+
+	const toOptions = (values: Array<string | number | null | undefined>) =>
+		Array.from(
+			new Set(
+				values
+					.map((v) => String(v ?? "").trim())
+					.filter(Boolean),
+			),
+		)
+			.sort((a, b) => a.localeCompare(b))
+			.map((v) => ({ label: v, value: v }));
+
+	const customerCodeOptions = useMemo(
+		() => toOptions(records.map((r) => r.customerCode)),
+		[records],
+	);
+	const customerNameOptions = useMemo(
+		() => toOptions(records.map((r) => r.customerName)),
+		[records],
+	);
+	const mobileOptions = useMemo(
+		() =>
+			toOptions(
+				records.map((r) => formatMobile(r.countryCode, r.mobileNo)),
+			),
+		[records],
+	);
+	const emailOptions = useMemo(
+		() => toOptions(records.map((r) => r.email)),
+		[records],
+	);
+	const gstinOptions = useMemo(
+		() => toOptions(records.map((r) => r.gstinNo)),
+		[records],
+	);
+	const addressOptions = useMemo(
+		() => {
+			const seen = new Set<string>();
+			const opts: Array<{ label: string; value: string }> = [];
+			for (const row of records) {
+				const label = String(row.address ?? "").trim();
+				if (!label) continue;
+				const value = label.split(",")[0]?.trim() || label;
+				if (!value || seen.has(value)) continue;
+				seen.add(value);
+				opts.push({ label, value });
+			}
+			return opts.sort((a, b) => a.label.localeCompare(b.label));
+		},
+		[records],
+	);
+	const stateOptions = useMemo(
+		() => toOptions(records.map((r) => r.stateName)),
+		[records],
+	);
+	const districtOptions = useMemo(
+		() => toOptions(records.map((r) => r.districtName)),
+		[records],
+	);
+	const territoryOptions = useMemo(
+		() => toOptions(records.map((r) => r.territoryName)),
+		[records],
+	);
+	const creditLimitOptions = useMemo(
+		() => toOptions(records.map((r) => formatCreditLimit(r.creditLimit ?? 0))),
+		[records],
+	);
+	const createdByOptions = useMemo(
+		() => toOptions(records.map((r) => r.createdBy)),
+		[records],
+	);
+	const updatedByOptions = useMemo(
+		() => toOptions(records.map((r) => r.updatedBy)),
+		[records],
+	);
+
 	const columns: ColumnConfig<CustomerListRecord>[] = [
 		{
 			key: "customerCode",
 			header: "Customer Code",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: customerCodeOptions,
 			width: "130px",
 			render: (val, row) => (
 				<span className='font-mono text-xs text-brand-700'>
@@ -212,7 +304,8 @@ export default function CustomersPage() {
 			header: "Customer Name",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: customerNameOptions,
 			width: "190px",
 			render: (val, row) => (
 				<div>
@@ -240,7 +333,8 @@ export default function CustomersPage() {
 			header: "Mobile Number",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: mobileOptions,
 			width: "150px",
 			render: (val, row) => (
 				<span className='font-mono'>
@@ -253,7 +347,8 @@ export default function CustomersPage() {
 			header: "Email Address",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: emailOptions,
 			width: "190px",
 			render: (val, row) => row.email || "—",
 		},
@@ -262,7 +357,8 @@ export default function CustomersPage() {
 			header: "GSTIN",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: gstinOptions,
 			width: "150px",
 			render: (val, row) => (
 				<span className='font-mono'>{row.gstinNo || "—"}</span>
@@ -286,7 +382,8 @@ export default function CustomersPage() {
 			header: "Address",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: addressOptions,
 			width: "240px",
 			render: (val, row) => row.address || "—",
 		},
@@ -295,7 +392,8 @@ export default function CustomersPage() {
 			header: "State",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: stateOptions,
 			width: "130px",
 			render: (val, row) => row.stateName || "—",
 		},
@@ -304,7 +402,8 @@ export default function CustomersPage() {
 			header: "District",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: districtOptions,
 			width: "130px",
 			render: (val, row) => row.districtName || "—",
 		},
@@ -313,7 +412,8 @@ export default function CustomersPage() {
 			header: "Territory",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: territoryOptions,
 			width: "130px",
 			render: (val, row) => row.territoryName || "—",
 		},
@@ -322,7 +422,8 @@ export default function CustomersPage() {
 			header: "Credit Limit",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: creditLimitOptions,
 			width: "110px",
 			render: (val, row) => formatCreditLimit(row.creditLimit ?? 0),
 		},
@@ -405,7 +506,8 @@ export default function CustomersPage() {
 			header: "Created",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "audit",
+			auditUserOptions: createdByOptions,
 			width: "120px",
 			render: (val, row) => (
 				<ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
@@ -416,7 +518,8 @@ export default function CustomersPage() {
 			header: "Updated",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "audit",
+			auditUserOptions: updatedByOptions,
 			width: "120px",
 			render: (val, row) => (
 				<ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
@@ -548,24 +651,6 @@ export default function CustomersPage() {
 	const handleAdd = () => {
 		router.push("/masters/customers/new");
 	};
-
-	const {
-		data,
-		isLoading,
-		isFetching,
-	} = useCustomers({
-		page,
-		pageSize,
-		search: String(filters.search ?? ""),
-		ordering: sortStateToOrdering(sort.key, sort.direction),
-		status: "all",
-		apiFilters: filters,
-	});
-
-	const records = data?.items ?? [];
-	const total = data?.total ?? 0;
-
-
 
 	const active = records.filter(r => r.status === "active").length;
 	const inactive = records.filter(r => r.status === "inactive").length;

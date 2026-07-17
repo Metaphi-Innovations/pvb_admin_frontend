@@ -14,7 +14,6 @@ export interface UnitListParams {
 export interface UnitListRecord {
   id: number;
   unitUuid: string;
-  unitCode: string;
   unitName: string;
   shortName: string;
   uomId: string | null;
@@ -64,7 +63,6 @@ export interface UnitParentUomOption {
 }
 
 export type UnitFilterField =
-  | "unit_code"
   | "unit_name"
   | "short_name"
   | "conversion_factor"
@@ -77,7 +75,6 @@ export type UnitFilterField =
   | "updated_by_user__first_name";
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
-  unitCode: "unitCode",
   unitName: "unitName",
   shortName: "shortName",
   conversionFactor: "conversionFactor",
@@ -142,7 +139,6 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): UnitListR
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     unitUuid: asString(raw.unit_id),
-    unitCode: asString(raw.unit_code),
     unitName: asString(raw.unit_name),
     shortName: asString(raw.short_name),
     uomId: uomIdRaw ? asString(uomIdRaw) : null,
@@ -162,7 +158,6 @@ function mapDetail(raw: Record<string, unknown>): UnitListRecord {
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
     unitUuid: asString(raw.unit_id),
-    unitCode: asString(raw.unit_code),
     unitName: asString(raw.unit_name),
     shortName: asString(raw.short_name),
     uomId: uomIdRaw ? asString(uomIdRaw) : null,

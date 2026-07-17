@@ -14,6 +14,9 @@ import {
   todayStr,
   type ProductImage,
   type ProductUrl,
+  getProductApiValidationToastMessage,
+  isProductApiValidationError,
+  mapProductApiErrorsToFormFields,
 } from "../product-data";
 import {
   DEFAULT_PRODUCT_FORM,
@@ -23,6 +26,7 @@ import {
   validateProductForm,
 } from "../components/ProductForm";
 import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
+import { ProductListService } from "@/services/product-list.service";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -114,8 +118,27 @@ export default function NewProductPage() {
           setTimeout(() => router.push("/masters/products"), 900);
         },
         onError: (err) => {
+          if (isProductApiValidationError(err)) {
+            const apiFieldErrors = mapProductApiErrorsToFormFields(err);
+            if (Object.keys(apiFieldErrors).length > 0) {
+              setErrors((prev) => ({ ...prev, ...apiFieldErrors }));
+            }
+            setToast({
+              msg: getProductApiValidationToastMessage(
+                err,
+                "Please fix the validation errors.",
+              ),
+              type: "error",
+            });
+            setTimeout(() => setToast(null), 5000);
+            return;
+          }
+
           setToast({
-            msg: err instanceof Error ? err.message : "Failed to save product.",
+            msg: ProductListService.extractErrorMessage(
+              err,
+              "Failed to save product.",
+            ),
             type: "error",
           });
           setTimeout(() => setToast(null), 4000);
@@ -163,12 +186,16 @@ export default function NewProductPage() {
       {toast && (
         <div
           className={cn(
-            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "fixed top-5 right-5 z-[100] flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium max-w-md",
             toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
           )}
         >
-          {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-          {toast.msg}
+          {toast.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          ) : (
+            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          )}
+          <span className="leading-snug whitespace-pre-wrap">{toast.msg}</span>
         </div>
       )}
     </FormContainer>

@@ -11,19 +11,19 @@ import { VendorForm } from "../components/VendorForm";
 import {
   DEFAULT_VENDOR_FORM,
   VendorFormValues,
-  VendorStatus,
-  validateVendorForm,
+  collectVendorFormFieldErrors,
+  isSupplierApiValidationError,
+  mapSupplierApiErrorsToVendorFormFields,
 } from "../vendor-data";
 import { SupplierCreatePayload } from "@/services/supplier-list.service";
 
 export default function NewSupplierPage() {
   const router = useRouter();
   const [form, setForm] = useState<VendorFormValues>(DEFAULT_VENDOR_FORM);
-  // const [status] = useState<VendorStatus>("active");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errorFocusToken, setErrorFocusToken] = useState(0);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  // Fetch the next supplier code from the API
   const { data: previewCode } = useSupplierPreviewNumber(form.vendorType, true);
   const supplierCode = previewCode ?? "SUP-XXXX";
 
@@ -31,21 +31,53 @@ export default function NewSupplierPage() {
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
+      if (!prev[key] && !(key === "gstNumber" && prev.gstin)) return prev;
       const next = { ...prev };
       delete next[key];
+      if (key === "gstNumber" || key === "gstin") delete next.gstin;
+      if (key === "accountNumber" || key === "confirmAccountNumber") {
+        delete next.accountNumber;
+        delete next.confirmAccountNumber;
+      }
       return next;
     });
 
+  const handleFormChange = (next: VendorFormValues) => {
+    setForm(next);
+    setErrors((prev) => {
+      if (!Object.keys(prev).length) return prev;
+      const clientErrors = collectVendorFormFieldErrors(next);
+      const nextErrors = { ...prev };
+      let changed = false;
+
+      for (const key of Object.keys(clientErrors)) {
+        if (clientErrors[key]) {
+          if (nextErrors[key] !== clientErrors[key]) {
+            nextErrors[key] = clientErrors[key];
+            changed = true;
+          }
+        } else if (nextErrors[key]) {
+          delete nextErrors[key];
+          changed = true;
+        }
+      }
+
+      if (prev._form) {
+        delete nextErrors._form;
+        changed = true;
+      }
+
+      return changed ? nextErrors : prev;
+    });
+  };
+
   const handleSave = () => {
-    // validateVendorForm returns a single error message (or null), not a per-field map.
-    const validationError = validateVendorForm(form);
-    if (validationError) {
-      setErrors({ form: validationError });
-      setToast({ msg: validationError, type: "error" });
-      setTimeout(() => setToast(null), 3200);
+    const fieldErrors = collectVendorFormFieldErrors(form);
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrorFocusToken((t) => t + 1);
       return;
     }
-    setErrors({});
 
     const payload: SupplierCreatePayload = {
       supplier_type_id: form.vendorType,
@@ -117,11 +149,19 @@ export default function NewSupplierPage() {
         setToast({ msg: "Supplier created successfully.", type: "success" });
         setTimeout(() => router.push("/masters/vendors"), 900);
       },
-      onError: (err: any) => {
-        setToast({
-          msg: err?.message || "Failed to create supplier.",
-          type: "error",
-        });
+      onError: (err: unknown) => {
+        if (isSupplierApiValidationError(err)) {
+          const apiFieldErrors = mapSupplierApiErrorsToVendorFormFields(err);
+          if (Object.keys(apiFieldErrors).length > 0) {
+            setErrors(apiFieldErrors);
+            setErrorFocusToken((t) => t + 1);
+            return;
+          }
+        }
+
+        const message =
+          (err as { message?: string })?.message || "Failed to create supplier.";
+        setToast({ msg: message, type: "error" });
         setTimeout(() => setToast(null), 4000);
       },
     });
@@ -158,9 +198,21 @@ export default function NewSupplierPage() {
           </Button>
         </div>
 
-        {/* Form Content */}
+        {errors._form && (
+          <div className="mx-5 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+            {errors._form}
+          </div>
+        )}
+
         <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <VendorForm form={form} onChange={setForm} vendorCode={supplierCode} />
+          <VendorForm
+            form={form}
+            onChange={handleFormChange}
+            vendorCode={supplierCode}
+            errors={errors}
+            onClearError={clearErr}
+            errorFocusToken={errorFocusToken}
+          />
         </div>
       </div>
 

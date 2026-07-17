@@ -10,7 +10,6 @@ import {
 export interface TdsApiRecord {
   id: number;
   tdsUuid: string;
-  sectionCode: string;
   sectionName: string;
   tdsRate: string;
   applicableTo: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -31,14 +31,15 @@ import {
   type SupplierListRecord,
 } from "@/services/supplier-list.service";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
-import { CURRENT_USER } from "@/lib/procurement/config";
 import { MiniKPICard } from "@/components/ui/KPICard";
 
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
-import { useSuppliers, useToggleSupplierStatus, useExportSuppliers } from "@/hooks/masters";
+import { useSuppliers, useToggleSupplierStatus, useExportSuppliers, useSupplierFilterDropdown } from "@/hooks/masters";
 import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { mergeListRequestFilters, MASTER_FILTER_FIELD_MAPS, resolveListStatus } from "@/lib/masters/list-api-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 
 interface ToastState {
   msg: string;
@@ -69,6 +70,7 @@ export default function VendorMasterPage() {
     applyFilters,
     appliedSearch,
   } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "supplierName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -81,21 +83,73 @@ export default function VendorMasterPage() {
   //   refresh();
   // }, [refresh]);
 
-  const listParams: MasterListKeyParams = useMemo(() => {
-    const { search, status, ...rest } = appliedFilters as Record<string, unknown>;
-    return {
-      page,
-      pageSize,
-      search: appliedSearch || ((search as string) ?? ""),
-      ordering: sortStateToOrdering(sort.key, sort.direction),
-      status: (status as "all" | "active" | "inactive") ?? "all",
-      apiFilters: rest,
-    };
-  }, [appliedFilters, appliedSearch, sort, page, pageSize]);
+  const apiFilters = useMemo(
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.supplier),
+    [appliedFilters],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
+  );
+  const listParams: MasterListKeyParams = useMemo(() => ({
+    page,
+    pageSize,
+    search: appliedSearch,
+    ordering: sortStateToOrdering(sort.key, sort.direction),
+    status: listStatus,
+    apiFilters,
+  }), [page, pageSize, appliedSearch, sort, listStatus, apiFilters]);
 
-  const { data, isLoading, isFetching } = useSuppliers(listParams);
+  const { data } = useSuppliers(listParams);
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
+
+  const supplierCodeOptionsQuery = useSupplierFilterDropdown("supplier_code", {
+    enabled: isFilterOpen("supplierCode"),
+  });
+  const supplierNameOptionsQuery = useSupplierFilterDropdown("supplier_name", {
+    enabled: isFilterOpen("supplierName"),
+  });
+  const supplierTypeOptionsQuery = useSupplierFilterDropdown("supplier_type__supplier_type_name", {
+    enabled: isFilterOpen("supplierType"),
+  });
+  const contactPersonOptionsQuery = useSupplierFilterDropdown("contact_person", {
+    enabled: isFilterOpen("contactPerson"),
+  });
+  const mobileOptionsQuery = useSupplierFilterDropdown("mobile_number", {
+    enabled: isFilterOpen("mobile"),
+  });
+  const gstinOptionsQuery = useSupplierFilterDropdown("gstin_number", {
+    enabled: isFilterOpen("gstNumber"),
+  });
+  const statusOptionsQuery = useSupplierFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useSupplierFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useSupplierFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
+
+  const supplierCodeOptions = useMemo(() => supplierCodeOptionsQuery.data ?? [], [supplierCodeOptionsQuery.data]);
+  const supplierNameOptions = useMemo(() => supplierNameOptionsQuery.data ?? [], [supplierNameOptionsQuery.data]);
+  const supplierTypeOptions = useMemo(() => supplierTypeOptionsQuery.data ?? [], [supplierTypeOptionsQuery.data]);
+  const contactPersonOptions = useMemo(() => contactPersonOptionsQuery.data ?? [], [contactPersonOptionsQuery.data]);
+  const mobileOptions = useMemo(() => mobileOptionsQuery.data ?? [], [mobileOptionsQuery.data]);
+  const gstinOptions = useMemo(() => gstinOptionsQuery.data ?? [], [gstinOptionsQuery.data]);
+  const statusOptions = useMemo(
+    () =>
+      statusOptionsQuery.data?.length
+        ? statusOptionsQuery.data
+        : [
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+          ],
+    [statusOptionsQuery.data],
+  );
+  const createdByOptions = useMemo(() => createdByOptionsQuery.data ?? [], [createdByOptionsQuery.data]);
+  const updatedByOptions = useMemo(() => updatedByOptionsQuery.data ?? [], [updatedByOptionsQuery.data]);
 
   useEffect(() => {
     if (!toast) return;
@@ -150,9 +204,11 @@ export default function VendorMasterPage() {
     {
       key: "supplierCode",
       header: "Supplier Code",
+      // colKey: "supplier_code",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: supplierCodeOptions,
       width: "110px",
       render: (_val, row) => (
         <span className="font-mono text-xs font-semibold text-foreground">{row.supplierCode || "—"}</span>
@@ -163,7 +219,8 @@ export default function VendorMasterPage() {
       header: "Supplier Name",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: supplierNameOptions,
       width: "180px",
       render: (_val, row) => (
         <button
@@ -180,7 +237,8 @@ export default function VendorMasterPage() {
       header: "Supplier Type",
       sortable: false,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: supplierTypeOptions,
       width: "160px",
       render: (_val, row) => row.supplierType?.supplier_type_name || "—",
     },
@@ -189,7 +247,8 @@ export default function VendorMasterPage() {
       header: "Contact Person",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: contactPersonOptions,
       width: "140px",
       render: (_val, row) => row.contactPerson || "—",
     },
@@ -198,7 +257,8 @@ export default function VendorMasterPage() {
       header: "Mobile Number",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: mobileOptions,
       width: "140px",
       render: (_val, row) => (
         <span className="font-mono text-xs text-muted-foreground">
@@ -211,7 +271,8 @@ export default function VendorMasterPage() {
       header: "GST Number",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: gstinOptions,
       width: "150px",
       render: (_val, row) => (
         <span className="font-mono text-[11px]">{row.gstinNumber || "—"}</span>
@@ -221,6 +282,9 @@ export default function VendorMasterPage() {
       key: "createdBy",
       header: "Created By",
       sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -230,6 +294,9 @@ export default function VendorMasterPage() {
       key: "updatedBy",
       header: "Updated By",
       sortable: true,
+      filterable: true,
+      filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -241,10 +308,7 @@ export default function VendorMasterPage() {
       sortable: false,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "110px",
       render: (_val, row) => (
         <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
@@ -357,6 +421,7 @@ export default function VendorMasterPage() {
           searchPlaceholder="Search supplier code, name, type, contact, GST…"
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 
