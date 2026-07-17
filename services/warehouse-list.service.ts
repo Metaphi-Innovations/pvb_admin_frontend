@@ -16,7 +16,11 @@ export interface WarehouseContactPayload {
 }
 
 export interface WarehouseDocumentPayload {
+    warehouse_document_id?: string;
     document_name: string;
+    file_name?: string;
+    file_url?: string;
+    created_at?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,8 +257,63 @@ function mapContacts(value: unknown): WarehouseContactPayload[] {
 
 function mapDocuments(value: unknown): WarehouseDocumentPayload[] {
     return toArray<Record<string, unknown>>(value).map((d) => ({
+        warehouse_document_id: asString(d.warehouse_document_id),
         document_name: asString(d.document_name),
+        file_name: asString(d.file_name),
+        file_url: asString(d.file_url),
+        created_at: asString(d.created_at),
     }));
+}
+
+export function resolveWarehouseDocumentUrl(path: string): string {
+    const raw = path.trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
+        return raw;
+    }
+
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+    const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+    const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+
+    return `${origin}${normalizedPath}`;
+}
+
+export function isWarehouseImageDocument(doc: WarehouseDocumentPayload): boolean {
+    const name = (doc.file_name || doc.file_url || "").toLowerCase();
+    return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+}
+
+export function isWarehouseDocumentLink(doc: WarehouseDocumentPayload): boolean {
+    const url = (doc.file_url || "").trim();
+    return /^https?:\/\//i.test(url) && !url.includes("/uploads/");
+}
+
+export function getWarehouseDocumentPreviewUrl(doc: WarehouseDocumentPayload): string {
+    return resolveWarehouseDocumentUrl(doc.file_url ?? "");
+}
+
+export async function downloadWarehouseDocument(doc: WarehouseDocumentPayload): Promise<void> {
+    const url = getWarehouseDocumentPreviewUrl(doc);
+    if (!url) {
+        throw new Error("Document URL is missing.");
+    }
+
+    const fileName = doc.file_name?.trim() || doc.document_name?.trim() || "document";
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok) {
+        throw new Error("Failed to download document.");
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
 }
 
 function mapItem(

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
-import { SupplierTypeCreatePayload, SupplierTypeExportParams, SupplierTypeListParams, SupplierTypeListService, SupplierTypeUpdatePayload } from "@/services/supplier-type.service";
+import { SupplierTypeCreatePayload, SupplierTypeExportParams, SupplierTypeFilterField, SupplierTypeListParams, SupplierTypeListService, SupplierTypeUpdatePayload } from "@/services/supplier-type.service";
 
 function toListParams(params: MasterListKeyParams): SupplierTypeListParams {
     return {
@@ -97,5 +97,21 @@ export function useSupplierTypesDropdown() {
 export function useExportSupplierTypes() {
     return useMutation({
         mutationFn: (params: SupplierTypeExportParams) => SupplierTypeListService.export(params),
+    });
+}
+
+type FilterDropdownQueryOptions = {
+    enabled?: boolean;
+};
+
+export function useSupplierTypeFilterDropdown(
+    fieldName: SupplierTypeFilterField,
+    options?: FilterDropdownQueryOptions,
+) {
+    return useQuery({
+        queryKey: masterKeys.supplierTypes.filterDropdown(fieldName),
+        queryFn: ({ signal }) => SupplierTypeListService.getFilterDropdown(fieldName, signal),
+        staleTime: 5 * 60 * 1000,
+        enabled: options?.enabled ?? true,
     });
 }
