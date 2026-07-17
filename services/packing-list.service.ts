@@ -117,17 +117,17 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
     sourceType: asString(raw.source_type) as any,
     sourceId: asString(raw.source_id),
     warehouseId: asString(raw.warehouse_id),
-    warehouseName: asString(warehouse.warehouse_name),
+    warehouseName: asString(raw.warehouse_name) || asString(warehouse.warehouse_name),
     customerName: asString(raw.customer_name),
-    sourceWarehouse: asString(raw.source_warehouse),
-    targetWarehouse: asString(raw.target_warehouse),
+    sourceWarehouse: asString(raw.source_warehouse) || asString((raw.customer_snapshot as any)?.source_warehouse),
+    targetWarehouse: asString(raw.target_warehouse) || asString((raw.customer_snapshot as any)?.target_warehouse),
     orderAmount: asNumber(raw.order_amount),
     orderDate: asDateOnly(raw.order_date),
     expectedDeliveryDate: asDateOnly(raw.expected_delivery_date),
     status: asString(raw.status),
     remarks: asString(raw.remarks),
-    totalItems: products.length,
-    totalQuantity: totalQty,
+    totalItems: raw.total_items !== undefined ? asNumber(raw.total_items) : products.length,
+    totalQuantity: raw.total_qty !== undefined ? asNumber(raw.total_qty) : totalQty,
     createdAt: asString(raw.created_at),
     updatedAt: asString(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),
@@ -242,7 +242,10 @@ export const PackingListService = {
     const items = listData.map((row) => mapItem((row ?? {}) as Record<string, unknown>));
     
     const pagination = dataObj?.pagination as Record<string, unknown> | undefined;
-    const totalRecords = pagination ? asNumber(pagination.total) : items.length;
+    const totalRecords = payload.totalRecords !== undefined ? asNumber(payload.totalRecords)
+      : payload.count !== undefined ? asNumber(payload.count)
+      : pagination ? asNumber(pagination.total)
+      : items.length;
 
     return { items, total: totalRecords };
   },
@@ -386,6 +389,7 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
         mfgDate: snap.mfg_date || snap.mfgDate || "",
         grnNo: snap.grn_no || snap.grnNo || "",
         lineId: p.packing_list_product_id,
+        quantity_type: p.quantity_type,
       };
     }),
   };

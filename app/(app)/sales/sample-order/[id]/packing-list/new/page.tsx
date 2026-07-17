@@ -314,6 +314,7 @@ export default function NewSampleOrderPackingListPage() {
           batch_code: alloc.batchNumber,
           order_qty: alloc.allocatedBaseQty,
           available_inventory_id: alloc.cartonId,
+          quantity_type: line.quantityType,
         }))
       ),
     };

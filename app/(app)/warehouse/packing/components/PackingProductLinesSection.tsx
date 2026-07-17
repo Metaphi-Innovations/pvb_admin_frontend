@@ -43,8 +43,9 @@ export function PackingProductLinesSection({
   const groupedProducts = useMemo(() => {
     const groups: Record<string, SalesOrderProduct[]> = {};
     order.products.forEach((p) => {
-      if (!groups[p.sku]) groups[p.sku] = [];
-      groups[p.sku].push(p);
+      const groupKey = `${p.sku}-${p.quantity_type || 'Case'}`;
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(p);
     });
     return Object.values(groups);
   }, [order.products]);
@@ -72,7 +73,7 @@ export function PackingProductLinesSection({
       <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-border/60">
         {groupedProducts.map((group) => (
           <PackingProductGroup
-            key={group[0].sku}
+            key={`${group[0].sku}-${group[0].quantity_type || 'Case'}`}
             products={group}
             orderedQtyLabel={orderedQtyLabel}
             selectedLines={selectedLines}
@@ -109,9 +110,13 @@ function PackingProductGroup({
   const [isExpanded, setIsExpanded] = useState(true);
 
   const product = products[0];
+  const quantityType = product.quantity_type?.toLowerCase() || "case";
+  const isPiece = quantityType === "piece" || quantityType === "pieces";
+  
   const config = product.productId ? getProductPackingConfig(Number(product.productId)) : undefined;
-  const unitsPerCase = product.packSize || 1;
+  const unitsPerCase = isPiece ? 1 : (product.packSize || 1);
   const baseUnit = config?.baseUnit || "Units";
+  const displayLabel = isPiece ? "Pieces" : "Cases";
 
   const totalOrderedQty = products.reduce((sum, p) => sum + (p.orderBaseQty || 0), 0);
   const totalPendingQty = products.reduce((sum, p) => sum + (p.pendingBaseQty || 0), 0);
@@ -128,11 +133,11 @@ function PackingProductGroup({
   return (
     <div className="flex flex-col">
       {/* Product Header */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 bg-muted/10 hover:bg-muted/20 transition-colors border-b border-border/40">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 bg-white hover:bg-slate-50 transition-colors">
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1 rounded-md hover:bg-muted text-foreground transition-colors"
+          className="p-1 -ml-1 rounded-md hover:bg-slate-100 text-slate-500 transition-colors"
         >
           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
@@ -148,142 +153,134 @@ function PackingProductGroup({
           aria-label={`Select all batches for ${product.product}`}
         />
 
-        <div className="flex-1 min-w-[200px]">
-          <p className="text-sm font-bold text-foreground">{product.product}</p>
-          <p className="font-mono text-xs text-brand-700 font-semibold">{product.sku}</p>
+        <div className="flex-1 min-w-[200px] flex flex-col">
+          <p className="text-[13px] font-bold text-slate-800">{product.product}</p>
+          <p className="font-mono text-[10px] text-slate-500 font-medium tracking-wide">{product.sku}</p>
         </div>
 
-        <div className="flex flex-col gap-1 min-w-[120px]">
-          <span className="text-xs">
-            <span className="text-muted-foreground">Total {orderedQtyLabel} (Cases): </span>
-              <span className="font-bold text-emerald-600">{Math.floor(totalOrderedQty / unitsPerCase)}</span>
-              {unitsPerCase > 1 && (
-                <span className="text-muted-foreground ml-1 text-[10px]">({totalOrderedQty} {baseUnit})</span>
-              )}
-            </span>
-            <div>
-              <span className="text-muted-foreground mr-1 text-xs">Pending:</span>
-              <span className="font-bold text-amber-600 text-xs">{Math.floor(totalPendingQty / unitsPerCase)}</span>
-              {unitsPerCase > 1 && (
-                <span className="text-muted-foreground ml-1 text-[10px]">({totalPendingQty} {baseUnit})</span>
-            )}
+        <div className="flex items-center gap-2 text-xs">
+          <div className="text-slate-500">
+            Ordered: <span className="font-bold text-slate-700">{isPiece ? totalOrderedQty : Math.floor(totalOrderedQty / unitsPerCase)} {displayLabel}</span>
+          </div>
+          <div className="h-3.5 w-[1px] bg-border/80" />
+          <div className="text-slate-500">
+            Pending: <span className="font-bold text-slate-700">{isPiece ? totalPendingQty : Math.floor(totalPendingQty / unitsPerCase)} {displayLabel}</span>
           </div>
         </div>
       </div>
 
-      {/* Batch Rows */}
+      {/* Batch Rows Table */}
       {isExpanded && (
-        <div className="flex flex-col divide-y divide-border/30 bg-white">
-          {products.map((p) => {
-            const lineKey = getLineKey(p);
-            const isSelected = !!selectedLines[lineKey];
-            const qtyValue = packingQty[lineKey] ?? 0;
-            const error = validationErrors[lineKey];
+        <div className="bg-white border-t border-border/40 overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[600px]">
+            <thead>
+              <tr className="border-b border-border/40 bg-white">
+                <th className="py-2.5 px-4 text-[11px] font-bold text-foreground w-12">Select</th>
+                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground w-[120px]">Quantity Type</th>
+                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground">Batch</th>
+                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground w-[100px]">Pending Qty</th>
+                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground w-[120px]">Pack Qty</th>
+                <th className="py-2.5 px-4 text-[11px] font-bold text-foreground w-[100px] text-right">Total (Base)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30">
+              {products.map((p) => {
+                const lineKey = getLineKey(p);
+                const isSelected = !!selectedLines[lineKey];
+                const qtyValue = packingQty[lineKey] ?? 0;
+                const error = validationErrors[lineKey];
 
-            return (
-              <div
-                key={lineKey}
-                className={cn(
-                  "flex flex-wrap items-center gap-x-3 gap-y-2 pl-14 pr-4 py-2.5 hover:bg-muted/5 transition-colors",
-                  !isSelected && "opacity-70"
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 rounded accent-brand-600 flex-shrink-0"
-                  checked={isSelected}
-                  onChange={(e) => onToggleProduct(lineKey, e.target.checked)}
-                  aria-label={`Select batch ${p.batchNumber} for ${p.product}`}
-                />
+                const qtyType = (p.quantity_type || "case").toUpperCase();
+                const isPieceRow = qtyType === "PIECE" || qtyType === "PIECES";
+                const rowUnitsPerCase = isPieceRow ? 1 : (p.packSize || 1);
+                
+                // Display for Pack Qty column
+                const packQtyDisplay = isPieceRow ? qtyValue : Math.floor(qtyValue / rowUnitsPerCase);
+                const pendingQtyDisplay = isPieceRow ? p.pendingBaseQty : Math.floor(p.pendingBaseQty / rowUnitsPerCase);
 
-                <div className="flex-1 min-w-[150px]">
-                  {(p.batchNumber || p.grnNo) ? (
-                    <div className="flex items-center gap-2">
-                      {p.batchNumber && (
-                        <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                          Batch: {p.batchNumber}
-                        </span>
-                      )}
-                      {p.grnNo && (
-                        <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
-                          GRN: {p.grnNo}
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic">No batch specified</span>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-0.5 min-w-[120px]">
-                  <span className="text-xs">
-                    <span className="text-muted-foreground">Pending (Cases): </span>
-                    <span className="font-bold text-amber-600">{Math.floor(p.pendingBaseQty / unitsPerCase)}</span>
-                  </span>
-                  {unitsPerCase > 1 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      ({p.pendingBaseQty} {baseUnit})
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex-shrink-0 pr-2">
-                  {isSelected ? (
-                    <div className="flex flex-col gap-1 items-end">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-muted-foreground">Pack:</span>
-                        <div className="flex items-center gap-1">
+                return (
+                  <tr
+                    key={lineKey}
+                    className={cn(
+                      "hover:bg-muted/5 transition-colors",
+                      !isSelected && "opacity-60"
+                    )}
+                  >
+                    <td className="py-3 px-4">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded accent-brand-600"
+                        checked={isSelected}
+                        onChange={(e) => onToggleProduct(lineKey, e.target.checked)}
+                        aria-label={`Select batch ${p.batchNumber} for ${p.product}`}
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-[10px] font-bold text-orange-700 tracking-wide">
+                        {qtyType}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2">
+                      <div className="flex flex-col gap-0.5">
+                        {p.batchNumber ? (
+                          <span className="font-mono text-xs font-semibold text-orange-600/90">{p.batchNumber}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">—</span>
+                        )}
+                        {p.grnNo && (
+                          <span className="font-mono text-[10px] text-purple-600/80">GRN: {p.grnNo}</span>
+                        )}
+                        {(p.mfgDate || p.expDate) && (
+                          <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+                            {p.mfgDate && <span>Mfg: {new Date(p.mfgDate).toLocaleDateString()}</span>}
+                            {p.expDate && <span>Exp: {new Date(p.expDate).toLocaleDateString()}</span>}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className="text-xs font-medium text-slate-600">{pendingQtyDisplay}</span>
+                    </td>
+                    <td className="py-3 px-2">
+                      {isSelected ? (
+                        <div className="flex flex-col gap-1 w-20">
                           <Input
                             type="number"
                             min={0}
-                            value={Math.floor(qtyValue / unitsPerCase) || ""}
+                            value={packQtyDisplay || ""}
                             onChange={(e) => {
-                              const newCases = e.target.value === "" ? 0 : Number(e.target.value);
-                              const currentLoose = qtyValue % unitsPerCase;
-                              onQtyChange(lineKey, newCases * unitsPerCase + currentLoose, p.pendingBaseQty);
+                              const enteredQty = e.target.value === "" ? 0 : Number(e.target.value);
+                              const newBaseQty = isPieceRow ? enteredQty : (enteredQty * rowUnitsPerCase);
+                              onQtyChange(lineKey, newBaseQty, p.pendingBaseQty);
                             }}
                             className={cn(
-                              "w-16 h-8 text-right font-bold text-sm",
+                              "h-8 text-xs font-medium shadow-none border-border/80 focus-visible:ring-brand-500",
                               error ? "border-red-500 focus-visible:ring-red-500" : ""
                             )}
-                            placeholder="C"
+                            placeholder={isPieceRow ? "0" : "0"}
                           />
-                          {unitsPerCase > 1 && (
-                            <Input
-                              type="number"
-                              min={0}
-                              max={unitsPerCase - 1}
-                              value={qtyValue % unitsPerCase || ""}
-                              onChange={(e) => {
-                                const newLoose = e.target.value === "" ? 0 : Number(e.target.value);
-                                const currentCases = Math.floor(qtyValue / unitsPerCase);
-                                onQtyChange(lineKey, currentCases * unitsPerCase + newLoose, p.pendingBaseQty);
-                              }}
-                              className={cn(
-                                "w-16 h-8 text-right font-bold text-sm",
-                                error ? "border-red-500 focus-visible:ring-red-500" : ""
-                              )}
-                              placeholder="L"
-                            />
+                          {error && (
+                            <span className="text-[9px] text-red-500 leading-tight absolute mt-9 w-24">
+                              {error}
+                            </span>
                           )}
                         </div>
-                      </div>
-                      {qtyValue > 0 && unitsPerCase > 1 && !error && (
-                        <span className="text-[10px] text-muted-foreground text-right w-full">
-                          = {qtyValue} {baseUnit}
-                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
-                      {error && (
-                        <span className="text-[10px] text-red-500 leading-tight text-right w-full">{error}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {isSelected ? (
+                        <span className="text-xs font-bold text-slate-700">{qtyValue}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
-                    </div>
-                  ) : (
-                    <span className="text-xs font-medium text-muted-foreground italic">Not Selected</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
