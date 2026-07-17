@@ -116,6 +116,12 @@ export function PurchaseReturnForm({
               <Label className="text-xs font-medium">Initiated By</Label>
               <ReadOnlyField value={record.initiatedBy} />
             </div>
+            {readOnly && record.packingListNo && (
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Packing List</Label>
+                <ReadOnlyField value={record.packingListNo} mono />
+              </div>
+            )}
             <div className="col-span-4 space-y-1">
               <Label className="text-xs font-medium">Overall Return Reason / Remarks</Label>
               <Textarea

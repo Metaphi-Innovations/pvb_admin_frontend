@@ -303,7 +303,11 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
       action: "revert",
       icon: RotateCcw,
       onClick: async (row) => {
-        if (!window.confirm("Are you sure you want to revert this Packing List? This will release the reserved inventory back to available stock.")) {
+        const isPurchaseReturn = row.sourceType === "purchase_return";
+        const confirmMsg = isPurchaseReturn
+          ? "Are you sure you want to revert this Packing List? The linked PO Return can be edited again."
+          : "Are you sure you want to revert this Packing List? This will release the reserved inventory back to available stock.";
+        if (!window.confirm(confirmMsg)) {
           return;
         }
         try {

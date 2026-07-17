@@ -42,7 +42,13 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
   const packingNo = backendDispatch.packing_done?.packing_done_no || backendDispatch.packing_done_no || "PKG-2026-001";
   
   const products = (backendDispatch.items || []).map((item: any) => {
-    const unitPerPacking = Number(item.product?.unit_per_packing || 1);
+    const unitPerPacking = Number(
+      item.product?.conversion_qty ||
+      item.product?.unit_per_packing ||
+      item.product_snapshot?.conversion_qty ||
+      item.product_snapshot?.unit_per_packing ||
+      10
+    );
     const baseQty = Number(item.dispatched_base_qty || 0);
     const cases = baseQty / unitPerPacking;
     
@@ -56,11 +62,15 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
       unitRate: unitRate,
       batchNo: item.inventory_batch?.batch_no || item.batch_code || "",
       batchExpiryDate: item.inventory_batch?.expiry_date || null,
+      returnedQtyPieces: Number(item.returned_base_qty || 0),
+      unitPerPacking: unitPerPacking,
       batchAllocations: [
         {
           batchNumber: item.inventory_batch?.batch_no || item.batch_code || "",
           expiryDate: item.inventory_batch?.expiry_date || null,
           allocatedQty: cases,
+          returnedQtyPieces: Number(item.returned_base_qty || 0),
+          unitPerPacking: unitPerPacking,
         }
       ]
     };
@@ -210,7 +220,11 @@ export default function NewSalesReturnPage() {
   };
 
   const handleQuantityTypeChange = (batchKey: string, type: "Case" | "Piece") => {
-    updateEntry(batchKey, { quantityType: type, returnLooseQty: type === "Case" ? "" : (returnEntries[batchKey]?.returnLooseQty || "") });
+    updateEntry(batchKey, {
+      quantityType: type,
+      returnCaseQty: type === "Piece" ? "" : (returnEntries[batchKey]?.returnCaseQty || ""),
+      returnLooseQty: type === "Case" ? "" : (returnEntries[batchKey]?.returnLooseQty || "")
+    });
   };
 
   const handleCaseQtyChange = (batchKey: string, value: string) => {
@@ -225,16 +239,20 @@ export default function NewSalesReturnPage() {
         return { ...current, [batchKey]: { ...existing, returnLooseQty: "" } };
       }
 
+      const sku = batchKey.split("::")[1];
+      const prod = dispatch?.products.find((p: any) => p.sku === sku);
+      const uKey = prod?.unitPerPacking || 10;
+
       const looseQty = parseQty(sanitized);
       const caseQty = parseQty(existing.returnCaseQty);
-      if (looseQty >= PIECES_PER_CASE) {
-        const totalPieces = caseQty * PIECES_PER_CASE + looseQty;
+      if (looseQty >= uKey) {
+        const totalPieces = caseQty * uKey + looseQty;
         return {
           ...current,
           [batchKey]: {
             ...existing,
-            returnCaseQty: String(Math.floor(totalPieces / PIECES_PER_CASE)),
-            returnLooseQty: String(totalPieces % PIECES_PER_CASE),
+            returnCaseQty: String(Math.floor(totalPieces / uKey)),
+            returnLooseQty: String(totalPieces % uKey),
           },
         };
       }

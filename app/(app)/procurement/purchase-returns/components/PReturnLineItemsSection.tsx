@@ -54,6 +54,33 @@ function gstPctFromLine(it: PurchaseReturnItem): number {
   return it.cgstPct + it.sgstPct + it.igstPct || it.gstPct;
 }
 
+function rejectionSourceLabel(source?: string): string {
+  switch (source) {
+    case "SALES_RETURN":
+      return "Sales Return";
+    case "SAMPLE_RETURN":
+      return "Sample Return";
+    case "QC_REJECTED":
+    default:
+      return "QC Rejected";
+  }
+}
+
+function RejectionSourceBadge({ source }: { source?: string }) {
+  const label = rejectionSourceLabel(source);
+  const isReturnPath = source === "SALES_RETURN" || source === "SAMPLE_RETURN";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+        isReturnPath ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 type GrnSummary = {
   grnId: string;
   grnNo: string;
@@ -97,6 +124,11 @@ function ReturnItemsTable({
   taxSupplyType: TaxSupplyType;
   onItemChange: (id: string, patch: Partial<PurchaseReturnItem>) => void;
 }) {
+  const showLatestGrn = useMemo(
+    () => items.some((it) => it.latestGrnNo && it.latestGrnNo !== it.grnNo),
+    [items],
+  );
+
   const handleSelectChange = (it: PurchaseReturnItem, checked: boolean) => {
     if (checked) {
       onItemChange(it.id, { selected: true });
@@ -117,7 +149,7 @@ function ReturnItemsTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
-      <table className="w-full min-w-[1500px]">
+      <table className="w-full min-w-[1680px]">
         <thead>
           <tr className="border-b border-border bg-muted/40">
             {!readOnly ? (
@@ -130,7 +162,9 @@ function ReturnItemsTable({
               </th>
             )}
             {[
-              "GRN No.",
+              "Source",
+              "Origin GRN",
+              ...(showLatestGrn ? ["Latest GRN"] : []),
               "Product Code",
               "Product Name",
               "Batch No.",
@@ -207,7 +241,15 @@ function ReturnItemsTable({
                     />
                   )}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{it.grnNo}</td>
+                <td className="px-3 py-2">
+                  <RejectionSourceBadge source={it.rejectionSource} />
+                </td>
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{it.grnNo || "—"}</td>
+                {showLatestGrn && (
+                  <td className="px-3 py-2 font-mono text-xs text-amber-700">
+                    {it.latestGrnNo && it.latestGrnNo !== it.grnNo ? it.latestGrnNo : "—"}
+                  </td>
+                )}
                 <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">
                   {it.productCode}
                 </td>

@@ -59,7 +59,9 @@ function NewPurchaseReturnContent() {
     }
     setErrors({});
     createMutation.mutate(record, {
-      onSuccess: () => router.push(`${purchaseReturnListHref()}&toast=pret-submitted`),
+      onSuccess: () => {
+        router.push(`${purchaseReturnListHref()}&toast=pret-submitted`);
+      },
     });
   };
 

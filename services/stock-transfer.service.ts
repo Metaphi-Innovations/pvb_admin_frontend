@@ -69,6 +69,13 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
 
+  let quantityType = "Piece";
+  if (raw.quantity_type) {
+    quantityType = String(raw.quantity_type).toUpperCase() === "CASE" ? "Case" : "Piece";
+  } else {
+    quantityType = caseQty > 0 ? "Case" : "Piece";
+  }
+
   return {
     id: asString(raw.stock_transfer_item_id || `line-${idx}`),
     productId: raw.product_id,
@@ -78,7 +85,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     quantity: totalQty,
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
-    quantityType: caseQty > 0 ? "Case" : "Piece",
+    quantityType: quantityType as "Case" | "Piece",
     unitPrice: asNumber(raw.cp_price),
     dealerPrice: asNumber(raw.cp_price),
     discount: 0,
@@ -243,10 +250,12 @@ export const StockTransferService = {
     return response.data?.data || [];
   },
 
-  async getBatches(productId: string | number, warehouseId: string | number): Promise<any[]> {
-    const response = await axiosInstance.get(
-      `${API_ENDPOINTS.SALES.STOCK_TRANSFER.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`
-    );
+  async getBatches(productId: string | number, warehouseId: string | number, quantityType?: string): Promise<any[]> {
+    let url = `${API_ENDPOINTS.SALES.STOCK_TRANSFER.BATCHES}?product_id=${productId}&warehouse_id=${warehouseId}`;
+    if (quantityType) {
+      url += `&quantity_type=${quantityType}`;
+    }
+    const response = await axiosInstance.get(url);
     return response.data?.data || [];
   },
 

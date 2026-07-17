@@ -82,7 +82,7 @@ export default function NewSampleOrderPackingListPage() {
         await Promise.all(
           order.lineItems.map(async (line) => {
             if (!line.productId) return;
-            const data = await PackingListService.getBatches(String(line.productId), warehouseId);
+            const data = await PackingListService.getBatches(String(line.productId), warehouseId, line.quantityType);
             newBatchesMap[String(line.productId)] = data;
           })
         );
@@ -144,6 +144,7 @@ export default function NewSampleOrderPackingListPage() {
         orderedBaseQty: line.quantity,
         hasPackingConfig: true,
         allocations: suggestedAllocations,
+        quantityType: line.quantityType,
       };
     });
 
@@ -181,7 +182,7 @@ export default function NewSampleOrderPackingListPage() {
         await Promise.all(
           order.lineItems.map(async (line) => {
             if (!line.productId) return;
-            const data = await PackingListService.getBatches(String(line.productId), id);
+            const data = await PackingListService.getBatches(String(line.productId), id, line.quantityType);
             newBatchesMap[String(line.productId)] = data;
           })
         );
@@ -213,13 +214,15 @@ export default function NewSampleOrderPackingListPage() {
             .reduce((sum, x) => sum + x.allocatedBaseQty, 0);
 
           const pending = Math.max(0, line.orderedBaseQty - totalAlreadyAllocated);
-          const autoFillBase = Math.min(a.availableBaseQty, pending);
-          const autoFillPacking = Math.floor(autoFillBase / a.unitsPerPackingUnit);
+          const availBase = a.availableBaseQty;
+
+          const takeBase = Math.min(pending, availBase);
+          const takePacking = line.packingUnit === "Case" ? Math.floor(takeBase / a.unitsPerPackingUnit) : takeBase;
 
           return {
             ...a,
-            allocatedPackingQty: autoFillPacking,
-            allocatedBaseQty: autoFillBase
+            allocatedPackingQty: takePacking,
+            allocatedBaseQty: takeBase
           };
         }
       });
@@ -232,10 +235,10 @@ export default function NewSampleOrderPackingListPage() {
   const updateAllocation = (
     lineItemId: string,
     cartonId: string,
-    field: "cases" | "loose",
     value: string,
   ) => {
-    const numValue = parseInt(value, 10) || 0;
+    let numValue = parseInt(value, 10);
+    if (isNaN(numValue)) numValue = 0;
     const key = `${lineItemId}-${cartonId}`;
     
     setLines(prev =>
@@ -246,19 +249,18 @@ export default function NewSampleOrderPackingListPage() {
           allocations: line.allocations.map(alloc => {
             if (alloc.cartonId !== cartonId) return alloc;
             
-            let c = alloc.allocatedPackingQty;
-            let p = alloc.allocatedBaseQty - (c * alloc.unitsPerPackingUnit);
-
-            if (field === "cases") {
-              c = numValue;
+            const maxBaseQty = alloc.availableBaseQty;
+            let newBaseQty = 0;
+            
+            if (line.packingUnit === "Case") {
+              newBaseQty = Math.min(numValue * alloc.unitsPerPackingUnit, maxBaseQty);
             } else {
-              p = numValue;
+              newBaseQty = Math.min(numValue, maxBaseQty);
             }
 
-            const totalBase = (c * alloc.unitsPerPackingUnit) + p;
-            setCheckedAllocations(prevChecks => ({ ...prevChecks, [key]: totalBase > 0 }));
+            setCheckedAllocations(prevChecks => ({ ...prevChecks, [key]: newBaseQty > 0 }));
 
-            return { ...alloc, allocatedPackingQty: c, allocatedBaseQty: totalBase };
+            return { ...alloc, allocatedPackingQty: numValue, allocatedBaseQty: newBaseQty };
           }),
         };
       }),
@@ -453,14 +455,11 @@ export default function NewSampleOrderPackingListPage() {
                       <thead>
                         <tr className="bg-muted/10 border-b border-border">
                           <th className="px-4 py-2.5 text-left w-12">Select</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold">Inventory Type</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold">Quantity Type</th>
                           <th className="px-3 py-2.5 text-left text-xs font-semibold">Batch</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold">Box/Carton</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Cases</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Loose</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Cases</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Loose ({line.baseUnit})</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Available Qty</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-32">Pack Qty</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total (Base)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -477,36 +476,23 @@ export default function NewSampleOrderPackingListPage() {
                                 />
                               </td>
                               <td className="px-3 py-2.5">
-                                <span className={cn(
-                                  "text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
-                                  alloc.inventoryType === "original" ? "bg-emerald-100 text-emerald-700" :
-                                  alloc.inventoryType === "sales_return" ? "bg-amber-100 text-amber-700" :
-                                  "bg-blue-100 text-blue-700"
-                                )}>
-                                  {formatInventoryType(alloc.inventoryType)}
+                                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap bg-blue-100 text-blue-700">
+                                  {line.packingUnit?.toUpperCase() || "PIECE"}
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 text-xs font-mono text-brand-700">{alloc.batchNumber}</td>
-                              <td className="px-3 py-2.5 text-xs font-mono">{alloc.cartonNumber}</td>
-                              <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)}</td>
-                              <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{alloc.availableBaseQty % alloc.unitsPerPackingUnit}</td>
-                              <td className="px-3 py-2.5">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
-                                  onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "cases", e.target.value)}
-                                  className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
-                                  placeholder="0"
-                                  disabled={!isChecked}
-                                />
+                              <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">
+                                {line.packingUnit === "Case"
+                                  ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)
+                                  : alloc.availableBaseQty}
                               </td>
                               <td className="px-3 py-2.5">
                                 <Input
                                   type="number"
                                   min="0"
-                                  value={isChecked ? alloc.allocatedBaseQty - (alloc.allocatedPackingQty * alloc.unitsPerPackingUnit) : (isChecked ? 0 : "")}
-                                  onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "loose", e.target.value)}
+                                  max={line.packingUnit === "Case" ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) : alloc.availableBaseQty}
+                                  value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
+                                  onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, e.target.value)}
                                   className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
                                   placeholder="0"
                                   disabled={!isChecked}

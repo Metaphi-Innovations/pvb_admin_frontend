@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, IndianRupee } from "lucide-react";
+import { Send, IndianRupee, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecordDetailPage } from "@/components/record-detail";
 import { formatCurrency } from "@/lib/procurement/utils";
@@ -108,6 +108,24 @@ export default function PurchaseReturnDetailPage() {
           : record.status === "Draft"
             ? "draft"
             : "neutral"
+      }
+      headerActions={
+        record.packingListId ? (
+          <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+            <Link
+              href={
+                record.status === "PO_return" || record.status === "Draft"
+                  ? `/warehouse/packing/create/${record.packingListId}`
+                  : "/warehouse/packing/purchase-return"
+              }
+            >
+              <Package className="h-3.5 w-3.5" />
+              {record.status === "PO_return" || record.status === "Draft"
+                ? "Continue to Packing"
+                : `View Packing (${record.packingListNo || "PL"})`}
+            </Link>
+          </Button>
+        ) : undefined
       }
       kpis={[
         {
