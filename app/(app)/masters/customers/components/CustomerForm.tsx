@@ -580,6 +580,30 @@ function CountryCodePicker({
 	);
 }
 
+function normalizeStateToOptionValue(
+	raw: string,
+	options: { value: string; label: string }[],
+): string {
+	const trimmed = raw.trim();
+	if (!trimmed) return "";
+
+	const exact = options.find((opt) => opt.value === trimmed);
+	if (exact) return exact.value;
+
+	const caseInsensitive = options.find(
+		(opt) => opt.value.toLowerCase() === trimmed.toLowerCase(),
+	);
+	if (caseInsensitive) return caseInsensitive.value;
+
+	const withoutSuffix = trimmed.replace(/\s+state$/i, "").trim();
+	const suffixMatch = options.find(
+		(opt) => opt.value.toLowerCase() === withoutSuffix.toLowerCase(),
+	);
+	if (suffixMatch) return suffixMatch.value;
+
+	return trimmed;
+}
+
 function BranchAddressWithPincode({
 	address,
 	onChange,
@@ -593,34 +617,165 @@ function BranchAddressWithPincode({
 	stateOptions: ReturnType<typeof getStateSelectOptions>;
 	errors?: Record<string, string | undefined>;
 }) {
-	const pincodeQuery = usePincode(
-		/^\d{6}$/.test(address.pincode.trim()) ? address.pincode.trim() : null,
-	);
+	const pincodeDigits = address.pincode.trim();
+	const isCompletePincode = /^\d{6}$/.test(pincodeDigits);
+	const pincodeQuery = usePincode(isCompletePincode ? pincodeDigits : null);
 	const pincodeRecords = pincodeQuery.data ?? [];
 
-	useEffect(() => {
-		if (pincodeRecords.length === 0) return;
+	/** Unique states from pincode master rows (case-insensitive). */
+	const uniqueStates = useMemo(() => {
+		const seen = new Map<string, string>();
+		for (const row of pincodeRecords) {
+			const name = String(row.statename ?? "").trim();
+			if (!name) continue;
+			const key = name.toLowerCase();
+			if (!seen.has(key)) seen.set(key, name);
+		}
+		return Array.from(seen.values());
+	}, [pincodeRecords]);
 
-		const first = pincodeRecords[0];
+	const townOptions = useMemo(() => {
+		const towns = pincodeRecords
+			.map((row) => String(row.officename ?? "").trim())
+			.filter(Boolean);
+		return Array.from(new Set(towns)).sort((a, b) => a.localeCompare(b));
+	}, [pincodeRecords]);
+
+	/**
+	 * After a pincode match, only expose the state(s) that belong to that pincode.
+	 * Prevents the full India state list from appearing for multi-office pincodes.
+	 */
+	const resolvedStateOptions = useMemo(() => {
+		if (!isCompletePincode || pincodeRecords.length === 0) {
+			return stateOptions;
+		}
+		if (uniqueStates.length === 0) {
+			return stateOptions;
+		}
+
+		const matched = stateOptions.filter((opt) =>
+			uniqueStates.some(
+				(state) =>
+					normalizeStateToOptionValue(state, stateOptions).toLowerCase() ===
+					opt.value.toLowerCase(),
+			),
+		);
+		if (matched.length > 0) return matched;
+
+		return uniqueStates.map((state) => {
+			const value = normalizeStateToOptionValue(state, stateOptions) || state;
+			const fromGeo = stateOptions.find((opt) => opt.value === value);
+			return fromGeo ?? { value, label: value };
+		});
+	}, [isCompletePincode, pincodeRecords.length, stateOptions, uniqueStates]);
+
+	useEffect(() => {
+		if (!isCompletePincode || pincodeRecords.length === 0) return;
+
+		const preferredTown = address.town?.trim().toLowerCase();
+		const matchedTown = preferredTown
+			? pincodeRecords.find(
+					(row) =>
+						String(row.officename ?? "").trim().toLowerCase() === preferredTown,
+				)
+			: undefined;
+		const pick = matchedTown ?? pincodeRecords[0];
+		const rawState =
+			uniqueStates.length === 1
+				? uniqueStates[0]
+				: String(pick.statename ?? "").trim() || address.state;
+		const nextState = normalizeStateToOptionValue(rawState, stateOptions) || rawState;
+		const nextDistrict = String(pick.district ?? "").trim() || address.district;
+		const nextTown =
+			pincodeRecords.length === 1
+				? String(pick.officename ?? "").trim() || address.town
+				: address.town;
+		const nextCity =
+			String(pick.district ?? "").trim() ||
+			String(pick.officename ?? "").trim() ||
+			address.city;
+		const nextPincodeId =
+			matchedTown?.id ||
+			(pincodeRecords.length === 1 ? pick.id : address.pincodeId);
+
+		const unchanged =
+			address.state === nextState &&
+			(address.district ?? "") === (nextDistrict ?? "") &&
+			(address.town ?? "") === (nextTown ?? "") &&
+			address.city === nextCity &&
+			address.pincodeId === nextPincodeId;
+		if (unchanged) return;
 
 		onChange({
 			...address,
-			state: first.statename || address.state,
-			district: first.district || address.district,
-			pincodeId: pincodeRecords.length === 1 ? first.id : address.pincodeId,
-			...(pincodeRecords.length === 1
-				? { town: first.officename || address.town, city: first.officename || address.city }
-				: {}),
+			state: nextState,
+			district: nextDistrict,
+			town: nextTown,
+			city: nextCity,
+			pincodeId: nextPincodeId,
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [pincodeRecords]);
+	}, [pincodeRecords, uniqueStates, isCompletePincode, stateOptions]);
+
+	const handleAddressChange = (next: BranchAddress) => {
+		if (
+			isCompletePincode &&
+			pincodeRecords.length > 0 &&
+			next.town?.trim() &&
+			next.town !== address.town
+		) {
+			const match = pincodeRecords.find(
+				(row) =>
+					String(row.officename ?? "").trim().toLowerCase() ===
+					next.town!.trim().toLowerCase(),
+			);
+			if (match) {
+				const rawState =
+					uniqueStates.length === 1
+						? uniqueStates[0]
+						: String(match.statename ?? "").trim() || next.state;
+				onChange({
+					...next,
+					pincodeId: match.id,
+					district: String(match.district ?? "").trim() || next.district,
+					state: normalizeStateToOptionValue(rawState, stateOptions) || rawState,
+					city:
+						String(match.district ?? "").trim() ||
+						String(match.officename ?? "").trim() ||
+						next.city,
+				});
+				return;
+			}
+		}
+		onChange(next);
+	};
+
+	const handlePincodeChange = (raw: string) => {
+		const digits = raw.replace(/\D/g, "").slice(0, 6);
+		if (digits.length < 6) {
+			onChange({
+				...address,
+				pincode: digits,
+				city: "",
+				town: "",
+				district: "",
+				state: "",
+				pincodeId: undefined,
+			});
+			return;
+		}
+		onChange({ ...address, pincode: digits });
+	};
 
 	return (
 		<BranchAddressFields
 			address={address}
-			onChange={onChange}
+			onChange={handleAddressChange}
+			onPincodeChange={handlePincodeChange}
 			readOnly={readOnly}
-			stateOptions={stateOptions}
+			stateOptions={resolvedStateOptions}
+			townOptions={pincodeRecords.length > 0 ? townOptions : undefined}
+			forceGeographyLocked={false}
 			errors={errors}
 		/>
 	);
@@ -1482,7 +1637,7 @@ export function CustomerForm({
 									onChange={(yes) => {
 										const gstRegistrationType = yes
 											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
-											: GST_REGISTRATION_TYPE_DEFAULT;
+											: GST_CATEGORY_UNREGISTERED;
 										const gstCategory = buildGstCategory(
 											yes,
 											gstRegistrationType,
@@ -2454,15 +2609,15 @@ export function customerApiRecordToFormValues(
 		status: (record.status?.toLowerCase() as CustomerStatus) ?? "draft",
 		blockReason: "",
 
-		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstApplicable,
 		gstRegistered,
 		gstRegistrationType: gstRegistered
 			? deriveGstRegistrationType(gstCategory)
 			: GST_CATEGORY_UNREGISTERED,
 		gstCategory,
-		gstin,
-		registeredLegalName: record.registered_legal_name ?? "",
-		registeredAddress: record.registered_gst_address ?? "",
+		gstin: gstRegistered ? gstin : "",
+		registeredLegalName: gstRegistered ? (record.registered_legal_name ?? "") : "",
+		registeredAddress: gstRegistered ? (record.registered_gst_address ?? "") : "",
 		gstMasterId: "",
 
 		tdsApplicable: true,
@@ -2637,15 +2792,15 @@ export function customerRecordToFormValues(
 		status: record.status,
 		blockReason: "",
 
-		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstApplicable,
 		gstRegistered,
 		gstRegistrationType: gstRegistered
 			? deriveGstRegistrationType(gstCategory)
 			: GST_CATEGORY_UNREGISTERED,
 		gstCategory,
-		gstin,
-		registeredLegalName: record.registeredLegalName ?? "",
-		registeredAddress: record.registeredGstAddress ?? "",
+		gstin: gstRegistered ? gstin : "",
+		registeredLegalName: gstRegistered ? (record.registeredLegalName ?? "") : "",
+		registeredAddress: gstRegistered ? (record.registeredGstAddress ?? "") : "",
 		gstMasterId: "",
 
 		tdsApplicable: record.tdsApplicable,
@@ -2712,7 +2867,9 @@ export function formValuesToUpdatePayload(
 		msme_reg_no: form.msmeRegistered ? form.msmeNumber : "",
 
 		gst_applicable: form.gstRegistered,
-		registration_type: form.gstRegistrationType,
+		registration_type: form.gstRegistered
+			? form.gstRegistrationType
+			: GST_CATEGORY_UNREGISTERED,
 		gstin_no: form.gstRegistered ? form.gstin.trim().toUpperCase() : "",
 		registered_legal_name: form.gstRegistered ? form.registeredLegalName : "",
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
@@ -2761,7 +2918,9 @@ export function formValuesToCreatePayload(
 		msme_reg_no: form.msmeRegistered ? form.msmeNumber : "",
 
 		gst_applicable: form.gstRegistered,
-		registration_type: form.gstRegistrationType,
+		registration_type: form.gstRegistered
+			? form.gstRegistrationType
+			: GST_CATEGORY_UNREGISTERED,
 		gstin_no: form.gstRegistered ? form.gstin.trim().toUpperCase() : "",
 		registered_legal_name: form.gstRegistered ? form.registeredLegalName : "",
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",

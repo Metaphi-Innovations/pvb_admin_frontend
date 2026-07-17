@@ -3,7 +3,6 @@
 export interface UnitRecord {
   id: number;
   unitUuid?: string;
-  unitCode: string;
   unitName: string;
   shortName: string;
   uomId: string | null;

@@ -165,7 +165,11 @@ axiosInstance.interceptors.response.use(
 
     // Global Error Handling: Map backend response errors or network errors
     const backendData = error.response?.data as
-      | { message?: string; error?: string }
+      | {
+          message?: string;
+          error?: string;
+          validation_errors?: Array<{ path?: string; message?: string }>;
+        }
       | undefined;
     const backendMessage =
       backendData?.message || backendData?.error || error.message || "An unexpected error occurred.";
@@ -186,6 +190,7 @@ axiosInstance.interceptors.response.use(
       success: false,
       message: backendMessage,
       error: backendData?.error || error.message || "Internal Server Error",
+      validation_errors: backendData?.validation_errors,
     };
 
     return Promise.reject(errorResponse);

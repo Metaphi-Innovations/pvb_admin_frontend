@@ -1318,3 +1318,110 @@ export function formatMoney(value: number): string {
     maximumFractionDigits: 2,
   }).format(value);
 }
+
+// ---------------------------------------------------------------------------
+// API validation error mapping (create / update)
+// ---------------------------------------------------------------------------
+
+export type ProductApiValidationError = {
+  status?: number;
+  message?: string;
+  validation_errors?: Array<{ path?: string; message?: string }>;
+};
+
+/** Maps API snake_case paths → ProductForm field keys (for inline errors). */
+export const PRODUCT_API_FIELD_MAP: Record<string, string> = {
+  product_code: "productCode",
+  product_name: "productName",
+  scientific_name: "scientificName",
+  sku: "sku",
+  supplier_id: "supplier",
+  supplier_code: "supplierCode",
+  hsn_id: "hsnCode",
+  hsn_code: "hsnCode",
+  gst_rate_id: "gstRate",
+  gst_id: "gstRate",
+  category_id: "category",
+  segment_id: "segment",
+  formulation_id: "form",
+  cfu_id: "cfu",
+  authority: "authority",
+  pack_size: "packSize",
+  base_unit: "baseUnit",
+  unit: "baseUnit",
+  mou: "mou",
+  unit_per_packing: "unitPerCase",
+  packing_unit: "packagingUnit",
+  net_weight: "netWeightPerPackagingUnit",
+  gross_weight: "grossWeight",
+  mrp: "mrp",
+  status: "status",
+  is_active: "status",
+};
+
+export function isProductApiValidationError(error: unknown): boolean {
+  const status = (error as ProductApiValidationError | undefined)?.status;
+  return status === 400 || status === 422;
+}
+
+function mapProductApiPathToFormField(path: string): string | null {
+  if (!path) return null;
+  const normalized = path.replace(/\[\d+\]/g, "").replace(/\./g, "_");
+  return (
+    PRODUCT_API_FIELD_MAP[path] ??
+    PRODUCT_API_FIELD_MAP[normalized] ??
+    null
+  );
+}
+
+/** Maps 400/422 product API errors to ProductForm field keys. */
+export function mapProductApiErrorsToFormFields(
+  error: unknown,
+): Record<string, string> {
+  const err = error as ProductApiValidationError;
+  if (!isProductApiValidationError(err)) return {};
+
+  const mapped: Record<string, string> = {};
+
+  const add = (field: string | null, message: string) => {
+    const trimmed = message.trim();
+    if (!field || !trimmed || mapped[field]) return;
+    mapped[field] = trimmed;
+  };
+
+  if (Array.isArray(err.validation_errors)) {
+    for (const issue of err.validation_errors) {
+      const path = String(issue.path ?? "").trim();
+      const message = String(issue.message ?? err.message ?? "Validation failed.").trim();
+      add(mapProductApiPathToFormField(path) ?? "_form", message);
+    }
+  }
+
+  const topMessage = err.message?.trim();
+  if (!Object.keys(mapped).length && topMessage) {
+    add("_form", topMessage);
+  }
+
+  return mapped;
+}
+
+/** Toast text from validation_errors (all messages) or top-level API message. */
+export function getProductApiValidationToastMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  const err = error as ProductApiValidationError;
+  const messages: string[] = [];
+
+  if (Array.isArray(err?.validation_errors)) {
+    for (const issue of err.validation_errors) {
+      const msg = String(issue?.message ?? "").trim();
+      if (msg && !messages.includes(msg)) messages.push(msg);
+    }
+  }
+
+  if (messages.length > 0) return messages.join(" • ");
+
+  const top = String(err?.message ?? "").trim();
+  return top || fallback;
+}
