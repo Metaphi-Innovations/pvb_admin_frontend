@@ -2,7 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { purchaseOrderKeys } from "@/lib/procurement/purchase-order-query-keys";
 import { purchaseReturnKeys } from "@/lib/procurement/purchase-return-query-keys";
 
-/** Invalidate PO listing, KPIs, and filter dropdowns. */
+/** Invalidate PO listing, KPIs, filter dropdowns, and GRN-eligible PO dropdowns. */
 export async function invalidatePurchaseOrderListingQueries(
   queryClient: QueryClient,
 ) {
@@ -12,6 +12,14 @@ export async function invalidatePurchaseOrderListingQueries(
     queryClient.invalidateQueries({
       queryKey: purchaseOrderKeys.filterDropdowns(),
     }),
+    // GRN create/edit eligibility depends on pending qty
+    queryClient.invalidateQueries({
+      queryKey: [...purchaseOrderKeys.all, "dropdown"],
+    }),
+    queryClient.invalidateQueries({
+      queryKey: purchaseOrderKeys.supplierDropdown(),
+    }),
+    queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.details() }),
   ]);
 }
 
