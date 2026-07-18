@@ -134,6 +134,8 @@ export function mergeReturnItemsForEdit(
       selected: true,
       isExistingOnReturn: true,
       batchGroupKey: item.batchGroupKey || avail?.batchGroupKey,
+      // Prefer persisted source; fall back to live eligible inventory provenance.
+      rejectionSource: item.rejectionSource || avail?.rejectionSource,
       balanceRejectedQty: eligibleBalanceBase,
       balanceDisplayQty:
         avail?.balanceDisplayQty ??

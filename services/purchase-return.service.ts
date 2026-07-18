@@ -189,7 +189,10 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     latestGrnId: latestGrnId || undefined,
     latestGrnItemId: asString(raw.latest_grn_item_id) || undefined,
     latestGrnBatchId: asString(raw.latest_grn_batch_id) || undefined,
-    rejectionSource: asString(raw.rejection_source) || undefined,
+    rejectionSource:
+      asString(raw.rejection_source) ||
+      asString(raw.return_reason) ||
+      undefined,
     grnItemId: asString(raw.grn_item_id) || undefined,
     grnBatchId: asString(raw.grn_batch_id) || undefined,
     batchGroupKey: asString(raw.batch_group_key) || undefined,
