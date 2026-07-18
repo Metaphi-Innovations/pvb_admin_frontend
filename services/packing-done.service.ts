@@ -276,6 +276,7 @@ export const PackingDoneService = {
     products: {
       packing_list_product_id: string;
       base_qty: number;
+      quantity_type?: string;
       remarks?: string;
     }[];
   }): Promise<any> {
@@ -284,6 +285,7 @@ export const PackingDoneService = {
       products: payload.products.map(p => ({
         packing_list_product_id: p.packing_list_product_id,
         base_qty: p.base_qty,
+        quantity_type: p.quantity_type,
         remarks: p.remarks,
       }))
     };
@@ -301,6 +303,7 @@ export const PackingDoneService = {
     products: {
       packing_list_product_id: string;
       base_qty: number;
+      quantity_type?: string;
       remarks?: string;
     }[];
   }): Promise<any> {
@@ -309,6 +312,7 @@ export const PackingDoneService = {
       products: payload.products.map(p => ({
         packing_list_product_id: p.packing_list_product_id,
         base_qty: p.base_qty,
+        quantity_type: p.quantity_type,
         remarks: p.remarks,
       }))
     };
