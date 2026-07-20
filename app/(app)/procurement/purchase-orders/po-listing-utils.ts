@@ -39,3 +39,21 @@ export function getVendorSecondaryLine(po: PurchaseOrder): string {
         .replace(/\b\w/g, (c) => c.toUpperCase())
     : "";
 }
+
+export const PURCHASE_ORDER_LIST_HREF = "/procurement/purchase-orders";
+
+export type PurchaseOrderListTab = "all" | "draft" | "po_return";
+
+export function purchaseOrderListHref(tab: PurchaseOrderListTab = "all"): string {
+  if (tab === "all") return PURCHASE_ORDER_LIST_HREF;
+  return `${PURCHASE_ORDER_LIST_HREF}?tab=${tab}`;
+}
+
+export function purchaseOrderListHrefWithToast(
+  toast: string,
+  tab: PurchaseOrderListTab = "all",
+): string {
+  const href = purchaseOrderListHref(tab);
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}toast=${encodeURIComponent(toast)}`;
+}
