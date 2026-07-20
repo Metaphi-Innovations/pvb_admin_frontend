@@ -36,10 +36,7 @@ function NewPurchaseReturnContent() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const poQuery = usePurchaseOrder(poId || null);
   const previewQuery = usePurchaseReturnPreviewNumber(Boolean(poId));
-  const eligibleItemsQuery = useEligiblePurchaseReturnItems(
-    poId || null,
-    poQuery.data?.warehouseId ? String(poQuery.data.warehouseId) : undefined,
-  );
+  const eligibleItemsQuery = useEligiblePurchaseReturnItems(poId || null);
   const createMutation = useCreatePurchaseReturn();
 
   useEffect(() => {

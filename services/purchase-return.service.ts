@@ -198,6 +198,8 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     batchGroupKey: asString(raw.batch_group_key) || undefined,
     inventoryDetailId: asString(raw.inventory_detail_id),
     inventoryRejectedItemId: asString(raw.inventory_rejected_item_id),
+    stockWarehouseId: asString(raw.warehouse_id) || undefined,
+    stockWarehouseName: asString(raw.warehouse_name) || undefined,
     mfgDate: asDateOnly(raw.manufacture_date),
     expDate: asDateOnly(raw.expiry_date),
     caseSize,
@@ -556,11 +558,22 @@ export const PurchaseReturnService = {
   },
 
   toWritePayload(record: PurchaseReturn): Record<string, unknown> {
+    const selectedItems = record.items.filter((item) => item.selected && item.returnQty > 0);
+    const stockWarehouseIds = [
+      ...new Set(
+        selectedItems
+          .map((item) => item.stockWarehouseId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const warehouseId =
+      stockWarehouseIds.length === 1 ? stockWarehouseIds[0] : record.warehouseId;
+
     return {
       return_no: record.returnNumber || undefined,
       purchase_order_id: record.poId,
       supplier_id: record.supplierId,
-      warehouse_id: record.warehouseId,
+      warehouse_id: warehouseId,
       return_date: record.returnDate,
       remarks: record.overallRemarks || undefined,
       additional_charges: (record.additionalCharges ?? []).map((item) => ({
@@ -582,8 +595,7 @@ export const PurchaseReturnService = {
       gst_amount: round2(record.summary.totalCgst + record.summary.totalSgst + record.summary.totalIgst),
       grand_total: record.summary.grandTotal,
       attachment_urls: record.attachments ?? [],
-      products: record.items
-        .filter((item) => item.selected && item.returnQty > 0)
+      products: selectedItems
         .map((item) => ({
           purchase_order_product_id: item.purchaseOrderProductId || undefined,
           product_id: item.productId,

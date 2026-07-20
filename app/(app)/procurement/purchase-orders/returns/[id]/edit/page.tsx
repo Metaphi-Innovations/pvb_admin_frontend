@@ -33,7 +33,7 @@ export default function EditPurchaseReturnPage() {
 
   const eligibleItemsQuery = useEligiblePurchaseReturnItems(
     detail?.poId ? String(detail.poId) : null,
-    detail?.warehouseId || undefined,
+    undefined,
     id,
   );
   const updateMutation = useUpdatePurchaseReturn();

@@ -47,6 +47,8 @@ function rejectionSourceLabel(source?: string): string {
       return "Sales Return";
     case "SAMPLE_RETURN":
       return "Sample Return";
+    case "STOCK_TRANSFER":
+      return "Stock Transfer Return";
     case "QC_REJECTED":
     default:
       return "QC Rejected";
@@ -69,12 +71,19 @@ function QuantityTypeBadge({ quantityType }: { quantityType: PurchaseReturnUnit 
 
 function RejectionSourceBadge({ source }: { source?: string }) {
   const label = rejectionSourceLabel(source);
-  const isReturnPath = source === "SALES_RETURN" || source === "SAMPLE_RETURN";
+  const isReturnPath =
+    source === "SALES_RETURN" ||
+    source === "SAMPLE_RETURN" ||
+    source === "STOCK_TRANSFER";
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
-        isReturnPath ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700",
+        source === "STOCK_TRANSFER"
+          ? "bg-indigo-50 text-indigo-800"
+          : isReturnPath
+            ? "bg-amber-50 text-amber-800"
+            : "bg-red-50 text-red-700",
       )}
     >
       {label}
