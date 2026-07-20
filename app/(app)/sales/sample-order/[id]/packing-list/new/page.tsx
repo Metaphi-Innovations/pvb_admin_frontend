@@ -38,7 +38,7 @@ export default function NewSampleOrderPackingListPage() {
   const [whOpen, setWhOpen] = useState(false);
   const [checkedAllocations, setCheckedAllocations] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [batchesMap, setBatchesMap] = useState<Record<string, any[]>>({});
+  const [loadingBatches, setLoadingBatches] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: rawOrder, isLoading: orderLoading } = useSampleOrder(orderId || null);
@@ -74,96 +74,89 @@ export default function NewSampleOrderPackingListPage() {
 
   // Fetch batches when warehouse changes
   useEffect(() => {
-    if (!order || !warehouseId) return;
+    if (!order || !warehouseId) {
+      setLines([]);
+      setCheckedAllocations({});
+      setExpandedSections({});
+      return;
+    }
 
     const fetchAllBatches = async () => {
-      const newBatchesMap: Record<string, any[]> = {};
+      setLoadingBatches(true);
+      setError("");
       try {
-        await Promise.all(
-          order.lineItems.map(async (line) => {
-            if (!line.productId) return;
-            const data = await PackingListService.getBatches(String(line.productId), warehouseId, line.quantityType);
-            newBatchesMap[String(line.productId)] = data;
-          })
-        );
-        setBatchesMap(newBatchesMap);
+        const packingLines: PackingListLine[] = [];
+        const initialChecked: Record<string, boolean> = {};
+        const initialExpanded: Record<string, boolean> = {};
+
+        for (const line of order.lineItems) {
+          if (!line.productId || line.quantity <= 0) continue;
+
+          const batches = await PackingListService.getBatches(String(line.productId), warehouseId, line.quantityType);
+
+          const unitsPerPacking = (line as any).packSize || 1;
+
+          let remaining = line.quantity;
+          const allocations = batches.map((b: any) => {
+            const availQty = Number(b.available_qty || 0);
+            
+            const neededBase = remaining;
+            const takeBase = Math.min(neededBase, availQty);
+            const takePacking = line.quantityType === "Case" ? Math.floor(takeBase / unitsPerPacking) : takeBase;
+
+            if (takeBase > 0) {
+              initialChecked[`${line.id}-${b.available_inventory_id}`] = true;
+              remaining -= takeBase;
+            }
+
+            return {
+              cartonId: b.available_inventory_id,
+              batchNumber: b.batch_code || "N/A",
+              expiryDate: b.expiry_date || "—",
+              cartonNumber: "BX-" + (b.batch_code || "N/A"),
+              packingUnit: (line as any).packingUnit || "Unit",
+              baseUnit: line.unit || "Unit",
+              unitsPerPackingUnit: unitsPerPacking,
+              availablePackingQty: line.quantityType === "Case" ? Math.floor(availQty / unitsPerPacking) : availQty,
+              availableBaseQty: availQty,
+              inventoryType: "original" as const,
+              suggestedPackingQty: takePacking,
+              suggestedBaseQty: takeBase,
+              allocatedPackingQty: takePacking,
+              allocatedBaseQty: takeBase,
+            };
+          });
+
+          initialExpanded[line.id] = true;
+
+          packingLines.push({
+            lineItemId: line.id,
+            productId: line.productId as any,
+            productCode: line.productCode || "",
+            productName: line.productName || "",
+            packingUnit: (line as any).packingUnit || "Unit",
+            baseUnit: line.unit || "Unit",
+            unitsPerPackingUnit: unitsPerPacking,
+            orderedBaseQty: line.quantity,
+            hasPackingConfig: true,
+            allocations: allocations,
+            quantityType: line.quantityType,
+          });
+        }
+
+        setLines(packingLines);
+        setCheckedAllocations(initialChecked);
+        setExpandedSections(initialExpanded);
       } catch (err) {
         console.error("Error fetching batches:", err);
+        setError("Failed to fetch batches.");
+      } finally {
+        setLoadingBatches(false);
       }
     };
+
     fetchAllBatches();
   }, [order, warehouseId]);
-
-  // Populate packing list lines when order or batchesMap changes
-  useEffect(() => {
-    if (!order || Object.keys(batchesMap).length === 0) return;
-
-    const newLines = order.lineItems.map((line) => {
-      const productBatches = batchesMap[String(line.productId)] || [];
-      const allocations = productBatches.map((b) => ({
-        cartonId: b.available_inventory_id,
-        batchNumber: b.batch_code,
-        expiryDate: b.expiry_date || "—",
-        cartonNumber: "BX-" + b.batch_code,
-        packingUnit: (line as any).packingUnit || "Unit",
-        baseUnit: line.unit || "Unit",
-        unitsPerPackingUnit: (line as any).packSize || 1,
-        availablePackingQty: b.available_qty,
-        availableBaseQty: b.available_qty,
-        inventoryType: "original" as const,
-        suggestedPackingQty: 0,
-        suggestedBaseQty: 0,
-        allocatedPackingQty: 0,
-        allocatedBaseQty: 0,
-      }));
-
-      // Auto-fill suggested allocations (FEFO)
-      let remaining = line.quantity;
-      const suggestedAllocations = allocations.map((alloc) => {
-        if (remaining <= 0) return alloc;
-        const take = Math.min(remaining, alloc.availableBaseQty);
-        remaining -= take;
-        const autoFillPacking = Math.floor(take / alloc.unitsPerPackingUnit);
-        return {
-          ...alloc,
-          suggestedPackingQty: autoFillPacking,
-          suggestedBaseQty: take,
-          allocatedPackingQty: autoFillPacking,
-          allocatedBaseQty: take,
-        };
-      });
-
-      return {
-        lineItemId: line.id,
-        productId: line.productId as any,
-        productCode: line.productCode || "",
-        productName: line.productName || "",
-        packingUnit: (line as any).packingUnit || "Unit",
-        baseUnit: line.unit || "Unit",
-        unitsPerPackingUnit: (line as any).packSize || 1,
-        orderedBaseQty: line.quantity,
-        hasPackingConfig: true,
-        allocations: suggestedAllocations,
-        quantityType: line.quantityType,
-      };
-    });
-
-    setLines(newLines as any);
-
-    const initialChecked: Record<string, boolean> = {};
-    const initialExpanded: Record<string, boolean> = {};
-    for (const line of newLines) {
-      initialExpanded[line.lineItemId] = true;
-      for (const alloc of line.allocations) {
-        if (alloc.allocatedBaseQty > 0) {
-          initialChecked[`${line.lineItemId}-${alloc.cartonId}`] = true;
-        }
-      }
-    }
-    setCheckedAllocations(initialChecked);
-    setExpandedSections(initialExpanded);
-    setError("");
-  }, [order, batchesMap]);
 
   if (orderLoading) return <div className="p-8 text-sm text-muted-foreground">Loading order…</div>;
   if (!order) return <div className="p-8">Order not found.</div>;
@@ -174,24 +167,6 @@ export default function NewSampleOrderPackingListPage() {
     setWarehouseName(name);
     setWhOpen(false);
     setError("");
-
-    // Refetch batches for new warehouse selection
-    const fetchAllBatches = async () => {
-      const newBatchesMap: Record<string, any[]> = {};
-      try {
-        await Promise.all(
-          order.lineItems.map(async (line) => {
-            if (!line.productId) return;
-            const data = await PackingListService.getBatches(String(line.productId), id, line.quantityType);
-            newBatchesMap[String(line.productId)] = data;
-          })
-        );
-        setBatchesMap(newBatchesMap);
-      } catch (err) {
-        console.error("Error fetching batches:", err);
-      }
-    };
-    fetchAllBatches();
   };
 
   const toggleCheckbox = (lineItemId: string, cartonId: string, alloc: CartonAllocation) => {
@@ -217,7 +192,7 @@ export default function NewSampleOrderPackingListPage() {
           const availBase = a.availableBaseQty;
 
           const takeBase = Math.min(pending, availBase);
-          const takePacking = line.packingUnit === "Case" ? Math.floor(takeBase / a.unitsPerPackingUnit) : takeBase;
+          const takePacking = line.quantityType === "Case" ? Math.floor(takeBase / a.unitsPerPackingUnit) : takeBase;
 
           return {
             ...a,
@@ -252,7 +227,7 @@ export default function NewSampleOrderPackingListPage() {
             const maxBaseQty = alloc.availableBaseQty;
             let newBaseQty = 0;
             
-            if (line.packingUnit === "Case") {
+            if (line.quantityType === "Case") {
               newBaseQty = Math.min(numValue * alloc.unitsPerPackingUnit, maxBaseQty);
             } else {
               newBaseQty = Math.min(numValue, maxBaseQty);
@@ -479,12 +454,12 @@ export default function NewSampleOrderPackingListPage() {
                               </td>
                               <td className="px-3 py-2.5">
                                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap bg-blue-100 text-blue-700">
-                                  {line.packingUnit?.toUpperCase() || "PIECE"}
+                                  {line.quantityType?.toUpperCase() || "PIECE"}
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 text-xs font-mono text-brand-700">{alloc.batchNumber}</td>
                               <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">
-                                {line.packingUnit === "Case"
+                                {line.quantityType === "Case"
                                   ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)
                                   : alloc.availableBaseQty}
                               </td>
@@ -492,7 +467,7 @@ export default function NewSampleOrderPackingListPage() {
                                 <Input
                                   type="number"
                                   min="0"
-                                  max={line.packingUnit === "Case" ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) : alloc.availableBaseQty}
+                                  max={line.quantityType === "Case" ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) : alloc.availableBaseQty}
                                   value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
                                   onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, e.target.value)}
                                   className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}

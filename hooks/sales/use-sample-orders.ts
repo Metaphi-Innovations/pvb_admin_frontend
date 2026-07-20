@@ -62,8 +62,8 @@ export function useSampleOrderFilterOptions(fieldName: string) {
 export function useCreateSampleOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ form, options }: { form: SalesOrderFormValues; options: { orderNo: string; status: string } }) =>
-      SampleOrderService.create(form, options),
+    mutationFn: ({ form, options, customerDetails }: { form: SalesOrderFormValues; options: { orderNo: string; status: string }, customerDetails?: any }) =>
+      SampleOrderService.create(form, options, customerDetails),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: sampleOrderKeys.lists() }),
@@ -75,8 +75,8 @@ export function useCreateSampleOrder() {
 export function useUpdateSampleOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, form, options }: { id: string; form: SalesOrderFormValues; options: { orderNo: string; status: string } }) =>
-      SampleOrderService.update(id, form, options),
+    mutationFn: ({ id, form, options, customerDetails }: { id: string; form: SalesOrderFormValues; options: { orderNo: string; status: string }, customerDetails?: any }) =>
+      SampleOrderService.update(id, form, options, customerDetails),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: sampleOrderKeys.lists() }),

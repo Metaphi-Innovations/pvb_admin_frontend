@@ -7,6 +7,7 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Save, CheckCircle2, XCircle } from "lucide-react";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
+import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import SampleOrderForm, {
 	type SalesOrderFormValues,
 	validateSalesOrderForm,
@@ -23,10 +24,12 @@ import {
 import {
 	useSalesmenDropdown,
 	useProductsDropdown,
+	useCustomersDropdown,
 } from "@/hooks/sales/use-sales-orders";
 
 export default function AddSalesOrderPage() {
 	const router = useRouter();
+	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
 	const [products, setProducts] = useState<ProductCatalogItem[]>([]);
 	const [toast, setToast] = useState<{
@@ -50,8 +53,47 @@ export default function AddSalesOrderPage() {
 
 	const { data: salesmanData } = useSalesmenDropdown();
 	const { data: productData } = useProductsDropdown();
+	const { data: customerData } = useCustomersDropdown();
 
 	const orderNumber = nextNumber || "SMO/27/2627/000001";
+
+	useEffect(() => {
+		if (customerData) {
+			const mapped = customerData.map((c: any) => ({
+				id: c.customer_id,
+				customerCode: c.customer_code,
+				customerName: c.customer_name,
+				registeredLegalName: c.registered_legal_name || "",
+				status: c.is_active ? "active" : "inactive",
+				mobile: c.mobile_no || "",
+				countryCode: c.country_code || "+91",
+				email: c.email || "",
+				gstin: c.gstin_no || "",
+				pan: c.pan_no || "",
+				registeredAddress: c.registered_gst_address || "",
+				stateName: c.state?.state_name || "",
+				districtName: c.district?.district_name || "",
+				pincode: c.pincode || "",
+				branches: (c.branches || []).map((b: any) => ({
+					branchName: b.branch_name,
+					isMain: b.is_main_branch,
+					billingAddress: {
+						address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
+						city: b.billing_city || "",
+						state: b.billing_state || "",
+						pincode: b.billing_pincode || "",
+					},
+					shippingAddress: {
+						address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
+						city: b.shipping_city || "",
+						state: b.shipping_state || "",
+						pincode: b.shipping_pincode || "",
+					},
+				})),
+			}));
+			setCustomers(mapped as any);
+		}
+	}, [customerData]);
 
 	useEffect(() => {
 		if (salesmanData) {
@@ -113,6 +155,7 @@ export default function AddSalesOrderPage() {
 					orderNo: orderNumber,
 					status: asDraft ? "draft" : "confirmed",
 				},
+				customerDetails: customers.find((c: any) => c.id === form.customerId),
 			},
 			{
 				onSuccess: () => {

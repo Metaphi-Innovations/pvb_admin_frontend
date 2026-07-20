@@ -1,7 +1,10 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { SalesOrder, SalesOrderLineItem } from "@/app/(app)/sales/sample-order/orders-data";
-import type { SalesOrderFormValues } from "@/app/(app)/sales/sample-order/components/SampleOrderForm";
+import {
+  type SalesOrderFormValues,
+} from "@/app/(app)/sales/sample-order/components/SampleOrderForm";
+import { resolveBillShipObjects, SalesOrderService } from "./sales-order.service";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -134,7 +137,8 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
 
 function buildBackendWriteBody(
   form: SalesOrderFormValues,
-  options: { orderNo: string; status: string }
+  options: { orderNo: string; status: string },
+  customerDetails?: any
 ): Record<string, any> {
   const items = (form.lineItems || []).map((line: SalesOrderLineItem) => {
     return {
@@ -163,6 +167,8 @@ function buildBackendWriteBody(
     };
   }, { total_qty: 0, product_subtotal: 0, discount_total: 0, taxable_amount: 0, tax_amount: 0, grand_total: 0 });
 
+  const { billToObj, shipToObj } = resolveBillShipObjects(form, customerDetails);
+
   return {
     order_no: options.orderNo,
     order_date: form.orderDate ? new Date(form.orderDate).toISOString() : new Date().toISOString(),
@@ -171,6 +177,8 @@ function buildBackendWriteBody(
     customer_id: form.customerId,
     warehouse_id: form.warehouseId,
     salesperson_id: form.salesManId,
+    bill_to: billToObj,
+    ship_to: shipToObj,
     ...totals,
     items,
   };
@@ -225,8 +233,9 @@ export const SampleOrderService = {
     };
   },
 
-  async create(form: SalesOrderFormValues, options: { orderNo: string; status: string }): Promise<SalesOrder> {
-    const body = buildBackendWriteBody(form, options);
+  async create(form: SalesOrderFormValues, options: { orderNo: string; status: string }, _customerDetails?: any): Promise<SalesOrder> {
+    const customerDetails = form.customerId ? await SalesOrderService.getCustomerDetails(String(form.customerId)) : null;
+    const body = buildBackendWriteBody(form, options, customerDetails);
     const response = await axiosInstance.post(API_ENDPOINTS.SALES.SAMPLE_ORDER.CREATE, body);
     return mapBackendSampleOrder(response.data?.data);
   },
@@ -236,8 +245,9 @@ export const SampleOrderService = {
     return mapBackendSampleOrder(response.data?.data);
   },
 
-  async update(id: string, form: SalesOrderFormValues, options: { orderNo: string; status: string }): Promise<SalesOrder> {
-    const body = buildBackendWriteBody(form, options);
+  async update(id: string, form: SalesOrderFormValues, options: { orderNo: string; status: string }, _customerDetails?: any): Promise<SalesOrder> {
+    const customerDetails = form.customerId ? await SalesOrderService.getCustomerDetails(String(form.customerId)) : null;
+    const body = buildBackendWriteBody(form, options, customerDetails);
     const response = await axiosInstance.put(API_ENDPOINTS.SALES.SAMPLE_ORDER.UPDATE(id), body);
     return mapBackendSampleOrder(response.data?.data);
   },
