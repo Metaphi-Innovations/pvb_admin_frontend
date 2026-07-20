@@ -198,7 +198,7 @@ export default function EditSalesOrderPage() {
 				id: order.id,
 				form,
 				options: {
-					soNumber: order.soNumber,
+					soNumber: orderNumber,
 					status: asDraft ? "draft" : form.status || "confirmed",
 				},
 			},

@@ -180,43 +180,48 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
   };
 }
 
-function resolveBillShipObjects(form: SalesOrderFormValues, customerDetails?: any) {
+export function resolveBillShipObjects(form: { billToAddressId?: string | null; shipToAddressId?: string | null; }, customerDetails?: any) {
   let billToObj: any = null;
   let shipToObj: any = null;
 
   if (customerDetails) {
-    const base = {
-      id: customerDetails.customer_id,
-      customerCode: customerDetails.customer_code,
-      customerName: customerDetails.customer_name,
-      customerType: customerDetails.customer_type?.customer_type_name || "",
-      status: customerDetails.is_active ? "active" : "inactive",
-      mobile: customerDetails.mobile_no || "",
-      email: customerDetails.email || "",
-      gstApplicable: customerDetails.gst_applicable,
-      gstin: customerDetails.gstin_no || "",
-      registeredLegalName: customerDetails.registered_legal_name || "",
-      registeredAddress: customerDetails.registered_gst_address || "",
-      pan: customerDetails.pan_no || "",
-      branches: (customerDetails.branches || []).map((b: any) => ({
-        branchName: b.branch_name,
-        isMain: b.is_main_branch,
-        billingAddress: {
-          address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
-          city: b.billing_city || "",
-          state: b.billing_state || "",
-          pincode: b.billing_pincode || "",
-          gstin: customerDetails.gstin_no || "",
-        },
-        shippingAddress: {
-          address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
-          city: b.shipping_city || "",
-          state: b.shipping_state || "",
-          pincode: b.shipping_pincode || "",
-          gstin: customerDetails.gstin_no || "",
-        },
-      })),
-    };
+    let base: any;
+    if (customerDetails.customer_id) {
+      base = {
+        id: customerDetails.customer_id,
+        customerCode: customerDetails.customer_code,
+        customerName: customerDetails.customer_name,
+        customerType: customerDetails.customer_type?.customer_type_name || "",
+        status: customerDetails.is_active ? "active" : "inactive",
+        mobile: customerDetails.mobile_no || "",
+        email: customerDetails.email || "",
+        gstApplicable: customerDetails.gst_applicable,
+        gstin: customerDetails.gstin_no || "",
+        registeredLegalName: customerDetails.registered_legal_name || "",
+        registeredAddress: customerDetails.registered_gst_address || "",
+        pan: customerDetails.pan_no || "",
+        branches: (customerDetails.branches || []).map((b: any) => ({
+          branchName: b.branch_name,
+          isMain: b.is_main_branch,
+          billingAddress: {
+            address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
+            city: b.billing_city || "",
+            state: b.billing_state || "",
+            pincode: b.billing_pincode || "",
+            gstin: customerDetails.gstin_no || "",
+          },
+          shippingAddress: {
+            address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
+            city: b.shipping_city || "",
+            state: b.shipping_state || "",
+            pincode: b.shipping_pincode || "",
+            gstin: customerDetails.gstin_no || "",
+          },
+        })),
+      };
+    } else {
+      base = customerDetails;
+    }
 
     const customerAddresses = getCustomerAddressesForSalesOrder(base as any);
     const billToAddr = customerAddresses.find((a) => a.id === form.billToAddressId);

@@ -39,7 +39,10 @@ export function POFormLayout({
         : poNumber
           ? `Procurement > Purchase Order > ${poNumber}`
           : "Procurement > Purchase Order";
-  const defaultBack = mode === "create" ? "/procurement/purchase-orders" : backHref ?? "/procurement/purchase-orders";
+  const defaultBack =
+    mode === "create"
+      ? "/procurement/purchase-orders"
+      : (backHref ?? "/procurement/purchase-orders");
 
   return (
     <FormContainer

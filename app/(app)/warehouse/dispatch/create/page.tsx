@@ -63,8 +63,8 @@ export default function CreateDispatchPage() {
   }, [selectedPackingId]);
 
   const selectedPacking = useMemo(() => {
-    return availablePackings.find((p) => p.packing_done_id === selectedPackingId);
-  }, [availablePackings, selectedPackingId]);
+    return packingDetails || availablePackings.find((p) => p.packing_done_id === selectedPackingId);
+  }, [availablePackings, selectedPackingId, packingDetails]);
 
   const handleSubmit = async () => {
     if (!selectedPackingId) {
@@ -117,8 +117,8 @@ export default function CreateDispatchPage() {
       if (!map.has(pId)) {
         map.set(pId, {
           product_id: pId,
-          product_name: item.product_name || item.product_id,
-          unit_price: item.unit_price || 0,
+          product_name: item.product?.product_name || item.product_snapshot?.product_name || item.product_name || item.product_id,
+          unit_price: item.product_snapshot?.price || item.unit_price || 0,
           total_order_qty: 0,
           total_packed_qty: 0,
           total_discount: 0,
@@ -128,8 +128,8 @@ export default function CreateDispatchPage() {
         });
       }
       const group = map.get(pId);
-      group.total_order_qty = Math.max(group.total_order_qty, Number(item.order_qty || 0));
-      group.total_packed_qty += Number(item.packed_qty || 0);
+      group.total_order_qty = Math.max(group.total_order_qty, Number(item.packing_list_product?.order_base_qty || item.order_qty || 0));
+      group.total_packed_qty += Number(item.base_qty || item.packed_qty || 0);
       group.total_discount += Number(item.discount_amount || 0);
       group.total_gst += Number(item.gst_amount || 0);
       group.total_amount += Number(item.item_total || 0);
@@ -138,13 +138,13 @@ export default function CreateDispatchPage() {
       const qtyType = (item.quantity_type || "N/A").toUpperCase();
       const existingBatch = group.batches.find((b: any) => b.batch_code === batchCode && b.quantity_type === qtyType);
       if (existingBatch) {
-        existingBatch.qty += Number(item.packed_qty || 0);
+        existingBatch.qty += Number(item.base_qty || item.packed_qty || 0);
       } else {
         group.batches.push({
           id: item.packing_done_product_id,
           batch_code: batchCode,
           quantity_type: qtyType,
-          qty: Number(item.packed_qty || 0),
+          qty: Number(item.base_qty || item.packed_qty || 0),
           remarks: item.remarks
         });
       }
@@ -276,34 +276,50 @@ export default function CreateDispatchPage() {
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Customer / Destination</p>
-                <p className="text-sm font-bold text-foreground">{selectedPacking.customer_name || selectedPacking.target_warehouse_name || "—"}</p>
+                <p className="text-sm font-bold text-foreground">{packingDetails?.customer_snapshot?.customer_name || packingDetails?.packing_list?.customer_snapshot?.customer_name || packingDetails?.warehouse_snapshot?.warehouse_name || selectedPacking?.customer_name || selectedPacking?.target_warehouse_name || "—"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Items</p>
-                <p className="text-sm font-bold text-foreground">{selectedPacking.total_items}</p>
+                <p className="text-sm font-bold text-foreground">{groupedPackingProducts.length || selectedPacking?.total_items || 0}</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Quantity</p>
-                <p className="text-sm font-bold text-foreground">{selectedPacking.total_packed_qty}</p>
+                <p className="text-sm font-bold text-foreground">{groupedPackingProducts.reduce((sum, item) => sum + item.total_packed_qty, 0) || selectedPacking?.total_packed_qty || 0}</p>
               </div>
             </div>
 
-            {packingDetails && packingDetails.customer_snapshot && packingDetails.source_type !== "stock_transfer" && (
-              <div className="bg-slate-50 p-4 rounded-lg border border-border">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
-                <div className="text-xs text-foreground space-y-1">
-                  <p className="font-semibold">{packingDetails.customer_snapshot.customer_name}</p>
-                  <p>{packingDetails.customer_snapshot.shipping_address || packingDetails.customer_snapshot.billing_address || "No address provided."}</p>
-                  {packingDetails.customer_snapshot.city && <p>{packingDetails.customer_snapshot.city}, {packingDetails.customer_snapshot.state} {packingDetails.customer_snapshot.pincode}</p>}
-                </div>
-              </div>
-            )}
+            {(() => {
+              const snapshot = packingDetails?.customer_snapshot || packingDetails?.packing_list?.customer_snapshot;
+              if (snapshot && packingDetails.source_type !== "stock_transfer") {
+                return (
+                  <div className="bg-slate-50 p-4 rounded-lg border border-border">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
+                    <div className="text-xs text-foreground space-y-1">
+                      <p className="font-semibold">{snapshot.customer_name || snapshot.supplier_name}</p>
+                      <p>{snapshot.shipping_address || snapshot.billing_address || [snapshot.address_1, snapshot.address_2].filter(Boolean).join(", ") || "No address provided."}</p>
+                      {snapshot.city && <p>{snapshot.city}, {snapshot.state} {snapshot.pincode || snapshot.pincode_master?.pincode}</p>}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {packingDetails && packingDetails.target_warehouse_name && packingDetails.source_type === "stock_transfer" && (
               <div className="bg-slate-50 p-4 rounded-lg border border-border">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Destination Warehouse</p>
                 <div className="text-xs text-foreground space-y-1">
                   <p className="font-semibold">{packingDetails.target_warehouse_name}</p>
+                  {(packingDetails.customer_snapshot || packingDetails.packing_list?.customer_snapshot)?.shipping_address && (
+                    <p>{(packingDetails.customer_snapshot || packingDetails.packing_list?.customer_snapshot).shipping_address}</p>
+                  )}
+                  {(packingDetails.customer_snapshot || packingDetails.packing_list?.customer_snapshot)?.city && (
+                    <p>
+                      {(packingDetails.customer_snapshot || packingDetails.packing_list?.customer_snapshot).city},{" "}
+                      {(packingDetails.customer_snapshot || packingDetails.packing_list?.customer_snapshot).state}{" "}
+                      {(packingDetails.customer_snapshot || packingDetails.packing_list?.customer_snapshot).pincode}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

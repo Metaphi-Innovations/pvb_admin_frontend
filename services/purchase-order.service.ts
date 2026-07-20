@@ -327,6 +327,8 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     poDate: asDateOnly(raw.po_date),
     supplierId: toUuidOrNull(raw.supplier_id ?? supplier.supplier_id) ?? 0,
     supplierName,
+    supplierCode:
+      asString(supplier.supplier_code) || asString(snapshot.supplier_code) || "",
     supplierType: supplierTypeFromSnapshot || supplierTypeFromSupplier || "",
     supplierContactPerson:
       asString(supplier.contact_person) || asString(snapshot.contact_person),

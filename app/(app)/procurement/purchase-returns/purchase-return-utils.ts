@@ -1,9 +1,46 @@
 import type { PurchaseReturn, PurchaseReturnItem, PurchaseReturnUnit } from "./purchase-return-data";
+import {
+  purchaseOrderListHrefWithToast,
+} from "../purchase-orders/po-listing-utils";
 
 export const PURCHASE_RETURN_LIST_HREF = "/procurement/purchase-orders?tab=po_return";
 
+export type PurchaseReturnNavSource = "po" | "por";
+
 export function purchaseReturnListHref(): string {
   return PURCHASE_RETURN_LIST_HREF;
+}
+
+export function purchaseReturnListHrefWithToast(toast: string): string {
+  return `${PURCHASE_RETURN_LIST_HREF}&toast=${encodeURIComponent(toast)}`;
+}
+
+export function parsePurchaseReturnNavSource(
+  value: string | null | undefined,
+): PurchaseReturnNavSource {
+  return value === "po" ? "po" : "por";
+}
+
+export function resolvePurchaseReturnBackHref(
+  from: PurchaseReturnNavSource,
+): string {
+  return from === "po"
+    ? "/procurement/purchase-orders"
+    : purchaseReturnListHref();
+}
+
+export function resolvePurchaseReturnRedirectWithToast(
+  from: PurchaseReturnNavSource,
+  toast: string,
+): string {
+  return from === "po"
+    ? purchaseOrderListHrefWithToast(toast)
+    : purchaseReturnListHrefWithToast(toast);
+}
+
+function appendQueryParam(href: string, key: string, value: string): string {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}${key}=${encodeURIComponent(value)}`;
 }
 
 /** Statuses that allow modifying lines / quantities on the Edit page. */
@@ -169,9 +206,24 @@ export function mergeReturnItemsForEdit(
 
 export const purchaseReturnRoutes = {
   list: PURCHASE_RETURN_LIST_HREF,
-  new: (poId: number | string) => `/procurement/purchase-orders/returns/new?poId=${poId}`,
-  detail: (id: number | string) => `/procurement/purchase-orders/returns/${id}`,
-  edit: (id: number | string) => `/procurement/purchase-orders/returns/${id}/edit`,
+  new: (poId: number | string, from: PurchaseReturnNavSource = "po") =>
+    appendQueryParam(
+      `/procurement/purchase-orders/returns/new?poId=${poId}`,
+      "from",
+      from,
+    ),
+  detail: (id: number | string, from: PurchaseReturnNavSource = "por") =>
+    appendQueryParam(
+      `/procurement/purchase-orders/returns/${id}`,
+      "from",
+      from,
+    ),
+  edit: (id: number | string, from: PurchaseReturnNavSource = "por") =>
+    appendQueryParam(
+      `/procurement/purchase-orders/returns/${id}/edit`,
+      "from",
+      from,
+    ),
 };
 
 export function getReturnQtyError(item: PurchaseReturnItem): string | undefined {

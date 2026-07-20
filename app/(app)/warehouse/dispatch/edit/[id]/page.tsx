@@ -258,16 +258,22 @@ export default function EditDispatchPage() {
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Packing Done No</p>
                   <p className="text-sm font-bold text-foreground font-mono">{dispatchDetails.packing_done.packing_done_no}</p>
                 </div>
-                {dispatchDetails.customer && dispatchDetails.source_type !== "stock_transfer" && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
-                    <div className="text-xs text-foreground space-y-1">
-                      <p className="font-semibold">{dispatchDetails.customer.customer_name}</p>
-                      <p>{dispatchDetails.customer.shipping_address || dispatchDetails.customer.billing_address || "No address provided."}</p>
-                      {dispatchDetails.customer.city && <p>{dispatchDetails.customer.city}, {dispatchDetails.customer.state} {dispatchDetails.customer.pincode}</p>}
-                    </div>
-                  </div>
-                )}
+                {(() => {
+                  const snapshot = dispatchDetails.customer_snapshot || dispatchDetails.customer;
+                  if (snapshot && dispatchDetails.source_type !== "stock_transfer") {
+                    return (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Shipping Address</p>
+                        <div className="text-xs text-foreground space-y-1">
+                          <p className="font-semibold">{snapshot.customer_name || snapshot.supplier_name}</p>
+                          <p>{snapshot.shipping_address || snapshot.billing_address || [snapshot.address_1, snapshot.address_2].filter(Boolean).join(", ") || "No address provided."}</p>
+                          {snapshot.city && <p>{snapshot.city}, {snapshot.state} {snapshot.pincode || snapshot.pincode_master?.pincode}</p>}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             )}
 

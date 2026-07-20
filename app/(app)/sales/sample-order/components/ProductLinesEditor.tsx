@@ -319,11 +319,11 @@ export default function ProductLinesEditor({
 		const lineIndex = lines.findIndex((l) => l.id === lineId);
 		if (lineIndex === -1) return;
 
-		// Check for duplicate products
+		// Check for duplicate products with same quantity type
 		for (const prod of selectedProducts) {
-			const exists = lines.some((l) => l.id !== lineId && l.productId === prod.id);
+			const exists = lines.some((l) => l.id !== lineId && l.productId === prod.id && l.quantityType === lines[lineIndex].quantityType);
 			if (exists) {
-				setLocalError(`Product "${prod.name}" is already added to this order.`);
+				setLocalError(`Product "${prod.name}" is already added as ${lines[lineIndex].quantityType || "Piece"} to this order.`);
 				return;
 			}
 		}
@@ -336,6 +336,7 @@ export default function ProductLinesEditor({
 			const p = selectedProducts[i];
 			let newLine = createEmptyLineItem();
 			newLine.productId = p.id;
+			newLine.quantityType = lines[lineIndex].quantityType || "Piece";
 			newLine = applyProductToLine(newLine, p, pricingContext);
 			newLines.push(newLine);
 		}
@@ -351,11 +352,11 @@ export default function ProductLinesEditor({
 			setLocalError("Please select a product.");
 			return;
 		}
-		// Check for duplicate products
+		// Check for duplicate products with same quantity type
 		for (const prod of topSelectedProds) {
-			const exists = lines.some((l) => l.productId === prod.id);
+			const exists = lines.some((l) => l.productId === prod.id && l.quantityType === topQuantityType);
 			if (exists) {
-				setLocalError(`Product "${prod.name}" is already added to this order.`);
+				setLocalError(`Product "${prod.name}" is already added as ${topQuantityType} to this order.`);
 				return;
 			}
 		}
@@ -424,7 +425,10 @@ export default function ProductLinesEditor({
 						products={products}
 						value={null}
 						selectedValues={topSelectedProds.map((p) => p.id)}
-						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is string => id !== null)}
+						alreadyAddedProductIds={lines
+							.filter((l) => l.quantityType === topQuantityType)
+							.map((l) => l.productId)
+							.filter((id): id is string => id !== null)}
 						onSelectMultiple={(selected) => setTopSelectedProds(selected)}
 					/>
 				}
@@ -520,7 +524,7 @@ export default function ProductLinesEditor({
 										value={line.productId}
 										selectedValues={line.productId ? [line.productId] : []}
 										alreadyAddedProductIds={lines
-											.filter((l) => l.id !== line.id)
+											.filter((l) => l.id !== line.id && l.quantityType === line.quantityType)
 											.map((l) => l.productId)
 											.filter((id): id is string => id !== null)}
 										onSelectMultiple={(selectedProds) =>

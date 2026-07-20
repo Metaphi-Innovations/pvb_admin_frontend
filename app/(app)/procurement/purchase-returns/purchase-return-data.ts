@@ -19,7 +19,11 @@ export type PurchaseReturnStatus =
 
 export type PurchaseReturnUnit = "CASE" | "PIECE";
 
-export type PurchaseReturnRejectionSource = "QC_REJECTED" | "SALES_RETURN" | "SAMPLE_RETURN";
+export type PurchaseReturnRejectionSource =
+  | "QC_REJECTED"
+  | "SALES_RETURN"
+  | "SAMPLE_RETURN"
+  | "STOCK_TRANSFER";
 
 export interface PurchaseReturnItem {
   id: string;
@@ -47,6 +51,9 @@ export interface PurchaseReturnItem {
   batchGroupKey?: string;
   inventoryDetailId: string;
   inventoryRejectedItemId?: string;
+  /** Physical warehouse where rejected stock sits (may differ from PO warehouse). */
+  stockWarehouseId?: string;
+  stockWarehouseName?: string;
   mfgDate: string;
   expDate: string;
   caseSize: number;
@@ -103,6 +110,7 @@ export interface PurchaseReturn {
   supplierId: number | string;
   supplierCode: string;
   supplierName: string;
+  supplierType: string;
   warehouseId: string;
   warehouseName: string;
   initiatedBy: string;

@@ -17,6 +17,7 @@ import {
 	setDynamicProducts,
 } from "../../orders-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
+import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import {
 	useSampleOrder,
 	useUpdateSampleOrder,
@@ -24,6 +25,7 @@ import {
 import {
 	useSalesmenDropdown,
 	useProductsDropdown,
+	useCustomersDropdown,
 } from "@/hooks/sales/use-sales-orders";
 
 export default function EditSalesOrderPage() {
@@ -31,6 +33,7 @@ export default function EditSalesOrderPage() {
 	const router = useRouter();
 	const id = String(params.id);
 
+	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
 	const [products, setProducts] = useState<ProductCatalogItem[]>([]);
 	const [orderNumber, setOrderNumber] = useState("");
@@ -52,6 +55,45 @@ export default function EditSalesOrderPage() {
 
 	const { data: salesmanData } = useSalesmenDropdown();
 	const { data: productData } = useProductsDropdown();
+	const { data: customerData } = useCustomersDropdown();
+
+	useEffect(() => {
+		if (customerData) {
+			const mapped = customerData.map((c: any) => ({
+				id: c.customer_id,
+				customerCode: c.customer_code,
+				customerName: c.customer_name,
+				registeredLegalName: c.registered_legal_name || "",
+				status: c.is_active ? "active" : "inactive",
+				mobile: c.mobile_no || "",
+				countryCode: c.country_code || "+91",
+				email: c.email || "",
+				gstin: c.gstin_no || "",
+				pan: c.pan_no || "",
+				registeredAddress: c.registered_gst_address || "",
+				stateName: c.state?.state_name || "",
+				districtName: c.district?.district_name || "",
+				pincode: c.pincode || "",
+				branches: (c.branches || []).map((b: any) => ({
+					branchName: b.branch_name,
+					isMain: b.is_main_branch,
+					billingAddress: {
+						address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
+						city: b.billing_city || "",
+						state: b.billing_state || "",
+						pincode: b.billing_pincode || "",
+					},
+					shippingAddress: {
+						address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
+						city: b.shipping_city || "",
+						state: b.shipping_state || "",
+						pincode: b.shipping_pincode || "",
+					},
+				})),
+			}));
+			setCustomers(mapped as any);
+		}
+	}, [customerData]);
 
 	useEffect(() => {
 		if (salesmanData) {
@@ -129,6 +171,7 @@ export default function EditSalesOrderPage() {
 					orderNo: orderNumber,
 					status: asDraft ? "draft" : form.status,
 				},
+				customerDetails: customers.find((c: any) => c.id === form.customerId),
 			},
 			{
 				onSuccess: () => {

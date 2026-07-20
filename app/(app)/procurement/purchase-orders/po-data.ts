@@ -125,6 +125,7 @@ export interface PurchaseOrder {
   /** Local master id (number) or backend supplier UUID (string). */
   supplierId: number | string;
   supplierName: string;
+  supplierCode?: string;
   supplierType: string;
   supplierContactPerson?: string;
   supplierMobile?: string;

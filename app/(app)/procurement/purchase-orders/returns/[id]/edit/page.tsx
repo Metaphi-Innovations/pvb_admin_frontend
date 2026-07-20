@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PReturnFormLayout } from "@/app/(app)/procurement/purchase-returns/components/PReturnFormLayout";
 import { PReturnFormFooter } from "@/app/(app)/procurement/purchase-returns/components/PReturnFormFooter";
@@ -10,7 +10,10 @@ import type { PurchaseReturn } from "@/app/(app)/procurement/purchase-returns/pu
 import {
   isPurchaseReturnLocked,
   mergeReturnItemsForEdit,
+  parsePurchaseReturnNavSource,
   purchaseReturnListHref,
+  resolvePurchaseReturnBackHref,
+  resolvePurchaseReturnRedirectWithToast,
   validateReturnItems,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
 import { recalcPurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-calc";
@@ -21,9 +24,20 @@ import {
 } from "@/hooks/procurement";
 
 export default function EditPurchaseReturnPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+      <EditPurchaseReturnContent />
+    </Suspense>
+  );
+}
+
+function EditPurchaseReturnContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = String(params.id);
+  const from = parsePurchaseReturnNavSource(searchParams.get("from"));
+  const backHref = resolvePurchaseReturnBackHref(from);
   const [record, setRecord] = useState<PurchaseReturn | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [mergedOnce, setMergedOnce] = useState(false);
@@ -33,7 +47,7 @@ export default function EditPurchaseReturnPage() {
 
   const eligibleItemsQuery = useEligiblePurchaseReturnItems(
     detail?.poId ? String(detail.poId) : null,
-    detail?.warehouseId || undefined,
+    undefined,
     id,
   );
   const updateMutation = useUpdatePurchaseReturn();
@@ -92,7 +106,10 @@ export default function EditPurchaseReturnPage() {
     setErrors({});
     updateMutation.mutate(
       { id: String(record.id), record },
-      { onSuccess: () => router.push(`${purchaseReturnListHref()}&toast=pret-submitted`) },
+      {
+        onSuccess: () =>
+          router.push(resolvePurchaseReturnRedirectWithToast(from, "pret-submitted")),
+      },
     );
   };
 
@@ -100,10 +117,11 @@ export default function EditPurchaseReturnPage() {
     <PReturnFormLayout
       mode="edit"
       returnNumber={record.returnNumber}
+      backHref={backHref}
       footer={
         <PReturnFormFooter
           readOnly={readOnly}
-          onCancel={() => router.push(purchaseReturnListHref())}
+          onCancel={() => router.push(backHref)}
           onSaveDraft={readOnly ? undefined : handleSubmit}
           onSubmit={readOnly ? undefined : handleSubmit}
           showSubmit={!readOnly}
