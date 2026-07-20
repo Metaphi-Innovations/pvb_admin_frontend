@@ -5,8 +5,15 @@ import { cn } from "@/lib/utils";
 import { AlertCircle, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, type TaxSupplyType } from "@/lib/procurement/utils";
-import type { PurchaseReturnItem } from "../purchase-return-data";
-import { clampReturnQty, getReturnQtyError } from "../purchase-return-utils";
+import type { PurchaseReturnItem, PurchaseReturnUnit } from "../purchase-return-data";
+import {
+  clampReturnDisplayValue,
+  getReturnQtyError,
+  resolveAvailableReturnBaseQty,
+  resolveDisplayQtyFromBase,
+  resolveMaxReturnBaseQty,
+  resolveReturnBaseQtyFromItem,
+} from "../purchase-return-utils";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -16,26 +23,6 @@ function SectionHead({ label, sub }: { label: string; sub?: string }) {
       <p className="text-xs font-bold uppercase tracking-wider text-foreground">{label}</p>
       {sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
     </div>
-  );
-}
-
-function LineStatusChip({ status }: { status: PurchaseReturnItem["lineStatus"] }) {
-  const isFull = status === "fully_returned";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
-        isFull ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700",
-      )}
-    >
-      <span
-        className={cn(
-          "w-1.5 h-1.5 rounded-full flex-shrink-0",
-          isFull ? "bg-slate-400" : "bg-emerald-500",
-        )}
-      />
-      {isFull ? "Fully Returned" : "Available for Return"}
-    </span>
   );
 }
 
@@ -64,6 +51,20 @@ function rejectionSourceLabel(source?: string): string {
     default:
       return "QC Rejected";
   }
+}
+
+function QuantityTypeBadge({ quantityType }: { quantityType: PurchaseReturnUnit }) {
+  const isCase = quantityType === "CASE";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+        isCase ? "bg-sky-50 text-sky-800" : "bg-violet-50 text-violet-800",
+      )}
+    >
+      {quantityType}
+    </span>
+  );
 }
 
 function RejectionSourceBadge({ source }: { source?: string }) {
@@ -133,7 +134,7 @@ function ReturnItemsTable({
     if (checked) {
       onItemChange(it.id, { selected: true });
     } else {
-      onItemChange(it.id, { selected: false, returnQty: 0, lineRemark: "" });
+      onItemChange(it.id, { selected: false, returnValue: 0, returnQty: 0, lineRemark: "" });
     }
   };
 
@@ -170,19 +171,20 @@ function ReturnItemsTable({
               "Batch No.",
               "MFG Date",
               "Expiry",
+              "Qty Type",
               "GRN Rcvd",
               "QC Rejected",
               "Returned",
-              "Balance Rejected",
-              "Return Cs",
-              "Return Ls",
-              "Total Return",
+              "Balance (Case)",
+              "Balance (Pcs)",
+              "Return (Case)",
+              "Return (Piece)",
+              "Total (Pcs)",
               "Rate",
               "GST %",
               ...(taxSupplyType === "intra" ? ["CGST", "SGST"] : ["IGST"]),
               "Amount",
               "Line Remark",
-              "Status",
             ].map((h) => (
               <th
                 key={h}
@@ -192,10 +194,11 @@ function ReturnItemsTable({
                     "GRN Rcvd",
                     "QC Rejected",
                     "Returned",
-                    "Balance Rejected",
-                    "Return Cs",
-                    "Return Ls",
-                    "Total Return",
+                    "Balance (UOM)",
+                    "Balance (Pcs)",
+                    "Return Qty (Case)",
+                    "Return Qty (Piece)",
+                    "Total Qty (Pcs)",
                     "Rate",
                     "GST %",
                     "CGST",
@@ -217,6 +220,34 @@ function ReturnItemsTable({
             const canEditQty = it.selected && !rowDisabled;
             const rowError = errors?.[it.id] ?? getReturnQtyError(it);
             const gstPct = gstPctFromLine(it);
+
+            const maxReturnBase = resolveMaxReturnBaseQty(it);
+            const availableBase = resolveAvailableReturnBaseQty(it);
+            const balanceDisplayQty = resolveDisplayQtyFromBase(
+              availableBase,
+              it.quantityType,
+              it.caseSize,
+            );
+            const maxReturnDisplayQty = resolveDisplayQtyFromBase(
+              maxReturnBase,
+              it.quantityType,
+              it.caseSize,
+            );
+            const grnReceivedDisplayQty = resolveDisplayQtyFromBase(
+              it.grnReceivedQty,
+              it.quantityType,
+              it.caseSize,
+            );
+            const qcRejectedDisplayQty = resolveDisplayQtyFromBase(
+              it.qcRejectedQty,
+              it.quantityType,
+              it.caseSize,
+            );
+            const alreadyReturnedDisplayQty = resolveDisplayQtyFromBase(
+              it.alreadyReturnedQty,
+              it.quantityType,
+              it.caseSize,
+            );
 
             return (
               <tr
@@ -257,79 +288,120 @@ function ReturnItemsTable({
                 <td className="px-3 py-2 font-mono text-xs text-foreground">{it.batchNumber}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{it.mfgDate || "—"}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{it.expDate || "—"}</td>
+                <td className="px-3 py-2 text-center">
+                  <QuantityTypeBadge quantityType={it.quantityType} />
+                </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
-                  {it.grnReceivedQty}
+                  {grnReceivedDisplayQty}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-red-600">
-                  {it.qcRejectedQty || "—"}
+                  {it.qcRejectedQty ? qcRejectedDisplayQty : "—"}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
-                  {it.alreadyReturnedQty}
+                  {alreadyReturnedDisplayQty}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-foreground">
-                  {it.balanceRejectedQty}
+                  {balanceDisplayQty}
+                </td>
+                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-foreground">
+                  {availableBase}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!canEditQty ? (
                     <span className="text-xs tabular-nums text-muted-foreground">
-                      {fullyReturned ? "—" : it.returnCases || "—"}
+                      {it.quantityType === "CASE"
+                        ? it.returnValue > 0
+                          ? it.returnValue
+                          : it.returnQty > 0
+                            ? resolveDisplayQtyFromBase(it.returnQty, "CASE", it.caseSize)
+                            : "—"
+                        : "—"}
                     </span>
                   ) : (
-                    <Input
-                      type="number"
-                      min={0}
-                      value={it.returnCases || ""}
-                      onChange={(e) => {
-                        const newCases = e.target.value === "" ? 0 : Number(e.target.value);
-                        const loose = it.returnLooseQty || 0;
-                        const total = newCases * (it.caseSize || 10) + loose;
-                        const v = clampReturnQty(total, it.balanceRejectedQty);
-                        onItemChange(it.id, { returnCases: newCases, returnLooseQty: loose, returnQty: v });
-                      }}
-                      className={cn("h-8 w-16 text-xs tabular-nums", rowError && "border-red-400")}
-                    />
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {!canEditQty ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {fullyReturned ? "—" : it.returnLooseQty || "—"}
-                    </span>
-                  ) : (
-                    <Input
-                      type="number"
-                      min={0}
-                      value={it.returnLooseQty || ""}
-                      onChange={(e) => {
-                        const newLoose = e.target.value === "" ? 0 : Number(e.target.value);
-                        const cases = it.returnCases || 0;
-                        const total = cases * (it.caseSize || 10) + newLoose;
-                        const v = clampReturnQty(total, it.balanceRejectedQty);
-                        onItemChange(it.id, { returnCases: cases, returnLooseQty: newLoose, returnQty: v });
-                      }}
-                      className={cn("h-8 w-16 text-xs tabular-nums", rowError && "border-red-400")}
-                    />
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {!canEditQty ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {fullyReturned ? "—" : it.returnQty || "—"}
-                    </span>
-                  ) : (
-                    <div className="inline-block space-y-1 text-left">
+                    it.quantityType === "CASE" ? (
                       <Input
                         type="number"
-                        readOnly
-                        value={it.returnQty || ""}
-                        className={cn("h-8 w-20 text-xs tabular-nums bg-muted focus-visible:ring-0", rowError && "border-red-400")}
+                        min={0}
+                        value={it.returnValue || ""}
+                        onChange={(e) => {
+                          const raw = e.target.value === "" ? 0 : Number(e.target.value);
+                          const displayValue = clampReturnDisplayValue(
+                            raw,
+                            maxReturnDisplayQty,
+                            it.quantityType,
+                            it.caseSize,
+                          );
+                          const nextItem = {
+                            ...it,
+                            returnValue: displayValue,
+                            returnUnit: it.quantityType,
+                          };
+                          onItemChange(it.id, {
+                            returnValue: displayValue,
+                            returnUnit: it.quantityType,
+                            returnQty: resolveReturnBaseQtyFromItem(nextItem),
+                          });
+                        }}
+                        className={cn("h-8 w-20 text-xs tabular-nums", rowError && "border-red-400")}
+                        placeholder="Cases"
                       />
-                      {rowError && (
-                        <p className="text-[10px] leading-tight text-red-500 max-w-[160px]">
-                          {rowError}
-                        </p>
-                      )}
-                    </div>
+                    ) : (
+                      <span className="text-xs tabular-nums text-muted-foreground">—</span>
+                    )
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {!canEditQty ? (
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {it.quantityType === "PIECE"
+                        ? it.returnValue > 0
+                          ? it.returnValue
+                          : it.returnQty > 0
+                            ? it.returnQty
+                            : "—"
+                        : "—"}
+                    </span>
+                  ) : (
+                    it.quantityType === "PIECE" ? (
+                      <Input
+                        type="number"
+                        min={0}
+                        value={it.returnValue || ""}
+                        onChange={(e) => {
+                          const raw = e.target.value === "" ? 0 : Number(e.target.value);
+                          const displayValue = clampReturnDisplayValue(
+                            raw,
+                            maxReturnDisplayQty,
+                            it.quantityType,
+                            it.caseSize,
+                          );
+                          const nextItem = {
+                            ...it,
+                            returnValue: displayValue,
+                            returnUnit: it.quantityType,
+                          };
+                          onItemChange(it.id, {
+                            returnValue: displayValue,
+                            returnUnit: it.quantityType,
+                            returnQty: resolveReturnBaseQtyFromItem(nextItem),
+                          });
+                        }}
+                        className={cn("h-8 w-20 text-xs tabular-nums", rowError && "border-red-400")}
+                        placeholder="Pieces"
+                      />
+                    ) : (
+                      <span className="text-xs tabular-nums text-muted-foreground">—</span>
+                    )
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <span className="text-xs tabular-nums text-foreground">
+                    {it.returnQty || "—"}
+                  </span>
+                  {rowError && (
+                    <p className="mt-1 text-[10px] leading-tight text-red-500 max-w-[160px]">
+                      {rowError}
+                    </p>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
@@ -366,9 +438,6 @@ function ReturnItemsTable({
                       className={cn(inputCls, "min-w-[120px]")}
                     />
                   )}
-                </td>
-                <td className="px-3 py-2">
-                  <LineStatusChip status={it.lineStatus} />
                 </td>
               </tr>
             );

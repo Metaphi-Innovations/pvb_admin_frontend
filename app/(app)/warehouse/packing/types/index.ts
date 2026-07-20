@@ -20,6 +20,7 @@ export interface SalesOrderProduct {
   mfgDate?: string;
   expDate?: string;
   lineId?: string;
+  quantity_type?: string;
 }
 
 export interface SalesOrderRecord {

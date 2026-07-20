@@ -111,13 +111,15 @@ export default function EditDispatchPage() {
       group.total_packed_qty = Math.max(group.total_packed_qty, Number(item.packed_qty || 0) / packSize);
       
       const batchCode = item.batch_snapshot?.batch_code || item.inventory_batch?.batch_code || item.batch_code || "Unknown";
-      const existingBatch = group.batches.find((b: any) => b.batch_code === batchCode);
+      const qtyType = (item.packing_done_product?.quantity_type || "N/A").toUpperCase();
+      const existingBatch = group.batches.find((b: any) => b.batch_code === batchCode && b.quantity_type === qtyType);
       if (existingBatch) {
         existingBatch.qty += dispQty;
       } else {
         group.batches.push({
           id: item.id || item.dispatch_item_id,
           batch_code: batchCode,
+          quantity_type: qtyType,
           qty: dispQty,
           remarks: item.remarks
         });
@@ -306,6 +308,11 @@ export default function EditDispatchPage() {
                               <td colSpan={3} className="px-3 py-1.5 pl-6 flex items-center gap-2">
                                 <div className="w-1.5 h-1.5 rounded-full bg-border" />
                                 Batch: <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">{b.batch_code}</span>
+                                {b.quantity_type && b.quantity_type !== "N/A" && (
+                                  <span className="font-mono text-[10px] bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded ml-1">
+                                    {b.quantity_type}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-3 py-1.5 tabular-nums text-right font-mono">{b.qty}</td>
                               <td colSpan={4}></td>

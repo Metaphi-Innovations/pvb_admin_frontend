@@ -61,6 +61,19 @@ export interface SupplierTypeDropdownItem {
     supplierTypeName: string;
 }
 
+export interface SupplierTypeFilterOption {
+    label: string;
+    value: string;
+}
+
+export type SupplierTypeFilterField =
+    | "supplier_type_name"
+    | "initial_code"
+    | "description"
+    | "is_active"
+    | "created_by_user__username"
+    | "updated_by_user__username";
+
 // ---------------------------------------------------------------------------
 // Sort-key → API ordering field map
 // ---------------------------------------------------------------------------
@@ -68,11 +81,11 @@ export interface SupplierTypeDropdownItem {
 const SORT_FIELD_MAP: Record<string, string> = {
     supplierTypeName: "supplier_type_name",
     initialCode: "initial_code",
-    status: "status",
+    status: "is_active",
     createdAt: "created_at",
     updatedAt: "updated_at",
-    createdBy: "created_by",
-    updatedBy: "updated_by",
+    createdBy: "created_by_user__username",
+    updatedBy: "updated_by_user__username",
     description: "description",
 };
 
@@ -126,7 +139,7 @@ function mapItem(
         supplierTypeName: asString(raw.supplier_type_name),
         initialCode: asString(raw.initial_code),
         description: asString(raw.description),
-        status: toStatus(raw.status, raw.is_active),
+        status: toStatus(raw.is_active, raw.status),
         createdAt: formatDate(raw.created_at),
         updatedAt: formatDate(raw.updated_at),
         createdBy: toDisplayName(raw.created_by_user),
@@ -136,6 +149,36 @@ function mapItem(
 
 function mapDetail(raw: Record<string, unknown>): SupplierTypeListRecord {
     return mapItem(raw, -1);
+}
+
+function mapFilterOptions(
+    data: unknown[],
+    fieldName: SupplierTypeFilterField,
+): SupplierTypeFilterOption[] {
+    const options: SupplierTypeFilterOption[] = [];
+    const seen = new Set<string>();
+
+    for (const row of data) {
+        if (!row || typeof row !== "object") continue;
+        const record = row as Record<string, unknown>;
+        const raw = record[fieldName];
+        const value = asString(raw).trim();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+
+        if (fieldName === "is_active") {
+            const active = raw === true || value.toLowerCase() === "true";
+            options.push({
+                label: active ? "Active" : "Inactive",
+                value: active ? "active" : "inactive",
+            });
+            continue;
+        }
+
+        options.push({ label: value, value });
+    }
+
+    return options.sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -159,32 +202,9 @@ export const SupplierTypeListService = {
     async list(params: SupplierTypeListParams): Promise<SupplierTypeListResult> {
         const ordering = encodeURIComponent(params.ordering ?? "");
 
-        // Map frontend camelCase array filters to backend snake_case single values
-        const backendFilters: Record<string, unknown> = {};
-        if (params.apiFilters) {
-            for (const [key, value] of Object.entries(params.apiFilters)) {
-                let realVal: unknown = value;
-                if (Array.isArray(value)) {
-                    if (value.length === 0) continue;
-                    realVal = value[0];
-                }
-                if (realVal === undefined || realVal === null || realVal === "") continue;
-
-                if (key === "supplierTypeName") {
-                    backendFilters["supplier_type_name"] = realVal;
-                } else if (key === "initialCode") {
-                    backendFilters["initial_code"] = realVal;
-                } else if (key === "status") {
-                    backendFilters["is_active"] = realVal === "active";
-                } else {
-                    backendFilters[key] = realVal;
-                }
-            }
-        }
-
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.SUPPLIER_TYPE.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
-            { filters: backendFilters },
+            { filters: params.apiFilters ?? {} },
             { signal: params.signal },
         );
 
@@ -275,6 +295,27 @@ export const SupplierTypeListService = {
         link.click();
         link.remove();
         window.URL.revokeObjectURL(url);
+    },
+
+    async getFilterDropdown(
+        fieldName: SupplierTypeFilterField,
+        signal?: AbortSignal,
+    ): Promise<SupplierTypeFilterOption[]> {
+        const response = await axiosInstance.get(
+            API_ENDPOINTS.MASTER.SUPPLIER_TYPE.FILTER_DROPDOWN,
+            {
+                params: { field_name: fieldName },
+                signal,
+            },
+        );
+
+        const payload = response.data as Record<string, unknown>;
+        const data = payload.data;
+        if (!Array.isArray(data)) {
+            throw new Error("Unexpected response shape: 'data' must be an array.");
+        }
+
+        return mapFilterOptions(data, fieldName);
     },
 
     async dropdown(): Promise<SupplierTypeDropdownItem[]> {

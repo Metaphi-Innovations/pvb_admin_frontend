@@ -152,7 +152,7 @@ export function ReturnGrnCreate({
     isLoading: salesDropdownLoading,
     isError: salesDropdownError,
     error: salesDropdownLoadError,
-  } = useSalesReturnDropdown(["Processed"], isSales && !isEdit);
+  } = useSalesReturnDropdown(["sales_returned"], isSales && !isEdit);
 
   const {
     data: sampleDropdown = [],
@@ -160,7 +160,7 @@ export function ReturnGrnCreate({
     isError: sampleDropdownError,
     error: sampleDropdownLoadError,
   } = useSampleReturnDropdown(
-    ["DRAFT", "SUBMITTED", "APPROVED"],
+    ["DRAFT", "SUBMITTED", "APPROVED","sample_returned"],
     !isSales && !isEdit,
   );
 

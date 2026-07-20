@@ -60,7 +60,6 @@ import {
   getMasterListErrorMessage,
 } from "@/lib/masters/master-query-errors";
 import type { PurchaseOrderListKeyParams } from "@/lib/procurement/purchase-order-query-keys";
-import type { PurchaseReturnListKeyParams } from "@/lib/procurement/purchase-return-query-keys";
 import type { POListingKpis } from "@/lib/procurement/listing-kpis";
 import { POListingKpiRow } from "../components/listing/ListingKpiRows";
 import { PurchaseReturnListing } from "./components/PurchaseReturnListing";
@@ -78,7 +77,6 @@ import type { POFollowUpEntry } from "./po-followup-data";
 import type { PurchaseOrder } from "./po-data";
 import { canUploadPOInvoiceForStatus } from "./po-invoice-utils";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
-import { usePurchaseReturnList } from "@/hooks/procurement";
 import { purchaseReturnRoutes } from "../purchase-returns/purchase-return-utils";
 
 type TabId = "all" | "draft" | "po_return";
@@ -202,11 +200,6 @@ export default function PurchaseOrdersPageClient() {
   const closeMutation = useClosePurchaseOrder();
   const cancelMutation = useCancelPurchaseOrder();
   const actionSubmitting = closeMutation.isPending || cancelMutation.isPending;
-  const prListParams = useMemo<PurchaseReturnListKeyParams>(
-    () => ({ page: 1, pageSize: 1, search: "", ordering: undefined, apiFilters: {} }),
-    [],
-  );
-  const purchaseReturnCountQuery = usePurchaseReturnList(prListParams);
 
   /** Prefer full detail; fall back to list-row stub so the popup opens immediately. */
   const modalPo = useMemo(() => {
@@ -381,16 +374,6 @@ export default function PurchaseOrdersPageClient() {
   }, [isDraftTab, statusOptionsQuery.data]);
 
   const summary = summaryQuery.data;
-
-  const tabCounts = useMemo(() => {
-    const c: Partial<Record<TabId, number>> = {};
-    if (summary) {
-      c.all = Math.max(0, (summary.total ?? 0) - (summary.draftPo ?? 0));
-      c.draft = summary.draftPo;
-    }
-    c.po_return = purchaseReturnCountQuery.data?.total ?? 0;
-    return c;
-  }, [purchaseReturnCountQuery.data?.total, summary]);
 
   /** Only map KPI fields that exist on the backend summary response. */
   const poListingKpis = useMemo<POListingKpis>(() => ({
@@ -671,7 +654,7 @@ export default function PurchaseOrdersPageClient() {
       titleIcon={ShoppingCart}
       tabs={TABS.map((t) => ({
         value: t.value,
-        label: `${t.label}${tabCounts[t.value] != null ? ` (${tabCounts[t.value]})` : ""}`,
+        label: t.label,
       }))}
       activeTab={tab}
       onTabChange={(id) => {

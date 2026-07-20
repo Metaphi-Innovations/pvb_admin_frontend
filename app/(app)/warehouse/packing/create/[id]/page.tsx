@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building, Layers, Info, Check, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { SalesOrderRecord, SalesOrderProduct } from "../../types";
 import { PackingAllocationSummaryDialog } from "../../components/PackingAllocationSummaryDialog";
 import { PackingProductLinesSection } from "../../components/PackingProductLinesSection";
@@ -13,6 +14,7 @@ import { PackingListService } from "@/services/packing-list.service";
 import { PackingDoneService } from "@/services/packing-done.service";
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import {
   getPackingDocumentNo,
   getPackingDocumentNoLabel,
@@ -37,6 +39,7 @@ function buildInitialSelection(products: SalesOrderRecord["products"]): Record<s
 
 export default function CreatePackingPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<SalesOrderRecord | null>(null);
   const [packingNo, setPackingNo] = useState("");
@@ -54,6 +57,17 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
   const showToast = (message: string, type: "error" | "success" = "error") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const getBackPath = () => {
+    if (!order) return "/warehouse/packing/sales";
+    switch (order.sourceDocumentType) {
+      case "Stock Transfer": return "/warehouse/packing/stock-transfer";
+      case "Purchase Return": return "/warehouse/packing/purchase-return";
+      case "Sample Order": return "/warehouse/packing/sample";
+      case "Sales Order":
+      default: return "/warehouse/packing/sales";
+    }
   };
 
   const warehouseName = order
@@ -116,6 +130,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       .map((p) => ({
         packing_list_product_id: p.lineId || "",
         base_qty: packingQty[getLineKey(p)] ?? 0,
+        quantity_type: p.quantity_type,
       }));
 
     if (productsPayload.length === 0) {
@@ -131,13 +146,10 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         products: productsPayload,
       });
 
+      await invalidatePurchaseOrderModuleListingQueries(queryClient);
       showToast("Packing created successfully!", "success");
       setTimeout(() => {
-        if (order.sourceDocumentType === "Purchase Return") {
-          router.push("/warehouse/packing/purchase-return?tab=packing-done");
-        } else {
-          router.push("/warehouse/packing");
-        }
+        router.push(getBackPath());
       }, 1000);
     } catch (err: any) {
       console.error("Error creating packing done:", err);
@@ -225,7 +237,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
   if (loading) {
     return (
-      <FormContainer title="Create Packing List" onBack={() => router.push("/warehouse/packing")}>
+      <FormContainer title="Create Packing List" onBack={() => router.back()}>
         <div className="max-w-[800px] mx-auto text-center py-24 space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto" />
           <p className="text-xs text-muted-foreground">Loading packing details...</p>
@@ -236,14 +248,14 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
   if (!order) {
     return (
-      <FormContainer title="Sales Order" onBack={() => router.push("/warehouse/packing")}>
+      <FormContainer title="Sales Order" onBack={() => router.back()}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <Info className="w-12 h-12 text-blue-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Sales Order Not Found</h1>
           <p className="text-xs text-muted-foreground">
             The sales order record you requested for packing does not exist.
           </p>
-          <Button variant="outline" size="sm" onClick={() => router.push("/warehouse/packing")}>
+          <Button variant="outline" size="sm" onClick={() => router.back()}>
             Go Back
           </Button>
         </div>
@@ -267,8 +279,8 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       <FormContainer
         title="Create Packing List"
         description={`Generate packing allocations for ${order.salesOrderNo}`}
-        onBack={() => router.push("/warehouse/packing")}
-        onCancel={() => router.push("/warehouse/packing")}
+        onBack={() => router.push(getBackPath())}
+        onCancel={() => router.push(getBackPath())}
         cancelLabel="Cancel"
         actions={
           <div className="flex gap-2">
@@ -412,11 +424,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         lines={summaryLines}
         onClose={() => {
           setSummaryOpen(false);
-          if (order.sourceDocumentType === "Purchase Return") {
-            router.push("/warehouse/packing/purchase-return");
-          } else {
-            router.push("/warehouse/packing");
-          }
+          router.push(getBackPath());
         }}
       />
     </>

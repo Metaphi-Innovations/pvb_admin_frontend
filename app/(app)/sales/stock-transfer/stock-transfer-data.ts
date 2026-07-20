@@ -57,6 +57,7 @@ export interface TransferLineItem extends SalesOrderLineItem {
   packingUnit?: string;
   baseUnit?: string;
   unitsPerPackingUnit?: number;
+  quantityType?: "Case" | "Piece";
 }
 
 export interface StockTransfer {
@@ -462,28 +463,7 @@ export function validateStockTransferForm(form: StockTransferFormValues): Record
       if (!line.productId || line.quantity <= 0) {
         errors.lineItems = "Each line must have a product and transfer qty greater than zero";
       }
-      if (line.batchNumber && line.expiryDate) {
-        const batchStatus = getStockStatus(line.expiryDate);
-        if (batchStatus === "Expired") {
-          errors[`line_${index}_batch`] = `Batch ${line.batchNumber} is expired and cannot be transferred`;
-        }
-      }
-      if (line.quantity > (line.availableStock ?? 0)) {
-        errors[`line_${index}_qty`] = `Transfer qty cannot exceed available qty (${line.availableStock ?? 0})`;
-      }
-      if (sourceWh && line.productName) {
-        const batches = getAvailableBatchRowsForTransfer(
-          sourceWh.warehouseName,
-          line.productName,
-          line.productCode,
-        );
-        if (line.batchNumber) {
-          const batch = batches.find((b) => b.batchNumber === line.batchNumber);
-          if (batch && line.quantity > batch.availableQty) {
-            errors[`line_${index}_qty`] = `Transfer qty exceeds batch available qty (${batch.availableQty})`;
-          }
-        }
-      }
+
     });
   }
   return errors;

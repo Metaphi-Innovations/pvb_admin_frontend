@@ -139,6 +139,7 @@ function buildBackendWriteBody(
   const items = (form.lineItems || []).map((line: SalesOrderLineItem) => {
     return {
       product_id: line.productId,
+      quantity_type: line.quantityType,
       stock_available: line.availableStock || 0,
       base_qty: line.quantity,
       dp_price: line.unitPrice || 0,

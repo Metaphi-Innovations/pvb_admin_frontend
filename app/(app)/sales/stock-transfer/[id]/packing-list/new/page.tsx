@@ -65,8 +65,7 @@ export default function TransferNewPackingListPage() {
           if (!line.productId || line.quantity <= 0) continue;
 
           // Fetch available inventory batches from the backend
-          const allBatches = await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType);
-          const batches = allBatches.filter((b: any) => b.batch_code === line.batchNumber);
+          const batches = await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType);
 
           const config = {
             packingUnit: line.packingUnit || "Unit",
@@ -243,6 +242,7 @@ export default function TransferNewPackingListPage() {
             batch_code: alloc.batchNumber,
             order_qty: alloc.allocatedBaseQty,
             available_inventory_id: alloc.cartonId,
+            quantity_type: line.quantityType,
           });
         }
       }

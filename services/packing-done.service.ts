@@ -57,8 +57,10 @@ function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
     warehouse: raw.warehouse_name || "",
     sourceDocumentType: sourceDocType as any,
     sourceDocumentNo: raw.packing_list_no || "",
-    sourceWarehouse: raw.warehouse_name || "",
-    targetWarehouse: "—",
+    sourceWarehouse: raw.source_warehouse || raw.warehouse_name || "",
+    targetWarehouse: raw.target_warehouse || "",
+    poNumber: raw.po_number || "",
+    supplierCode: raw.supplier_code || "",
     products: [],
   };
 }
@@ -211,8 +213,9 @@ export const PackingDoneService = {
       : (dataObj && Array.isArray(dataObj.data) ? dataObj.data : []);
 
     const items = listData.map((row) => mapListItemToPackingRecord((row ?? {}) as Record<string, any>));
-    const totalRecords = dataObj && typeof dataObj.pagination === "object"
-      ? Number((dataObj.pagination as any)?.total || items.length)
+    const totalRecords = payload.totalRecords !== undefined ? Number(payload.totalRecords)
+      : payload.count !== undefined ? Number(payload.count)
+      : (dataObj && typeof dataObj.pagination === "object") ? Number((dataObj.pagination as any)?.total || items.length)
       : items.length;
 
     return { items, total: totalRecords };
@@ -273,6 +276,7 @@ export const PackingDoneService = {
     products: {
       packing_list_product_id: string;
       base_qty: number;
+      quantity_type?: string;
       remarks?: string;
     }[];
   }): Promise<any> {
@@ -281,6 +285,7 @@ export const PackingDoneService = {
       products: payload.products.map(p => ({
         packing_list_product_id: p.packing_list_product_id,
         base_qty: p.base_qty,
+        quantity_type: p.quantity_type,
         remarks: p.remarks,
       }))
     };
@@ -298,6 +303,7 @@ export const PackingDoneService = {
     products: {
       packing_list_product_id: string;
       base_qty: number;
+      quantity_type?: string;
       remarks?: string;
     }[];
   }): Promise<any> {
@@ -306,6 +312,7 @@ export const PackingDoneService = {
       products: payload.products.map(p => ({
         packing_list_product_id: p.packing_list_product_id,
         base_qty: p.base_qty,
+        quantity_type: p.quantity_type,
         remarks: p.remarks,
       }))
     };

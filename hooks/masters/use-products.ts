@@ -5,6 +5,7 @@ import {
   ProductListService,
   type ProductCreatePayload,
   type ProductExportParams,
+  type ProductFilterField,
   type ProductListParams,
   type ProductUpdatePayload,
 } from "@/services/product-list.service";
@@ -105,5 +106,21 @@ export function useProductPreviewNumber() {
   return useQuery({
     queryKey: ["product-preview-number"],
     queryFn: () => ProductListService.previewNumber(),
+  });
+}
+
+type FilterDropdownQueryOptions = {
+  enabled?: boolean;
+};
+
+export function useProductFilterDropdown(
+  fieldName: ProductFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
+  return useQuery({
+    queryKey: masterKeys.products.filterDropdown(fieldName),
+    queryFn: ({ signal }) => ProductListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

@@ -14,6 +14,9 @@ import {
   purchaseOrderKeys,
   type PurchaseOrderListKeyParams,
 } from "@/lib/procurement/purchase-order-query-keys";
+import {
+  invalidatePurchaseOrderModuleListingQueries,
+} from "@/lib/procurement/invalidate-po-listing-queries";
 import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: PurchaseOrderListKeyParams): PurchaseOrderListParams {
@@ -26,6 +29,14 @@ function toListParams(params: PurchaseOrderListKeyParams): PurchaseOrderListPara
   };
 }
 
+/** PO listing/filters change from GRN, POR, packing, dispatch — never serve stale cache. */
+const PO_LIVE_QUERY_OPTIONS = {
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnMount: "always" as const,
+  refetchOnWindowFocus: true,
+};
+
 export function usePurchaseOrderList(
   params: PurchaseOrderListKeyParams,
   enabled = true,
@@ -35,6 +46,7 @@ export function usePurchaseOrderList(
     queryFn: ({ signal }) =>
       PurchaseOrderListService.list({ ...toListParams(params), signal }),
     enabled,
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -42,6 +54,7 @@ export function usePurchaseOrderSummary() {
   return useQuery({
     queryKey: purchaseOrderKeys.summary(),
     queryFn: ({ signal }) => PurchaseOrderListService.getSummary(signal),
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -62,8 +75,8 @@ export function usePurchaseOrderFilterDropdown(
         excludeDraft: options?.excludeDraft,
         poStatus: options?.poStatus,
       }),
-    staleTime: 5 * 60 * 1000,
     enabled: options?.enabled ?? true,
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -82,6 +95,8 @@ export function usePurchaseOrder(id: string | null | undefined) {
     queryKey: purchaseOrderKeys.detail(id ?? ""),
     queryFn: ({ signal }) => PurchaseOrderService.getById(id!, signal),
     enabled: Boolean(id),
+    // Received/pending qty changes with every GRN — always refetch.
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -98,7 +113,8 @@ export function usePurchaseOrderSupplierDropdown(enabled = true) {
     queryKey: purchaseOrderKeys.supplierDropdown(),
     queryFn: ({ signal }) => PurchaseOrderService.getSupplierDropdown(signal),
     enabled,
-    staleTime: 30_000,
+    // Eligibility depends on pending GRN qty — always refetch.
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -123,7 +139,8 @@ export function usePurchaseOrderDropdown(
     queryKey: purchaseOrderKeys.dropdown(filters),
     queryFn: ({ signal }) => PurchaseOrderService.getDropdown(filters, signal),
     enabled: enabled && Boolean(filters.supplier_id),
-    staleTime: 30_000,
+    // GRN create/edit changes pending qty — never serve a memoized PO list.
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -132,8 +149,7 @@ async function invalidatePoQueries(
   id?: string,
 ) {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.lists() }),
-    queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.summaries() }),
+    invalidatePurchaseOrderModuleListingQueries(queryClient),
     id
       ? queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.detail(id) })
       : Promise.resolve(),
@@ -230,3 +246,9 @@ export function useCancelPurchaseOrder() {
     },
   });
 }
+
+export {
+  invalidatePurchaseOrderListingQueries,
+  invalidatePurchaseReturnListingQueries,
+  invalidatePurchaseOrderModuleListingQueries,
+} from "@/lib/procurement/invalidate-po-listing-queries";

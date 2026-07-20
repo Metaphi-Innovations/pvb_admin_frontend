@@ -103,6 +103,26 @@ export interface ProductListResult {
   total: number;
 }
 
+export interface ProductFilterOption {
+  label: string;
+  value: string;
+}
+
+export type ProductFilterField =
+  | "product_code"
+  | "product_name"
+  | "sku"
+  | "supplier_code"
+  | "supplier_name"
+  | "hsnCode"
+  | "categoryName"
+  | "unit"
+  | "pack_size"
+  | "mrp"
+  | "status"
+  | "created_by_user__username"
+  | "updated_by_user__username";
+
 // ---------------------------------------------------------------------------
 // Sort-key → API ordering field map
 // ---------------------------------------------------------------------------
@@ -129,7 +149,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
   sku: "sku",
   supplierCode: "supplier_code",
   supplier: "supplier__supplier_name",
-  hsnCode: "hsn_id",
+  hsnCode: "hsn__hsnCode",
   category: "category__categoryName",
   packSize: "pack_size",
   baseUnit: "unit",
@@ -294,6 +314,44 @@ function mapDetail(raw: Record<string, unknown>): ProductListRecord {
   return mapped;
 }
 
+function mapFilterOptions(
+  data: unknown[],
+  fieldName: ProductFilterField,
+): ProductFilterOption[] {
+  const options: ProductFilterOption[] = [];
+  const seen = new Set<string>();
+  const responseKey =
+    fieldName === "supplier_name"
+      ? "supplier__supplier_name"
+      : fieldName === "categoryName"
+        ? "category__categoryName"
+        : fieldName === "hsnCode"
+          ? "hsn__hsnCode"
+          : fieldName;
+
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const raw = record[responseKey] ?? record[fieldName];
+    const value = asString(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+
+    if (fieldName === "status") {
+      const token = value.toLowerCase();
+      options.push({
+        label: value,
+        value: token === "active" ? "active" : token === "inactive" ? "inactive" : value,
+      });
+      continue;
+    }
+
+    options.push({ label: value, value });
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function extractErrorMessage(error: unknown, fallback: string): string {
   const err = error as {
     response?: {
@@ -325,6 +383,44 @@ function extractErrorMessage(error: unknown, fallback: string): string {
     fallback
   );
 }
+
+// ---------------------------------------------------------------------------
+// Multipart helpers (shared by create + update)
+// ---------------------------------------------------------------------------
+
+function buildProductFormData(
+  payload: ProductCreatePayload | ProductUpdatePayload,
+  images: File[] = [],
+): FormData {
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (key === "assets") {
+      formData.append("assets", JSON.stringify(value));
+      return;
+    }
+    if (value !== undefined && value !== null) {
+      formData.append(key, String(value));
+    }
+  });
+
+  images.forEach((file) => {
+    formData.append("product_image", file);
+  });
+
+  return formData;
+}
+
+/** Let axios set multipart boundary; default instance Content-Type is application/json. */
+const MULTIPART_REQUEST_CONFIG = {
+  transformRequest: [
+    (data: unknown, headers: Record<string, string>) => {
+      if (typeof FormData !== "undefined" && data instanceof FormData) {
+        delete headers["Content-Type"];
+      }
+      return data;
+    },
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Service
@@ -381,25 +477,10 @@ export const ProductListService = {
   },
 
   async create(payload: ProductCreatePayload, images: File[] = []): Promise<void> {
-    const formData = new FormData();
-    Object.entries(payload).forEach(([key, value]) => {
-      if (key === "assets") {
-        formData.append("assets", JSON.stringify(value));
-        return;
-      }
-      if (value !== undefined && value !== null) {
-        formData.append(key, String(value));
-      }
-    });
-
-    images.forEach((file) => {
-      formData.append("product_image", file);
-    });
-
     const response = await axiosInstance.post(
       API_ENDPOINTS.MASTER.PRODUCT.CREATE,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
+      buildProductFormData(payload, images),
+      MULTIPART_REQUEST_CONFIG,
     );
 
     const body = response.data as Record<string, unknown>;
@@ -409,31 +490,37 @@ export const ProductListService = {
   },
 
   async update(id: string, payload: ProductUpdatePayload, images: File[] = []): Promise<void> {
-    const formData = new FormData();
-    Object.entries(payload).forEach(([key, value]) => {
-      if (key === "assets") {
-        formData.append("assets", JSON.stringify(value));
-        return;
-      }
-      if (value !== undefined && value !== null) {
-        formData.append(key, String(value));
-      }
-    });
-
-    images.forEach((file) => {
-      formData.append("product_image", file);
-    });
-
     const response = await axiosInstance.put(
       API_ENDPOINTS.MASTER.PRODUCT.UPDATE(id),
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
+      buildProductFormData(payload, images),
+      MULTIPART_REQUEST_CONFIG,
     );
 
     const body = response.data as Record<string, unknown>;
     if (!body.success) {
       throw new Error(asString(body.message) || "Failed to update product.");
     }
+  },
+
+  async getFilterDropdown(
+    fieldName: ProductFilterField,
+    signal?: AbortSignal,
+  ): Promise<ProductFilterOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.MASTER.PRODUCT.FILTER_DROPDOWN,
+      {
+        params: { field_name: fieldName },
+        signal,
+      },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return mapFilterOptions(data, fieldName);
   },
 
   async updateStatus(id: string, isActive: boolean): Promise<void> {

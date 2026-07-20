@@ -73,7 +73,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Packing Record Not Found</h1>
           <p className="text-xs text-muted-foreground">The packing or sales order details record you requested does not exist.</p>
-          <Button variant="outline" size="sm" onClick={() => router.push("/warehouse/packing")}>
+          <Button variant="outline" size="sm" onClick={() => router.back()}>
             Go Back
           </Button>
         </div>
@@ -90,9 +90,19 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const qtyLabel = getPackingQtyLabel(docType);
   const showBatchInfo = isPurchaseReturn || (rowData.products?.some((p: any) => p.batchNumber) ?? false);
 
+  const getBackPath = () => {
+    switch (docType) {
+      case "Stock Transfer": return "/warehouse/packing/stock-transfer";
+      case "Purchase Return": return "/warehouse/packing/purchase-return";
+      case "Sample Order": return "/warehouse/packing/sample";
+      case "Sales Order":
+      default: return "/warehouse/packing/sales";
+    }
+  };
+
   return (
     <RecordDetailPage
-      listHref="/warehouse/packing"
+      listHref={getBackPath()}
       listLabel="Packing"
       recordName={
         type === "order"

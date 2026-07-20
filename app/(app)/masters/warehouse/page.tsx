@@ -167,6 +167,9 @@ export default function WarehouseListPage() {
   const cityOptionsQuery = useWarehouseFilterDropdown("city", {
     enabled: isFilterOpen("city"),
   });
+  const gstNumberOptionsQuery = useWarehouseFilterDropdown("gst_number", {
+    enabled: isFilterOpen("gstNumber"),
+  });
 
   const warehouseNameOptions = useMemo(
     () => warehouseNameOptionsQuery.data ?? [],
@@ -198,6 +201,10 @@ export default function WarehouseListPage() {
   const cityOptions = useMemo(
     () => cityOptionsQuery.data ?? [],
     [cityOptionsQuery.data],
+  );
+  const gstNumberOptions = useMemo(
+    () => gstNumberOptionsQuery.data ?? [],
+    [gstNumberOptionsQuery.data],
   );
   const createdByOptions = useMemo(
     () => createdByOptionsQuery.data ?? [],
@@ -299,7 +306,8 @@ export default function WarehouseListPage() {
       header: "GST Number",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: gstNumberOptions,
       width: "150px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.gstNumber || "—"}</span>,
     },
@@ -489,6 +497,7 @@ export default function WarehouseListPage() {
     statusOptions,
     stateOptions,
     cityOptions,
+    gstNumberOptions,
     createdByOptions,
     updatedByOptions,
   ]);

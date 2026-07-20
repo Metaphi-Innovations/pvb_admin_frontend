@@ -8,7 +8,7 @@ import {
 } from "@/services/grn.service";
 import { GrnListService } from "@/services/grn-list.service";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
-import { purchaseOrderKeys } from "@/lib/procurement/purchase-order-query-keys";
+import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import type { BackendGrnSourceType } from "@/lib/warehouse/grn-status";
 import {
   salesReturnKeys,
@@ -60,7 +60,7 @@ export function useCreateGrn() {
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
         queryClient.invalidateQueries({ queryKey: grnKeys.previewNumber() }),
-        queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
+        invalidatePurchaseOrderModuleListingQueries(queryClient),
         queryClient.invalidateQueries({ queryKey: salesReturnKeys.all }),
         queryClient.invalidateQueries({ queryKey: sampleReturnKeys.all }),
         createdId
@@ -82,7 +82,7 @@ export function useUpdateGrn() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: grnKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
-        queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
+        invalidatePurchaseOrderModuleListingQueries(queryClient),
         queryClient.invalidateQueries({ queryKey: salesReturnKeys.all }),
         queryClient.invalidateQueries({ queryKey: sampleReturnKeys.all }),
         queryClient.invalidateQueries({ queryKey: grnKeys.detail(updatedId) }),

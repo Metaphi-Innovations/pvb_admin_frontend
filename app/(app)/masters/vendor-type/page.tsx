@@ -13,20 +13,25 @@ import {
 } from "lucide-react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  ListingAuditCell,
+  ListingStatusToggle,
+  isActiveStatus,
+} from "@/components/listing";
 import {
   useSupplierTypes,
   useToggleSupplierTypeStatus,
   useExportSupplierTypes,
+  useSupplierTypeFilterDropdown,
 } from "@/hooks/masters";
 import { sortStateToOrdering, type SupplierTypeListRecord } from "@/services/supplier-type.service";
 import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
   resolveListStatus,
-  type FieldMapper,
 } from "@/lib/masters/list-api-filters";
-import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -62,46 +67,99 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function VendorTypeMasterPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "supplierTypeName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  // ---- ordering / api-filters / status ----
   const ordering = useMemo(
     () => sortStateToOrdering(sort.key, sort.direction),
     [sort.key, sort.direction],
   );
 
   const apiFilters = useMemo(
-    () =>
-      mergeListRequestFilters(debouncedFilters, (MASTER_FILTER_FIELD_MAPS as unknown as Record<string, Record<string, FieldMapper>>).supplierType, {}),
-    [debouncedFilters],
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.supplierType),
+    [appliedFilters],
   );
 
   const listStatus = useMemo(
-    () => resolveListStatus(debouncedFilters, "all"),
-    [debouncedFilters],
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
     () => ({
       page,
       pageSize,
-      search: debouncedSearch,
+      search: appliedSearch,
       status: listStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
-  // ---- queries / mutations ----
   const listQuery = useSupplierTypes(listParams);
   const toggleStatusMutation = useToggleSupplierTypeStatus();
   const exportMutation = useExportSupplierTypes();
+
+  const supplierTypeNameOptionsQuery = useSupplierTypeFilterDropdown("supplier_type_name", {
+    enabled: isFilterOpen("supplierTypeName"),
+  });
+  const initialCodeOptionsQuery = useSupplierTypeFilterDropdown("initial_code", {
+    enabled: isFilterOpen("initialCode"),
+  });
+  const descriptionOptionsQuery = useSupplierTypeFilterDropdown("description", {
+    enabled: isFilterOpen("description"),
+  });
+  const statusOptionsQuery = useSupplierTypeFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+  const createdByOptionsQuery = useSupplierTypeFilterDropdown("created_by_user__username", {
+    enabled: isFilterOpen("createdBy"),
+  });
+  const updatedByOptionsQuery = useSupplierTypeFilterDropdown("updated_by_user__username", {
+    enabled: isFilterOpen("updatedBy"),
+  });
+
+  const supplierTypeNameOptions = useMemo(
+    () => supplierTypeNameOptionsQuery.data ?? [],
+    [supplierTypeNameOptionsQuery.data],
+  );
+  const initialCodeOptions = useMemo(
+    () => initialCodeOptionsQuery.data ?? [],
+    [initialCodeOptionsQuery.data],
+  );
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(
+    () =>
+      statusOptionsQuery.data?.length
+        ? statusOptionsQuery.data
+        : [
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+          ],
+    [statusOptionsQuery.data],
+  );
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
 
   const records = listQuery.data?.items ?? [];
   const totalRecords = listQuery.data?.total ?? 0;
@@ -114,19 +172,22 @@ export default function VendorTypeMasterPage() {
     })
     : null;
 
-  // ---- reset page on filter / sort change ----
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
-  // ---- auto-dismiss toast ----
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
-  // ---- status toggle ----
+  const handleFilterChange = (next: FilterState) => {
+    setFilters(next);
+    applyFilters(next);
+    setPage(1);
+  };
+
   const updateStatus = (row: SupplierTypeListRecord) => {
     const uuid = row.supplierTypeUuid;
     if (!uuid) {
@@ -151,10 +212,9 @@ export default function VendorTypeMasterPage() {
     );
   };
 
-  // ---- export ----
   const handleExport = () => {
     exportMutation.mutate(
-      { search: debouncedSearch, status: listStatus, ordering, apiFilters },
+      { search: appliedSearch, status: listStatus, ordering, apiFilters },
       {
         onError: (error) =>
           setToast({
@@ -165,78 +225,93 @@ export default function VendorTypeMasterPage() {
     );
   };
 
-  // ---- columns ----
-  const columns: ColumnConfig<SupplierTypeListRecord>[] = [
-    {
-      key: "supplierTypeName",
-      header: "Supplier Type Name",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "220px",
-      render: (_val, row) => (
-        <Link
-          href={`/masters/vendor-type/${row.supplierTypeUuid}`}
-          className="text-xs font-semibold text-foreground hover:text-brand-700"
-        >
-          {row.supplierTypeName}
-        </Link>
-      ),
-    },
-    {
-      key: "initialCode",
-      header: "Initial Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (_val, row) => (
-        <span className="font-mono text-xs font-medium text-foreground">{row.initialCode}</span>
-      ),
-    },
-    {
-      key: "description",
-      header: "Description",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "320px",
-      render: (_val, row) => row.description || "—",
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: false,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
-      width: "120px",
-      render: (_val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => updateStatus(row)} />
-      ),
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdAt} />
-      ),
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
-      ),
-    },
-  ];
+  const columns: ColumnConfig<SupplierTypeListRecord>[] = useMemo(
+    () => [
+      {
+        key: "supplierTypeName",
+        header: "Supplier Type Name",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: supplierTypeNameOptions,
+        width: "220px",
+        render: (_val, row) => (
+          <Link
+            href={`/masters/vendor-type/${row.supplierTypeUuid}`}
+            className="text-xs font-semibold text-foreground hover:text-brand-700"
+          >
+            {row.supplierTypeName}
+          </Link>
+        ),
+      },
+      {
+        key: "initialCode",
+        header: "Initial Code",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: initialCodeOptions,
+        width: "120px",
+        render: (_val, row) => (
+          <span className="font-mono text-xs font-medium text-foreground">{row.initialCode}</span>
+        ),
+      },
+      {
+        key: "description",
+        header: "Description",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: descriptionOptions,
+        width: "320px",
+        render: (_val, row) => row.description || "—",
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: statusOptions,
+        width: "120px",
+        render: (_val, row) => (
+          <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => updateStatus(row)} />
+        ),
+      },
+      {
+        key: "createdBy",
+        header: "Created By",
+        sortable: true,
+        filterable: true,
+        filterType: "audit",
+        auditUserOptions: createdByOptions,
+        width: "150px",
+        render: (_val, row) => (
+          <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
+        ),
+      },
+      {
+        key: "updatedBy",
+        header: "Updated By",
+        sortable: true,
+        filterable: true,
+        filterType: "audit",
+        auditUserOptions: updatedByOptions,
+        width: "150px",
+        render: (_val, row) => (
+          <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
+        ),
+      },
+    ],
+    [
+      supplierTypeNameOptions,
+      initialCodeOptions,
+      descriptionOptions,
+      statusOptions,
+      createdByOptions,
+      updatedByOptions,
+    ],
+  );
 
   const actions: ActionItemConfig<SupplierTypeListRecord>[] = [
     {
@@ -278,7 +353,7 @@ export default function VendorTypeMasterPage() {
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={(f) => { setFilters(f); setPage(1); }}
+          onFilterChange={handleFilterChange}
           actions={actions}
           onAdd={() => router.push("/masters/vendor-type/add")}
           addLabel="Add Supplier Type"
@@ -287,7 +362,7 @@ export default function VendorTypeMasterPage() {
           searchPlaceholder="Search supplier type name, initial code, description..."
           currentFilters={filters}
           currentSort={sort}
-
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 
