@@ -162,7 +162,16 @@ export const API_ENDPOINTS = {
       PRICING: "/master/product/pricing",
     },
     PRICING: {
+      LIST: "/master/product-pricing/list",
+      SUMMARY: "/master/product-pricing/summary",
+      CREATE: "/master/product-pricing/create",
+      UPDATE: (id: string) => `/master/product-pricing/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/product-pricing/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/product-pricing/details/${id}`,
+      EXPORT: "/master/product-pricing/export",
       DROPDOWN: "/master/product-pricing/dropdown",
+      PRODUCT_DROPDOWN: "/master/product-pricing/product-dropdown",
+      FILTER_DROPDOWN: "/master/product-pricing/filter-dropdown",
     },
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",

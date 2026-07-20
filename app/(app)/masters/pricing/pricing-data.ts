@@ -7,6 +7,12 @@ import {
 import { loadMasterRecords, saveMasterRecords } from "@/lib/masters/common";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { loadProducts, type Product } from "../products/product-data";
+import type { ProductListRecord } from "@/services/product-list.service";
+import type {
+  PricingCreatePayload,
+  PricingListRecord,
+  PricingUpdatePayload,
+} from "@/services/pricing-list.service";
 
 export { formatIndianRupeeDisplay };
 
@@ -35,6 +41,7 @@ export type DiscountType = "" | "percentage" | "flat";
 
 export interface ProductPricingSnapshot {
   id: number;
+  productUuid: string;
   productCode: string;
   sku: string;
   productName: string;
@@ -138,6 +145,9 @@ const PRODUCT_REFERENCE_DEALER_PRICE: Record<number, number> = {
 };
 
 export interface PricingRecord extends BaseMasterRecord {
+  pricingUuid?: string;
+  productUuid?: string;
+  customerTypeId?: string;
   productId: number;
   productCode: string;
   sku: string;
@@ -462,7 +472,7 @@ function migratePricingRecord(raw: Partial<PricingRecord>): PricingRecord {
     effectiveTo,
     priceListName:
       raw.priceListName ?? generatePriceListName(state, customerType),
-    costPrice: raw.costPrice ?? resolveProductCostPrice(raw.productId ?? 0),
+    costPrice: raw.costPrice ?? 0,
     mrp: raw.mrp ?? product?.mrp ?? 0,
     distributorPrice: raw.distributorPrice ?? sellingPrice,
     dealerPrice: raw.dealerPrice ?? 0,
@@ -982,6 +992,7 @@ export function resolveProductMrp(product: Product): number {
 export function buildProductPricingSnapshot(product: Product): ProductPricingSnapshot {
   return {
     id: product.id,
+    productUuid: "",
     productCode: product.productCode,
     sku: product.sku,
     productName: product.productName,
@@ -1041,7 +1052,26 @@ export function getMrpInlineError(mrp: number): string | undefined {
 export function syncPricingProductLines(
   form: PricingForm,
   selectedIds: string[],
+  catalog: ProductListRecord[] = [],
 ): PricingForm {
+  if (catalog.length > 0) {
+    const preserved = new Map(
+      form.productLines.map((line) => [line.productUuid || String(line.id), line]),
+    );
+    const productLines = selectedIds
+      .map((id) => {
+        const product = catalog.find((p) => p.productUuid === id);
+        if (!product) return null;
+        const existing = preserved.get(id);
+        return existing
+          ? mergePreservedPricingLineFromApi(existing, product)
+          : buildBulkPricingLineFromApi(product);
+      })
+      .filter((line): line is BulkPricingLine => line !== null);
+
+    return { ...form, productLines };
+  }
+
   const activeProducts = loadActiveProducts();
   const preserved = new Map(form.productLines.map((line) => [String(line.id), line]));
   const productLines = selectedIds
@@ -1416,16 +1446,12 @@ export function computePricingDashboardStats(
 
 export function getPricingProductLineInlineErrors(
   line: BulkPricingLine,
-): { costPrice?: string; dealerPrice?: string; mrp?: string } {
-  const fieldErrors: { costPrice?: string; dealerPrice?: string; mrp?: string } = {};
+): { dealerPrice?: string; mrp?: string } {
+  const fieldErrors: { dealerPrice?: string; mrp?: string } = {};
 
   const mrpError = getMrpInlineError(line.mrp);
   if (mrpError) {
     fieldErrors.mrp = mrpError;
-  }
-
-  if (line.costPrice < 0) {
-    fieldErrors.costPrice = "Cost Price cannot be negative.";
   }
 
   const dealerError = getDealerPriceInlineError(line.dealerPrice, line.mrp);
@@ -1451,14 +1477,8 @@ export function getDealerPriceInlineError(
 
 function getPricingProductLineSaveErrors(
   line: BulkPricingLine,
-): { costPrice?: string; dealerPrice?: string; mrp?: string } {
+): { dealerPrice?: string; mrp?: string } {
   const fieldErrors = getPricingProductLineInlineErrors(line);
-
-  if (!fieldErrors.costPrice) {
-    if (!line.costPrice || line.costPrice <= 0) {
-      fieldErrors.costPrice = "Cost Price is required.";
-    }
-  }
 
   if (!fieldErrors.dealerPrice) {
     if (!line.dealerPrice || line.dealerPrice <= 0) {
@@ -1505,9 +1525,6 @@ function validateAddPricingForm(
     if (lineErrors.mrp) {
       errors[`line_${idx}_mrp`] = lineErrors.mrp;
     }
-    if (lineErrors.costPrice) {
-      errors[`line_${idx}_costPrice`] = lineErrors.costPrice;
-    }
     if (lineErrors.dealerPrice) {
       errors[`line_${idx}_dealerPrice`] = lineErrors.dealerPrice;
     }
@@ -1528,10 +1545,12 @@ function validateEditPricingForm(
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
-  if (form.costPrice < 0) {
-    errors.costPrice = "Cost Price cannot be negative.";
-  } else if (!form.costPrice || form.costPrice <= 0) {
-    errors.costPrice = "Cost Price is required.";
+  if (!form.state.trim()) {
+    errors.state = "State is required.";
+  }
+
+  if (!form.customerType) {
+    errors.customerType = "Customer type is required.";
   }
 
   if (form.dealerPrice < 0) {
@@ -1597,3 +1616,172 @@ function findScopeDuplicateMessage(
 
   return undefined;
 }
+
+export function buildBulkPricingLineFromApi(product: ProductListRecord): BulkPricingLine {
+  const packSize =
+    product.packSize != null && product.packSize !== ""
+      ? String(product.packSize)
+      : "";
+
+  return {
+    id: product.id,
+    productUuid: product.productUuid,
+    productCode: product.productCode,
+    sku: product.sku,
+    productName: product.productName,
+    supplierName: product.supplier ?? "",
+    supplierCode: product.supplierCode ?? "",
+    segment: product.segment ?? "",
+    category: product.category ?? "",
+    baseUnit: product.baseUnit ?? "",
+    mou: product.mou ?? "",
+    unit: product.baseUnit ?? "",
+    packagingUnit: product.packagingUnit ?? "",
+    packSize,
+    unitsPerCase: product.unitPerCase ?? 1,
+    hsnCode: product.hsnCode ?? "",
+    gstPct: product.gstRate ?? "",
+    costPrice: 0,
+    productDealerPrice: 0,
+    mrp: product.mrp ?? 0,
+    dealerPrice: 0,
+    discountType: "",
+    discountValue: 0,
+    netSellingPrice: 0,
+    status: "active",
+  };
+}
+
+function mergePreservedPricingLineFromApi(
+  existing: BulkPricingLine,
+  product: ProductListRecord,
+): BulkPricingLine {
+  const next = buildBulkPricingLineFromApi(product);
+  return {
+    ...next,
+    costPrice: existing.costPrice,
+    dealerPrice: existing.dealerPrice,
+    netSellingPrice: existing.dealerPrice,
+    status: existing.status,
+  };
+}
+
+export function mapProductCatalogToOptions(products: ProductListRecord[]) {
+  return products.map((p) => {
+    const meta = [
+      p.sku ? `SKU: ${p.sku}` : "",
+      p.productCode ? `Code: ${p.productCode}` : "",
+      p.category ? `Category: ${p.category}` : "",
+      p.supplier ? `Supplier: ${p.supplier}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    return {
+      value: p.productUuid,
+      label: p.productName,
+      sublabel: meta || undefined,
+      searchText: [
+        p.productCode,
+        p.productName,
+        p.sku,
+        p.supplier,
+        p.supplierCode,
+        p.hsnCode,
+        p.category,
+        p.segment,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase(),
+    };
+  });
+}
+
+export function apiPricingToForm(record: PricingListRecord): PricingForm {
+  return {
+    productId: record.productUuid,
+    productCode: record.productCode,
+    productName: record.productName,
+    sku: record.sku,
+    supplierName: record.supplierName,
+    supplierCode: record.supplierCode,
+    segment: record.segment,
+    category: record.category,
+    baseUnit: record.baseUnit,
+    mou: record.mou,
+    unit: record.unit,
+    uom: record.uom,
+    packSize: record.packSize,
+    unitsPerCase: record.unitsPerCase,
+    hsnCode: record.hsnCode,
+    gstPct: record.gstPct,
+    productDealerPrice: record.productDealerPrice,
+    customerType: record.customerType,
+    state: record.state,
+    states: [record.state],
+    customerTypes: record.customerType ? [record.customerType as PricingCustomerType] : [],
+    applyToAllStates: false,
+    applyToAllCustomerTypes: false,
+    costPrice: record.costPrice,
+    mrp: record.mrp,
+    distributorPrice: record.distributorPrice,
+    dealerPrice: record.dealerPrice,
+    retailPrice: record.retailPrice,
+    farmerPrice: record.farmerPrice,
+    specialPrice: record.specialPrice,
+    discountType: record.discountType,
+    discountValue: record.discountValue,
+    netSellingPrice: record.netSellingPrice,
+    status: record.status,
+    productLines: [],
+  };
+}
+
+export function buildPricingUpdatePayload(
+  form: PricingForm,
+  record: PricingListRecord,
+  customerTypeIdByName: Record<string, string>,
+): PricingUpdatePayload {
+  const customerTypeId =
+    customerTypeIdByName[form.customerType] ?? record.customerTypeId;
+
+  return {
+    product_id: record.productUuid,
+    state_name: form.state.trim(),
+    customer_type_id: customerTypeId,
+    cost_price: form.costPrice > 0 ? form.costPrice : null,
+    dealer_price: form.dealerPrice,
+    is_active: form.status === "active",
+  };
+}
+
+export function buildPricingCreatePayloads(
+  form: PricingForm,
+  customerTypeIdByName: Record<string, string>,
+): PricingCreatePayload[] {
+  const states = resolveFormStates(form);
+  const customerTypes = resolveFormCustomerTypes(form);
+  const payloads: PricingCreatePayload[] = [];
+
+  for (const line of form.productLines) {
+    if (!line.productUuid) continue;
+    for (const state of states) {
+      for (const customerType of customerTypes) {
+        const customerTypeId = customerTypeIdByName[customerType];
+        if (!customerTypeId) continue;
+        payloads.push({
+          product_id: line.productUuid,
+          state_name: state,
+          customer_type_id: customerTypeId,
+          cost_price: line.costPrice > 0 ? line.costPrice : null,
+          dealer_price: line.dealerPrice,
+          is_active: form.status === "active",
+        });
+      }
+    }
+  }
+
+  return payloads;
+}
+

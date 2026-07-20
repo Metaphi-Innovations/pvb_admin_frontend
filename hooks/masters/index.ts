@@ -17,3 +17,4 @@ export * from "./use-customers";
 export * from "./use-supplier-types";
 export * from "./use-warehouse-master";
 export * from "./use-pincode";
+export * from "./use-pricing";

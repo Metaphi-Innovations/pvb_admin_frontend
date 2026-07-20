@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,6 @@ import {
   Edit2,
   Eye,
   IndianRupee,
-  Info,
   X,
   Trash2,
   AlertTriangle,
@@ -31,30 +30,41 @@ import { PricingForm as PricingFormFields } from "./components/PricingForm";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import {
   DEFAULT_PRICING_FORM,
-  PRICING_CUSTOMER_TYPES,
-  PRICING_STATES,
-  PRICING_STORAGE_KEY,
-  computePricingDashboardStats,
-  findDuplicateActivePricing,
-  formToPricing,
+  apiPricingToForm,
+  buildPricingUpdatePayload,
   formatIndianRupeeDisplay,
   getSellingPriceFromRecord,
-  loadActiveProductOptions,
-  loadActiveSupplierFilterOptions,
-  loadPricingRecords,
-  pricingToForm,
   validatePricingForm,
   type PricingForm,
-  type PricingRecord,
 } from "./pricing-data";
-import { saveMasterRecords, masterToday, type MasterStatus } from "@/lib/masters/common";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { applyFilters } from "@/components/listing/filter-utils";
 import { AuditUserRow, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
+import {
+  useCustomerTypeDropdown,
+  useExportPricing,
+  usePricing,
+  usePricingList,
+  usePricingSummary,
+  usePricingFilterDropdown,
+  useTogglePricingStatus,
+  useUpdatePricing,
+  PricingListService,
+  type PricingListRecord,
+} from "@/hooks/masters";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+} from "@/lib/masters/list-api-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
+import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
+import { sortStateToOrdering } from "@/services/pricing-list.service";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
 interface ToastState {
   msg: string;
@@ -88,48 +98,211 @@ function MoneyCell({ value }: { value: number }) {
 
 export default function PricingMasterPage() {
   const router = useRouter();
-  const [records, setRecords] = useState<PricingRecord[]>([]);
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "productCode", direction: "asc" });
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"edit" | "view" | null>(null);
-  const [active, setActive] = useState<PricingRecord | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const [active, setActive] = useState<PricingListRecord | null>(null);
   const [form, setForm] = useState<PricingForm>(DEFAULT_PRICING_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<PricingRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PricingListRecord | null>(null);
 
-  const productOptions = useMemo(() => loadActiveProductOptions(), [sheetMode]);
-
-  const categoryFilterOptions = useMemo(
-    () =>
-      [...new Set(records.map((r) => r.category).filter(Boolean))]
-        .sort()
-        .map((c) => ({ label: c, value: c })),
-    [records],
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
   );
 
-  const segmentFilterOptions = useMemo(
-    () =>
-      [...new Set(records.map((r) => r.segment).filter(Boolean))]
-        .sort()
-        .map((s) => ({ label: s, value: s })),
-    [records],
+  const apiFilters = useMemo(
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.pricing),
+    [appliedFilters],
   );
 
-  const supplierFilterOptions = useMemo(
-    () =>
-      loadActiveSupplierFilterOptions().map((s) => ({ label: s, value: s })),
-    [records],
+  const listStatus = useMemo(
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
   );
 
-  const dashboardStats = useMemo(() => computePricingDashboardStats(records), [records]);
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: appliedSearch,
+      status: listStatus,
+      apiFilters,
+      ordering,
+    }),
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
+  );
+
+  const listQuery = usePricingList(listParams);
+  const summaryQuery = usePricingSummary();
+  const detailQuery = usePricing(viewId);
+  const { data: customerTypes = [] } = useCustomerTypeDropdown();
+  const updateMutation = useUpdatePricing();
+  const toggleStatusMutation = useTogglePricingStatus();
+  const exportMutation = useExportPricing();
+
+  const productNameOptionsQuery = usePricingFilterDropdown("product__product_name", {
+    enabled: isFilterOpen("productName"),
+  });
+  const productCodeOptionsQuery = usePricingFilterDropdown("product__product_code", {
+    enabled: isFilterOpen("productCode"),
+  });
+  const supplierNameOptionsQuery = usePricingFilterDropdown("product__supplier__supplier_name", {
+    enabled: isFilterOpen("supplierName"),
+  });
+  const supplierCodeOptionsQuery = usePricingFilterDropdown("product__supplier_code", {
+    enabled: isFilterOpen("supplierCode"),
+  });
+  const stateOptionsQuery = usePricingFilterDropdown("state_name", {
+    enabled: isFilterOpen("state"),
+  });
+  const customerTypeOptionsQuery = usePricingFilterDropdown("customer_type__customer_type_name", {
+    enabled: isFilterOpen("customerType"),
+  });
+  const categoryOptionsQuery = usePricingFilterDropdown("product__category__categoryName", {
+    enabled: isFilterOpen("category"),
+  });
+  const segmentOptionsQuery = usePricingFilterDropdown("product__segment__segment_name", {
+    enabled: isFilterOpen("segment"),
+  });
+  const packSizeOptionsQuery = usePricingFilterDropdown("product__pack_size", {
+    enabled: isFilterOpen("packSize"),
+  });
+  const unitOptionsQuery = usePricingFilterDropdown("product__unit", {
+    enabled: isFilterOpen("unit"),
+  });
+  const gstPctOptionsQuery = usePricingFilterDropdown("product__gst_rate__gstPercentage", {
+    enabled: isFilterOpen("gstPct"),
+  });
+  const dealerPriceOptionsQuery = usePricingFilterDropdown("dealer_price", {
+    enabled: isFilterOpen("dealerPrice"),
+  });
+  const mrpOptionsQuery = usePricingFilterDropdown("product__mrp", {
+    enabled: isFilterOpen("mrp"),
+  });
+  const statusOptionsQuery = usePricingFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+
+  const productNameOptions = useMemo(
+    () => productNameOptionsQuery.data ?? [],
+    [productNameOptionsQuery.data],
+  );
+  const productCodeOptions = useMemo(
+    () => productCodeOptionsQuery.data ?? [],
+    [productCodeOptionsQuery.data],
+  );
+  const supplierNameOptions = useMemo(
+    () => supplierNameOptionsQuery.data ?? [],
+    [supplierNameOptionsQuery.data],
+  );
+  const supplierCodeOptions = useMemo(
+    () => supplierCodeOptionsQuery.data ?? [],
+    [supplierCodeOptionsQuery.data],
+  );
+  const stateOptions = useMemo(
+    () => stateOptionsQuery.data ?? [],
+    [stateOptionsQuery.data],
+  );
+  const customerTypeFilterOptions = useMemo(
+    () => customerTypeOptionsQuery.data ?? [],
+    [customerTypeOptionsQuery.data],
+  );
+  const categoryOptions = useMemo(
+    () => categoryOptionsQuery.data ?? [],
+    [categoryOptionsQuery.data],
+  );
+  const segmentOptions = useMemo(
+    () => segmentOptionsQuery.data ?? [],
+    [segmentOptionsQuery.data],
+  );
+  const packSizeOptions = useMemo(
+    () => packSizeOptionsQuery.data ?? [],
+    [packSizeOptionsQuery.data],
+  );
+  const unitOptions = useMemo(
+    () => unitOptionsQuery.data ?? [],
+    [unitOptionsQuery.data],
+  );
+  const gstPctOptions = useMemo(
+    () => gstPctOptionsQuery.data ?? [],
+    [gstPctOptionsQuery.data],
+  );
+  const dealerPriceOptions = useMemo(
+    () => dealerPriceOptionsQuery.data ?? [],
+    [dealerPriceOptionsQuery.data],
+  );
+  const mrpOptions = useMemo(
+    () => mrpOptionsQuery.data ?? [],
+    [mrpOptionsQuery.data],
+  );
+  const statusOptions = useMemo(
+    () =>
+      statusOptionsQuery.data?.length
+        ? statusOptionsQuery.data
+        : [
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+          ],
+    [statusOptionsQuery.data],
+  );
+
+  const customerTypeOptions = useMemo(
+    () =>
+      customerTypes.map((item) => ({
+        value: item.customerType,
+        label: item.customerType,
+      })),
+    [customerTypes],
+  );
+
+  const customerTypeIdByName = useMemo(
+    () =>
+      Object.fromEntries(
+        customerTypes.map((item) => [item.customerType, item.id]),
+      ),
+    [customerTypes],
+  );
+
+  const records = listQuery.data?.items ?? [];
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "pricing rules",
+        notFoundMessage: "Pricing list endpoint not found.",
+        serverMessage: "Server error while loading pricing rules.",
+      })
+    : null;
+
+  const dashboardStats = useMemo(
+    () => ({
+      totalRules: summaryQuery.data?.totalRecords ?? 0,
+      activePrices: summaryQuery.data?.activeRecords ?? 0,
+      expiredPrices: summaryQuery.data?.inactiveRecords ?? 0,
+      upcomingPrices: summaryQuery.data?.uniqueStates ?? 0,
+      bulkPriceLists: summaryQuery.data?.bulkPriceLists ?? 0,
+    }),
+    [summaryQuery.data],
+  );
 
   useEffect(() => {
-    setRecords(loadPricingRecords());
-  }, []);
+    setPage(1);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!toast) return;
@@ -137,206 +310,240 @@ export default function PricingMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = (record: PricingRecord) => {
-    const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
-
-    if (nextStatus === "active") {
-      const duplicate = findDuplicateActivePricing(
-        {
-          productId: String(record.productId),
-          customerType: record.customerType,
-          state: record.state,
-          status: "active",
-        },
-        records,
-        record.id,
-      );
-      if (duplicate) {
-        setToast({
-          msg: `Cannot activate — an active rule already exists for this product, state, and customer type.`,
-          type: "error",
-        });
-        return;
-      }
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load pricing details."),
+        type: "error",
+      });
+      setViewId(null);
+      return;
     }
+    if (detailQuery.data) {
+      setActive(detailQuery.data);
+      setForm(apiPricingToForm(detailQuery.data));
+      setSheetMode("view");
+    }
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
 
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? {
-            ...item,
-            status: nextStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
-        : item,
-    );
-    setRecords(updated);
-    saveMasterRecords(PRICING_STORAGE_KEY, updated);
-    setToast({
-      msg: `Pricing status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
+  const handleFilterChange = (next: FilterState) => {
+    setFilters(next);
+    applyFilters(next);
+    setPage(1);
   };
 
-  const columns: ColumnConfig<PricingRecord>[] = useMemo(() => [
-    {
-      key: "productCode",
-      header: "Product Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (_val, row) => (
-        <button
-          type="button"
-          onClick={() => openView(row)}
-          className="text-left text-xs font-mono font-semibold text-foreground hover:text-brand-600 hover:underline"
-        >
-          {row.productCode || row.sku}
-        </button>
-      ),
-    },
-    {
-      key: "productName",
-      header: "Product Name",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "170px",
-      render: (_val, row) => (
-        <span className="text-xs font-medium text-foreground">{row.productName}</span>
-      ),
-    },
-    {
-      key: "supplierName",
-      header: "Supplier Name",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: supplierFilterOptions,
-      width: "140px",
-      render: (_val, row) => <span className="text-xs">{row.supplierName || "—"}</span>,
-    },
-    {
-      key: "supplierCode",
-      header: "Supplier Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (_val, row) => (
-        <span className="text-xs font-mono">{row.supplierCode || "—"}</span>
-      ),
-    },
-    {
-      key: "state",
-      header: "State",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: PRICING_STATES.map((s) => ({ label: s, value: s })),
-      width: "120px",
-      render: (_val, row) => <span className="text-xs">{row.state || "—"}</span>,
-    },
-    {
-      key: "customerType",
-      header: "Customer Type",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: PRICING_CUSTOMER_TYPES.map((t) => ({ label: t, value: t })),
-      width: "110px",
-      render: (_val, row) => <span className="text-xs">{row.customerType}</span>,
-    },
-    {
-      key: "category",
-      header: "Category",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: categoryFilterOptions,
-      width: "100px",
-      render: (_val, row) => <span className="text-xs">{row.category || "—"}</span>,
-    },
-    {
-      key: "segment",
-      header: "Segment",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: segmentFilterOptions,
-      width: "100px",
-      render: (_val, row) => <span className="text-xs">{row.segment || "—"}</span>,
-    },
-    {
-      key: "packSize",
-      header: "Pack Size",
-      sortable: true,
-      width: "90px",
-      render: (_val, row) => <span className="text-xs">{row.packSize || "—"}</span>,
-    },
-    {
-      key: "unit",
-      header: "Unit",
-      sortable: true,
-      width: "80px",
-      render: (_val, row) => (
-        <span className="text-xs">{row.unit || row.mou || row.baseUnit || "—"}</span>
-      ),
-    },
-    {
-      key: "gstPct",
-      header: "GST %",
-      sortable: true,
-      width: "70px",
-      render: (_val, row) => <span className="text-xs">{row.gstPct || "—"}</span>,
-    },
-    {
-      key: "costPrice",
-      header: "Cost Price",
-      sortable: true,
-      width: "100px",
-      align: "right",
-      render: (_val, row) => <MoneyCell value={row.costPrice} />,
-    },
-    {
-      key: "dealerPrice",
-      header: "Dealer Price",
-      sortable: true,
-      width: "110px",
-      align: "right",
-      render: (_val, row) => <MoneyCell value={row.dealerPrice || getSellingPriceFromRecord(row)} />,
-    },
-    {
-      key: "mrp",
-      header: "MRP",
-      sortable: true,
-      width: "100px",
-      align: "right",
-      render: (_val, row) => <MoneyCell value={row.mrp} />,
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
-      width: "100px",
-      render: (_val, row) => (
-        <ListingStatusToggle
-          active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
-        />
-      ),
-    },
-  ], [categoryFilterOptions, segmentFilterOptions, supplierFilterOptions]);
+  const toggleStatus = (record: PricingListRecord) => {
+    const nextActive = record.status !== "active";
+    toggleStatusMutation.mutate(
+      { id: record.pricingUuid, isActive: nextActive },
+      {
+        onSuccess: () =>
+          setToast({
+            msg: `Pricing status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          }),
+        onError: (error) =>
+          setToast({
+            msg: getErrorMessage(error, "Failed to update pricing status."),
+            type: "error",
+          }),
+      },
+    );
+  };
 
-  const actions: ActionItemConfig<PricingRecord>[] = [
-    { label: "View", action: "view", icon: Eye, onClick: (row) => openView(row) },
+  const columns: ColumnConfig<PricingListRecord>[] = useMemo(
+    () => [
+      {
+        key: "productCode",
+        header: "Product Code",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: productCodeOptions,
+        width: "120px",
+        render: (_val, row) => (
+          <button
+            type="button"
+            onClick={() => openView(row)}
+            className="text-left text-xs font-mono font-semibold text-foreground hover:text-brand-600 hover:underline"
+          >
+            {row.productCode || row.sku}
+          </button>
+        ),
+      },
+      {
+        key: "productName",
+        header: "Product Name",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: productNameOptions,
+        width: "170px",
+        render: (_val, row) => (
+          <span className="text-xs font-medium text-foreground">{row.productName}</span>
+        ),
+      },
+      {
+        key: "supplierName",
+        header: "Supplier Name",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: supplierNameOptions,
+        width: "140px",
+        render: (_val, row) => <span className="text-xs">{row.supplierName || "—"}</span>,
+      },
+      {
+        key: "supplierCode",
+        header: "Supplier Code",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: supplierCodeOptions,
+        width: "110px",
+        render: (_val, row) => (
+          <span className="text-xs font-mono">{row.supplierCode || "—"}</span>
+        ),
+      },
+      {
+        key: "state",
+        header: "State",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: stateOptions,
+        width: "120px",
+        render: (_val, row) => <span className="text-xs">{row.state || "—"}</span>,
+      },
+      {
+        key: "customerType",
+        header: "Customer Type",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: customerTypeFilterOptions,
+        width: "110px",
+        render: (_val, row) => <span className="text-xs">{row.customerType}</span>,
+      },
+      {
+        key: "category",
+        header: "Category",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: categoryOptions,
+        width: "100px",
+        render: (_val, row) => <span className="text-xs">{row.category || "—"}</span>,
+      },
+      {
+        key: "segment",
+        header: "Segment",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: segmentOptions,
+        width: "100px",
+        render: (_val, row) => <span className="text-xs">{row.segment || "—"}</span>,
+      },
+      {
+        key: "packSize",
+        header: "Pack Size",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: packSizeOptions,
+        width: "90px",
+        render: (_val, row) => <span className="text-xs">{row.packSize || "—"}</span>,
+      },
+      {
+        key: "unit",
+        header: "Unit",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: unitOptions,
+        width: "80px",
+        render: (_val, row) => (
+          <span className="text-xs">{row.unit || row.mou || row.baseUnit || "—"}</span>
+        ),
+      },
+      {
+        key: "gstPct",
+        header: "GST %",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: gstPctOptions,
+        width: "70px",
+        render: (_val, row) => <span className="text-xs">{row.gstPct || "—"}</span>,
+      },
+      {
+        key: "dealerPrice",
+        header: "Dealer Price",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: dealerPriceOptions,
+        width: "110px",
+        align: "right",
+        render: (_val, row) => (
+          <MoneyCell value={row.dealerPrice || getSellingPriceFromRecord(row)} />
+        ),
+      },
+      {
+        key: "mrp",
+        header: "MRP",
+        sortable: false,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: mrpOptions,
+        width: "100px",
+        align: "right",
+        render: (_val, row) => <MoneyCell value={row.mrp} />,
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: statusOptions,
+        width: "100px",
+        render: (_val, row) => (
+          <ListingStatusToggle
+            active={isActiveStatus(row.status)}
+            onChange={() => toggleStatus(row)}
+          />
+        ),
+      },
+    ],
+    [
+      productNameOptions,
+      productCodeOptions,
+      supplierNameOptions,
+      supplierCodeOptions,
+      stateOptions,
+      customerTypeFilterOptions,
+      categoryOptions,
+      segmentOptions,
+      packSizeOptions,
+      unitOptions,
+      gstPctOptions,
+      dealerPriceOptions,
+      mrpOptions,
+      statusOptions,
+    ],
+  );
+
+  const actions: ActionItemConfig<PricingListRecord>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => openView(row),
+      disabled: () => viewLoading,
+    },
     { label: "Edit", action: "edit", icon: Edit2, onClick: (row) => openEdit(row) },
     {
       label: "Delete",
@@ -347,165 +554,97 @@ export default function PricingMasterPage() {
     },
   ];
 
-  const filtered = useMemo(() => {
-    let result = [...records];
-
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (r) =>
-          r.productCode.toLowerCase().includes(q) ||
-          r.sku.toLowerCase().includes(q) ||
-          r.productName.toLowerCase().includes(q) ||
-          (r.supplierName || "").toLowerCase().includes(q) ||
-          (r.supplierCode || "").toLowerCase().includes(q) ||
-          (r.hsnCode || "").toLowerCase().includes(q),
-      );
-    }
-
-    result = applyFilters(result, filters);
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        let aVal: string | number;
-        let bVal: string | number;
-        if (sort.key === "dealerPrice") {
-          aVal = getSellingPriceFromRecord(a);
-          bVal = getSellingPriceFromRecord(b);
-        } else {
-          aVal = a[sort.key as keyof PricingRecord] as string | number;
-          bVal = b[sort.key as keyof PricingRecord] as string | number;
-        }
-        if (typeof aVal === "number" && typeof bVal === "number") {
-          const cmp = aVal - bVal;
-          return sort.direction === "asc" ? cmp : -cmp;
-        }
-        const cmp = String(aVal ?? "")
-          .toLowerCase()
-          .localeCompare(String(bVal ?? "").toLowerCase());
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort]);
-
-  const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
-  }, [filtered, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort, pageSize]);
-
-  const openEdit = (row: PricingRecord) => {
-    setForm(pricingToForm(row));
+  const openEdit = (row: PricingListRecord) => {
+    setViewId(null);
+    setForm(apiPricingToForm(row));
     setErrors({});
     setActive(row);
     setSheetMode("edit");
   };
 
-  const openView = (row: PricingRecord) => {
-    setActive(row);
-    setForm(pricingToForm(row));
-    setSheetMode("view");
-  };
+  const openView = useCallback((row: PricingListRecord) => {
+    if (!row.pricingUuid) {
+      setToast({ msg: "Pricing id missing. Unable to load details.", type: "error" });
+      return;
+    }
+    setViewId(row.pricingUuid);
+  }, []);
 
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
+    setViewId(null);
     setErrors({});
   };
 
   const persist = () => {
     if (!active) return;
-    const list = loadPricingRecords();
-    const fieldErrors = validatePricingForm(form, list, active.id);
+    const fieldErrors = validatePricingForm(form, [], active.id);
     if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
       return;
     }
 
-    const updatedList = list.map((r) =>
-      r.id === active.id ? formToPricing(form, active.id, active) : r,
+    updateMutation.mutate(
+      {
+        id: active.pricingUuid,
+        payload: buildPricingUpdatePayload(form, active, customerTypeIdByName),
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Pricing rule updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) =>
+          setToast({
+            msg: getErrorMessage(error, "Failed to update pricing rule."),
+            type: "error",
+          }),
+      },
     );
-    saveMasterRecords(PRICING_STORAGE_KEY, updatedList);
-    setRecords(updatedList);
-    setToast({ msg: "Pricing rule updated successfully", type: "success" });
-    closeSheet();
   };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    const updated = records.map((r) =>
-      r.id === deleteTarget.id
-        ? {
-            ...r,
-            status: "inactive" as MasterStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
-        : r,
+    toggleStatusMutation.mutate(
+      { id: deleteTarget.pricingUuid, isActive: false },
+      {
+        onSuccess: () => {
+          setDeleteTarget(null);
+          setToast({
+            msg: `"${deleteTarget.productName}" marked as inactive`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setDeleteTarget(null);
+          setToast({
+            msg: getErrorMessage(error, "Failed to deactivate pricing rule."),
+            type: "error",
+          });
+        },
+      },
     );
-    saveMasterRecords(PRICING_STORAGE_KEY, updated);
-    setRecords(updated);
-    setDeleteTarget(null);
-    setToast({ msg: `"${deleteTarget.productName}" marked as inactive`, type: "success" });
   };
 
   const handleExport = () => {
-    try {
-      const headers = [
-        "Product Code",
-        "Product Name",
-        "Supplier Name",
-        "Supplier Code",
-        "State",
-        "Customer Type",
-        "Category",
-        "Segment",
-        "Pack Size",
-        "Unit",
-        "GST %",
-        "Cost Price",
-        "Dealer Price",
-        "MRP",
-        "Status",
-      ];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        csvRows.push(
-          [
-            r.productCode || r.sku,
-            `"${r.productName.replace(/"/g, '""')}"`,
-            `"${(r.supplierName || "").replace(/"/g, '""')}"`,
-            r.supplierCode,
-            r.state,
-            r.customerType,
-            r.category,
-            r.segment,
-            r.packSize,
-            r.unit || r.mou || r.baseUnit,
-            r.gstPct,
-            r.costPrice,
-            r.dealerPrice || getSellingPriceFromRecord(r),
-            r.mrp,
-            r.status,
-          ].join(","),
-        );
-      }
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `pricing_export_${masterToday()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setToast({ msg: "Pricing records exported successfully", type: "success" });
-    } catch {
-      setToast({ msg: "Failed to export pricing records", type: "error" });
-    }
+    exportMutation.mutate(
+      {
+        search: appliedSearch,
+        status: listStatus,
+        ordering,
+        apiFilters,
+      },
+      {
+        onSuccess: () =>
+          setToast({ msg: "Pricing records exported successfully", type: "success" }),
+        onError: (error) =>
+          setToast({
+            msg: PricingListService.extractErrorMessage(error, "Failed to export pricing records."),
+            type: "error",
+          }),
+      },
+    );
   };
 
   const sheetTitle = sheetMode === "edit" ? "Edit Pricing" : "View Pricing";
@@ -530,7 +669,10 @@ export default function PricingMasterPage() {
                   { label: "Category", value: active.category || "—" },
                   { label: "Segment", value: active.segment || "—" },
                   { label: "Pack Size", value: active.packSize || "—" },
-                  { label: "Unit", value: active.unit || active.mou || active.baseUnit || "—" },
+                  {
+                    label: "Unit",
+                    value: active.unit || active.mou || active.baseUnit || "—",
+                  },
                   { label: "HSN", value: active.hsnCode || "—" },
                   { label: "GST %", value: active.gstPct || "—" },
                 ].map((item) => (
@@ -547,7 +689,13 @@ export default function PricingMasterPage() {
                 {[
                   { label: "State", value: active.state },
                   { label: "Customer Type", value: active.customerType },
-                  { label: "Cost Price", value: formatIndianRupeeDisplay(active.costPrice) },
+                  {
+                    label: "Cost Price",
+                    value:
+                      active.costPrice > 0
+                        ? formatIndianRupeeDisplay(active.costPrice)
+                        : "—",
+                  },
                   {
                     label: "Dealer Price",
                     value: formatIndianRupeeDisplay(
@@ -573,12 +721,16 @@ export default function PricingMasterPage() {
                 <AuditUserRow label="Created By" name={active.createdBy} />
                 <div className="space-y-1">
                   <p className="text-[11px] text-muted-foreground">Created Date</p>
-                  <p className="text-sm font-medium text-foreground font-mono">{active.createdAt}</p>
+                  <p className="text-sm font-medium text-foreground font-mono">
+                    {active.createdAt}
+                  </p>
                 </div>
                 <AuditUserRow label="Updated By" name={active.updatedBy} />
                 <div className="space-y-1">
                   <p className="text-[11px] text-muted-foreground">Updated Date</p>
-                  <p className="text-sm font-medium text-foreground font-mono">{active.updatedAt}</p>
+                  <p className="text-sm font-medium text-foreground font-mono">
+                    {active.updatedAt}
+                  </p>
                 </div>
               </div>
             </MasterDrawerSection>
@@ -622,32 +774,32 @@ export default function PricingMasterPage() {
         </div>
       }
     >
-      <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2.5 text-xs text-blue-900">
-        <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
-        <p>
-          Sales price will be picked based on Product + Customer Type + State.
-          Sales Order integration will be handled later.
-        </p>
-      </div>
+      {listError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {listError}
+        </div>
+      )}
 
-      <MasterListing<PricingRecord>
+      <MasterListing<PricingListRecord>
         columns={columns}
-        data={paginated}
-        totalRecords={filtered.length}
+        data={records}
+        loading={loading}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={handleFilterChange}
         actions={actions}
         onAdd={() => router.push("/masters/pricing/add")}
         addLabel="Add Pricing"
         onExport={handleExport}
         emptyMessage="pricing rules"
-        searchPlaceholder="Search product code, name, supplier, SKU, or HSN..."
+        searchPlaceholder="Search product, supplier, category, segment, state..."
         currentFilters={filters}
         currentSort={sort}
+        onOpenFilter={handleOpenFilter}
       />
 
       <MasterListingSheets
@@ -675,8 +827,16 @@ export default function PricingMasterPage() {
               form={form}
               onChange={setForm}
               errors={errors}
-              productOptions={productOptions}
+              productOptions={[]}
+              customerTypeOptions={customerTypeOptions}
               mode="edit"
+              onClearError={(key) =>
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[key];
+                  return next;
+                })
+              }
             />
           ) : null
         }
@@ -713,6 +873,7 @@ export default function PricingMasterPage() {
               size="sm"
               className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
               onClick={confirmDelete}
+              disabled={toggleStatusMutation.isPending}
             >
               Mark Inactive
             </Button>

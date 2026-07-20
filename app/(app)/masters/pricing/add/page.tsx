@@ -9,14 +9,17 @@ import { cn } from "@/lib/utils";
 import { PricingForm } from "../components/PricingForm";
 import {
   DEFAULT_PRICING_FORM,
-  PRICING_STORAGE_KEY,
-  expandPricingFormToRecords,
-  loadActiveProductOptions,
-  loadPricingRecords,
+  buildPricingCreatePayloads,
+  mapProductCatalogToOptions,
   validatePricingForm,
   type PricingForm as PricingFormValues,
 } from "../pricing-data";
-import { saveMasterRecords } from "@/lib/masters/common";
+import {
+  useCreatePricing,
+  useCustomerTypeDropdown,
+  useProducts,
+  PricingListService,
+} from "@/hooks/masters";
 
 export default function AddPricingPage() {
   const router = useRouter();
@@ -24,7 +27,29 @@ export default function AddPricingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const productOptions = useMemo(() => loadActiveProductOptions(), []);
+  const { data: productsResult, isLoading: productsLoading } = useProducts({
+    page: 1,
+    pageSize: 500,
+    search: "",
+    status: "active",
+    apiFilters: { status: "Active" },
+  });
+  const { data: customerTypes = [] } = useCustomerTypeDropdown();
+  const createMutation = useCreatePricing();
+
+  const productCatalog = productsResult?.items ?? [];
+  const productOptions = useMemo(
+    () => mapProductCatalogToOptions(productCatalog),
+    [productCatalog],
+  );
+
+  const customerTypeIdByName = useMemo(
+    () =>
+      Object.fromEntries(
+        customerTypes.map((item) => [item.customerType, item.id]),
+      ),
+    [customerTypes],
+  );
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -33,9 +58,8 @@ export default function AddPricingPage() {
       return next;
     });
 
-  const handleSave = () => {
-    const list = loadPricingRecords();
-    const fieldErrors = validatePricingForm(form, list);
+  const handleSave = async () => {
+    const fieldErrors = validatePricingForm(form, []);
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) {
       const firstError = Object.values(fieldErrors)[0];
@@ -47,19 +71,32 @@ export default function AddPricingPage() {
       return;
     }
 
-    let nextId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
-    const newRecords = expandPricingFormToRecords(form, nextId);
+    const payloads = buildPricingCreatePayloads(form, customerTypeIdByName);
+    if (payloads.length === 0) {
+      setToast({ msg: "No pricing records to create.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+      return;
+    }
 
-    const updatedList = [...list, ...newRecords];
-    saveMasterRecords(PRICING_STORAGE_KEY, updatedList);
-    setToast({
-      msg:
-        newRecords.length > 1
-          ? `${newRecords.length} pricing rules added successfully.`
-          : "Pricing rule added successfully.",
-      type: "success",
-    });
-    setTimeout(() => router.push("/masters/pricing"), 900);
+    try {
+      for (const payload of payloads) {
+        await createMutation.mutateAsync(payload);
+      }
+      setToast({
+        msg:
+          payloads.length > 1
+            ? `${payloads.length} pricing rules added successfully.`
+            : "Pricing rule added successfully.",
+        type: "success",
+      });
+      setTimeout(() => router.push("/masters/pricing"), 900);
+    } catch (error) {
+      setToast({
+        msg: PricingListService.extractErrorMessage(error, "Failed to create pricing rules."),
+        type: "error",
+      });
+      setTimeout(() => setToast(null), 3200);
+    }
   };
 
   return (
@@ -81,6 +118,7 @@ export default function AddPricingPage() {
             type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={createMutation.isPending || productsLoading}
           >
             <Save className="w-4 h-4" /> Save
           </Button>
@@ -92,6 +130,7 @@ export default function AddPricingPage() {
         onChange={setForm}
         errors={errors}
         productOptions={productOptions}
+        productCatalog={productCatalog}
         mode="add"
         onClearError={clearErr}
       />
