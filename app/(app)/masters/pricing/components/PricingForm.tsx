@@ -12,6 +12,7 @@ import {
   pricingReadonly,
 } from "./pricing-form-styles";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { BulkPricingGrid } from "./BulkPricingGrid";
 import { PricingProductMultiSelect } from "./PricingProductMultiSelect";
 import { PricingScopeMultiSelect } from "./PricingScopeMultiSelect";
@@ -28,6 +29,7 @@ import {
   type PricingCustomerType,
   type PricingForm,
 } from "../pricing-data";
+import type { ProductListRecord } from "@/services/product-list.service";
 
 function PricingFormGrid({
   children,
@@ -77,6 +79,8 @@ export interface PricingFormProps {
   onChange: (form: PricingForm) => void;
   errors: Record<string, string>;
   productOptions: { value: string; label: string; sublabel?: string; searchText?: string }[];
+  productCatalog?: ProductListRecord[];
+  customerTypeOptions?: { value: string; label: string }[];
   mode?: "add" | "edit";
   onClearError?: (key: string) => void;
 }
@@ -86,6 +90,8 @@ export function PricingForm({
   onChange,
   errors,
   productOptions,
+  productCatalog = [],
+  customerTypeOptions,
   mode = "add",
   onClearError,
 }: PricingFormProps) {
@@ -96,6 +102,10 @@ export function PricingForm({
     errors.dealerPrice || getDealerPriceInlineError(form.dealerPrice, form.mrp);
   const editMrpError = errors.mrp || getMrpInlineError(form.mrp);
   const hasSyncedProductMrp = useRef(false);
+  const resolvedCustomerTypeOptions =
+    customerTypeOptions ??
+    PRICING_CUSTOMER_TYPES.map((type) => ({ value: type, label: type }));
+  const stateOptions = PRICING_STATES.map((state) => ({ value: state, label: state }));
 
   useEffect(() => {
     if (mode !== "add" || hasSyncedProductMrp.current || form.productLines.length === 0) {
@@ -103,7 +113,7 @@ export function PricingForm({
     }
 
     const selectedIds = form.productLines.map((line) => String(line.id));
-    const synced = syncPricingProductLines(form, selectedIds);
+    const synced = syncPricingProductLines(form, selectedIds, productCatalog);
     const mrpChanged = synced.productLines.some(
       (line, index) => line.mrp !== form.productLines[index]?.mrp,
     );
@@ -141,7 +151,7 @@ export function PricingForm({
   };
 
   const handleProductSelectionChange = (selectedIds: string[]) => {
-    const next = syncPricingProductLines(form, selectedIds);
+    const next = syncPricingProductLines(form, selectedIds, productCatalog);
     onChange(next);
     onClearError?.("productLines");
   };
@@ -176,18 +186,52 @@ export function PricingForm({
 
         <PricingFormSection title="Pricing Scope">
           <PricingFormGrid>
-            <MasterField label="State">
-              <Input readOnly className={pricingReadonly()} value={form.state} />
+            <MasterField label="State" required error={errors.state}>
+              <FieldWidth size="medium">
+                <AutocompleteSelect
+                  options={stateOptions}
+                  value={form.state}
+                  onChange={(value) => {
+                    onChange({
+                      ...form,
+                      state: value,
+                      states: value ? [value] : [],
+                    });
+                    onClearError?.("state");
+                  }}
+                  placeholder="Select state..."
+                  searchPlaceholder="Search state..."
+                  className={cn(pricingInput(), errors.state && "border-red-400")}
+                  error={Boolean(errors.state)}
+                />
+              </FieldWidth>
             </MasterField>
-            <MasterField label="Customer Type">
-              <Input readOnly className={pricingReadonly()} value={form.customerType} />
+            <MasterField label="Customer Type" required error={errors.customerType}>
+              <FieldWidth size="medium">
+                <AutocompleteSelect
+                  options={resolvedCustomerTypeOptions}
+                  value={form.customerType}
+                  onChange={(value) => {
+                    onChange({
+                      ...form,
+                      customerType: value as PricingForm["customerType"],
+                      customerTypes: value ? [value as PricingCustomerType] : [],
+                    });
+                    onClearError?.("customerType");
+                  }}
+                  placeholder="Select customer type..."
+                  searchPlaceholder="Search customer type..."
+                  className={cn(pricingInput(), errors.customerType && "border-red-400")}
+                  error={Boolean(errors.customerType)}
+                />
+              </FieldWidth>
             </MasterField>
           </PricingFormGrid>
         </PricingFormSection>
 
         <PricingFormSection title="Price Details">
           <PricingFormGrid className="md:grid-cols-2 lg:grid-cols-3">
-            <MasterField label="Cost Price" required error={errors.costPrice}>
+            <MasterField label="Cost Price">
               <FieldWidth size="narrow">
                 <IndianRupeeInput
                   value={form.costPrice}
