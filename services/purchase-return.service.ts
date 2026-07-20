@@ -49,6 +49,27 @@ function toDisplayName(user: unknown): string {
   return `${asString(record.first_name)} ${asString(record.last_name)}`.trim();
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function mapSupplierTypeName(
+  supplier: Record<string, unknown>,
+  snapshot?: Record<string, unknown>,
+): string {
+  const supplierType = asRecord(supplier.supplier_type);
+  const snapshotType = snapshot ? asRecord(snapshot.supplier_type) : {};
+  return (
+    asString(supplierType.supplier_type_name) ||
+    asString(snapshotType.supplier_type_name) ||
+    asString(snapshot?.supplier_type) ||
+    ""
+  );
+}
+
 type BackendStatus = PurchaseReturnStatus;
 
 function mapAdditionalCharges(raw: unknown): ProcurementAdditionalCharge[] {
@@ -90,6 +111,7 @@ function mapPackingFields(raw: Record<string, unknown>): {
 
 function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
   const supplier = (raw.supplier ?? {}) as Record<string, unknown>;
+  const supplierSnapshot = (raw.supplier_snapshot ?? {}) as Record<string, unknown>;
   const warehouse = (raw.warehouse ?? {}) as Record<string, unknown>;
   const po = (raw.purchase_order ?? {}) as Record<string, unknown>;
   const productsCount = asNumber(((raw._count ?? {}) as Record<string, unknown>).products);
@@ -100,8 +122,10 @@ function mapListItem(raw: Record<string, unknown>): PurchaseReturn {
     poId: asString(raw.purchase_order_id),
     poNumber: asString(po.po_no),
     supplierId: asString(raw.supplier_id),
-    supplierCode: asString(supplier.supplier_code),
-    supplierName: asString(supplier.supplier_name),
+    supplierCode: asString(supplier.supplier_code) || asString(supplierSnapshot.supplier_code),
+    supplierName:
+      asString(supplier.supplier_name) || asString(supplierSnapshot.supplier_name),
+    supplierType: mapSupplierTypeName(supplier, supplierSnapshot),
     warehouseId: asString(raw.warehouse_id),
     warehouseName: asString(warehouse.warehouse_name),
     initiatedBy: toDisplayName(raw.created_by_user),
@@ -198,6 +222,8 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     batchGroupKey: asString(raw.batch_group_key) || undefined,
     inventoryDetailId: asString(raw.inventory_detail_id),
     inventoryRejectedItemId: asString(raw.inventory_rejected_item_id),
+    stockWarehouseId: asString(raw.warehouse_id) || undefined,
+    stockWarehouseName: asString(raw.warehouse_name) || undefined,
     mfgDate: asDateOnly(raw.manufacture_date),
     expDate: asDateOnly(raw.expiry_date),
     caseSize,
@@ -240,6 +266,7 @@ function mapDetailItem(raw: Record<string, unknown>): PurchaseReturnItem {
 
 function mapDetail(raw: Record<string, unknown>): PurchaseReturn {
   const supplier = (raw.supplier ?? {}) as Record<string, unknown>;
+  const supplierSnapshot = (raw.supplier_snapshot ?? {}) as Record<string, unknown>;
   const warehouse = (raw.warehouse ?? {}) as Record<string, unknown>;
   const po = (raw.purchase_order ?? {}) as Record<string, unknown>;
   const products = Array.isArray(raw.products) ? raw.products : [];
@@ -252,8 +279,10 @@ function mapDetail(raw: Record<string, unknown>): PurchaseReturn {
     poId: asString(raw.purchase_order_id),
     poNumber: asString(po.po_no),
     supplierId: asString(raw.supplier_id),
-    supplierCode: asString(supplier.supplier_code),
-    supplierName: asString(supplier.supplier_name),
+    supplierCode: asString(supplier.supplier_code) || asString(supplierSnapshot.supplier_code),
+    supplierName:
+      asString(supplier.supplier_name) || asString(supplierSnapshot.supplier_name),
+    supplierType: mapSupplierTypeName(supplier, supplierSnapshot),
     warehouseId: asString(raw.warehouse_id),
     warehouseName: asString(warehouse.warehouse_name),
     initiatedBy: toDisplayName(raw.created_by_user),
@@ -533,8 +562,9 @@ export const PurchaseReturnService = {
       poId: String(po.id),
       poNumber: po.poNumber,
       supplierId: asString(po.supplierId),
-      supplierCode: "",
+      supplierCode: asString(po.supplierCode),
       supplierName: po.supplierName,
+      supplierType: po.supplierType,
       warehouseId: asString(po.warehouseId),
       warehouseName: po.warehouseName,
       initiatedBy: "",
@@ -556,11 +586,22 @@ export const PurchaseReturnService = {
   },
 
   toWritePayload(record: PurchaseReturn): Record<string, unknown> {
+    const selectedItems = record.items.filter((item) => item.selected && item.returnQty > 0);
+    const stockWarehouseIds = [
+      ...new Set(
+        selectedItems
+          .map((item) => item.stockWarehouseId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const warehouseId =
+      stockWarehouseIds.length === 1 ? stockWarehouseIds[0] : record.warehouseId;
+
     return {
       return_no: record.returnNumber || undefined,
       purchase_order_id: record.poId,
       supplier_id: record.supplierId,
-      warehouse_id: record.warehouseId,
+      warehouse_id: warehouseId,
       return_date: record.returnDate,
       remarks: record.overallRemarks || undefined,
       additional_charges: (record.additionalCharges ?? []).map((item) => ({
@@ -582,8 +623,7 @@ export const PurchaseReturnService = {
       gst_amount: round2(record.summary.totalCgst + record.summary.totalSgst + record.summary.totalIgst),
       grand_total: record.summary.grandTotal,
       attachment_urls: record.attachments ?? [],
-      products: record.items
-        .filter((item) => item.selected && item.returnQty > 0)
+      products: selectedItems
         .map((item) => ({
           purchase_order_product_id: item.purchaseOrderProductId || undefined,
           product_id: item.productId,

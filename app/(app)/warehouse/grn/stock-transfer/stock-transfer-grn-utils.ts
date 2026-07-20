@@ -342,7 +342,10 @@ export async function buildStockTransferLinesFromDispatch(
       1;
 
     return {
-      sourceItemId: asString(item.source_item_id) || asString(item.id),
+      sourceItemId:
+        asString(item.source_item_id) ||
+        asString(pdProduct?.source_item_id) ||
+        "",
       productId: asString(item.product_id || product.product_id),
       sku: asString(product.product_code) || asString(productSnapshot.product_code),
       productName: asString(product.product_name) || asString(productSnapshot.product_name) || "—",

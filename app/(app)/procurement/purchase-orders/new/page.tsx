@@ -21,9 +21,7 @@ import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 export default function NewPOPage() {
   return (
-    <Suspense
-      fallback={<POFormPageSkeleton />}
-    >
+    <Suspense fallback={<POFormPageSkeleton />}>
       <NewPOContent />
     </Suspense>
   );

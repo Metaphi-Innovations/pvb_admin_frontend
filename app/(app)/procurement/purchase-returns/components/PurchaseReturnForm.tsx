@@ -109,6 +109,10 @@ export function PurchaseReturnForm({
               <ReadOnlyField value={record.supplierName} />
             </div>
             <div className="space-y-1">
+              <Label className="text-xs font-medium">Supplier Type</Label>
+              <ReadOnlyField value={record.supplierType} />
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs font-medium">Supplier Code</Label>
               <ReadOnlyField value={record.supplierCode} mono />
             </div>

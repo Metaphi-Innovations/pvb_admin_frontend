@@ -12,7 +12,10 @@ import {
   Scissors,
   Upload,
 } from "lucide-react";
-import { RecordDetailPage, type RecordDetailTab } from "@/components/record-detail";
+import {
+  RecordDetailPage,
+  type RecordDetailTab,
+} from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import { UploadVendorInvoiceDialog } from "../components/UploadVendorInvoiceDialog";
 import { ShortClosePOModal } from "../components/ShortClosePOModal";
@@ -27,7 +30,10 @@ import {
   type POActionConfirmType,
 } from "../components/POActionConfirmModal";
 import { Toast } from "../../components/ProcurementUI";
-import { PurchaseOrderForm, poToFormValues } from "../components/PurchaseOrderForm";
+import {
+  PurchaseOrderForm,
+  poToFormValues,
+} from "../components/PurchaseOrderForm";
 import { PO_STATUS_CFG, type POStatus } from "../po-data";
 import { getPOTotalItems } from "../po-listing-utils";
 import { canShortClosePO } from "../po-qty";
@@ -57,8 +63,15 @@ const PO_TABS: RecordDetailTab[] = [
   { value: "follow-up", label: "Follow-up" },
 ];
 
-function poStatusVariant(status: POStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "approved" || status === "invoice_uploaded" || status === "received") return "active";
+function poStatusVariant(
+  status: POStatus,
+): "active" | "inactive" | "draft" | "blocked" | "neutral" {
+  if (
+    status === "approved" ||
+    status === "invoice_uploaded" ||
+    status === "received"
+  )
+    return "active";
   if (status === "draft") return "draft";
   if (status === "rejected" || status === "cancelled") return "blocked";
   if (status === "pending_approval") return "neutral";
@@ -80,12 +93,22 @@ export default function PODetailPage() {
   const po = detailQuery.data;
   // console.log(po);
   const [activeTab, setActiveTab] = useState("overview");
-  const [uploadOpen, setUploadOpen] = useState(searchParams.get("upload") === "1");
-  const [shortCloseOpen, setShortCloseOpen] = useState(searchParams.get("shortClose") === "1");
+  const [uploadOpen, setUploadOpen] = useState(
+    searchParams.get("upload") === "1",
+  );
+  const [shortCloseOpen, setShortCloseOpen] = useState(
+    searchParams.get("shortClose") === "1",
+  );
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
-  const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [rawDetail, setRawDetail] = useState<Record<string, unknown> | null>(null);
+  const [actionConfirmType, setActionConfirmType] =
+    useState<POActionConfirmType>("close");
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: "success" | "error";
+  } | null>(null);
+  const [rawDetail, setRawDetail] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [rawLoading, setRawLoading] = useState(false);
 
   useEffect(() => {
@@ -123,7 +146,8 @@ export default function PODetailPage() {
     if (typeof window === "undefined") return;
     const hash = window.location.hash;
     if (hash === "#follow-up-history") setActiveTab("follow-up");
-    if (hash === "#vendor-invoice" || hash === "#three-way-match") setActiveTab("integration");
+    if (hash === "#vendor-invoice" || hash === "#three-way-match")
+      setActiveTab("integration");
   }, [id]);
 
   useEffect(() => {
@@ -140,7 +164,10 @@ export default function PODetailPage() {
     return (
       <div className="p-8 text-sm text-muted-foreground">
         {getErrorMessage(detailQuery.error, "Purchase order not found.")}{" "}
-        <Link href="/procurement/purchase-orders" className="text-brand-600 hover:underline">
+        <Link
+          href="/procurement/purchase-orders"
+          className="text-brand-600 hover:underline"
+        >
           Back
         </Link>
       </div>
@@ -148,7 +175,8 @@ export default function PODetailPage() {
   }
 
   const canUploadInvoice = canUploadPOInvoice(po);
-  const statusLabel = PO_STATUS_CFG[po.status]?.label ?? getPOStatusLabel(po.status);
+  const statusLabel =
+    PO_STATUS_CFG[po.status]?.label ?? getPOStatusLabel(po.status);
 
   const headerActions = (
     <>
@@ -157,7 +185,9 @@ export default function PODetailPage() {
           variant="outline"
           size="sm"
           className="h-8 text-xs gap-1.5"
-          onClick={() => router.push(`/procurement/purchase-orders/${po.id}/edit`)}
+          onClick={() =>
+            router.push(`/procurement/purchase-orders/${po.id}/edit`)
+          }
         >
           <Edit2 className="w-3.5 h-3.5" /> Edit
         </Button>
@@ -172,11 +202,21 @@ export default function PODetailPage() {
         </Button>
       )}
       {canShortClosePO(po) && (
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShortCloseOpen(true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => setShortCloseOpen(true)}
+        >
           <Scissors className="w-3.5 h-3.5" /> Short Close PO
         </Button>
       )}
-      {["approved", "invoice_uploaded", "partially_received", "received"].includes(po.status) && (
+      {[
+        "approved",
+        "invoice_uploaded",
+        "partially_received",
+        "received",
+      ].includes(po.status) && (
         <Button
           variant="outline"
           size="sm"
@@ -259,13 +299,16 @@ export default function PODetailPage() {
             <POClosureInformation po={po} />
           </div>
         )}
-        {activeTab === "integration" && (
-          rawLoading ? (
+        {activeTab === "integration" &&
+          (rawLoading ? (
             <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
               <div className="h-8 w-44 rounded bg-muted animate-pulse" />
               <div className="mt-4 space-y-3">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <div key={idx} className="h-10 rounded bg-muted/60 animate-pulse" />
+                  <div
+                    key={idx}
+                    className="h-10 rounded bg-muted/60 animate-pulse"
+                  />
                 ))}
               </div>
             </div>
@@ -276,15 +319,17 @@ export default function PODetailPage() {
               invoices={invoices}
               onUpload={() => setUploadOpen(true)}
             />
-          )
-        )}
-        {activeTab === "follow-up" && (
-          rawLoading ? (
+          ))}
+        {activeTab === "follow-up" &&
+          (rawLoading ? (
             <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
               <div className="h-8 w-48 rounded bg-muted animate-pulse" />
               <div className="mt-4 space-y-3">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <div key={idx} className="h-10 rounded bg-muted/60 animate-pulse" />
+                  <div
+                    key={idx}
+                    className="h-10 rounded bg-muted/60 animate-pulse"
+                  />
                 ))}
               </div>
             </div>
@@ -309,7 +354,10 @@ export default function PODetailPage() {
                     },
                     onError: (error) => {
                       setToast({
-                        msg: getErrorMessage(error, "Failed to save follow-up."),
+                        msg: getErrorMessage(
+                          error,
+                          "Failed to save follow-up.",
+                        ),
                         type: "error",
                       });
                     },
@@ -319,8 +367,7 @@ export default function PODetailPage() {
               submitting={followupMutation.isPending}
               onToast={(msg) => setToast({ msg, type: "success" })}
             />
-          )
-        )}
+          ))}
       </RecordDetailPage>
 
       <UploadVendorInvoiceDialog
@@ -373,7 +420,9 @@ export default function PODetailPage() {
             {
               onSuccess: () => {
                 setShortCloseOpen(false);
-                router.push("/procurement/purchase-orders?toast=po-short-closed");
+                router.push(
+                  "/procurement/purchase-orders?toast=po-short-closed",
+                );
               },
               onError: (error) => {
                 setToast({
@@ -393,12 +442,16 @@ export default function PODetailPage() {
         action={actionConfirmType}
         submitting={closeMutation.isPending || cancelMutation.isPending}
         onConfirm={() => {
-          const mutation = actionConfirmType === "close" ? closeMutation : cancelMutation;
+          const mutation =
+            actionConfirmType === "close" ? closeMutation : cancelMutation;
           mutation.mutate(po.id, {
             onSuccess: () => {
               setActionConfirmOpen(false);
               setToast({
-                msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
+                msg:
+                  actionConfirmType === "close"
+                    ? "PO closed."
+                    : "PO cancelled.",
                 type: "success",
               });
               void detailQuery.refetch();

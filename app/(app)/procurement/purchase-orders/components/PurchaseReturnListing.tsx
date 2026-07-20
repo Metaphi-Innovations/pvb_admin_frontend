@@ -149,7 +149,7 @@ export function PurchaseReturnListing() {
         render: (_val, row) => (
           <button
             type="button"
-            onClick={() => router.push(purchaseReturnRoutes.detail(row.id))}
+            onClick={() => router.push(purchaseReturnRoutes.detail(row.id, "por"))}
             className="text-left"
           >
             <p className="font-semibold text-brand-700 text-xs hover:underline font-mono">
@@ -267,7 +267,7 @@ export function PurchaseReturnListing() {
               <DropdownMenuSeparator />
               <button
                 type="button"
-                onClick={() => router.push(purchaseReturnRoutes.detail(row.id))}
+                onClick={() => router.push(purchaseReturnRoutes.detail(row.id, "por"))}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
               >
                 <Eye className="w-3.5 h-3.5" /> View
@@ -275,7 +275,7 @@ export function PurchaseReturnListing() {
               {canEditPurchaseReturn(row) && (
                 <button
                   type="button"
-                  onClick={() => router.push(purchaseReturnRoutes.edit(row.id))}
+                  onClick={() => router.push(purchaseReturnRoutes.edit(row.id, "por"))}
                   className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 rounded-sm"
                 >
                   <Edit2 className="w-3.5 h-3.5" /> Edit
