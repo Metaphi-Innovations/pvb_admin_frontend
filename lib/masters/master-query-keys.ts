@@ -246,4 +246,20 @@ export const masterKeys = {
     previewNumber: () => [...masterKeys.supplierTypes.all(), "preview-number"] as const,
     export: () => [...masterKeys.supplierTypes.all(), "export"] as const,
   },
+
+  pricing: {
+    all: () => [...masterKeys.all, "pricing"] as const,
+    lists: () => [...masterKeys.pricing.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.pricing.lists(), params] as const,
+    details: () => [...masterKeys.pricing.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.pricing.details(), id] as const,
+    dropdown: () => [...masterKeys.pricing.all(), "dropdown"] as const,
+    productDropdown: () => [...masterKeys.pricing.all(), "product-dropdown"] as const,
+    filterDropdowns: () => [...masterKeys.pricing.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.pricing.filterDropdowns(), fieldName] as const,
+    export: () => [...masterKeys.pricing.all(), "export"] as const,
+    summary: () => [...masterKeys.pricing.all(), "summary"] as const,
+  },
 } as const;

@@ -499,6 +499,43 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
 
+  pricing: {
+    productCode: "product.product_code",
+    productName: "product.product_name",
+    sku: "product.sku",
+    supplierName: "product.supplier.supplier_name",
+    supplierCode: "product.supplier_code",
+    state: "state_name",
+    customerType: "customer_type.customer_type_name",
+    category: "product.category.categoryName",
+    segment: "product.segment.segment_name",
+    packSize: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw).trim());
+      return Number.isFinite(num) ? { product: { pack_size: num } } : null;
+    },
+    unit: "product.unit",
+    gstPct: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw).replace(/%/g, "").trim());
+      return Number.isFinite(num)
+        ? { product: { gst_rate: { gstPercentage: num } } }
+        : null;
+    },
+    dealerPrice: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw).trim());
+      return Number.isFinite(num) ? { dealer_price: num } : null;
+    },
+    mrp: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw).trim());
+      return Number.isFinite(num) ? { product: { mrp: num } } : null;
+    },
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+
   warehouse: {
     warehouseName: "warehouse_name",
     operatedBy: "operated_by",
