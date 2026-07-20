@@ -375,14 +375,13 @@ export default function PurchaseOrdersPageClient() {
 
   const summary = summaryQuery.data;
 
-  /** Only map KPI fields that exist on the backend summary response. */
   const poListingKpis = useMemo<POListingKpis>(() => ({
     total: summary?.total ?? 0,
-    openPo: 0,
-    partialReceived: 0,
-    fullyReceived: 0,
+    openPo: summary?.openPo ?? 0,
+    partialReceived: summary?.partialReceived ?? 0,
+    fullyReceived: summary?.fullyReceived ?? 0,
     closedPo: summary?.closedPo ?? 0,
-    totalPoValue: 0,
+    totalPoValue: summary?.totalPoValue ?? 0,
   }), [summary]);
 
   useEffect(() => {
@@ -627,7 +626,7 @@ export default function PurchaseOrdersPageClient() {
               <>
                 <button
                   type="button"
-                  onClick={() => router.push(purchaseReturnRoutes.new(row.id))}
+                  onClick={() => router.push(purchaseReturnRoutes.new(row.id, "po"))}
                   className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
                 >
                   Purchase Return

@@ -46,12 +46,13 @@ export interface PurchaseOrderListResult {
   total: number;
 }
 
-/** Only fields that match backend `/summary` are populated; others stay 0. */
 export interface PurchaseOrderListSummary {
   total: number;
+  openPo: number;
+  partialReceived: number;
+  fullyReceived: number;
   closedPo: number;
-  draftPo: number;
-  pendingApproval: number;
+  totalPoValue: number;
 }
 
 export interface PurchaseOrderFilterOption {
@@ -157,9 +158,11 @@ function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
 function mapSummary(raw: Record<string, unknown>): PurchaseOrderListSummary {
   return {
     total: asNumber(raw.totalPO),
-    closedPo: asNumber(raw.closedPO),
-    draftPo: asNumber(raw.draftPO),
-    pendingApproval: asNumber(raw.pendingApproval),
+    openPo: asNumber(raw.openPo),
+    partialReceived: asNumber(raw.partialReceived),
+    fullyReceived: asNumber(raw.fullyReceived),
+    closedPo: asNumber(raw.closedPo),
+    totalPoValue: asNumber(raw.totalPoValue),
   };
 }
 

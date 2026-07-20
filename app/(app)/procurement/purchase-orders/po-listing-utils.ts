@@ -6,16 +6,21 @@ import type { ThreeWayMatchStatus } from "@/lib/erp/three-way-match";
 export type POListingInvoiceStatus = "not_uploaded" | "uploaded";
 export type POListingThreeWayMatchStatus = ThreeWayMatchStatus;
 
-export function getPOListingInvoiceStatus(po: PurchaseOrder): POListingInvoiceStatus {
+export function getPOListingInvoiceStatus(
+  po: PurchaseOrder,
+): POListingInvoiceStatus {
   return getPOInvoiceListingStatus(po);
 }
 
-export function getPOListingThreeWayMatchStatus(po: PurchaseOrder): POListingThreeWayMatchStatus {
+export function getPOListingThreeWayMatchStatus(
+  po: PurchaseOrder,
+): POListingThreeWayMatchStatus {
   return computeThreeWayMatch(po).status;
 }
 
 export function getPOTotalItems(po: PurchaseOrder): number {
-  return po.lines.filter((l) => Boolean(l.productId) || Boolean(l.productName)).length;
+  return po.lines.filter((l) => Boolean(l.productId) || Boolean(l.productName))
+    .length;
 }
 
 export function getPOTotalSkuQty(po: PurchaseOrder): number {
@@ -28,5 +33,9 @@ export function getPOTotalAmount(po: PurchaseOrder): number {
 
 export function getVendorSecondaryLine(po: PurchaseOrder): string {
   if (po.supplierGstin?.trim()) return "GST Registered";
-  return po.supplierType ? po.supplierType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "";
+  return po.supplierType
+    ? po.supplierType
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+    : "";
 }

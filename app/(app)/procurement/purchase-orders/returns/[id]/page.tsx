@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Send, IndianRupee, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,20 +16,39 @@ import {
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import {
   canEditPurchaseReturn,
+  parsePurchaseReturnNavSource,
   purchaseReturnListHref,
   purchaseReturnRoutes,
+  resolvePurchaseReturnBackHref,
+  resolvePurchaseReturnRedirectWithToast,
   validateReturnItems,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
 import { usePurchaseReturn, useUpdatePurchaseReturn } from "@/hooks/procurement";
+import { useFlashToast } from "../../../hooks/useFlashToast";
+import { Toast } from "../../../components/ProcurementUI";
 
 export default function PurchaseReturnDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+      <PurchaseReturnDetailContent />
+    </Suspense>
+  );
+}
+
+function PurchaseReturnDetailContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = String(params.id);
+  const from = parsePurchaseReturnNavSource(searchParams.get("from"));
+  const backHref = resolvePurchaseReturnBackHref(from);
   const [record, setRecord] = useState<PurchaseReturn | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const detailQuery = usePurchaseReturn(id);
   const updateMutation = useUpdatePurchaseReturn();
+
+  useFlashToast(setToast);
 
   useEffect(() => {
     if (detailQuery.data) setRecord(detailQuery.data);
@@ -59,29 +78,35 @@ export default function PurchaseReturnDetailPage() {
     }
     updateMutation.mutate(
       { id: String(record.id), record },
-      { onSuccess: () => router.push(`${purchaseReturnListHref()}&toast=pret-submitted`) },
+      {
+        onSuccess: () =>
+          router.push(resolvePurchaseReturnRedirectWithToast(from, "pret-submitted")),
+      },
     );
   };
 
   if (isDraft) {
     return (
-      <PReturnFormLayout
-        mode="view"
-        returnNumber={record.returnNumber}
-        footer={
-          <PReturnFormFooter
-            readOnly
-            onCancel={() => router.push(purchaseReturnListHref())}
-          />
-        }
-      >
+      <>
+        {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+        <PReturnFormLayout
+          mode="view"
+          returnNumber={record.returnNumber}
+          backHref={backHref}
+          footer={
+            <PReturnFormFooter
+              readOnly
+              onCancel={() => router.push(backHref)}
+            />
+          }
+        >
         <div className="flex justify-end gap-2 mb-3">
           {canEdit && (
             <Button
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => router.push(purchaseReturnRoutes.edit(id))}
+              onClick={() => router.push(purchaseReturnRoutes.edit(id, from))}
             >
               Edit Draft
             </Button>
@@ -97,13 +122,16 @@ export default function PurchaseReturnDetailPage() {
           )}
         </div>
         <PurchaseReturnForm record={record} onChange={() => {}} readOnly errors={errors} />
-      </PReturnFormLayout>
+        </PReturnFormLayout>
+      </>
     );
   }
 
   return (
-    <RecordDetailPage
-      listHref={purchaseReturnListHref()}
+    <>
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      <RecordDetailPage
+      listHref={backHref}
       listLabel="Purchase Order"
       recordName="Purchase Return"
       recordCode={record.returnNumber}
@@ -167,6 +195,7 @@ export default function PurchaseReturnDetailPage() {
       onTabChange={() => {}}
     >
       <PurchaseReturnForm record={record} onChange={() => {}} readOnly />
-    </RecordDetailPage>
+      </RecordDetailPage>
+    </>
   );
 }

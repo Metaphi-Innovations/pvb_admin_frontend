@@ -110,6 +110,7 @@ export interface PurchaseReturn {
   supplierId: number | string;
   supplierCode: string;
   supplierName: string;
+  supplierType: string;
   warehouseId: string;
   warehouseName: string;
   initiatedBy: string;
