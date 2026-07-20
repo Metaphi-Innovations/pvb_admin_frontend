@@ -1,5 +1,6 @@
 /**
- * Pending credit notes — sales returns and scheme settlements awaiting CN generation.
+ * Pending credit notes — sales returns, legacy Near Expiry settlements,
+ * and Accounts scheme entitlements (ERP-confirmed deferred claims).
  * Reads sales return + invoice data (read-only); does not modify non-Accounts modules.
  */
 
@@ -13,9 +14,14 @@ import {
   type PendingSchemeSettlementOption,
 } from "@/lib/accounts/scheme-settlement-data";
 import {
+  hasCreditNoteForEntitlement,
+  listPendingSchemeEntitlements,
+  type SchemeEntitlement,
+  type SchemeEntitlementStatus,
+} from "@/lib/accounts/scheme-entitlement-demo";
+import {
   buildReferenceFromSalesReturn,
   computeCreditNoteGstSplit,
-  loadCreditNotes,
   recalcAllCreditLines,
 } from "./credit-notes-data";
 
@@ -25,6 +31,7 @@ type CreditNoteLink = {
   sourceReturnId?: string;
   sourceReturnNo?: string;
   schemeSettlementKey?: string;
+  schemeEntitlementId?: string;
   status: string;
 };
 
@@ -40,8 +47,10 @@ function loadCreditNoteLinks(): CreditNoteLink[] {
 
 export type PendingCreditNoteSourceType = "sales_return" | "scheme";
 
+export type PendingSchemeClaimKind = "entitlement" | "legacy_near_expiry";
+
 export interface PendingCreditNoteRow {
-  /** Unique row key — return id or scheme settlement key */
+  /** Unique row key — return id, scheme settlement key, or entitlement id */
   id: string;
   sourceType: PendingCreditNoteSourceType;
   customerName: string;
@@ -55,11 +64,20 @@ export interface PendingCreditNoteRow {
   sgstAmount: number;
   igstAmount: number;
   totalAmount: number;
-  status: "Pending";
+  /** Display status — entitlements use ERP claim status; others "Pending" */
+  status: "Pending" | SchemeEntitlementStatus;
   returnId?: string;
   returnDate?: string;
   schemeSettlementKey?: string;
   schemeName?: string;
+  /** Entitlement-based deferred scheme claim */
+  schemeEntitlementId?: string;
+  schemeClaimKind?: PendingSchemeClaimKind;
+  schemeType?: string;
+  schemeCode?: string;
+  schemePeriod?: string;
+  eligibleDate?: string;
+  eligibleBaseAmount?: number;
 }
 
 export function hasCreditNoteForReturn(ret: SalesReturnRecord): boolean {
@@ -76,7 +94,9 @@ export function hasCreditNoteForReturn(ret: SalesReturnRecord): boolean {
 export function hasCreditNoteForScheme(key: string): boolean {
   const notes = loadCreditNoteLinks();
   return notes.some(
-    (cn) => cn.status !== "cancelled" && cn.schemeSettlementKey === key,
+    (cn) =>
+      cn.status !== "cancelled" &&
+      (cn.schemeSettlementKey === key || cn.schemeEntitlementId === key),
   );
 }
 
@@ -180,6 +200,47 @@ function schemeToPendingRow(opt: PendingSchemeSettlementOption): PendingCreditNo
     status: "Pending",
     schemeSettlementKey: opt.key,
     schemeName: opt.schemeName,
+    schemeClaimKind: "legacy_near_expiry",
+    schemeType: opt.schemeType || "Near Expiry Discount",
+    schemeCode: opt.schemeCode,
+    schemePeriod: opt.batchExpiryDate ? `Batch EXP ${opt.batchExpiryDate}` : undefined,
+    eligibleBaseAmount: taxable,
+  };
+}
+
+function entitlementToPendingRow(ent: SchemeEntitlement): PendingCreditNoteRow {
+  const total = ent.creditNoteAmount ?? ent.calculatedBenefit;
+  const included = ent.includedRecords?.length
+    ? ent.includedRecords.filter((r) => r.eligibilityStatus === "Eligible")
+    : ent.invoiceBreakdown.filter((b) => b.includedInCalculation);
+
+  return {
+    id: ent.id,
+    sourceType: "scheme",
+    customerName: ent.customerName,
+    customerId: ent.customerId,
+    referenceNo: ent.claimNumber || ent.schemeCode,
+    linkedInvoiceNos: included.map((b) =>
+      "invoiceNumber" in b && b.invoiceNumber
+        ? b.invoiceNumber
+        : (b as { invoiceNo: string }).invoiceNo,
+    ),
+    linkedInvoiceIds: included.map((b) => b.invoiceId),
+    eligibleCreditAmount: ent.eligibleBaseAmount,
+    gstAmount: 0,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
+    totalAmount: total,
+    status: ent.status,
+    schemeEntitlementId: ent.id,
+    schemeClaimKind: "entitlement",
+    schemeName: ent.schemeName,
+    schemeType: ent.schemeType,
+    schemeCode: ent.schemeCode,
+    schemePeriod: ent.periodReference || `${ent.periodStart} – ${ent.periodEnd}`,
+    eligibleDate: ent.eligibleDate,
+    eligibleBaseAmount: ent.eligibleBaseAmount,
   };
 }
 
@@ -193,12 +254,23 @@ export function listPendingCreditNotes(): PendingCreditNoteRow[] {
     rows.push(salesReturnToPendingRow(ret));
   }
 
+  for (const ent of listPendingSchemeEntitlements()) {
+    if (ent.status === "Credit Note Generated") continue;
+    if (hasCreditNoteForEntitlement(ent.id)) continue;
+    rows.push(entitlementToPendingRow(ent));
+  }
+
   for (const opt of listPendingSchemeSettlementOptions()) {
     if (hasCreditNoteForScheme(opt.key)) continue;
     rows.push(schemeToPendingRow(opt));
   }
 
-  return rows.sort((a, b) => b.referenceNo.localeCompare(a.referenceNo));
+  return rows.sort((a, b) => {
+    const da = a.eligibleDate || a.returnDate || "";
+    const db = b.eligibleDate || b.returnDate || "";
+    if (da && db && da !== db) return db.localeCompare(da);
+    return b.referenceNo.localeCompare(a.referenceNo);
+  });
 }
 
 export function getPendingCreditNoteRow(
@@ -226,7 +298,9 @@ export function filterPendingCreditNotes(
         x.referenceNo.toLowerCase().includes(q) ||
         x.customerName.toLowerCase().includes(q) ||
         x.linkedInvoiceNos.some((inv) => inv.toLowerCase().includes(q)) ||
-        x.schemeName?.toLowerCase().includes(q),
+        x.schemeName?.toLowerCase().includes(q) ||
+        x.schemeCode?.toLowerCase().includes(q) ||
+        x.schemeType?.toLowerCase().includes(q),
     );
   }
   return r;

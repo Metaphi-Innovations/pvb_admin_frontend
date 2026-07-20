@@ -23,7 +23,7 @@ export function AccountsSummaryBar({
   return (
     <div
       className={cn(
-        "flex-shrink-0 px-3 py-2 border-b border-[#E5E7EB] bg-white",
+        "accounts-summary-strip flex-shrink-0 px-2.5 py-1.5 border-b border-[#E5E7EB] bg-white",
         ACCOUNTS_REPORT_KPI_GRID_CLASS,
         className,
       )}
@@ -32,7 +32,7 @@ export function AccountsSummaryBar({
         <div
           key={item.label}
           className={cn(
-            "flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-[#E5E7EB] bg-white min-h-[44px] min-w-0",
+            "flex flex-col justify-center px-2 py-1 rounded-md border border-[#E5E7EB] bg-white min-h-[36px] min-w-0",
             item.warn && "border-red-200 bg-red-50/50",
           )}
         >

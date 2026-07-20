@@ -1,28 +1,31 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { Save } from "lucide-react";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { SearchableSelect } from "./components/SearchableSelect";
-import { CreditNoteCustomerSection } from "./components/CreditNoteCustomerSection";
 import { NoteTypeSelector } from "./components/NoteTypeSelector";
 import { FreshCreditNoteForm, computeFreshCreditTotals } from "./components/FreshCreditNoteForm";
 import { LinkedInvoicesMultiSelect, type LinkedInvoiceOption } from "./components/LinkedInvoicesMultiSelect";
 import { CreditNoteProductTable } from "./components/CreditNoteProductTable";
+import { CreditNoteCustomerInfoButton } from "./components/CreditNoteCustomerInfoButton";
 import { buildCreditNoteLedgerImpact } from "./credit-note-accounting";
+import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
+import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
+import {
+  isInterstateGstTreatment,
+  isGstApplicableTreatment,
+} from "@/lib/accounts/scheme-entitlement-credit-note";
 import {
   applyReturnQtyToLines,
   buildReferenceFromInvoice,
   buildReferenceFromSalesReturn,
-  computeCreditNoteGstSplit,
   createCreditNote,
   createEmptyCreditLine,
   creditLinesForSchemeSettlement,
@@ -32,6 +35,7 @@ import {
   listInvoicesForReference,
   listSalesReturnsForCreditNote,
   normalizeCreditLine,
+  peekNextCreditNoteNo,
   postCreditNote,
   previewToFormInput,
   recalcAllCreditLines,
@@ -50,6 +54,11 @@ import {
   type CustomerTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 import { findPendingSchemeSettlement } from "@/lib/accounts/scheme-settlement-data";
+import {
+  buildCreditNotePrefillFromEntitlement,
+  resolveEntitlementCreditNoteNavigation,
+  SCHEME_ENTITLEMENT_LEDGER_ERROR,
+} from "@/lib/accounts/scheme-entitlement-credit-note";
 import { getPendingCreditNoteRow } from "./pending-credit-notes-data";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
@@ -58,24 +67,32 @@ import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { getInvoiceById } from "@/app/(app)/accounts/invoices/invoices-data";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import { Textarea } from "@/components/ui/textarea";
+import "./credit-note-tx.css";
 
 type FormMode = "fresh" | "return" | "scheme";
 
-const NOTE_TYPE_OPTIONS: { value: CreditNoteCreationMode; label: string }[] = [
-  { value: "against_reference", label: "Against Sales Invoice / Sales Return (Quantity Based)" },
-  { value: "direct_adjustment", label: "Direct Amount Adjustment" },
+const NOTE_TYPE_OPTIONS: { value: CreditNoteCreationMode; label: string; description?: string }[] = [
+  { value: "direct_adjustment", label: "Amount Based", description: "Direct amount adjustment" },
+  {
+    value: "against_reference",
+    label: "Quantity Based",
+    description: "Against sales invoice / sales return",
+  },
 ];
 
 export default function CreditNoteFormPageClient({
   creditNoteId,
   returnId: returnIdProp,
   schemeKey: schemeKeyProp,
+  entitlementId: entitlementIdProp,
   invoiceId: invoiceIdProp,
   mode,
 }: {
   creditNoteId?: number;
   returnId?: string;
   schemeKey?: string;
+  entitlementId?: string;
   invoiceId?: string;
   mode?: FormMode;
 }) {
@@ -85,6 +102,8 @@ export default function CreditNoteFormPageClient({
   const isEdit = creditNoteId != null;
   const returnId = returnIdProp ?? searchParams.get("returnId") ?? undefined;
   const schemeKey = schemeKeyProp ?? searchParams.get("schemeKey") ?? undefined;
+  const entitlementId =
+    entitlementIdProp ?? searchParams.get("entitlementId") ?? undefined;
   const invoiceIdFromUrl = invoiceIdProp ?? searchParams.get("invoiceId") ?? undefined;
   const modeFromUrl = searchParams.get("mode");
   const resolvedMode: FormMode | undefined =
@@ -93,12 +112,14 @@ export default function CreditNoteFormPageClient({
       ? modeFromUrl
       : returnId
         ? "return"
-        : schemeKey
+        : schemeKey || entitlementId
           ? "scheme"
           : undefined);
   const isFresh = !isEdit && resolvedMode === "fresh";
   const isReturn = !isEdit && (resolvedMode === "return" || Boolean(returnId));
-  const isScheme = !isEdit && (resolvedMode === "scheme" || Boolean(schemeKey));
+  const isScheme =
+    !isEdit && (resolvedMode === "scheme" || Boolean(schemeKey) || Boolean(entitlementId));
+  const isEntitlementScheme = isScheme && Boolean(entitlementId);
 
   const customers = useMemo(() => getCustomersForCreditNote(), []);
   const invoices = useMemo(() => listInvoicesForReference(), []);
@@ -137,8 +158,19 @@ export default function CreditNoteFormPageClient({
   const [schemeCode, setSchemeCode] = useState("");
   const [schemeName, setSchemeName] = useState("");
   const [schemeSettlementAmount, setSchemeSettlementAmount] = useState<number | undefined>();
+  const [schemeEntitlementId, setSchemeEntitlementId] = useState("");
+  const [schemeId, setSchemeId] = useState("");
+  const [schemeType, setSchemeType] = useState("");
+  const [calculationReference, setCalculationReference] = useState("");
+  const [sourceInvoiceIds, setSourceInvoiceIds] = useState<number[]>([]);
+  const [schemePeriod, setSchemePeriod] = useState("");
+  const [schemeClaimNumber, setSchemeClaimNumber] = useState("");
+  const [gstTreatment, setGstTreatment] = useState("");
+  const [eligibleBase, setEligibleBase] = useState<number | undefined>();
+  const [ledgerConfigError, setLedgerConfigError] = useState<string | null>(null);
 
   const [directReason, setDirectReason] = useState("");
+  const [directParticular, setDirectParticular] = useState("");
   const [directRefNo, setDirectRefNo] = useState("");
   const [linkedInvoices, setLinkedInvoices] = useState<CreditNoteLinkedInvoice[]>([]);
   const [directAmount, setDirectAmount] = useState("");
@@ -344,7 +376,7 @@ export default function CreditNoteFormPageClient({
   }, [isReturn, returnId, isEdit, salesReturns, customers]);
 
   useEffect(() => {
-    if (!isScheme || !schemeKey || isEdit) return;
+    if (!isScheme || !schemeKey || entitlementId || isEdit) return;
     const opt = findPendingSchemeSettlement(schemeKey);
     const preview = opt ? buildReferenceFromInvoice(opt.invoiceId) : null;
     if (!opt || !preview) return;
@@ -376,7 +408,79 @@ export default function CreditNoteFormPageClient({
     const c = customers.find((x) => x.id === preview.customerId || x.customerName === opt.customerName);
     if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isScheme, schemeKey, isEdit, customers]);
+  }, [isScheme, schemeKey, entitlementId, isEdit, customers]);
+
+  useEffect(() => {
+    if (!isEntitlementScheme || !entitlementId || isEdit) return;
+
+    const nav = resolveEntitlementCreditNoteNavigation(entitlementId);
+    if (nav.kind === "open_draft") {
+      router.replace(nav.href);
+      return;
+    }
+    if (nav.kind === "open_existing") {
+      router.replace(nav.href);
+      return;
+    }
+
+    try {
+      const prefill = buildCreditNotePrefillFromEntitlement(entitlementId);
+      setLedgerConfigError(null);
+      setNoteType("against_reference");
+      setReferenceDocType("sales_invoice");
+      setSchemeEntitlementId(prefill.entitlement.id);
+      setSchemeId(prefill.schemeId);
+      setSchemeType(prefill.schemeType);
+      setSchemeCode(prefill.schemeCode);
+      setSchemeName(prefill.schemeName);
+      setSchemePeriod(prefill.schemePeriod);
+      setSchemeClaimNumber(prefill.schemeClaimNumber);
+      setCalculationReference(prefill.calculationReference);
+      setGstTreatment(prefill.gstTreatment);
+      setEligibleBase(prefill.eligibleBase);
+      setSchemeSettlementAmount(prefill.creditNoteAmount);
+      setSourceInvoiceIds(prefill.sourceInvoiceIds);
+      setAdjustmentLedgerId(prefill.ledger.id);
+      setAdjustmentLedgerName(prefill.ledger.name);
+      setLinkedInvoices(prefill.linkedInvoices);
+      setSourceInvoiceId(prefill.sourceInvoiceId);
+      setSourceInvoiceNo(prefill.sourceInvoiceNo);
+      if (prefill.sourceInvoiceId) {
+        setReferenceInvoiceId(String(prefill.sourceInvoiceId));
+      }
+      applyReferencePreview(prefill.referencePreview);
+      setLines(
+        recalcAllCreditLines(
+          prefill.lines.map((l) => normalizeCreditLine(l)),
+          0,
+        ),
+      );
+      setRemarks(prefill.narration);
+      setOriginalAmount(String(prefill.eligibleBase));
+      setAlreadyAdjusted("0");
+
+      const c = customers.find(
+        (x) =>
+          x.id === prefill.customerId ||
+          x.customerName === prefill.customerName,
+      );
+      if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
+      else {
+        setCustomerId(prefill.customerId ? String(prefill.customerId) : "");
+        setCustomerFields(null);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : SCHEME_ENTITLEMENT_LEDGER_ERROR;
+      setLedgerConfigError(msg);
+      setError(msg);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEntitlementScheme, entitlementId, isEdit, customers, router]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    setCreditNoteNo(peekNextCreditNoteNo());
+  }, [isEdit]);
 
   useEffect(() => {
     if (!isEdit || creditNoteId == null) return;
@@ -408,6 +512,15 @@ export default function CreditNoteFormPageClient({
     setSchemeCode(rec.schemeCode ?? "");
     setSchemeName(rec.schemeName ?? "");
     setSchemeSettlementAmount(rec.schemeSettlementAmount);
+    setSchemeEntitlementId(rec.schemeEntitlementId ?? "");
+    setSchemeId(rec.schemeId ?? "");
+    setSchemeType(rec.schemeType ?? "");
+    setCalculationReference(rec.calculationReference ?? "");
+    setSourceInvoiceIds(rec.sourceInvoiceIds ?? []);
+    if (rec.schemeEntitlementId) {
+      setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
+      setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
+    }
     if (rec.sourceReturnId) {
       setReferenceDocType("sales_return");
       setReferenceReturnId(rec.sourceReturnId);
@@ -429,6 +542,9 @@ export default function CreditNoteFormPageClient({
     if (isDirect) {
       setDirectReason(rec.reason);
       const line = rec.lineItems[0];
+      setDirectParticular(
+        (line?.description || line?.productName || "").trim() || "",
+      );
       const base = line?.unitPrice ?? rec.taxableValue ?? rec.currentCreditAmount;
       setDirectAmount(String(base));
       setDirectGstApplicable((line?.taxPct ?? 0) > 0);
@@ -448,17 +564,56 @@ export default function CreditNoteFormPageClient({
   }, [isEdit, creditNoteId, router, customers]);
 
   const freshTotals = computeFreshCreditTotals(directAmount, directGstApplicable, directGstPct);
-  const subTotal = isAgainstMode
-    ? lines.reduce((s, l) => s + l.creditAmount, 0)
-    : freshTotals.total;
-  const grandTotal = Math.max(0, subTotal + (isAgainstMode ? adjustment : 0));
-  const gstSplit = isAgainstMode
-    ? computeCreditNoteGstSplit(lines)
-    : {
-        taxable: freshTotals.taxable,
-        taxAmount: freshTotals.gstAmount,
-        grandTotal,
-      };
+  const placeOfSupply =
+    customerFields?.placeOfSupply?.trim() ||
+    selectedCustomer?.stateName?.trim() ||
+    "";
+  const interstateFromPos = inferInterstateFromPlaceOfSupply(placeOfSupply);
+  const interstate =
+    isScheme && gstTreatment.trim()
+      ? isInterstateGstTreatment(gstTreatment)
+        ? true
+        : /cgst|sgst|intra/i.test(gstTreatment)
+          ? false
+          : interstateFromPos
+      : interstateFromPos;
+
+  const againstLinesForTax = lines.filter(
+    (l) => l.productName && (l.returnQty > 0 || l.creditAmount > 0),
+  );
+  const taxBreakup = isAgainstMode
+    ? computeNoteTaxBreakup(againstLinesForTax, interstate)
+    : computeNoteTaxBreakup(
+        [
+          {
+            creditAmount: freshTotals.total,
+            taxPct: directGstApplicable ? parseFloat(directGstPct) || 0 : 0,
+          },
+        ],
+        interstate,
+      );
+
+  const discountTotal = isAgainstMode
+    ? againstLinesForTax.reduce((s, l) => {
+        if (l.returnQty <= 0 || l.unitPrice <= 0 || !(l.discountPct > 0)) return s;
+        const base = Math.round(l.returnQty * l.unitPrice * 100) / 100;
+        return s + Math.round(base * (l.discountPct / 100) * 100) / 100;
+      }, 0)
+    : 0;
+
+  const subTotal = isAgainstMode ? taxBreakup.taxableValue : freshTotals.taxable;
+  const grandTotal = Math.max(
+    0,
+    (isAgainstMode ? taxBreakup.total : freshTotals.total) + (isAgainstMode ? adjustment : 0),
+  );
+  const gstSplit = {
+    taxable: taxBreakup.taxableValue,
+    taxAmount: taxBreakup.taxAmount,
+    grandTotal,
+  };
+  const cgstDisplay = taxBreakup.cgstAmount;
+  const sgstDisplay = taxBreakup.sgstAmount;
+  const igstDisplay = taxBreakup.igstAmount;
   const original = parseFloat(originalAmount) || grandTotal;
 
   const onCreditQtyChange = (lineId: string, qty: number) => {
@@ -477,10 +632,14 @@ export default function CreditNoteFormPageClient({
 
   const buildDirectLineItems = (): CreditNoteLine[] => {
     if (freshTotals.total <= 0) return [];
+    const particular =
+      directParticular.trim() || "Adjustment";
     return [
       normalizeCreditLine({
         ...createEmptyCreditLine(),
-        productName: directReason || "Direct Adjustment",
+        productName: particular,
+        description: directParticular.trim(),
+        reason: particular,
         returnQty: 1,
         unitPrice: freshTotals.taxable,
         taxPct: directGstApplicable ? parseFloat(directGstPct) || 0 : 0,
@@ -504,7 +663,7 @@ export default function CreditNoteFormPageClient({
 
   const resolveSource = (): CreditNoteSource => {
     if (isFresh || noteType === "direct_adjustment") return "manual";
-    if (isScheme || schemeSettlementKey) return "payment_discount_scheme";
+    if (isScheme || schemeSettlementKey || schemeEntitlementId) return "payment_discount_scheme";
     if (isReturn || referenceReturnId || sourceReturnId) return "sales_return";
     return "manual";
   };
@@ -524,6 +683,7 @@ export default function CreditNoteFormPageClient({
       receivableLedger: customerLedgerName,
       billingAddress,
       shippingAddress,
+      placeOfSupply: placeOfSupply || undefined,
       sourceInvoiceId: refInvId,
       sourceInvoiceNo: refInvNo,
       linkedInvoices: linkedInvoices.length ? linkedInvoices : undefined,
@@ -535,11 +695,13 @@ export default function CreditNoteFormPageClient({
         ? buildDirectLineItems()
         : lines.filter((l) => l.productName && (l.returnQty > 0 || l.creditAmount > 0)),
       reason: isDirect
-        ? directReason || "Other Adjustment"
-        : isScheme
-          ? "Near Expiry Scheme Settlement"
-          : "Sales return",
-      remarks: isDirect ? remarks || directRefNo : remarks,
+        ? directParticular.trim() || "Other"
+        : isEntitlementScheme || schemeEntitlementId
+          ? "Scheme Settlement"
+          : isScheme
+            ? "Near Expiry Scheme Settlement"
+            : "Sales return",
+      remarks,
       status: nextStatus,
       source: resolveSource(),
       sourceReturnId: referenceReturnId || sourceReturnId || undefined,
@@ -548,8 +710,19 @@ export default function CreditNoteFormPageClient({
       schemeCode: schemeCode || undefined,
       schemeName: schemeName || undefined,
       schemeSettlementAmount: schemeSettlementAmount ?? (isScheme ? grandTotal : undefined),
-      adjustmentLedgerId: isDirect ? adjustmentLedgerId ?? undefined : undefined,
-      adjustmentLedgerName: isDirect ? adjustmentLedgerName || undefined : undefined,
+      schemeEntitlementId: schemeEntitlementId || undefined,
+      schemeId: schemeId || undefined,
+      schemeType: schemeType || undefined,
+      calculationReference: calculationReference || undefined,
+      sourceInvoiceIds: sourceInvoiceIds.length ? sourceInvoiceIds : undefined,
+      adjustmentLedgerId:
+        isDirect || schemeEntitlementId
+          ? adjustmentLedgerId ?? undefined
+          : undefined,
+      adjustmentLedgerName:
+        isDirect || schemeEntitlementId
+          ? adjustmentLedgerName || undefined
+          : undefined,
       referenceNo: isDirect ? directRefNo || undefined : undefined,
       attachmentName: isDirect ? attachmentName || undefined : undefined,
       warehouse: warehouseRef ?? undefined,
@@ -558,13 +731,21 @@ export default function CreditNoteFormPageClient({
   };
 
   const validateForPost = (): boolean => {
+    if (ledgerConfigError) {
+      setError(ledgerConfigError);
+      return false;
+    }
     if (!resolveCustomerName().trim()) {
       setError("Select a customer before saving.");
       return false;
     }
+    if (schemeEntitlementId && !adjustmentLedgerId && !adjustmentLedgerName.trim()) {
+      setError(SCHEME_ENTITLEMENT_LEDGER_ERROR);
+      return false;
+    }
     if (noteType === "direct_adjustment") {
-      if (!directReason.trim()) {
-        setError("Select a reason for the direct adjustment.");
+      if (!directParticular.trim()) {
+        setError("Enter a particular / description for the adjustment.");
         return false;
       }
       if (!adjustmentLedgerId && !adjustmentLedgerName) {
@@ -587,7 +768,11 @@ export default function CreditNoteFormPageClient({
         return false;
       }
       if (grandTotal <= 0) {
-        setError("Enter credit qty on at least one line.");
+        setError(
+          isEntitlementScheme || schemeEntitlementId
+            ? "Credit Note amount must be greater than zero."
+            : "Enter credit qty on at least one line.",
+        );
         return false;
       }
     }
@@ -597,8 +782,16 @@ export default function CreditNoteFormPageClient({
   const saveDraft = () => {
     setError(null);
     try {
+      if (ledgerConfigError) {
+        setError(ledgerConfigError);
+        return;
+      }
       if (!resolveCustomerName().trim()) {
         setError("Select a customer before saving.");
+        return;
+      }
+      if (schemeEntitlementId && !adjustmentLedgerId && !adjustmentLedgerName.trim()) {
+        setError(SCHEME_ENTITLEMENT_LEDGER_ERROR);
         return;
       }
       if (isEdit && creditNoteId != null) {
@@ -655,9 +848,13 @@ export default function CreditNoteFormPageClient({
     taxable: gstSplit.taxable,
     taxAmount: gstSplit.taxAmount,
     grandTotal,
-    isSchemeSettlement: Boolean(schemeSettlementKey) || isScheme,
+    isSchemeSettlement: Boolean(schemeSettlementKey) || isScheme || Boolean(schemeEntitlementId),
     isManualAdjustment: noteType === "direct_adjustment",
     adjustmentLedgerName: adjustmentLedgerName || undefined,
+    cgst: cgstDisplay,
+    sgst: sgstDisplay,
+    igst: igstDisplay,
+    interstate,
   });
 
   const [baselineReady, setBaselineReady] = useState(false);
@@ -677,6 +874,7 @@ export default function CreditNoteFormPageClient({
       remarks,
       linkedInvoices,
       directReason,
+      directParticular,
       directRefNo,
       directAmount,
       directGstApplicable,
@@ -693,6 +891,7 @@ export default function CreditNoteFormPageClient({
       remarks,
       linkedInvoices,
       directReason,
+      directParticular,
       directRefNo,
       directAmount,
       directGstApplicable,
@@ -706,295 +905,494 @@ export default function CreditNoteFormPageClient({
     listHref: CREDIT_NOTES_LIST_PATH,
     isDirty,
   });
+  const invoiceCountForScheme =
+    sourceInvoiceIds.length ||
+    linkedInvoices.length ||
+    (sourceInvoiceNo ? 1 : 0);
+  const showGstBreakup =
+    taxBreakup.taxAmount > 0 ||
+    (!isAgainstMode && directGstApplicable) ||
+    (isScheme && isGstApplicableTreatment(gstTreatment));
+
+  const stickyActions = (
+    <div className="cnz-footer">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 text-xs"
+        onClick={requestCancel}
+      >
+        Cancel
+      </Button>
+      {!readOnly ? (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5"
+            onClick={saveDraft}
+            disabled={Boolean(ledgerConfigError)}
+          >
+            <Save className="w-3.5 h-3.5" /> Save Draft
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={postNote}
+            disabled={Boolean(ledgerConfigError)}
+          >
+            Save & Post
+          </Button>
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">Read-only</span>
+      )}
+    </div>
+  );
 
   return (
     <>
-    <AccountsFormLayout
-      fullWidth
-      onBackClick={readOnly ? undefined : requestCancel}
-      title={formTitle}
-      breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
-      code={creditNoteNo || undefined}
-      footer={
-        readOnly ? (
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
-            Back
-          </Button>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs font-medium"
-              onClick={requestCancel}
-            >
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5" onClick={saveDraft}>
-              <Save className="w-3.5 h-3.5" /> Save Draft
-            </Button>
-            <Button size="sm" className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
-              Post Credit Note
-            </Button>
-          </div>
-        )
-      }
-    >
-      <div className="bg-white border border-border/60 rounded-lg shadow-sm">
-        <div className="px-6 py-5 border-b border-border/60 space-y-4">
-          {!isReturn && !isScheme && (
-            <NoteTypeSelector
-              value={noteType}
-              options={NOTE_TYPE_OPTIONS}
-              onChange={onNoteTypeChange}
-              disabled={readOnly}
-            />
-          )}
+      <div className="h-full min-h-0 flex flex-col">
+      <AccountsFormLayout
+        fullWidth
+        onBackClick={readOnly ? undefined : requestCancel}
+        title={formTitle}
+        breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
+        code={creditNoteNo || undefined}
+        headerMeta={
+          creditNoteNo ? (
+            <span className="inline-flex items-center h-6 px-2 rounded-md border border-brand-200 bg-brand-50 font-mono text-[11px] font-semibold text-brand-700">
+              {creditNoteNo}
+            </span>
+          ) : null
+        }
+        stickyFooter={stickyActions}
+      >
+        <div className="cnz">
+          {error ? <div className="cnz-alert">{error}</div> : null}
+          {ledgerConfigError ? <div className="cnz-alert">{ledgerConfigError}</div> : null}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Credit Note No.</Label>
-              <Input className="h-9 text-sm font-mono bg-muted/20" disabled value={isEdit ? creditNoteNo : "Auto-generated"} />
+          <div className="cnz-head">
+            <div className="cnz-f">
+              <label>
+                Customer<span className="cnz-req">*</span>
+                <CreditNoteCustomerInfoButton
+                  customer={selectedCustomer}
+                  placeOfSupply={placeOfSupply}
+                />
+              </label>
+              {customerLocked ? (
+                <p className="cnz-ro font-medium">{resolveCustomerName() || "—"}</p>
+              ) : (
+                <SearchableSelect
+                  label=""
+                  options={customers.map((cust) => ({
+                    value: String(cust.id),
+                    label: cust.customerName,
+                    sub: cust.customerCode,
+                  }))}
+                  value={customerId}
+                  onChange={(id) => {
+                    const cust = customers.find((x) => x.id === Number(id));
+                    onCustomerChange(id, cust ? customerMasterToTransactionFields(cust) : null);
+                  }}
+                  placeholder="Select customer"
+                  required
+                  disabled={readOnly}
+                />
+              )}
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Credit Note Date</Label>
+            <div className="cnz-f">
+              <label>Credit Note No.</label>
+              <p className="cnz-ro cnz-ro--mono" title="Auto-generated">
+                {creditNoteNo || "…"}
+              </p>
+            </div>
+            <div className="cnz-f">
+              <label>Credit Note Date</label>
               <AccountsDateInput
                 value={creditNoteDate}
                 onChange={setCreditNoteDate}
                 disabled={readOnly}
                 aria-label="Credit note date"
-                className="h-9 text-sm"
+                className="h-7 text-xs"
               />
             </div>
-            {warehouseRef ? (
-              <div className="sm:col-span-2">
-                <WarehouseMappedBankAccountSelect
-                  warehouseRef={warehouseRef}
-                  value={bankAccountId}
-                  onChange={(id) => setBankAccountId(id)}
-                  label="Bank Account (for payment / print)"
+
+            <div className="cnz-f">
+              <label>Reference No.</label>
+              <Input
+                className="h-7 text-xs"
+                value={directRefNo}
+                onChange={(e) => setDirectRefNo(e.target.value)}
+                placeholder="Optional"
+                disabled={readOnly || isScheme}
+              />
+            </div>
+            <div className="cnz-f">
+              <label>Salesperson</label>
+              <p className="cnz-ro text-xs">{selectedCustomer?.salesManName || "—"}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Credit Note Basis</label>
+              {!isReturn && !isScheme ? (
+                <NoteTypeSelector
+                  hideLabel
+                  label="Credit Note Basis"
+                  value={noteType}
+                  options={NOTE_TYPE_OPTIONS}
+                  onChange={onNoteTypeChange}
                   disabled={readOnly}
                 />
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {isReturn && referencePreview && (
-          <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Sales Return Reference</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-              <div><span className="text-muted-foreground">Return No.</span><p className="font-mono font-medium">{sourceReturnNo}</p></div>
-              <div><span className="text-muted-foreground">Invoice</span><p className="font-mono font-medium">{sourceInvoiceNo || "—"}</p></div>
-              <div><span className="text-muted-foreground">Sales Order</span><p className="font-mono font-medium">{sourceOrderNo || "—"}</p></div>
+              ) : (
+                <p className="cnz-ro text-xs">
+                  {isScheme ? "Scheme" : "Quantity Based"}
+                  {isScheme && schemeCode ? ` · ${schemeCode}` : ""}
+                  {isReturn && sourceReturnNo ? ` · ${sourceReturnNo}` : ""}
+                </p>
+              )}
             </div>
-          </div>
-        )}
 
-        {isScheme && schemeCode && (
-          <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Scheme Settlement Reference</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-              <div><span className="text-muted-foreground">Scheme Code</span><p className="font-mono font-medium">{schemeCode}</p></div>
-              <div><span className="text-muted-foreground">Scheme Name</span><p className="font-medium">{schemeName}</p></div>
-              <div><span className="text-muted-foreground">Invoice</span><p className="font-mono font-medium">{sourceInvoiceNo || "—"}</p></div>
-              <div><span className="text-muted-foreground">Est. Benefit</span><p className="font-medium tabular-nums">{formatINR(schemeSettlementAmount ?? 0)}</p></div>
-            </div>
-          </div>
-        )}
-
-        {isAgainstMode ? (
-          <>
-            {!isReturn && !isScheme && (
-              <div className="px-6 py-5 border-b border-border/60 space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      { value: "sales_invoice" as const, label: "Sales Invoice" },
-                      { value: "sales_return" as const, label: "Sales Return" },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
+            <div className="cnz-f">
+              <label>{isAgainstMode && !isScheme ? "Reference Document" : "Linked Invoice"}</label>
+              {isAgainstMode && !isReturn && !isScheme ? (
+                <div className="space-y-1.5">
+                  <div className="cnz-radios">
+                    {(
+                      [
+                        { value: "sales_invoice" as const, label: "Sales Invoice" },
+                        { value: "sales_return" as const, label: "Sales Return" },
+                      ] as const
+                    ).map((opt) => (
+                      <label key={opt.value}>
+                        <input
+                          type="radio"
+                          name="cn-ref-doc"
+                          checked={referenceDocType === opt.value}
+                          disabled={readOnly}
+                          onChange={() => {
+                            setReferenceDocType(opt.value);
+                            clearReference();
+                            setReferenceInvoiceId("");
+                            setReferenceReturnId("");
+                          }}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {referenceDocType === "sales_invoice" ? (
+                    <SearchableSelect
+                      label=""
+                      value={referenceInvoiceId}
+                      onChange={onInvoiceSelect}
+                      options={invoiceOptions}
+                      placeholder="Select invoice"
+                      required
                       disabled={readOnly}
-                      onClick={() => {
-                        setReferenceDocType(opt.value);
-                        clearReference();
-                        setReferenceInvoiceId("");
-                        setReferenceReturnId("");
-                      }}
-                      className={cn(
-                        "h-7 px-2.5 text-sm font-medium rounded-md border",
-                        referenceDocType === opt.value
-                          ? "border-brand-500 bg-brand-50 text-brand-800"
-                          : "border-border text-muted-foreground hover:bg-muted/30",
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                    />
+                  ) : (
+                    <SearchableSelect
+                      label=""
+                      value={referenceReturnId}
+                      onChange={onSalesReturnSelect}
+                      options={salesReturnOptions}
+                      placeholder="Select sales return"
+                      required
+                      disabled={readOnly}
+                    />
+                  )}
                 </div>
-
-                {referenceDocType === "sales_invoice" ? (
-                  <SearchableSelect
-                    label="Sales Invoice"
-                    value={referenceInvoiceId}
-                    onChange={onInvoiceSelect}
-                    options={invoiceOptions}
-                    placeholder="Select invoice…"
-                    required
-                    disabled={readOnly}
-                  />
-                ) : (
-                  <SearchableSelect
-                    label="Sales Return"
-                    value={referenceReturnId}
-                    onChange={onSalesReturnSelect}
-                    options={salesReturnOptions}
-                    placeholder="Select sales return…"
-                    required
-                    disabled={readOnly}
-                  />
-                )}
-
-                {referencePreview && (
-                  <p className="text-xs text-muted-foreground">
-                    Invoice total {formatINR(referencePreview.originalAmount)} · Already credited{" "}
-                    {formatINR(referencePreview.alreadyAdjustedAmount)}
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="px-6 py-5 border-b border-border/60">
-              <CreditNoteCustomerSection
-                customers={customers}
-                customerId={customerId}
-                onCustomerIdChange={onCustomerChange}
-                fields={customerFields}
-                billToId={billToId}
-                shipToId={shipToId}
-                onBillToChange={(id, addr) => {
-                  setBillToId(id);
-                  setBillingAddress(addr);
-                }}
-                onShipToChange={(id, addr) => {
-                  setShipToId(id);
-                  setShippingAddress(addr);
-                }}
-                billingAddress={billingAddress}
-                shippingAddress={shippingAddress}
-                disabled={readOnly || customerLocked}
-              />
-            </div>
-
-            {(referencePreview || isReturn || isScheme) && (
-              <div className="px-6 py-4 border-b border-border/60">
+              ) : isReturn ? (
+                <p className="cnz-ro font-mono text-[13px]">{sourceInvoiceNo || "—"}</p>
+              ) : isScheme ? (
+                <p className="cnz-ro text-[13px]">
+                  {invoiceCountForScheme > 0
+                    ? `${invoiceCountForScheme} Invoice${invoiceCountForScheme === 1 ? "" : "s"}`
+                    : "—"}
+                </p>
+              ) : (
                 <LinkedInvoicesMultiSelect
+                  label=""
                   value={linkedInvoices}
                   onChange={setLinkedInvoices}
                   options={linkedInvoiceOptions}
                   disabled={readOnly}
                 />
-              </div>
-            )}
-
-            <div className="px-6 py-4 space-y-3">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground">Product Lines</h3>
-              {lines.length > 0 ? (
-                <CreditNoteProductTable lines={lines} readOnly={readOnly} onQtyChange={onCreditQtyChange} />
-              ) : (
-                <p className="text-xs text-muted-foreground py-6 text-center border border-dashed border-border rounded-xl">
-                  Select an invoice or sales return to load product lines.
-                </p>
-              )}
-
-              {lines.length > 0 && (
-                <div className="flex justify-end pt-2">
-                  <div className="w-full sm:w-80 border border-border/60 rounded-lg p-4 bg-muted/5 space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Sub Total</span>
-                      <span className="tabular-nums font-medium">{formatINR(subTotal)}</span>
-                    </div>
-                    <div className="flex justify-between items-center gap-2">
-                      <span className="text-muted-foreground">Adjustment</span>
-                      <AccountsMoneyInput
-                        className="h-8 w-24 text-xs text-right tabular-nums ml-auto"
-                        value={adjustment || ""}
-                        onChange={(v) => setAdjustment(v)}
-                        disabled={readOnly}
-                      />
-                    </div>
-                    <div className="flex justify-between font-semibold pt-2 border-t border-border/60">
-                      <span>Total</span>
-                      <span className="tabular-nums text-brand-700">{formatINR(grandTotal)}</span>
-                    </div>
-                  </div>
-                </div>
               )}
             </div>
-          </>
-        ) : (
-          <div className="px-6 py-5 space-y-4">
-            <FreshCreditNoteForm
-              customerSelector={
-                <SearchableSelect
-                  label=""
-                  options={customers.map((c) => ({
-                    value: String(c.id),
-                    label: c.customerName,
-                    sub: c.customerCode,
-                  }))}
-                  value={customerId}
-                  onChange={(id) => {
-                    const c = customers.find((x) => x.id === Number(id));
-                    onCustomerChange(id, c ? customerMasterToTransactionFields(c) : null);
-                  }}
-                  placeholder="Select customer…"
-                  required
+
+            {isScheme ? (
+              <>
+                <div className="cnz-f">
+                  <label>Claim Number</label>
+                  <p className="cnz-ro font-mono text-[13px]">{schemeClaimNumber || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>Scheme Type</label>
+                  <p className="cnz-ro text-[13px]">{schemeType || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>Scheme Period</label>
+                  <p className="cnz-ro text-[13px]">{schemePeriod || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>Mapped Ledger</label>
+                  <p className="cnz-ro text-[13px] truncate" title={adjustmentLedgerName || undefined}>
+                    {adjustmentLedgerName || "—"}
+                  </p>
+                </div>
+                <div className="cnz-f cnz-head__span2">
+                  <label>Calculation Reference</label>
+                  <p className="cnz-ro text-[13px] truncate">{calculationReference || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>GST Treatment</label>
+                  <p className="cnz-ro text-[13px]">
+                    {gstTreatment || (interstate ? "IGST" : "CGST + SGST")}
+                  </p>
+                </div>
+              </>
+            ) : null}
+
+            {isReturn && referencePreview ? (
+              <>
+                <div className="cnz-f">
+                  <label>Sales Return</label>
+                  <p className="cnz-ro font-mono text-[13px]">{sourceReturnNo || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>Sales Order</label>
+                  <p className="cnz-ro font-mono text-[13px]">{sourceOrderNo || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>Invoice Amount</label>
+                  <p className="cnz-ro text-[13px] tabular-nums">
+                    {formatINR(referencePreview.originalAmount)}
+                  </p>
+                </div>
+              </>
+            ) : null}
+
+            {isAgainstMode && !isReturn && !isScheme && referencePreview ? (
+              <>
+                <div className="cnz-f">
+                  <label>Invoice Date</label>
+                  <p className="cnz-ro text-[13px]">{referencePreview.documentDate || "—"}</p>
+                </div>
+                <div className="cnz-f">
+                  <label>Already Credited</label>
+                  <p className="cnz-ro text-[13px] tabular-nums">
+                    {formatINR(referencePreview.alreadyAdjustedAmount)}
+                  </p>
+                </div>
+                <div className="cnz-f">
+                  <label>Tax Structure</label>
+                  <p className="cnz-ro text-[13px]">
+                    {interstate ? "IGST (inter-state)" : "CGST + SGST (intra-state)"}
+                  </p>
+                </div>
+              </>
+            ) : null}
+
+            {warehouseRef ? (
+              <div className="cnz-f">
+                <WarehouseMappedBankAccountSelect
+                  warehouseRef={warehouseRef}
+                  value={bankAccountId}
+                  onChange={(id) => setBankAccountId(id)}
+                  label="Bank Account"
                   disabled={readOnly}
                 />
-              }
-              reason={directReason}
-              onReasonChange={setDirectReason}
-              referenceNo={directRefNo}
-              onReferenceNoChange={setDirectRefNo}
-              linkedInvoices={linkedInvoices}
-              onLinkedInvoicesChange={setLinkedInvoices}
-              linkedInvoiceOptions={linkedInvoiceOptions}
-              adjustmentLedgerId={adjustmentLedgerId}
-              onAdjustmentLedgerChange={(l) => {
-                setAdjustmentLedgerId(l.id);
-                setAdjustmentLedgerName(l.accountName);
-              }}
-              taxableAmount={directAmount}
-              onTaxableAmountChange={setDirectAmount}
-              gstPct={directGstPct}
-              onGstPctChange={setDirectGstPct}
-              gstApplicable={directGstApplicable}
-              onGstApplicableChange={setDirectGstApplicable}
-              narration={remarks}
-              onNarrationChange={setRemarks}
-              attachmentName={attachmentName}
-              onAttachmentChange={setAttachmentName}
-              disabled={readOnly}
-            />
+              </div>
+            ) : null}
           </div>
-        )}
 
-        {grandTotal > 0 && (
-          <div className="px-6 pb-4">
-            <LedgerImpactPreview lines={impactLines} />
+          <div className="cnz-items">
+            <div className="cnz-items__bar">
+              <h2 className="cnz-items__title">
+                {isScheme
+                  ? "Scheme Particulars"
+                  : isAgainstMode
+                    ? "Quantity Particulars"
+                    : "Amount Particulars"}
+              </h2>
+            </div>
+
+            {isScheme ? (
+              <div className="cnz-table-wrap">
+                <table className="cnz-table cnz-table--scheme accounts-table">
+                  <thead>
+                    <tr>
+                      <th className="accounts-table-th" style={{ width: "24%" }}>Scheme Particular</th>
+                      <th className="accounts-table-th">Mapped Ledger</th>
+                      <th className="accounts-table-th text-right">Eligible Base</th>
+                      <th className="accounts-table-th text-right">Rate</th>
+                      <th className="accounts-table-th">GST Treatment</th>
+                      <th className="accounts-table-th text-right">GST Amount</th>
+                      <th className="accounts-table-th text-right">Credit Note Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(lines.length
+                      ? lines.filter((l) => l.creditAmount > 0 || l.productName)
+                      : [
+                          {
+                            id: "scheme-row",
+                            productName: schemeName || "Scheme Settlement",
+                            creditAmount: schemeSettlementAmount ?? grandTotal,
+                            taxPct: 0,
+                            unitPrice: 0,
+                            returnQty: 0,
+                            gstAmount: 0,
+                          } as CreditNoteLine,
+                        ]
+                    ).map((line) => {
+                      const rate =
+                        eligibleBase && eligibleBase > 0 && line.creditAmount > 0
+                          ? Math.round((line.creditAmount / eligibleBase) * 10000) / 100
+                          : 0;
+                      const lineTax =
+                        line.gstAmount > 0
+                          ? line.gstAmount
+                          : line.taxPct > 0
+                            ? Math.round(
+                                (line.creditAmount -
+                                  line.creditAmount / (1 + line.taxPct / 100)) *
+                                  100,
+                              ) / 100
+                            : taxBreakup.taxAmount;
+                      return (
+                        <tr key={line.id}>
+                          <td className="font-medium">
+                            {line.productName || schemeName || "Scheme Settlement"}
+                          </td>
+                          <td className="text-[13px]">{adjustmentLedgerName || "—"}</td>
+                          <td className="cnz-num">{formatINR(eligibleBase ?? 0)}</td>
+                          <td className="cnz-num">{rate > 0 ? `${rate}%` : "—"}</td>
+                          <td className="text-[13px]">
+                            {gstTreatment || (interstate ? "IGST" : "CGST + SGST")}
+                          </td>
+                          <td className="cnz-num">{formatINR(lineTax)}</td>
+                          <td className="cnz-num font-semibold">
+                            {formatINR(line.creditAmount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : isAgainstMode ? (
+              lines.length > 0 ? (
+                <CreditNoteProductTable
+                  lines={lines}
+                  readOnly={readOnly}
+                  onQtyChange={onCreditQtyChange}
+                />
+              ) : (
+                <div className="cnz-table-wrap">
+                  <p className="cnz-empty">
+                    Select a sales invoice or sales return to load items.
+                  </p>
+                </div>
+              )
+            ) : (
+              <FreshCreditNoteForm
+                particular={directParticular}
+                onParticularChange={setDirectParticular}
+                adjustmentLedgerId={adjustmentLedgerId}
+                onAdjustmentLedgerChange={(l) => {
+                  setAdjustmentLedgerId(l.id);
+                  setAdjustmentLedgerName(l.accountName);
+                }}
+                taxableAmount={directAmount}
+                onTaxableAmountChange={setDirectAmount}
+                gstPct={directGstPct}
+                onGstPctChange={setDirectGstPct}
+                gstApplicable={directGstApplicable}
+                onGstApplicableChange={setDirectGstApplicable}
+                interstate={interstate}
+                disabled={readOnly}
+              />
+            )}
           </div>
-        )}
 
-        {error && <p className="px-6 pb-4 text-xs text-red-600">{error}</p>}
+          <div className="cnz-after-table">
+            <div className="cnz-totals">
+              <h3 className="cnz-totals__title">Amount Breakdown</h3>
+              <div className="cnz-totals__row">
+                <span>Taxable / Subtotal</span>
+                <span>{formatINR(subTotal)}</span>
+              </div>
+              {discountTotal > 0 ? (
+                <div className="cnz-totals__row">
+                  <span>Discount</span>
+                  <span>{formatINR(discountTotal)}</span>
+                </div>
+              ) : null}
+              {showGstBreakup && !interstate ? (
+                <>
+                  <div className="cnz-totals__row">
+                    <span>CGST</span>
+                    <span>{formatINR(cgstDisplay)}</span>
+                  </div>
+                  <div className="cnz-totals__row">
+                    <span>SGST</span>
+                    <span>{formatINR(sgstDisplay)}</span>
+                  </div>
+                </>
+              ) : null}
+              {showGstBreakup && interstate ? (
+                <div className="cnz-totals__row">
+                  <span>IGST</span>
+                  <span>{formatINR(igstDisplay)}</span>
+                </div>
+              ) : null}
+              {isAgainstMode && !isScheme ? (
+                <div className="cnz-totals__row">
+                  <span>Rounding Off</span>
+                  <AccountsMoneyInput
+                    className="h-7 w-20 text-xs text-right"
+                    value={adjustment || ""}
+                    onChange={(v) => setAdjustment(v)}
+                    disabled={readOnly}
+                  />
+                </div>
+              ) : null}
+              <div className="cnz-totals__grand">
+                <span>Total Amount</span>
+                <span>{formatINR(grandTotal)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="cnz-notes">
+            <div className="cnz-f">
+              <label>Narration</label>
+              <Textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Accounting narration for this credit note"
+                disabled={readOnly}
+              />
+            </div>
+          </div>
+
+          {grandTotal > 0 ? (
+            <div className="cnz-impact">
+              <LedgerImpactPreview
+                title="Accounting Preview"
+                lines={impactLines}
+              />
+            </div>
+          ) : null}
+        </div>
+      </AccountsFormLayout>
       </div>
-    </AccountsFormLayout>
-    <AccountsToast toast={toast} onDismiss={dismissToast} />
-    {discardDialog}
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
+      {discardDialog}
     </>
   );
 }

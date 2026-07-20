@@ -1,7 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-
+/** Compact neutral radio group — transaction mode, not navigation. */
 export interface NoteTypeOption<T extends string> {
   value: T;
   label: string;
@@ -9,42 +8,36 @@ export interface NoteTypeOption<T extends string> {
 }
 
 export function NoteTypeSelector<T extends string>({
-  label = "Note Type",
+  label = "Basis",
   value,
   options,
   onChange,
   disabled,
+  hideLabel,
 }: {
   label?: string;
   value: T;
   options: NoteTypeOption<T>[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  hideLabel?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-foreground">{label}</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((opt) => {
-          const active = value === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
+    <div className="cnz-basis">
+      {!hideLabel ? <span className="cnz-basis__lab">{label}</span> : null}
+      <div className="cnz-radios" role="radiogroup" aria-label={label}>
+        {options.map((opt) => (
+          <label key={opt.value} title={opt.description}>
+            <input
+              type="radio"
+              name={`cn-basis-${label}`}
+              checked={value === opt.value}
               disabled={disabled}
-              onClick={() => onChange(opt.value)}
-              className={cn(
-                "h-8 px-3 text-xs font-medium rounded-lg border transition-colors text-left",
-                active
-                  ? "border-brand-500 bg-brand-50 text-brand-800"
-                  : "border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                disabled && "opacity-50 cursor-not-allowed",
-              )}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
+              onChange={() => onChange(opt.value)}
+            />
+            {opt.label}
+          </label>
+        ))}
       </div>
     </div>
   );

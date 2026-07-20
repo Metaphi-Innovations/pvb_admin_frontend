@@ -33,6 +33,7 @@ export type InventoryVoucherType =
   | "Purchase Return"
   | "Sales Dispatch"
   | "Sales Return"
+  | "Sample Issue"
   | "Stock Adjustment"
   | "Stock Reconciliation";
 
@@ -476,22 +477,33 @@ export function buildInventoryMovements(filters?: {
 
   for (const inv of loadInvoices()) {
     if (inv.invoiceStatus === "cancelled") continue;
+    const isSample =
+      inv.sourceType === "sample_order" || inv.invoiceType === "sample_order";
     for (const line of inv.lineItems) {
       if (line.qty <= 0) continue;
-      const sku = resolveSku(line.productName);
+      const sku = resolveSku(line.productName, line.productCode);
+      const rate =
+        isSample && typeof line.costPrice === "number" && line.costPrice > 0
+          ? line.costPrice
+          : getCostPriceBySku(sku, line.productName);
       movements.push({
         id: `si-${inv.id}-${line.id}`,
         date: inv.invoiceDate,
-        voucherType: "Sales Dispatch",
+        voucherType: isSample ? "Sample Issue" : "Sales Dispatch",
         voucherNo: inv.invoiceNo,
         product: line.productName,
         sku,
         warehouse: inv.warehouse ?? "Central Warehouse",
-        batchNo: "—",
+        batchNo: line.batchNo?.trim() || "—",
         inQty: 0,
         outQty: line.qty,
-        rate: getCostPriceBySku(sku, line.productName),
-        source: `Sales Invoice — ${inv.customerName}`,
+        rate,
+        source: isSample
+          ? `Sample Order Proforma — ${inv.customerName}`
+          : `Sales Invoice — ${inv.customerName}`,
+        narration: isSample
+          ? `Inventory issue at CP — ${inv.invoiceNo}`
+          : undefined,
       });
     }
   }
@@ -812,14 +824,54 @@ export function getInventoryDashboardMetrics(asOnDate?: string): InventoryDashbo
 const DEMO_LEDGER_SPECS: Array<{ subGroup: string; name: string }> = [
   { subGroup: "Other Current Liabilities", name: "GRN Clearing / Purchase Accrual" },
   { subGroup: "Cost of Goods Sold", name: "Cost of Goods Sold — Inventory" },
+  { subGroup: "Selling Expenses", name: "Sample / Promotional Expense" },
   { subGroup: "Miscellaneous Expenses", name: "Inventory Loss / Stock Adjustment Expense" },
   { subGroup: "Miscellaneous Income", name: "Stock Adjustment Gain / Other Income" },
 ];
 
+/** Ensure Selling Expenses group exists under Indirect Expenses (Sample Order posting). */
+function ensureSellingExpensesGroup(records: ChartOfAccount[]): boolean {
+  const existing = records.find(
+    (r) => r.nodeLevel === "account_group" && r.accountName === "Selling Expenses",
+  );
+  if (existing) return false;
+  const indirect = records.find(
+    (r) =>
+      r.nodeLevel === "account_group" &&
+      r.accountName.toLowerCase() === "indirect expenses",
+  );
+  if (!indirect) return false;
+  const id = nextId(records);
+  records.push({
+    id,
+    accountCode: `GRP-${String(id).padStart(4, "0")}`,
+    accountName: "Selling Expenses",
+    alias: "",
+    accountType: "Expense",
+    nodeLevel: "account_group",
+    parentAccountId: indirect.id,
+    parentAccount: indirect.accountName,
+    description: "Auto-created for Sample / Promotional Expense posting",
+    status: "active",
+    usedIn: ["journal", "sales"],
+    isSystem: false,
+    isSystemGenerated: true,
+    openingBalance: 0,
+    balanceType: "Debit",
+    gstApplicable: false,
+    tdsApplicable: false,
+    costCenterApplicable: false,
+    bankAccountFlag: false,
+    createdBy: ACCOUNTS_CURRENT_USER,
+    updatedBy: ACCOUNTS_CURRENT_USER,
+  });
+  return true;
+}
+
 export function ensureInventoryAccountingLedgers(): void {
   if (typeof window === "undefined") return;
   const records = loadChartOfAccounts();
-  let changed = false;
+  let changed = ensureSellingExpensesGroup(records);
   for (const spec of DEMO_LEDGER_SPECS) {
     const subGroup = records.find(
       (r) => r.nodeLevel === "account_group" && r.accountName === spec.subGroup,

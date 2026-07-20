@@ -1,4 +1,4 @@
-/** Lets the COA sidebar tree open the full-page Generic Ledger form via CoaAddLedgerHost. */
+/** Lets the COA sidebar tree open add/edit ledgers via CoaAddLedgerHost. */
 
 type CoaAddLedgerHandlers = {
   addUnderParent: ((parentGroupId: number) => void) | null;
@@ -43,9 +43,9 @@ export function registerCoaAddLedgerHandler(
 }
 
 /**
- * Specialized master forms (customer/vendor/warehouse/product/GST/TDS) are no longer
- * opened from Chart of Accounts. Party and master entities live in ERP Masters;
- * COA only accepts user-created generic Level-4 ledgers under Level-3 subgroups.
+ * Kept for call-site compatibility. Party (customer/vendor) routing is handled in
+ * CoaAddLedgerHost via resolveCoaLedgerBehavior — this stub must stay import-light
+ * to avoid circular/heavy module graphs that block the COA page chunk.
  */
 export function requestCoaSpecializedLedgerForm(_parentId: number): boolean {
   return false;

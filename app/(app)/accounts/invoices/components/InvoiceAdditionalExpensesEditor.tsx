@@ -17,25 +17,14 @@ import {
 	calcAdditionalExpenseRow,
 	createEmptyAdditionalExpense,
 	INVOICE_EXPENSE_HEAD_OPTIONS,
+	resolveExpenseHeadCoaLedger,
 	type InvoiceAdditionalExpense,
+	type InvoiceExpenseHead,
 } from "../invoice-additional-expenses";
 import { formatINR } from "../invoice-utils";
 
 const NUM_INPUT_CLASS =
 	"h-8 text-sm tabular-nums text-right min-w-[4.5rem] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
-
-const HEADERS = [
-	"Expense Head",
-	"Amount",
-	"GST Applicable",
-	"GST %",
-	"GST Amount",
-	"Total Amount",
-	"Remarks",
-	"",
-] as const;
-
-const RIGHT_ALIGN = new Set(["Amount", "GST %", "GST Amount", "Total Amount"]);
 
 function GstToggle({
 	value,
@@ -76,16 +65,18 @@ const ExpenseRow = memo(function ExpenseRow({
 	row,
 	disabled,
 	defaultGstPct,
+	interstate,
 	onUpdate,
 	onRemove,
 }: {
 	row: InvoiceAdditionalExpense;
 	disabled?: boolean;
 	defaultGstPct: number;
+	interstate: boolean;
 	onUpdate: (id: string, patch: Partial<InvoiceAdditionalExpense>) => void;
 	onRemove: (id: string) => void;
 }) {
-	const calc = calcAdditionalExpenseRow(row);
+	const calc = calcAdditionalExpenseRow(row, interstate);
 	const fromSalesOrder = row.origin === "sales_order";
 
 	return (
@@ -94,14 +85,18 @@ const ExpenseRow = memo(function ExpenseRow({
 				<Select
 					value={row.expenseHead || undefined}
 					disabled={disabled || fromSalesOrder}
-					onValueChange={(v) =>
+					onValueChange={(v) => {
+						const expenseHead = v as InvoiceExpenseHead;
+						const ledger = resolveExpenseHeadCoaLedger(expenseHead);
 						onUpdate(row.id, {
-							expenseHead: v as InvoiceAdditionalExpense["expenseHead"],
-						})
-					}
+							expenseHead,
+							coaLedgerId: ledger.coaLedgerId,
+							coaLedgerName: ledger.coaLedgerName,
+						});
+					}}
 				>
-					<SelectTrigger className="h-9 text-sm font-medium">
-						<SelectValue placeholder="Select expense head…" />
+					<SelectTrigger className="h-8 text-xs font-medium">
+						<SelectValue placeholder="Select charge / expense head…" />
 					</SelectTrigger>
 					<SelectContent>
 						{INVOICE_EXPENSE_HEAD_OPTIONS.map((opt) => (
@@ -115,7 +110,7 @@ const ExpenseRow = memo(function ExpenseRow({
 					<p className="text-[10px] text-muted-foreground mt-0.5">From Sales Order</p>
 				) : null}
 			</td>
-			<td className="p-2 w-[120px]">
+			<td className="p-2 w-[110px]">
 				<AccountsMoneyInput
 					className={NUM_INPUT_CLASS}
 					value={row.amount || ""}
@@ -123,14 +118,14 @@ const ExpenseRow = memo(function ExpenseRow({
 					onChange={(v) => onUpdate(row.id, { amount: v })}
 				/>
 			</td>
-			<td className="p-2 w-[120px]">
+			<td className="p-2 w-[110px]">
 				<GstToggle
 					value={row.gstApplicable}
 					disabled={disabled}
 					onChange={(gstApplicable) => onUpdate(row.id, { gstApplicable })}
 				/>
 			</td>
-			<td className="p-2 w-[88px]">
+			<td className="p-2 w-[72px]">
 				<Input
 					type="number"
 					min={0}
@@ -146,15 +141,26 @@ const ExpenseRow = memo(function ExpenseRow({
 					}
 				/>
 			</td>
-			<td className="p-2 w-[110px] text-right text-xs tabular-nums font-medium text-muted-foreground">
-				{calc.gstAmount > 0 ? formatINR(calc.gstAmount) : "—"}
-			</td>
-			<td className="p-2 w-[110px] text-right text-xs tabular-nums font-semibold">
+			{interstate ? (
+				<td className="p-2 w-[90px] text-right text-xs tabular-nums font-medium text-muted-foreground">
+					{calc.igst > 0 ? formatINR(calc.igst) : "—"}
+				</td>
+			) : (
+				<>
+					<td className="p-2 w-[90px] text-right text-xs tabular-nums font-medium text-muted-foreground">
+						{calc.cgst > 0 ? formatINR(calc.cgst) : "—"}
+					</td>
+					<td className="p-2 w-[90px] text-right text-xs tabular-nums font-medium text-muted-foreground">
+						{calc.sgst > 0 ? formatINR(calc.sgst) : "—"}
+					</td>
+				</>
+			)}
+			<td className="p-2 w-[100px] text-right text-xs tabular-nums font-semibold">
 				{calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—"}
 			</td>
-			<td className="p-2 min-w-[140px]">
+			<td className="p-2 min-w-[120px]">
 				<Input
-					className="h-9 text-sm font-medium"
+					className="h-8 text-xs font-medium"
 					placeholder="Optional"
 					disabled={disabled}
 					value={row.remarks}
@@ -167,9 +173,9 @@ const ExpenseRow = memo(function ExpenseRow({
 						type="button"
 						onClick={() => onRemove(row.id)}
 						className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
-						aria-label="Remove expense row"
+						aria-label="Remove charge row"
 					>
-						<Trash2 className="w-4 h-4" />
+						<Trash2 className="w-3.5 h-3.5" />
 					</button>
 				)}
 			</td>
@@ -182,12 +188,39 @@ function InvoiceAdditionalExpensesEditorInner({
 	onChange,
 	defaultGstPct = 18,
 	disabled,
+	interstate = false,
 }: {
 	expenses: InvoiceAdditionalExpense[];
 	onChange: Dispatch<SetStateAction<InvoiceAdditionalExpense[]>>;
 	defaultGstPct?: number;
 	disabled?: boolean;
+	interstate?: boolean;
 }) {
+	const headers = interstate
+		? ([
+				"Charge / Expense Head",
+				"Amount",
+				"GST Applicable",
+				"GST %",
+				"IGST",
+				"Total Amount",
+				"Remarks",
+				"",
+			] as const)
+		: ([
+				"Charge / Expense Head",
+				"Amount",
+				"GST Applicable",
+				"GST %",
+				"CGST",
+				"SGST",
+				"Total Amount",
+				"Remarks",
+				"",
+			] as const);
+
+	const rightAlign = new Set(["Amount", "GST %", "CGST", "SGST", "IGST", "Total Amount"]);
+
 	const update = useCallback(
 		(id: string, patch: Partial<InvoiceAdditionalExpense>) => {
 			onChange((prev) =>
@@ -198,6 +231,11 @@ function InvoiceAdditionalExpensesEditorInner({
 						next.gstPct = 0;
 					} else if (patch.gstApplicable === true && next.gstPct <= 0) {
 						next.gstPct = defaultGstPct;
+					}
+					if (patch.expenseHead && !patch.coaLedgerName) {
+						const ledger = resolveExpenseHeadCoaLedger(patch.expenseHead);
+						next.coaLedgerId = ledger.coaLedgerId;
+						next.coaLedgerName = ledger.coaLedgerName;
 					}
 					return next;
 				}),
@@ -225,17 +263,17 @@ function InvoiceAdditionalExpensesEditorInner({
 	const hasManualExpense = expenses.some((e) => e.origin !== "sales_order");
 
 	return (
-		<div className="space-y-3">
+		<div className="space-y-2">
 			<div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
 				<table className="w-full text-sm min-w-[980px]">
 					<thead className="border-b border-border/60 bg-muted/20">
 						<tr>
-							{HEADERS.map((h) => (
+							{headers.map((h) => (
 								<th
 									key={h || "actions"}
 									className={cn(
-										"px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
-										RIGHT_ALIGN.has(h) && "text-right",
+										"px-2.5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+										rightAlign.has(h) && "text-right",
 									)}
 								>
 									{h}
@@ -247,11 +285,11 @@ function InvoiceAdditionalExpensesEditorInner({
 						{expenses.length === 0 ? (
 							<tr>
 								<td
-									colSpan={HEADERS.length}
-									className="py-10 text-center text-sm text-muted-foreground"
+									colSpan={headers.length}
+									className="py-8 text-center text-xs text-muted-foreground"
 								>
-									No additional expenses. Click &quot;+ Add Expense&quot; to add freight or
-									other charges.
+									No additional charges. Click &quot;+ Add Charge&quot; to add freight or other
+									charges.
 								</td>
 							</tr>
 						) : (
@@ -261,6 +299,7 @@ function InvoiceAdditionalExpensesEditorInner({
 									row={row}
 									disabled={disabled}
 									defaultGstPct={defaultGstPct}
+									interstate={interstate}
 									onUpdate={update}
 									onRemove={removeRow}
 								/>
@@ -277,7 +316,7 @@ function InvoiceAdditionalExpensesEditorInner({
 							type="button"
 							variant="outline"
 							size="sm"
-							className="h-9 text-sm font-medium gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+							className="h-8 text-xs font-medium gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
 							onClick={() => {
 								const lastManual = [...expenses]
 									.reverse()
@@ -285,24 +324,20 @@ function InvoiceAdditionalExpensesEditorInner({
 								if (lastManual) removeRow(lastManual.id);
 							}}
 						>
-							<Trash2 className="w-4 h-4" /> Delete Expense
+							<Trash2 className="w-3.5 h-3.5" /> Remove Charge
 						</Button>
 					)}
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						className="h-9 text-sm font-medium gap-1.5"
+						className="h-8 text-xs font-medium gap-1.5"
 						onClick={addRow}
 					>
-						<Plus className="w-4 h-4" /> Add Expense
+						<Plus className="w-3.5 h-3.5" /> Add Charge
 					</Button>
 				</div>
 			)}
-
-			<p className="text-xs text-muted-foreground">
-				Expense heads will be linked to Expense Ledger / COA in a future release.
-			</p>
 		</div>
 	);
 }

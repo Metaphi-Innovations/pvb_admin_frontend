@@ -230,6 +230,15 @@ export interface ReceiptAllocationLine {
   invoiceId: number;
   invoiceNo: string;
   amount: number;
+  /** Phase 1 — scheme eligibility support fields (derived at allocation time). */
+  invoiceDate?: string;
+  dueDate?: string;
+  originalInvoiceAmount?: number;
+  outstandingAmountBefore?: number;
+  paymentTermsDays?: number;
+  actualPaymentDays?: number;
+  paymentStatus?: "full" | "partial";
+  allocationStatus?: "allocated";
 }
 
 export interface ReceiptAllocationRecord {
@@ -296,6 +305,45 @@ const TODAY = () => new Date().toISOString().slice(0, 10);
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Receipt Date minus Invoice Date — used for payment-based scheme eligibility. */
+export function computeActualPaymentDays(
+  invoiceDate: string,
+  receiptDate: string,
+): number | undefined {
+  if (!invoiceDate || !receiptDate) return undefined;
+  const a = new Date(invoiceDate);
+  const b = new Date(receiptDate);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return undefined;
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function computePaymentTermsDays(invoiceDate: string, dueDate: string): number | undefined {
+  return computeActualPaymentDays(invoiceDate, dueDate);
+}
+
+function buildEnrichedAllocationLine(
+  inv: InvoiceRecord,
+  allocAmount: number,
+  receiptDate: string,
+): ReceiptAllocationLine {
+  const outstandingBefore = getInvoiceOutstanding(inv);
+  const projectedReceived = round2(inv.amountReceived + allocAmount);
+  const fullPayment = projectedReceived >= inv.grandTotal - 0.009;
+  return {
+    invoiceId: inv.id,
+    invoiceNo: inv.invoiceNo,
+    amount: round2(allocAmount),
+    invoiceDate: inv.invoiceDate,
+    dueDate: inv.dueDate,
+    originalInvoiceAmount: inv.grandTotal,
+    outstandingAmountBefore: outstandingBefore,
+    paymentTermsDays: computePaymentTermsDays(inv.invoiceDate, inv.dueDate),
+    actualPaymentDays: computeActualPaymentDays(inv.invoiceDate, receiptDate),
+    paymentStatus: fullPayment ? "full" : "partial",
+    allocationStatus: "allocated",
+  };
 }
 
 function daysBetween(from: string, to: string): number {
@@ -939,7 +987,9 @@ export function applyReceiptAllocation(
     if (alloc.amount > outstanding + 0.009) {
       return `Allocation for ${inv.invoiceNo} exceeds invoice outstanding (${formatMoney(outstanding)}).`;
     }
-    lines.push({ invoiceId: inv.id, invoiceNo: inv.invoiceNo, amount: round2(alloc.amount) });
+    lines.push(
+      buildEnrichedAllocationLine(inv, alloc.amount, record.receiptDate),
+    );
   }
 
   const nextStore = store.filter((e) => e.voucherId !== voucherId);

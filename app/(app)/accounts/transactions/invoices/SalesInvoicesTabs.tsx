@@ -3,10 +3,9 @@
 import { cn } from "@/lib/utils";
 import {
   SALES_INVOICE_TAB_META,
+  SALES_INVOICE_VISIBLE_TABS,
   type SalesInvoiceTabId,
 } from "./sales-invoice-tab-data";
-
-const TABS: SalesInvoiceTabId[] = ["sales_order", "stock_transfer", "sample_order"];
 
 export function SalesInvoicesTabs({
   value,
@@ -15,11 +14,11 @@ export function SalesInvoicesTabs({
 }: {
   value: SalesInvoiceTabId;
   onChange: (tab: SalesInvoiceTabId) => void;
-  counts: Record<SalesInvoiceTabId, number | null>;
+  counts: Partial<Record<SalesInvoiceTabId, number | null>>;
 }) {
   return (
     <div className="flex items-end gap-0 border-b border-border overflow-x-auto">
-      {TABS.map((tab) => {
+      {SALES_INVOICE_VISIBLE_TABS.map((tab) => {
         const active = value === tab;
         const count = counts[tab];
         const label = SALES_INVOICE_TAB_META[tab].label;

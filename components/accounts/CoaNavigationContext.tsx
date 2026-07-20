@@ -150,6 +150,9 @@ export function CoaNavigationProvider({
     const showTree = (full = false) => {
       if (cancelled) return;
       const loaded = readCoaRecords(full);
+      // #region agent log
+      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'S2',location:'CoaNavigationContext.tsx:showTree',message:'COA showTree completed',data:{full,recordCount:loaded.length,initMode},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setRecords(loaded);
       setExpandedIds((prev) => {
         const next = defaultExpandedIds(loaded);
@@ -161,19 +164,8 @@ export function CoaNavigationProvider({
 
     if (!initRef.current) {
       initRef.current = true;
-
-      const loadInitial = () => {
-        if (cancelled) return;
-        showTree(false);
-      };
-
-      if (typeof window.requestAnimationFrame === "function") {
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(loadInitial);
-        });
-      } else {
-        window.setTimeout(loadInitial, 32);
-      }
+      // Load immediately — deferred rAF left the sidebar blank for multiple frames/clicks.
+      showTree(false);
 
       if (initMode === "full" && !backfillRef.current) {
         backfillRef.current = true;
@@ -242,6 +234,11 @@ export function CoaNavigationProvider({
         router.push(buildTdsPartyWiseReportHref(resolved, records));
         return;
       }
+      // #region agent log
+      if (resolved.nodeLevel === "ledger") {
+        fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-B',location:'CoaNavigationContext.tsx:selectNode',message:'selectNode ledger (non-party path)',data:{nodeId:resolved.id,name:resolved.accountName,erpSourceModule:resolved.erpSourceModule??null},timestamp:Date.now()})}).catch(()=>{});
+      }
+      // #endregion
       setSelectedId(resolved.id);
       setExpandedIds((prev) => {
         let next = expandAncestorsOf(records, resolved.id, prev);

@@ -101,7 +101,7 @@ export function ReportFilterResetButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "h-7 px-2.5 text-xs font-medium rounded-md border border-border text-muted-foreground",
+        "h-8 px-2.5 text-xs font-medium rounded-md border border-border text-muted-foreground",
         "hover:bg-muted/40 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none",
         className,
       )}

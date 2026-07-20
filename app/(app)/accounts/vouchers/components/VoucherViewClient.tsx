@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -15,6 +16,7 @@ import { VoucherEntryClient } from "./VoucherEntryClient";
 import { ReceiptVoucherForm } from "./ReceiptVoucherForm";
 import { PaymentVoucherForm } from "./PaymentVoucherForm";
 import { ContraVoucherForm } from "./ContraVoucherForm";
+import { ensureManualDemoDisplayVouchers } from "@/lib/accounts/bank-recon-display";
 
 interface VoucherViewClientProps {
   voucherId: number;
@@ -22,6 +24,16 @@ interface VoucherViewClientProps {
 
 export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
   const router = useRouter();
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (voucherId >= 920_000 && voucherId < 923_000) {
+      ensureManualDemoDisplayVouchers();
+      setTick((t) => t + 1);
+    }
+  }, [voucherId]);
+
+  void tick;
   const voucher = getVoucherById(voucherId);
   const listHref = voucher
     ? `/accounts/vouchers?tab=${voucherTypeToUrl(voucher.voucherType)}`

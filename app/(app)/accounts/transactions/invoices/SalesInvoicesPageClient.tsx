@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { Ban, Download } from "lucide-react";
+import { Ban, Download, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -58,11 +59,22 @@ import {
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { downloadInvoicePdf } from "@/app/(app)/accounts/invoices/invoice-pdf";
 import { InvoiceCancelDialog } from "@/app/(app)/accounts/invoices/components/InvoiceCancelDialog";
+import { InvoiceStatusBadge } from "@/app/(app)/accounts/invoices/components/InvoiceStatusBadge";
+import { CustomerPartyNameCell } from "@/app/(app)/accounts/invoices/components/CustomerPartyInfo";
 import { SalesInvoicesTabs } from "./SalesInvoicesTabs";
+import {
+  SalesInvoiceEInvoiceStatusCell,
+  SalesInvoiceEWayStatusCell,
+} from "./SalesInvoiceStatutoryStatusCell";
+import {
+  LISTING_EINVOICE_STATUS_OPTIONS,
+  LISTING_EWAY_STATUS_OPTIONS,
+} from "./sales-invoice-statutory";
 import {
   getSalesInvoiceBranchOptions,
   listSalesInvoicesByTab,
   SALES_INVOICE_TAB_META,
+  SALES_INVOICE_VISIBLE_TABS,
   type SalesInvoiceListRow,
   type SalesInvoiceTabId,
 } from "./sales-invoice-tab-data";
@@ -104,6 +116,9 @@ function applyToolbarFilters(
         r.dispatchNo.toLowerCase().includes(q) ||
         r.customerName.toLowerCase().includes(q) ||
         r.customerCode.toLowerCase().includes(q) ||
+        r.partyOrTransfer.toLowerCase().includes(q) ||
+        r.invoiceTypeLabel.toLowerCase().includes(q) ||
+        r.referencePrimary.toLowerCase().includes(q) ||
         r.fromWarehouse.toLowerCase().includes(q) ||
         r.toWarehouse.toLowerCase().includes(q),
     );
@@ -126,16 +141,44 @@ function exportSalesInvoiceTabCsv(tab: SalesInvoiceTabId, rows: SalesInvoiceList
   let headers: string[];
   let toRow: (r: SalesInvoiceListRow) => (string | number)[];
 
-  if (tab === "stock_transfer") {
+  if (tab === "all") {
     headers = [
       "Invoice Date",
       "Invoice No.",
-      "Order No.",
+      "Invoice Type",
+      "Reference No.",
+      "Party / Transfer",
+      "Qty / Item Count",
+      "Total Amount",
+      "Status",
+      "E-Invoice Status",
+      "E-Way Bill Status",
+    ];
+    toRow = (r) => [
+      r.invoiceDate || "—",
+      r.invoiceNo,
+      r.invoiceTypeLabel,
+      [r.referencePrimary, r.referenceSecondary].filter(Boolean).join(" / "),
+      r.partyOrTransfer,
+      r.qtyOrItemCount,
+      formatMoney(r.sourceType === "sample_order" ? 0 : r.totalAmount),
+      r.invoiceStatus,
+      r.eInvoiceStatusLabel,
+      r.ewayBillStatusLabel,
+    ];
+  } else if (tab === "stock_transfer") {
+    headers = [
+      "Invoice Date",
+      "Invoice No.",
+      "Stock Transfer No.",
       "Dispatch No.",
       "From Warehouse",
       "To Warehouse",
       "Total Amount",
-      "Total Item Count",
+      "Qty",
+      "Status",
+      "E-Invoice Status",
+      "E-Way Bill Status",
     ];
     toRow = (r) => [
       r.invoiceDate || "—",
@@ -145,18 +188,23 @@ function exportSalesInvoiceTabCsv(tab: SalesInvoiceTabId, rows: SalesInvoiceList
       r.fromWarehouse || "—",
       r.toWarehouse || "—",
       formatMoney(r.totalAmount),
-      r.itemCount,
+      r.qtyOrItemCount,
+      r.invoiceStatus,
+      r.eInvoiceStatusLabel,
+      r.ewayBillStatusLabel,
     ];
   } else {
     headers = [
       "Invoice Date",
       "Invoice No.",
-      "Order No.",
+      tab === "sample_order" ? "Sample Order No." : "Sales Order No.",
       "Dispatch No.",
-      "Customer Name",
-      "Customer Code",
+      "Customer",
       "Total Amount",
-      "Total Item Count",
+      "Qty",
+      "Status",
+      "E-Invoice Status",
+      "E-Way Bill Status",
     ];
     toRow = (r) => [
       r.invoiceDate || "—",
@@ -164,9 +212,11 @@ function exportSalesInvoiceTabCsv(tab: SalesInvoiceTabId, rows: SalesInvoiceList
       r.orderNo,
       r.dispatchNo,
       r.customerName,
-      r.customerCode || "—",
       formatMoney(tab === "sample_order" ? 0 : r.totalAmount),
-      r.itemCount,
+      r.qtyOrItemCount,
+      r.invoiceStatus,
+      r.eInvoiceStatusLabel,
+      r.ewayBillStatusLabel,
     ];
   }
 
@@ -182,6 +232,36 @@ function exportSalesInvoiceTabCsv(tab: SalesInvoiceTabId, rows: SalesInvoiceList
   a.download = meta.exportFileName;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function StatutoryStatusHeaders() {
+  return (
+    <>
+      <SortTh
+        label="E-Invoice / IRN"
+        colKey="eInvoiceStatusLabel"
+        filterType="status"
+      />
+      <SortTh
+        label="E-Way Bill"
+        colKey="ewayBillStatusLabel"
+        filterType="status"
+      />
+    </>
+  );
+}
+
+function StatutoryStatusCells({ row }: { row: SalesInvoiceListRow }) {
+  return (
+    <>
+      <AccountsTableCell>
+        <SalesInvoiceEInvoiceStatusCell details={row.eInvoiceDetails} />
+      </AccountsTableCell>
+      <AccountsTableCell>
+        <SalesInvoiceEWayStatusCell details={row.ewayBillDetails} />
+      </AccountsTableCell>
+    </>
+  );
 }
 
 function SalesInvoicesListing({
@@ -288,6 +368,42 @@ function RowActions({
   );
 }
 
+function ReferenceCell({ row }: { row: SalesInvoiceListRow }) {
+  if (row.sourceType === "service") {
+    return <span className="text-xs text-foreground">{row.referencePrimary}</span>;
+  }
+  return (
+    <div className="min-w-0 leading-tight">
+      <p className="text-xs font-mono font-semibold text-brand-700 truncate">{row.referencePrimary}</p>
+      {row.referenceSecondary ? (
+        <p className="text-[11px] font-mono text-muted-foreground mt-0.5 truncate">
+          {row.referenceSecondary}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PartyCell({ row }: { row: SalesInvoiceListRow }) {
+  if (row.sourceType === "stock_transfer") {
+    return (
+      <div className="min-w-0 leading-tight">
+        <p className="text-xs font-semibold text-foreground truncate">{row.fromWarehouse || "—"}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+          → {row.toWarehouse || "—"}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <CustomerPartyNameCell
+      customerName={row.customerName}
+      customerCode={row.customerCode}
+      branch={row.branch}
+    />
+  );
+}
+
 function SalesInvoicesTable({
   tab,
   mounted,
@@ -327,9 +443,11 @@ function SalesInvoicesTable({
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
+  const isAll = tab === "all";
   const isStockTransfer = tab === "stock_transfer";
   const isSampleOrder = tab === "sample_order";
-  const colSpan = isStockTransfer ? 9 : 8;
+  const colSpan = isAll ? 11 : isStockTransfer ? 11 : 10;
+
 
   const emptyStates =
     !mounted || loading ? (
@@ -346,19 +464,83 @@ function SalesInvoicesTable({
       <AccountsTableEmpty colSpan={colSpan} message="No records match the column filters." />
     ) : null;
 
-  if (isStockTransfer) {
+  if (isAll) {
     return (
-      <AccountsTable minWidth={1180}>
+      <AccountsTable minWidth={1380}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
             <SortTh label="Invoice No." colKey="invoiceNo" />
-            <SortTh label="Order No." colKey="orderNo" />
+            <SortTh label="Invoice Type" colKey="invoiceTypeLabel" filterType="select" />
+            <SortTh label="Reference No." colKey="referencePrimary" />
+            <SortTh label="Party / Transfer" colKey="partyOrTransfer" className="accounts-col-party" />
+            <SortTh label="Qty / Item Count" colKey="qtyOrItemCount" filterType="amount" align="right" />
+            <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
+            <SortTh label="Status" colKey="invoiceStatus" filterType="status" />
+            <StatutoryStatusHeaders />
+            <AccountsColumnHeader
+              label="Actions"
+              colKey="_actions"
+              sortable={false}
+              filterable={false}
+              align="right"
+              className="accounts-col-actions-wide"
+            />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {emptyStates ??
+            pagedRows.map((r) => (
+              <AccountsTableRow key={r.id}>
+                <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
+                <AccountsTableCell mono className="font-semibold text-brand-700">
+                  <Link href={r.viewHref} className="hover:underline">
+                    {r.invoiceNo}
+                  </Link>
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <span className="text-xs font-medium text-foreground">{r.invoiceTypeLabel}</span>
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <ReferenceCell row={r} />
+                </AccountsTableCell>
+                <AccountsTableCell className="accounts-col-party">
+                  <PartyCell row={r} />
+                </AccountsTableCell>
+                <AccountsTableCell align="right" className="tabular-nums">
+                  {r.qtyOrItemCount}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money className="font-semibold">
+                  <MoneyAmount amount={r.sourceType === "sample_order" ? 0 : r.totalAmount} />
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <InvoiceStatusBadge status={r.invoiceStatus} />
+                </AccountsTableCell>
+                <StatutoryStatusCells row={r} />
+                <AccountsTableCell align="right">
+                  <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))}
+        </AccountsTableBody>
+      </AccountsTable>
+    );
+  }
+
+  if (isStockTransfer) {
+    return (
+      <AccountsTable minWidth={1380}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
+            <SortTh label="Invoice No." colKey="invoiceNo" />
+            <SortTh label="Stock Transfer No." colKey="orderNo" />
             <SortTh label="Dispatch No." colKey="dispatchNo" />
             <SortTh label="From Warehouse" colKey="fromWarehouse" />
             <SortTh label="To Warehouse" colKey="toWarehouse" />
             <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
-            <SortTh label="Total Item Count" colKey="itemCount" filterType="amount" align="right" />
+            <SortTh label="Qty" colKey="qtyOrItemCount" filterType="amount" align="right" />
+            <StatutoryStatusHeaders />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -387,8 +569,9 @@ function SalesInvoicesTable({
                   <MoneyAmount amount={r.totalAmount} />
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="tabular-nums">
-                  {r.itemCount}
+                  {r.qtyOrItemCount}
                 </AccountsTableCell>
+                <StatutoryStatusCells row={r} />
                 <AccountsTableCell align="right">
                   <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
                 </AccountsTableCell>
@@ -400,16 +583,20 @@ function SalesInvoicesTable({
   }
 
   return (
-    <AccountsTable minWidth={1120}>
+    <AccountsTable minWidth={1320}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
           <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
           <SortTh label="Invoice No." colKey="invoiceNo" />
-          <SortTh label="Order No." colKey="orderNo" />
+          <SortTh
+            label={isSampleOrder ? "Sample Order No." : "Sales Order No."}
+            colKey="orderNo"
+          />
           <SortTh label="Dispatch No." colKey="dispatchNo" />
           <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
           <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
-          <SortTh label="Total Item Count" colKey="itemCount" filterType="amount" align="right" />
+          <SortTh label="Qty" colKey="qtyOrItemCount" filterType="amount" align="right" />
+          <StatutoryStatusHeaders />
           <AccountsColumnHeader
             label="Actions"
             colKey="_actions"
@@ -433,21 +620,19 @@ function SalesInvoicesTable({
               <AccountsTableCell mono>{r.orderNo}</AccountsTableCell>
               <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
               <AccountsTableCell className="accounts-col-party">
-                <div className="min-w-0 leading-tight">
-                  <p className="text-xs font-semibold text-foreground truncate">{r.customerName}</p>
-                  {r.customerCode ? (
-                    <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
-                      {r.customerCode}
-                    </p>
-                  ) : null}
-                </div>
+                <CustomerPartyNameCell
+                  customerName={r.customerName}
+                  customerCode={r.customerCode}
+                  branch={r.branch}
+                />
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="font-semibold">
                 <MoneyAmount amount={isSampleOrder ? 0 : r.totalAmount} />
               </AccountsTableCell>
               <AccountsTableCell align="right" className="tabular-nums">
-                {r.itemCount}
+                {r.qtyOrItemCount}
               </AccountsTableCell>
+              <StatutoryStatusCells row={r} />
               <AccountsTableCell align="right">
                 <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
               </AccountsTableCell>
@@ -460,7 +645,7 @@ function SalesInvoicesTable({
 
 export default function SalesInvoicesPageClient() {
   const mounted = useClientMounted();
-  const [activeTab, setActiveTab] = useState<SalesInvoiceTabId>("sales_order");
+  const [activeTab, setActiveTab] = useState<SalesInvoiceTabId>("all");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
     useReportDateRange("this_month");
   const [financialYearId, setFinancialYearId] = useState("all");
@@ -468,9 +653,11 @@ export default function SalesInvoicesPageClient() {
   const [cancelTarget, setCancelTarget] = useState<SalesInvoiceListRow | null>(null);
 
   const [tabState, setTabState] = useState<Record<SalesInvoiceTabId, TabCache>>({
+    all: createEmptyTabCache(),
     sales_order: createEmptyTabCache(),
     stock_transfer: createEmptyTabCache(),
     sample_order: createEmptyTabCache(),
+    service: createEmptyTabCache(),
   });
 
   const filterKey = `${financialYearId}|${dateFrom}|${dateTo}|${branches.join(",")}`;
@@ -510,10 +697,9 @@ export default function SalesInvoicesPageClient() {
 
   useEffect(() => {
     if (!mounted) return;
-    fetchTab("sales_order");
+    fetchTab("all");
   }, [mounted, fetchTab]);
 
-  // Refresh when returning from invoice generation / edit
   useEffect(() => {
     if (!mounted) return;
     const refresh = () => fetchTab(activeTab);
@@ -559,7 +745,7 @@ export default function SalesInvoicesPageClient() {
   const branchOptions = useMemo(() => {
     if (!mounted) return [];
     const set = new Set<string>();
-    (Object.keys(tabState) as SalesInvoiceTabId[]).forEach((tab) => {
+    SALES_INVOICE_VISIBLE_TABS.forEach((tab) => {
       if (tabState[tab].loaded) {
         for (const r of tabState[tab].rows) if (r.branch && r.branch !== "—") set.add(r.branch);
       }
@@ -615,13 +801,9 @@ export default function SalesInvoicesPageClient() {
   );
 
   const tabCounts = useMemo(() => {
-    const counts: Record<SalesInvoiceTabId, number | null> = {
-      sales_order: null,
-      stock_transfer: null,
-      sample_order: null,
-    };
+    const counts: Partial<Record<SalesInvoiceTabId, number | null>> = {};
     if (!mounted) return counts;
-    (Object.keys(counts) as SalesInvoiceTabId[]).forEach((tab) => {
+    SALES_INVOICE_VISIBLE_TABS.forEach((tab) => {
       const cache = tabState[tab];
       if (!cache.loaded) {
         try {
@@ -693,10 +875,7 @@ export default function SalesInvoicesPageClient() {
       if (!cancelTarget) return;
       cancelInvoice(cancelTarget.invoiceId, reason);
       setCancelTarget(null);
-      // Refetch every tab so counts stay in sync after cancel
-      (["sales_order", "stock_transfer", "sample_order"] as SalesInvoiceTabId[]).forEach(
-        (tab) => fetchTab(tab),
-      );
+      SALES_INVOICE_VISIBLE_TABS.forEach((tab) => fetchTab(tab));
     },
     [cancelTarget, fetchTab],
   );
@@ -708,27 +887,59 @@ export default function SalesInvoicesPageClient() {
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
+  const statutoryFilterCols = {
+    eInvoiceStatusLabel: {
+      type: "status" as const,
+      options: [...LISTING_EINVOICE_STATUS_OPTIONS],
+    },
+    ewayBillStatusLabel: {
+      type: "status" as const,
+      options: [...LISTING_EWAY_STATUS_OPTIONS],
+    },
+  };
+
   const columnConfig: AccountsColumnFilterConfig =
-    activeTab === "stock_transfer"
+    activeTab === "all"
       ? {
           invoiceDate: { type: "date" },
           invoiceNo: { type: "text" },
-          orderNo: { type: "text" },
-          dispatchNo: { type: "text" },
-          fromWarehouse: { type: "text" },
-          toWarehouse: { type: "text" },
+          invoiceTypeLabel: {
+            type: "select",
+            options: ["Sales Order", "Stock Transfer", "Sample Order", "Service"],
+          },
+          referencePrimary: { type: "text" },
+          partyOrTransfer: { type: "text" },
+          qtyOrItemCount: { type: "amount" },
           totalAmount: { type: "amount" },
-          itemCount: { type: "amount" },
+          invoiceStatus: {
+            type: "status",
+            options: ["draft", "sent", "cancelled"],
+            optionLabels: { draft: "Draft", sent: "Sent", cancelled: "Cancelled" },
+          },
+          ...statutoryFilterCols,
         }
-      : {
-          invoiceDate: { type: "date" },
-          invoiceNo: { type: "text" },
-          orderNo: { type: "text" },
-          dispatchNo: { type: "text" },
-          customerName: { type: "text" },
-          totalAmount: { type: "amount" },
-          itemCount: { type: "amount" },
-        };
+      : activeTab === "stock_transfer"
+        ? {
+            invoiceDate: { type: "date" },
+            invoiceNo: { type: "text" },
+            orderNo: { type: "text" },
+            dispatchNo: { type: "text" },
+            fromWarehouse: { type: "text" },
+            toWarehouse: { type: "text" },
+            totalAmount: { type: "amount" },
+            qtyOrItemCount: { type: "amount" },
+            ...statutoryFilterCols,
+          }
+        : {
+            invoiceDate: { type: "date" },
+            invoiceNo: { type: "text" },
+            orderNo: { type: "text" },
+            dispatchNo: { type: "text" },
+            customerName: { type: "text" },
+            totalAmount: { type: "amount" },
+            qtyOrItemCount: { type: "amount" },
+            ...statutoryFilterCols,
+          };
 
   return (
     <div className="sales-invoices-compact h-full min-h-0">
@@ -743,7 +954,7 @@ export default function SalesInvoicesPageClient() {
         <AccountsPageShell
           breadcrumbs={accountsBreadcrumb("Transactions", "Sales Invoice")}
           title="Sales Invoices"
-          description="Generated tax invoices by source — sales order, stock transfer, and sample order."
+          description="Generated tax invoices by source — sales order, stock transfer, sample order, and service."
           hideDescription
           layout="split"
           className="h-full min-h-0"
@@ -757,11 +968,23 @@ export default function SalesInvoicesPageClient() {
           filters={
             <ReportFilterRow
               end={
-                <AccountsExportMenu
-                  onExcel={() => exportSalesInvoiceTabCsv(activeTab, toolbarRows)}
-                  onPdf={() => exportSalesInvoiceTabCsv(activeTab, toolbarRows)}
-                  disabled={toolbarRows.length === 0}
-                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+                  >
+                    <Link href="/accounts/transactions/invoices/new-service">
+                      <Plus className="w-3.5 h-3.5" />
+                      Create Service Invoice
+                    </Link>
+                  </Button>
+                  <AccountsExportMenu
+                    onExcel={() => exportSalesInvoiceTabCsv(activeTab, toolbarRows)}
+                    onPdf={() => exportSalesInvoiceTabCsv(activeTab, toolbarRows)}
+                    disabled={toolbarRows.length === 0}
+                  />
+                </div>
               }
             >
               <ReportFinancialYearFilter

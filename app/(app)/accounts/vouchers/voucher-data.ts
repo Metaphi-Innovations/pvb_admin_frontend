@@ -983,6 +983,10 @@ export function canEditVoucher(voucher: AccountingVoucher): boolean {
   ) {
     return true;
   }
+  // Bank Reconciliation demo stubs are view-only (never posted to ledgers).
+  if (voucher.referenceNo === "BANK-RECON-DEMO") {
+    return false;
+  }
   return canEditAccountsDocument(voucher.workflow, voucher.status);
 }
 

@@ -25,6 +25,7 @@ import {
   TALLY_SEED_VERSION,
   createTallyLinkId,
 } from "@/lib/accounts/bank-recon-tally-store";
+import { ensureManualDemoDisplayVouchers } from "@/lib/accounts/bank-recon-display";
 import type { BankReconTallyLink } from "@/lib/accounts/bank-recon-tally-types";
 
 function buildManualSeedLinks(): BankReconTallyLink[] {
@@ -74,6 +75,7 @@ export function ensureBankReconTallySeeded(): void {
     const links = buildManualSeedLinks();
     saveTallyLinks(links, { silent: true });
     saveTallySuggestions([], { silent: true });
+    ensureManualDemoDisplayVouchers();
 
     // Touch overlay so tree-shaken counters stay accurate in checks.
     void getAllManualDemoMovements().length;
@@ -97,4 +99,5 @@ export function resetBankReconciliationDemoData(): void {
   if (typeof window === "undefined") return;
   resetBankReconciliationDemoStorage();
   ensureBankReconTallySeeded();
+  ensureManualDemoDisplayVouchers();
 }

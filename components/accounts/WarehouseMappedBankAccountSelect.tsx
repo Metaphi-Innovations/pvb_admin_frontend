@@ -30,6 +30,7 @@ export function WarehouseMappedBankAccountSelect({
   disabled = false,
   className,
   placeholder = "Select bank account…",
+  hideHint = false,
 }: {
   warehouseRef: string | number | null | undefined;
   value: number | null;
@@ -39,6 +40,8 @@ export function WarehouseMappedBankAccountSelect({
   disabled?: boolean;
   className?: string;
   placeholder?: string;
+  /** Hide warehouse mapping hint (Goods invoice compact layout). */
+  hideHint?: boolean;
 }) {
   useEffect(() => {
     loadBankAccounts();
@@ -62,11 +65,13 @@ export function WarehouseMappedBankAccountSelect({
   const empty = options.length === 0;
 
   return (
-    <div className={cn("space-y-1", className)}>
-      <Label className="text-xs font-medium">
-        {label}
-        {required ? <span className="text-red-500"> *</span> : null}
-      </Label>
+    <div className={cn(hideHint ? "space-y-0 w-full" : "space-y-1", className)}>
+      {label ? (
+        <Label className="text-xs font-medium">
+          {label}
+          {required ? <span className="text-red-500"> *</span> : null}
+        </Label>
+      ) : null}
       {noWarehouse ? (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           Could not resolve warehouse &quot;{String(warehouseRef)}&quot;. Select a valid warehouse first.
@@ -85,7 +90,7 @@ export function WarehouseMappedBankAccountSelect({
           }}
           disabled={disabled}
         >
-          <SelectTrigger className="h-9 text-sm rounded-lg">
+          <SelectTrigger className={cn("rounded-lg", hideHint ? "h-8 text-xs" : "h-9 text-sm")}>
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
@@ -110,7 +115,7 @@ export function WarehouseMappedBankAccountSelect({
           </SelectContent>
         </Select>
       )}
-      {resolvedWarehouse && !empty && (
+      {resolvedWarehouse && !empty && !hideHint && (
         <p className="text-[11px] text-muted-foreground">
           Showing accounts mapped to {resolvedWarehouse.warehouseName}.
         </p>

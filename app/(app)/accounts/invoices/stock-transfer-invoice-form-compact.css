@@ -1,0 +1,61 @@
+/* Stock Transfer Invoice generation — page-scoped (reuses SO compact tokens). */
+
+.stock-transfer-invoice-form-compact {
+  --so-ctrl-h: 32px;
+  --so-label-gap: 4px;
+  --so-helper-h: 14px;
+  --so-field-gap: 0.75rem;
+  --so-fs-page: 18px;
+  --so-fs-section: 14px;
+  --so-fs-label: 11px;
+  --so-fs-control: 12px;
+  --so-fs-body: 12px;
+  --so-fs-th: 10px;
+  --so-fs-secondary: 10px;
+  --so-fs-summary: 12px;
+  --so-fs-grand: 15px;
+  --so-fs-btn: 12px;
+  --so-fs-code: 11px;
+  --so-fw-regular: 400;
+  --so-fw-medium: 500;
+  --so-fw-semibold: 600;
+  font-family: inherit;
+}
+
+.stock-transfer-invoice-form-compact .so-w-wh { width: 240px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-pos { width: 200px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-gstin { width: 180px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-so { width: 180px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-inv-no { width: 190px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-date { width: 160px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-dispatch { width: 180px; max-width: 100%; }
+.stock-transfer-invoice-form-compact .so-w-bank { width: 320px; max-width: 100%; }
+
+.stock-transfer-invoice-form-compact textarea.so-goods-narration {
+  min-height: 56px !important;
+  max-height: 72px !important;
+  height: 64px !important;
+  font-size: var(--so-fs-control) !important;
+}
+
+.stock-transfer-invoice-form-compact .so-goods-product-table .so-hsn-value {
+  font-family: inherit !important;
+  font-size: var(--so-fs-body, 12px) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--foreground)) !important;
+  text-align: left;
+}
+
+.stock-transfer-invoice-form-compact .so-goods-product-table .so-sku-value,
+.stock-transfer-invoice-form-compact .so-goods-product-table .so-batch-value {
+  font-family: inherit !important;
+  font-size: var(--so-fs-body, 12px) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.stock-transfer-invoice-form-compact .so-goods-product-table .so-product-meta {
+  font-size: var(--so-fs-secondary, 10px) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--muted-foreground)) !important;
+}

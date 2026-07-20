@@ -16,12 +16,18 @@ import {
   NEAR_EXPIRY_PENDING_DEMO_CUSTOMER,
   ensureNearExpiryPendingDemoCustomer,
 } from "@/lib/accounts/pending-invoice-near-expiry-demo";
+import {
+  GOODS_WE008_BATCH,
+  GOODS_WE008_DISPATCH_ID,
+  GOODS_WE008_DISPATCH_NO,
+  ensureGoodsWe008DemoLinkage,
+} from "@/lib/accounts/pending-invoice-goods-we008-demo";
 
-export const PENDING_INVOICE_SEED_VERSION = 7;
+export const PENDING_INVOICE_SEED_VERSION = 11;
 
 export const PENDING_SEED_DISPATCH_IDS = {
   ne001: NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID,
-  we008: "dp-pi-we-008",
+  we008: GOODS_WE008_DISPATCH_ID,
   se011: "dp-pi-se-011",
   st004: "dp-pi-st-004",
   st007: "dp-pi-st-007",
@@ -63,7 +69,24 @@ const STOCK_TRANSFER_DISPATCHES: DispatchRecord[] = [
     targetWarehouse: "Ahmedabad Warehouse",
     packingNumbers: ["PKG-ST-2026-004"],
     products: [
-      { product: "DAP 50kg", sku: "SKU-DAP-50", packedQty: 200, dispatchQty: 200, unitRate: 260 },
+      {
+        product: "DAP 50kg",
+        sku: "FERT-000004",
+        packedQty: 200,
+        dispatchQty: 200,
+        unitRate: 260,
+        batchNo: "B-DAP-33C",
+        batchExpiryDate: "2027-12-01",
+        manufacturingDate: "2025-12-01",
+        batchAllocations: [
+          {
+            batchNumber: "B-DAP-33C",
+            allocatedQty: 200,
+            expiryDate: "2027-12-01",
+            manufacturingDate: "2025-12-01",
+          },
+        ],
+      },
     ],
     dispatch_id: PENDING_SEED_DISPATCH_IDS.st004,
     dispatch_no: "DSP-ST-2026-004",
@@ -89,7 +112,24 @@ const STOCK_TRANSFER_DISPATCHES: DispatchRecord[] = [
     targetWarehouse: "Pune Warehouse",
     packingNumbers: ["PKG-ST-2026-007"],
     products: [
-      { product: "Urea 50kg", sku: "SKU-UR-50", packedQty: 250, dispatchQty: 250, unitRate: 314 },
+      {
+        product: "Urea 50kg",
+        sku: "FERT-000002",
+        packedQty: 250,
+        dispatchQty: 250,
+        unitRate: 314,
+        batchNo: "B-UR-99A",
+        batchExpiryDate: "2027-11-01",
+        manufacturingDate: "2025-11-01",
+        batchAllocations: [
+          {
+            batchNumber: "B-UR-99A",
+            allocatedQty: 250,
+            expiryDate: "2027-11-01",
+            manufacturingDate: "2025-11-01",
+          },
+        ],
+      },
     ],
     dispatch_id: PENDING_SEED_DISPATCH_IDS.st007,
     dispatch_no: "DSP-ST-2026-007",
@@ -116,7 +156,24 @@ const SAMPLE_ORDER_DISPATCHES: DispatchRecord[] = [
     warehouse: "Central Warehouse",
     packingNumbers: ["PKG-SM-2026-003"],
     products: [
-      { product: "Hybrid Maize Seed", sku: "SKU-MZ-12", packedQty: 40, dispatchQty: 40, unitRate: 0 },
+      {
+        product: "Hybrid Maize Seed",
+        sku: "SEED-000002",
+        packedQty: 40,
+        dispatchQty: 40,
+        unitRate: 0,
+        batchNo: "B-MZ-22A",
+        batchExpiryDate: "2026-10-10",
+        manufacturingDate: "2025-10-10",
+        batchAllocations: [
+          {
+            batchNumber: "B-MZ-22A",
+            allocatedQty: 40,
+            expiryDate: "2026-10-10",
+            manufacturingDate: "2025-10-10",
+          },
+        ],
+      },
     ],
     dispatch_id: PENDING_SEED_DISPATCH_IDS.sm003,
     dispatch_no: "DSP-SM-2026-003",
@@ -136,10 +193,27 @@ const SAMPLE_ORDER_DISPATCHES: DispatchRecord[] = [
     transporterName: "Company Vehicle",
     dispatchDate: demoDateAt(2),
     deliveryStatus: "Delivered",
-    warehouse: "West Zone Hub",
+    warehouse: "Central Warehouse",
     packingNumbers: ["PKG-SM-2026-006"],
     products: [
-      { product: "Bio Fertilizer 1L", sku: "SKU-BF-1L", packedQty: 25, dispatchQty: 25, unitRate: 0 },
+      {
+        product: "Bio Fertilizer A",
+        sku: "BIO-000001",
+        packedQty: 25,
+        dispatchQty: 25,
+        unitRate: 0,
+        batchNo: "B002",
+        batchExpiryDate: "2026-12-23",
+        manufacturingDate: "2025-12-01",
+        batchAllocations: [
+          {
+            batchNumber: "B002",
+            allocatedQty: 25,
+            expiryDate: "2026-12-23",
+            manufacturingDate: "2025-12-01",
+          },
+        ],
+      },
     ],
     dispatch_id: PENDING_SEED_DISPATCH_IDS.sm006,
     dispatch_no: "DSP-SM-2026-006",
@@ -159,11 +233,45 @@ const SAMPLE_ORDER_DISPATCHES: DispatchRecord[] = [
     transporterName: "Blue Dart Logistics",
     dispatchDate: demoDateAt(0),
     deliveryStatus: "Delivered",
-    warehouse: "North Zone Hub",
+    warehouse: "Central Warehouse",
     packingNumbers: ["PKG-SM-2026-009"],
     products: [
-      { product: "Hybrid Tomato Seeds", sku: "SKU-TM-06", packedQty: 60, dispatchQty: 60, unitRate: 0 },
-      { product: "Vermicompost", sku: "SKU-VC-08", packedQty: 30, dispatchQty: 30, unitRate: 0 },
+      {
+        product: "Hybrid Maize Seed",
+        sku: "SEED-000002",
+        packedQty: 60,
+        dispatchQty: 60,
+        unitRate: 0,
+        batchNo: "B-MZ-22A",
+        batchExpiryDate: "2026-10-10",
+        manufacturingDate: "2025-10-10",
+        batchAllocations: [
+          {
+            batchNumber: "B-MZ-22A",
+            allocatedQty: 60,
+            expiryDate: "2026-10-10",
+            manufacturingDate: "2025-10-10",
+          },
+        ],
+      },
+      {
+        product: "Urea 50kg",
+        sku: "FERT-000002",
+        packedQty: 30,
+        dispatchQty: 30,
+        unitRate: 0,
+        batchNo: "B-UR-99A",
+        batchExpiryDate: "2027-11-01",
+        manufacturingDate: "2025-11-01",
+        batchAllocations: [
+          {
+            batchNumber: "B-UR-99A",
+            allocatedQty: 30,
+            expiryDate: "2027-11-01",
+            manufacturingDate: "2025-11-01",
+          },
+        ],
+      },
     ],
     dispatch_id: PENDING_SEED_DISPATCH_IDS.sm009,
     dispatch_no: "DSP-SM-2026-009",
@@ -189,10 +297,25 @@ const SALES_DISPATCHES: DispatchRecord[] = [
     warehouse: "Central Warehouse",
     packingNumbers: ["PKG-2026-WE-008"],
     products: [
-      { product: "Urea 50kg", sku: "SKU-UR-50", packedQty: 300, dispatchQty: 300, unitRate: 310 },
+      {
+        product: "Urea 50kg",
+        sku: "SKU-UR-50",
+        packedQty: 300,
+        dispatchQty: 300,
+        unitRate: 310,
+        batchNo: GOODS_WE008_BATCH,
+        batchExpiryDate: "2027-11-01",
+        batchAllocations: [
+          {
+            batchNumber: GOODS_WE008_BATCH,
+            expiryDate: "2027-11-01",
+            allocatedQty: 300,
+          },
+        ],
+      },
     ],
     dispatch_id: PENDING_SEED_DISPATCH_IDS.we008,
-    dispatch_no: "DSP-2026-WE-008",
+    dispatch_no: GOODS_WE008_DISPATCH_NO,
     source_type: "sales_order",
     sourceDocumentType: "Sales Order",
     source_document_no: "SO-2026-WE-014",
@@ -334,7 +457,7 @@ const SEED_ROW_DEFS: SeedRowDef[] = [
     interstate: false,
     status: "Delivered",
     salesOrderId: null,
-    warehouse: "West Zone Hub",
+    warehouse: "Central Warehouse",
     dispatch: SAMPLE_ORDER_DISPATCHES[1],
   },
   {
@@ -350,7 +473,7 @@ const SEED_ROW_DEFS: SeedRowDef[] = [
     interstate: false,
     status: "Delivered",
     salesOrderId: null,
-    warehouse: "North Zone Hub",
+    warehouse: "Central Warehouse",
     dispatch: SAMPLE_ORDER_DISPATCHES[2],
   },
 ];
@@ -380,6 +503,14 @@ export function getPendingInvoiceSeedDispatch(
     ensureNearExpiryPendingDemoCustomer();
     return NEAR_EXPIRY_PENDING_DEMO_DISPATCH;
   }
+  if (
+    dispatchId === PENDING_SEED_DISPATCH_IDS.we008 ||
+    dispatchNo === GOODS_WE008_DISPATCH_NO
+  ) {
+    if (isDispatchInvoiced(GOODS_WE008_DISPATCH_NO)) return undefined;
+    ensureGoodsWe008DemoLinkage();
+    return SALES_DISPATCHES.find((d) => d.id === PENDING_SEED_DISPATCH_IDS.we008);
+  }
   const all = [...SALES_DISPATCHES, ...STOCK_TRANSFER_DISPATCHES, ...SAMPLE_ORDER_DISPATCHES];
   return (
     (dispatchId ? all.find((d) => d.id === dispatchId) : undefined) ??
@@ -395,6 +526,9 @@ export function listPendingInvoiceSeedRows(): PendingTaxInvoiceRow[] {
   if (typeof window === "undefined") {
     return SEED_ROW_DEFS.map((row, index) => mapSeedDefToRow(row, index + 1));
   }
+
+  ensureNearExpiryPendingDemoCustomer();
+  ensureGoodsWe008DemoLinkage();
 
   return SEED_ROW_DEFS.filter((row) => !isDispatchInvoiced(row.dispatchNo)).map((row, index) =>
     mapSeedDefToRow(row, index + 1),

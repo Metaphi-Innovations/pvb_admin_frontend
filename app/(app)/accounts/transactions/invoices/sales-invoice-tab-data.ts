@@ -1,6 +1,7 @@
 /**
  * Sales Invoices — tab-scoped data sources.
- * Each tab maps generated invoices from its own source pipeline.
+ * Each source tab maps generated invoices from its own pipeline.
+ * "All Invoices" combines goods + service invoices.
  * Used only by Transactions → Sales Invoice.
  */
 
@@ -18,11 +19,27 @@ import {
   getDispatchByNumber,
 } from "@/lib/accounts/dispatch-invoice-bridge";
 import { getPendingInvoiceSeedDispatch } from "@/lib/accounts/pending-invoice-seed";
-import { resolveInvoiceDocumentType } from "@/lib/accounts/invoice-type";
+import {
+  resolveInvoiceDocumentType,
+  salesInvoiceTypeLabel,
+  type SalesInvoiceSourceType,
+} from "@/lib/accounts/invoice-type";
 import { resolveWarehouseOrderType } from "@/app/(app)/warehouse/lib/order-document-type";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+import {
+  buildEInvoiceDetails,
+  buildEWayDetails,
+  resolveListingEInvoiceStatus,
+  resolveListingEWayStatus,
+  type ListingEInvoiceStatus,
+  type ListingEWayStatus,
+  type SalesInvoiceEInvoiceDetails,
+  type SalesInvoiceEWayDetails,
+} from "./sales-invoice-statutory";
 
-export type SalesInvoiceTabId = "sales_order" | "stock_transfer" | "sample_order";
+export type SalesInvoiceKind = "sales_order" | "stock_transfer" | "sample_order" | "service";
+
+export type SalesInvoiceTabId = "all" | SalesInvoiceKind;
 
 export const SALES_INVOICE_TAB_META: Record<
   SalesInvoiceTabId,
@@ -33,34 +50,52 @@ export const SALES_INVOICE_TAB_META: Record<
     emptyMessage: string;
   }
 > = {
+  all: {
+    label: "All Invoices",
+    sourceNoLabel: "Reference No.",
+    exportFileName: "all-sales-invoices.xlsx",
+    emptyMessage: "No sales invoices generated yet.",
+  },
   sales_order: {
     label: "Sales Order Invoices",
-    sourceNoLabel: "Order No.",
+    sourceNoLabel: "Sales Order No.",
     exportFileName: "sales-order-invoices.xlsx",
     emptyMessage: "No sales order invoices generated yet.",
   },
   stock_transfer: {
     label: "Stock Transfer Invoices",
-    sourceNoLabel: "Order No.",
+    sourceNoLabel: "Stock Transfer No.",
     exportFileName: "stock-transfer-invoices.xlsx",
     emptyMessage: "No stock transfer invoices generated yet.",
   },
   sample_order: {
     label: "Sample Order Invoices",
-    sourceNoLabel: "Order No.",
+    sourceNoLabel: "Sample Order No.",
     exportFileName: "sample-order-invoices.xlsx",
     emptyMessage: "No sample order invoices generated yet.",
+  },
+  service: {
+    label: "Service Invoices",
+    sourceNoLabel: "Manual Reference No.",
+    exportFileName: "service-invoices.xlsx",
+    emptyMessage: "No service invoices created yet.",
   },
 };
 
 /** Display row for a generated sales invoice, retaining source identity. */
 export interface SalesInvoiceListRow {
   id: number;
-  sourceType: SalesInvoiceTabId;
+  /** Tab membership for source-specific tabs; service only appears in All. */
+  sourceType: SalesInvoiceKind;
   sourceRecordId: number | string | null;
   invoiceId: number;
   invoiceNo: string;
   invoiceDate: string;
+  invoiceTypeLabel: string;
+  /** Compact reference lines: order/transfer + dispatch, or manual ref / — */
+  referencePrimary: string;
+  referenceSecondary: string;
+  partyOrTransfer: string;
   orderNo: string;
   dispatchNo: string;
   customerName: string;
@@ -68,6 +103,8 @@ export interface SalesInvoiceListRow {
   fromWarehouse: string;
   toWarehouse: string;
   totalAmount: number;
+  /** Qty sum for goods; line count for service when qty not meaningful */
+  qtyOrItemCount: number;
   itemCount: number;
   branch: string;
   invoiceStatus: InvoiceRecord["invoiceStatus"];
@@ -76,6 +113,10 @@ export interface SalesInvoiceListRow {
   canCancel: boolean;
   canEdit: boolean;
   canPdf: boolean;
+  eInvoiceStatusLabel: ListingEInvoiceStatus;
+  ewayBillStatusLabel: ListingEWayStatus;
+  eInvoiceDetails: SalesInvoiceEInvoiceDetails;
+  ewayBillDetails: SalesInvoiceEWayDetails;
 }
 
 const LIST_PATH = "/accounts/transactions/invoices";
@@ -101,14 +142,21 @@ function findDispatchForInvoice(inv: InvoiceRecord): DispatchRecord | undefined 
 }
 
 /**
- * Resolve which Sales Invoice tab an invoice belongs to.
+ * Resolve listing invoice kind.
  * Prefers persisted sourceType; falls back to invoiceType, dispatch, and doc-no patterns.
  */
-export function resolveSalesInvoiceSourceType(inv: InvoiceRecord): SalesInvoiceTabId {
+export function resolveSalesInvoiceKind(inv: InvoiceRecord): SalesInvoiceKind {
+  if (inv.sourceType === "service") return "service";
   if (inv.sourceType === "sales_order") return "sales_order";
   if (inv.sourceType === "stock_transfer") return "stock_transfer";
   if (inv.sourceType === "sample_order") return "sample_order";
   if (inv.sourceType === "direct") return "sales_order";
+
+  if (inv.invoiceNo.startsWith("SVC/")) return "service";
+  if (inv.invoiceNo.startsWith("PVB/SMP/")) return "sample_order";
+  if (inv.invoiceType === "sample_order" || inv.documentType === "proforma_invoice") {
+    return "sample_order";
+  }
 
   if (resolveInvoiceDocumentType(inv) === "stock_transfer") {
     return "stock_transfer";
@@ -143,10 +191,20 @@ export function resolveSalesInvoiceSourceType(inv: InvoiceRecord): SalesInvoiceT
   return "sales_order";
 }
 
+/** @deprecated Use resolveSalesInvoiceKind — kept for callers expecting tab ids without "all"/"service". */
+export function resolveSalesInvoiceSourceType(
+  inv: InvoiceRecord,
+): Exclude<SalesInvoiceKind, "service"> {
+  const kind = resolveSalesInvoiceKind(inv);
+  if (kind === "service") return "sales_order";
+  return kind;
+}
+
 function resolveSourceRecordId(
-  sourceType: SalesInvoiceTabId,
+  sourceType: SalesInvoiceKind,
   inv: InvoiceRecord,
 ): number | string | null {
+  if (sourceType === "service") return null;
   const sourceNo = (inv.salesOrderNo || inv.referenceNo || "").trim();
 
   if (sourceType === "sales_order") {
@@ -184,7 +242,7 @@ function resolveCustomerCode(inv: InvoiceRecord): string {
 
 function resolveWarehouses(
   inv: InvoiceRecord,
-  sourceType: SalesInvoiceTabId,
+  sourceType: SalesInvoiceKind,
   sourceRecordId: number | string | null,
 ): { fromWarehouse: string; toWarehouse: string } {
   if (sourceType !== "stock_transfer") {
@@ -218,14 +276,57 @@ function resolveWarehouses(
   return { fromWarehouse, toWarehouse };
 }
 
+function sumLineQty(inv: InvoiceRecord): number {
+  const lines = inv.lineItems ?? [];
+  if (!lines.length) return 0;
+  return lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
+}
+
+function buildReference(
+  kind: SalesInvoiceKind,
+  inv: InvoiceRecord,
+): { primary: string; secondary: string } {
+  const orderNo = (inv.salesOrderNo || "").trim();
+  const dispatchNo = (inv.dispatchNo || "").trim();
+  const manualRef = (inv.referenceNo || "").trim();
+
+  if (kind === "service") {
+    return {
+      primary: manualRef || "—",
+      secondary: "",
+    };
+  }
+
+  return {
+    primary: orderNo || "—",
+    secondary: dispatchNo || "—",
+  };
+}
+
+function buildPartyOrTransfer(
+  kind: SalesInvoiceKind,
+  inv: InvoiceRecord,
+  fromWarehouse: string,
+  toWarehouse: string,
+): string {
+  if (kind === "stock_transfer") {
+    return `${fromWarehouse || "—"} → ${toWarehouse || "—"}`;
+  }
+  return inv.customerName?.trim() || "—";
+}
+
 function mapInvoiceToListRow(inv: InvoiceRecord): SalesInvoiceListRow {
-  const sourceType = resolveSalesInvoiceSourceType(inv);
+  const sourceType = resolveSalesInvoiceKind(inv);
   const sourceRecordId = resolveSourceRecordId(sourceType, inv);
   const actions = getInvoiceRowActions(inv);
   const { fromWarehouse, toWarehouse } = resolveWarehouses(inv, sourceType, sourceRecordId);
   const itemCount = inv.lineItems?.length ?? 0;
+  const qtySum = sumLineQty(inv);
   const totalAmount =
     sourceType === "sample_order" ? 0 : Math.round((inv.grandTotal ?? 0) * 100) / 100;
+  const ref = buildReference(sourceType, inv);
+  const eInvoiceStatusLabel = resolveListingEInvoiceStatus(inv, sourceType);
+  const ewayBillStatusLabel = resolveListingEWayStatus(inv, sourceType);
 
   return {
     id: inv.id,
@@ -234,6 +335,10 @@ function mapInvoiceToListRow(inv: InvoiceRecord): SalesInvoiceListRow {
     invoiceId: inv.id,
     invoiceNo: inv.invoiceNo,
     invoiceDate: inv.invoiceDate,
+    invoiceTypeLabel: salesInvoiceTypeLabel(inv.sourceType as SalesInvoiceSourceType | undefined, sourceType),
+    referencePrimary: ref.primary,
+    referenceSecondary: ref.secondary,
+    partyOrTransfer: buildPartyOrTransfer(sourceType, inv, fromWarehouse, toWarehouse),
     orderNo: inv.salesOrderNo || inv.referenceNo || "—",
     dispatchNo: inv.dispatchNo?.trim() || "—",
     customerName: inv.customerName || "—",
@@ -241,6 +346,7 @@ function mapInvoiceToListRow(inv: InvoiceRecord): SalesInvoiceListRow {
     fromWarehouse,
     toWarehouse,
     totalAmount,
+    qtyOrItemCount: qtySum > 0 ? qtySum : itemCount,
     itemCount,
     branch: inv.branch?.trim() || "—",
     invoiceStatus: inv.invoiceStatus,
@@ -249,19 +355,28 @@ function mapInvoiceToListRow(inv: InvoiceRecord): SalesInvoiceListRow {
     canCancel: actions.includes("cancel"),
     canEdit: actions.includes("edit"),
     canPdf: actions.includes("pdf"),
+    eInvoiceStatusLabel,
+    ewayBillStatusLabel,
+    eInvoiceDetails: buildEInvoiceDetails(inv, eInvoiceStatusLabel),
+    ewayBillDetails: buildEWayDetails(inv, ewayBillStatusLabel),
   };
 }
 
-/** Fetch + map generated invoices for one source tab (independent pipeline). */
+/** Fetch + map generated invoices for one listing tab. */
 export function listSalesInvoicesForTab(tab: SalesInvoiceTabId): SalesInvoiceListRow[] {
-  return loadInvoices()
-    .filter((inv) => resolveSalesInvoiceSourceType(inv) === tab)
-    .map(mapInvoiceToListRow)
-    .sort((a, b) => {
-      const d = b.invoiceDate.localeCompare(a.invoiceDate);
-      if (d !== 0) return d;
-      return b.invoiceNo.localeCompare(a.invoiceNo);
-    });
+  const all = loadInvoices().map(mapInvoiceToListRow);
+  const filtered =
+    tab === "all"
+      ? all
+      : tab === "service"
+        ? all.filter((r) => r.sourceType === "service")
+        : all.filter((r) => r.sourceType === tab);
+
+  return filtered.sort((a, b) => {
+    const d = b.invoiceDate.localeCompare(a.invoiceDate);
+    if (d !== 0) return d;
+    return b.invoiceNo.localeCompare(a.invoiceNo);
+  });
 }
 
 export function listSalesInvoicesByTab(tab: SalesInvoiceTabId): SalesInvoiceListRow[] {
@@ -275,3 +390,11 @@ export function getSalesInvoiceBranchOptions(tab: SalesInvoiceTabId): string[] {
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
+
+/** Tabs shown in the Sales Invoice register UI (no dedicated Service tab). */
+export const SALES_INVOICE_VISIBLE_TABS: SalesInvoiceTabId[] = [
+  "all",
+  "sales_order",
+  "stock_transfer",
+  "sample_order",
+];

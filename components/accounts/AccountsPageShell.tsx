@@ -58,7 +58,7 @@ export function AccountsPageShell({
     <div
       className={cn(
         "flex flex-col w-full",
-        isSplit ? "h-full min-h-0 overflow-hidden gap-2" : "gap-2",
+        isSplit ? "h-full min-h-0 overflow-hidden gap-1.5" : "gap-1.5",
         isConstrainedHeight && !isSplit && "h-full min-h-0 overflow-hidden",
         className,
       )}
@@ -91,8 +91,8 @@ export function AccountsPageShell({
 
       <div
         className={cn(
-          "flex-shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 min-h-0",
-          !isSplit && "items-start",
+          "flex-shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 min-h-0",
+          !isSplit && "items-center",
         )}
       >
         <div className="min-w-0 flex-1">

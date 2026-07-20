@@ -28,6 +28,7 @@ export type LedgerMappingKey =
   | "sales_sgst"
   | "sales_igst"
   | "sales_cogs"
+  | "sample_promotional_expense"
   | "purchase_inventory"
   | "purchase_payable"
   | "purchase_cgst"
@@ -77,6 +78,11 @@ export const DEFAULT_MAPPING_TARGETS: Record<
     module: "sales",
     subGroupName: "Cost of Goods Sold",
     description: "Debit COGS on sales dispatch at cost price",
+  },
+  sample_promotional_expense: {
+    module: "sales",
+    subGroupName: "Selling Expenses",
+    description: "Debit Sample / Promotional Expense on sample issue at cost price",
   },
   purchase_inventory: {
     module: "procurement",
@@ -157,7 +163,7 @@ export function loadLedgerMappings(): LedgerMapping[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
       return seed;
     }
-    const list = JSON.parse(raw) as LedgerMapping[];
+    let list = JSON.parse(raw) as LedgerMapping[];
     let changed = false;
     const migrated = list.map((m) => {
       if (m.mappingKey === "sales_receivable" && m.subGroupName === "Accounts Receivable") {
@@ -170,8 +176,25 @@ export function loadLedgerMappings(): LedgerMapping[] {
       }
       return m;
     });
-    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-    return migrated;
+    list = migrated;
+    const existingKeys = new Set(list.map((m) => m.mappingKey));
+    for (const key of Object.keys(DEFAULT_MAPPING_TARGETS) as LedgerMappingKey[]) {
+      if (existingKeys.has(key)) continue;
+      const t = DEFAULT_MAPPING_TARGETS[key];
+      const maxId = list.reduce((m, r) => Math.max(m, r.id), 0);
+      list.push({
+        id: maxId + 1,
+        module: t.module,
+        mappingKey: key,
+        subGroupName: t.subGroupName,
+        coaAccountId: null,
+        description: t.description,
+        isActive: true,
+      });
+      changed = true;
+    }
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return list;
   } catch {
     return buildSeed();
   }
