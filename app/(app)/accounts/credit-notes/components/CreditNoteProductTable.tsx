@@ -8,11 +8,6 @@ import {
   type CreditNoteLine,
 } from "../credit-notes-data";
 
-const TABLE_HEAD =
-  "px-2.5 py-2 text-xs font-semibold uppercase text-[#6B7280] whitespace-nowrap bg-[#FFF3E6]";
-const TABLE_CELL = "px-2.5 py-1.5 align-middle text-xs text-foreground";
-const ROW_CLASS = "border-b border-border/50 hover:bg-muted/10 min-h-[42px]";
-
 export interface CreditNoteProductTableProps {
   lines: CreditNoteLine[];
   readOnly?: boolean;
@@ -42,91 +37,98 @@ export function CreditNoteProductTable({
   onQtyChange,
 }: CreditNoteProductTableProps) {
   return (
-    <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1280px]">
-          <thead>
-            <tr className="border-b border-border/60">
-              <th className={cn(TABLE_HEAD, "text-left min-w-[280px] w-[280px]")}>Product</th>
-              <th className={cn(TABLE_HEAD, "text-left min-w-[100px]")}>Batch</th>
-              <th className={cn(TABLE_HEAD, "text-left min-w-[80px]")}>HSN</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[72px]")}>Invoice Qty</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[72px]")}>Return Qty</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[80px]")}>Credit Qty</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[80px]")}>Rate</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[72px]")}>Discount</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[96px]")}>Taxable Value</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[64px]")}>GST %</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[88px]")}>GST Amount</th>
-              <th className={cn(TABLE_HEAD, "text-right min-w-[88px]")}>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => {
-              const amounts = lineAmounts(line);
-              const maxQty = getCreditLineMaxQty(line);
-              const returnQtyDisplay =
-                line.salesReturnQty != null && line.salesReturnQty > 0
-                  ? line.salesReturnQty
-                  : line.eligibleReturnQty ?? line.invoiceQty;
-              const overMax = line.returnQty > maxQty + 0.0001;
-
-              return (
-                <tr key={line.id} className={ROW_CLASS}>
-                  <td className={cn(TABLE_CELL, "font-medium leading-snug whitespace-normal")}>
-                    {line.productName || "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "font-mono text-xs text-muted-foreground")}>
-                    {line.batchNo?.trim() ? line.batchNo : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "font-mono text-xs")}>{line.hsn || "—"}</td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums")}>
-                    {line.invoiceQty > 0 ? line.invoiceQty : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums text-muted-foreground")}>
-                    {returnQtyDisplay > 0 ? returnQtyDisplay : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right")}>
-                    {readOnly ? (
-                      <span className="tabular-nums">{line.returnQty > 0 ? line.returnQty : "—"}</span>
-                    ) : (
-                      <Input
-                        type="number"
-                        min={0}
-                        max={Number.isFinite(maxQty) ? maxQty : undefined}
-                        className={cn(
-                          "h-8 w-[72px] text-xs text-right tabular-nums ml-auto",
-                          overMax && "border-red-400",
-                        )}
-                        value={line.returnQty || ""}
-                        onChange={(e) => onQtyChange(line.id, parseFloat(e.target.value) || 0)}
-                      />
-                    )}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums font-mono")}>
-                    {line.unitPrice > 0 ? line.unitPrice.toFixed(2) : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums")}>
-                    {line.discountPct > 0 ? `${line.discountPct}%` : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums font-mono")}>
-                    {amounts ? amounts.taxable.toFixed(2) : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums")}>
-                    {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums font-mono")}>
-                    {amounts ? amounts.taxAmt.toFixed(2) : "—"}
-                  </td>
-                  <td className={cn(TABLE_CELL, "text-right tabular-nums font-mono font-semibold text-brand-700")}>
-                    {amounts && amounts.amount > 0 ? amounts.amount.toFixed(2) : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div className="cnz-table-wrap">
+      <table className="cnz-table cnz-table--qty accounts-table">
+        <thead>
+          <tr>
+            <th className="accounts-table-th" style={{ width: "16%" }}>Product</th>
+            <th className="accounts-table-th">SKU</th>
+            <th className="accounts-table-th">Batch</th>
+            <th className="accounts-table-th text-right">Invoice Qty</th>
+            <th className="accounts-table-th text-right">Prev. Credited</th>
+            <th className="accounts-table-th text-right">Available Qty</th>
+            <th className="accounts-table-th text-right">Credit Qty</th>
+            <th className="accounts-table-th text-right">Rate</th>
+            <th className="accounts-table-th text-right">Discount</th>
+            <th className="accounts-table-th text-right">GST %</th>
+            <th className="accounts-table-th text-right">Taxable</th>
+            <th className="accounts-table-th text-right">GST Amt</th>
+            <th className="accounts-table-th text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line) => {
+            const amounts = lineAmounts(line);
+            const maxQty = getCreditLineMaxQty(line);
+            const available = Number.isFinite(maxQty) ? maxQty : line.invoiceQty;
+            const previouslyCredited =
+              line.invoiceQty > 0 && Number.isFinite(available)
+                ? Math.max(0, Math.round((line.invoiceQty - available) * 100) / 100)
+                : 0;
+            const overMax = line.returnQty > maxQty + 0.0001;
+            return (
+              <tr key={line.id}>
+                <td className="font-medium leading-snug whitespace-normal">
+                  {line.productName || "—"}
+                  {line.hsn ? (
+                    <span className="block text-[11px] text-muted-foreground font-normal">
+                      HSN {line.hsn}
+                    </span>
+                  ) : null}
+                </td>
+                <td className="font-mono text-[12px] text-muted-foreground">
+                  {line.sku?.trim() || "—"}
+                </td>
+                <td className="font-mono text-[12px] text-muted-foreground">
+                  {line.batchNo?.trim() || "—"}
+                </td>
+                <td className="cnz-num">
+                  {line.invoiceQty > 0 ? line.invoiceQty.toFixed(2) : "—"}
+                </td>
+                <td className="cnz-num">
+                  {previouslyCredited > 0 ? previouslyCredited.toFixed(2) : "0.00"}
+                </td>
+                <td className="cnz-num">
+                  {available > 0 ? available.toFixed(2) : "—"}
+                </td>
+                <td className="cnz-num">
+                  {readOnly ? (
+                    <span>{line.returnQty > 0 ? line.returnQty.toFixed(2) : "—"}</span>
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      max={Number.isFinite(maxQty) ? maxQty : undefined}
+                      className={cn(
+                        "cnz-cell-input h-7 w-[64px] text-xs text-right tabular-nums ml-auto",
+                        overMax && "border-red-400",
+                      )}
+                      value={line.returnQty || ""}
+                      onChange={(e) => onQtyChange(line.id, parseFloat(e.target.value) || 0)}
+                    />
+                  )}
+                </td>
+                <td className="cnz-num">
+                  {line.unitPrice > 0 ? line.unitPrice.toFixed(2) : "0.00"}
+                </td>
+                <td className="cnz-num">
+                  {line.discountPct > 0 ? `${line.discountPct}%` : "0%"}
+                </td>
+                <td className="cnz-num">{line.taxPct > 0 ? `${line.taxPct}%` : "—"}</td>
+                <td className="cnz-num">
+                  {amounts && amounts.taxable > 0 ? amounts.taxable.toFixed(2) : "0.00"}
+                </td>
+                <td className="cnz-num">
+                  {amounts && amounts.taxAmt > 0 ? amounts.taxAmt.toFixed(2) : "0.00"}
+                </td>
+                <td className="cnz-num font-semibold">
+                  {amounts && amounts.amount > 0 ? amounts.amount.toFixed(2) : "0.00"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -10,7 +10,8 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { XCircle } from "lucide-react";
+import { Download, XCircle } from "lucide-react";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -66,6 +67,10 @@ import {
 } from "../../credit-notes/credit-notes-data";
 import { listPendingCreditNotes } from "../../credit-notes/pending-credit-notes-data";
 import { exportCreditNotesToExcel } from "../../credit-notes/credit-notes-export";
+import {
+  canDownloadCreditNotePdf,
+  downloadCreditNotePdf,
+} from "../../credit-notes/credit-note-pdf";
 import { formatLinkedInvoiceNos } from "../../credit-notes/components/LinkedInvoicesMultiSelect";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../../credit-notes/note-utils";
 import { loadInvoices } from "../../invoices/invoices-data";
@@ -134,6 +139,7 @@ function CreditNotesRecordsTable({
   onPageSizeChange,
   onView,
   onCancel,
+  onDownloadPdf,
 }: {
   mounted: boolean;
   toolbarFiltered: CreditNoteRecord[];
@@ -143,6 +149,7 @@ function CreditNotesRecordsTable({
   onPageSizeChange: (s: number) => void;
   onView: (r: CreditNoteRecord) => void;
   onCancel: (r: CreditNoteRecord) => void;
+  onDownloadPdf: (r: CreditNoteRecord) => void;
 }) {
   const ctx = useAccountsColumnFilterContext();
   const visible = useAccountsFilteredRows(toolbarFiltered);
@@ -232,14 +239,25 @@ function CreditNotesRecordsTable({
                       {getCreditNoteRowActions(r).includes("edit") && (
                         <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
                       )}
-                      {getCreditNoteRowActions(r).includes("cancel") && (
-                        <AccountsMoreActions contentClassName="w-40">
-                          <DropdownMenuItem
-                            className="text-xs gap-2 text-red-600"
-                            onClick={() => onCancel(r)}
-                          >
-                            <XCircle className="w-4 h-4" /> Cancel
-                          </DropdownMenuItem>
+                      {(canDownloadCreditNotePdf(r.status) ||
+                        getCreditNoteRowActions(r).includes("cancel")) && (
+                        <AccountsMoreActions contentClassName="w-44">
+                          {canDownloadCreditNotePdf(r.status) && (
+                            <DropdownMenuItem
+                              className="text-xs gap-2"
+                              onClick={() => onDownloadPdf(r)}
+                            >
+                              <Download className="w-4 h-4" /> Download PDF
+                            </DropdownMenuItem>
+                          )}
+                          {getCreditNoteRowActions(r).includes("cancel") && (
+                            <DropdownMenuItem
+                              className="text-xs gap-2 text-red-600"
+                              onClick={() => onCancel(r)}
+                            >
+                              <XCircle className="w-4 h-4" /> Cancel
+                            </DropdownMenuItem>
+                          )}
                         </AccountsMoreActions>
                       )}
                     </AccountsTableActionCell>
@@ -268,6 +286,7 @@ export default function CreditNotesListClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
+  const { toast, showToast, dismissToast } = useAccountsToast();
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
 
   const [moduleTab, setModuleTab] = useState("pending");
@@ -379,6 +398,21 @@ export default function CreditNotesListClient() {
     }
   };
 
+  const handleDownloadPdf = useCallback(
+    (r: CreditNoteRecord) => {
+      try {
+        downloadCreditNotePdf(r);
+        showToast(`Preparing PDF ${r.creditNoteNo}`);
+      } catch (e) {
+        showToast(
+          e instanceof Error ? e.message : "Could not download Credit Note PDF.",
+          "error",
+        );
+      }
+    },
+    [showToast],
+  );
+
   const handleResetFilters = () => {
     setStatusTab("all");
     setPreset("this_month");
@@ -464,12 +498,15 @@ export default function CreditNotesListClient() {
                   onPageSizeChange={setPageSize}
                   onView={setViewTarget}
                   onCancel={setCancelTarget}
+                  onDownloadPdf={handleDownloadPdf}
                 />
               </AccountsTableListing>
             </AccountsColumnFilterProvider>
           )}
         </div>
       </AccountsPageShell>
+
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
 
       <CreditNoteCancelDialog
         open={!!cancelTarget}

@@ -174,7 +174,7 @@ export function AccountsTablePagination({
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       recordLabel={recordLabel}
-      variant="full"
+      variant="compact"
     />
   );
 }

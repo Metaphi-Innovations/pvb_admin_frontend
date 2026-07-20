@@ -146,6 +146,7 @@ const SBI_MOVEMENTS: ManualDemoBookMovement[] = [
     deposit: 0,
     withdrawal: 18_750,
     seedBankDate: null,
+    narration: "Electricity charges — June 2026 billing cycle",
   },
   {
     key: "sbi-cnt-01",

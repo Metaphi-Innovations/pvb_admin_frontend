@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import "./bank-accounts-dense.css";
 import { Button } from "@/components/ui/button";
 import {
   AccountsEditAction,
@@ -46,11 +47,19 @@ import {
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type BankAccountRow = BankAccountMaster & {
   currentBalance: number;
   balanceType: "Debit" | "Credit";
   mappedWarehousesLabel: string;
+  mappedWarehouseNames: string[];
 };
 
 function formatBankReconciledDate(iso: string): string {
@@ -58,6 +67,43 @@ function formatBankReconciledDate(iso: string): string {
   if (!y || !m || !d) return iso;
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d} ${months[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function formatMappedWarehousesCompact(names: string[]): string {
+  if (names.length === 0) return "—";
+  if (names.length === 1) return names[0]!;
+  if (names.length >= 5) return `${names.length} Warehouses`;
+  return `${names[0]} +${names.length - 1} more`;
+}
+
+function MappedWarehousesCell({ names }: { names: string[] }) {
+  if (names.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const label = formatMappedWarehousesCompact(names);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="bank-accounts-wh-trigger" title={names.join(", ")}>
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs p-2">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+          Mapped Warehouses ({names.length})
+        </p>
+        <ul className="space-y-0.5">
+          {names.map((name) => (
+            <li key={name} className="text-xs text-foreground">
+              {name}
+            </li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function exportBankAccountsCsv(rows: BankAccountRow[]) {
@@ -111,6 +157,7 @@ function BankAccountsExportToolbar({
 
   return (
     <AccountsTableToolbar
+      className="bank-accounts-toolbar"
       search={{
         value: search,
         onChange: onSearchChange,
@@ -128,13 +175,13 @@ function BankAccountsSummary({ totalRows, activeCount }: { totalRows: number; ac
   if (visible.length === 0) return null;
 
   return (
-    <div className="flex items-center justify-between px-5 py-2 border-b border-border/60 bg-muted/10 text-xs text-muted-foreground">
-      <span>
+    <div className="bank-accounts-summary flex items-center justify-between px-2.5 py-1 border-b border-border/60 bg-muted/10 text-[11px] text-muted-foreground">
+      <span className="truncate">
         <span className="font-medium text-foreground">{visible.length}</span> of{" "}
         <span className="font-medium text-foreground">{totalRows}</span> accounts
         {activeCount !== totalRows && <span> · {activeCount} active</span>}
       </span>
-      <span className="tabular-nums">
+      <span className="tabular-nums whitespace-nowrap flex-shrink-0 ml-2">
         Total current balance:{" "}
         <span className="font-medium text-foreground">
           {formatMoney(visible.reduce((s, r) => s + r.currentBalance, 0))}
@@ -174,7 +221,7 @@ function BankAccountsTable({
 
   return (
     <>
-      <AccountsTable minWidth={1280}>
+      <AccountsTable minWidth={1080}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Account Name" colKey="accountNickname" />
@@ -212,15 +259,27 @@ function BankAccountsTable({
           ) : (
             pagedRows.map((account) => (
               <AccountsTableRow key={account.id}>
-                <AccountsTableCell className="font-semibold whitespace-nowrap">
-                  {account.accountNickname}
+                <AccountsTableCell className="font-semibold whitespace-nowrap max-w-[9rem]">
+                  <span className="block truncate" title={account.accountNickname}>
+                    {account.accountNickname}
+                  </span>
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap">{account.bankName}</AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap max-w-[8rem]">
+                  <span className="block truncate" title={account.bankName}>
+                    {account.bankName}
+                  </span>
+                </AccountsTableCell>
                 <AccountsTableCell mono className="font-semibold text-brand-700 whitespace-nowrap">
                   {account.accountNumber ? maskBankAccountLast4(account.accountNumber) : "—"}
                 </AccountsTableCell>
-                <AccountsTableCell mono className="whitespace-nowrap">{account.ifsc || "—"}</AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap">{account.branchName || "—"}</AccountsTableCell>
+                <AccountsTableCell mono className="whitespace-nowrap">
+                  {account.ifsc || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap max-w-[7rem]">
+                  <span className="block truncate" title={account.branchName || undefined}>
+                    {account.branchName || "—"}
+                  </span>
+                </AccountsTableCell>
                 <AccountsTableCell className="whitespace-nowrap">{account.accountType}</AccountsTableCell>
                 <AccountsTableCell align="right" className="whitespace-nowrap">
                   <MoneyAmount amount={account.openingBalance} side={account.balanceType} className="text-xs" />
@@ -228,20 +287,23 @@ function BankAccountsTable({
                 <AccountsTableCell align="right" className="whitespace-nowrap">
                   <MoneyAmount amount={account.currentBalance} side={account.balanceType} className="text-xs" />
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap text-xs">
+                <AccountsTableCell className="bank-accounts-recon-cell whitespace-nowrap text-xs">
                   {account.reconciliationEnabled ? (
                     <span className="text-emerald-700 font-medium">Yes</span>
                   ) : (
                     <span className="text-muted-foreground">No</span>
                   )}
                   {account.lastReconciledDate ? (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {formatBankReconciledDate(account.lastReconciledDate)}
-                    </p>
+                    <span
+                      className="text-muted-foreground ml-1"
+                      title={`Last reconciled ${formatBankReconciledDate(account.lastReconciledDate)}`}
+                    >
+                      · {formatBankReconciledDate(account.lastReconciledDate)}
+                    </span>
                   ) : null}
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-normal text-xs max-w-[200px]">
-                  {account.mappedWarehousesLabel || "—"}
+                <AccountsTableCell className={cn("bank-accounts-wh-cell", "whitespace-nowrap")}>
+                  <MappedWarehousesCell names={account.mappedWarehouseNames} />
                 </AccountsTableCell>
                 <AccountsTableCell className="whitespace-nowrap">
                   <StatusBadge status={account.status} />
@@ -291,11 +353,13 @@ function buildBankAccountRows(): BankAccountRow[] {
     const balance = ledger
       ? computeLedgerCurrentBalance(ledger)
       : { amount: account.openingBalance, balanceType: account.balanceType };
+    const mappedWarehouseNames = getMappedWarehouseLabels(account);
     return {
       ...account,
       currentBalance: balance.amount,
       balanceType: balance.balanceType,
-      mappedWarehousesLabel: getMappedWarehouseLabels(account).join(", "),
+      mappedWarehouseNames,
+      mappedWarehousesLabel: mappedWarehouseNames.join(", "),
     };
   });
 }
@@ -345,55 +409,60 @@ export default function BankAccountsPageClient() {
   const activeCount = rows.filter((r) => r.status === "active").length;
 
   return (
-    <AccountsColumnFilterProvider
-      rows={toolbarFiltered}
-      getCellValue={getCellValue}
-      columnConfig={{
-        accountNickname: { type: "text" },
-        bankName: { type: "text" },
-        accountNumber: { type: "text" },
-        ifsc: { type: "text" },
-        branchName: { type: "text" },
-        accountType: { type: "text" },
-        openingBalance: { type: "amount" },
-        currentBalance: { type: "amount" },
-        reconciliationEnabled: { type: "text" },
-        status: { type: "text" },
-      }}
-      defaultSortKey="bankName"
-      defaultSortDir="asc"
-    >
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts")}
-        title="Bank Accounts"
-        description="Company bank ledgers used in Bank Book, vouchers and reconciliation."
-        hideDescription
-        actions={
-          <Button
-            size="sm"
-            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
-            onClick={() => router.push("/accounts/banking/bank-accounts/new")}
-          >
-            <Plus className="w-4 h-4" /> Add Bank Account
-          </Button>
-        }
-        layout="split"
-        className="h-full min-h-0"
+    <TooltipProvider delayDuration={200}>
+      <AccountsColumnFilterProvider
+        rows={toolbarFiltered}
+        getCellValue={getCellValue}
+        columnConfig={{
+          accountNickname: { type: "text" },
+          bankName: { type: "text" },
+          accountNumber: { type: "text" },
+          ifsc: { type: "text" },
+          branchName: { type: "text" },
+          accountType: { type: "text" },
+          openingBalance: { type: "amount" },
+          currentBalance: { type: "amount" },
+          reconciliationEnabled: { type: "text" },
+          mappedWarehousesLabel: { type: "text" },
+          status: { type: "text" },
+        }}
+        defaultSortKey="bankName"
+        defaultSortDir="asc"
       >
-        <AccountsTableListing
-          toolbar={<BankAccountsExportToolbar search={search} onSearchChange={setSearch} />}
-          summary={<BankAccountsSummary totalRows={rows.length} activeCount={activeCount} />}
-        >
-          <BankAccountsTable
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            search={search}
-            onClearSearch={() => setSearch("")}
-          />
-        </AccountsTableListing>
-      </AccountsPageShell>
-    </AccountsColumnFilterProvider>
+        <div className="bank-accounts-dense h-full min-h-0 flex flex-col">
+          <AccountsPageShell
+            breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts")}
+            title="Bank Accounts"
+            description="Company bank ledgers used in Bank Book, vouchers and reconciliation."
+            hideDescription
+            actions={
+              <Button
+                size="sm"
+                className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+                onClick={() => router.push("/accounts/banking/bank-accounts/new")}
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Bank Account
+              </Button>
+            }
+            layout="split"
+            className="h-full min-h-0"
+          >
+            <AccountsTableListing
+              toolbar={<BankAccountsExportToolbar search={search} onSearchChange={setSearch} />}
+              summary={<BankAccountsSummary totalRows={rows.length} activeCount={activeCount} />}
+            >
+              <BankAccountsTable
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                search={search}
+                onClearSearch={() => setSearch("")}
+              />
+            </AccountsTableListing>
+          </AccountsPageShell>
+        </div>
+      </AccountsColumnFilterProvider>
+    </TooltipProvider>
   );
 }

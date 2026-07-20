@@ -21,6 +21,7 @@ import {
   type CustomerFormValues,
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../customer-permissions";
 import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 import {
@@ -66,6 +67,20 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 export default function NewCustomerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const returnToParam = searchParams.get("returnTo");
+  const fromCoa =
+    searchParams.get("source") === "chart-of-accounts" ||
+    searchParams.get("from") === "coa";
+  const parentNodeId =
+    searchParams.get("parentNodeId") || searchParams.get("coaParent");
+  const leaveHref =
+    returnToParam ||
+    (fromCoa
+      ? parentNodeId
+        ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentNodeId}`
+        : CHART_OF_ACCOUNTS_HREF
+      : "/masters/customers");
+
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -182,13 +197,26 @@ export default function NewCustomerPage() {
       }
     }
     if (!asDraft && status !== "draft") {
-      ensureCustomerLedgerFromMaster(record);
+      const ledger = ensureCustomerLedgerFromMaster(record);
+      setToast({
+        msg: "Customer created successfully.",
+        type: "success",
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'RET',location:'customers/new/page.tsx:persist',message:'Customer save leave target',data:{fromCoa,leaveHref,ledgerId:ledger?.id??null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      const dest =
+        fromCoa && ledger?.id != null
+          ? `${CHART_OF_ACCOUNTS_HREF}?node=${ledger.id}`
+          : leaveHref;
+      setTimeout(() => router.push(dest), 1000);
+      return;
     }
     setToast({
       msg: asDraft ? "Draft saved successfully." : "Customer created successfully.",
       type: "success",
     });
-    setTimeout(() => router.push("/masters/customers"), 1000);
+    setTimeout(() => router.push(leaveHref), 1000);
   };
 
   if (allowed === false) {
@@ -205,7 +233,7 @@ export default function NewCustomerPage() {
           variant="outline"
           size="sm"
           className="h-7 mt-2 text-[11px] px-3"
-          onClick={() => router.push("/masters/customers")}
+          onClick={() => router.push(leaveHref)}
         >
           Back to listing
         </Button>
@@ -221,13 +249,13 @@ export default function NewCustomerPage() {
     <FormContainer
       title="Add Customer"
       description="Masters → Customer Master → Add"
-      onBack={() => router.back()}
+      onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customerCode}
           </span>
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.push(leaveHref)}>
             Discard
           </Button>
           <Button variant="default" size="sm" onClick={() => persist(false)}>

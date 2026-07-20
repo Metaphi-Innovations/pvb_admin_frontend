@@ -73,6 +73,19 @@ export function findPostedSalesInvoiceVoucher(invoiceNo: string): AccountingVouc
   );
 }
 
+/** Sample Order Proforma posts a journal (Dr Sample Expense · Cr Inventory), not a sales voucher. */
+export function findPostedSampleOrderExpenseVoucher(invoiceNo: string): AccountingVoucher | null {
+  return (
+    loadVouchers().find(
+      (v) =>
+        (v.status === "posted" || v.status === "approved") &&
+        v.voucherType === "journal" &&
+        v.referenceNo === invoiceNo &&
+        /sample/i.test(v.narration || ""),
+    ) ?? null
+  );
+}
+
 function coaPathForLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): string {
   const hierarchy = resolveHierarchyPath(records, ledger.id);
   return [

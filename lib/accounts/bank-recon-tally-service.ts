@@ -8,7 +8,6 @@ import {
   maskAccountNumber,
   type BankReconBankAccount,
 } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
-import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import {
   appendUndoAuditEntry,
   createTallyLinkId,
@@ -72,6 +71,9 @@ import {
   getManualDemoAccount,
   isManualDemoAccount,
 } from "@/lib/accounts/bank-recon-manual-demo-overlay";
+
+/** Demo actor shown on Bank Reconciliation links (frontend prototype only). */
+const BANK_RECON_DEMO_USER = "Admin User";
 
 function ensure(): void {
   if (typeof window === "undefined") return;
@@ -598,7 +600,7 @@ export function reconcileWithStatement(
     bankDate: input.bankDate,
     status,
     reconciledAmount: amountOf(book),
-    reconciledBy: ACCOUNTS_CURRENT_USER,
+    reconciledBy: BANK_RECON_DEMO_USER,
     reconciledAt: nowIso(),
     remarks: input.remarks?.trim() || null,
     reviewReason: input.markForReview ? input.remarks?.trim() || "Marked for review" : null,
@@ -645,7 +647,7 @@ export function reconcileBankDateOnly(
     bankDate: input.bankDate,
     status,
     reconciledAmount: amountOf(book),
-    reconciledBy: ACCOUNTS_CURRENT_USER,
+    reconciledBy: BANK_RECON_DEMO_USER,
     reconciledAt: nowIso(),
     remarks: input.remarks?.trim() || null,
     reviewReason: input.markForReview ? input.remarks?.trim() || "Marked for review" : null,
@@ -730,7 +732,7 @@ export function markBookForReview(
     bankDate: existing?.bankDate ?? null,
     status: "MARKED_FOR_REVIEW",
     reconciledAmount: existing?.reconciledAmount ?? null,
-    reconciledBy: ACCOUNTS_CURRENT_USER,
+    reconciledBy: BANK_RECON_DEMO_USER,
     reconciledAt: nowIso(),
     remarks: reason.trim() || null,
     reviewReason: reason.trim() || "Marked for review",
@@ -761,7 +763,7 @@ export function markStatementForReview(
     bankDate: existing?.bankDate ?? stmt.statementDate,
     status: "MARKED_FOR_REVIEW",
     reconciledAmount: existing?.reconciledAmount ?? null,
-    reconciledBy: ACCOUNTS_CURRENT_USER,
+    reconciledBy: BANK_RECON_DEMO_USER,
     reconciledAt: nowIso(),
     remarks: reason.trim() || null,
     reviewReason: reason.trim() || "Marked for review",
@@ -795,7 +797,7 @@ export function ignoreStatementEntry(
     bankDate: stmt.statementDate,
     status: "IGNORED",
     reconciledAmount: null,
-    reconciledBy: ACCOUNTS_CURRENT_USER,
+    reconciledBy: BANK_RECON_DEMO_USER,
     reconciledAt: nowIso(),
     remarks: reason.trim(),
     reviewReason: reason.trim(),
@@ -826,7 +828,7 @@ export function undoReconciliation(
     bookTransactionId: link.bookTransactionId,
     bankDate: link.bankDate,
     reason: input.reason.trim(),
-    undoneBy: ACCOUNTS_CURRENT_USER,
+    undoneBy: BANK_RECON_DEMO_USER,
     undoneAt: nowIso(),
   });
   // Remove link — clears Bank Date and restores Unreconciled without changing book balance.

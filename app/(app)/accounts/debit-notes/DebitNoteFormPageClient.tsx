@@ -18,6 +18,7 @@ import {
   computeDebitTotals,
   createDebitNote,
   DEBIT_REASONS,
+  FRESH_DEBIT_REASONS,
   getDebitNoteById,
   getDebitLineMaxQty,
   getPendingDebitNoteRow,
@@ -39,7 +40,6 @@ import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsT
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
-import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
 import {
   vendorMasterToTransactionFields,
   type VendorTransactionFields,
@@ -48,8 +48,12 @@ import { Download, Eye, Save, Trash2, Upload } from "lucide-react";
 import { getPurchaseInvoiceById } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { resolveWarehouseFromGrnNo } from "@/lib/accounts/bank-warehouse-mapping";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import { Textarea } from "@/components/ui/textarea";
+import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
+import "../credit-notes/credit-note-workspace.css";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
+type DebitBasis = "amount" | "quantity";
 
 export default function DebitNoteFormPageClient({
   debitNoteId,
@@ -466,91 +470,315 @@ export default function DebitNoteFormPageClient({
     isDirty,
   });
 
+  const gstAmountDisplay = isFresh ? freshTotals.gstAmount : lineTotals.gstAmount;
+  const taxableDisplay = isFresh ? freshTotals.taxable : lineTotals.taxableAmount;
+  const cgstDisplay = Math.round((gstAmountDisplay / 2) * 100) / 100;
+  const sgstDisplay = cgstDisplay;
+  const igstDisplay = 0;
+  const basis: DebitBasis = isFresh ? "amount" : "quantity";
+
+  const stickyActions = (
+    <div className="flex items-center justify-between w-full gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}
+        >
+          Back
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={requestCancel}
+        >
+          Cancel
+        </Button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-medium gap-1.5"
+          onClick={() => saveDraft("view")}
+        >
+          <Save className="w-3.5 h-3.5" /> Save Draft
+        </Button>
+        <Button
+          size="sm"
+          className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white"
+          onClick={() => postNote("view")}
+        >
+          Save & Post
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <>
     <AccountsFormLayout
+      fullWidth
       onBackClick={requestCancel}
       title={title}
       breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
       code={debitNoteNo || undefined}
-      footer={
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 text-sm font-medium"
-            onClick={requestCancel}
-          >
-            Cancel
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => saveDraft("view")}>
-            <Save className="w-3.5 h-3.5" /> Save & View
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => saveDraft("list")}>
-            Save & Back to List
-          </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => postNote("view")}>
-            Post Debit Note
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => postNote("list")}>
-            Post & Back to List
-          </Button>
-        </div>
+      headerMeta={
+        <>
+          <span className="cn-ws__badge is-draft">{isEdit ? "Edit" : "Draft"}</span>
+          <span className="cn-ws__badge">
+            {basis === "amount" ? "Amount Based" : "Quantity Based"}
+          </span>
+          {debitNoteNo ? (
+            <span className="font-mono text-[11px] text-muted-foreground">{debitNoteNo}</span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">Auto number on save</span>
+          )}
+        </>
       }
+      stickyFooter={stickyActions}
     >
-      <div className="space-y-4 pb-8 w-full">
-        <div className="bg-white border border-border/60 rounded-lg shadow-sm">
-          <div className="px-6 py-5 border-b border-border/60">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Debit Note No.</Label>
-                <Input className="h-9 text-sm font-mono bg-muted/30" disabled value={isEdit ? debitNoteNo : "Auto-generated"} />
-              </div>
-              {!isFresh && (
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">Debit Note Date</Label>
-                  <AccountsDateInput
-                    value={debitNoteDate}
-                    onChange={setDebitNoteDate}
-                    aria-label="Debit note date"
-                    className="h-9 text-sm"
-                  />
-                </div>
+      <div className="cn-ws">
+        {error ? <p className="cn-ws__error">{error}</p> : null}
+
+        {/* Basic Information */}
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Basic Information</p>
+          <div className="cn-ws__grid-3">
+            <div className="cn-ws__field" style={{ gridColumn: "span 1" }}>
+              <Label className="text-[11px] font-medium text-muted-foreground">Vendor</Label>
+              {vendorLocked ? (
+                <p className="cn-ws__ro font-medium truncate">{resolveVendorName() || "—"}</p>
+              ) : (
+                <SearchableSelect
+                  label=""
+                  options={vendors.map((v) => ({
+                    value: String(v.id),
+                    label: v.vendorName,
+                    sub: v.vendorCode,
+                  }))}
+                  value={vendorId}
+                  onChange={(id) => {
+                    const v = vendors.find((x) => x.id === Number(id));
+                    onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
+                  }}
+                  placeholder="Select supplier…"
+                  required
+                />
               )}
-              {warehouseRef ? (
-                <div className="sm:col-span-2">
-                  <WarehouseMappedBankAccountSelect
-                    warehouseRef={warehouseRef}
-                    value={bankAccountId}
-                    onChange={(id) => setBankAccountId(id)}
-                    label="Bank Account (for payment / print)"
-                  />
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Debit Note Date
+              </Label>
+              <AccountsDateInput
+                value={debitNoteDate}
+                onChange={setDebitNoteDate}
+                aria-label="Debit note date"
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Debit Note No.
+              </Label>
+              <Input
+                className="h-9 text-sm font-mono bg-muted/20"
+                disabled
+                value={isEdit ? debitNoteNo : "Auto-generated"}
+              />
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Reference No.
+              </Label>
+              <Input
+                className="h-9 text-sm"
+                value={referenceNo}
+                onChange={(e) => setReferenceNo(e.target.value)}
+                placeholder="Optional"
+                disabled={!isFresh}
+              />
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Accounts Payable
+              </Label>
+              <p className="cn-ws__ro truncate">
+                {vendorFields?.payableLedger || resolveVendorName() || "—"}
+              </p>
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">Status</Label>
+              <p className="cn-ws__ro capitalize">{isEdit ? "Draft / loaded" : "New"}</p>
+            </div>
+            {warehouseRef ? (
+              <div className="cn-ws__field" style={{ gridColumn: "1 / -1" }}>
+                <WarehouseMappedBankAccountSelect
+                  warehouseRef={warehouseRef}
+                  value={bankAccountId}
+                  onChange={(id) => setBankAccountId(id)}
+                  label="Bank Account (optional)"
+                />
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        {/* Basis */}
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Debit Note Basis</p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="cn-ws__badge">
+              {basis === "amount" ? "Amount Based" : "Quantity Based"}
+            </span>
+            <span className="cn-ws__hint">
+              Source:{" "}
+              {isFresh
+                ? "Manual"
+                : isPurchaseInvoice
+                  ? "Purchase Invoice"
+                  : isReturn
+                    ? "Purchase Return"
+                    : "Reference document"}
+            </span>
+          </div>
+          {isFresh ? (
+            <p className="cn-ws__hint mt-1.5">
+              Quantity-based Debit Notes continue to be created from Purchase Return /
+              Purchase Invoice — this path is amount-based only.
+            </p>
+          ) : null}
+        </section>
+
+        {/* Reference */}
+        {isFresh ? (
+          <section className="cn-ws__section">
+            <p className="cn-ws__label">Reference Information</p>
+            <div className="cn-ws__grid-3">
+              <SearchableSelect
+                label="Reason"
+                value={reason}
+                onChange={setReason}
+                options={FRESH_DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
+                placeholder="Select reason…"
+                required
+              />
+              <div className="cn-ws__field">
+                <Label className="text-[11px] font-medium text-muted-foreground">
+                  Adjustment Ledger <span className="text-red-500">*</span>
+                </Label>
+                <GroupedLedgerSelect
+                  value={adjustmentLedgerId}
+                  onChange={(ledger) => {
+                    setAdjustmentLedgerId(ledger.id);
+                    setAdjustmentLedgerName(ledger.accountName);
+                  }}
+                  placeholder="Select adjustment ledger…"
+                  required
+                />
+              </div>
+              <div className="cn-ws__field">
+                <Label className="text-[11px] font-medium text-muted-foreground">
+                  Reference No.
+                </Label>
+                <Input
+                  className="h-9 text-sm"
+                  value={referenceNo}
+                  onChange={(e) => setReferenceNo(e.target.value)}
+                  placeholder="Invoice / PO / memo…"
+                />
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="cn-ws__section">
+            <p className="cn-ws__label">
+              {isPurchaseInvoice ? "Purchase Invoice Reference" : "Purchase Return Reference"}
+            </p>
+            <div className="cn-ws__grid-4">
+              {sourceReturnNo ? (
+                <div className="cn-ws__field">
+                  <span className="cn-ws__flabel">Return No.</span>
+                  <p className="cn-ws__ro font-mono">{sourceReturnNo}</p>
                 </div>
               ) : null}
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">Purchase Invoice</span>
+                <p className="cn-ws__ro font-mono">
+                  {referencePreview?.sourceInvoiceNo || "—"}
+                </p>
+              </div>
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">PO No.</span>
+                <p className="cn-ws__ro font-mono">
+                  {referencePreview?.sourcePoNo || "—"}
+                </p>
+              </div>
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">GRN No.</span>
+                <p className="cn-ws__ro font-mono">
+                  {referencePreview?.sourceGrnNo || "—"}
+                </p>
+              </div>
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">Invoice Amount</span>
+                <p className="cn-ws__ro tabular-nums">
+                  {referencePreview
+                    ? formatINR(referencePreview.originalAmount)
+                    : "—"}
+                </p>
+              </div>
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">Already Debited</span>
+                <p className="cn-ws__ro tabular-nums">
+                  {referencePreview
+                    ? formatINR(referencePreview.alreadyAdjustedAmount)
+                    : "—"}
+                </p>
+              </div>
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">Dispatch</span>
+                <p className="cn-ws__ro font-mono">
+                  {sourceDispatchNo || sourcePackingNo || "—"}
+                </p>
+              </div>
+              <div className="cn-ws__field">
+                <SearchableSelect
+                  label="Reason"
+                  value={reason}
+                  onChange={setReason}
+                  options={DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
+                  placeholder="Select reason…"
+                  required
+                />
+              </div>
             </div>
-          </div>
+            {(vendorFields || resolveVendorName()) && (
+              <p className="text-[11px] text-muted-foreground mt-2 truncate">
+                Vendor: {resolveVendorName()}
+                {billingAddress ? ` · Bill: ${billingAddress}` : ""}
+              </p>
+            )}
+          </section>
+        )}
 
+        {/* Particulars */}
+        <section className="cn-ws__section cn-ws__section--flush">
+          <div className="px-4 pt-2.5 pb-1">
+            <p className="cn-ws__label mb-0">
+              {isFresh ? "Particulars" : "Item Particulars"}
+            </p>
+          </div>
           {isFresh ? (
-            <div className="px-6 py-5">
+            <div className="px-4 pb-3">
               <FreshDebitNoteForm
-                vendorSelector={
-                  <SearchableSelect
-                    label=""
-                    options={vendors.map((v) => ({
-                      value: String(v.id),
-                      label: v.vendorName,
-                      sub: v.vendorCode,
-                    }))}
-                    value={vendorId}
-                    onChange={(id) => {
-                      const v = vendors.find((x) => x.id === Number(id));
-                      onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
-                    }}
-                    placeholder="Select supplier…"
-                    required
-                  />
-                }
+                particularsOnly
+                vendorSelector={null}
                 debitNoteDate={debitNoteDate}
                 onDebitNoteDateChange={setDebitNoteDate}
                 reason={reason}
@@ -573,142 +801,167 @@ export default function DebitNoteFormPageClient({
                 onNarrationChange={setNarration}
               />
             </div>
+          ) : lines.length > 0 ? (
+            <DebitNoteProductTable lines={lines} onQtyChange={onDebitQtyChange} />
           ) : (
-            <>
-              {referencePreview && (
-                <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Purchase Return Reference</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div><span className="text-muted-foreground">Return No.</span><p className="font-mono font-medium">{sourceReturnNo}</p></div>
-                    <div><span className="text-muted-foreground">PO No.</span><p className="font-mono font-medium">{referencePreview.sourcePoNo}</p></div>
-                    <div><span className="text-muted-foreground">GRN No.</span><p className="font-mono font-medium">{referencePreview.sourceGrnNo || "—"}</p></div>
-                    <div><span className="text-muted-foreground">Dispatch</span><p className="font-mono font-medium">{sourceDispatchNo || sourcePackingNo || "—"}</p></div>
-                    <div><span className="text-muted-foreground">Invoice</span><p className="font-mono font-medium">{referencePreview.sourceInvoiceNo || "—"}</p></div>
-                    <div><span className="text-muted-foreground">Dispatch Status</span><p className="font-medium">{referencePreview.dispatchStatus || "—"}</p></div>
-                  </div>
-                </div>
-              )}
-
-              <div className="px-6 py-5 border-b border-border/60">
-                <VendorMasterPanel
-                  vendors={vendors}
-                  vendorId={vendorId}
-                  onVendorIdChange={onVendorChange}
-                  fields={vendorFields}
-                  billToId={billToId}
-                  shipToId={shipToId}
-                  onBillToChange={(id, addr) => {
-                    setBillToId(id);
-                    setBillingAddress(addr);
-                  }}
-                  onShipToChange={(id, addr) => {
-                    setShipToId(id);
-                    setShippingAddress(addr);
-                  }}
-                  billingAddress={billingAddress}
-                  shippingAddress={shippingAddress}
-                  disabled={vendorLocked}
-                />
-              </div>
-
-              <div className="px-6 py-4 space-y-3">
-                <SearchableSelect
-                  label="Reason"
-                  value={reason}
-                  onChange={setReason}
-                  options={DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
-                  placeholder="Select reason…"
-                  required
-                />
-
-                <h3 className="text-xs font-semibold uppercase text-muted-foreground pt-1">Product Lines</h3>
-                {lines.length > 0 ? (
-                  <DebitNoteProductTable lines={lines} onQtyChange={onDebitQtyChange} />
-                ) : (
-                  <p className="text-xs text-muted-foreground py-6 text-center border border-dashed border-border rounded-xl">
-                    Loading purchase return lines…
-                  </p>
-                )}
-              </div>
-            </>
+            <p className="text-xs text-muted-foreground py-8 text-center border-t border-dashed border-border">
+              {isPurchaseInvoice
+                ? "Loading purchase invoice lines…"
+                : "Loading purchase return lines…"}
+            </p>
           )}
+        </section>
 
-          <div className="px-6 py-4 border-t border-border/60 space-y-3">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Attachments (Optional)</p>
-            <div className="flex flex-wrap gap-2 items-end">
-              <div className="space-y-1 flex-1 min-w-[140px]">
-                <Label className="text-xs">Document Name</Label>
-                <Input id="dn-doc-name" className="h-9 text-sm" placeholder="e.g. Supplier memo" />
-              </div>
-              <label className="inline-flex items-center gap-1.5 h-8 px-3 text-xs border rounded-lg cursor-pointer hover:bg-muted/40">
-                <Upload className="w-4 h-4" /> Upload
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    const name = (document.getElementById("dn-doc-name") as HTMLInputElement)?.value;
-                    handleFile(f, name);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            </div>
-            {attachments.length > 0 && (
-              <div className="space-y-1.5">
-                {attachments.map((att) => (
-                  <div key={att.id} className="flex items-center gap-2 py-1.5 px-2 border rounded text-xs">
-                    <span className="font-medium">{att.documentName}</span>
-                    <span className="text-muted-foreground flex-1">{att.fileName}</span>
-                    {att.dataUrl && (
-                      <>
-                        <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(att.dataUrl, "_blank")}>
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <a href={att.dataUrl} download={att.fileName} className="p-1 hover:bg-muted rounded">
-                          <Download className="w-4 h-4" />
-                        </a>
-                      </>
-                    )}
-                    <button type="button" className="p-1 hover:bg-red-50 text-red-600 rounded" onClick={() => setAttachments((p) => p.filter((a) => a.id !== att.id))}>
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Tax & Summary */}
+        <div className="cn-ws__summary">
+          <div className="space-y-2">
+            <p className="cn-ws__hint">
+              {isFresh
+                ? "GST controls apply to the amount-based particular above."
+                : "Debit qty is capped at available quantity. Amounts follow existing GST logic."}
+            </p>
+            {totalDebit > 0 ? (
+              <LedgerImpactPreview
+                lines={debitNoteImpactResolved({
+                  vendorName: resolveVendorName() || "Supplier",
+                  taxable: taxableDisplay,
+                  taxAmount: gstAmountDisplay,
+                  grandTotal: totalDebit,
+                  adjustmentLedgerName: isFresh ? adjustmentLedgerName : undefined,
+                })}
+              />
+            ) : null}
           </div>
-
-          {error && <p className="px-6 pb-4 text-xs text-red-600">{error}</p>}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-border/60 bg-white p-4 space-y-2 text-xs">
-            <h2 className="text-xs font-semibold uppercase text-muted-foreground">Summary</h2>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Taxable Amount</span>
-              <span className="tabular-nums">{formatINR(isFresh ? freshTotals.taxable : lineTotals.taxableAmount)}</span>
+          <div className="cn-ws__summary-rows">
+            <div>
+              <span className="cn-muted">Subtotal</span>
+              <span className="tabular-nums">{formatINR(taxableDisplay)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">GST Amount</span>
-              <span className="tabular-nums">{formatINR(isFresh ? freshTotals.gstAmount : lineTotals.gstAmount)}</span>
+            <div>
+              <span className="cn-muted">Discount</span>
+              <span className="tabular-nums">{formatINR(0)}</span>
             </div>
-            <div className="flex justify-between font-semibold text-brand-700 pt-2 border-t">
-              <span>Total Debit</span>
+            <div>
+              <span className="cn-muted">CGST</span>
+              <span className="tabular-nums">{formatINR(cgstDisplay)}</span>
+            </div>
+            <div>
+              <span className="cn-muted">SGST</span>
+              <span className="tabular-nums">{formatINR(sgstDisplay)}</span>
+            </div>
+            <div>
+              <span className="cn-muted">IGST</span>
+              <span className="tabular-nums">{formatINR(igstDisplay)}</span>
+            </div>
+            <div>
+              <span className="cn-muted">Round Off</span>
+              <span className="tabular-nums">{formatINR(0)}</span>
+            </div>
+            <div className="cn-total">
+              <span>Grand Total</span>
               <span className="tabular-nums">{formatINR(totalDebit)}</span>
             </div>
           </div>
-          <LedgerImpactPreview
-            lines={debitNoteImpactResolved({
-              vendorName: resolveVendorName() || "Supplier",
-              taxable: isFresh ? freshTotals.taxable : lineTotals.taxableAmount,
-              taxAmount: isFresh ? freshTotals.gstAmount : lineTotals.gstAmount,
-              grandTotal: totalDebit,
-              adjustmentLedgerName: isFresh ? adjustmentLedgerName : undefined,
-            })}
-          />
         </div>
+
+        {/* Narration & Attachments */}
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Narration &amp; Attachments</p>
+          <div className="cn-ws__grid-3">
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Reason Summary
+              </Label>
+              <Input className="h-9 text-sm" value={reason || "—"} disabled />
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Internal Reference
+              </Label>
+              <Input
+                className="h-9 text-sm"
+                value={referenceNo}
+                onChange={(e) => setReferenceNo(e.target.value)}
+                placeholder="Optional…"
+                disabled={!isFresh}
+              />
+            </div>
+            <div className="cn-ws__field">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Attachment
+              </Label>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1 h-7 px-2 text-[11px] border rounded-md cursor-pointer hover:bg-muted/40">
+                  <Upload className="w-3.5 h-3.5" /> Upload
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      handleFile(f, f.name);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="cn-ws__field" style={{ gridColumn: "1 / -1" }}>
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                Narration
+              </Label>
+              <Textarea
+                className="min-h-[64px] text-xs resize-none"
+                value={isFresh ? narration : remarks}
+                onChange={(e) => {
+                  if (isFresh) setNarration(e.target.value);
+                  else setRemarks(e.target.value);
+                }}
+                placeholder="Narration…"
+              />
+            </div>
+          </div>
+          {attachments.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              {attachments.map((att) => (
+                <div
+                  key={att.id}
+                  className="flex items-center gap-2 py-1 px-2 border rounded text-[11px]"
+                >
+                  <span className="font-medium">{att.documentName}</span>
+                  <span className="text-muted-foreground flex-1 truncate">{att.fileName}</span>
+                  {att.dataUrl ? (
+                    <>
+                      <button
+                        type="button"
+                        className="p-1 hover:bg-muted rounded"
+                        onClick={() => window.open(att.dataUrl, "_blank")}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <a
+                        href={att.dataUrl}
+                        download={att.fileName}
+                        className="p-1 hover:bg-muted rounded"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </a>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="p-1 hover:bg-red-50 text-red-600 rounded"
+                    onClick={() =>
+                      setAttachments((p) => p.filter((a) => a.id !== att.id))
+                    }
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
       </div>
     </AccountsFormLayout>
     {discardDialog}

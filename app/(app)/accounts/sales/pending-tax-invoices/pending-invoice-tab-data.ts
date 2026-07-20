@@ -42,22 +42,22 @@ export const PENDING_INVOICE_TAB_META: Record<
 > = {
   sales_order: {
     label: "Sales Order Invoices",
-    sourceNoLabel: "Order Number",
+    sourceNoLabel: "Sales Order No.",
     partyLabel: "Customer",
     exportFileName: "sales-order-pending-invoices.xlsx",
     emptyMessage: "No sales order dispatches pending invoice generation.",
   },
   stock_transfer: {
     label: "Stock Transfer Invoices",
-    sourceNoLabel: "Transfer Number",
+    sourceNoLabel: "Stock Transfer No.",
     partyLabel: "Destination Warehouse",
     exportFileName: "stock-transfer-pending-invoices.xlsx",
     emptyMessage: "No stock transfer dispatches pending invoice generation.",
   },
   sample_order: {
     label: "Sample Order Invoices",
-    sourceNoLabel: "Sample Order Number",
-    partyLabel: "Recipient",
+    sourceNoLabel: "Sample Order No.",
+    partyLabel: "Customer",
     exportFileName: "sample-order-pending-invoices.xlsx",
     emptyMessage: "No sample order dispatches pending invoice generation.",
   },
@@ -94,6 +94,8 @@ export interface PendingInvoiceListRow {
   salesperson: string;
   /** Distinct order line items count */
   itemCount: number;
+  /** Total dispatch quantity (sum of line dispatchQty) */
+  qty: number;
   /** Stock Transfer tab: source warehouse */
   fromWarehouse: string;
   /** Stock Transfer tab: destination warehouse */
@@ -106,6 +108,13 @@ export interface PendingInvoiceListRow {
   detailHref: string | null;
   /** Invoice print route — null until invoice exists */
   printHref: string | null;
+}
+
+function sumDispatchQty(
+  products: Array<{ dispatchQty?: number }> | undefined,
+): number {
+  if (!products?.length) return 0;
+  return products.reduce((s, p) => s + (Number(p.dispatchQty) || 0), 0);
 }
 
 const INVOICE_READY_STATUSES = new Set<DispatchRecord["deliveryStatus"]>([
@@ -411,6 +420,7 @@ function mapSeedToListRow(row: PendingTaxInvoiceRow, sourceType: PendingInvoiceT
     getPendingInvoiceSeedDispatch(row.dispatchId) ??
     getPendingInvoiceSeedDispatches().find((d) => d.id === row.dispatchId);
   const seedItemCount = seedDispatch?.products.filter((p) => p.dispatchQty > 0).length ?? 0;
+  const seedQty = sumDispatchQty(seedDispatch?.products);
   const salesMeta =
     sourceType === "sales_order"
       ? resolveSalesOrderMeta(
@@ -469,6 +479,7 @@ function mapSeedToListRow(row: PendingTaxInvoiceRow, sourceType: PendingInvoiceT
     customerCode: salesMeta?.customerCode ?? sampleMeta?.customerCode ?? "",
     salesperson: salesMeta?.salesperson ?? "—",
     itemCount: salesMeta?.itemCount ?? sampleMeta?.itemCount ?? stockMeta?.itemCount ?? seedItemCount,
+    qty: seedQty > 0 ? seedQty : salesMeta?.itemCount ?? sampleMeta?.itemCount ?? stockMeta?.itemCount ?? seedItemCount,
     fromWarehouse: stockMeta?.fromWarehouse ?? "",
     toWarehouse: stockMeta?.toWarehouse ?? "",
     totalAmount:
@@ -503,6 +514,7 @@ function mapWarehouseToListRow(d: DispatchRecord, sourceType: PendingInvoiceTabI
   });
 
   const dispatchItemCount = d.products.filter((p) => p.dispatchQty > 0).length;
+  const dispatchQty = sumDispatchQty(d.products);
   const salesMeta =
     sourceType === "sales_order"
       ? resolveSalesOrderMeta(
@@ -563,6 +575,7 @@ function mapWarehouseToListRow(d: DispatchRecord, sourceType: PendingInvoiceTabI
     salesperson: salesMeta?.salesperson ?? "—",
     itemCount:
       salesMeta?.itemCount ?? sampleMeta?.itemCount ?? stockMeta?.itemCount ?? dispatchItemCount,
+    qty: dispatchQty > 0 ? dispatchQty : dispatchItemCount,
     fromWarehouse: stockMeta?.fromWarehouse ?? "",
     toWarehouse: stockMeta?.toWarehouse ?? "",
     totalAmount:

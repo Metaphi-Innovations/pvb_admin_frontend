@@ -14,9 +14,18 @@ import {
 } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
 import { registerCoaEditLedgerHandler } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-edit-ledger-bridge";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
+import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
-import { isCustomerOrSupplierLinkedLedger } from "@/lib/accounts/coa-master-link";
+import {
+  isCustomerOrSupplierLinkedLedger,
+  resolveCoaMasterLink,
+} from "@/lib/accounts/coa-master-link";
+import {
+  coaPartyMasterCreateHref,
+  coaPartyMasterEditHref,
+} from "@/lib/accounts/coa-party-master-routes";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { useCoaNavigation } from "./CoaNavigationContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,17 +65,29 @@ export function CoaAddLedgerHost() {
         setBlockMessage("You do not have permission to create ledgers.");
         return;
       }
+      const list = records.length > 0 ? records : loadChartOfAccounts();
       const parent =
         preferredParentId != null
-          ? records.find((r) => r.id === preferredParentId)
+          ? list.find((r) => r.id === preferredParentId)
           : undefined;
       const parentGroupId =
-        parent && canAddLedgerUnder(parent, records) ? preferredParentId! : null;
+        parent && canAddLedgerUnder(parent, list) ? preferredParentId! : null;
+
+      if (parentGroupId != null) {
+        const partyHref = coaPartyMasterCreateHref(parentGroupId, list);
+        // #region agent log
+        fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H1',location:'CoaAddLedgerHost.tsx:openGlobalAdd',message:'Global add party route',data:{parentGroupId,parentName:parent?.accountName??null,specializedGroupType:parent?.specializedGroupType??null,accountCode:parent?.accountCode??null,partyHref,behaviorKind:parent?resolveCoaLedgerBehavior(parent,list).kind:null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (partyHref) {
+          router.push(partyHref);
+          return;
+        }
+      }
 
       if (parentGroupId != null && requestCoaSpecializedLedgerForm(parentGroupId)) return;
 
       if (parent && parentGroupId == null) {
-        setBlockMessage(describeInvalidLedgerParentMessage(parent, records));
+        setBlockMessage(describeInvalidLedgerParentMessage(parent, list));
         return;
       }
 
@@ -81,16 +102,28 @@ export function CoaAddLedgerHost() {
         setBlockMessage("You do not have permission to create ledgers.");
         return;
       }
+      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const parent = list.find((r) => r.id === parentGroupId);
+      const partyHref = parent ? coaPartyMasterCreateHref(parentGroupId, list) : null;
+      // #region agent log
+      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H2',location:'CoaAddLedgerHost.tsx:openAddUnderParent',message:'COA Add under parent',data:{parentGroupId,parentName:parent?.accountName??null,specializedGroupType:parent?.specializedGroupType??null,accountCode:parent?.accountCode??null,partyHref,behaviorKind:parent?resolveCoaLedgerBehavior(parent,list).kind:null,canAdd:parent?canAddLedgerUnder(parent,list):false},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (partyHref) {
+        router.push(partyHref);
+        return;
+      }
       if (requestCoaSpecializedLedgerForm(parentGroupId)) return;
-      const parent = records.find((r) => r.id === parentGroupId);
-      if (!parent || !canAddLedgerUnder(parent, records)) {
+      if (!parent || !canAddLedgerUnder(parent, list)) {
         setBlockMessage(
           parent
-            ? describeInvalidLedgerParentMessage(parent, records)
+            ? describeInvalidLedgerParentMessage(parent, list)
             : "Please select a valid Parent Group.",
         );
         return;
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H3',location:'CoaAddLedgerHost.tsx:genericFallback',message:'Falling back to generic ledger form',data:{parentGroupId,href:genericLedgerNewHref(parentGroupId)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       router.push(genericLedgerNewHref(parentGroupId));
     },
     [canCreate, records, router],
@@ -102,14 +135,23 @@ export function CoaAddLedgerHost() {
         setBlockMessage("You do not have permission to edit ledgers.");
         return;
       }
-      const row = records.find((r) => r.id === ledgerId);
-      if (!row || !canEditLedger(row, records)) {
+      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const row = list.find((r) => r.id === ledgerId);
+      if (!row || !canEditLedger(row, list)) {
         setBlockMessage("This ledger cannot be edited.");
+        return;
+      }
+      const link = resolveCoaMasterLink(row, list);
+      // #region agent log
+      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-C',location:'CoaAddLedgerHost.tsx:openEdit',message:'Edit ledger route selection',data:{ledgerId,name:row.accountName,linkCategory:link?.category??null,sourceId:link?.sourceId??null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (link?.category === "customer" || link?.category === "vendor") {
+        router.push(coaPartyMasterEditHref(link.category, link.sourceId));
         return;
       }
       setEditConfirmTarget(row);
     },
-    [canEdit, records],
+    [canEdit, records, router],
   );
 
   useEffect(() => {

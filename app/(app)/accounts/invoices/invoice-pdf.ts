@@ -5,10 +5,14 @@ import { getInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
 
 export function downloadInvoicePdf(invoice: InvoiceRecord): void {
   const rec = normalizeInvoice(invoice);
-  const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(rec);
+  const { taxableValue, invoiceTotal } = getInvoiceAmountBreakup(rec);
   const isSalesOrderInvoice = rec.sourceType === "sales_order";
-  const gst = isSalesOrderInvoice ? getInvoiceGstBreakup(rec) : null;
-  const bank = isSalesOrderInvoice ? getBankAccountPrintDetails(rec.bankAccountId) : null;
+  const isServiceInvoice = rec.sourceType === "service";
+  const gst = getInvoiceGstBreakup(rec);
+  const bank =
+    isSalesOrderInvoice || isServiceInvoice
+      ? getBankAccountPrintDetails(rec.bankAccountId)
+      : null;
 
   const rows = isSalesOrderInvoice
     ? rec.lineItems
@@ -50,13 +54,10 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
     : `<th>Product</th><th>Description</th><th>Qty</th><th>Unit</th>
       <th>Unit Price</th><th>Disc %</th><th>Tax %</th><th>Amount</th>`;
 
-  const taxRows =
-    isSalesOrderInvoice && gst
-      ? gst.interstate
-        ? `<tr><td class="label">Output IGST</td><td align="right">${formatINR(gst.igst)}</td></tr>`
-        : `<tr><td class="label">Output CGST</td><td align="right">${formatINR(gst.cgst)}</td></tr>
-           <tr><td class="label">Output SGST</td><td align="right">${formatINR(gst.sgst)}</td></tr>`
-      : `<tr><td class="label">${INVOICE_AMOUNT_LABELS.gstAmount}</td><td align="right">${formatINR(gstAmount)}</td></tr>`;
+  const taxRows = gst.interstate
+    ? `<tr><td class="label">Output IGST</td><td align="right">${formatINR(gst.igst)}</td></tr>`
+    : `<tr><td class="label">Output CGST</td><td align="right">${formatINR(gst.cgst)}</td></tr>
+       <tr><td class="label">Output SGST</td><td align="right">${formatINR(gst.sgst)}</td></tr>`;
 
   const bankBlock = bank
     ? `<div style="margin-top:16px;padding:10px;border:1px solid #ddd;border-radius:6px">
@@ -65,13 +66,14 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
       </div>`
     : "";
 
-  const footerNotes = isSalesOrderInvoice
-    ? rec.internalRemarks || rec.remarks
-      ? `<p style="margin-top:16px"><strong>Narration:</strong> ${escapeHtml(rec.internalRemarks || rec.remarks)}</p>`
-      : ""
-    : rec.remarks
-      ? `<p style="margin-top:16px"><strong>Remarks:</strong> ${escapeHtml(rec.remarks)}</p>`
-      : "";
+  const footerNotes =
+    isSalesOrderInvoice || isServiceInvoice
+      ? rec.internalRemarks || rec.remarks
+        ? `<p style="margin-top:16px"><strong>Narration:</strong> ${escapeHtml(rec.internalRemarks || rec.remarks)}</p>`
+        : ""
+      : rec.remarks
+        ? `<p style="margin-top:16px"><strong>Remarks:</strong> ${escapeHtml(rec.remarks)}</p>`
+        : "";
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><title>${rec.invoiceNo}</title>
@@ -87,7 +89,7 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
   .totals .label { color: #666; }
   .grand { font-weight: 700; font-size: 14px; }
 </style></head><body>
-  <h1>Tax Invoice</h1>
+  <h1>${isServiceInvoice ? "Service Invoice" : "Tax Invoice"}</h1>
   <p class="muted">${escapeHtml(rec.invoiceNo)} · ${escapeHtml(rec.invoiceDate)}</p>
   <p><strong>Bill To:</strong> ${escapeHtml(rec.customerName)}<br/>
   ${escapeHtml(rec.billingAddress)}<br/>

@@ -2,14 +2,12 @@
 
 import { memo, useState } from "react";
 import { Info } from "lucide-react";
-import { Label } from "@/components/ui/label";
 import {
   InvoiceFormField,
   InvoiceFormInput,
   InvoiceFormReadOnly,
   INVOICE_FORM_GRID_CLASS,
   INVOICE_FORM_INPUT_CLASS,
-  INVOICE_FORM_LABEL_CLASS,
 } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import { SalesInvoiceDispatchSelect } from "./SalesInvoiceDispatchSelect";
 import { SalesInvoiceDispatchDetailsDialog } from "./SalesInvoiceDispatchDetailsDialog";
@@ -38,10 +36,27 @@ export interface SalesInvoiceDocumentInfoSectionProps {
   selectedDispatchId: string;
   onDispatchSelect: (dispatchId: string, row: PendingDispatchInvoiceRow | null) => void;
   showDispatchSelect?: boolean;
-  /** Sales Order Pending→Generate: show real preview number, not "Auto-generated". */
   previewInvoiceNo?: string;
   compactGrid?: boolean;
   invoiceDateRequired?: boolean;
+  goodsGenerateCompact?: boolean;
+  bankAccountSlot?: React.ReactNode;
+  /** Optional helper under Bank Account (kept in reserved helper row for alignment). */
+  bankAccountHelper?: string;
+  /** Read-only ERP context for the compact Dispatch Details popup (Goods only). */
+  dispatchContext?: {
+    salesOrderNo?: string;
+    salesOrderDate?: string;
+    placeOfSupply?: string;
+    billFrom?: string;
+    billTo?: string;
+    shipTo?: string;
+    warehouse?: string;
+    dispatchQty?: number;
+    qtyUnit?: string;
+  };
+  /** @deprecated Goods narration is placed after Additional Charges. */
+  narrationSlot?: React.ReactNode;
 }
 
 function SalesInvoiceDocumentInfoSectionInner({
@@ -62,12 +77,115 @@ function SalesInvoiceDocumentInfoSectionInner({
   previewInvoiceNo,
   compactGrid = false,
   invoiceDateRequired = false,
+  goodsGenerateCompact = false,
+  bankAccountSlot,
+  bankAccountHelper,
+  dispatchContext,
 }: SalesInvoiceDocumentInfoSectionProps) {
   const [dispatchInfoOpen, setDispatchInfoOpen] = useState(false);
   const hasDispatch = Boolean(sourceDispatchId || dispatchRef);
   const displayInvoiceNo = isEdit
     ? invoiceNo
     : previewInvoiceNo?.trim() || "Auto-generated";
+
+  if (goodsGenerateCompact) {
+    return (
+      <div className="space-y-2">
+        <div className="so-goods-field-grid">
+          <div className="so-goods-field so-w-inv-no">
+            <p className="so-goods-field__label">Invoice No.</p>
+            <div className="so-goods-field__control">
+              <div className="so-goods-ro so-goods-ro--mono w-full">{displayInvoiceNo}</div>
+            </div>
+            <p className="so-goods-field__helper">&nbsp;</p>
+          </div>
+
+          <div className="so-goods-field so-w-date">
+            <p className="so-goods-field__label">
+              Invoice Date{invoiceDateRequired ? <span className="text-red-500 ml-0.5">*</span> : null}
+            </p>
+            <div className="so-goods-field__control">
+              <InvoiceFormInput
+                type="date"
+                className="h-8 w-full"
+                value={invoiceDate}
+                onChange={(e) => onInvoiceDateChange(e.target.value)}
+                required={invoiceDateRequired}
+              />
+            </div>
+            <p className="so-goods-field__helper">&nbsp;</p>
+          </div>
+
+          <div className="so-goods-field so-w-date">
+            <p className="so-goods-field__label">Due Date</p>
+            <div className="so-goods-field__control">
+              <InvoiceFormInput
+                type="date"
+                value={dueDate}
+                disabled
+                className="h-8 w-full bg-slate-50 text-slate-700"
+              />
+            </div>
+            <p className="so-goods-field__helper">Net {creditDays} days</p>
+          </div>
+
+          <div className="so-goods-field so-w-so">
+            <p className="so-goods-field__label">Sales Order No.</p>
+            <div className="so-goods-field__control">
+              <div className="so-goods-ro so-goods-ro--mono w-full">{salesOrderRef || "—"}</div>
+            </div>
+            <p className="so-goods-field__helper">&nbsp;</p>
+          </div>
+
+          <div className="so-goods-field so-w-dispatch">
+            <p className="so-goods-field__label">Dispatch No.</p>
+            <div className="so-goods-field__control">
+              <div className="so-goods-ro-with-info">
+                <span className="so-goods-ro-with-info__value so-goods-ro-with-info__value--mono">
+                  {dispatchRef || "—"}
+                </span>
+                {hasDispatch ? (
+                  <button
+                    type="button"
+                    onClick={() => setDispatchInfoOpen(true)}
+                    className="so-goods-info-btn"
+                    title="View dispatch details"
+                    aria-label="Dispatch details"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <p className="so-goods-field__helper">&nbsp;</p>
+          </div>
+
+          {bankAccountSlot ? (
+            <div className="so-goods-field so-w-bank">
+              <p className="so-goods-field__label">
+                Bank Account<span className="text-red-500 ml-0.5">*</span>
+              </p>
+              <div className="so-goods-field__control min-w-0 w-full">
+                {bankAccountSlot}
+              </div>
+              <p className="so-goods-field__helper" title={bankAccountHelper || undefined}>
+                {bankAccountHelper?.trim() || "\u00a0"}
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        <SalesInvoiceDispatchDetailsDialog
+          dispatchId={sourceDispatchId}
+          dispatchNo={dispatchRef}
+          open={dispatchInfoOpen}
+          onOpenChange={setDispatchInfoOpen}
+          goodsInvoiceFields
+          context={dispatchContext}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -101,17 +219,18 @@ function SalesInvoiceDocumentInfoSectionInner({
 
         <InvoiceFormReadOnly label="Sales Order No." value={salesOrderRef || "—"} mono />
 
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <div className="flex items-center gap-1.5">
-            <Label className={INVOICE_FORM_LABEL_CLASS}>Dispatch No.</Label>
+            <p className="text-xs font-medium">Dispatch No.</p>
             {hasDispatch && (
               <button
                 type="button"
                 onClick={() => setDispatchInfoOpen(true)}
-                className="flex items-center justify-center w-5 h-5 transition-colors rounded-full shadow-sm bg-brand-600 hover:bg-brand-700"
+                className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:bg-muted hover:text-brand-700"
                 title="View dispatch details"
+                aria-label="Dispatch details"
               >
-                <Info className="w-3 h-3 text-white" />
+                <Info className="w-3 h-3" />
               </button>
             )}
           </div>

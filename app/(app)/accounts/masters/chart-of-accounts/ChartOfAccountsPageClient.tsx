@@ -156,6 +156,12 @@ export default function ChartOfAccountsPageClient() {
   }, [openTransaction]);
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'S4',location:'ChartOfAccountsPageClient.tsx:mount',message:'COA page client mounted',data:{},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, []);
+
+  useEffect(() => {
     ensureCoaPostingLedgerTransactionsOnPageLoad();
   }, []);
 

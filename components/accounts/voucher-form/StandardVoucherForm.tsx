@@ -34,6 +34,7 @@ import {
 } from "@/components/accounts/voucher-simple-form-ui";
 import { VoucherFormHeaderFields } from "@/components/accounts/voucher-form/VoucherFormHeaderFields";
 import { VoucherNarrationSection } from "@/components/accounts/voucher-form/VoucherNarrationSection";
+import { VoucherBankReconciliationSection } from "@/components/accounts/VoucherBankReconciliationSection";
 import { VoucherDualEntryPanel } from "@/components/accounts/voucher-form/VoucherDualEntryPanel";
 import { loadWarehouseMappingOptions } from "@/lib/accounts/bank-warehouse-mapping";
 import { VoucherSelectContent } from "@/components/accounts/voucher-simple-form-ui";
@@ -650,7 +651,21 @@ export function StandardVoucherForm({
           variant={isPremiumVoucher ? "premium" : "default"}
         />
 
-        {readOnly && resolvedVoucherId != null && VOUCHER_CATEGORY_MAP[voucherType] && (
+        {readOnly &&
+          resolvedVoucherId != null &&
+          (voucherType === "payment" ||
+            voucherType === "receipt" ||
+            voucherType === "contra") && (
+            <VoucherBankReconciliationSection
+              voucherId={resolvedVoucherId}
+              voucherNumber={existing?.voucherNumber}
+            />
+          )}
+
+        {readOnly &&
+          resolvedVoucherId != null &&
+          VOUCHER_CATEGORY_MAP[voucherType] &&
+          existing?.referenceNo !== "BANK-RECON-DEMO" && (
           <div className="mt-3">
             <AccountsDocumentWorkflowSection
               category={VOUCHER_CATEGORY_MAP[voucherType]!}

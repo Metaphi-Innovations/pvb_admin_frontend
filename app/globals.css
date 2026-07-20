@@ -167,11 +167,11 @@
   /* Accounts module — compact typography (aligned with voucher entry forms)
    * Page title 18px · section 14px · body/inputs 13px · labels/helper 12px */
   .accounts-page-title {
-    @apply text-lg font-semibold text-foreground leading-tight;
+    @apply text-[17px] font-semibold text-foreground leading-tight;
   }
 
   .accounts-page-subtitle {
-    @apply text-xs text-muted-foreground mt-0.5 leading-snug;
+    @apply text-[11px] text-muted-foreground mt-0.5 leading-snug;
   }
 
   .accounts-section-heading {
@@ -199,7 +199,7 @@
   }
 
   .accounts-filter-label {
-    @apply text-xs font-medium text-muted-foreground leading-none tracking-wide;
+    @apply text-[10px] font-medium text-muted-foreground leading-none tracking-wide;
   }
 
   .accounts-filter-control {
@@ -208,9 +208,9 @@
     max-height: 32px;
     padding-top: 0;
     padding-bottom: 0;
-    font-size: 13px;
-    line-height: 18px;
-    @apply text-foreground placeholder:text-[13px] placeholder:text-muted-foreground;
+    font-size: 12px;
+    line-height: 16px;
+    @apply text-foreground placeholder:text-xs placeholder:text-muted-foreground;
     @apply border border-border rounded-md bg-background px-2;
   }
 
@@ -225,8 +225,8 @@
     -webkit-line-clamp: unset !important;
     overflow: visible !important;
     white-space: nowrap;
-    font-size: 13px;
-    line-height: 18px;
+    font-size: 12px;
+    line-height: 16px;
   }
 
   .accounts-filter-select svg.lucide-chevron-down,
@@ -241,8 +241,8 @@
   }
 
   .accounts-date-filter-input .accounts-date-display {
-    font-size: 13px;
-    line-height: 18px;
+    font-size: 12px;
+    line-height: 16px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -341,29 +341,29 @@
 
   /* Accounts report layout — shared responsive standard for all report screens */
   .accounts-report-body {
-    @apply flex flex-col gap-3 min-h-0 flex-1 w-full;
+    @apply flex flex-col gap-2 min-h-0 flex-1 w-full;
   }
 
   .accounts-report-kpi-grid {
     display: grid;
     width: 100%;
-    gap: 0.75rem;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.25rem), 1fr));
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr));
   }
 
   @media (min-width: 1280px) {
     .accounts-report-kpi-grid {
-      grid-template-columns: repeat(auto-fill, minmax(min(100%, 12.5rem), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.5rem), 1fr));
     }
   }
 
   .accounts-report-kpi-card {
-    @apply bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm min-w-0;
+    @apply bg-white rounded-lg border border-border p-2 flex items-center gap-2.5 shadow-sm min-w-0;
     min-width: 0;
   }
 
   .accounts-report-kpi-value {
-    @apply text-base font-bold text-foreground tabular-nums leading-tight;
+    @apply text-[15px] font-bold text-foreground tabular-nums leading-tight;
     white-space: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
@@ -376,7 +376,7 @@
   }
 
   .accounts-report-kpi-label {
-    @apply text-[11px] text-muted-foreground mt-0.5 leading-tight;
+    @apply text-[10px] text-muted-foreground mt-0.5 leading-tight;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -392,7 +392,7 @@
   }
 
   .accounts-status-badge {
-    @apply inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap;
+    @apply inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap;
   }
 
   /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.)
@@ -419,11 +419,12 @@
   }
 
   .accounts-table-th {
-    @apply px-2 py-1.5 whitespace-nowrap text-xs font-semibold text-foreground text-left uppercase tracking-wide;
+    @apply px-2 py-1 whitespace-nowrap text-[11px] font-semibold text-foreground text-left tracking-normal normal-case;
     @apply border-b border-border bg-brand-50;
     box-sizing: border-box;
     vertical-align: middle;
-    min-height: 32px;
+    min-height: 0;
+    line-height: 1.15;
   }
 
   .accounts-table-th-inner {
@@ -508,10 +509,11 @@
   }
 
   .accounts-table-td {
-    @apply px-2 py-1.5 text-xs font-normal text-foreground;
+    @apply px-2 py-1 text-xs font-normal text-foreground;
     box-sizing: border-box;
     vertical-align: middle;
-    min-height: 36px;
+    min-height: 0;
+    line-height: 1.2;
   }
 
   .accounts-table-td-inner {
@@ -545,21 +547,21 @@
   .accounts-listing-filter-card {
     background-color: #ffffff;
     border: 1px solid #E5E7EB;
-    border-radius: 12px;
+    border-radius: 8px;
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    @apply flex-shrink-0 flex flex-col gap-2 px-2.5 py-2 w-full min-w-0;
+    @apply flex-shrink-0 flex flex-col gap-1.5 px-2 py-1.5 w-full min-w-0;
   }
 
   .accounts-listing-filter-card > .accounts-report-filter-stack {
-    @apply flex flex-wrap items-end gap-x-2 gap-y-2.5 w-full min-w-0;
+    @apply flex flex-wrap items-end gap-x-2 gap-y-1.5 w-full min-w-0;
   }
 
   .accounts-listing-filter-card [role="combobox"] {
     height: 32px;
     min-height: 32px;
     max-height: 32px;
-    font-size: 13px;
-    line-height: 18px;
+    font-size: 12px;
+    line-height: 16px;
     padding-top: 0;
     padding-bottom: 0;
     border-color: #E5E7EB;
@@ -600,12 +602,13 @@
 
   /* Legacy markup: th without component classes still get standard layout */
   .accounts-table > thead > tr > th:not(.accounts-table-th) {
-    @apply px-2.5 py-2 whitespace-nowrap text-xs font-semibold text-[#1F2937] text-left uppercase tracking-wide;
+    @apply px-2 py-1 whitespace-nowrap text-[11px] font-semibold text-[#1F2937] text-left tracking-normal normal-case;
     @apply border-b border-[#E5E7EB] sticky top-0 z-30;
     background-color: #FFF3E6;
     box-sizing: border-box;
     vertical-align: middle;
-    min-height: 36px;
+    min-height: 0;
+    line-height: 1.15;
     box-shadow: 0 1px 0 0 #E5E7EB;
   }
 
@@ -624,10 +627,11 @@
   }
 
   .accounts-table > tbody > tr > td {
-    @apply px-2 py-1.5 text-xs font-normal text-[#1F2937];
+    @apply px-2 py-1 text-xs font-normal text-[#1F2937];
     box-sizing: border-box;
     vertical-align: middle;
-    min-height: 36px;
+    min-height: 0;
+    line-height: 1.2;
   }
 
   .input-base {

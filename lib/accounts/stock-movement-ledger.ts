@@ -15,6 +15,7 @@ import { getQcPassedStockRecords } from "@/app/(app)/warehouse/stockoverview/moc
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import {
   buildInventoryMovements,
+  getCostPriceBySku,
   resolveSku,
   type InventoryMovement,
 } from "@/lib/accounts/inventory-accounting-data";
@@ -220,6 +221,8 @@ function mapInventoryVoucherType(
       return "purchase";
     case "Sales Dispatch":
       return "sales";
+    case "Sample Issue":
+      return "sample_issue";
     case "Purchase Return":
       return "purchase_return";
     case "Sales Return":
@@ -305,8 +308,15 @@ export function resolveStockLedgerDocumentHref(
     case "negative_adjustment":
     case "adjustment":
       return "/accounts/transactions/inventory-adjustments";
-    case "sample_issue":
+    case "sample_issue": {
+      const sampleInv = loadInvoices().find(
+        (i) =>
+          i.invoiceNo === documentNo &&
+          (i.sourceType === "sample_order" || i.invoiceType === "sample_order"),
+      );
+      if (sampleInv) return `/accounts/transactions/invoices/${sampleInv.id}`;
       return "/sales/sample-order";
+    }
     case "sample_return":
       return "/sales/sample-order/sample-return";
     case "expired_stock":
@@ -328,7 +338,10 @@ function movementFromInventory(m: InventoryMovement, batchMap: Map<string, { mfg
   if (m.voucherType === "GRN") {
     const grn = getGrnRecords().find((g) => g.grnNo === m.voucherNo);
     if (grn?.createdBy) createdBy = grn.createdBy;
-  } else if (m.voucherType === "Sales Dispatch" && m.voucherNo.startsWith("INV")) {
+  } else if (
+    (m.voucherType === "Sales Dispatch" || m.voucherType === "Sample Issue") &&
+    (m.voucherNo.startsWith("INV") || m.voucherNo.startsWith("PVB/SMP"))
+  ) {
     const inv = loadInvoices().find((i) => i.invoiceNo === m.voucherNo);
     if (inv?.createdBy) createdBy = inv.createdBy;
   }
@@ -452,9 +465,26 @@ function movementsFromStockTransfers(batchMap: Map<string, { mfgDate: string; ex
 }
 
 function movementsFromSampleIssues(batchMap: Map<string, { mfgDate: string; expiryDate: string }>): RawMovement[] {
+  const sampleInvoiceRefs = new Set(
+    loadInvoices()
+      .filter(
+        (inv) =>
+          inv.invoiceStatus !== "cancelled" &&
+          (inv.sourceType === "sample_order" || inv.invoiceType === "sample_order"),
+      )
+      .flatMap((inv) =>
+        [inv.salesOrderNo, inv.dispatchNo, inv.referenceNo, inv.invoiceNo]
+          .map((v) => v?.trim())
+          .filter((v): v is string => Boolean(v)),
+      ),
+  );
+
   const rows: RawMovement[] = [];
   for (const entry of getSampleIssueMovements()) {
     if ((entry.outQty ?? 0) <= 0 && (entry.inQty ?? 0) <= 0) continue;
+    /** Prefer Sample Order Proforma invoice movement (valued at CP) when already generated. */
+    if (entry.referenceNo && sampleInvoiceRefs.has(entry.referenceNo.trim())) continue;
+
     const sku = resolveSku(entry.productCode) || entry.productCode;
     const batchNo = entry.batchNumber || "—";
     const meta = lookupBatchMeta(batchMap, sku, batchNo, entry.warehouse);
@@ -473,7 +503,7 @@ function movementsFromSampleIssues(batchMap: Map<string, { mfgDate: string; expi
       inQty: entry.inQty || 0,
       outQty: entry.outQty || 0,
       unit: lookupUnit(sku, entry.productCode),
-      rate: 0,
+      rate: getCostPriceBySku(sku, entry.productCode),
       referenceModule: "Sample Issue",
       createdBy: ACCOUNTS_CURRENT_USER,
       remarks: "",

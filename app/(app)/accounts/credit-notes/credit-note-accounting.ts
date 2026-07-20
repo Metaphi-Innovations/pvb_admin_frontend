@@ -16,6 +16,9 @@ import {
 import { postFromErpSource, type PostingLineInput, type PostingResult } from "@/lib/accounts/posting-engine";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 
+const ENTITLEMENT_SCHEME_LEDGER_ERROR =
+  "Scheme discount ledger is not mapped for this entitlement. Configure mappedLedgerId / mappedLedgerCode / mappedLedgerName before generating a Credit Note.";
+
 function findLedgerByHint(name: string): string | null {
   const ledgers = getActivePostingLedgers();
   const lower = name.trim().toLowerCase();
@@ -32,7 +35,7 @@ function findLedgerIdByName(name: string): number | null {
   return account?.id ?? null;
 }
 
-/** Scheme / sales-return debit ledger — never "General". */
+/** Prefer mapped scheme / adjustment ledger when present (entitlement claims). */
 export function resolveCreditNoteDiscountLedger(isSchemeSettlement: boolean): string {
   if (isSchemeSettlement) {
     return (
@@ -103,10 +106,9 @@ export function buildCreditNoteLedgerImpact(input: {
         }
       : normalizeGstAmounts(input.taxAmount, input.interstate);
 
-  const discountLedger =
-    input.isManualAdjustment && input.adjustmentLedgerName?.trim()
-      ? input.adjustmentLedgerName.trim()
-      : resolveCreditNoteDiscountLedger(!!input.isSchemeSettlement);
+  const discountLedger = input.adjustmentLedgerName?.trim()
+    ? input.adjustmentLedgerName.trim()
+    : resolveCreditNoteDiscountLedger(!!input.isSchemeSettlement);
   const customerLedger = resolveCreditNoteCustomerLedger(
     input.customerLedgerName,
     input.customerName,
@@ -137,6 +139,7 @@ export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult 
 
   const isScheme = Boolean(note.schemeSettlementKey) || note.source === "payment_discount_scheme";
   const isManual = note.source === "manual";
+  const isEntitlementScheme = Boolean(note.schemeEntitlementId);
   const customerName = note.receivableLedger?.trim() || note.customerName;
   const interstate = inferInterstateFromPlaceOfSupply(
     (note as { placeOfSupply?: string }).placeOfSupply,
@@ -157,18 +160,40 @@ export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult 
 
   const taxable = Math.max(0, note.currentCreditAmount - (note.taxCreditAmount ?? 0));
   const total = note.currentCreditAmount;
-  const discountLedgerName =
-    isManual && note.adjustmentLedgerName?.trim()
-      ? note.adjustmentLedgerName.trim()
-      : resolveCreditNoteDiscountLedger(isScheme);
-  const discountLedgerId =
-    isManual && note.adjustmentLedgerId
-      ? note.adjustmentLedgerId
-      : findLedgerIdByName(discountLedgerName) ??
-        getActivePostingLedgers().find((l) =>
-          l.accountName.toLowerCase().includes(isScheme ? "promotion" : isManual ? "discount" : "sales return"),
-        )?.id ??
-        null;
+
+  let discountLedgerName = note.adjustmentLedgerName?.trim() || "";
+  let discountLedgerId: number | null = note.adjustmentLedgerId ?? null;
+
+  if (isEntitlementScheme) {
+    /** Entitlement CNs must use the mapped scheme ledger only — never fall back. */
+    const coa = loadChartOfAccounts().filter((r) => r.nodeLevel === "ledger");
+    if (discountLedgerId != null) {
+      const byId = coa.find((r) => r.id === discountLedgerId);
+      if (!byId) {
+        throw new Error(ENTITLEMENT_SCHEME_LEDGER_ERROR);
+      }
+      discountLedgerName = discountLedgerName || byId.accountName;
+    } else if (discountLedgerName) {
+      discountLedgerId = findLedgerIdByName(discountLedgerName);
+      if (discountLedgerId == null) {
+        throw new Error(ENTITLEMENT_SCHEME_LEDGER_ERROR);
+      }
+    } else {
+      throw new Error(ENTITLEMENT_SCHEME_LEDGER_ERROR);
+    }
+  } else {
+    discountLedgerName = discountLedgerName || resolveCreditNoteDiscountLedger(isScheme);
+    discountLedgerId =
+      discountLedgerId != null
+        ? discountLedgerId
+        : findLedgerIdByName(discountLedgerName) ??
+          getActivePostingLedgers().find((l) =>
+            l.accountName
+              .toLowerCase()
+              .includes(isScheme ? "promotion" : isManual ? "discount" : "sales return"),
+          )?.id ??
+          null;
+  }
 
   const customerLedgerName = resolveCreditNoteCustomerLedger(
     note.receivableLedger ?? "",

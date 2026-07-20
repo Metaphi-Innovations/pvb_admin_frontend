@@ -597,6 +597,69 @@ export function postSalesInvoiceCogs(input: {
   });
 }
 
+/**
+ * Sample Order Proforma — zero billing; inventory consumption at Cost Price.
+ * Dr Sample / Promotional Expense · Cr Inventory / Stock-in-Hand
+ * No receivable, sales revenue, or output GST.
+ */
+export function postSampleOrderInventoryExpense(input: {
+  invoiceId: number;
+  invoiceNo: string;
+  date: string;
+  customerName: string;
+  lines: { productName: string; sku?: string; qty: number; costPrice?: number }[];
+}): PostingResult {
+  ensureInventoryAccountingLedgers();
+  let expenseTotal = 0;
+  for (const line of input.lines) {
+    if (line.qty <= 0) continue;
+    const sku = line.sku ?? resolveSku(line.productName);
+    const cp =
+      typeof line.costPrice === "number" && line.costPrice > 0
+        ? line.costPrice
+        : getCostPriceBySku(sku, line.productName);
+    if (!(cp > 0)) {
+      return {
+        success: false,
+        error: `Cost Price not available for "${line.productName}". Cannot post Sample Order inventory expense.`,
+      };
+    }
+    expenseTotal += line.qty * cp;
+  }
+  expenseTotal = roundMoney(expenseTotal);
+  if (expenseTotal <= 0) {
+    return {
+      success: false,
+      error: "No inventory value to post for Sample Order (Cost Price × Qty).",
+    };
+  }
+
+  return postFromErpSource({
+    sourceModule: "sales",
+    sourceDocumentId: `${input.invoiceId}-sample`,
+    sourceDocumentNo: input.invoiceNo,
+    voucherType: "journal",
+    date: input.date,
+    narration: `Sample Order issue ${input.invoiceNo} — ${input.customerName} (inventory at CP)`,
+    lines: [
+      {
+        mappingKey: "sample_promotional_expense",
+        partyName: "Sample / Promotional Expense",
+        debit: expenseTotal,
+        credit: 0,
+        remarks: `Sample / promotional expense at CP — ${input.invoiceNo}`,
+      },
+      {
+        mappingKey: "stock_inventory",
+        partyName: "Inventory / Stock-in-Hand",
+        debit: 0,
+        credit: expenseTotal,
+        remarks: `Inventory reduction (sample issue) — ${input.invoiceNo}`,
+      },
+    ],
+  });
+}
+
 /** Sales: Credit Note approved → reverse revenue & reduce receivable */
 export function postCreditNote(input: {
   creditNoteId: number;

@@ -1,5 +1,6 @@
 "use client";
 
+import "./accounts-ui-dense.css";
 import { AccountsAccordionProvider } from "@/components/accounts/AccountsAccordionContext";
 import { CoaNavigationProviderLazy } from "@/components/accounts/CoaNavigationProviderLazy";
 import { AccountsSidebarProvider } from "@/components/accounts/AccountsSidebarContext";

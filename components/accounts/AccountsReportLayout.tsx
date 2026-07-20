@@ -93,13 +93,13 @@ export function AccountsReportKpiCard({
     >
       <div
         className={cn(
-          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
+          "w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0",
           warning ? "bg-amber-100" : accent ? "bg-brand-600" : "bg-muted",
         )}
       >
         <Icon
           className={cn(
-            "w-4 h-4",
+            "w-3.5 h-3.5",
             warning ? "text-amber-600" : accent ? "text-white" : "text-muted-foreground",
           )}
         />
