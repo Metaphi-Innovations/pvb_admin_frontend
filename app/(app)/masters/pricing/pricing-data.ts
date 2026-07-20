@@ -385,9 +385,17 @@ export function getSellingPriceLabel(customerType: PricingCustomerType | ""): st
   }
 }
 
-export function getSellingPriceFromRecord(record: PricingRecord): number {
+export function getSellingPriceFromRecord(record: {
+  dealerPrice: number;
+  customerType: string;
+  netSellingPrice: number;
+  distributorPrice: number;
+  retailPrice: number;
+  farmerPrice: number;
+  specialPrice: number;
+}): number {
   if (record.dealerPrice > 0) return record.dealerPrice;
-  const key = getSellingPriceFieldKey(record.customerType);
+  const key = getSellingPriceFieldKey(record.customerType as PricingScopeCustomerType | "");
   if (key) return record[key];
   return record.netSellingPrice;
 }
@@ -1619,7 +1627,7 @@ function findScopeDuplicateMessage(
 
 export function buildBulkPricingLineFromApi(product: ProductListRecord): BulkPricingLine {
   const packSize =
-    product.packSize != null && product.packSize !== ""
+    product.packSize != null
       ? String(product.packSize)
       : "";
 
@@ -1717,7 +1725,7 @@ export function apiPricingToForm(record: PricingListRecord): PricingForm {
     hsnCode: record.hsnCode,
     gstPct: record.gstPct,
     productDealerPrice: record.productDealerPrice,
-    customerType: record.customerType,
+    customerType: (record.customerType || "") as PricingScopeCustomerType | "",
     state: record.state,
     states: [record.state],
     customerTypes: record.customerType ? [record.customerType as PricingCustomerType] : [],

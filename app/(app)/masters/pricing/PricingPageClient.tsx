@@ -53,8 +53,8 @@ import {
   useTogglePricingStatus,
   useUpdatePricing,
   PricingListService,
-  type PricingListRecord,
 } from "@/hooks/masters";
+import type { PricingListRecord } from "@/services/pricing-list.service";
 import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
