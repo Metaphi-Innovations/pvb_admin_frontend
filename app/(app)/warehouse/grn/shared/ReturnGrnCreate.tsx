@@ -160,7 +160,7 @@ export function ReturnGrnCreate({
     isError: sampleDropdownError,
     error: sampleDropdownLoadError,
   } = useSampleReturnDropdown(
-    ["DRAFT", "SUBMITTED", "APPROVED"],
+    ["DRAFT", "SUBMITTED", "APPROVED","sample_returned"],
     !isSales && !isEdit,
   );
 

@@ -125,6 +125,8 @@ function calcAmounts(qty: number, unitPrice: number, gstPct: number) {
 
 interface ReceiptItem extends GrnItem {
   sourceItemId: string;
+  /** Max base qty this GRN may receive (excludes this GRN's posted qty on edit). */
+  maxReceivableQty: number;
 }
 
 function buildItemsFromPoLines(
@@ -150,19 +152,22 @@ function buildItemsFromPoLines(
     .filter((line) => {
       if (!line.purchaseOrderProductId) return false;
       const exclude = thisGrnQtyBySourceItem?.get(line.purchaseOrderProductId) ?? 0;
-      const pending = getPendingBase(line, exclude);
+      const maxReceivable = getPendingBase(line, exclude);
       const prefill = prefillReceivedBySourceItem?.get(line.purchaseOrderProductId) ?? 0;
-      return pending > 0 || prefill > 0;
+      return maxReceivable > 0 || prefill > 0;
     })
     .map((line) => {
       const sourceItemId = line.purchaseOrderProductId as string;
       const exclude = thisGrnQtyBySourceItem?.get(sourceItemId) ?? 0;
       const alreadyReceivedQty = Math.max(0, round2(getAlreadyReceivedBase(line) - exclude));
-      const pendingQty = getPendingBase(line, exclude);
+      // Cap for this receipt (other GRNs only) — used for over-receive validation.
+      const maxReceivableQty = getPendingBase(line, exclude);
       const unitPerPacking = resolvePackingSize({
         unitPerPacking: line.conversionQty || 0,
       }) || 1;
       const receivedQty = prefillReceivedBySourceItem?.get(sourceItemId) ?? 0;
+      // Live PO pending after this GRN's current received qty.
+      const pendingQty = Math.max(0, round2(maxReceivableQty - receivedQty));
       const quantityType = DEFAULT_NEW_GRN_QUANTITY_TYPE;
       const displayQty =
         receivedQty > 0
@@ -194,6 +199,7 @@ function buildItemsFromPoLines(
         orderedQty: line.orderedQty,
         alreadyReceivedQty,
         pendingQty,
+        maxReceivableQty,
         receivedQty,
         displayQty,
         quantityType,
@@ -653,6 +659,7 @@ export function PurchaseCreate({
           quantityType,
           displayQty,
           receivedQty,
+          pendingQty: Math.max(0, round2((it.maxReceivableQty ?? 0) - receivedQty)),
           receivedCases: displayQty,
           receivedLooseQty: 0,
         };
@@ -660,13 +667,13 @@ export function PurchaseCreate({
 
       const target = next.find((it) => it.sourceItemId === sourceItemId);
       if (target) {
-        const pending = target.pendingQty ?? 0;
+        const maxReceivable = target.maxReceivableQty ?? target.pendingQty ?? 0;
         const packingSize = target.unitPerPacking || 1;
         setItemWarnings((w) => {
           const copy = { ...w };
-          if (target.receivedQty > pending) {
+          if (target.receivedQty > maxReceivable) {
             copy[key] =
-              `Current received (${target.receivedQty} pcs) exceeds pending qty (${pending}).`;
+              `Current received (${target.receivedQty} pcs) exceeds pending qty (${maxReceivable}).`;
           } else {
             delete copy[key];
           }
@@ -844,7 +851,7 @@ export function PurchaseCreate({
         );
         return;
       }
-      const pending = it.pendingQty ?? 0;
+      const pending = it.maxReceivableQty ?? it.pendingQty ?? 0;
       if (it.receivedQty > pending) {
         setFormError(
           `Received qty for ${it.productName} (${it.receivedQty}) exceeds pending qty (${pending}).`,

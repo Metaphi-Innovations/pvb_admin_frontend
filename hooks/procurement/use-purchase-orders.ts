@@ -95,6 +95,8 @@ export function usePurchaseOrder(id: string | null | undefined) {
     queryKey: purchaseOrderKeys.detail(id ?? ""),
     queryFn: ({ signal }) => PurchaseOrderService.getById(id!, signal),
     enabled: Boolean(id),
+    // Received/pending qty changes with every GRN — always refetch.
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -111,7 +113,8 @@ export function usePurchaseOrderSupplierDropdown(enabled = true) {
     queryKey: purchaseOrderKeys.supplierDropdown(),
     queryFn: ({ signal }) => PurchaseOrderService.getSupplierDropdown(signal),
     enabled,
-    staleTime: 30_000,
+    // Eligibility depends on pending GRN qty — always refetch.
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
@@ -136,7 +139,8 @@ export function usePurchaseOrderDropdown(
     queryKey: purchaseOrderKeys.dropdown(filters),
     queryFn: ({ signal }) => PurchaseOrderService.getDropdown(filters, signal),
     enabled: enabled && Boolean(filters.supplier_id),
-    staleTime: 30_000,
+    // GRN create/edit changes pending qty — never serve a memoized PO list.
+    ...PO_LIVE_QUERY_OPTIONS,
   });
 }
 
