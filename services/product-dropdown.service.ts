@@ -33,6 +33,7 @@ export interface ProductDropdownItem {
   packing_unit?: string | null;
   unit_per_packing?: string | number | null;
   pack_size?: string | number | null;
+  cost_price?: string | number | null;
 }
 
 export const ProductDropdownService = {

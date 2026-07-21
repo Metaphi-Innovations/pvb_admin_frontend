@@ -600,58 +600,15 @@ export function PurchaseOrderForm({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
 	}, [taxSupplyType]);
 
-	const getUpdatedLinesForState = async (
-		state: string,
+	const getUpdatedLinesForState = (
+		_state: string,
 		currentLines: POLineItem[],
 		supplyType: TaxSupplyType = taxSupplyType,
-	) => {
-		const targetState = selectedSupplier?.state || state;
-		let lines = currentLines;
-		if (currentLines.length > 0 && targetState) {
-			try {
-				const pricingPromises = currentLines.map(async (line) => {
-					try {
-						const res = await axiosInstance.post("/master/product/pricing", {
-							product_id: line.productId,
-							state_name: targetState,
-						});
-						if (res.data?.success && res.data?.data) {
-							return {
-								productId: line.productId,
-								cost_price: res.data.data.cost_price,
-								success: true,
-							};
-						}
-					} catch (err) {
-						console.error(`Failed to fetch pricing for state ${state}:`, err);
-					}
-					return { productId: line.productId, success: false };
-				});
+	) => applyTaxSupplyToPOLines(currentLines, supplyType);
 
-				const resolvedPricings = await Promise.all(pricingPromises);
-				const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
-
-				lines = currentLines.map((line) => {
-					const apiPricing = pricingMap.get(line.productId);
-					if (apiPricing && apiPricing.success) {
-						return {
-							...line,
-							unitPrice: apiPricing.cost_price,
-							cpSource: "pricing_master" as const,
-						};
-					}
-					return line;
-				});
-			} catch (err) {
-				console.error("Failed to update line items pricing:", err);
-			}
-		}
-		return applyTaxSupplyToPOLines(lines, supplyType);
-	};
-
-	const onStateChange = async (state: string) => {
+	const onStateChange = (state: string) => {
 		const nextTaxSupplyType = resolveTaxSupplyType(state, selectedSupplier?.state ?? "");
-		const updatedLines = await getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
+		const updatedLines = getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
 		patch({
 			state,
 			warehouseId: null,
@@ -679,13 +636,13 @@ export function PurchaseOrderForm({
 		});
 	};
 
-	const onWarehouseChange = async (val: string) => {
+	const onWarehouseChange = (val: string) => {
 		const wh = (dbWarehouses || []).find((w) => String(w.warehouse_id) === val) ?? null;
 		const addressStr = wh ? [wh.address, wh.address_1].filter(Boolean).join(", ") : "";
 		const primaryContact = wh?.contacts?.find((c) => c.is_primary) ?? wh?.contacts?.[0];
 		const nextState = wh?.state || form.state || "";
 		const nextTaxSupplyType = resolveTaxSupplyType(nextState, selectedSupplier?.state ?? "");
-		const updatedLines = await getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
+		const updatedLines = getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
 
 		patch({
 			warehouseId: wh ? wh.warehouse_id : null,
