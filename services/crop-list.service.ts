@@ -16,8 +16,7 @@ export interface CropListRecord {
   cropUuid: string;
   cropName: string;
   fieldType: string;
-  categoryId: string;
-  categoryName: string;
+  category: string;
   season: string[];
   description: string;
   status: "active" | "inactive";
@@ -41,14 +40,14 @@ export interface CropCreatePayload {
   crop_name: string;
   field_type?: string | null;
   season?: string | null;
-  category_id?: string | null;
+  category?: string | null;
 }
 
 export interface CropUpdatePayload {
   crop_name?: string;
   field_type?: string | null;
   season?: string | null;
-  category_id?: string | null;
+  category?: string | null;
   description?: string | null;
 }
 
@@ -68,7 +67,7 @@ export type CropFilterField =
   | "crop_name"
   | "field_type"
   | "season"
-  | "category__categoryName"
+  | "category"
   | "is_active"
   | "created_by_user__username"
   | "updated_by_user__username";
@@ -76,7 +75,7 @@ export type CropFilterField =
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
   cropName: "cropName",
   fieldType: "fieldType",
-  categoryName: "categoryId",
+  category: "category",
   season: "season",
   status: "isActive",
   createdBy: "createdAt",
@@ -127,29 +126,15 @@ function seasonToApiValue(season: string[]): string | null {
   return joined || null;
 }
 
-function mapCategory(raw: Record<string, unknown>) {
-  const category =
-    raw.category && typeof raw.category === "object"
-      ? (raw.category as Record<string, unknown>)
-      : null;
-
-  return {
-    categoryId: asString(raw.category_id ?? category?.id),
-    categoryName: asString(category?.categoryName ?? category?.category_name),
-  };
-}
-
 function mapItem(raw: Record<string, unknown>, fallbackIndex: number): CropListRecord {
   const srNo = Number(raw.sr_no);
-  const category = mapCategory(raw);
 
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     cropUuid: asString(raw.crop_id),
     cropName: asString(raw.crop_name),
     fieldType: asString(raw.field_type),
-    categoryId: category.categoryId,
-    categoryName: category.categoryName,
+    category: asString(raw.category),
     season: parseSeason(raw.season),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
@@ -162,15 +147,13 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): CropListR
 
 function mapDetail(raw: Record<string, unknown>): CropListRecord {
   const srNo = Number(raw.sr_no);
-  const category = mapCategory(raw);
 
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
     cropUuid: asString(raw.crop_id),
     cropName: asString(raw.crop_name),
     fieldType: asString(raw.field_type),
-    categoryId: category.categoryId,
-    categoryName: category.categoryName,
+    category: asString(raw.category),
     season: parseSeason(raw.season),
     description: asString(raw.description),
     status: toStatus(raw.is_active),
@@ -265,7 +248,7 @@ export const CropListService = {
       crop_name: payload.crop_name.trim(),
       field_type: payload.field_type?.trim() || null,
       season: payload.season?.trim() || null,
-      category_id: payload.category_id || null,
+      category: payload.category?.trim() || null,
     });
 
     const body = response.data as Record<string, unknown>;
@@ -281,8 +264,8 @@ export const CropListService = {
         ? { field_type: payload.field_type?.trim() || null }
         : {}),
       ...(payload.season !== undefined ? { season: payload.season?.trim() || null } : {}),
-      ...(payload.category_id !== undefined
-        ? { category_id: payload.category_id || null }
+      ...(payload.category !== undefined
+        ? { category: payload.category?.trim() || null }
         : {}),
       ...(payload.description !== undefined
         ? { description: payload.description?.trim() || null }
