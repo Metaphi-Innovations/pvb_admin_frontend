@@ -15,6 +15,6 @@ export async function GET() {
 export async function POST() {
   return NextResponse.json({
     success: false,
-    error: "Implement POST via posting-engine connected to database.",
+    error: "Implement POST via posting-engine connected to database..",
   }, { status: 501 });
 }
