@@ -1649,7 +1649,7 @@ export function buildBulkPricingLineFromApi(product: ProductListRecord): BulkPri
     unitsPerCase: product.unitPerCase ?? 1,
     hsnCode: product.hsnCode ?? "",
     gstPct: product.gstRate ?? "",
-    costPrice: 0,
+    costPrice: product.costPrice ?? 0,
     productDealerPrice: 0,
     mrp: product.mrp ?? 0,
     dealerPrice: 0,
@@ -1758,7 +1758,6 @@ export function buildPricingUpdatePayload(
     product_id: record.productUuid,
     state_name: form.state.trim(),
     customer_type_id: customerTypeId,
-    cost_price: form.costPrice > 0 ? form.costPrice : null,
     dealer_price: form.dealerPrice,
     is_active: form.status === "active",
   };
@@ -1782,7 +1781,6 @@ export function buildPricingCreatePayloads(
           product_id: line.productUuid,
           state_name: state,
           customer_type_id: customerTypeId,
-          cost_price: line.costPrice > 0 ? line.costPrice : null,
           dealer_price: line.dealerPrice,
           is_active: form.status === "active",
         });

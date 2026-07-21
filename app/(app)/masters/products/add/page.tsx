@@ -93,6 +93,7 @@ export default function NewProductPage() {
       net_weight: parseNum(resolvedForm.netWeightPerPackagingUnit),
       gross_weight: parseNum(resolvedForm.grossWeight),
       mrp: parseNum(resolvedForm.mrp),
+      cost_price: parseNum(resolvedForm.costPrice),
       is_active: resolvedForm.status === "active",
       status: resolvedForm.status === "active" ? "Active" : "Inactive",
       assets: buildProductApiAssets(productImages, productUrls),

@@ -233,11 +233,12 @@ export function PricingForm({
           <PricingFormGrid className="md:grid-cols-2 lg:grid-cols-3">
             <MasterField label="Cost Price">
               <FieldWidth size="narrow">
-                <IndianRupeeInput
-                  value={form.costPrice}
-                  onChange={(v) => onChange({ ...form, costPrice: v })}
-                  className={pricingInput()}
+                <Input
+                  readOnly
+                  className={cn(pricingReadonly("text-right font-medium tabular-nums"))}
+                  value={formatIndianRupeeDisplay(form.costPrice)}
                 />
+                <p className="mt-1 text-[10px] text-muted-foreground">From Product Master</p>
               </FieldWidth>
             </MasterField>
 
