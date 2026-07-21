@@ -28,6 +28,7 @@ export type LedgerMappingKey =
   | "sales_sgst"
   | "sales_igst"
   | "sales_cogs"
+  | "sample_promotional_expense"
   | "purchase_inventory"
   | "purchase_payable"
   | "purchase_cgst"
@@ -67,30 +68,35 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   sales_receivable: {
     module: "sales",
-    subGroupName: "Trade Receivables / Sundry Debtors",
+    subGroupName: "Sundry Debtors",
     description: "Debit customer receivable on sales invoice",
   },
-  sales_cgst: { module: "sales", subGroupName: "GST Output", description: "Output CGST" },
-  sales_sgst: { module: "sales", subGroupName: "GST Output", description: "Output SGST" },
-  sales_igst: { module: "sales", subGroupName: "GST Output", description: "Output IGST" },
+  sales_cgst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output CGST" },
+  sales_sgst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output SGST" },
+  sales_igst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output IGST" },
   sales_cogs: {
     module: "sales",
     subGroupName: "Cost of Goods Sold",
     description: "Debit COGS on sales dispatch at cost price",
   },
+  sample_promotional_expense: {
+    module: "sales",
+    subGroupName: "Selling Expenses",
+    description: "Debit Sample / Promotional Expense on sample issue at cost price",
+  },
   purchase_inventory: {
     module: "procurement",
-    subGroupName: "Inventory / Stock-in-Hand",
+    subGroupName: "Inventory",
     description: "Debit inventory on purchase invoice",
   },
   purchase_payable: {
     module: "procurement",
-    subGroupName: "Trade Payables / Sundry Creditors",
+    subGroupName: "Sundry Creditors",
     description: "Credit vendor payable on purchase invoice",
   },
-  purchase_cgst: { module: "procurement", subGroupName: "GST Input", description: "Input CGST (ITC)" },
-  purchase_sgst: { module: "procurement", subGroupName: "GST Input", description: "Input SGST (ITC)" },
-  purchase_igst: { module: "procurement", subGroupName: "GST Input", description: "Input IGST (ITC)" },
+  purchase_cgst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input CGST (ITC)" },
+  purchase_sgst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input SGST (ITC)" },
+  purchase_igst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input IGST (ITC)" },
   grn_clearing: {
     module: "procurement",
     subGroupName: "Other Current Liabilities",
@@ -123,7 +129,7 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   stock_inventory: {
     module: "journal",
-    subGroupName: "Inventory / Stock-in-Hand",
+    subGroupName: "Inventory",
     description: "Inventory asset on stock adjustment",
   },
   cash_ledger: { module: "payments", subGroupName: "Cash-in-Hand", description: "Default cash ledger" },
@@ -157,7 +163,38 @@ export function loadLedgerMappings(): LedgerMapping[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
       return seed;
     }
-    return JSON.parse(raw) as LedgerMapping[];
+    let list = JSON.parse(raw) as LedgerMapping[];
+    let changed = false;
+    const migrated = list.map((m) => {
+      if (m.mappingKey === "sales_receivable" && m.subGroupName === "Accounts Receivable") {
+        changed = true;
+        return { ...m, subGroupName: "Sundry Debtors" };
+      }
+      if (m.mappingKey === "purchase_payable" && m.subGroupName === "Accounts Payable") {
+        changed = true;
+        return { ...m, subGroupName: "Sundry Creditors" };
+      }
+      return m;
+    });
+    list = migrated;
+    const existingKeys = new Set(list.map((m) => m.mappingKey));
+    for (const key of Object.keys(DEFAULT_MAPPING_TARGETS) as LedgerMappingKey[]) {
+      if (existingKeys.has(key)) continue;
+      const t = DEFAULT_MAPPING_TARGETS[key];
+      const maxId = list.reduce((m, r) => Math.max(m, r.id), 0);
+      list.push({
+        id: maxId + 1,
+        module: t.module,
+        mappingKey: key,
+        subGroupName: t.subGroupName,
+        coaAccountId: null,
+        description: t.description,
+        isActive: true,
+      });
+      changed = true;
+    }
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return list;
   } catch {
     return buildSeed();
   }

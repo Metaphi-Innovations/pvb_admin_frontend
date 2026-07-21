@@ -68,8 +68,6 @@ import {
   type PurchaseSourceType,
 } from "./purchase-invoices-data";
 import { PURCHASE_NATURE_LABELS } from "./purchase-invoice-direct-utils";
-import { PURCHASE_INVOICE_DEMO_SCENARIO_LABELS } from "./purchase-invoice-seed";
-import { PURCHASE_INVOICE_DIRECT_DEMO_LABELS } from "./purchase-invoice-direct-seed";
 import { PurchaseInvoiceAttachmentLink } from "./PurchaseInvoiceAttachmentLink";
 import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import "./purchase-invoice-listing.css";
@@ -180,10 +178,6 @@ function ListingSelectFilter<T extends string>({
   );
 }
 
-function demoLabel(inv: PurchaseInvoiceRecord): string | undefined {
-  return PURCHASE_INVOICE_DEMO_SCENARIO_LABELS[inv.id] ?? PURCHASE_INVOICE_DIRECT_DEMO_LABELS[inv.id];
-}
-
 function estimatedGrnValue(grn: GrnRecord) {
   return grn.items.reduce((s, item) => {
     const u = item.unit?.toLowerCase() ?? "";
@@ -250,16 +244,12 @@ function PurchaseInvoicesTabTable({
               const gst = getPurchaseInvoiceGstBreakup(inv);
               const gstAmount = gst.cgst + gst.sgst + gst.igst;
               const sourceType = resolvePurchaseSourceType(inv);
-              const label = demoLabel(inv);
               return (
                 <AccountsTableRow key={inv.id}>
                   <AccountsTableCell mono className="font-semibold text-brand-700">
                     <Link href={`/accounts/purchase-invoices/${inv.id}`} className="hover:underline">
                       {inv.invoiceNo}
                     </Link>
-                    {label && (
-                      <span className="block text-[10px] font-normal text-muted-foreground mt-0.5">{label}</span>
-                    )}
                   </AccountsTableCell>
                   <AccountsTableCell>
                     <SourceTypeBadge type={sourceType} />

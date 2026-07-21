@@ -112,6 +112,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Sales Orders", href: "/sales/orders" },
       { label: "Sample Orders", href: "/sales/sample-order" },
       { label: "Stock Transfer", href: "/sales/stock-transfer" },
+      { label: "Scheme Progress", href: "/sales/scheme-progress" },
       // { label: "Invoices", href: "/sales/invoices" },
       // { label: "Dispatch", href: "/sales/dispatch" },
       // { label: "Collections", href: "/sales/collections" },

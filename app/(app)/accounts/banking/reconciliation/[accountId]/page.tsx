@@ -1,4 +1,9 @@
-import BankReconciliationWorkspacePageClient from "@/app/(app)/accounts/bank-reconciliation/BankReconciliationWorkspacePageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const BankReconciliationWorkspacePageClient = lazyAccountsPage(
+  () => import("@/app/(app)/accounts/bank-reconciliation/BankReconciliationWorkspacePageClient"),
+  { label: "Bank Reconciliation", pathnameHint: "/accounts/banking/reconciliation" },
+);
 
 interface PageProps {
   params: { accountId: string };

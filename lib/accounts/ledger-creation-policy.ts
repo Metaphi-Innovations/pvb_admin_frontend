@@ -1,41 +1,25 @@
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import {
   canAddLedgerUnder,
-  getAncestorPath,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
-import { isTdsGroupContext } from "@/lib/accounts/coa-specialized-groups";
-import { isBankAccountsSubGroup, isBankGroupNode } from "@/lib/accounts/bank-coa-utils";
 
-/** Sub-groups whose ledgers are owned by other ERP masters — not manually created in COA/Ledgers. */
+/** Sub-groups whose party/product ledgers are owned by ERP Masters — not created as COA rows. */
 export function isMasterOwnedSubGroup(node: ChartOfAccount): boolean {
-  if (isBankAccountsSubGroup(node) || isBankGroupNode(node)) return true;
-  if (node.nodeLevel !== "account_group") return false;
-  const name = node.accountName.toLowerCase();
-  return (
-    name.includes("trade receivables") ||
-    name.includes("sundry debtors") ||
-    name.includes("trade payables") ||
-    name.includes("sundry creditors") ||
-    name.includes("inventory") ||
-    name.includes("stock-in-hand")
-  );
+  // Bank accounts still use Banking master for bank ledgers; COA Add Ledger stays generic.
+  void node;
+  return false;
 }
 
 export function isGstLedgerParent(node: ChartOfAccount): boolean {
   if (node.nodeLevel !== "account_group") return false;
   const name = node.accountName.toLowerCase();
-  return name.includes("gst payable") || name.includes("gst output") || name.includes("duties & taxes");
+  return name.includes("duties & taxes") || name.includes("gst");
 }
 
-export function isTdsLedgerParent(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+export function isTdsLedgerParent(node: ChartOfAccount, _records: ChartOfAccount[]): boolean {
   if (node.nodeLevel !== "account_group") return false;
-  return isTdsGroupContext(node, records);
-}
-
-function isExpenseLedgerParent(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
-  const path = getAncestorPath(records, node.id);
-  return path.some((p) => p.accountType === "Expense" || p.accountName === "Expenses");
+  return node.accountName.toLowerCase().includes("tds");
 }
 
 /** True when ledger creation is allowed under this COA node (structure remains fixed). */

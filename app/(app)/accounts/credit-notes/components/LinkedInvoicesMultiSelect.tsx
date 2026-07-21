@@ -54,8 +54,8 @@ export function LinkedInvoicesMultiSelect({
   };
 
   return (
-    <div className="space-y-1 md:col-span-2">
-      <Label className="text-xs font-medium">{label}</Label>
+    <div className={label ? "space-y-1 md:col-span-2" : "md:col-span-2"}>
+      {label ? <Label className="text-xs font-medium">{label}</Label> : null}
       <Popover open={open && !disabled} onOpenChange={(v) => { if (!disabled) { setOpen(v); if (!v) setQ(""); } }}>
         <PopoverTrigger asChild>
           <button

@@ -196,6 +196,11 @@ interface EnrichedPeriodRow {
   debit: number;
   credit: number;
   referenceNo: string;
+  billWiseReferenceNo?: string;
+  billWiseReferenceType?: string;
+  billWiseOriginalAmount?: number | null;
+  billWiseAdjustedAmount?: number | null;
+  billWiseOutstandingAmount?: number | null;
   voucherId?: number;
   lineOrder?: number;
   viewHref?: string;
@@ -235,6 +240,14 @@ function enrichPeriodRow(
     debit: row.debit,
     credit: row.credit,
     referenceNo: row.referenceNo,
+    billWiseReferenceNo: line?.billWiseReferenceNo || undefined,
+    billWiseReferenceType: line?.billWiseReferenceType || undefined,
+    billWiseOriginalAmount:
+      line?.billWiseReferenceType === "new_reference" || line?.billWiseReferenceType === "advance"
+        ? Math.max(line.debit, line.credit)
+        : null,
+    billWiseAdjustedAmount: null,
+    billWiseOutstandingAmount: null,
     voucherId: row.voucherId,
     lineOrder: row.lineOrder,
     viewHref: row.viewHref,
@@ -364,6 +377,11 @@ export function buildGeneralLedgerStatementFromLedger(
       tdsAmount: null,
       gstAmount: null,
       referenceNo: t.referenceNo,
+      billWiseReferenceNo: t.billWiseReferenceNo,
+      billWiseReferenceType: t.billWiseReferenceType,
+      billWiseOriginalAmount: t.billWiseOriginalAmount ?? null,
+      billWiseAdjustedAmount: t.billWiseAdjustedAmount ?? null,
+      billWiseOutstandingAmount: t.billWiseOutstandingAmount ?? null,
       runningBalance: running.amount,
       runningBalanceType: running.balanceType,
       voucherId: t.voucherId,

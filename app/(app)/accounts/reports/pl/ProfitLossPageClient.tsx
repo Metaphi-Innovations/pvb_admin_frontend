@@ -16,8 +16,6 @@ import {
   ReportLedgerMultiFilter,
   ReportMoreFilters,
   ReportFilterSummary,
-  ReportFromDateFilter,
-  ReportToDateFilter,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
@@ -402,10 +400,8 @@ export default function ProfitLossPageClient() {
         onPresetChange={handlePresetChange}
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
-        inlineCustomDates={false}
+        inlineCustomDates
       />
-      <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} />
-      <ReportToDateFilter value={dateTo} onChange={setDateTo} />
       <ReportBranchMultiFilter
         values={branches}
         onChange={setBranches}

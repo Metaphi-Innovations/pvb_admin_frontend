@@ -44,6 +44,7 @@ const ASSET_SUBGROUP_BASE: Record<string, number> = {
   "Short-Term Investments": 500000,
   "Long-Term Investments": 750000,
   "Other Investments": 120000,
+  "Sundry Debtors": 45000,
   "Trade Receivables / Sundry Debtors": 45000,
 };
 
@@ -57,8 +58,9 @@ const LIABILITY_SUBGROUP_BASE: Record<string, number> = {
   "Bank Loans": 1500000,
   "NBFC Loans": 680000,
   "Director / Related Party Loans": 320000,
+  "Sundry Creditors": 55000,
   "Trade Payables / Sundry Creditors": 55000,
-  "Duties & Taxes Payable": 85000,
+  "Duties & Taxes": 85000,
   "TDS Payable": 42000,
   "GST Payable": 95000,
   "PF / ESIC Payable": 78000,
@@ -87,7 +89,7 @@ const SKIP_OPENING_SUBGROUPS = new Set([
   "Inventory / Stock-in-Hand",
 ]);
 
-/** Sundry debtors — 2 sample posting ledgers under Trade Receivables */
+/** Sundry debtors — 2 sample posting ledgers under Sundry Debtors */
 export const COA_DEMO_DEBTOR_SPECS: Array<{ name: string; openingBalance: number }> = [
   { name: "ABC Agro Distributor", openingBalance: 50000 },
   { name: "XYZ Traders", openingBalance: 47650 },
@@ -168,10 +170,14 @@ function makeDemoLedger(
     gstApplicable: false,
     tdsApplicable: false,
     costCenterApplicable: false,
+    billWiseAccounting: false,
     bankAccountFlag: partial.bankAccountFlag ?? false,
     bankGroupFlag: partial.bankGroupFlag ?? false,
     isSystem: false,
     isSystemGenerated: true,
+    ledgerKind: "MASTER",
+    masterType: COA_DEMO_SOURCE_MODULE,
+    masterId: null,
     erpSourceModule: COA_DEMO_SOURCE_MODULE,
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -245,7 +251,10 @@ export function buildBundledCoaDemoLedgers(
     );
   }
 
-  const debtorsGroup = subGroupByName.get("trade receivables / sundry debtors");
+  const debtorsGroup =
+    subGroupByName.get("sundry debtors") ??
+    subGroupByName.get("trade receivables / sundry debtors") ??
+    subGroupByName.get("accounts receivable");
   if (debtorsGroup) {
     for (const spec of COA_DEMO_DEBTOR_SPECS) {
       const id = allocId(`debtor|${spec.name}`);
@@ -266,7 +275,10 @@ export function buildBundledCoaDemoLedgers(
     }
   }
 
-  const creditorsGroup = subGroupByName.get("trade payables / sundry creditors");
+  const creditorsGroup =
+    subGroupByName.get("sundry creditors") ??
+    subGroupByName.get("trade payables / sundry creditors") ??
+    subGroupByName.get("accounts payable");
   if (creditorsGroup) {
     for (const spec of COA_DEMO_CREDITOR_SPECS) {
       const id = allocId(`creditor|${spec.name}`);
@@ -394,5 +406,7 @@ export function mergeBundledCoaDemoLedgers(records: ChartOfAccount[]): ChartOfAc
     return !existingKeys.has(key);
   });
 
-  return withOpeningBalanceDifference(toAdd.length === 0 ? records : [...records, ...toAdd]);
+  const merged = withOpeningBalanceDifference(toAdd.length === 0 ? records : [...records, ...toAdd]);
+
+  return merged;
 }

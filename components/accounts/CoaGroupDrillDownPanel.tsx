@@ -296,7 +296,7 @@ export function CoaGroupDrillDownPanel({
     };
     return (
       <DashboardShell
-        title="Trade Receivables / Sundry Debtors"
+        title="Sundry Debtors"
         summary={
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <SummaryField label="Total Customers" value={context.totalCustomers} />
@@ -358,7 +358,7 @@ export function CoaGroupDrillDownPanel({
     return (
       <div className="flex flex-col flex-1 min-h-0 border-t border-border/40 overflow-auto">
         <DashboardShell
-          title="Trade Payables / Sundry Creditors"
+          title="Sundry Creditors"
           summary={
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <SummaryField label="Total Suppliers" value={context.totalVendors} />

@@ -1,9 +1,9 @@
-import dynamic from "next/dynamic";
-import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
-const AuditTrailPageClient = dynamic(() => import("./AuditTrailPageClient"), {
-  loading: () => <PageContentSkeleton />,
-});
+const AuditTrailPageClient = lazyAccountsPage(
+  () => import("./AuditTrailPageClient"),
+  { pathnameHint: "/accounts/reports/audit-trail" },
+);
 
 export default function AuditTrailReportPage() {
   return <AuditTrailPageClient />;

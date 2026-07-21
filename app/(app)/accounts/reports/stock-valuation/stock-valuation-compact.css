@@ -63,16 +63,16 @@
 
 .stock-valuation-compact .accounts-table-th,
 .stock-valuation-compact .accounts-table > thead > tr > th {
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
   vertical-align: middle;
 }
 
 .stock-valuation-compact .accounts-table-td,
 .stock-valuation-compact .accounts-table > tbody > tr > td {
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-  min-height: 40px;
+  padding-top: 0.3125rem;
+  padding-bottom: 0.3125rem;
+  min-height: 0;
   vertical-align: middle;
 }
 

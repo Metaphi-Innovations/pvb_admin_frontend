@@ -59,10 +59,10 @@ export const AccountsModuleShell = memo(function AccountsModuleShell({
           <AccountsSectionSidebar sectionId={sectionId} collapsed={collapsed} />
         </aside>
 
-        <main className="accounts-module-main relative flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
+        <main className="accounts-module-main accounts-ui-dense relative flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
           <AccountsNavigationOverlay />
           {/* overflow-y-auto comes from ACCOUNTS_MAIN_PANEL_CLASS — do not append overflow-hidden (it overrides and blocks page scroll) */}
-          <div className={cn(ACCOUNTS_MAIN_PANEL_CLASS, "px-3 py-2 min-h-0 flex-1 flex flex-col")}>
+          <div className={cn(ACCOUNTS_MAIN_PANEL_CLASS, "px-3 py-1.5 min-h-0 flex-1 flex flex-col")}>
             <AccountsModuleErrorBoundary>
               <Suspense fallback={null}>{children}</Suspense>
             </AccountsModuleErrorBoundary>

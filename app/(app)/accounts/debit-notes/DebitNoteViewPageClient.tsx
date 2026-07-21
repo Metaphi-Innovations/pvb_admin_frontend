@@ -1,11 +1,14 @@
 "use client";
 
+/**
+ * Debit Note View — same enterprise workspace as Create/Edit (read-only).
+ */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Eye, Pencil } from "lucide-react";
-import { RecordDetailPage } from "@/components/record-detail";
-import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
+import { Download } from "lucide-react";
+import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import {
   canEditAccountsDocument,
@@ -15,22 +18,13 @@ import {
   canEditDebitNote,
   DEBIT_NOTE_SOURCE_LABELS,
   getDebitNoteById,
-  totalRejectedQtyFromLines,
   type DebitNoteRecord,
 } from "./debit-notes-data";
 import { downloadDebitNotePdf } from "./debit-note-pdf";
-import { DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase text-muted-foreground">{label}</p>
-      <p className="text-xs font-medium mt-0.5">{value || "—"}</p>
-    </div>
-  );
-}
+import "../credit-notes/credit-note-workspace.css";
 
 export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: number }) {
   const router = useRouter();
@@ -51,187 +45,317 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
 
   if (!record) return null;
 
-  const canEdit = canEditDebitNote(record) && canEditAccountsDocument(record.workflow, record.status);
+  const canEdit =
+    canEditDebitNote(record) && canEditAccountsDocument(record.workflow, record.status);
   const displayStatus = resolveWorkflowStatus(record.workflow, record.status);
+  const isFresh = record.againstType === "standalone_adjustment";
+  const statusBadgeClass =
+    displayStatus === "posted"
+      ? "cn-ws__badge is-posted"
+      : displayStatus === "draft"
+        ? "cn-ws__badge is-draft"
+        : "cn-ws__badge";
 
   return (
-    <RecordDetailPage
-      embedded
-      listHref={DEBIT_NOTES_LIST_PATH}
-      listLabel="Debit Notes"
-      recordName={record.vendorName}
-      recordCode={record.debitNoteNo}
-      statusLabel={displayStatus.replaceAll("_", " ")}
-      statusVariant={displayStatus === "posted" ? "active" : displayStatus === "draft" ? "draft" : "neutral"}
-      metaItems={[
-        { icon: Calendar, label: record.debitNoteDate },
-        { label: DEBIT_NOTE_SOURCE_LABELS[record.source] },
-      ]}
-      onEdit={canEdit ? () => router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`) : undefined}
-      headerActions={
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={() => downloadDebitNotePdf(record)}>
-            <Download className="w-4 h-4" /> Download PDF
+    <AccountsFormLayout
+      fullWidth
+      title="View Debit Note"
+      breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
+      code={record.debitNoteNo}
+      headerMeta={
+        <>
+          <span className={statusBadgeClass}>{displayStatus.replaceAll("_", " ")}</span>
+          <span className="cn-ws__badge">
+            {isFresh ? "Amount Based" : "Quantity Based"}
+          </span>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {record.debitNoteNo}
+          </span>
+        </>
+      }
+      stickyFooter={
+        <div className="flex items-center justify-between w-full gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}
+          >
+            Back
           </Button>
-          {displayStatus === "posted" && (
-            <span className="text-xs text-muted-foreground">Posted to accounts</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1"
+              onClick={() => downloadDebitNotePdf(record)}
+            >
+              <Download className="w-3.5 h-3.5" /> PDF
+            </Button>
+            {canEdit ? (
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                onClick={() =>
+                  router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`)
+                }
+              >
+                Edit
+              </Button>
+            ) : null}
+          </div>
         </div>
       }
-      sidebar={{
-        summary: [
-          { label: "Taxable", value: formatINR(record.taxableAmount) },
-          { label: "GST", value: formatINR(record.gstAmount) },
-          { label: "Total Debit", value: formatINR(record.currentDebitAmount), highlight: true },
-          ...(record.originalAmount > 0
-            ? [{ label: "Balance After", value: formatINR(record.balanceAfterAdjustment) }]
-            : []),
-          { label: "Rejected Qty", value: String(totalRejectedQtyFromLines(record.lineItems) || "—") },
-          { label: "Created By", value: record.createdBy },
-        ],
-        activity: [...record.activity].reverse().slice(0, 5).map((a, i) => ({
-          id: `${a.at}-${i}`,
-          title: a.action.replaceAll("_", " "),
-          subtitle: a.detail,
-          date: new Date(a.at).toLocaleString(),
-        })),
-        quickActions: [
-          {
-            label: "Download PDF",
-            icon: Download,
-            variant: "outline" as const,
-            onClick: () => downloadDebitNotePdf(record),
-          },
-          ...(canEdit
-            ? [
-                {
-                  label: "Edit Debit Note",
-                  icon: Pencil,
-                  variant: "outline" as const,
-                  onClick: () => router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`),
-                },
-              ]
-            : []),
-        ],
-      }}
     >
-      <div className="space-y-4">
-        <LedgerImpactPreview
-          title="Accounting Entry — reduces supplier outstanding"
-          lines={debitNoteImpactResolved({
-            vendorName: record.vendorName,
-            taxable: record.taxableAmount,
-            taxAmount: record.gstAmount,
-            grandTotal: record.currentDebitAmount,
-            adjustmentLedgerName: record.adjustmentLedgerName,
-          })}
-        />
-        <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.status} />
+      <div className="cn-ws">
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Basic Information</p>
+          <div className="cn-ws__grid-3">
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Vendor</span>
+              <p className="cn-ws__ro font-medium">{record.vendorName}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Debit Note Date</span>
+              <p className="cn-ws__ro">{record.debitNoteDate}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Debit Note No.</span>
+              <p className="cn-ws__ro font-mono">{record.debitNoteNo}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Reference No.</span>
+              <p className="cn-ws__ro">{record.referenceNo || "—"}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Accounts Payable</span>
+              <p className="cn-ws__ro">{record.vendorName}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Status</span>
+              <p className="cn-ws__ro capitalize">
+                {displayStatus.replaceAll("_", " ")}
+              </p>
+            </div>
+          </div>
+        </section>
 
-        <AccountsDocumentWorkflowSection
-          category="debit_note"
-          documentId={record.id}
-          workflow={record.workflow}
-          legacyStatus={record.status}
-          onUpdated={refresh}
-        />
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Debit Note Basis</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="cn-ws__badge">
+              {isFresh ? "Amount Based" : "Quantity Based"}
+            </span>
+            <span className="cn-ws__hint">
+              Source: {DEBIT_NOTE_SOURCE_LABELS[record.source]}
+            </span>
+          </div>
+        </section>
 
-        <div className="rounded-lg border border-border/60 bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <DetailRow label="Source" value={DEBIT_NOTE_SOURCE_LABELS[record.source]} />
-          <DetailRow
-            label="Reference Document"
-            value={record.source === "purchase_return" ? record.sourceReturnNo ?? "" : record.reason}
-          />
-          <DetailRow label="Supplier" value={record.vendorName} />
-          <DetailRow label="Purchase Return Reference" value={record.sourceReturnNo ?? ""} />
-          <DetailRow label="PO No." value={record.sourcePoNo} />
-          <DetailRow label="GRN No." value={record.sourceGrnNo} />
-          <DetailRow label="Dispatch No." value={record.sourceDispatchNo ?? ""} />
-          <DetailRow label="Reference No." value={record.referenceNo ?? ""} />
-          <DetailRow label="Adjustment Ledger" value={record.adjustmentLedgerName ?? ""} />
-          <DetailRow label="Purchase Invoice Reference" value={record.sourceInvoiceNo} />
-          <DetailRow label="Debit Note Date" value={record.debitNoteDate} />
-          <DetailRow label="Taxable Value" value={formatINR(record.taxableAmount)} />
-          <DetailRow label="CGST" value={formatINR(record.cgstAmount)} />
-          <DetailRow label="SGST" value={formatINR(record.sgstAmount)} />
-          <DetailRow label="IGST" value={formatINR(record.igstAmount)} />
-          <DetailRow label="Total" value={formatINR(record.currentDebitAmount)} />
-        </div>
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Reference Information</p>
+          <div className="cn-ws__grid-4">
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Reason</span>
+              <p className="cn-ws__ro">{record.reason || "—"}</p>
+            </div>
+            {!isFresh ? (
+              <>
+                <div className="cn-ws__field">
+                  <span className="cn-ws__flabel">Purchase Invoice</span>
+                  <p className="cn-ws__ro font-mono">{record.sourceInvoiceNo || "—"}</p>
+                </div>
+                <div className="cn-ws__field">
+                  <span className="cn-ws__flabel">Purchase Return</span>
+                  <p className="cn-ws__ro font-mono">{record.sourceReturnNo || "—"}</p>
+                </div>
+                <div className="cn-ws__field">
+                  <span className="cn-ws__flabel">PO No.</span>
+                  <p className="cn-ws__ro font-mono">{record.sourcePoNo || "—"}</p>
+                </div>
+                <div className="cn-ws__field">
+                  <span className="cn-ws__flabel">GRN No.</span>
+                  <p className="cn-ws__ro font-mono">{record.sourceGrnNo || "—"}</p>
+                </div>
+              </>
+            ) : (
+              <div className="cn-ws__field">
+                <span className="cn-ws__flabel">Adjustment Ledger</span>
+                <p className="cn-ws__ro">{record.adjustmentLedgerName || "—"}</p>
+              </div>
+            )}
+          </div>
+        </section>
 
-        {record.againstType !== "standalone_adjustment" && record.lineItems.length > 0 && (
-          <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
-            <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-            <table className="accounts-table w-full min-w-[720px]">
-              <thead className="border-b">
+        <section className="cn-ws__section cn-ws__section--flush">
+          <div className="px-4 pt-2.5 pb-1">
+            <p className="cn-ws__label mb-0">Particulars</p>
+          </div>
+          <div className="cn-ws__table-wrap">
+            <table className="cn-ws__table min-w-[640px]">
+              <thead>
                 <tr>
-                  {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amount"].map((h) => (
-                    <th key={h} className="py-1.5 text-left text-xs uppercase text-muted-foreground font-semibold">
-                      {h}
-                    </th>
-                  ))}
+                  {isFresh ? (
+                    <>
+                      <th>Description</th>
+                      <th>Adjustment Ledger</th>
+                      <th className="text-right">Amount</th>
+                    </>
+                  ) : (
+                    <>
+                      <th>Product</th>
+                      <th className="text-right">Original Qty</th>
+                      <th className="text-right">Debit Qty</th>
+                      <th className="text-right">Rate</th>
+                      <th className="text-right">GST %</th>
+                      <th className="text-right">Amount</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {record.lineItems.map((l) => (
-                  <tr key={l.id} className="border-b border-border/40">
-                    <td className="py-1.5">{l.productName || "—"}</td>
-                    <td className="py-1.5">{l.invoiceQty || "—"}</td>
-                    <td className="py-1.5">{l.returnQty || "—"}</td>
-                    <td className="py-1.5">{l.uom || "—"}</td>
-                    <td className="py-1.5 tabular-nums">{formatINR(l.unitPrice)}</td>
-                    <td className="py-1.5">{l.taxPct ? `${l.taxPct}%` : "—"}</td>
-                    <td className="py-1.5 tabular-nums font-medium">{formatINR(l.debitAmount)}</td>
+                {isFresh ? (
+                  <tr>
+                    <td>{record.reason || "Direct Adjustment"}</td>
+                    <td>{record.adjustmentLedgerName || "—"}</td>
+                    <td className="cn-num font-semibold">
+                      {formatINR(record.currentDebitAmount)}
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  record.lineItems.map((l) => (
+                    <tr key={l.id}>
+                      <td className="font-medium">{l.productName || "—"}</td>
+                      <td className="cn-num">{l.invoiceQty || "—"}</td>
+                      <td className="cn-num">{l.returnQty || "—"}</td>
+                      <td className="cn-num">
+                        {l.unitPrice ? l.unitPrice.toFixed(2) : "—"}
+                      </td>
+                      <td className="cn-num">{l.taxPct ? `${l.taxPct}%` : "—"}</td>
+                      <td className="cn-num font-semibold">
+                        {formatINR(l.debitAmount)}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        )}
+        </section>
 
-        {record.attachments.length > 0 && (
-          <div className="bg-white rounded-lg border p-4">
-            <h2 className="text-sm font-semibold mb-3">Attachments</h2>
-            <div className="space-y-1.5">
+        <div className="cn-ws__summary">
+          <div>
+            <LedgerImpactPreview
+              title="Accounting Entry"
+              lines={debitNoteImpactResolved({
+                vendorName: record.vendorName,
+                taxable: record.taxableAmount,
+                taxAmount: record.gstAmount,
+                grandTotal: record.currentDebitAmount,
+                adjustmentLedgerName: record.adjustmentLedgerName,
+              })}
+            />
+            <div className="mt-2">
+              <AccountsDocumentWorkflowSection
+                category="debit_note"
+                documentId={record.id}
+                workflow={record.workflow}
+                legacyStatus={record.status}
+                onUpdated={refresh}
+              />
+            </div>
+          </div>
+          <div className="cn-ws__summary-rows">
+            <div>
+              <span className="cn-muted">Subtotal</span>
+              <span className="tabular-nums">{formatINR(record.taxableAmount)}</span>
+            </div>
+            <div>
+              <span className="cn-muted">CGST</span>
+              <span className="tabular-nums">{formatINR(record.cgstAmount)}</span>
+            </div>
+            <div>
+              <span className="cn-muted">SGST</span>
+              <span className="tabular-nums">{formatINR(record.sgstAmount)}</span>
+            </div>
+            <div>
+              <span className="cn-muted">IGST</span>
+              <span className="tabular-nums">{formatINR(record.igstAmount)}</span>
+            </div>
+            <div className="cn-total">
+              <span>Grand Total</span>
+              <span className="tabular-nums">
+                {formatINR(record.currentDebitAmount)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <section className="cn-ws__section">
+          <p className="cn-ws__label">Narration &amp; Attachments</p>
+          <div className="cn-ws__grid-3">
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Reason Summary</span>
+              <p className="cn-ws__ro">{record.reason || "—"}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Internal Reference</span>
+              <p className="cn-ws__ro">{record.referenceNo || "—"}</p>
+            </div>
+            <div className="cn-ws__field">
+              <span className="cn-ws__flabel">Attachments</span>
+              <p className="cn-ws__ro">
+                {record.attachments?.length
+                  ? `${record.attachments.length} file(s)`
+                  : "—"}
+              </p>
+            </div>
+            <div className="cn-ws__field" style={{ gridColumn: "1 / -1" }}>
+              <span className="cn-ws__flabel">Narration</span>
+              <p className="cn-ws__ro min-h-[48px] items-start py-2">
+                {record.remarks || "—"}
+              </p>
+            </div>
+          </div>
+          {record.attachments?.length > 0 ? (
+            <div className="mt-2 space-y-1">
               {record.attachments.map((att) => (
-                <div key={att.id} className="flex items-center gap-2 text-xs py-1.5 px-2 border rounded">
+                <div
+                  key={att.id}
+                  className="flex items-center gap-2 text-[11px] py-1 px-2 border rounded"
+                >
                   <span className="font-medium">{att.documentName}</span>
-                  <span className="text-muted-foreground truncate flex-1">{att.fileName}</span>
-                  {att.dataUrl && (
-                    <>
-                      <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(att.dataUrl, "_blank")}>
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <a href={att.dataUrl} download={att.fileName} className="p-1 hover:bg-muted rounded">
-                        <Download className="w-4 h-4" />
-                      </a>
-                    </>
-                  )}
+                  <span className="text-muted-foreground flex-1 truncate">
+                    {att.fileName}
+                  </span>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : null}
+        </section>
 
-        {record.remarks && (
-          <div className="bg-white rounded-lg border p-4 text-xs">
-            <p className="text-xs uppercase text-muted-foreground mb-1">Remarks</p>
-            <p>{record.remarks}</p>
-          </div>
-        )}
-
-        <div className="bg-white rounded-lg border p-4">
-          <h2 className="text-sm font-semibold mb-3">Activity Timeline</h2>
-          <div className="space-y-2">
-            {[...record.activity].reverse().map((a, i) => (
-              <div key={i} className="text-xs border-l-2 border-brand-200 pl-3 py-0.5">
-                <p className="font-medium capitalize">{a.action.replaceAll("_", " ")}</p>
-                <p className="text-muted-foreground">{a.detail}</p>
-                <p className="text-xs text-muted-foreground">{a.by} · {new Date(a.at).toLocaleString()}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        {record.activity.length > 0 ? (
+          <section className="cn-ws__section">
+            <p className="cn-ws__label">Activity</p>
+            <div className="space-y-1.5">
+              {[...record.activity].reverse().slice(0, 8).map((a, i) => (
+                <div
+                  key={`${a.at}-${i}`}
+                  className="text-[11px] flex gap-3 border-b border-border/40 pb-1"
+                >
+                  <span className="font-medium capitalize min-w-[7rem]">
+                    {a.action.replaceAll("_", " ")}
+                  </span>
+                  <span className="text-muted-foreground flex-1">{a.detail}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    {a.by} · {new Date(a.at).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
-    </RecordDetailPage>
+    </AccountsFormLayout>
   );
 }

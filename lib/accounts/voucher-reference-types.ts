@@ -14,6 +14,7 @@ import {
 } from "@/lib/accounts/voucher-quick-add-ledger";
 
 export type VoucherReferenceType =
+  | "new_reference"
   | "against_invoice"
   | "advance"
   | "on_account"
@@ -24,7 +25,8 @@ export type VoucherReferenceType =
   | "other";
 
 export const VOUCHER_REFERENCE_TYPE_LABELS: Record<VoucherReferenceType, string> = {
-  against_invoice: "Against Invoice",
+  new_reference: "New Reference",
+  against_invoice: "Against Reference",
   advance: "Advance",
   on_account: "On Account",
   against_credit_note: "Against Credit Note",
@@ -34,19 +36,10 @@ export const VOUCHER_REFERENCE_TYPE_LABELS: Record<VoucherReferenceType, string>
   other: "Other",
 };
 
-const ALL_REFERENCE_TYPES: VoucherReferenceType[] = [
-  "against_invoice",
-  "advance",
-  "on_account",
-  "against_credit_note",
-  "against_debit_note",
-  "against_opening_balance",
-  "other",
-];
-
 const BANK_SIDE_TYPES: VoucherReferenceType[] = ["on_account", "transfer", "other"];
 const CONTRA_TYPES: VoucherReferenceType[] = ["on_account", "transfer", "other"];
 const PARTY_TYPES: VoucherReferenceType[] = [
+  "new_reference",
   "against_invoice",
   "advance",
   "on_account",
@@ -55,6 +48,18 @@ const PARTY_TYPES: VoucherReferenceType[] = [
   "against_opening_balance",
   "other",
 ];
+const GENERIC_BILL_WISE_TYPES: VoucherReferenceType[] = [
+  "new_reference",
+  "against_invoice",
+  "advance",
+  "on_account",
+];
+
+/** True when ledger has bill-wise accounting enabled (party defaults or generic toggle). */
+export function isBillWiseEnabledLedger(ledger: ChartOfAccount | null | undefined): boolean {
+  if (!ledger) return false;
+  return ledger.billWiseAccounting === true;
+}
 
 export function defaultEntryReferenceType(
   voucherType: VoucherTypeCode,
@@ -72,12 +77,13 @@ export function supportsInvoiceAllocation(
   coaRecords: ChartOfAccount[],
 ): boolean {
   if (!ledger) return false;
-  if (voucherType === "receipt" || voucherType === "payment" || voucherType === "journal") {
-    return (
-      isCustomerPartyLedger(ledger, coaRecords) || isVendorPartyLedger(ledger, coaRecords)
-    );
+  if (voucherType !== "receipt" && voucherType !== "payment" && voucherType !== "journal") {
+    return false;
   }
-  return false;
+  if (isCustomerPartyLedger(ledger, coaRecords) || isVendorPartyLedger(ledger, coaRecords)) {
+    return true;
+  }
+  return isBillWiseEnabledLedger(ledger);
 }
 
 export function isBankCashEntry(
@@ -105,7 +111,20 @@ export function getAvailableReferenceTypes(
   }
 
   if (supportsInvoiceAllocation(voucherType, ledger, coaRecords)) {
+    if (
+      ledger &&
+      !isCustomerPartyLedger(ledger, coaRecords) &&
+      !isVendorPartyLedger(ledger, coaRecords) &&
+      isBillWiseEnabledLedger(ledger)
+    ) {
+      return GENERIC_BILL_WISE_TYPES;
+    }
     return PARTY_TYPES;
+  }
+
+  // Non-bill-wise generic ledgers: no reference selection beyond on-account/other
+  if (ledger && !isBillWiseEnabledLedger(ledger)) {
+    return ["on_account", "other"];
   }
 
   return ["on_account", "advance", "other"];
@@ -121,7 +140,7 @@ export function referenceTypeRequiresDocument(refType: VoucherReferenceType): bo
 }
 
 export function referenceTypeAllowsTextReference(refType: VoucherReferenceType): boolean {
-  return refType === "transfer" || refType === "other";
+  return refType === "transfer" || refType === "other" || refType === "new_reference";
 }
 
 export function referenceTypeShowsAllocationPicker(refType: VoucherReferenceType): boolean {

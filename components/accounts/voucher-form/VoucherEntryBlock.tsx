@@ -34,6 +34,8 @@ import type { VoucherFormEntry, VoucherEntryType } from "@/lib/accounts/voucher-
 import {
   defaultEntryReferenceType,
   getAvailableReferenceTypes,
+  isBankCashEntry,
+  isBillWiseEnabledLedger,
   referenceTypeAllowsTextReference,
   referenceTypeShowsAllocationPicker,
   supportsInvoiceAllocation,
@@ -47,6 +49,7 @@ import {
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
 import { isCustomerPartyLedger, isVendorPartyLedger } from "@/lib/accounts/voucher-ledger-groups";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { loadCostCenters } from "@/lib/accounts/cost-centers-data";
 import { cn } from "@/lib/utils";
 import { ListChecks } from "lucide-react";
 
@@ -98,6 +101,11 @@ export function VoucherEntryBlock({
   const [allocOpen, setAllocOpen] = useState(false);
 
   const ledger = entry.accountId ? findLedgerById(entry.accountId, coaRecords) ?? null : null;
+  const costCentreApplicable = ledger?.costCenterApplicable === true;
+  const costCenterOptions = useMemo(
+    () => (costCentreApplicable ? loadCostCenters().filter((c) => c.status === "active") : []),
+    [costCentreApplicable],
+  );
 
   const allocationMode = useMemo((): "receipt" | "payment" | null => {
     if (!ledger || !supportsInvoiceAllocation(voucherType, ledger, coaRecords)) return null;
@@ -106,6 +114,8 @@ export function VoucherEntryBlock({
     if (voucherType === "journal") {
       if (isCustomerPartyLedger(ledger, coaRecords)) return "receipt";
       if (isVendorPartyLedger(ledger, coaRecords)) return "payment";
+      // Generic bill-wise ledger: treat like receipt for open-reference picker
+      if (ledger.billWiseAccounting) return "receipt";
     }
     return null;
   }, [ledger, voucherType, entry.entryType, coaRecords]);
@@ -121,8 +131,16 @@ export function VoucherEntryBlock({
     [voucherType, entry.entryType, ledger, coaRecords],
   );
 
+  const showReferenceControls =
+    voucherType === "contra" ||
+    isBankCashEntry(ledger, coaRecords) ||
+    supportsInvoiceAllocation(voucherType, ledger, coaRecords) ||
+    isBillWiseEnabledLedger(ledger) ||
+    (voucherType === "receipt" && entry.entryType === "DEBIT") ||
+    (voucherType === "payment" && entry.entryType === "CREDIT");
+
   const showAgainstRef = referenceTypeShowsAllocationPicker(entry.referenceType)
-    ? Boolean(allocationMode)
+    ? Boolean(allocationMode) || (ledger != null && isBillWiseEnabledLedger(ledger))
     : referenceTypeAllowsTextReference(entry.referenceType);
 
   const textReference =
@@ -160,6 +178,9 @@ export function VoucherEntryBlock({
       referenceType: refType,
       referenceId: null,
       allocations: [],
+      costCenterId: null,
+      costCenterName: "",
+      billWiseDueDate: "",
     });
   };
 
@@ -317,7 +338,11 @@ export function VoucherEntryBlock({
           labelClassName={labelClass}
           spacingClassName={fieldSpacing}
         >
-          {readOnly ? (
+          {!showReferenceControls ? (
+            <p className={cn(previewHeight, "flex items-center text-muted-foreground", previewClass)}>
+              —
+            </p>
+          ) : readOnly ? (
             <p className={cn(previewHeight, "flex items-center", previewClass)}>
               {VOUCHER_REFERENCE_TYPE_LABELS[entry.referenceType] ?? entry.referenceType}
             </p>
@@ -346,7 +371,7 @@ export function VoucherEntryBlock({
           labelClassName={labelClass}
           spacingClassName={fieldSpacing}
         >
-          {!showAgainstRef ? (
+          {!showReferenceControls || !showAgainstRef ? (
             <p className={cn(previewHeight, "flex items-center text-muted-foreground", previewClass)}>
               —
             </p>
@@ -401,7 +426,11 @@ export function VoucherEntryBlock({
               className={cn(inputClass, !compact && "h-8 text-xs")}
               value={textReference}
               onChange={(e) => setTextReference(e.target.value)}
-              placeholder="UTR / cheque / ref…"
+              placeholder={
+                entry.referenceType === "new_reference"
+                  ? "New reference no…"
+                  : "UTR / cheque / ref…"
+              }
             />
           )}
         </VoucherFormField>
@@ -443,6 +472,90 @@ export function VoucherEntryBlock({
         )}
       </div>
       </div>
+
+      {costCentreApplicable && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+          <VoucherFormField
+            label="Cost Centre"
+            className="min-w-0"
+            labelClassName={labelClass}
+            spacingClassName={fieldSpacing}
+          >
+            {readOnly ? (
+              <p className={cn(previewHeight, "flex items-center", previewClass)}>
+                {entry.costCenterName || "—"}
+              </p>
+            ) : (
+              <Select
+                value={entry.costCenterId != null ? String(entry.costCenterId) : ""}
+                onValueChange={(v) => {
+                  const cc = costCenterOptions.find((c) => String(c.id) === v);
+                  onChange({
+                    costCenterId: cc?.id ?? null,
+                    costCenterName: cc ? `${cc.code} — ${cc.name}` : "",
+                  });
+                }}
+              >
+                <SelectTrigger className={cn(inputClass, !compact && "h-8 text-xs")}>
+                  <SelectValue placeholder="Select cost centre…" />
+                </SelectTrigger>
+                <VoucherSelectContent>
+                  {costCenterOptions.map((cc) => (
+                    <SelectItem key={cc.id} value={String(cc.id)} className={selectItemClass}>
+                      {cc.code} — {cc.name}
+                    </SelectItem>
+                  ))}
+                </VoucherSelectContent>
+              </Select>
+            )}
+          </VoucherFormField>
+          {entry.referenceType === "new_reference" && (
+            <VoucherFormField
+              label="Due Date"
+              className="min-w-0"
+              labelClassName={labelClass}
+              spacingClassName={fieldSpacing}
+            >
+              {readOnly ? (
+                <p className={cn(previewHeight, "flex items-center", previewClass)}>
+                  {entry.billWiseDueDate || "—"}
+                </p>
+              ) : (
+                <Input
+                  type="date"
+                  className={cn(inputClass, !compact && "h-8 text-xs")}
+                  value={entry.billWiseDueDate ?? ""}
+                  onChange={(e) => onChange({ billWiseDueDate: e.target.value })}
+                />
+              )}
+            </VoucherFormField>
+          )}
+        </div>
+      )}
+
+      {!costCentreApplicable && entry.referenceType === "new_reference" && (
+        <div className="max-w-xs">
+          <VoucherFormField
+            label="Due Date"
+            className="min-w-0"
+            labelClassName={labelClass}
+            spacingClassName={fieldSpacing}
+          >
+            {readOnly ? (
+              <p className={cn(previewHeight, "flex items-center", previewClass)}>
+                {entry.billWiseDueDate || "—"}
+              </p>
+            ) : (
+              <Input
+                type="date"
+                className={cn(inputClass, !compact && "h-8 text-xs")}
+                value={entry.billWiseDueDate ?? ""}
+                onChange={(e) => onChange({ billWiseDueDate: e.target.value })}
+              />
+            )}
+          </VoucherFormField>
+        </div>
+      )}
 
       {showLineRemark && (
         <VoucherFormField label="Line Remark" className="min-w-0 w-full">

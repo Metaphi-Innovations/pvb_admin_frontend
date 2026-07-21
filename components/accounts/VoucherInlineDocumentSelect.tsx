@@ -11,6 +11,7 @@ import {
 import { formatMoney } from "@/lib/accounts/money-format";
 import { getOpenBillsForVendor } from "@/lib/accounts/payables-data";
 import { getOpenInvoicesForCustomer } from "@/lib/accounts/receivables-data";
+import { getOpenGenericBillWiseDocuments, isGenericBillWiseLedger } from "@/lib/accounts/generic-bill-wise-store";
 import { resolveAutoPartyFromLedger, isCustomerPartyLedger, isVendorPartyLedger } from "@/lib/accounts/voucher-ledger-groups";
 import { getCustomerById } from "@/lib/accounts/transaction-master-fetch";
 import { getVendorById } from "@/app/(app)/masters/vendors/vendor-data";
@@ -77,26 +78,33 @@ export function useOpenVoucherDocuments(
   );
 
   return useMemo(() => {
-    if (!partyRef) return [];
-    if (partyRef.kind === "customer") {
-      return getOpenInvoicesForCustomer(partyRef.contactId).map((inv) => ({
-        id: inv.invoiceId,
-        no: inv.invoiceNo,
-        documentDate: inv.invoiceDate,
-        originalAmount: inv.invoiceAmount,
-        outstanding: inv.outstanding,
-        href: `/accounts/invoices/${inv.invoiceId}`,
+    if (partyRef) {
+      if (partyRef.kind === "customer") {
+        return getOpenInvoicesForCustomer(partyRef.contactId).map((inv) => ({
+          id: inv.invoiceId,
+          no: inv.invoiceNo,
+          documentDate: inv.invoiceDate,
+          originalAmount: inv.invoiceAmount,
+          outstanding: inv.outstanding,
+          href: `/accounts/invoices/${inv.invoiceId}`,
+        }));
+      }
+      return getOpenBillsForVendor(partyRef.contactId).map((bill) => ({
+        id: bill.billId,
+        no: bill.billNo,
+        documentDate: bill.billDate,
+        originalAmount: bill.billAmount,
+        outstanding: bill.outstanding,
+        href: `/accounts/purchase-invoices/${bill.billId}`,
       }));
     }
-    return getOpenBillsForVendor(partyRef.contactId).map((bill) => ({
-      id: bill.billId,
-      no: bill.billNo,
-      documentDate: bill.billDate,
-      originalAmount: bill.billAmount,
-      outstanding: bill.outstanding,
-      href: `/accounts/purchase-invoices/${bill.billId}`,
-    }));
-  }, [partyRef]);
+
+    if (partyLedger?.id != null && isGenericBillWiseLedger(partyLedger.id)) {
+      return getOpenGenericBillWiseDocuments(partyLedger.id);
+    }
+
+    return [];
+  }, [partyRef, partyLedger?.id]);
 }
 
 interface VoucherInlineDocumentSelectProps {

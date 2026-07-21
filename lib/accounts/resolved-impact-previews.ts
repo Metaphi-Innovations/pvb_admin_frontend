@@ -121,6 +121,29 @@ export function salesInvoiceImpactResolved(input: {
   return lines;
 }
 
+/** Sample Order Proforma — inventory consumption only (no receivable / revenue / GST). */
+export function sampleOrderInventoryImpactResolved(inventoryValue: number): LedgerImpactLine[] {
+  if (!(inventoryValue > 0)) return [];
+  const expense = ledgerLabel(
+    "sample_promotional_expense",
+    "Sample / Promotional Expense",
+    "Sample / Promotional Expense",
+  );
+  const inventory = ledgerLabel("stock_inventory", "General", "Inventory / Stock-in-Hand");
+  return [
+    {
+      ledger: expense,
+      debit: inventoryValue,
+      note: "Sample / Promotional Expense Dr (at Cost Price)",
+    },
+    {
+      ledger: inventory,
+      credit: inventoryValue,
+      note: "Inventory / Stock-in-Hand Cr",
+    },
+  ];
+}
+
 export function purchaseInvoiceImpactResolved(input: {
   vendorName: string;
   taxable: number;

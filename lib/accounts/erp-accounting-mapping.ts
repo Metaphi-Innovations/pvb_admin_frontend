@@ -56,7 +56,7 @@ export interface ProductAccountingConfig {
 }
 
 const DEFAULT_PRODUCT_ACCOUNTS = {
-  inventoryAccount: "Inventory / Stock in Hand",
+  inventoryAccount: "Stock in Hand",
   salesAccount: "Sales",
   purchaseAccount: "Purchases",
   cogsAccount: "Cost of Goods Sold",

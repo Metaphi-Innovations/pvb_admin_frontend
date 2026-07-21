@@ -159,7 +159,7 @@ export function createAccountsVendorLedger(
     throw new Error("Sundry Creditors group was not found in Chart of Accounts.");
   }
   if (!isSundryCreditorsGroup(parent, records)) {
-    throw new Error("Parent group must be Trade Payables / Sundry Creditors.");
+    throw new Error("Parent group must be Sundry Creditors.");
   }
 
   const list = readAll();
@@ -203,8 +203,14 @@ export function createAccountsVendorLedger(
     gstApplicable: vendorRecord.gstApplicable,
     tdsApplicable: vendorRecord.tdsApplicable,
     costCenterApplicable: false,
+    billWiseAccounting: true,
     bankAccountFlag: false,
+    ledgerKind: "MASTER",
+    masterType: "vendor",
+    masterId: vendorRecord.id,
     isSystemGenerated: false,
+    erpSourceModule: "vendor_master",
+    erpSourceId: vendorRecord.id,
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
   };

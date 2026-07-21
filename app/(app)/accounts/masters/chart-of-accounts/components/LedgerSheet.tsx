@@ -1,12 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
+import { CompactToggle } from "@/components/ui/ActiveInactiveToggle";
 import {
   Select,
   SelectContent,
@@ -14,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetBody,
@@ -30,12 +30,17 @@ import {
   parentGroupLabel,
   type LedgerFormValues,
 } from "../chart-of-accounts-data";
-import { inferAccountTypeFromPath } from "@/lib/accounts/coa-accounting-view";
 import { CoaParentGroupSelector } from "./CoaParentGroupSelector";
 import { CoaAddLedgerParentSelect } from "./CoaAddLedgerParentSelect";
-import { resolveCoaLedgerBehaviorById } from "@/lib/accounts/coa-ledger-behavior";
+import {
+  formatTdsSummary,
+  getActiveTDSMasters,
+  getTdsSectionCode,
+} from "@/app/(app)/masters/tds/tds-data";
 
 type SheetMode = "add" | "edit" | "view";
+
+const GST_RATE_OPTIONS = ["0", "5", "12", "18", "28"] as const;
 
 interface LedgerSheetProps {
   open: boolean;
@@ -49,10 +54,48 @@ interface LedgerSheetProps {
   onSave: () => void;
   onFormChange: (form: LedgerFormValues) => void;
   canEdit: boolean;
-  /** Compact add form for Chart of Accounts — only essential fields */
-  compactAdd?: boolean;
   /** When true, parent group is pre-selected from tree '+' and cannot be changed */
   parentGroupLocked?: boolean;
+}
+
+function SectionHeading({ label }: { label: string }) {
+  return (
+    <div className="pb-2 border-b border-border">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function YesNoRow({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
+      <div>
+        <Label className="text-xs">{label}</Label>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {checked ? "Yes" : "No"}
+        </p>
+      </div>
+      <CompactToggle
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+        activeLabel="Yes"
+        inactiveLabel="No"
+      />
+    </div>
+  );
 }
 
 export function LedgerSheet({
@@ -67,35 +110,18 @@ export function LedgerSheet({
   onSave,
   onFormChange,
   canEdit,
-  compactAdd = false,
   parentGroupLocked = false,
 }: LedgerSheetProps) {
   const readOnly = mode === "view" || !canEdit;
-  const isCompactAdd = compactAdd && mode === "add";
   const parentGroupError =
-    isCompactAdd && !form.parentGroupId && formError === "Please select a Parent Group."
+    !form.parentGroupId && formError === "Please select a Parent Group."
       ? formError
       : null;
 
+  const tdsOptions = useMemo(() => getActiveTDSMasters(), [open]);
+
   const setForm = (patch: Partial<LedgerFormValues>) =>
     onFormChange({ ...form, ...patch });
-
-  const ledgerType =
-    form.parentGroupId != null
-      ? inferAccountTypeFromPath(records, form.parentGroupId)
-      : "Asset";
-  const behavior =
-    form.parentGroupId != null
-      ? resolveCoaLedgerBehaviorById(form.parentGroupId, records)
-      : null;
-  const addTitle =
-    behavior && behavior.kind !== "generic"
-      ? `Add ${behavior.label}`
-      : "Add Ledger";
-
-  const showGst = ledgerType === "Income" || ledgerType === "Expense" || ledgerType === "Asset";
-  const showTds =
-    ledgerType === "Expense" || ledgerType === "Liability" || ledgerType === "Income";
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -108,83 +134,98 @@ export function LedgerSheet({
             <div className="min-w-0">
               <SheetTitle className="text-base">
                 {mode === "add"
-                  ? addTitle
+                  ? "Add Generic Ledger"
                   : mode === "edit"
-                    ? "Edit Ledger"
-                    : "Account Details"}
+                    ? "Edit Generic Ledger"
+                    : "Generic Ledger Details"}
               </SheetTitle>
               <SheetDescription className="text-xs mt-0.5">
                 {readOnly
-                  ? "View ledger balances and configuration."
-                  : behavior?.source
-                    ? `Source: ${behavior.source}`
+                  ? "View accounting configuration for this ledger."
                   : parentGroupLocked
-                    ? "Create a ledger under the selected Accounting Group."
-                    : "Create a ledger under an Accounting Group."}
+                    ? "Accounting ledger under the selected Level 3 group. Legal entity details stay in ERP Masters."
+                    : "For income, expense, asset, or liability ledgers (e.g. Rent, Interest Income). Not for customers, suppliers, or banks."}
               </SheetDescription>
             </div>
           </div>
         </SheetHeader>
 
-        <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          {formError && !(isCompactAdd && parentGroupError) && (
+        <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {formError && !parentGroupError && (
             <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
               {formError}
             </p>
           )}
 
-          {mode === "add" && (
+          {/* Basic Information */}
+          <div className="space-y-3">
+            <SectionHeading label="Basic Information" />
+
+            <div className="space-y-1">
+              <Label className="text-xs">
+                Ledger Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                className="h-9 text-sm font-medium"
+                disabled={readOnly}
+                value={form.ledgerName}
+                onChange={(e) => setForm({ ledgerName: e.target.value })}
+                placeholder="e.g. Office Rent, Audit Fees, Interest Income"
+              />
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs">Ledger Code</Label>
-              <Input className="h-9 text-sm font-medium bg-muted/30 font-mono" disabled readOnly value={previewCode} />
-              <p className="text-xs text-muted-foreground">Auto-generated on save</p>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label className="text-xs">
-              Ledger Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              className="h-9 text-sm font-medium"
-              disabled={readOnly}
-              value={form.ledgerName}
-              onChange={(e) => setForm({ ledgerName: e.target.value })}
-              placeholder="e.g. Office Cash, Trade Debtor, Rent"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">
-              Parent Group <span className="text-red-500">*</span>
-            </Label>
-            {parentGroupLocked && form.parentGroupId ? (
-              <>
-                <Input
-                  className="h-9 text-sm font-medium bg-muted/30"
-                  disabled
-                  readOnly
-                  value={parentGroupLabel(records, form.parentGroupId)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  New ledger will be created under this Accounting Group
-                </p>
-              </>
-            ) : isCompactAdd ? (
-              <CoaAddLedgerParentSelect
-                records={records}
-                value={form.parentGroupId}
-                placeholder="Select Accounting Group…"
-                error={parentGroupError}
-                onChange={(id) => {
-                  setForm({
-                    parentGroupId: id,
-                    balanceType: defaultBalanceTypeForParent(records, id),
-                  });
-                }}
+              <Input
+                className="h-9 text-sm font-medium bg-muted/30 font-mono"
+                disabled
+                readOnly
+                value={mode === "add" ? previewCode : active?.accountCode ?? previewCode}
               />
-            ) : (
-              <>
+              <p className="text-[11px] text-muted-foreground">Auto-generated</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Alias</Label>
+              <Input
+                className="h-9 text-sm font-medium"
+                disabled={readOnly}
+                value={form.alias}
+                onChange={(e) => setForm({ alias: e.target.value })}
+                placeholder="Optional short name for search"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">
+                Parent Group / Level 3 <span className="text-red-500">*</span>
+              </Label>
+              {parentGroupLocked && form.parentGroupId ? (
+                <>
+                  <Input
+                    className="h-9 text-sm font-medium bg-muted/30"
+                    disabled
+                    readOnly
+                    value={parentGroupLabel(records, form.parentGroupId)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Auto-selected from the Level 3 group in the chart
+                  </p>
+                </>
+              ) : mode === "add" ? (
+                <CoaAddLedgerParentSelect
+                  records={records}
+                  value={form.parentGroupId}
+                  placeholder="Select Level 3 Accounting Group…"
+                  error={parentGroupError}
+                  onChange={(id) => {
+                    setForm({
+                      parentGroupId: id,
+                      balanceType: defaultBalanceTypeForParent(records, id),
+                    });
+                  }}
+                />
+              ) : (
                 <CoaParentGroupSelector
                   records={records}
                   value={form.parentGroupId}
@@ -196,106 +237,198 @@ export function LedgerSheet({
                     });
                   }}
                 />
-              </>
+              )}
+            </div>
+          </div>
+
+          {/* Accounting */}
+          <div className="space-y-3">
+            <SectionHeading label="Accounting" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Opening Balance</Label>
+                <AccountsMoneyInput
+                  className="h-9 text-sm font-medium"
+                  disabled={readOnly}
+                  value={form.openingBalance}
+                  onChange={(v) => setForm({ openingBalance: String(v) })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Balance Type</Label>
+                <Select
+                  value={form.balanceType}
+                  disabled={readOnly}
+                  onValueChange={(v) => setForm({ balanceType: v as "Debit" | "Credit" })}
+                >
+                  <SelectTrigger className="h-9 text-sm font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Debit" className="text-xs">
+                      Debit
+                    </SelectItem>
+                    <SelectItem value="Credit" className="text-xs">
+                      Credit
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="space-y-3">
+            <SectionHeading label="Controls" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <YesNoRow
+                label="Cost Centre Applicable"
+                checked={form.costCenterApplicable}
+                disabled={readOnly}
+                onChange={(v) => setForm({ costCenterApplicable: v })}
+              />
+              <YesNoRow
+                label="Bill-wise Accounting"
+                checked={form.billWiseAccounting}
+                disabled={readOnly}
+                onChange={(v) => setForm({ billWiseAccounting: v })}
+              />
+            </div>
+          </div>
+
+          {/* Tax Configuration */}
+          <div className="space-y-3">
+            <SectionHeading label="Tax Configuration" />
+
+            <YesNoRow
+              label="GST Applicable"
+              checked={form.gstApplicable}
+              disabled={readOnly}
+              onChange={(v) =>
+                setForm({
+                  gstApplicable: v,
+                  ...(v ? {} : { defaultGstRate: "", defaultHsnSac: "" }),
+                })
+              }
+            />
+            {form.gstApplicable && (
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Default GST Rate</Label>
+                  <Select
+                    value={form.defaultGstRate || "__none__"}
+                    disabled={readOnly}
+                    onValueChange={(v) =>
+                      setForm({ defaultGstRate: v === "__none__" ? "" : v })
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-sm font-medium">
+                      <SelectValue placeholder="Optional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-xs">
+                        None
+                      </SelectItem>
+                      {GST_RATE_OPTIONS.map((rate) => (
+                        <SelectItem key={rate} value={rate} className="text-xs">
+                          {rate}%
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Default HSN/SAC</Label>
+                  <Input
+                    className="h-9 text-sm font-medium font-mono"
+                    disabled={readOnly}
+                    value={form.defaultHsnSac}
+                    onChange={(e) => setForm({ defaultHsnSac: e.target.value })}
+                    placeholder="Optional HSN / SAC code"
+                  />
+                </div>
+              </div>
+            )}
+
+            <YesNoRow
+              label="TDS Applicable"
+              checked={form.tdsApplicable}
+              disabled={readOnly}
+              onChange={(v) =>
+                setForm({
+                  tdsApplicable: v,
+                  ...(v ? {} : { defaultTdsSection: "" }),
+                })
+              }
+            />
+            {form.tdsApplicable && (
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-1">
+                <Label className="text-xs">Default TDS Section</Label>
+                <Select
+                  value={form.defaultTdsSection || "__none__"}
+                  disabled={readOnly}
+                  onValueChange={(v) =>
+                    setForm({ defaultTdsSection: v === "__none__" ? "" : v })
+                  }
+                >
+                  <SelectTrigger className="h-9 text-sm font-medium">
+                    <SelectValue placeholder="Select TDS section…" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[240px]">
+                    <SelectItem value="__none__" className="text-xs">
+                      None
+                    </SelectItem>
+                    {tdsOptions.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)} className="text-xs">
+                        {formatTdsSummary(t)} — {getTdsSectionCode(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <YesNoRow
+              label="TCS Applicable"
+              checked={form.tcsApplicable}
+              disabled={readOnly}
+              onChange={(v) =>
+                setForm({
+                  tcsApplicable: v,
+                  ...(v ? {} : { defaultTcsSection: "" }),
+                })
+              }
+            />
+            {form.tcsApplicable && (
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-1">
+                <Label className="text-xs">Default TCS Section</Label>
+                <Input
+                  className="h-9 text-sm font-medium"
+                  disabled={readOnly}
+                  value={form.defaultTcsSection}
+                  onChange={(e) => setForm({ defaultTcsSection: e.target.value })}
+                  placeholder="e.g. Section 206C"
+                />
+              </div>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Description */}
+          <div className="space-y-3">
+            <SectionHeading label="Description" />
+
             <div className="space-y-1">
-              <Label className="text-xs">Opening Balance</Label>
-              <AccountsMoneyInput
-                className="h-9 text-sm font-medium"
+              <Label className="text-xs">Description / Remarks</Label>
+              <Textarea
+                className="text-sm min-h-[72px] resize-none"
                 disabled={readOnly}
-                value={form.openingBalance}
-                onChange={(v) => setForm({ openingBalance: String(v) })}
+                value={form.description}
+                onChange={(e) => setForm({ description: e.target.value })}
+                placeholder="Optional notes for accountants"
               />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Balance Type</Label>
-              <Select
-                value={form.balanceType}
-                disabled={readOnly}
-                onValueChange={(v) => setForm({ balanceType: v as "Debit" | "Credit" })}
-              >
-                <SelectTrigger className="h-9 text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Debit" className="text-xs">
-                    Debit
-                  </SelectItem>
-                  <SelectItem value="Credit" className="text-xs">
-                    Credit
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {!isCompactAdd && (
-            <>
-          <div className="space-y-1">
-            <Label className="text-xs">Alias / Short Name</Label>
-            <Input
-              className="h-9 text-sm font-medium"
-              disabled={readOnly}
-              value={form.alias}
-              onChange={(e) => setForm({ alias: e.target.value })}
-              placeholder="Short name for search & reports"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Ledger Type</Label>
-            <Input className="h-9 text-sm font-medium bg-muted/30" disabled readOnly value={ledgerType} />
-          </div>
-
-          {showGst && (
-          <div className="rounded-lg border border-border/60 p-3 bg-muted/10 space-y-2.5">
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <Checkbox
-                checked={form.gstApplicable}
-                disabled={readOnly}
-                onCheckedChange={(c) => setForm({ gstApplicable: !!c })}
-              />
-              GST Applicable
-            </label>
-            {showTds && (
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <Checkbox
-                checked={form.tdsApplicable}
-                disabled={readOnly}
-                onCheckedChange={(c) => setForm({ tdsApplicable: !!c })}
-              />
-              TDS Applicable
-            </label>
-            )}
-          </div>
-          )}
-
-          <div className="space-y-1">
-            <Label className="text-xs">Description</Label>
-            <Input
-              className="h-9 text-sm font-medium"
-              disabled={readOnly}
-              value={form.description}
-              onChange={(e) => setForm({ description: e.target.value })}
-              placeholder="Optional notes for accountants"
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
-            <div>
-              <Label className="text-xs">Active Status</Label>
-              <p className="text-xs text-muted-foreground">
-                {form.status === "active" ? "Active" : "Inactive"}
-              </p>
-            </div>
-            <ActiveInactiveToggle
-              active={form.status === "active"}
-              onChange={(on) => setForm({ status: on ? "active" : "inactive" })}
-              disabled={readOnly}
-            />
           </div>
 
           {readOnly && active && (
@@ -308,8 +441,6 @@ export function LedgerSheet({
                 <span className="text-muted-foreground">Created by:</span> {active.createdBy}
               </p>
             </div>
-          )}
-            </>
           )}
         </SheetBody>
 

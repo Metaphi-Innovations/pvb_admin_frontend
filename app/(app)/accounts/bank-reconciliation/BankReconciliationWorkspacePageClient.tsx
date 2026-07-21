@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, History as HistoryIcon, Plus, Upload } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import "./bank-reconciliation-compact.css";
+import { ArrowLeft, Check, Info, MoreVertical, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,6 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -24,20 +32,18 @@ import {
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
 import {
-  AccountsColumnFilterProvider,
-  SortTh,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
-import {
   AccountsTableEmpty,
-  AccountsTablePagination,
   ACCOUNTS_DEFAULT_PAGE_SIZE,
 } from "@/components/accounts/AccountsTableListing";
 import {
-  ReportSearchFilter,
   ACCOUNTS_FILTER_CONTROL_CLASS,
-  ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/components/accounts/ReportFilters";
+import { Pagination } from "@/components/listing/Pagination";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
@@ -46,173 +52,52 @@ import {
   getBankReconAccounts,
   maskAccountNumber,
 } from "./bank-reconciliation-v2-data";
+import { RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
+import { BankReconTallyStatusBadge } from "./components/BankReconTallyStatusBadge";
+import { BankReconBrsSummaryCard } from "./components/BankReconBrsSummaryCard";
+import { BankReconTallyUndoDialog } from "./components/BankReconTallyUndoDialog";
 import {
-  BankReconEntrySourceBadge,
-  BankReconReconciliationStatusBadge,
-} from "./components/BankReconBadges";
-import { BankReconReconcilePanel } from "./components/BankReconReconcilePanel";
-import { BankReconUploadDialog } from "./components/BankReconUploadDialog";
-import { BankReconManualEntryDialog } from "./components/BankReconManualEntryDialog";
+  getBrsSummary,
+  listBookTransactions,
+  reconcileBankDateBulk,
+  reconcileBankDateOnly,
+} from "@/lib/accounts/bank-recon-tally-service";
 import {
-  RECONCILIATION_LIST_PATH,
-  BANK_RECON_IMPORT_HISTORY_PATH,
-  bankReconWorkspacePath,
-} from "./reconciliation-utils";
-import {
-  loadBankReconTransactions,
-  type BankReconTransactionRecord,
-} from "@/lib/accounts/bank-recon-register";
-import {
-  getDisplayReconciliationStatus,
-  type ReconcileSaveAction,
-} from "@/lib/accounts/bank-recon-reconcile-service";
+  BANK_RECON_TALLY_STATUS_FILTERS,
+  TALLY_EVENT,
+  type BankReconBookTransaction,
+} from "@/lib/accounts/bank-recon-tally-types";
+import { isManualDemoAccount } from "@/lib/accounts/bank-recon-manual-demo-overlay";
 
-const PENDING_STATUSES = new Set([
-  "Unreconciled",
-  "Pending",
-  "Suggested",
-  "Pending Review",
-]);
-
-type WorkspaceRow = BankReconTransactionRecord & {
-  reference: string;
-  reconStatus: string;
-};
-
-const RECON_STATUS_FILTER_OPTIONS = [
-  { value: "all", label: "All Statuses" },
-  { value: "Unreconciled", label: "Unreconciled" },
-  { value: "Pending", label: "Pending" },
-  { value: "Pending Review", label: "Pending Review" },
-  { value: "Reconciled", label: "Reconciled" },
-  { value: "Suggested", label: "Suggested" },
-];
-
-function StatementTransactionsTable({
-  rows,
-  selectedId,
-  onSelect,
-  onReconcile,
-  loading,
-}: {
-  rows: WorkspaceRow[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  onReconcile: (id: string) => void;
-  loading: boolean;
-}) {
-  const filtered = useAccountsFilteredRows(rows);
-
-  if (loading) {
-    return (
-      <AccountsTable minWidth={920}>
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <AccountsTableHeadCell key={i} sticky={false}>
-                &nbsp;
-              </AccountsTableHeadCell>
-            ))}
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <SkeletonRow key={i} cols={8} />
-          ))}
-        </AccountsTableBody>
-      </AccountsTable>
-    );
-  }
-
-  return (
-    <AccountsTable minWidth={920}>
-      <AccountsTableHead>
-        <AccountsTableHeadRow>
-          <SortTh label="Date" colKey="statementDate" filterType="date" />
-          <SortTh label="Narration" colKey="narration" className="accounts-col-wide" />
-          <SortTh label="Reference / UTR / Cheque" colKey="reference" className="min-w-[120px]" />
-          <SortTh label="Debit" colKey="withdrawal" filterType="amount" align="right" />
-          <SortTh label="Credit" colKey="deposit" filterType="amount" align="right" />
-          <SortTh label="Running Balance" colKey="runningBalance" filterType="amount" align="right" />
-          <SortTh label="Status" colKey="reconStatus" />
-          <AccountsTableHeadCell className="w-24" sticky={false}>
-            Action
-          </AccountsTableHeadCell>
-        </AccountsTableHeadRow>
-      </AccountsTableHead>
-      <AccountsTableBody>
-        {rows.length === 0 ? (
-          <tr>
-            <td colSpan={8} className="accounts-table-empty">
-              <p>No bank transactions yet.</p>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Upload a statement or add a manual entry to begin.
-              </p>
-            </td>
-          </tr>
-        ) : filtered.length === 0 ? (
-          <AccountsTableEmpty colSpan={8} message="No transactions match the current filters." />
-        ) : (
-          filtered.map((txn) => (
-            <AccountsTableRow
-              key={txn.id}
-              className={cn(
-                "cursor-pointer group",
-                selectedId === txn.id && "bg-brand-50/60 hover:bg-brand-50/60",
-              )}
-              onClick={() => onSelect(txn.id)}
-            >
-              <AccountsTableCell>{txn.statementDate}</AccountsTableCell>
-              <AccountsTableCell wrap>
-                <span className="line-clamp-2 text-[11px] leading-snug">{txn.narration}</span>
-              </AccountsTableCell>
-              <AccountsTableCell mono wrap>
-                <span className="line-clamp-1">{txn.reference || "—"}</span>
-              </AccountsTableCell>
-              <AccountsTableCell align="right" money>
-                {txn.withdrawal ? formatMoney(txn.withdrawal) : "—"}
-              </AccountsTableCell>
-              <AccountsTableCell align="right" money>
-                {txn.deposit ? formatMoney(txn.deposit) : "—"}
-              </AccountsTableCell>
-              <AccountsTableCell align="right" money>
-                {txn.runningBalance != null ? formatMoney(txn.runningBalance) : "—"}
-              </AccountsTableCell>
-              <AccountsTableCell>
-                <div className="space-y-0.5">
-                  <BankReconEntrySourceBadge source={txn.source} />
-                  <BankReconReconciliationStatusBadge status={txn.reconStatus} />
-                </div>
-              </AccountsTableCell>
-              <AccountsTableCell>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[11px] px-2"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onReconcile(txn.id);
-                  }}
-                >
-                  Reconcile
-                </Button>
-              </AccountsTableCell>
-            </AccountsTableRow>
-          ))
-        )}
-      </AccountsTableBody>
-    </AccountsTable>
-  );
+function moneyOrDash(n: number): string {
+  return n ? formatMoney(n) : "—";
 }
 
-interface BankReconciliationWorkspacePageClientProps {
-  accountId?: string;
+function matchesSearch(hay: string, q: string): boolean {
+  if (!q) return true;
+  return hay.toLowerCase().includes(q);
 }
+
+const VOUCHER_TYPE_FILTERS = [
+  { value: "all", label: "All Types" },
+  { value: "payment", label: "Payment" },
+  { value: "receipt", label: "Receipt" },
+  { value: "contra", label: "Contra" },
+  { value: "journal", label: "Journal" },
+  { value: "other", label: "Other" },
+] as const;
+
+const DIRECTION_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "deposit", label: "Deposit" },
+  { value: "withdrawal", label: "Withdrawal" },
+] as const;
 
 export default function BankReconciliationWorkspacePageClient({
   accountId: accountIdProp,
-}: BankReconciliationWorkspacePageClientProps) {
+}: {
+  accountId?: string;
+}) {
   const router = useRouter();
   const routeParams = useParams();
   const accountId =
@@ -222,133 +107,208 @@ export default function BankReconciliationWorkspacePageClient({
       : Array.isArray(routeParams?.accountId)
         ? routeParams.accountId[0] ?? ""
         : "");
-  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("UNRECONCILED");
+  const [voucherTypeFilter, setVoucherTypeFilter] = useState("all");
+  const [directionFilter, setDirectionFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
-  const [selectedTxnId, setSelectedTxnId] = useState<string | null>(null);
-  const [registerTick, setRegisterTick] = useState(0);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBankDate, setBulkBankDate] = useState("");
+  const [undoLinkId, setUndoLinkId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const allAccounts = useMemo(() => {
-    void registerTick;
-    return getBankReconAccounts();
-  }, [registerTick]);
-
+  const allAccounts = useMemo(() => getBankReconAccounts(), [tick]);
   const account = useMemo(
     () => allAccounts.find((a) => a.id === accountId) ?? getBankReconAccountById(accountId),
     [allAccounts, accountId],
   );
 
   useEffect(() => {
-    const handler = () => setRegisterTick((t) => t + 1);
-    window.addEventListener("bank-recon-register-updated", handler);
-    return () => window.removeEventListener("bank-recon-register-updated", handler);
+    const handler = () => setTick((t) => t + 1);
+    window.addEventListener(TALLY_EVENT, handler);
+    return () => window.removeEventListener(TALLY_EVENT, handler);
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 300);
+    if (!accountId) return;
+    const acct = getBankReconAccountById(accountId);
+    if (acct) {
+      setDateFrom(acct.statementPeriodFrom);
+      setDateTo(acct.statementPeriodTo);
+    }
+    setStatusFilter("UNRECONCILED");
+    setSelectedIds(new Set());
+    const t = setTimeout(() => setLoading(false), 250);
     return () => clearTimeout(t);
   }, [accountId]);
 
-  const workspaceAction = searchParams.get("upload") === "1" ? "upload" : searchParams.get("manual") === "1" ? "manual" : null;
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds(new Set());
+  }, [statusFilter, debouncedSearch, dateFrom, dateTo, voucherTypeFilter, directionFilter, accountId]);
 
   useEffect(() => {
-    if (workspaceAction === "upload") {
-      setUploadOpen(true);
-      router.replace(bankReconWorkspacePath(accountId));
-    }
-    if (workspaceAction === "manual") {
-      setManualOpen(true);
-      router.replace(bankReconWorkspacePath(accountId));
-    }
-  }, [workspaceAction, accountId, router]);
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 180);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
-  const allTransactions = useMemo((): WorkspaceRow[] => {
-    void registerTick;
-    if (!account) return [];
-    return loadBankReconTransactions(accountId)
-      .filter((t) => t.manualEntryStatus !== "Draft" && t.manualEntryStatus !== "Cancelled")
-      .map((t) => ({
-        ...t,
-        activity: [...t.activity],
-        reference: t.reference || t.chequeNo || t.utrNumber || "",
-        reconStatus: getDisplayReconciliationStatus(t),
-      }));
-  }, [account, accountId, registerTick]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  const filteredTransactions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return allTransactions.filter((t) => {
-      if (statusFilter !== "all" && t.reconStatus !== statusFilter) return false;
-      if (dateFrom && t.statementDate < dateFrom) return false;
-      if (dateTo && t.statementDate > dateTo) return false;
-      if (!q) return true;
-      return (
-        t.narration.toLowerCase().includes(q) ||
-        t.reference.toLowerCase().includes(q) ||
-        (t.chequeNo ?? "").toLowerCase().includes(q) ||
-        (t.utrNumber ?? "").toLowerCase().includes(q)
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  const books = useMemo(() => {
+    void tick;
+    if (!accountId) return [] as BankReconBookTransaction[];
+    return listBookTransactions(accountId, dateFrom || undefined, dateTo || undefined);
+  }, [accountId, dateFrom, dateTo, tick]);
+
+  const brs = useMemo(() => {
+    void tick;
+    if (!accountId) return null;
+    return getBrsSummary(accountId, dateFrom || undefined, dateTo || undefined);
+  }, [accountId, dateFrom, dateTo, tick]);
+
+  const filteredBooks = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    return books.filter((b) => {
+      if (statusFilter === "UNRECONCILED" && b.status === "RECONCILED") return false;
+      if (statusFilter === "RECONCILED" && b.status !== "RECONCILED") return false;
+      if (voucherTypeFilter !== "all") {
+        const code = (b.voucherTypeCode || "").toLowerCase();
+        if (voucherTypeFilter === "other") {
+          if (["payment", "receipt", "contra", "journal"].includes(code)) return false;
+        } else if (code !== voucherTypeFilter) {
+          return false;
+        }
+      }
+      if (directionFilter === "deposit" && !(b.deposit > 0)) return false;
+      if (directionFilter === "withdrawal" && !(b.withdrawal > 0)) return false;
+      return matchesSearch(
+        `${b.particulars} ${b.voucherNumber} ${b.instrumentNumber} ${b.voucherType}`,
+        q,
       );
     });
-  }, [allTransactions, statusFilter, dateFrom, dateTo, search]);
+  }, [books, debouncedSearch, statusFilter, voucherTypeFilter, directionFilter]);
 
-  const paginatedRows = useMemo(() => {
+  const pageRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return filteredTransactions.slice(start, start + pageSize);
-  }, [filteredTransactions, page, pageSize]);
+    return filteredBooks.slice(start, start + pageSize);
+  }, [filteredBooks, page, pageSize]);
+  const bookById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books]);
 
-  const refreshRegister = useCallback(() => setRegisterTick((t) => t + 1), []);
-
-  const advanceToNextPending = useCallback(
-    (currentId: string) => {
-      const list = filteredTransactions;
-      const idx = list.findIndex((t) => t.id === currentId);
-      const after = list.slice(idx + 1).find((t) => PENDING_STATUSES.has(t.reconStatus));
-      const before = list.slice(0, idx).find((t) => PENDING_STATUSES.has(t.reconStatus));
-      setSelectedTxnId((after ?? before)?.id ?? null);
+  const handleInlineBankDateSave = useCallback(
+    (row: BankReconBookTransaction, bankDate: string): string | null => {
+      if (!bankDate.trim()) return "Bank Date is required.";
+      const result = reconcileBankDateOnly({
+        bankAccountId: row.bankAccountId,
+        bookTransactionId: row.id,
+        bankDate,
+        remarks: "Bank Date updated inline",
+      });
+      if (!result.ok) return result.error;
+      refresh();
+      setToast({ msg: `Reconciled ${row.voucherNumber} with Bank Date ${bankDate}.`, type: "success" });
+      return null;
     },
-    [filteredTransactions],
+    [refresh],
   );
 
-  const handleReconcileComplete = useCallback(
-    (action: ReconcileSaveAction) => {
-      const prev = selectedTxnId;
-      refreshRegister();
-      if (action !== "skip" && prev) {
-        setTimeout(() => advanceToNextPending(prev), 50);
+  const handleBulkApply = useCallback(() => {
+    if (!accountId) return;
+    if (!bulkBankDate.trim()) {
+      setToast({ msg: "Enter a common Bank Date for selected rows.", type: "error" });
+      return;
+    }
+    if (selectedIds.size === 0) {
+      setToast({ msg: "Select at least one unreconciled row.", type: "error" });
+      return;
+    }
+    const ids = [...selectedIds].filter((id) => {
+      const row = bookById.get(id);
+      return row && row.status !== "RECONCILED";
+    });
+    const result = reconcileBankDateBulk({
+      bankAccountId: accountId,
+      bookTransactionIds: ids,
+      bankDate: bulkBankDate,
+      remarks: "Bulk Bank Date apply",
+    });
+    if (!result.ok) {
+      setToast({ msg: result.error, type: "error" });
+      return;
+    }
+    setSelectedIds(new Set());
+    refresh();
+    setToast({
+      msg: `Applied Bank Date to ${result.saved} row(s)${result.skipped ? ` · ${result.skipped} skipped` : ""}.`,
+      type: "success",
+    });
+  }, [accountId, bulkBankDate, selectedIds, bookById, refresh]);
+
+  const handleResetFilters = useCallback(() => {
+    setSearch("");
+    setStatusFilter("UNRECONCILED");
+    setVoucherTypeFilter("all");
+    setDirectionFilter("all");
+    if (account) {
+      setDateFrom(account.statementPeriodFrom);
+      setDateTo(account.statementPeriodTo);
+    }
+    setBulkBankDate("");
+    setSelectedIds(new Set());
+  }, [account]);
+
+  const openVoucher = useCallback((row: BankReconBookTransaction) => {
+    if (isManualDemoAccount(row.bankAccountId) || row.viewHref.startsWith("#recon-voucher:")) {
+      // Ensure draft display stubs exist, then open Payment/Receipt/Contra view.
+      void import("@/lib/accounts/bank-recon-display").then(({ ensureManualDemoDisplayVouchers }) => {
+        ensureManualDemoDisplayVouchers();
+        router.push(`/accounts/vouchers/view/${row.voucherId}`);
+      });
+      return;
+    }
+    window.open(row.viewHref, "_blank", "noopener,noreferrer");
+  }, [router]);
+
+  const selectablePageIds = useMemo(
+    () => pageRows.filter((row) => row.status !== "RECONCILED").map((row) => row.id),
+    [pageRows],
+  );
+  const allPageSelected = useMemo(
+    () => selectablePageIds.length > 0 && selectablePageIds.every((id) => selectedIds.has(id)),
+    [selectablePageIds, selectedIds],
+  );
+  const handleToggleAll = useCallback(() => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (selectablePageIds.every((id) => next.has(id))) {
+        selectablePageIds.forEach((id) => next.delete(id));
+      } else {
+        selectablePageIds.forEach((id) => next.add(id));
       }
-    },
-    [selectedTxnId, refreshRegister, advanceToNextPending],
-  );
-
-  const handleSkip = useCallback(() => {
-    if (selectedTxnId) advanceToNextPending(selectedTxnId);
-  }, [selectedTxnId, advanceToNextPending]);
-
-  const getCellValue = useCallback(
-    (row: WorkspaceRow, key: string) => (row as unknown as Record<string, unknown>)[key],
-    [],
-  );
-
-  const openReconcile = useCallback((id: string) => {
-    setSelectedTxnId(id);
-    requestAnimationFrame(() => {
-      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      return next;
+    });
+  }, [selectablePageIds]);
+  const handleToggleOne = useCallback((id: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   }, []);
-
-  const selectedTransaction = useMemo(
-    () => (selectedTxnId ? allTransactions.find((t) => t.id === selectedTxnId) ?? null : null),
-    [allTransactions, selectedTxnId],
-  );
+  const handleUndoOpen = useCallback((linkId: string) => setUndoLinkId(linkId), []);
 
   if (!account) {
     return (
@@ -373,92 +333,81 @@ export default function BankReconciliationWorkspacePageClient({
     );
   }
 
-  const statementPeriodLabel = `${account.statementPeriodFrom} — ${account.statementPeriodTo}`;
-
   return (
     <>
-      <AccountsPageShell
-        breadcrumbs={[
-          { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
-          { label: "Banking" },
-          { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
-          { label: account.accountNickname },
-        ]}
-        title="Bank Reconciliation"
-        description={`${account.bankName} · ${maskAccountNumber(account.accountNumber)}`}
-        hideDescription
-        layout="split"
-        className="h-full min-h-0"
-        actions={
+      <div className="bank-recon-dense h-full min-h-0 flex flex-col gap-1 overflow-hidden">
+        <div className="h-8 flex-shrink-0 flex items-center gap-2 min-w-0">
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-8 text-xs gap-1.5"
+            className="h-7 w-7 p-0 flex-shrink-0 border-border/70"
             onClick={() => router.push(RECONCILIATION_LIST_PATH)}
+            aria-label="Back to Bank Reconciliation"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back
           </Button>
-        }
-      >
-        <div className="flex-shrink-0 flex flex-wrap items-end gap-2 pb-2 border-b border-border/60">
-          <div className="space-y-0.5 min-w-[160px]">
-            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Bank Account</Label>
-            <Select value={accountId} onValueChange={(id) => router.push(bankReconWorkspacePath(id))}>
-              <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[180px]")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {allAccounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id} className="text-xs">
-                    {a.accountNickname} · {maskAccountNumber(a.accountNumber)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <h1 className="text-sm font-bold text-foreground whitespace-nowrap">Bank Reconciliation</h1>
+          <span className="text-xs text-muted-foreground truncate">
+            {account.accountNickname} • {maskAccountNumber(account.accountNumber)}
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                aria-label="Reconciliation information"
+              >
+                <Info className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              Reconciliation only updates Bank Date. Amount corrections must be made in the original
+              voucher.
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
-          <div className="space-y-0.5">
-            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Statement Period</Label>
-            <div className="flex items-center gap-1">
+        <div className="flex-shrink-0 flex flex-wrap lg:flex-nowrap items-end gap-2 rounded-lg bg-white px-2 py-1.5 shadow-xs">
+          <div className="space-y-1">
+            <span className="block text-[10px] font-medium text-muted-foreground">Date Range</span>
+            <div className="flex items-center gap-1.5">
               <input
                 type="date"
                 value={dateFrom || account.statementPeriodFrom}
-                onChange={(e) => {
-                  setDateFrom(e.target.value);
-                  setPage(1);
-                }}
-                className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[120px]")}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className={cn(
+                  ACCOUNTS_FILTER_CONTROL_CLASS,
+                  "h-8 mt-0 w-[125px] rounded-lg border-border/70 px-2 text-xs",
+                )}
+                aria-label="Date from"
               />
-              <span className="text-[11px] text-muted-foreground">—</span>
+              <span className="text-[10px] text-muted-foreground">to</span>
               <input
                 type="date"
                 value={dateTo || account.statementPeriodTo}
-                onChange={(e) => {
-                  setDateTo(e.target.value);
-                  setPage(1);
-                }}
-                className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[120px]")}
+                onChange={(e) => setDateTo(e.target.value)}
+                className={cn(
+                  ACCOUNTS_FILTER_CONTROL_CLASS,
+                  "h-8 mt-0 w-[125px] rounded-lg border-border/70 px-2 text-xs",
+                )}
+                aria-label="Date to"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground">{statementPeriodLabel}</p>
           </div>
-
-          <div className="space-y-0.5 min-w-[130px]">
-            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</Label>
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => {
-                setStatusFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-full")}>
+          <div className="space-y-1">
+            <span className="block text-[10px] font-medium text-muted-foreground">Status</span>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger
+                className={cn(
+                  ACCOUNTS_FILTER_CONTROL_CLASS,
+                  "h-8 mt-0 w-[130px] rounded-lg border-border/70 px-2.5 text-xs",
+                )}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {RECON_STATUS_FILTER_OPTIONS.map((o) => (
+                {BANK_RECON_TALLY_STATUS_FILTERS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
                   </SelectItem>
@@ -466,115 +415,405 @@ export default function BankReconciliationWorkspacePageClient({
               </SelectContent>
             </Select>
           </div>
-
-          <ReportSearchFilter
-            value={search}
-            onChange={(v) => {
-              setSearch(v);
-              setPage(1);
-            }}
-            placeholder="Search narration, reference…"
-          />
-
-          <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-            <Link href={BANK_RECON_IMPORT_HISTORY_PATH}>
-              <HistoryIcon className="w-3.5 h-3.5" />
-              Import History
-            </Link>
-          </Button>
-
+          <div className="space-y-1">
+            <span className="block text-[10px] font-medium text-muted-foreground">Voucher Type</span>
+            <Select value={voucherTypeFilter} onValueChange={setVoucherTypeFilter}>
+              <SelectTrigger
+                className={cn(
+                  ACCOUNTS_FILTER_CONTROL_CLASS,
+                  "h-8 mt-0 w-[135px] rounded-lg border-border/70 px-2.5 text-xs",
+                )}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VOUCHER_TYPE_FILTERS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <span className="block text-[10px] font-medium text-muted-foreground">
+              Transaction Type
+            </span>
+            <Select value={directionFilter} onValueChange={setDirectionFilter}>
+              <SelectTrigger
+                className={cn(
+                  ACCOUNTS_FILTER_CONTROL_CLASS,
+                  "h-8 mt-0 w-[150px] rounded-lg border-border/70 px-2.5 text-xs",
+                )}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DIRECTION_FILTERS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 min-w-[180px] flex-1">
+            <span className="block text-[10px] font-medium text-muted-foreground">Search</span>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Voucher, particulars or UTR…"
+                className="h-8 w-full rounded-lg border border-border/70 bg-white pl-8 pr-2.5 text-xs outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200"
+                aria-label="Search transactions"
+              />
+            </div>
+          </div>
           <Button
+            type="button"
             size="sm"
             variant="outline"
-            className="h-8 text-xs gap-1.5"
-            onClick={() => setManualOpen(true)}
+            className="h-8 px-2.5 gap-1.5 flex-shrink-0 rounded-lg border-border/70 text-xs text-muted-foreground"
+            onClick={handleResetFilters}
+            aria-label="Reset filters"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Manual Entry
-          </Button>
-
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={() => setUploadOpen(true)}
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Upload Statement
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
           </Button>
         </div>
 
-        <div className="flex flex-1 min-h-0 gap-0 overflow-hidden">
-          <div className="flex-1 min-w-0 flex flex-col min-h-0 border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-            <AccountsColumnFilterProvider
-              rows={paginatedRows}
-              getCellValue={getCellValue}
-              columnConfig={{
-                statementDate: { type: "date" },
-                narration: { type: "text" },
-                reference: { type: "text" },
-                withdrawal: { type: "amount" },
-                deposit: { type: "amount" },
-                runningBalance: { type: "amount" },
-                reconStatus: { type: "text" },
-              }}
-              defaultSortKey="statementDate"
-              defaultSortDir="desc"
-            >
-              <div className="flex-1 min-h-0 overflow-auto">
-                <StatementTransactionsTable
-                  rows={paginatedRows}
-                  selectedId={selectedTxnId}
-                  onSelect={openReconcile}
-                  onReconcile={openReconcile}
-                  loading={loading}
-                />
-              </div>
-              <div className="flex-shrink-0 border-t border-border bg-muted/20">
-                <AccountsTablePagination
-                  page={page}
-                  pageSize={pageSize}
-                  totalRecords={filteredTransactions.length}
-                  onPageChange={setPage}
-                  onPageSizeChange={(s) => {
-                    setPageSize(s);
-                    setPage(1);
-                  }}
-                  recordLabel="transactions"
-                />
-              </div>
-            </AccountsColumnFilterProvider>
-          </div>
+        {brs && <BankReconBrsSummaryCard key={accountId} summary={brs} />}
 
-          <div ref={panelRef} className="flex-shrink-0 min-h-0">
-            <BankReconReconcilePanel
-              transaction={selectedTransaction}
-              transactionId={selectedTxnId}
-              onComplete={handleReconcileComplete}
-              onSkip={handleSkip}
+        <div className="flex-1 min-h-0 flex flex-col border border-border/70 rounded-lg bg-white overflow-hidden">
+          <div className="h-9 flex-shrink-0 flex items-center gap-3 border-b border-border/60 bg-white px-3">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              <strong className="text-foreground">{filteredBooks.length}</strong>{" "}
+              {statusFilter === "RECONCILED" ? "reconciled" : statusFilter === "all" ? "records" : "pending"}
+            </span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              <strong className="text-foreground">{selectedIds.size}</strong> selected
+            </span>
+            <div className="flex-1" />
+            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+              Bank Date
+            </span>
+            <input
+              type="date"
+              value={bulkBankDate}
+              onChange={(e) => setBulkBankDate(e.target.value)}
+              className="h-8 w-[125px] rounded-lg border border-border/70 bg-white px-2 text-xs"
+              aria-label="Bulk Bank Date"
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 w-[76px] px-2 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border disabled:opacity-100"
+              disabled={selectedIds.size === 0}
+              onClick={handleBulkApply}
+            >
+              <Check className="w-3 h-3" />
+              Apply
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto">
+            {loading ? (
+              <AccountsTable minWidth={1040} className="bank-recon-grid">
+                <AccountsTableHead>
+                  <AccountsTableHeadRow>
+                    {Array.from({ length: 11 }).map((_, i) => (
+                      <AccountsTableHeadCell key={i}>&nbsp;</AccountsTableHeadCell>
+                    ))}
+                  </AccountsTableHeadRow>
+                </AccountsTableHead>
+                <AccountsTableBody>
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <SkeletonRow key={i} cols={11} />
+                  ))}
+                </AccountsTableBody>
+              </AccountsTable>
+            ) : (
+              <BooksTable
+                rows={pageRows}
+                empty={filteredBooks.length === 0}
+                selectedIds={selectedIds}
+                allPageSelected={allPageSelected}
+                onToggleAll={handleToggleAll}
+                onToggleOne={handleToggleOne}
+                onInlineSave={handleInlineBankDateSave}
+                onViewVoucher={openVoucher}
+                onUndo={handleUndoOpen}
+              />
+            )}
+          </div>
+          <div className="bank-recon-pagination flex-shrink-0">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalRecords={filteredBooks.length}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+              recordLabel="rows"
+              variant="compact"
             />
           </div>
         </div>
-      </AccountsPageShell>
+      </div>
 
-      <BankReconUploadDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        bankAccountId={accountId}
-        onImported={() => {
-          refreshRegister();
-          setUploadOpen(false);
+      <BankReconTallyUndoDialog
+        open={!!undoLinkId}
+        onClose={() => setUndoLinkId(null)}
+        linkId={undoLinkId}
+        onDone={() => {
+          refresh();
+          setToast({ msg: "Reconciliation undone. Entry is Unreconciled again.", type: "success" });
         }}
       />
 
-      <BankReconManualEntryDialog
-        open={manualOpen}
-        onClose={() => setManualOpen(false)}
-        bankAccountId={accountId}
-        onCreated={(id) => {
-          refreshRegister();
-          setSelectedTxnId(id);
-        }}
-      />
+      {toast && (
+        <div
+          className={cn(
+            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+            toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+          )}
+        >
+          {toast.msg}
+        </div>
+      )}
     </>
   );
 }
+
+function RowActions({ children }: { children: React.ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="h-7 w-7 inline-flex items-center justify-center hover:bg-muted/60 rounded-md transition-colors"
+          aria-label="More actions"
+          title="More actions"
+        >
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+          Actions
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function BooksTable({
+  rows,
+  empty,
+  selectedIds,
+  allPageSelected,
+  onToggleAll,
+  onToggleOne,
+  onInlineSave,
+  onViewVoucher,
+  onUndo,
+}: {
+  rows: BankReconBookTransaction[];
+  empty: boolean;
+  selectedIds: Set<string>;
+  allPageSelected: boolean;
+  onToggleAll: () => void;
+  onToggleOne: (id: string) => void;
+  onInlineSave: (row: BankReconBookTransaction, bankDate: string) => string | null;
+  onViewVoucher: (row: BankReconBookTransaction) => void;
+  onUndo: (linkId: string) => void;
+}) {
+  return (
+    <AccountsTable minWidth={1040} className="bank-recon-grid table-fixed">
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <AccountsTableHeadCell className="w-9" align="center">
+            <input
+              type="checkbox"
+              className="w-3 h-3 rounded accent-brand-600"
+              checked={allPageSelected}
+              onChange={onToggleAll}
+              aria-label="Select all on page"
+            />
+          </AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[82px]">Voucher Date</AccountsTableHeadCell>
+          <AccountsTableHeadCell>Particulars</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[70px]">Type</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[102px]">Voucher No.</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[112px]">Instrument / UTR</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[88px]" align="right">Deposit</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[88px]" align="right">Withdrawal</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[156px]" align="center">Bank Date</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-[96px]" align="center">Status</AccountsTableHeadCell>
+          <AccountsTableHeadCell className="w-11" align="center">Action</AccountsTableHeadCell>
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {empty ? (
+          <AccountsTableEmpty
+            colSpan={11}
+            message="No book transactions match the current filters."
+          />
+        ) : (
+          rows.map((row) => (
+            <CompactBookRow
+              key={row.id}
+              row={row}
+              selected={selectedIds.has(row.id)}
+              onToggle={onToggleOne}
+              onInlineSave={onInlineSave}
+              onViewVoucher={onViewVoucher}
+              onUndo={onUndo}
+            />
+          ))
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
+const CompactBookRow = memo(function CompactBookRow({
+  row,
+  selected,
+  onToggle,
+  onInlineSave,
+  onViewVoucher,
+  onUndo,
+}: {
+  row: BankReconBookTransaction;
+  selected: boolean;
+  onToggle: (id: string) => void;
+  onInlineSave: (row: BankReconBookTransaction, bankDate: string) => string | null;
+  onViewVoucher: (row: BankReconBookTransaction) => void;
+  onUndo: (linkId: string) => void;
+}) {
+  const isReconciled = row.status === "RECONCILED";
+  const [draft, setDraft] = useState(row.bankDate ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(row.bankDate ?? "");
+    setError(null);
+  }, [row.bankDate]);
+
+  const save = useCallback(() => {
+    const validationError = onInlineSave(row, draft);
+    setError(validationError);
+  }, [draft, onInlineSave, row]);
+
+  return (
+    <AccountsTableRow className={cn("group", selected && "is-selected")}>
+      <AccountsTableCell align="center">
+        <input
+          type="checkbox"
+          className="w-3 h-3 rounded accent-brand-600"
+          disabled={isReconciled}
+          checked={selected}
+          onChange={() => onToggle(row.id)}
+          aria-label={`Select ${row.voucherNumber}`}
+        />
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap tabular-nums">{row.voucherDate}</AccountsTableCell>
+      <AccountsTableCell className="min-w-0">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="block w-full truncate text-left text-[12px] font-medium text-foreground hover:text-brand-700"
+              onClick={() => onViewVoucher(row)}
+            >
+              {row.particulars}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-sm">
+            {row.particulars}
+          </TooltipContent>
+        </Tooltip>
+      </AccountsTableCell>
+      <AccountsTableCell className="truncate" title={row.voucherType}>
+        {row.voucherType}
+      </AccountsTableCell>
+      <AccountsTableCell mono className="truncate text-brand-700" title={row.voucherNumber}>
+        {row.voucherNumber}
+      </AccountsTableCell>
+      <AccountsTableCell className="truncate font-mono text-[10px]" title={row.instrumentNumber || ""}>
+        {row.instrumentNumber || "—"}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" money>{moneyOrDash(row.deposit)}</AccountsTableCell>
+      <AccountsTableCell align="right" money>{moneyOrDash(row.withdrawal)}</AccountsTableCell>
+      <AccountsTableCell align="center">
+        {isReconciled ? (
+          <span className="text-[11px] font-medium tabular-nums whitespace-nowrap">{row.bankDate ?? "—"}</span>
+        ) : (
+          <div className="flex items-center justify-center gap-1" title={error ?? undefined}>
+            <input
+              type="date"
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  save();
+                }
+              }}
+              className={cn(
+                "h-[30px] w-[120px] rounded-lg border bg-white px-2 text-[11px] tabular-nums outline-none focus:ring-1",
+                error
+                  ? "border-red-400 focus:ring-red-200"
+                  : "border-border focus:border-brand-400 focus:ring-brand-200",
+              )}
+              aria-invalid={!!error}
+              aria-label={`Bank Date for ${row.voucherNumber}`}
+            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={!draft}
+                  className={cn(
+                    "h-7 w-7 inline-flex flex-shrink-0 items-center justify-center rounded-md text-brand-700 hover:bg-brand-50",
+                    !draft && "invisible pointer-events-none",
+                  )}
+                  aria-label={`Save reconciliation for ${row.voucherNumber}`}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Save reconciliation</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+      </AccountsTableCell>
+      <AccountsTableCell align="center">
+        <BankReconTallyStatusBadge status={isReconciled ? "RECONCILED" : "UNRECONCILED"} />
+      </AccountsTableCell>
+      <AccountsTableCell align="center">
+        <RowActions>
+          <DropdownMenuItem onClick={() => onViewVoucher(row)}>View Details</DropdownMenuItem>
+          {row.editHref && (
+            <DropdownMenuItem asChild>
+              <Link href={row.editHref}>Edit Voucher</Link>
+            </DropdownMenuItem>
+          )}
+          {isReconciled && row.linkId && (
+            <DropdownMenuItem onClick={() => onUndo(row.linkId!)}>Undo Reconciliation</DropdownMenuItem>
+          )}
+        </RowActions>
+      </AccountsTableCell>
+    </AccountsTableRow>
+  );
+});

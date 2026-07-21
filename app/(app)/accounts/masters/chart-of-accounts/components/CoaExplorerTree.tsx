@@ -2,7 +2,7 @@
 
 import React, { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Lock, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import type { ChartOfAccount } from "../../../data";
 import {
   canAddLedgerUnder,
@@ -10,10 +10,17 @@ import {
   canDeleteGroup,
   canEditGroup,
   countLedgersUnder,
+  getLedgerDeleteBlockReason,
   getSearchVisibleIds,
   nodeMatchesSearch,
   saveChartOfAccounts,
 } from "../chart-of-accounts-data";
+import {
+  isCustomerOrSupplierLinkedLedger,
+  resolveCoaMasterLink,
+} from "@/lib/accounts/coa-master-link";
+import { removeErpPartyLink } from "@/lib/accounts/erp-party-links";
+import { deleteLedgerMeta } from "@/lib/accounts/ledger-metadata";
 import { coaTreeNodeHasChildren, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import {
   canCoaSidebarAddLedgerUnder,
@@ -30,6 +37,10 @@ import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } fro
 import { requestCoaEditLedger } from "../coa-edit-ledger-bridge";
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaLevelBadge } from "./CoaLevelBadge";
+import {
+  CoaSystemManagedLock,
+  isSystemManagedStatutoryNode,
+} from "./CoaSystemManagedLock";
 import {
   LEVEL_SELECTED_ROW_CLASS,
   COA_TREE_CHEVRON_WIDTH_CLASS,
@@ -106,7 +117,7 @@ const TreeNode = memo(function TreeNodeComponent({
   const Icon = resolveCoaSidebarIcon(node, visualLevel, records);
   const isLedger = node.nodeLevel === "ledger";
   const isPrimaryHead = node.nodeLevel === "primary_head";
-  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
+  const isStatutoryManaged = isSystemManagedStatutoryNode(node);
   const hasChildren = isSidebar
     ? coaSidebarNodeHasChildren(records, node.id)
     : coaTreeNodeHasChildren(records, node.id);
@@ -135,7 +146,7 @@ const TreeNode = memo(function TreeNodeComponent({
       canAddLedgerUnder(node, records) &&
       !isAddLedgerBlocked(node, records);
   const allowEdit = isSidebar
-    ? canEdit && canCoaSidebarEditNode(node)
+    ? canEdit && canCoaSidebarEditNode(node, records)
     : canEdit && canEditGroup(node);
   const allowDelete = isSidebar
     ? canEdit && canCoaSidebarDeleteNode(node, records)
@@ -149,8 +160,17 @@ const TreeNode = memo(function TreeNodeComponent({
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
   const handleClick = () => {
+    // #region agent log
+    if (isLedger) {
+      const link = resolveCoaMasterLink(node, records);
+      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-A',location:'CoaExplorerTree.tsx:handleClick',message:'Tree ledger node clicked',data:{nodeId:node.id,name:node.accountName,nodeLevel:node.nodeLevel,hasOnLedgerOpen:Boolean(onLedgerOpen),linkCategory:link?.category??null,masterHref:link?.masterHref??null,erpSourceModule:node.erpSourceModule??null,erpSourceId:node.erpSourceId??null},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
+    if (isLedger && onLedgerOpen) {
+      onLedgerOpen(node);
+      return;
+    }
     onSelect(node);
-    if (isLedger && onLedgerOpen) onLedgerOpen(node);
   };
 
   return (
@@ -246,15 +266,15 @@ const TreeNode = memo(function TreeNodeComponent({
                 )}
               >
                 {node.accountName}
-                {isSystemLocked && (
-                  <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
-                )}
                 {!isLedger && ledgerCount > 0 && (
                   <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums whitespace-nowrap">
                     ({ledgerCount})
                   </span>
                 )}
               </span>
+            )}
+            {isStatutoryManaged && (
+              <CoaSystemManagedLock className="mx-0.5 shrink-0" />
             )}
             {!isSidebar && (
               <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0" />
@@ -348,16 +368,41 @@ export function CoaExplorerTree({
   onRecordsChange,
 }: CoaExplorerTreeProps) {
   const [deleteTarget, setDeleteTarget] = useState<ChartOfAccount | null>(null);
+  const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(null);
   const isSidebar = variant === "sidebar";
 
   const handleDeleteLedger = (ledgerId: number) => {
     const ledger = records.find((r) => r.id === ledgerId);
     if (!ledger || !canCoaSidebarDeleteNode(ledger, records)) return;
+    const block = getLedgerDeleteBlockReason(ledger, records);
+    if (block) {
+      setDeleteBlockReason(block);
+      setDeleteTarget(ledger);
+      return;
+    }
+    setDeleteBlockReason(null);
     setDeleteTarget(ledger);
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteTarget(null);
+    setDeleteBlockReason(null);
   };
 
   const confirmDeleteLedger = () => {
     if (!deleteTarget) return;
+    const block = getLedgerDeleteBlockReason(deleteTarget, records);
+    if (block) {
+      setDeleteBlockReason(block);
+      return;
+    }
+
+    const link = resolveCoaMasterLink(deleteTarget, records);
+    if (link && (link.category === "customer" || link.category === "vendor")) {
+      removeErpPartyLink(link.sourceModule, link.sourceId);
+    }
+    deleteLedgerMeta(deleteTarget.id);
+
     const next = records.filter((r) => r.id !== deleteTarget.id);
     saveChartOfAccounts(next);
     onRecordsChange?.(next);
@@ -365,7 +410,7 @@ export function CoaExplorerTree({
       operation: "delete",
       recordId: deleteTarget.id,
     });
-    setDeleteTarget(null);
+    closeDeleteDialog();
   };
 
   const roots = useMemo(
@@ -434,37 +479,66 @@ export function CoaExplorerTree({
       </div>
 
       {isSidebar && (
-        <Dialog open={deleteTarget != null} onOpenChange={() => setDeleteTarget(null)}>
+        <Dialog open={deleteTarget != null} onOpenChange={() => closeDeleteDialog()}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
-                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border",
+                    deleteBlockReason
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-red-50 border-red-200",
+                  )}
+                >
+                  <AlertTriangle
+                    className={cn(
+                      "w-4 h-4",
+                      deleteBlockReason ? "text-amber-500" : "text-red-500",
+                    )}
+                  />
                 </div>
-                Delete ledger?
+                {deleteBlockReason ? "Cannot delete ledger" : "Delete ledger?"}
               </DialogTitle>
               <DialogDescription className="pt-1">
-                {deleteTarget
-                  ? `"${deleteTarget.accountName}" will be removed from the chart of accounts. This cannot be undone.`
-                  : ""}
+                {deleteBlockReason
+                  ? deleteBlockReason
+                  : deleteTarget
+                    ? isCustomerOrSupplierLinkedLedger(deleteTarget, records)
+                      ? `"${deleteTarget.accountName}" is linked to a customer/supplier master. Removing it from the chart of accounts cannot be undone.`
+                      : `"${deleteTarget.accountName}" will be removed from the chart of accounts. This cannot be undone.`
+                    : ""}
               </DialogDescription>
             </DialogHeader>
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
-                onClick={confirmDeleteLedger}
-              >
-                Delete
-              </Button>
+              {deleteBlockReason ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={closeDeleteDialog}
+                >
+                  Close
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={closeDeleteDialog}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    onClick={confirmDeleteLedger}
+                  >
+                    Delete
+                  </Button>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>

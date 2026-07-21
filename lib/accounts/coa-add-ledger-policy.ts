@@ -26,11 +26,13 @@ export interface CoaAddLedgerPolicy {
   alternatives: CoaAddLedgerAlternative[];
 }
 
-export const SUNDRY_DEBTORS_GROUP_NAME = "Trade Receivables / Sundry Debtors";
+/** L3 group for customer / party receivable ledgers (Indian COA). */
+export const SUNDRY_DEBTORS_GROUP_NAME = "Sundry Debtors";
 export const SUNDRY_DEBTORS_ADD_LEDGER_HREF =
   "/accounts/masters/chart-of-accounts/sundry-debtors/new";
 
-export const SUNDRY_CREDITORS_GROUP_NAME = "Trade Payables / Sundry Creditors";
+/** L3 group for vendor / party payable ledgers (Indian COA). */
+export const SUNDRY_CREDITORS_GROUP_NAME = "Sundry Creditors";
 export const SUNDRY_CREDITORS_ADD_LEDGER_HREF =
   "/accounts/masters/chart-of-accounts/sundry-creditors/new";
 
@@ -40,7 +42,7 @@ export const LAND_BUILDING_ADD_WAREHOUSE_HREF =
 
 export const TDS_ADD_LEDGER_HREF = "/accounts/masters/chart-of-accounts/tds/new";
 
-/** True when the node is (or sits under) Trade Receivables / Sundry Debtors. */
+/** True when the node is (or sits under) Sundry Debtors. */
 export function isSundryDebtorsGroup(
   node: ChartOfAccount,
   records: ChartOfAccount[],
@@ -48,7 +50,7 @@ export function isSundryDebtorsGroup(
   return resolveCoaLedgerBehavior(node, records).kind === "customer";
 }
 
-/** True when the node is (or sits under) Trade Payables / Sundry Creditors. */
+/** True when the node is (or sits under) Sundry Creditors. */
 export function isSundryCreditorsGroup(
   node: ChartOfAccount,
   records: ChartOfAccount[],
@@ -88,11 +90,10 @@ export function landBuildingAddWarehouseHref(parentGroupId?: number | null): str
 
 /** Primary add action label for COA toolbar / node detail. */
 export function resolveCoaAddActionLabel(
-  node: ChartOfAccount,
-  records: ChartOfAccount[],
+  _node: ChartOfAccount,
+  _records: ChartOfAccount[],
 ): string {
-  const behavior = resolveCoaLedgerBehavior(node, records);
-  return behavior.kind === "generic" ? "Add Ledger" : `Add ${behavior.label}`;
+  return "Add Ledger";
 }
 
 export function sundryCreditorsAddLedgerHref(parentGroupId?: number | null): string {
@@ -109,13 +110,15 @@ export function sundryDebtorsAddLedgerHref(parentGroupId?: number | null): strin
   return SUNDRY_DEBTORS_ADD_LEDGER_HREF;
 }
 
+/**
+ * Users may create Level-4 ledgers under any eligible Level-3 subgroup.
+ * Customers, suppliers, products, warehouses, GST rates, and TDS sections are
+ * not created as separate COA ledgers — they stay in ERP Masters.
+ */
 export function resolveCoaAddLedgerPolicy(
-  node: ChartOfAccount,
-  records: ChartOfAccount[],
+  _node: ChartOfAccount,
+  _records: ChartOfAccount[],
 ): CoaAddLedgerPolicy {
-  // Form ownership is resolved separately by the centralized behavior table.
-  // A specialized group must never silently fall back to the generic form.
-  resolveCoaLedgerBehavior(node, records);
   return { blocked: false, alternatives: [] };
 }
 

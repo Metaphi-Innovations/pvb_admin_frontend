@@ -21,8 +21,9 @@ import {
   demoDocNo,
   demoTimestamp,
 } from "@/lib/accounts/demo-date-utils";
+import { getCostPriceBySku, resolveSku } from "@/lib/accounts/inventory-accounting-data";
 
-export const SALES_INVOICE_SEED_VERSION = 5;
+export const SALES_INVOICE_SEED_VERSION = 10;
 
 
 
@@ -538,7 +539,303 @@ export function buildSalesInvoiceSeed(): InvoiceRecord[] {
         updatedAt: demoTimestamp(invoiceDate),
       } satisfies InvoiceRecord;
     })(),
-  ];
+    // Sample order invoices — distinct dispatch nos so Pending Invoices is unchanged
+    buildSeedInvoice(
+      110,
+      demoDocNo("INV", 10),
+      "sales",
+      demoDateAt(2),
+      "SM-2024-001",
+      `DSP-SM-GEN-${y}-001`,
+      "Rajesh Kumar (TM)",
+      0,
+      0,
+      0,
+      "sent",
+      "Demo Sample Kit A",
+      0,
+      false,
+      "Maharashtra",
+    ),
+    buildSeedInvoice(
+      111,
+      demoDocNo("INV", 11),
+      "sales",
+      demoDateAt(4),
+      "SMP-2024-003",
+      `DSP-SM-GEN-${y}-002`,
+      "Vikram Das (Intern)",
+      0,
+      0,
+      0,
+      "sent",
+      "Training Sample Pack",
+      0,
+      false,
+      "Maharashtra",
+    ),
+    buildSeedInvoice(
+      112,
+      demoDocNo("INV", 12),
+      "sales",
+      demoDateAt(6),
+      "SM-2024-004",
+      `DSP-SM-GEN-${y}-003`,
+      "Priya Singh (ASM)",
+      0,
+      0,
+      0,
+      "sent",
+      "Event Display Samples",
+      0,
+      false,
+      "Maharashtra",
+    ),
+    (() => {
+      const invoiceDate = demoDateAt(1);
+      const svcLine = recalculateLineItem({
+        id: "seed-svc-1",
+        productId: null,
+        productName: "Field Advisory Service",
+        description: "Monthly agri advisory retainer",
+        hsn: "998314",
+        qty: 1,
+        unit: "Job",
+        unitPrice: 15000,
+        discountPct: 0,
+        taxPct: 18,
+        amount: 0,
+      });
+      return {
+        id: 113,
+        invoiceNo: `SVC/${y}-${String(1).padStart(4, "0")}`,
+        invoiceType: "sales" as InvoiceDocumentType,
+        invoiceDate,
+        dueDate: invoiceDate,
+        referenceNo: `SVC-REF-${y}-001`,
+        remarks: "Service invoice demo",
+        customerId: 1,
+        customerName: "ABC Agro Distributor",
+        customerMobile: "",
+        customerEmail: "",
+        customerGst: "27AABCT1234F1ZA",
+        customerGstCategory: "regular",
+        billingAddress: "ABC Agro Distributor",
+        lineItems: [svcLine],
+        subtotal: 15000,
+        discountTotal: 0,
+        taxAmount: 2700,
+        grandTotal: 17700,
+        amountReceived: 0,
+        balanceAmount: 17700,
+        salesOrderNo: "",
+        dispatchNo: "",
+        sourceType: "service" as const,
+        branch: "Head Office",
+        warehouse: "",
+        gstTreatment: "intrastate",
+        placeOfSupply: "Maharashtra",
+        state: "Maharashtra",
+        invoiceStatus: "sent" as const,
+        paymentStatus: "unpaid" as const,
+        collections: [],
+        attachments: [],
+        activity: [
+          {
+            at: demoTimestamp(invoiceDate),
+            action: "created",
+            by: ACCOUNTS_CURRENT_USER,
+            detail: "Service invoice created",
+          },
+        ],
+        createdBy: ACCOUNTS_CURRENT_USER,
+        updatedBy: ACCOUNTS_CURRENT_USER,
+        createdAt: demoTimestamp(invoiceDate),
+        updatedAt: demoTimestamp(invoiceDate),
+        eInvoiceStatus: "generated" as const,
+        eInvoiceNo: `EINV-SVC-${y}-0001`,
+        irn: `IRN-SVC-${y}-DEMO-0001`,
+        acknowledgementNo: `ACK-SVC-${y}-01`,
+        acknowledgementDate: invoiceDate,
+        eInvoiceGeneratedAt: demoTimestamp(invoiceDate),
+        qrCodeAvailable: true,
+        ewayBillStatus: "not_applicable" as const,
+      } satisfies InvoiceRecord;
+    })(),
+  ].map(applyStatutoryDemoFields);
+}
+
+function applyStatutoryDemoFields(inv: InvoiceRecord): InvoiceRecord {
+  const ts = inv.createdAt || demoTimestamp(inv.invoiceDate);
+  const byId: Record<number, Partial<InvoiceRecord>> = {
+    101: {
+      sourceType: "sales_order",
+      customerGst: "27AABCU9603R1ZX",
+      billingAddress: "Reliance Agri, Plot 12, MIDC, Pune, Maharashtra 411019",
+      shippingAddress: "Reliance Agri Warehouse, Pune, Maharashtra 411019",
+      eInvoiceStatus: "generated",
+      eInvoiceNo: "EINV-2026-000101",
+      irn: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      acknowledgementNo: "ACK-101-2026",
+      acknowledgementDate: inv.invoiceDate,
+      eInvoiceGeneratedAt: ts,
+      qrCodeAvailable: true,
+      ewayBillStatus: "generated",
+      ewayBillNo: "EWB381234567890",
+      ewayBillGeneratedAt: ts,
+      ewayBillExpiryDate: inv.invoiceDate,
+      vehicleNo: "MH-12-AB-1234",
+      transporterName: "Blue Dart Logistics",
+      transportMode: "Road",
+      productDiscountTurnoverEligible: false,
+      productDiscountExclusionReason:
+        "Transactions under Monsoon Offer are excluded from Annual Turnover Scheme",
+    },
+    102: {
+      sourceType: "sales_order",
+      eInvoiceStatus: "generated",
+      eInvoiceNo: "EINV-2026-000102",
+      irn: "b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef1234567a",
+      acknowledgementNo: "ACK-102-2026",
+      acknowledgementDate: inv.invoiceDate,
+      eInvoiceGeneratedAt: ts,
+      qrCodeAvailable: true,
+      ewayBillStatus: "not_generated",
+    },
+    103: {
+      sourceType: "sales_order",
+      eInvoiceStatus: "failed",
+      eInvoiceGeneratedAt: ts,
+      ewayBillStatus: "not_generated",
+    },
+    104: {
+      sourceType: "stock_transfer",
+      eInvoiceStatus: "cancelled",
+      eInvoiceNo: "EINV-STI-000104",
+      irn: "cancelled-irn-104",
+      acknowledgementNo: "ACK-104",
+      acknowledgementDate: inv.invoiceDate,
+      eInvoiceGeneratedAt: ts,
+      eInvoiceCancelledAt: ts,
+      eInvoiceCancelledReason: "Incorrect destination GSTIN",
+      qrCodeAvailable: false,
+      ewayBillStatus: "cancelled",
+      ewayBillNo: "EWB381111111111",
+      ewayBillGeneratedAt: ts,
+      ewayBillExpiryDate: inv.invoiceDate,
+      ewayBillCancelledAt: ts,
+      ewayBillCancelledReason: "Vehicle changed — regenerate required",
+      vehicleNo: "GJ-01-ST-4401",
+      transporterName: "Gati Express",
+      transportMode: "Road",
+    },
+    105: {
+      sourceType: "stock_transfer",
+      eInvoiceStatus: "not_generated",
+      ewayBillStatus: "expired",
+      ewayBillNo: "EWB389999999999",
+      ewayBillGeneratedAt: ts,
+      ewayBillExpiryDate: demoDateAt(30),
+      vehicleNo: "MH-14-ST-7707",
+      transporterName: "VRL Logistics",
+      transportMode: "Road",
+    },
+    106: {
+      sourceType: "sales_order",
+      eInvoiceStatus: "not_generated",
+      ewayBillStatus: "failed",
+    },
+    110: {
+      sourceType: "sample_order",
+      eInvoiceStatus: "not_applicable",
+      ewayBillStatus: "not_applicable",
+      documentType: "proforma_invoice",
+      invoiceType: "sample_order",
+    },
+    111: {
+      sourceType: "sample_order",
+      eInvoiceStatus: "not_applicable",
+      ewayBillStatus: "not_applicable",
+      documentType: "proforma_invoice",
+      invoiceType: "sample_order",
+    },
+    112: {
+      sourceType: "sample_order",
+      eInvoiceStatus: "not_applicable",
+      ewayBillStatus: "not_applicable",
+      documentType: "proforma_invoice",
+      invoiceType: "sample_order",
+    },
+  };
+
+  const patch = byId[inv.id];
+  if (!patch) {
+    return {
+      ...inv,
+      eInvoiceStatus: inv.eInvoiceStatus ?? "not_generated",
+      ewayBillStatus: inv.ewayBillStatus ?? "not_generated",
+    };
+  }
+  const merged: InvoiceRecord = { ...inv, ...patch };
+  if (merged.id === 101) {
+    return {
+      ...merged,
+      customerGst: merged.customerGst?.trim() || "27AABCU9603R1ZX",
+      lineItems: merged.lineItems.map((l) => ({
+        ...l,
+        productId: l.productId ?? 5,
+        productCode: l.productCode?.trim() || "FERT-000002",
+        hsn: l.hsn?.trim() || "3102",
+        batchNo: l.batchNo?.trim() || "UREA-B-2026-01",
+        manufacturingDate: l.manufacturingDate || "2025-11-01",
+        expiryDate: l.expiryDate || "2027-10-31",
+        qtyInCase: l.qtyInCase ?? 50,
+        unit: l.unit || "Bag",
+        salesperson: l.salesperson?.trim() || "Rajesh Kumar",
+        schemeApplied: "Yes" as const,
+        schemeCode: "SCH-MON-001",
+        schemeName: "Monsoon Product Offer",
+        schemeDiscountType: "Percentage" as const,
+        schemeDiscountPercent:
+          l.schemeDiscountPercent != null && l.schemeDiscountPercent > 0
+            ? l.schemeDiscountPercent
+            : l.discountPct > 0
+              ? l.discountPct
+              : 5,
+        /** Keep stored discountPct / totals unchanged; view derives display amount from scheme %. */
+      })),
+    };
+  }
+  if (
+    merged.sourceType === "sample_order" ||
+    merged.invoiceType === "sample_order"
+  ) {
+    return {
+      ...merged,
+      paymentStatus: "paid",
+      grandTotal: 0,
+      balanceAmount: 0,
+      taxAmount: 0,
+      subtotal: 0,
+      lineItems: merged.lineItems.map((l) => {
+        const sku = resolveSku(l.productName, l.productCode);
+        const costPrice =
+          typeof l.costPrice === "number" && l.costPrice > 0
+            ? l.costPrice
+            : getCostPriceBySku(sku, l.productName);
+        return {
+          ...l,
+          unitPrice: 0,
+          amount: 0,
+          discountPct: l.discountPct > 0 ? l.discountPct : 100,
+          costPrice,
+          cpMissing: !(costPrice > 0),
+          costPriceSource: costPrice > 0 ? `Pricing Master · ${sku} · CP` : "Pricing Master (not found)",
+        };
+      }),
+    };
+  }
+  return merged;
 }
 
 /** @deprecated Use buildSalesInvoiceSeed() — kept for static analysis */

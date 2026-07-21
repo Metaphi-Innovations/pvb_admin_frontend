@@ -9,6 +9,7 @@ import {
   type ChartOfAccount,
 } from "../data";
 import {
+  DEFAULT_LEDGER_FORM,
   formToLedger,
   generateLedgerCode,
   getValidLedgerParents,
@@ -933,7 +934,7 @@ function defaultParentForAccountType(
   const parents = getValidLedgerParents(records);
   const preferredNames: Partial<Record<AccountType, string[]>> = {
     Asset: ["Bank Accounts", "Cash-in-Hand", "Other Current Assets"],
-    Liability: ["Other Current Liabilities", "Trade Payables / Sundry Creditors"],
+    Liability: ["Other Current Liabilities", "Sundry Creditors", "Trade Payables / Sundry Creditors"],
     Income: ["Miscellaneous Income", "Sales"],
     Expense: ["Miscellaneous Expenses", "Bank Charges"],
     Equity: ["Other Current Liabilities"],
@@ -955,25 +956,20 @@ export function createLedgerQuick(input: {
   const records = loadChartOfAccounts();
   const parentGroupId = input.parentGroupId ?? defaultParentForAccountType(records, input.accountType);
   const form: LedgerFormValues = {
+    ...DEFAULT_LEDGER_FORM,
     ledgerName: input.ledgerName.trim(),
-    alias: "",
-    description: "",
     parentGroupId,
-    openingBalance: "0",
     balanceType:
       input.accountType === "Liability" || input.accountType === "Income" ? "Credit" : "Debit",
-    gstApplicable: false,
-    tdsApplicable: false,
-    costCenterApplicable: false,
-    bankAccountFlag: input.accountType === "Asset",
-    bankGroupFlag: false,
-    status: "active",
   };
   const err = validateLedgerForm(form, records);
   if (err) throw new Error(err);
   const ledgers = getCoaLedgers();
   const id = nextId(ledgers);
-  const ledger = formToLedger(form, id, generateLedgerCode(records), records);
+  const ledger = {
+    ...formToLedger(form, id, generateLedgerCode(records), records),
+    bankAccountFlag: input.accountType === "Asset",
+  };
   const next = [...records, ledger];
   saveChartOfAccounts(next);
   return ledger;

@@ -13,43 +13,30 @@ import {
   type TDSMaster,
 } from "@/app/(app)/masters/tds/tds-data";
 import {
-  formatTdsSectionLedgerName,
   syncTdsCoaFromMaster,
-  TDS_ERP_SOURCE,
+  TDS_PAYABLE_GROUP,
+  TDS_RECEIVABLE_GROUP,
   tdsLedgerKindAlias,
   type TdsLedgerKind,
 } from "@/lib/accounts/tds-coa-sync";
 
-export { TDS_RECEIVABLE_GROUP, TDS_PAYABLE_GROUP } from "@/lib/accounts/tds-coa-sync";
+export { TDS_RECEIVABLE_GROUP, TDS_PAYABLE_GROUP };
 
 /** Sync TDS Master → COA ledgers. */
 export function ensureTdsAccountingLedgers(): void {
   syncTdsCoaFromMaster();
 }
 
-function findTdsLedgerByMaster(
+function findCanonicalTdsLedger(
   records: ChartOfAccount[],
-  masterId: number,
   kind: TdsLedgerKind,
 ): ChartOfAccount | undefined {
+  const name = kind === "receivable" ? TDS_RECEIVABLE_GROUP : TDS_PAYABLE_GROUP;
   return records.find(
     (r) =>
       r.nodeLevel === "ledger" &&
-      r.erpSourceModule === TDS_ERP_SOURCE &&
-      r.erpSourceId === masterId &&
       r.alias === tdsLedgerKindAlias(kind) &&
-      r.status === "active",
-  );
-}
-
-function findTdsLedgerByName(
-  records: ChartOfAccount[],
-  name: string,
-): ChartOfAccount | undefined {
-  return records.find(
-    (r) =>
-      r.nodeLevel === "ledger" &&
-      r.accountName.toLowerCase() === name.toLowerCase() &&
+      r.accountName === name &&
       r.status === "active",
   );
 }
@@ -69,11 +56,7 @@ function resolveTdsLedger(kind: TdsLedgerKind, master: TDSMaster): ChartOfAccoun
   if (!sectionCode) return null;
 
   const records = loadChartOfAccounts();
-  const linked = findTdsLedgerByMaster(records, master.id, kind);
-  if (linked) return linked;
-
-  const name = formatTdsSectionLedgerName(sectionCode, master.sectionName);
-  return findTdsLedgerByName(records, name) ?? null;
+  return findCanonicalTdsLedger(records, kind) ?? null;
 }
 
 /** Resolve TDS Payable ledger for a TDS section (by master id or section code). */

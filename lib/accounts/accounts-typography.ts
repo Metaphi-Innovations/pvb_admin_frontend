@@ -2,15 +2,14 @@
  * Accounts module typography — use these classes/constants only under `/accounts/**`
  * and `components/accounts/**`. Do not use in other ERP modules.
  *
- * Compact scale (aligned with voucher entry forms):
- * - Page title: text-lg (18px)
- * - Section / card title: text-sm (14px)
- * - Tabs / sidebar: text-xs (12px)
- * - Form labels: text-xs (12px)
- * - Form inputs / body: text-[13px]
- * - Buttons / filters: h-8, text-xs / 13px
- * - Table header / data / badges / helper: text-xs (12px)
- * - Micro / balance hints: text-[11px]
+ * Dense enterprise scale (Bank Reconciliation reference):
+ * - Page title: ~17px
+ * - Subtitle / filter labels: 10–11px
+ * - Filter controls / buttons: h-8 (32px), 12px text
+ * - Table header: 11px semibold
+ * - Table body: 12px
+ * - KPI value: ~15px · KPI label: 10px
+ * - Pagination footer: compact (~22px controls)
  */
 
 /** Page title — 18px semibold */

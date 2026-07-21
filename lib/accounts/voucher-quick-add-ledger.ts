@@ -41,7 +41,11 @@ export type VoucherLedgerScope =
   | "payment_debit";
 
 const VOUCHER_QUICK_ADD_OVERRIDE_BLOCKED = new Set([
+  "Sundry Debtors",
+  "Accounts Receivable",
   "Trade Receivables / Sundry Debtors",
+  "Sundry Creditors",
+  "Accounts Payable",
   "Trade Payables / Sundry Creditors",
   "Bank Accounts",
   "Cash-in-Hand",
@@ -332,8 +336,10 @@ function isPurchaseOrInventoryLedger(ledger: ChartOfAccount, records: ChartOfAcc
 function isDutiesTaxesLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): boolean {
   const names = ledgerPathNamesLower(ledger, records);
   return (
+    ledgerHasAncestorNamed(ledger, "Duties & Taxes", records) ||
     ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records) ||
     ledgerHasAncestorNamed(ledger, "GST Payable", records) ||
+    ledgerHasAncestorNamed(ledger, "GST Input Credit", records) ||
     ledgerHasAncestorNamed(ledger, "GST Input", records) ||
     ledgerHasAncestorNamed(ledger, "GST Output", records) ||
     ledgerHasAncestorNamed(ledger, "TDS Payable", records) ||
@@ -461,8 +467,9 @@ function isGstPayableLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): 
   }
   return (
     ledgerHasAncestorNamed(ledger, "GST Payable", records) ||
+    ledgerHasAncestorNamed(ledger, "Duties & Taxes", records) ||
     ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records) ||
-    namesIncludeAny(names, ["gst payable", "cgst payable", "sgst payable", "igst payable", "output cgst", "output sgst", "output igst"])
+    namesIncludeAny(names, ["gst payable", "cgst payable", "sgst payable", "igst payable", "cgst output", "sgst output", "igst output", "output cgst", "output sgst", "output igst"])
   );
 }
 
@@ -739,11 +746,15 @@ export function ledgerMatchesVoucherScope(
       return ledgerMatchesPaymentCreditScope(ledger, records);
     case "party_receivable":
       return (
+        ledgerHasAncestorNamed(ledger, "Sundry Debtors", records) ||
+        ledgerHasAncestorNamed(ledger, "Accounts Receivable", records) ||
         ledgerHasAncestorNamed(ledger, "Trade Receivables / Sundry Debtors", records) ||
         ledger.erpSourceModule === "customer_master"
       );
     case "party_payable":
       return (
+        ledgerHasAncestorNamed(ledger, "Sundry Creditors", records) ||
+        ledgerHasAncestorNamed(ledger, "Accounts Payable", records) ||
         ledgerHasAncestorNamed(ledger, "Trade Payables / Sundry Creditors", records) ||
         ledger.erpSourceModule === "vendor_master"
       );
@@ -752,7 +763,10 @@ export function ledgerMatchesVoucherScope(
     case "income":
       return ledger.accountType === "Income" || ledgerUnderIncome(ledger, records);
     case "tax":
-      return ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records);
+      return (
+        ledgerHasAncestorNamed(ledger, "Duties & Taxes", records) ||
+        ledgerHasAncestorNamed(ledger, "Duties & Taxes Payable", records)
+      );
     case "loan_advance":
       return (
         ledgerHasAncestorNamed(ledger, "Loans & Advances", records) ||
@@ -820,7 +834,6 @@ export function createVoucherQuickAddLedger(form: LedgerFormValues): ChartOfAcco
   const normalized: LedgerFormValues = {
     ...form,
     ledgerName: form.ledgerName.trim(),
-    bankAccountFlag: isBankParent || form.bankAccountFlag,
     balanceType:
       form.balanceType ||
       defaultBalanceTypeForParent(records, form.parentGroupId),
@@ -828,7 +841,10 @@ export function createVoucherQuickAddLedger(form: LedgerFormValues): ChartOfAcco
 
   const ledgers = getCoaLedgers();
   const id = nextId(ledgers);
-  const ledger = formToLedger(normalized, id, generateLedgerCode(records), records);
+  const ledger = {
+    ...formToLedger(normalized, id, generateLedgerCode(records), records),
+    bankAccountFlag: isBankParent,
+  };
   saveChartOfAccounts([...records, ledger]);
   dispatchAccountsDataChanged("ledgers", {
     operation: "create",

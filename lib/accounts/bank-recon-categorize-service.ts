@@ -136,9 +136,9 @@ function resolvePartyLedger(input: BankReconCategorizeFormInput): { id: number; 
 function findGstLedger(component: string): number | null {
   const records = loadChartOfAccounts();
   const hints: Record<string, string[]> = {
-    CGST: ["CGST Payable", "Output CGST"],
-    SGST: ["SGST Payable", "Output SGST"],
-    IGST: ["IGST Payable", "Output IGST"],
+    CGST: ["CGST Output", "CGST Payable", "Output CGST"],
+    SGST: ["SGST Output", "SGST Payable", "Output SGST"],
+    IGST: ["IGST Output", "IGST Payable", "Output IGST"],
     CESS: ["CESS Payable", "CESS"],
   };
   for (const hint of hints[component] ?? []) {

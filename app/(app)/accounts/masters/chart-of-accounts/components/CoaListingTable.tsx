@@ -1,10 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo } from "react";
-import { BookOpen, Lock } from "lucide-react";
+import React, { useCallback, useMemo } from "react";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -14,7 +20,7 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-import { isStructuralNode, isPostableNode } from "@/lib/accounts/coa-hierarchy";
+import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
 import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import type { ChartOfAccount } from "../../../data";
@@ -27,6 +33,10 @@ import {
 import type { CoaLedgerListingRow, CoaListingRow } from "../coa-listing-data";
 import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaHierarchyLevelIcon } from "./CoaLevelBadge";
+import {
+  CoaSystemManagedLock,
+  isSystemManagedStatutoryNode,
+} from "./CoaSystemManagedLock";
 import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
 import {
   AccountsColumnFilterProvider,
@@ -244,7 +254,7 @@ function CoaHierarchyTableContent({
           {visible.map((row) => {
             const { node } = row;
             const isLedger = node.nodeLevel === "ledger";
-            const isSystemLocked = node.isSystem && isStructuralNode(node);
+            const isStatutoryManaged = isSystemManagedStatutoryNode(node);
             const allowAddSubGroup =
               canCreate && onAddSubGroup && canAddSubGroupUnder(node, records);
             const allowAddLedger =
@@ -285,8 +295,8 @@ function CoaHierarchyTableContent({
                       )}
                     >
                       {node.accountName}
-                      {isSystemLocked && (
-                        <Lock className="inline w-3 h-3 ml-1 text-muted-foreground/60" />
+                      {isStatutoryManaged && (
+                        <CoaSystemManagedLock className="ml-1" />
                       )}
                     </p>
                     {allowAddSubGroup || allowAddLedger || allowEdit || allowDelete ? (
@@ -446,79 +456,83 @@ function CoaLedgerTableContent({
   const visible = useAccountsFilteredRows<CoaLedgerListingRow>([]);
 
   return (
-    <AccountsTableScroll>
-      <AccountsTable minWidth={1100}>
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            <SortTh label="Ledger Name" colKey="accountName" className="min-w-[200px]" />
-            <SortTh label="Ledger Code" colKey="accountCode" className="w-28" />
-            <SortTh label="Parent Group" colKey="parentGroupName" className="min-w-[160px]" />
-            <SortTh label="Source" colKey="source" className="min-w-[140px]" />
-            <SortTh label="Opening Balance" colKey="openingAmount" filterType="amount" align="right" className="w-36" />
-            <SortTh label="Current Balance" colKey="currentAmount" filterType="amount" align="right" className="w-36" />
-            <AccountsColumnHeader label="Actions" colKey="actions" sortable={false} align="right" className="w-36" />
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {visible.map((row) => {
-            const { ledger } = row;
-            const isHighlighted = highlightedLedgerId === ledger.id;
+    <TooltipProvider delayDuration={200}>
+      <AccountsTableScroll>
+        <AccountsTable minWidth={760}>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="Ledger Name" colKey="accountName" className="w-[40%] min-w-[260px]" />
+              <SortTh label="Ledger Code" colKey="accountCode" className="w-[18%] min-w-[140px]" />
+              <SortTh label="Opening Balance" colKey="openingAmount" filterType="amount" align="right" className="w-[18%] min-w-[150px]" />
+              <SortTh label="Current Balance" colKey="currentAmount" filterType="amount" align="right" className="w-[18%] min-w-[150px]" />
+              <AccountsColumnHeader label="Actions" colKey="actions" sortable={false} align="center" className="w-16" />
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {visible.map((row) => {
+              const { ledger } = row;
+              const isHighlighted = highlightedLedgerId === ledger.id;
 
-            return (
-              <AccountsTableRow
-                key={ledger.id}
-                className={cn("group cursor-pointer", isHighlighted && "is-selected")}
-                onClick={() => onSelectLedger(ledger)}
-              >
-                <AccountsTableCell wrap className="min-w-[200px]">
-                  <p className="text-xs font-semibold text-foreground leading-snug group-hover:text-brand-700">
-                    {ledger.accountName}
-                  </p>
-                  {row.tdsSection ? (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Sec {row.tdsSection} · {row.tdsRate} · {row.tdsKind}
-                      {row.tdsDeductee ? ` · ${row.tdsDeductee}` : ""}
+              return (
+                <AccountsTableRow
+                  key={ledger.id}
+                  className={cn("group cursor-pointer", isHighlighted && "is-selected")}
+                  onClick={() => onSelectLedger(ledger)}
+                >
+                  <AccountsTableCell wrap className="w-[40%] min-w-[260px]">
+                    <p className="flex items-center gap-1 text-xs font-semibold text-foreground leading-snug group-hover:text-brand-700">
+                      {ledger.accountName}
+                      {isSystemManagedStatutoryNode(ledger) && (
+                        <CoaSystemManagedLock className="shrink-0" />
+                      )}
                     </p>
-                  ) : null}
-                </AccountsTableCell>
-                <AccountsTableCell className="font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
-                  {ledger.accountCode}
-                </AccountsTableCell>
-                <AccountsTableCell wrap className="text-xs text-foreground/90">
-                  {row.parentGroupName || "—"}
-                </AccountsTableCell>
-                <AccountsTableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                  {row.source}
-                </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  {row.openingAmount > 0 ? (
-                    <MoneyAmount amount={row.openingAmount} side={row.openingSide} className="text-xs" />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  {row.currentAmount > 0 ? (
-                    <MoneyAmount
-                      amount={row.currentAmount}
-                      side={row.currentSide}
-                      className="text-xs font-medium"
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-brand-700 group-hover:bg-brand-50 rounded-md transition-colors">
-                    <BookOpen className="w-3.5 h-3.5" />
-                    View Transactions
-                  </span>
-                </AccountsTableCell>
-              </AccountsTableRow>
-            );
-          })}
-        </AccountsTableBody>
-      </AccountsTable>
-    </AccountsTableScroll>
+                    {row.tdsSection ? (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Sec {row.tdsSection} · {row.tdsRate} · {row.tdsKind}
+                        {row.tdsDeductee ? ` · ${row.tdsDeductee}` : ""}
+                      </p>
+                    ) : null}
+                  </AccountsTableCell>
+                  <AccountsTableCell className="w-[18%] min-w-[140px] font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
+                    {ledger.accountCode}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className="w-[18%] min-w-[150px]">
+                    {row.openingAmount > 0 ? (
+                      <MoneyAmount amount={row.openingAmount} side={row.openingSide} className="text-xs" />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" className="w-[18%] min-w-[150px]">
+                    {row.currentAmount > 0 ? (
+                      <MoneyAmount
+                        amount={row.currentAmount}
+                        side={row.currentSide}
+                        className="text-xs font-medium"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          aria-label="View Ledger Transactions"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover:bg-brand-50 group-hover:text-brand-700"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">View Ledger Transactions</TooltipContent>
+                    </Tooltip>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              );
+            })}
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableScroll>
+    </TooltipProvider>
   );
 }

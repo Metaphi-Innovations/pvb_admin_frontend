@@ -62,8 +62,9 @@ const LIABILITY_SUBGROUP_BASE: Record<string, number> = {
   "Bank Loans": 1500000,
   "NBFC Loans": 680000,
   "Director / Related Party Loans": 320000,
+  "Sundry Creditors": 0,
   "Trade Payables / Sundry Creditors": 0,
-  "Duties & Taxes Payable": 85000,
+  "Duties & Taxes": 85000,
   "TDS Payable": 42000,
   "GST Payable": 95000,
   "PF / ESIC Payable": 78000,
@@ -79,9 +80,14 @@ const LIABILITY_SUBGROUP_BASE: Record<string, number> = {
 
 const SKIP_OPENING_SUBGROUPS = new Set([
   "Bank Accounts",
+  "Sundry Debtors",
   "Trade Receivables / Sundry Debtors",
+  "Accounts Receivable",
+  "Sundry Creditors",
   "Trade Payables / Sundry Creditors",
+  "Accounts Payable",
   "Inventory / Stock-in-Hand",
+  "Inventory",
 ]);
 
 function subGroupName(records: ChartOfAccount[], ledger: ChartOfAccount): string {

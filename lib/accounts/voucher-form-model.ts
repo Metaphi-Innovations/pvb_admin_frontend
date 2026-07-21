@@ -70,6 +70,11 @@ export interface VoucherFormEntry {
   amount: number;
   remark: string;
   allocations: VoucherEntryAllocation[];
+  /** Cost centre when selected ledger has costCenterApplicable */
+  costCenterId?: number | null;
+  costCenterName?: string;
+  /** Free-text / due date for New Reference */
+  billWiseDueDate?: string;
 }
 
 export interface VoucherFormModel {
@@ -116,6 +121,9 @@ export function createEmptyFormEntry(
     amount: 0,
     remark: "",
     allocations: [],
+    costCenterId: null,
+    costCenterName: "",
+    billWiseDueDate: "",
   };
 }
 
@@ -152,14 +160,29 @@ export function isFormModelBalanced(entries: VoucherFormEntry[]): boolean {
 export function formEntriesToVoucherLines(entries: VoucherFormEntry[]): VoucherLine[] {
   return entries
     .filter((e) => e.accountId != null && (Number(e.amount) || 0) > 0)
-    .map((e, i) => ({
-      id: e.id || nextFormEntryId() + i,
-      ledgerId: e.accountId,
-      ledgerName: e.accountName,
-      debit: e.entryType === "DEBIT" ? roundMoney(e.amount) : 0,
-      credit: e.entryType === "CREDIT" ? roundMoney(e.amount) : 0,
-      remarks: e.remark ?? "",
-    }));
+    .map((e, i) => {
+      const textRef =
+        e.allocations[0]?.documentNumber?.trim() ||
+        (e.referenceType === "new_reference" ? e.allocations[0]?.documentNumber : "") ||
+        "";
+      return {
+        id: e.id || nextFormEntryId() + i,
+        ledgerId: e.accountId,
+        ledgerName: e.accountName,
+        debit: e.entryType === "DEBIT" ? roundMoney(e.amount) : 0,
+        credit: e.entryType === "CREDIT" ? roundMoney(e.amount) : 0,
+        remarks: e.remark ?? "",
+        costCenterId: e.costCenterId ?? null,
+        costCenterName: e.costCenterName ?? "",
+        billWiseReferenceType: e.referenceType,
+        billWiseReferenceId: e.referenceId,
+        billWiseReferenceNo:
+          textRef ||
+          e.allocations.find((a) => a.documentNumber)?.documentNumber ||
+          "",
+        billWiseDueDate: e.billWiseDueDate ?? "",
+      };
+    });
 }
 
 export function voucherLinesToFormEntries(
@@ -168,20 +191,36 @@ export function voucherLinesToFormEntries(
 ): VoucherFormEntry[] {
   return lines
     .filter((l) => l.ledgerId && (lineDebitAmount(l) > 0 || lineCreditAmount(l) > 0))
-    .map((l) => ({
-      id: l.id,
-      accountId: l.ledgerId,
-      accountName: l.ledgerName,
-      entryType: lineDebitAmount(l) > 0 ? "DEBIT" : "CREDIT",
-      referenceType: defaultEntryReferenceType(
-        voucherType,
-        lineDebitAmount(l) > 0 ? "DEBIT" : "CREDIT",
-      ),
-      referenceId: null,
-      amount: roundMoney(lineDebitAmount(l) > 0 ? lineDebitAmount(l) : lineCreditAmount(l)),
-      remark: l.remarks ?? "",
-      allocations: [],
-    }));
+    .map((l) => {
+      const entryType: VoucherEntryType = lineDebitAmount(l) > 0 ? "DEBIT" : "CREDIT";
+      const referenceType = (l.billWiseReferenceType as VoucherReferenceType | undefined) ??
+        defaultEntryReferenceType(voucherType, entryType);
+      const refNo = l.billWiseReferenceNo?.trim() ?? "";
+      return {
+        id: l.id,
+        accountId: l.ledgerId,
+        accountName: l.ledgerName,
+        entryType,
+        referenceType,
+        referenceId: l.billWiseReferenceId ?? null,
+        amount: roundMoney(lineDebitAmount(l) > 0 ? lineDebitAmount(l) : lineCreditAmount(l)),
+        remark: l.remarks ?? "",
+        allocations: refNo
+          ? [
+              {
+                documentType: "other" as const,
+                documentId: l.billWiseReferenceId ?? null,
+                documentNumber: refNo,
+                outstandingAmount: 0,
+                allocatedAmount: 0,
+              },
+            ]
+          : [],
+        costCenterId: l.costCenterId ?? null,
+        costCenterName: l.costCenterName ?? "",
+        billWiseDueDate: l.billWiseDueDate ?? "",
+      };
+    });
 }
 
 export function getFormEntry(
@@ -372,16 +411,52 @@ export function formModelToVoucherLines(
   coaRecords?: ChartOfAccount[],
 ): VoucherLine[] {
   if (model.voucherType === "receipt") {
-    return buildReceiptVoucherLines(cashInputFromDualEntries(model.entries, "receipt", extras));
+    return mergeFormEntryMetadataOntoLines(
+      buildReceiptVoucherLines(cashInputFromDualEntries(model.entries, "receipt", extras)),
+      model.entries,
+    );
   }
   if (model.voucherType === "payment") {
-    return buildPaymentVoucherLines(cashInputFromDualEntries(model.entries, "payment", extras));
+    return mergeFormEntryMetadataOntoLines(
+      buildPaymentVoucherLines(cashInputFromDualEntries(model.entries, "payment", extras)),
+      model.entries,
+    );
   }
   if (model.voucherType === "contra") {
-    return buildContraVoucherLines(contraInputFromDualEntries(model.entries));
+    return mergeFormEntryMetadataOntoLines(
+      buildContraVoucherLines(contraInputFromDualEntries(model.entries)),
+      model.entries,
+    );
   }
   const lines = formEntriesToVoucherLines(model.entries);
   return coaRecords ? applyAutoPartyToLines(compactPostedVoucherLines(lines), coaRecords) : lines;
+}
+
+/** Copy cost-centre / bill-wise fields from dual-entry form rows onto built voucher lines. */
+function mergeFormEntryMetadataOntoLines(
+  lines: VoucherLine[],
+  entries: VoucherFormEntry[],
+): VoucherLine[] {
+  return lines.map((line) => {
+    const entry = entries.find((e) => {
+      if (e.accountId == null || e.accountId !== line.ledgerId) return false;
+      if (e.entryType === "DEBIT" && line.debit > 0) return true;
+      if (e.entryType === "CREDIT" && line.credit > 0) return true;
+      return false;
+    });
+    if (!entry) return line;
+    const textRef =
+      entry.allocations.find((a) => a.documentNumber.trim())?.documentNumber.trim() ?? "";
+    return {
+      ...line,
+      costCenterId: entry.costCenterId ?? null,
+      costCenterName: entry.costCenterName ?? "",
+      billWiseReferenceType: entry.referenceType,
+      billWiseReferenceId: entry.referenceId,
+      billWiseReferenceNo: textRef,
+      billWiseDueDate: entry.billWiseDueDate ?? "",
+    };
+  });
 }
 
 export function calcEntryAllocationTotal(entry: VoucherFormEntry): number {
@@ -462,7 +537,7 @@ function validateEntryReferences(
         return null;
       }
       if (!entry.referenceId) {
-        return "Against Reference is required when Reference Type is Against Invoice.";
+        return "Against Reference is required when Reference Type is Against Reference.";
       }
     }
   }

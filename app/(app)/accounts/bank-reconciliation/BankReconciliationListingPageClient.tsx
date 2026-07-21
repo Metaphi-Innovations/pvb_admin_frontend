@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Upload, History } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -59,83 +59,45 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
 import {
-  BANK_RECON_ACCOUNT_STATUS_OPTIONS,
   BANK_RECON_ACCOUNT_TYPE_OPTIONS,
-  computeAccountDifference,
-  computeListingSummary,
-  getBankReconAccounts,
   maskAccountNumber,
-  type BankReconBankAccount,
 } from "./bank-reconciliation-v2-data";
-import { BankReconAccountStatusBadge } from "./components/BankReconBadges";
+import { bankReconWorkspacePath, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 import {
-  bankReconUploadPath,
-  bankReconWorkspacePath,
-  RECONCILIATION_LIST_PATH,
-  BANK_RECON_IMPORT_HISTORY_PATH,
-} from "./reconciliation-utils";
-import { BankReconManualTransactionSheet } from "./components/BankReconManualTransactionSheet";
-import { BankReconSelectAccountDialog } from "./components/BankReconSelectAccountDialog";
+  computeListingSummary,
+  getListingAccounts,
+} from "@/lib/accounts/bank-recon-tally-service";
+import { resetBankReconciliationDemoData } from "@/lib/accounts/bank-recon-tally-demo-seed";
+import type { BankReconListingAccount } from "@/lib/accounts/bank-recon-tally-types";
+import { TALLY_EVENT } from "@/lib/accounts/bank-recon-tally-types";
 
 const ACCOUNT_TYPE_FILTER_OPTIONS = [
   { value: "all", label: "All Types" },
   ...BANK_RECON_ACCOUNT_TYPE_OPTIONS.map((t) => ({ value: t, label: t })),
 ];
 
-const STATUS_FILTER_OPTIONS = BANK_RECON_ACCOUNT_STATUS_OPTIONS.map((s) => ({
-  value: s,
-  label: s,
-}));
-
-function UploadButton({ onUpload }: { onUpload: (accountId?: string) => void }) {
-  const accounts = getBankReconAccounts();
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className="h-8 text-xs gap-1.5"
-      onClick={() => {
-        if (accounts.length === 1) {
-          onUpload(accounts[0]!.id);
-        } else {
-          onUpload();
-        }
-      }}
-    >
-      <Upload className="w-3.5 h-3.5" />
-      Upload Statement
-    </Button>
-  );
-}
+const IS_DEV = process.env.NODE_ENV === "development";
 
 function BankAccountTable({
   rows,
   onOpenReconciliation,
-  onUploadStatement,
-  onAddManual,
-  onViewBankBook,
   loading,
 }: {
-  rows: BankReconBankAccount[];
+  rows: BankReconListingAccount[];
   onOpenReconciliation: (id: string) => void;
-  onUploadStatement: (id: string) => void;
-  onAddManual: (id: string) => void;
-  onViewBankBook: (id: string) => void;
   loading: boolean;
 }) {
   const filtered = useAccountsFilteredRows(rows);
 
   if (loading) {
     return (
-      <AccountsTable minWidth={1200}>
+      <AccountsTable minWidth={1180}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            {Array.from({ length: 11 }).map((_, i) => (
+            {Array.from({ length: 10 }).map((_, i) => (
               <AccountsTableHeadCell key={i} sticky={false}>
                 &nbsp;
               </AccountsTableHeadCell>
@@ -144,7 +106,7 @@ function BankAccountTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonRow key={i} cols={11} />
+            <SkeletonRow key={i} cols={10} />
           ))}
         </AccountsTableBody>
       </AccountsTable>
@@ -152,19 +114,28 @@ function BankAccountTable({
   }
 
   return (
-    <AccountsTable minWidth={1200}>
+    <AccountsTable minWidth={1180}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
           <SortTh label="Bank Name" colKey="bankName" />
           <SortTh label="Account Nickname" colKey="accountNickname" />
-          <SortTh label="Account Number" colKey="accountNumber" />
+          <SortTh label="Account Number" colKey="maskedAccountNumber" />
           <SortTh label="Account Type" colKey="accountType" />
-          <SortTh label="Book Balance" colKey="bookBalance" filterType="amount" align="right" />
-          <SortTh label="Statement Balance" colKey="statementBalance" filterType="amount" align="right" />
+          <SortTh label="Balance as per Books" colKey="bookBalance" filterType="amount" align="right" />
+          <SortTh
+            label="Expected Balance as per Bank"
+            colKey="bankBalance"
+            filterType="amount"
+            align="right"
+          />
           <SortTh label="Difference" colKey="difference" filterType="amount" align="right" />
-          <SortTh label="Pending Txns" colKey="pendingTransactions" filterType="amount" align="right" />
-          <SortTh label="Last Reconciled" colKey="lastReconciledDate" filterType="date" />
-          <SortTh label="Status" colKey="status" filterType="text" />
+          <SortTh
+            label="Pending Count"
+            colKey="pendingReconciliationCount"
+            filterType="amount"
+            align="right"
+          />
+          <SortTh label="Last Reconciled Date" colKey="lastReconciledDate" filterType="date" />
           <AccountsTableHeadCell className={accountsActionColClass("multi")} sticky>
             Action
           </AccountsTableHeadCell>
@@ -172,67 +143,74 @@ function BankAccountTable({
       </AccountsTableHead>
       <AccountsTableBody>
         {rows.length === 0 ? (
-          <AccountsTableEmpty colSpan={11} message="No bank accounts configured." />
+          <AccountsTableEmpty colSpan={10} message="No bank accounts configured." />
         ) : filtered.length === 0 ? (
-          <AccountsTableEmpty colSpan={11} message="No accounts match the current filters." />
+          <AccountsTableEmpty colSpan={10} message="No accounts match the current filters." />
         ) : (
-          filtered.map((account) => {
-            const diff = computeAccountDifference(account);
-            return (
-              <AccountsTableRow key={account.id} className="group">
-                <AccountsTableCell className="font-medium">{account.bankName}</AccountsTableCell>
-                <AccountsTableCell>{account.accountNickname}</AccountsTableCell>
-                <AccountsTableCell mono>{maskAccountNumber(account.accountNumber)}</AccountsTableCell>
-                <AccountsTableCell>{account.accountType}</AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  {formatMoney(account.bookBalance)}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  {formatMoney(account.statementBalance)}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>
-                  <span className={diff !== 0 ? "text-red-700" : undefined}>
-                    {formatMoney(Math.abs(diff))}
-                    {diff !== 0 ? (diff > 0 ? " Dr" : " Cr") : ""}
+          filtered.map((account) => (
+            <AccountsTableRow key={account.id} className="group">
+              <AccountsTableCell className="font-medium">{account.bankName}</AccountsTableCell>
+              <AccountsTableCell>{account.accountNickname}</AccountsTableCell>
+              <AccountsTableCell mono>
+                {maskAccountNumber(account.accountNumber)}
+              </AccountsTableCell>
+              <AccountsTableCell>{account.accountType}</AccountsTableCell>
+              <AccountsTableCell align="right" money>
+                {account.bookLedgerLinked && account.bookBalance != null ? (
+                  formatMoney(account.bookBalance)
+                ) : (
+                  <span className="text-[11px] text-amber-700 font-medium whitespace-nowrap">
+                    Book ledger not linked
                   </span>
-                </AccountsTableCell>
-                <AccountsTableCell align="right">{account.pendingTransactions}</AccountsTableCell>
-                <AccountsTableCell>{account.lastReconciledDate ?? "—"}</AccountsTableCell>
-                <AccountsTableCell>
-                  <BankReconAccountStatusBadge status={account.status} />
-                </AccountsTableCell>
-                <AccountsTableCell align="right" className="accounts-table-td-sticky">
-                  <AccountsTableActionCell variant="multi">
-                    <Button
-                      asChild
-                      size="sm"
-                      className="h-7 text-[11px] px-2 bg-brand-600 hover:bg-brand-700 text-white"
-                    >
-                      <Link href={bankReconWorkspacePath(account.id)}>Reconcile</Link>
-                    </Button>
-                    <AccountsMoreActions contentClassName="w-48">
-                      <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                        Actions
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => onOpenReconciliation(account.id)}>
-                        Open Workspace
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onViewBankBook(account.id)}>
-                        View Bank Book
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onUploadStatement(account.id)}>
-                        Upload Statement
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onAddManual(account.id)}>
-                        Manual Entry
-                      </DropdownMenuItem>
-                    </AccountsMoreActions>
-                  </AccountsTableActionCell>
-                </AccountsTableCell>
-              </AccountsTableRow>
-            );
-          })
+                )}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money>
+                {account.bookLedgerLinked ? (
+                  formatMoney(account.bankBalance)
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money>
+                {account.difference == null ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <span className={account.difference !== 0 ? "text-red-700" : undefined}>
+                    {formatMoney(Math.abs(account.difference))}
+                    {account.difference !== 0
+                      ? account.difference > 0
+                        ? " Dr"
+                        : " Cr"
+                      : ""}
+                  </span>
+                )}
+              </AccountsTableCell>
+              <AccountsTableCell align="right">
+                {account.pendingReconciliationCount}
+              </AccountsTableCell>
+              <AccountsTableCell>{account.lastReconciledDate ?? "—"}</AccountsTableCell>
+              <AccountsTableCell align="right" className="accounts-table-td-sticky">
+                <AccountsTableActionCell variant="multi">
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-7 text-[11px] px-2 bg-brand-600 hover:bg-brand-700 text-white"
+                  >
+                    <Link href={bankReconWorkspacePath(account.id)}>Reconcile</Link>
+                  </Button>
+                  <AccountsMoreActions contentClassName="w-48">
+                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                      Actions
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onOpenReconciliation(account.id)}>
+                      Reconcile
+                    </DropdownMenuItem>
+                  </AccountsMoreActions>
+                </AccountsTableActionCell>
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ))
         )}
       </AccountsTableBody>
     </AccountsTable>
@@ -241,42 +219,47 @@ function BankAccountTable({
 
 export default function BankReconciliationListingPageClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const { selectedFY } = useFY();
 
   const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
   const [search, setSearch] = useState("");
   const [accountType, setAccountType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
-  const [manualSheetOpen, setManualSheetOpen] = useState(false);
-  const [manualAccountId, setManualAccountId] = useState<string | undefined>();
-  const [uploadPickerOpen, setUploadPickerOpen] = useState(false);
-  const [manualPickerOpen, setManualPickerOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 400);
+    const t = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("action") === "upload") {
-      setUploadPickerOpen(true);
-      router.replace(RECONCILIATION_LIST_PATH);
-    }
-  }, [searchParams, router]);
+    const handler = () => setTick((x) => x + 1);
+    window.addEventListener(TALLY_EVENT, handler);
+    return () => window.removeEventListener(TALLY_EVENT, handler);
+  }, []);
 
-  const allAccounts = useMemo(() => getBankReconAccounts(), []);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const allAccounts = useMemo(() => {
+    void tick;
+    return getListingAccounts();
+  }, [tick]);
 
   const filteredAccounts = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allAccounts.filter((a) => {
       if (accountType !== "all" && a.accountType !== accountType) return false;
-      if (filterStatus.length > 0 && !filterStatus.includes(a.status)) return false;
+      if (dateFrom && a.lastReconciledDate && a.lastReconciledDate < dateFrom) return false;
+      if (dateTo && a.lastReconciledDate && a.lastReconciledDate > dateTo) return false;
       if (!q) return true;
       return (
         a.bankName.toLowerCase().includes(q) ||
@@ -285,14 +268,13 @@ export default function BankReconciliationListingPageClient() {
         a.accountType.toLowerCase().includes(q)
       );
     });
-  }, [allAccounts, search, accountType, filterStatus]);
+  }, [allAccounts, search, accountType, dateFrom, dateTo]);
 
   const tableRows = useMemo(
     () =>
       filteredAccounts.map((a) => ({
         ...a,
-        difference: computeAccountDifference(a),
-        accountNumber: maskAccountNumber(a.accountNumber),
+        maskedAccountNumber: maskAccountNumber(a.accountNumber),
       })),
     [filteredAccounts],
   );
@@ -302,15 +284,20 @@ export default function BankReconciliationListingPageClient() {
     return tableRows.slice(start, start + pageSize);
   }, [tableRows, page, pageSize]);
 
-  const summary = useMemo(() => computeListingSummary(allAccounts), [allAccounts]);
+  const summary = useMemo(() => computeListingSummary(filteredAccounts), [filteredAccounts]);
 
   const handleReset = useCallback(() => {
     setSearch("");
     setAccountType("all");
-    setFilterStatus([]);
     setDateFrom("");
     setDateTo("");
     setPage(1);
+  }, []);
+
+  const handleResetDemo = useCallback(() => {
+    resetBankReconciliationDemoData();
+    setTick((x) => x + 1);
+    setToast("Bank Reconciliation demo data reset.");
   }, []);
 
   const handleExportExcel = useCallback(() => {
@@ -319,26 +306,26 @@ export default function BankReconciliationListingPageClient() {
       "Nickname",
       "Account Number",
       "Type",
-      "Book Balance",
-      "Statement Balance",
+      "Balance as per Books",
+      "Expected Balance as per Bank",
       "Difference",
-      "Pending Txns",
-      "Last Reconciled",
-      "Status",
+      "Pending Count",
+      "Last Reconciled Date",
     ];
     const lines = tableRows.map((a) => [
       a.bankName,
       a.accountNickname,
-      a.accountNumber,
+      maskAccountNumber(a.accountNumber),
       a.accountType,
-      a.bookBalance,
-      a.statementBalance,
-      computeAccountDifference(a),
-      a.pendingTransactions,
+      a.bookBalance ?? "",
+      a.bankBalance,
+      a.difference ?? "",
+      a.pendingReconciliationCount,
       a.lastReconciledDate ?? "",
-      a.status,
     ]);
-    const csv = [headers, ...lines].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = [headers, ...lines]
+      .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -347,35 +334,6 @@ export default function BankReconciliationListingPageClient() {
     link.click();
     URL.revokeObjectURL(url);
   }, [tableRows]);
-
-  const handleUploadStatement = useCallback(
-    (id?: string) => {
-      if (id) {
-        router.push(bankReconUploadPath(id));
-        return;
-      }
-      setUploadPickerOpen(true);
-    },
-    [router],
-  );
-
-  const handleManualFromListing = useCallback(
-    (accountId?: string) => {
-      if (accountId) {
-        router.push(`${bankReconWorkspacePath(accountId)}?manual=1`);
-        return;
-      }
-      setManualPickerOpen(true);
-    },
-    [router],
-  );
-
-  const handleViewBankBook = useCallback(
-    (_accountId: string) => {
-      router.push("/accounts/reports/bank-book");
-    },
-    [router],
-  );
 
   const handleOpenReconciliation = useCallback(
     (accountId: string) => {
@@ -392,8 +350,11 @@ export default function BankReconciliationListingPageClient() {
 
   const summaryItems = [
     { label: "Total Bank Accounts", value: String(summary.totalAccounts) },
-    { label: "Total Book Balance", value: formatMoney(summary.totalBookBalance) },
-    { label: "Total Statement Balance", value: formatMoney(summary.totalStatementBalance) },
+    { label: "Total Balance as per Books", value: formatMoney(summary.totalBookBalance) },
+    {
+      label: "Total Expected Balance as per Bank",
+      value: formatMoney(summary.totalBankBalance),
+    },
     {
       label: "Total Difference",
       value: formatMoney(Math.abs(summary.totalDifference)),
@@ -407,33 +368,25 @@ export default function BankReconciliationListingPageClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Banking", "Bank Reconciliation", RECONCILIATION_LIST_PATH)}
       title="Bank Reconciliation"
-      description={`Reconcile bank statements with books · ${selectedFY.label}`}
+      description={`Mark book entries cleared by bank date · ${selectedFY.label}`}
       hideDescription
       layout="split"
       className="h-full min-h-0"
       actions={
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs gap-1.5"
-            onClick={() => router.push(BANK_RECON_IMPORT_HISTORY_PATH)}
-          >
-            <History className="w-3.5 h-3.5" />
-            Import History
-          </Button>
-          <UploadButton onUpload={handleUploadStatement} />
-          <Button
-            type="button"
-            size="sm"
-            className={cn("h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white border-0")}
-            onClick={() => handleManualFromListing()}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Manual Entry
-          </Button>
-        </div>
+        IS_DEV ? (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={handleResetDemo}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset Bank Reconciliation Demo Data
+            </Button>
+          </div>
+        ) : null
       }
     >
       <AccountsColumnFilterProvider
@@ -442,14 +395,13 @@ export default function BankReconciliationListingPageClient() {
         columnConfig={{
           bankName: { type: "text" },
           accountNickname: { type: "text" },
-          accountNumber: { type: "text" },
+          maskedAccountNumber: { type: "text" },
           accountType: { type: "text" },
           bookBalance: { type: "amount" },
-          statementBalance: { type: "amount" },
+          bankBalance: { type: "amount" },
           difference: { type: "amount" },
-          pendingTransactions: { type: "amount" },
+          pendingReconciliationCount: { type: "amount" },
           lastReconciledDate: { type: "date" },
-          status: { type: "text" },
         }}
         defaultSortKey="bankName"
       >
@@ -501,12 +453,6 @@ export default function BankReconciliationListingPageClient() {
                     dateTo={dateTo}
                     onDateFromChange={setDateFrom}
                     onDateToChange={setDateTo}
-                    statusOptions={STATUS_FILTER_OPTIONS}
-                    status={filterStatus}
-                    onStatusChange={(s) => {
-                      setFilterStatus(s);
-                      setPage(1);
-                    }}
                     initialPreset="this_year"
                   />
                 )}
@@ -543,41 +489,16 @@ export default function BankReconciliationListingPageClient() {
           <BankAccountTable
             rows={paginatedRows}
             onOpenReconciliation={handleOpenReconciliation}
-            onUploadStatement={handleUploadStatement}
-            onAddManual={handleManualFromListing}
-            onViewBankBook={handleViewBankBook}
             loading={loading}
           />
         </AccountsTableListing>
       </AccountsColumnFilterProvider>
 
-      <BankReconSelectAccountDialog
-        open={uploadPickerOpen}
-        onClose={() => setUploadPickerOpen(false)}
-        title="Upload Bank Statement"
-        description="Choose the bank account for this statement import."
-        confirmLabel="Continue"
-        onConfirm={(id) => router.push(bankReconUploadPath(id))}
-      />
-
-      <BankReconSelectAccountDialog
-        open={manualPickerOpen}
-        onClose={() => setManualPickerOpen(false)}
-        title="Manual Bank Entry"
-        description="Choose the bank account for this manual entry."
-        confirmLabel="Continue"
-        onConfirm={(id) => router.push(`${bankReconWorkspacePath(id)}?manual=1`)}
-      />
-
-      <BankReconManualTransactionSheet
-        open={manualSheetOpen}
-        onClose={() => {
-          setManualSheetOpen(false);
-          setManualAccountId(undefined);
-        }}
-        bankAccountId={manualAccountId}
-        onSaved={() => {}}
-      />
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl bg-emerald-600 text-white text-sm font-medium animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
+          {toast}
+        </div>
+      )}
     </AccountsPageShell>
   );
 }

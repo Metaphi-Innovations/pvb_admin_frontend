@@ -26,6 +26,7 @@ import {
 } from "@/app/(app)/accounts/components/AccountsUI";
 import type { BankBookDisplayRow, BankBookSummary } from "./bank-book-data";
 import { formatBankBookDate } from "./bank-book-data";
+import { useBankReconDisplay } from "@/components/accounts/useBankReconDisplay";
 
 export function BankBookTable({
   openingRow,
@@ -61,7 +62,7 @@ export function BankBookTable({
   return (
     <>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
-        <AccountsTable minWidth={1200} className="text-xs">
+        <AccountsTable minWidth={1400} className="text-xs">
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <SortTh label="Date" colKey="date" filterType="date" />
@@ -79,6 +80,18 @@ export function BankBookTable({
                 align="right"
               />
               <AccountsColumnHeader
+                label="Bank Date"
+                colKey="bankDate"
+                sortable={false}
+                filterable={false}
+              />
+              <AccountsColumnHeader
+                label="Recon Status"
+                colKey="reconStatus"
+                sortable={false}
+                filterable={false}
+              />
+              <AccountsColumnHeader
                 label="Status"
                 colKey="status"
                 sortable={false}
@@ -90,7 +103,7 @@ export function BankBookTable({
             <BankBookTableRow row={openingRow} />
             {transactionRows.length > 0 && columnFilteredRows.length === 0 ? (
               <AccountsTableRow>
-                <AccountsTableCell colSpan={9} className="accounts-table-empty">
+                <AccountsTableCell colSpan={11} className="accounts-table-empty">
                   No records match the column filters.
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -119,7 +132,7 @@ export function BankBookTable({
                   className="text-xs justify-end font-semibold"
                 />
               </AccountsTableCell>
-              <AccountsTableCell className="py-2" />
+              <AccountsTableCell className="py-2" colSpan={3} />
             </AccountsTableRow>
           </AccountsTableFoot>
         </AccountsTable>
@@ -142,6 +155,10 @@ export function BankBookTable({
 
 function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
   const isOpening = row.kind === "opening";
+  const recon = useBankReconDisplay(
+    isOpening ? null : row.voucherId,
+    isOpening ? null : row.voucherNo,
+  );
 
   return (
     <AccountsTableRow
@@ -203,6 +220,12 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
             className="text-xs justify-end"
           />
         )}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap py-2 tabular-nums text-[11px]">
+        {isOpening ? "—" : recon.isReconciled && recon.bankDate ? recon.bankDate : "—"}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap py-2 text-[11px]">
+        {isOpening ? "—" : recon.statusLabel}
       </AccountsTableCell>
       {!isOpening && row.status && row.status !== "—" ? (
         <AccountsTableCell className="whitespace-nowrap py-2">

@@ -482,7 +482,10 @@ function matchCustomerMasterHref(ledgerId: number, ledgerName: string): string |
 const ENTRY_NOTES: Record<string, string> = {
   "Capital Account": "Journal Voucher · Profit transfer · Drawings entry · Year-end closing",
   "Loans / Borrowings": "Loan receipt voucher · Payment voucher · Journal voucher · Interest accrual",
+  "Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
   "Trade Payables / Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
+  "Accounts Payable": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
+  "Duties & Taxes": "Sales Invoice · Purchase Bill · Payment Voucher · Journal Voucher",
   "Duties & Taxes Payable": "Sales Invoice · Purchase Bill · Payment Voucher · Journal Voucher",
   "GST Payable": "Sales Invoice · Purchase Bill · Credit Note · Debit Note · GST Payment Voucher",
   "Salary Payable": "Payroll · Payment Voucher · Journal Voucher",
@@ -554,6 +557,7 @@ function buildGroupHighlights(
         { label: "Unsecured Loans", value: sumLedgersMatching(ledgers, (n) => n.includes("unsecured")) },
         { label: "Bank Loans", value: sumLedgersMatching(ledgers, (n) => n.includes("bank loan")) },
       ];
+    case "Duties & Taxes":
     case "Duties & Taxes Payable":
       return [
         { label: "GST Payable", value: sumLedgersMatching(ledgers, (n) => n.includes("gst")) },
@@ -850,7 +854,11 @@ export function resolveCoaGroupContext(
       ledgers,
     };
   }
-  if (name === "Trade Receivables / Sundry Debtors") {
+  if (
+    name === "Sundry Debtors" ||
+    name === "Accounts Receivable" ||
+    name === "Trade Receivables / Sundry Debtors"
+  ) {
     const asOf = new Date().toISOString().slice(0, 10);
     const outstandingRows = computeCustomerOutstanding().map((r) => ({
       ...r,
@@ -882,7 +890,11 @@ export function resolveCoaGroupContext(
       recentReceipts,
     };
   }
-  if (name === "Trade Payables / Sundry Creditors") {
+  if (
+    name === "Sundry Creditors" ||
+    name === "Accounts Payable" ||
+    name === "Trade Payables / Sundry Creditors"
+  ) {
     const asOf = new Date().toISOString().slice(0, 10);
     const outstandingRows = computeVendorOutstanding().map((r) => {
       const due = purchaseDueDate(r.lastTransactionDate);
@@ -1148,36 +1160,39 @@ export function resolveCoaGroupContext(
     };
   }
 
-  if (name === "GST Input" || name === "GST Output") {
+  if (name === "GST Input" || name === "GST Input Credit") {
     const gstLedgers = collectDescendantLedgers(records, node.id);
     const gstLedgerIds = new Set(gstLedgers.map((l) => l.id));
     const total = sumLedgerBalances(gstLedgers);
-    const isOutput = name === "GST Output";
     return {
-      kind: isOutput ? "gst_output" : "gst_payable",
+      kind: "gst_payable",
       nodeId: node.id,
       nodeName: name,
       totalGstPayable: total,
-      outputGst: isOutput ? total : 0,
-      inputGstCredit: isOutput ? 0 : total,
+      outputGst: 0,
+      inputGstCredit: total,
       netPayable: total,
       gstLedgers,
       postedEntries: collectPostingRows(gstLedgerIds),
     };
   }
 
-  if (name === "GST Payable" || name === "Duties & Taxes Payable") {
+  if (
+    name === "GST Payable" ||
+    name === "GST Output" ||
+    name === "Duties & Taxes" ||
+    name === "Duties & Taxes Payable"
+  ) {
     const gstLedgers = collectDescendantLedgers(records, node.id);
     const gstLedgerIds = new Set(gstLedgers.map((l) => l.id));
     const total = sumLedgerBalances(gstLedgers);
-    const isOutput = name === "Duties & Taxes Payable";
     return {
-      kind: isOutput ? "gst_output" : "gst_payable",
+      kind: "gst_output",
       nodeId: node.id,
       nodeName: name,
       totalGstPayable: total,
-      outputGst: isOutput ? total : total * 0.62,
-      inputGstCredit: isOutput ? 0 : total * 0.38,
+      outputGst: total,
+      inputGstCredit: 0,
       netPayable: total,
       gstLedgers,
       postedEntries: collectPostingRows(gstLedgerIds),

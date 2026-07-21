@@ -30,7 +30,7 @@ import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
 import { X, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsFilterDateRangeSection";
 import { Switch } from "@/components/ui/switch";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
@@ -101,7 +101,7 @@ export function ReportFilterResetButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "h-7 px-2.5 text-xs font-medium rounded-md border border-border text-muted-foreground",
+        "h-8 px-2.5 text-xs font-medium rounded-md border border-border text-muted-foreground",
         "hover:bg-muted/40 hover:text-foreground disabled:opacity-50 disabled:pointer-events-none",
         className,
       )}

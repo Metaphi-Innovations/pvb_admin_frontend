@@ -1,0 +1,500 @@
+/**
+ * Credit Note — compact continuous transaction document.
+ * Uses Accounts orange/neutral tokens; matches accounts-ui-dense table density.
+ */
+
+.cnz {
+  --cnz-label: #64748b;
+  --cnz-ink: #0f172a;
+  --cnz-line: hsl(var(--border));
+  --cnz-head: hsl(var(--muted) / 0.4);
+  --cnz-accent: #d96a10; /* brand-600 */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  /* Internal horizontal padding — keeps fields/tables off container edges */
+  padding: 0.15rem 0.75rem 0.85rem;
+  overflow-x: hidden;
+}
+
+.cnz-alert {
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.6875rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+}
+
+.cnz-head {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  padding: 0.15rem 0 0.65rem;
+  border-bottom: 1px solid var(--cnz-line);
+}
+
+@media (max-width: 900px) {
+  .cnz-head {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .cnz-head {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cnz-head__span2 {
+  grid-column: span 2;
+}
+
+.cnz-head__full {
+  grid-column: 1 / -1;
+}
+
+.cnz-f {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.cnz-f > label,
+.cnz-f .cnz-lab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--cnz-label);
+  line-height: 1.2;
+}
+
+.cnz-f .cnz-req {
+  color: #ef4444;
+  margin-left: 0.1rem;
+}
+
+.cnz-ro {
+  min-height: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--cnz-ink);
+  padding: 0 0.5rem;
+  border: 1px solid var(--cnz-line);
+  border-radius: 0.375rem;
+  background: hsl(var(--muted) / 0.25);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cnz-ro--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  color: #b85508;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.cnz-hint {
+  font-size: 0.625rem;
+  color: var(--cnz-label);
+  margin-top: 0.1rem;
+}
+
+.cnz-tag {
+  font-size: 0.6875rem;
+  color: var(--cnz-label);
+}
+
+/* Basis radios — brand orange accent (no blue) */
+.cnz-basis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  min-height: 1.75rem;
+}
+
+.cnz-basis__lab {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--cnz-label);
+}
+
+.cnz-radios {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.cnz-radios label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--cnz-ink);
+  cursor: pointer;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.cnz-radios input {
+  width: 0.8rem;
+  height: 0.8rem;
+  accent-color: var(--cnz-accent);
+}
+
+.cnz-items {
+  padding: 0.55rem 0 0.15rem;
+  min-width: 0;
+}
+
+.cnz-items__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.3rem;
+}
+
+.cnz-items__title {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+/* Standard Accounts table surface */
+.cnz-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--cnz-line);
+  border-radius: 0.5rem;
+  background: #fff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cnz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem; /* 12px body */
+  font-variant-numeric: tabular-nums;
+}
+
+.cnz-table--qty {
+  min-width: 960px;
+}
+
+.cnz-table--amt {
+  min-width: 860px;
+}
+
+.cnz-table--scheme {
+  min-width: 720px;
+}
+
+.cnz-table thead th {
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  font-size: 0.6875rem; /* 11px */
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #475569;
+  background: hsl(var(--muted) / 0.4);
+  border-bottom: 1px solid var(--cnz-line);
+  white-space: nowrap;
+  vertical-align: middle;
+  line-height: 1.15;
+}
+
+.cnz-table thead th.text-right,
+.cnz-table th.cnz-num {
+  text-align: right;
+}
+
+.cnz-table tbody td {
+  padding: 0.3rem 0.45rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  vertical-align: middle;
+  color: var(--cnz-ink);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  background: #fff;
+}
+
+.cnz-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cnz-table tbody tr:hover td {
+  background: hsl(var(--muted) / 0.15);
+}
+
+.cnz-table .cnz-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Cell controls — flat, not floating boxes */
+.cnz-table tbody td .cnz-cell-input,
+.cnz-table tbody td input,
+.cnz-table tbody td button[role="combobox"],
+.cnz .cnz-table tbody td [data-radix-collection-item] {
+  /* fall through */
+}
+
+.cnz-table tbody td input.h-7,
+.cnz-table tbody td input.h-8,
+.cnz-table .cnz-cell-input {
+  height: 1.75rem !important;
+  min-height: 1.75rem !important;
+  font-size: 0.75rem !important;
+  border-radius: 0.375rem !important;
+  border-color: hsl(var(--border)) !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  padding-left: 0.4rem !important;
+  padding-right: 0.4rem !important;
+}
+
+.cnz-table tbody td input:focus-visible,
+.cnz-table .cnz-cell-input:focus-visible {
+  outline: none !important;
+  border-color: #ffcb90 !important;
+  box-shadow: 0 0 0 2px rgba(217, 106, 16, 0.2) !important;
+}
+
+.cnz-empty {
+  padding: 1.25rem 0.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--cnz-label);
+}
+
+/* Totals under table — right-aligned, no summary card */
+.cnz-after-table {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.55rem;
+  padding: 0.65rem 0 0;
+  border-top: 1px solid var(--cnz-line);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cnz-totals {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 0.75rem;
+  min-width: 14rem;
+  max-width: 18rem;
+  width: 100%;
+}
+
+.cnz-totals__title {
+  margin: 0 0 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.cnz-totals__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  color: var(--cnz-ink);
+  border-bottom: 1px solid hsl(var(--border) / 0.45);
+}
+
+.cnz-totals__row:last-of-type {
+  border-bottom: none;
+}
+
+.cnz-totals__row > span:first-child {
+  color: var(--cnz-label);
+}
+
+.cnz-totals__row > span:last-child {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  min-width: 5rem;
+  text-align: right;
+}
+
+.cnz-totals__grand {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.2rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--cnz-line);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--cnz-ink);
+}
+
+.cnz-totals__grand span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.cnz-notes {
+  padding: 0.65rem 0 0.25rem;
+  border-top: 1px solid var(--cnz-line);
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cnz-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+/* Density + brand focus inside document */
+.cnz .h-9,
+.cnz .h-8,
+.cnz .h-7 {
+  height: 1.75rem !important;
+  min-height: 1.75rem !important;
+  font-size: 0.75rem !important;
+  border-radius: 0.375rem !important;
+  padding-left: 0.45rem !important;
+  padding-right: 0.45rem !important;
+}
+
+.cnz input:focus-visible,
+.cnz textarea:focus-visible,
+.cnz button:focus-visible {
+  outline: none;
+}
+
+.cnz input:focus-visible,
+.cnz textarea:focus-visible {
+  border-color: #ffcb90 !important;
+  box-shadow: 0 0 0 2px rgba(217, 106, 16, 0.18) !important;
+}
+
+.cnz textarea {
+  font-size: 0.75rem !important;
+  border-radius: 0.5rem !important;
+  min-height: 2.75rem !important;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.5rem !important;
+  border: 1px solid var(--cnz-line) !important;
+  background: #fff;
+}
+
+.cnz .cnz-impact {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--cnz-line);
+}
+
+.cnz-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 9999px;
+  border: 1px solid var(--cnz-line);
+  color: var(--cnz-label);
+  background: #fff;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cnz-info-btn:hover {
+  color: var(--cnz-accent);
+  border-color: #ffcb90;
+  background: #fff3e8;
+}
+
+.cnz-info-pop {
+  width: 16rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.6875rem;
+}
+
+.cnz-info-pop__row {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 0.3rem;
+  padding: 0.18rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.cnz-info-pop__row:last-child {
+  border-bottom: none;
+}
+
+.cnz-info-pop__row span:first-child {
+  color: var(--cnz-label);
+}
+
+.cnz-info-pop__row span:last-child {
+  color: var(--cnz-ink);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+/* GST No/Yes — brand orange active */
+.cnz-gst-toggle {
+  display: inline-flex;
+  border-radius: 0.375rem;
+  border: 1px solid var(--cnz-line);
+  padding: 0.125rem;
+  background: hsl(var(--muted) / 0.2);
+}
+
+.cnz-gst-toggle button {
+  height: 1.35rem;
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border-radius: 0.25rem;
+  transition: colors 0.15s;
+  color: var(--cnz-label);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.cnz-gst-toggle button[data-active="true"] {
+  background: var(--cnz-accent);
+  color: #fff;
+}
+
+.cnz-gst-toggle button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

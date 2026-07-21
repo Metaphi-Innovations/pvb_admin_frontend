@@ -29,10 +29,10 @@ function inferFromPathNames(names: string[]): CoaSpecializedGroupType | null {
   if (names.some(matchesTdsPayableName)) return "tds_payable";
   if (names.some(matchesTdsReceivableName)) return "tds_receivable";
   if (names.some((n) => GST_DUTIES_NAMES.has(n.toLowerCase()))) return "gst_duties";
-  if (names.some((n) => n.includes("sundry debtors") || n.includes("trade receivables"))) {
+  if (names.some((n) => n.includes("sundry debtors") || n.includes("trade receivables") || n === "accounts receivable")) {
     return "sundry_debtors";
   }
-  if (names.some((n) => n.includes("sundry creditors") || n.includes("trade payables"))) {
+  if (names.some((n) => n.includes("sundry creditors") || n.includes("trade payables") || n === "accounts payable")) {
     return "sundry_creditors";
   }
   if (names.some((n) => n === "bank accounts" || n.includes("bank account"))) {

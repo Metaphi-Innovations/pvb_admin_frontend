@@ -16,6 +16,7 @@ import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync
 import {
   buildSalesInvoicePrefillFromDispatch,
   findPendingDispatchForCustomer,
+  mapProratedSalesOrderExpenses,
   type DispatchSalesInvoicePrefill,
 } from "@/lib/accounts/dispatch-invoice-bridge";
 
@@ -108,20 +109,25 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
   const ledger = customer ? ensureCustomerLedgerFromMaster(customer) : null;
   const { lines, errors } = linesFromOrder(order);
 
+  const today = new Date().toISOString().slice(0, 10);
+  const placeOfSupply = custFields.placeOfSupply || custFields.state || "";
   return {
     invoiceType: "sales",
+    sourceType: "sales_order",
     salesOrderId: order.id,
     salesOrderNo: order.soNumber,
+    salesOrderDate: order.orderDate ?? "",
     sourceDispatchId: "",
     dispatchNo: "",
+    dispatchDate: "",
     branch: "Head Office",
     warehouse: "Central Warehouse",
     salesperson: order.salesManName ?? "",
     referenceNo: order.soNumber,
     paymentTerms: custFields.paymentTerms ?? "Net 30",
     creditDays,
-    dueDate: dueDateFromTerms(order.orderDate, creditDays),
-    invoiceDate: order.orderDate,
+    dueDate: dueDateFromTerms(today, creditDays),
+    invoiceDate: today,
     customerId: custFields.customerId,
     customerLedgerId: ledger?.id ?? null,
     customerCode: custFields.customerCode ?? "",
@@ -134,12 +140,26 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
     shippingAddress: custFields.shippingAddress || custFields.billingAddress,
     pan: custFields.pan ?? "",
     contactPerson: custFields.contactPerson ?? "",
-    placeOfSupply: custFields.placeOfSupply ?? "",
-    state: custFields.state ?? "",
+    placeOfSupply,
+    state: custFields.state || placeOfSupply,
     gstTreatment: custFields.gstTreatment ?? "registered",
     receivableLedger: ledger?.accountName ?? custFields.receivableLedger,
+    billFrom: "Central Warehouse",
+    billTo: custFields.customerName,
+    shipTo: custFields.customerName,
+    dispatchQty: lines.reduce((s, l) => s + (l.qty || 0), 0),
+    transportMode: "",
+    transporterName: "",
+    transporterId: "",
+    vehicleNo: "",
+    lrNo: "",
+    lrDate: "",
+    transportDocNo: "",
+    transportDocDate: "",
+    distanceKm: null,
     lineItems: lines,
     lineErrors: errors,
+    additionalExpenses: mapProratedSalesOrderExpenses(order, lines),
     nearExpirySchemes: [],
   };
 }

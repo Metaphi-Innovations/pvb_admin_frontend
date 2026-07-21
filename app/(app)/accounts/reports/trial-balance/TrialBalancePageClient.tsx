@@ -376,35 +376,7 @@ export default function TrialBalancePageClient() {
 
   const sourceDetailedGroups = useMemo(() => {
     if (!mounted) return [];
-    const t0 = typeof performance !== "undefined" ? performance.now() : 0;
     const groups = buildTrialBalanceDetailedGroups(tbFilters);
-    const t1 = typeof performance !== "undefined" ? performance.now() : 0;
-    // #region agent log
-    if (typeof window !== "undefined") {
-      const ledgerCount = groups.reduce(
-        (sum, g) => sum + g.subgroups.reduce((s, sg) => s + sg.ledgers.length, 0),
-        0,
-      );
-      fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "179db4" },
-        body: JSON.stringify({
-          sessionId: "179db4",
-          runId: "tb-oom",
-          hypothesisId: "H2",
-          location: "TrialBalancePageClient.tsx:sourceDetailedGroups",
-          message: "trial balance groups built",
-          data: {
-            groupCount: groups.length,
-            ledgerCount,
-            ms: Math.round(t1 - t0),
-            voucherCount: typeof window !== "undefined" ? undefined : undefined,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, tbFilters, dataTick]);
@@ -448,23 +420,6 @@ export default function TrialBalancePageClient() {
         voucherLinesByLedgerId,
       },
     ).filter(isRenderableTrialBalanceDetailedRow);
-    // #region agent log
-    if (typeof window !== "undefined") {
-      fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "179db4" },
-        body: JSON.stringify({
-          sessionId: "179db4",
-          runId: "tb-oom",
-          hypothesisId: "H3",
-          location: "TrialBalancePageClient.tsx:detailedFlatRows",
-          message: "detailed flat rows computed",
-          data: { activeTab, rowCount: rows.length, expandedLedgers: expandedLedgerIds.size },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     return rows;
   }, [
     activeTab,

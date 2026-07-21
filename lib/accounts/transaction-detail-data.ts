@@ -78,6 +78,8 @@ export interface TransactionDetail {
   attachments: TransactionAttachment[];
   sourceHref: string;
   sourceLabel: string;
+  /** Optional edit route for mock / voucher forms */
+  editHref?: string;
 }
 
 export type TransactionDetailRef =
@@ -309,10 +311,55 @@ function detailFromDebitNote(note: DebitNoteRecord): TransactionDetail {
   };
 }
 
+function isLedgerStatementDemoVoucher(v: AccountingVoucher): boolean {
+  return (
+    v.referenceNo === "COA-LEDGER-STMT-DEMO" ||
+    v.voucherNumber.startsWith("COA-DMO-")
+  );
+}
+
+function mockAttachmentsForVoucher(v: AccountingVoucher): TransactionAttachment[] {
+  if (!isLedgerStatementDemoVoucher(v)) return [];
+  const stamp = v.date || "2026-04-01";
+  return [
+    {
+      id: `mock-att-${v.id}-1`,
+      name: "Supporting document",
+      fileName: `${v.voucherNumber.replace(/\s+/g, "_")}_support.pdf`,
+      uploadedAt: stamp,
+    },
+    {
+      id: `mock-att-${v.id}-2`,
+      name: "Approval note",
+      fileName: `${v.voucherNumber.replace(/\s+/g, "_")}_approval.pdf`,
+      uploadedAt: stamp,
+    },
+  ];
+}
+
+function mockGstForVoucher(v: AccountingVoucher, total: number): {
+  gstDetails?: string;
+  gstAmount?: number;
+  taxableAmount?: number;
+} {
+  if (!isLedgerStatementDemoVoucher(v)) return {};
+  const taxableTypes = new Set(["sales", "purchase", "credit_note", "debit_note"]);
+  if (!taxableTypes.has(v.voucherType)) return {};
+  const taxable = roundMoney(total / 1.18);
+  const gst = roundMoney(total - taxable);
+  return {
+    taxableAmount: taxable,
+    gstAmount: gst,
+    gstDetails: `CGST 9% + SGST 9% (mock) · Taxable ${formatMoney(taxable)}`,
+  };
+}
+
 function detailFromVoucher(v: AccountingVoucher, context?: { partyName?: string; debit?: number; credit?: number }): TransactionDetail {
   const source = resolveSourceDocumentLink(v);
   const approval = workflowApprovalMeta(v.workflow);
   const { debitLedger, creditLedger } = pickDebitCreditLedgers(v);
+  const totalAmount = Math.max(v.totalDebit, v.totalCredit);
+  const gst = mockGstForVoucher(v, totalAmount);
 
   return {
     voucherNumber: v.voucherNumber,
@@ -328,15 +375,18 @@ function detailFromVoucher(v: AccountingVoucher, context?: { partyName?: string;
     bankCashLedger: pickBankCashLedger(v),
     referenceNumber: v.referenceNo || undefined,
     ledgerLines: ledgerLinesFromVoucher(v),
-    totalAmount: Math.max(v.totalDebit, v.totalCredit),
+    ...gst,
+    netAmount: totalAmount,
+    totalAmount,
     debit: context?.debit ?? v.totalDebit,
     credit: context?.credit ?? v.totalCredit,
     narration: v.narration || "—",
     createdBy: v.createdBy,
     ...approval,
-    attachments: [],
+    attachments: mockAttachmentsForVoucher(v),
     sourceHref: source.href,
     sourceLabel: source.label,
+    editHref: `/accounts/vouchers/edit/${v.id}`,
   };
 }
 

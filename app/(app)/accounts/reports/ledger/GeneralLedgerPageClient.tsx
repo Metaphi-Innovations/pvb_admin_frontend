@@ -48,6 +48,8 @@ import {
 } from "@/lib/accounts/party-ledger-statement";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { BillWiseOutstandingButton } from "@/components/accounts/BillWiseOutstandingButton";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { cn } from "@/lib/utils";
 import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
@@ -569,6 +571,13 @@ function GeneralLedgerPageBody({
 }) {
   const canExport = Boolean(statement && ledgerId);
 
+  const billWiseLedger = useMemo(() => {
+    if (!ledgerId) return null;
+    const id = Number(ledgerId);
+    if (!Number.isFinite(id)) return null;
+    return loadChartOfAccounts().find((r) => r.id === id && r.nodeLevel === "ledger") ?? null;
+  }, [ledgerId]);
+
   const handleExportExcel = async () => {
     if (!statement || !openingRow || !closingRow) return;
     setExporting(true);
@@ -612,6 +621,7 @@ function GeneralLedgerPageBody({
               </Link>
             </Button>
           ) : null}
+          <BillWiseOutstandingButton ledger={billWiseLedger} from="gl" />
           <Button
             type="button"
             variant="outline"

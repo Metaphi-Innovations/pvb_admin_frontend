@@ -1,42 +1,38 @@
 "use client";
 
+/**
+ * Credit Note View — compact continuous document (aligned with create/edit).
+ */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, Pencil } from "lucide-react";
-import { RecordDetailPage } from "@/components/record-detail";
-import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
+import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
-import { formatLinkedInvoiceNos } from "./components/LinkedInvoicesMultiSelect";
+import { CreditNoteCustomerInfoButton } from "./components/CreditNoteCustomerInfoButton";
 import {
   canEditCreditNote,
   cancelCreditNote,
   CREDIT_NOTE_SOURCE_LABELS,
   getCreditNoteById,
+  getCustomersForCreditNote,
   type CreditNoteRecord,
 } from "./credit-notes-data";
-import { CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { creditNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import {
   canEditAccountsDocument,
   resolveWorkflowStatus,
 } from "@/lib/accounts/accounts-maker-checker";
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="text-xs font-medium mt-0.5">{value ?? "—"}</p>
-    </div>
-  );
-}
+import "./credit-note-tx.css";
 
 export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteId: number }) {
   const router = useRouter();
   const [record, setRecord] = useState<CreditNoteRecord | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const customers = getCustomersForCreditNote();
 
   const refresh = () => {
     const r = getCreditNoteById(creditNoteId);
@@ -53,157 +49,341 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
 
   if (!record) return null;
 
-  const canEdit = canEditCreditNote(record) && canEditAccountsDocument(record.workflow, record.status);
+  const canEdit =
+    canEditCreditNote(record) && canEditAccountsDocument(record.workflow, record.status);
   const displayStatus = resolveWorkflowStatus(record.workflow, record.status);
+  const isScheme = record.source === "payment_discount_scheme";
+  const isQty =
+    record.source === "sales_return" ||
+    record.lineItems.some((l) => (l.invoiceQty || 0) > 0);
+  const customer = record.customerId
+    ? customers.find((c) => c.id === record.customerId)
+    : customers.find((c) => c.customerName === record.customerName);
+  const invoiceCount =
+    record.linkedInvoices?.length ||
+    record.sourceInvoiceIds?.length ||
+    (record.sourceInvoiceNo ? 1 : 0);
+  const showCgst = (record.cgstAmount || 0) > 0;
+  const showSgst = (record.sgstAmount || 0) > 0;
+  const showIgst = (record.igstAmount || 0) > 0;
 
   return (
-    <RecordDetailPage
-      embedded
-      listHref={CREDIT_NOTES_LIST_PATH}
-      listLabel="Credit Notes"
-      recordName={record.customerName}
-      recordCode={record.creditNoteNo}
-      statusLabel={displayStatus.replaceAll("_", " ")}
-      statusVariant={
-        displayStatus === "posted" ? "active" : displayStatus === "draft" ? "draft" : "neutral"
-      }
-      metaItems={[{ icon: Calendar, label: record.creditNoteDate }]}
-      onEdit={canEdit ? () => router.push(`${CREDIT_NOTES_LIST_PATH}/${record.id}/edit`) : undefined}
-      sidebar={{
-        summary: [
-          { label: "Original Amount", value: formatINR(record.originalAmount) },
-          { label: "Already Adjusted", value: formatINR(record.alreadyAdjustedAmount) },
-          { label: "This Credit", value: formatINR(record.currentCreditAmount), highlight: true },
-          { label: "Balance After", value: formatINR(record.balanceAfterAdjustment) },
-          { label: "Created By", value: record.createdBy },
-          { label: "Updated By", value: record.updatedBy },
-        ],
-        approval: record.approvedBy
-          ? [{ label: "Approved By", value: record.approvedBy, tone: "approved" as const }]
-          : [],
-        activity: [...record.activity].reverse().slice(0, 5).map((a, i) => ({
-          id: `${a.at}-${i}`,
-          title: a.action.replaceAll("_", " "),
-          subtitle: a.detail,
-          date: new Date(a.at).toLocaleString(),
-        })),
-        quickActions: canEdit
-          ? [
-              {
-                label: "Edit Credit Note",
-                icon: Pencil,
-                variant: "outline" as const,
-                onClick: () => router.push(`${CREDIT_NOTES_LIST_PATH}/${record.id}/edit`),
-              },
-            ]
-          : [],
-      }}
-    >
-      <div className="space-y-4">
-        <LedgerImpactPreview
-          title="Accounting Entry — reduces customer outstanding"
-          lines={creditNoteImpactResolved({
-            customerName: record.customerName,
-            taxable: Math.max(0, record.currentCreditAmount - (record.taxCreditAmount ?? 0)),
-            taxAmount: record.taxCreditAmount ?? 0,
-            grandTotal: record.currentCreditAmount,
-          })}
-        />
-        <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.status} />
-
-        <AccountsDocumentWorkflowSection
-          category="credit_note"
-          documentId={record.id}
-          workflow={record.workflow}
-          legacyStatus={record.status}
-          onUpdated={refresh}
-        />
-
-        <div className="rounded-lg border border-brand-200/50 bg-brand-50/20 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-          <DetailRow label="Source" value={CREDIT_NOTE_SOURCE_LABELS[record.source]} />
-          <DetailRow
-            label="Reference Document"
-            value={
-              record.source === "sales_return"
-                ? record.sourceReturnNo
-                : record.source === "payment_discount_scheme"
-                  ? record.schemeName ?? record.schemeCode
-                  : record.reason
-            }
-          />
-          <DetailRow label="Customer" value={record.customerName} />
-          <DetailRow
-            label="Linked Invoice(s)"
-            value={
-              formatLinkedInvoiceNos(record.linkedInvoices) ||
-              record.sourceInvoiceNo ||
-              "—"
-            }
-          />
-          {record.source === "payment_discount_scheme" && record.schemeName && (
-            <DetailRow label="Scheme Name" value={record.schemeName} />
-          )}
-          {record.source === "payment_discount_scheme" && record.discountPercent != null && (
-            <DetailRow label="Discount %" value={`${record.discountPercent}%`} />
-          )}
-          {record.source === "sales_return" && record.sourceReturnNo && (
-            <DetailRow label="Sales Return No." value={record.sourceReturnNo} />
-          )}
-          <DetailRow label="Credit Note Date" value={record.creditNoteDate} />
-          <DetailRow label="Taxable Value" value={formatINR(record.taxableValue)} />
-          <DetailRow label="CGST" value={formatINR(record.cgstAmount)} />
-          <DetailRow label="SGST" value={formatINR(record.sgstAmount)} />
-          <DetailRow label="IGST" value={formatINR(record.igstAmount)} />
-          <DetailRow label="Total" value={formatINR(record.currentCreditAmount)} />
-        </div>
-
-        <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
-          <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-          <table className="accounts-table w-full min-w-[640px]">
-            <thead className="border-b">
-              <tr>
-                {["Product", "Description", "Inv Qty", "Return Qty", "Credit Amount"].map((h) => (
-                  <th key={h} className="py-1.5 text-left text-xs uppercase text-muted-foreground font-semibold">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {record.lineItems.map((l) => (
-                <tr key={l.id} className="border-b border-border/40">
-                  <td className="py-1.5">{l.productName || "—"}</td>
-                  <td className="py-1.5 text-muted-foreground">{l.description || "—"}</td>
-                  <td className="py-1.5">{l.invoiceQty || "—"}</td>
-                  <td className="py-1.5">{l.returnQty || "—"}</td>
-                  <td className="py-1.5 tabular-nums font-medium">{formatINR(l.creditAmount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {record.remarks && (
-          <div className="bg-white rounded-lg border p-4 text-xs">
-            <p className="text-xs uppercase text-muted-foreground mb-1">Remarks</p>
-            <p>{record.remarks}</p>
+    <>
+      <div className="h-full min-h-0 flex flex-col">
+      <AccountsFormLayout
+        fullWidth
+        title="Credit Note"
+        breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
+        code={record.creditNoteNo}
+        headerMeta={
+          <span className="inline-flex items-center h-6 px-2 rounded-md border border-brand-200 bg-brand-50 font-mono text-[11px] font-semibold text-brand-700">
+            {record.creditNoteNo}
+          </span>
+        }
+        stickyFooter={
+          <div className="cnz-footer">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+            >
+              Cancel
+            </Button>
+            <div className="flex items-center gap-2">
+              {canEdit ? (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={() =>
+                    router.push(`${CREDIT_NOTES_LIST_PATH}/${record.id}/edit`)
+                  }
+                >
+                  Edit
+                </Button>
+              ) : null}
+              {record.status !== "cancelled" && record.status !== "posted" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs text-red-600"
+                  onClick={() => setCancelOpen(true)}
+                >
+                  Cancel Note
+                </Button>
+              ) : null}
+            </div>
           </div>
-        )}
-
-        <div className="bg-white rounded-lg border p-4">
-          <h2 className="text-sm font-semibold mb-3">Activity Timeline</h2>
-          <div className="space-y-2">
-            {[...record.activity].reverse().map((a, i) => (
-              <div key={i} className="text-xs border-l-2 border-brand-200 pl-3 py-0.5">
-                <p className="font-medium capitalize">{a.action.replaceAll("_", " ")}</p>
-                <p className="text-muted-foreground">{a.detail}</p>
-                <p className="text-xs text-muted-foreground">
-                  {a.by} · {new Date(a.at).toLocaleString()}
+        }
+      >
+        <div className="cnz">
+          <div className="cnz-head">
+            <div className="cnz-f">
+              <label>
+                Customer
+                <CreditNoteCustomerInfoButton
+                  customer={customer}
+                  placeOfSupply={record.placeOfSupply}
+                />
+              </label>
+              <p className="cnz-ro font-medium">{record.customerName}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Credit Note No.</label>
+              <p className="cnz-ro font-mono text-[13px]">{record.creditNoteNo}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Credit Note Date</label>
+              <p className="cnz-ro text-[13px]">{record.creditNoteDate}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Reference No.</label>
+              <p className="cnz-ro text-[13px]">{record.referenceNo || "—"}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Salesperson</label>
+              <p className="cnz-ro text-[13px]">{record.salesperson || "—"}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Credit Note Basis</label>
+              <p className="cnz-ro text-[13px]">
+                {isScheme ? "Scheme" : isQty ? "Quantity Based" : "Amount Based"}
+              </p>
+            </div>
+            <div className="cnz-f">
+              <label>Reason</label>
+              <p className="cnz-ro text-[13px]">{record.reason || "—"}</p>
+            </div>
+            <div className="cnz-f">
+              <label>Linked Invoice</label>
+              <p className="cnz-ro text-[13px]">
+                {invoiceCount > 0
+                  ? `${invoiceCount} Invoice${invoiceCount === 1 ? "" : "s"}`
+                  : record.sourceInvoiceNo || "—"}
+              </p>
+            </div>
+            {isScheme && record.adjustmentLedgerName ? (
+              <div className="cnz-f">
+                <label>Mapped Ledger</label>
+                <p className="cnz-ro text-[13px] truncate">
+                  {record.adjustmentLedgerName}
                 </p>
               </div>
-            ))}
+            ) : null}
+            <div className="cnz-f cnz-head__full">
+              <span className="cnz-tag">
+                Source: {CREDIT_NOTE_SOURCE_LABELS[record.source]} · Status:{" "}
+                {displayStatus.replaceAll("_", " ")}
+              </span>
+            </div>
+          </div>
+
+          <div className="cnz-items">
+            <div className="cnz-items__bar">
+              <h2 className="cnz-items__title">
+                {isScheme
+                  ? "Scheme Particulars"
+                  : isQty
+                    ? "Quantity Particulars"
+                    : "Amount Particulars"}
+              </h2>
+            </div>
+            <div className="cnz-table-wrap">
+              <table
+                className={
+                  isScheme
+                    ? "cnz-table cnz-table--scheme"
+                    : isQty
+                      ? "cnz-table cnz-table--qty"
+                      : "cnz-table cnz-table--amt"
+                }
+              >
+                <thead>
+                  <tr>
+                    {isScheme ? (
+                      <>
+                        <th>Scheme Particular</th>
+                        <th>Mapped Ledger</th>
+                        <th className="text-right">Taxable</th>
+                        <th className="text-right">GST Amount</th>
+                        <th className="text-right">Credit Note Total</th>
+                      </>
+                    ) : isQty ? (
+                      <>
+                        <th>Product</th>
+                        <th>SKU</th>
+                        <th>Batch</th>
+                        <th className="text-right">Invoice Qty</th>
+                        <th className="text-right">Credit Qty</th>
+                        <th className="text-right">Rate</th>
+                        <th className="text-right">GST %</th>
+                        <th className="text-right">Total</th>
+                      </>
+                    ) : (
+                      <>
+                        <th>Particular</th>
+                        <th>Adjustment Ledger</th>
+                        <th className="text-right">Amount</th>
+                        <th className="text-right">GST %</th>
+                        {(record.igstAmount || 0) > 0 ? (
+                          <th className="text-right">IGST</th>
+                        ) : (
+                          <>
+                            <th className="text-right">CGST</th>
+                            <th className="text-right">SGST</th>
+                          </>
+                        )}
+                        <th className="text-right">Line Total</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {record.lineItems.map((l) => (
+                    <tr key={l.id}>
+                      {isScheme ? (
+                        <>
+                          <td className="font-medium">
+                            {l.productName || record.schemeName || "—"}
+                          </td>
+                          <td>{record.adjustmentLedgerName || "—"}</td>
+                          <td className="cnz-num">
+                            {formatINR(Math.max(0, l.creditAmount - (l.gstAmount || 0)))}
+                          </td>
+                          <td className="cnz-num">{formatINR(l.gstAmount || 0)}</td>
+                          <td className="cnz-num font-semibold">
+                            {formatINR(l.creditAmount)}
+                          </td>
+                        </>
+                      ) : isQty ? (
+                        <>
+                          <td className="font-medium">{l.productName || "—"}</td>
+                          <td className="font-mono text-[12px]">{l.sku || "—"}</td>
+                          <td className="font-mono text-[12px]">{l.batchNo || "—"}</td>
+                          <td className="cnz-num">{l.invoiceQty || "—"}</td>
+                          <td className="cnz-num">{l.returnQty || "—"}</td>
+                          <td className="cnz-num">
+                            {l.unitPrice ? l.unitPrice.toFixed(2) : "0.00"}
+                          </td>
+                          <td className="cnz-num">
+                            {l.taxPct > 0 ? `${l.taxPct}%` : "—"}
+                          </td>
+                          <td className="cnz-num font-semibold">
+                            {formatINR(l.creditAmount)}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td>
+                            {l.description || l.productName || record.reason || "—"}
+                          </td>
+                          <td>{record.adjustmentLedgerName || "—"}</td>
+                          <td className="cnz-num">
+                            {formatINR(Math.max(0, l.creditAmount - (l.gstAmount || 0)))}
+                          </td>
+                          <td className="cnz-num">
+                            {l.taxPct > 0 ? `${l.taxPct}%` : "—"}
+                          </td>
+                          {(record.igstAmount || 0) > 0 ? (
+                            <td className="cnz-num">
+                              {formatINR(l.gstAmount || record.igstAmount || 0)}
+                            </td>
+                          ) : (
+                            <>
+                              <td className="cnz-num">
+                                {formatINR(
+                                  l.gstAmount
+                                    ? Math.round((l.gstAmount / 2) * 100) / 100
+                                    : record.cgstAmount || 0,
+                                )}
+                              </td>
+                              <td className="cnz-num">
+                                {formatINR(
+                                  l.gstAmount
+                                    ? Math.round((l.gstAmount / 2) * 100) / 100
+                                    : record.sgstAmount || 0,
+                                )}
+                              </td>
+                            </>
+                          )}
+                          <td className="cnz-num font-semibold">
+                            {formatINR(l.creditAmount)}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="cnz-after-table">
+            <div />
+            <div className="cnz-totals">
+              <div className="cnz-totals__row">
+                <span>Subtotal</span>
+                <span>{formatINR(record.taxableValue)}</span>
+              </div>
+              {showCgst ? (
+                <div className="cnz-totals__row">
+                  <span>CGST</span>
+                  <span>{formatINR(record.cgstAmount)}</span>
+                </div>
+              ) : null}
+              {showSgst ? (
+                <div className="cnz-totals__row">
+                  <span>SGST</span>
+                  <span>{formatINR(record.sgstAmount)}</span>
+                </div>
+              ) : null}
+              {showIgst ? (
+                <div className="cnz-totals__row">
+                  <span>IGST</span>
+                  <span>{formatINR(record.igstAmount)}</span>
+                </div>
+              ) : null}
+              <div className="cnz-totals__grand">
+                <span>Credit Note Total</span>
+                <span>{formatINR(record.currentCreditAmount)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="cnz-notes">
+            <div className="cnz-f">
+              <label>Narration</label>
+              <p className="cnz-ro min-h-[3.25rem] items-start py-2 whitespace-pre-wrap text-[13px]">
+                {record.remarks || "—"}
+              </p>
+            </div>
+            <div className="cnz-f">
+              <AccountsDocumentWorkflowSection
+                category="credit_note"
+                documentId={record.id}
+                workflow={record.workflow}
+                legacyStatus={record.status}
+                onUpdated={refresh}
+              />
+            </div>
+          </div>
+
+          <div className="cnz-impact">
+            <LedgerImpactPreview
+              title="Accounting Entry"
+              lines={creditNoteImpactResolved({
+                customerName: record.customerName,
+                taxable: Math.max(
+                  0,
+                  record.currentCreditAmount - (record.taxCreditAmount ?? 0),
+                ),
+                taxAmount: record.taxCreditAmount ?? 0,
+                grandTotal: record.currentCreditAmount,
+              })}
+            />
           </div>
         </div>
+      </AccountsFormLayout>
       </div>
 
       <CreditNoteCancelDialog
@@ -215,6 +395,6 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
           refresh();
         }}
       />
-    </RecordDetailPage>
+    </>
   );
 }

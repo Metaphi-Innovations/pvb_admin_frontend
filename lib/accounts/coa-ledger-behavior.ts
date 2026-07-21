@@ -42,7 +42,12 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
     source: "ERP Customer Master",
     metadata: ["sundry_debtors"],
     stableCodes: ["1212"],
-    aliases: ["sundry debtors", "trade receivables / sundry debtors"],
+    aliases: [
+      "sundry debtors",
+      "accounts receivable",
+      "trade receivables / sundry debtors",
+      "trade receivables",
+    ],
   },
   {
     kind: "vendor",
@@ -50,7 +55,12 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
     source: "ERP Vendor Master",
     metadata: ["sundry_creditors"],
     stableCodes: ["2310"],
-    aliases: ["sundry creditors", "trade payables / sundry creditors"],
+    aliases: [
+      "sundry creditors",
+      "accounts payable",
+      "trade payables / sundry creditors",
+      "trade payables",
+    ],
   },
   {
     kind: "bank",
@@ -100,8 +110,15 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
     label: "GST Ledger",
     source: "GST Master",
     metadata: ["gst_input", "gst_output", "gst_payable", "gst_receivable", "gst_duties"],
-    stableCodes: ["23110", "23111"],
-    aliases: ["gst input", "gst input credit", "gst output", "gst payable", "gst receivable"],
+    stableCodes: ["1220", "2311", "23110", "23111"],
+    aliases: [
+      "duties & taxes",
+      "gst input",
+      "gst input credit",
+      "gst output",
+      "gst payable",
+      "gst receivable",
+    ],
   },
   {
     kind: "tds",

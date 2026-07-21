@@ -35,8 +35,9 @@ export function CoaNavigationProviderLazy({ children }: { children: React.ReactN
   const { activeAccountsSection } = useAccountsAccordion();
   const needsFullCoa = routeNeedsCoaData(pathname);
   const needsTreeCoa = activeAccountsSection === "coa";
+  const willMountProvider = needsFullCoa || needsTreeCoa;
 
-  if (!needsFullCoa && !needsTreeCoa) return <>{children}</>;
+  if (!willMountProvider) return <>{children}</>;
 
   return (
     <CoaNavigationProvider initMode={needsFullCoa ? "full" : "tree-only"}>

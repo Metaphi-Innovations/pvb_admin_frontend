@@ -16,6 +16,7 @@ import {
   postPurchaseInvoice,
   postSalesInvoice,
   postSalesInvoiceCogs,
+  postSampleOrderInventoryExpense,
   type PostingResult,
 } from "@/lib/accounts/posting-engine";
 import {
@@ -36,6 +37,30 @@ function taxableFromGrand(inv: {
 
 export function maybePostSalesInvoice(invoice: InvoiceRecord): PostingResult | null {
   if (invoice.invoiceStatus === "cancelled") return null;
+
+  const isSampleOrder =
+    invoice.sourceType === "sample_order" || invoice.invoiceType === "sample_order";
+
+  /** Sample Order Proforma — zero billing; post inventory consumption at CP only. */
+  if (isSampleOrder) {
+    return postSampleOrderInventoryExpense({
+      invoiceId: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      date: invoice.invoiceDate,
+      customerName: invoice.customerName,
+      lines: invoice.lineItems.map((l) => ({
+        productName: l.productName,
+        sku: l.productCode,
+        qty: l.qty,
+        costPrice: l.costPrice,
+      })),
+    });
+  }
+
+  /** Other proforma documents — no debtor / revenue posting. */
+  if (invoice.documentType === "proforma_invoice") {
+    return { success: true };
+  }
 
   const interstate = inferInterstateFromPlaceOfSupply(invoice.placeOfSupply);
   const lineInputs = invoice.lineItems.map((l) => ({

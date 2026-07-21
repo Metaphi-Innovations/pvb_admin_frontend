@@ -27,6 +27,10 @@ import { appendAuditTrailEntry } from "@/lib/accounts/audit-trail-data";
 import { linkCreditNoteToSalesReturn } from "@/lib/accounts/sales-return-credit-bridge";
 import { buildCreditNotesSeed } from "./credit-notes-seed";
 import {
+  markSchemeEntitlementCreditNoteGenerated,
+  syncSchemeEntitlementCreditNoteStatus,
+} from "@/lib/accounts/scheme-entitlement-demo";
+import {
   getProductReturnPieces,
   getSalesReturnById,
   getSalesReturnRecords,
@@ -38,17 +42,18 @@ export type CreditNoteSource = "sales_return" | "payment_discount_scheme" | "man
 export const CREDIT_NOTE_SOURCE_LABELS: Record<CreditNoteSource, string> = {
   sales_return: "Sales Return",
   payment_discount_scheme: "Scheme",
-  manual: "Manual",
+  manual: "Direct",
 };
 
 export const MANUAL_CREDIT_REASONS = [
-  "Commercial Discount",
-  "Rate Difference",
-  "Pricing Correction",
-  "GST Adjustment",
-  "Goodwill Discount",
-  "Billing Correction",
-  "Other Adjustment",
+  "Sales Return",
+  "Damaged Material",
+  "Quality Issue",
+  "Leakage",
+  "Expiry",
+  "Commercial Adjustment",
+  "Pricing Adjustment",
+  "Other",
 ] as const;
 
 export type CreditNoteAgainst = "sales_invoice" | "sales_order" | "general";
@@ -130,6 +135,8 @@ export interface CreditNoteRecord {
   subject?: string;
   billingAddress?: string;
   shippingAddress?: string;
+  /** Customer / ship-to place of supply — drives CGST+SGST vs IGST via existing GST helpers. */
+  placeOfSupply?: string;
   customerNotes?: string;
   termsAndConditions?: string;
   originalAmount: number;
@@ -159,6 +166,12 @@ export interface CreditNoteRecord {
   sourceReturnNo?: string;
   schemeName?: string;
   discountPercent?: number;
+  /** ERP scheme entitlement link (Phase 3) — additive */
+  schemeEntitlementId?: string;
+  schemeId?: string;
+  schemeType?: string;
+  calculationReference?: string;
+  sourceInvoiceIds?: number[];
   taxableValue: number;
   cgstAmount: number;
   sgstAmount: number;
@@ -194,6 +207,11 @@ function nextCreditNoteNo(records: CreditNoteRecord[]): string {
     return Number.isFinite(n) ? Math.max(m, n) : m;
   }, 0);
   return `CN-${String(max + 1).padStart(4, "0")}`;
+}
+
+/** Preview of the next auto CN number for create forms (assigned on save). */
+export function peekNextCreditNoteNo(): string {
+  return nextCreditNoteNo(loadCreditNotes());
 }
 
 function appendActivity(
@@ -353,9 +371,7 @@ export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
   const lineItems = rec.lineItems.map((l) => normalizeCreditLine(l));
   const currentCreditAmount = lineItems.reduce((s, l) => s + l.creditAmount, 0);
   const { taxAmount } = computeCreditNoteGstSplit(lineItems);
-  const interstate = inferInterstateFromPlaceOfSupply(
-    (rec as { placeOfSupply?: string }).placeOfSupply,
-  );
+  const interstate = inferInterstateFromPlaceOfSupply(rec.placeOfSupply);
   const taxBreakup = computeNoteTaxBreakup(lineItems, interstate);
   const originalAmount = rec.originalAmount > 0 ? rec.originalAmount : currentCreditAmount;
   const balanceAfterAdjustment = Math.max(
@@ -719,6 +735,37 @@ function validateBasic(input: CreditNoteFormInput, options?: { requireAmount?: b
   if (input.source === "manual" && requireAmount && !input.adjustmentLedgerId && !input.adjustmentLedgerName) {
     throw new Error("Select an adjustment ledger for the credit note.");
   }
+  if (
+    input.schemeEntitlementId &&
+    requireAmount &&
+    !input.adjustmentLedgerId &&
+    !input.adjustmentLedgerName?.trim()
+  ) {
+    throw new Error(
+      "Scheme discount ledger is not mapped for this entitlement. Configure the mapped scheme ledger before posting.",
+    );
+  }
+}
+
+function linkEntitlementAfterCreditNoteWrite(note: CreditNoteRecord): void {
+  if (!note.schemeEntitlementId || note.status === "cancelled") return;
+  try {
+    markSchemeEntitlementCreditNoteGenerated(note.schemeEntitlementId, {
+      creditNoteId: note.id,
+      creditNoteNo: note.creditNoteNo,
+      creditNoteStatus: note.status,
+    });
+  } catch {
+    try {
+      syncSchemeEntitlementCreditNoteStatus(note.schemeEntitlementId, {
+        creditNoteId: note.id,
+        creditNoteNo: note.creditNoteNo,
+        creditNoteStatus: note.status,
+      });
+    } catch {
+      /* entitlement link is best-effort after CN write */
+    }
+  }
 }
 
 export type CreditNoteFormInput = {
@@ -730,6 +777,7 @@ export type CreditNoteFormInput = {
   subject?: string;
   billingAddress?: string;
   shippingAddress?: string;
+  placeOfSupply?: string;
   customerNotes?: string;
   termsAndConditions?: string;
   sourceInvoiceId: number | null;
@@ -751,6 +799,11 @@ export type CreditNoteFormInput = {
   sourceReturnNo?: string;
   schemeName?: string;
   discountPercent?: number;
+  schemeEntitlementId?: string;
+  schemeId?: string;
+  schemeType?: string;
+  calculationReference?: string;
+  sourceInvoiceIds?: number[];
   adjustmentLedgerId?: number;
   adjustmentLedgerName?: string;
   referenceNo?: string;
@@ -768,7 +821,13 @@ function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
 function resolveCreditNoteSource(input: CreditNoteFormInput): CreditNoteSource {
   if (input.source) return input.source;
   if (input.sourceReturnNo) return "sales_return";
-  if (input.schemeSettlementKey || input.schemeName) return "payment_discount_scheme";
+  if (
+    input.schemeEntitlementId ||
+    input.schemeSettlementKey ||
+    input.schemeName
+  ) {
+    return "payment_discount_scheme";
+  }
   return "manual";
 }
 
@@ -808,6 +867,7 @@ export function createCreditNote(
     subject: normalizedInput.subject,
     billingAddress: normalizedInput.billingAddress,
     shippingAddress: normalizedInput.shippingAddress,
+    placeOfSupply: normalizedInput.placeOfSupply,
     customerNotes: normalizedInput.customerNotes,
     termsAndConditions: normalizedInput.termsAndConditions,
     originalAmount: normalizedInput.originalAmount,
@@ -831,6 +891,11 @@ export function createCreditNote(
     schemeSettlementKey: normalizedInput.schemeSettlementKey,
     schemeCode: normalizedInput.schemeCode,
     schemeSettlementAmount: normalizedInput.schemeSettlementAmount,
+    schemeEntitlementId: normalizedInput.schemeEntitlementId,
+    schemeId: normalizedInput.schemeId,
+    schemeType: normalizedInput.schemeType,
+    calculationReference: normalizedInput.calculationReference,
+    sourceInvoiceIds: normalizedInput.sourceInvoiceIds,
     adjustmentLedgerId: normalizedInput.adjustmentLedgerId,
     adjustmentLedgerName: normalizedInput.adjustmentLedgerName,
     referenceNo: normalizedInput.referenceNo,
@@ -844,6 +909,7 @@ export function createCreditNote(
     updatedAt: new Date().toISOString(),
   });
   saveCreditNotes([...all, rec]);
+  linkEntitlementAfterCreditNoteWrite(rec);
   return rec;
 }
 
@@ -877,6 +943,7 @@ export function updateCreditNote(
     subject: normalizedInput.subject,
     billingAddress: normalizedInput.billingAddress,
     shippingAddress: normalizedInput.shippingAddress,
+    placeOfSupply: normalizedInput.placeOfSupply ?? cur.placeOfSupply,
     customerNotes: normalizedInput.customerNotes,
     termsAndConditions: normalizedInput.termsAndConditions,
     originalAmount: normalizedInput.originalAmount,
@@ -893,6 +960,13 @@ export function updateCreditNote(
     schemeSettlementKey: normalizedInput.schemeSettlementKey,
     schemeCode: normalizedInput.schemeCode,
     schemeSettlementAmount: normalizedInput.schemeSettlementAmount,
+    schemeEntitlementId:
+      normalizedInput.schemeEntitlementId ?? cur.schemeEntitlementId,
+    schemeId: normalizedInput.schemeId ?? cur.schemeId,
+    schemeType: normalizedInput.schemeType ?? cur.schemeType,
+    calculationReference:
+      normalizedInput.calculationReference ?? cur.calculationReference,
+    sourceInvoiceIds: normalizedInput.sourceInvoiceIds ?? cur.sourceInvoiceIds,
     adjustmentLedgerId: normalizedInput.adjustmentLedgerId ?? cur.adjustmentLedgerId,
     adjustmentLedgerName: normalizedInput.adjustmentLedgerName ?? cur.adjustmentLedgerName,
     referenceNo: normalizedInput.referenceNo ?? cur.referenceNo,
@@ -905,6 +979,7 @@ export function updateCreditNote(
   });
   all[idx] = updated;
   saveCreditNotes(all);
+  linkEntitlementAfterCreditNoteWrite(updated);
   return updated;
 }
 
@@ -1049,6 +1124,7 @@ export function approveCreditNote(id: number): CreditNoteRecord {
   }
 
   postCreditNoteAccounting(updated);
+  linkEntitlementAfterCreditNoteWrite(updated);
   if (updated.sourceReturnId) {
     linkCreditNoteToSalesReturn(
       updated.sourceReturnId,

@@ -1,0 +1,30 @@
+/* Sales Invoices — align with Accounts global dense density */
+
+.sales-invoices-compact .accounts-listing-filter-card {
+  padding: 0.375rem 0.5rem;
+}
+
+.sales-invoices-compact .accounts-table-th,
+.sales-invoices-compact .accounts-table > thead > tr > th {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.sales-invoices-compact .accounts-table-td,
+.sales-invoices-compact .accounts-table > tbody > tr > td {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  padding-top: 0.3125rem;
+  padding-bottom: 0.3125rem;
+  font-size: 12px;
+}
+
+.sales-invoices-compact .accounts-table-empty {
+  padding-top: 0.875rem;
+  padding-bottom: 0.875rem;
+}
