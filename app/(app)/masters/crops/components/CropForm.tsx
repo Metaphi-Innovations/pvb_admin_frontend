@@ -5,11 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { useCategoryDropdown } from "@/hooks/masters/use-categories";
-import { toCategoryIdSelectOptions } from "@/services/category-list.service";
-import { useCropFilterDropdown } from "@/hooks/masters/use-crops";
 import {
   DEFAULT_CROP_FORM,
+  CATEGORIES,
   FIELD_TYPES,
   SEASONS,
   type CropForm,
@@ -18,6 +16,9 @@ import {
 export type CropFormValues = CropForm;
 
 export { DEFAULT_CROP_FORM };
+
+const toSelectOptions = (values: readonly string[]) =>
+  values.map((value) => ({ label: value, value }));
 
 export function CropForm({
   form,
@@ -32,9 +33,9 @@ export function CropForm({
   onClearError: (key: string) => void;
   readOnly?: boolean;
 }) {
-  const categoryQuery = useCategoryDropdown();
-  const fieldTypeOptionsQuery = useCropFilterDropdown("field_type");
-  const seasonOptionsQuery = useCropFilterDropdown("season");
+  const fieldTypeOptions = useMemo(() => toSelectOptions(FIELD_TYPES), []);
+  const categoryOptions = useMemo(() => toSelectOptions(CATEGORIES), []);
+  const seasonOptions = useMemo(() => toSelectOptions(SEASONS), []);
 
   const set = <K extends keyof CropFormValues>(key: K, value: CropFormValues[K]) => {
     onChange({ ...form, [key]: value });
@@ -43,31 +44,6 @@ export function CropForm({
 
   const inputCls = (key: string) =>
     cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
-
-  const selectedCategoryName = useMemo(() => {
-    const match = (categoryQuery.data ?? []).find((item) => item.id === form.categoryId);
-    return match?.categoryName;
-  }, [categoryQuery.data, form.categoryId]);
-
-  const categoryOptions = useMemo(
-    () =>
-      toCategoryIdSelectOptions(
-        categoryQuery.data ?? [],
-        form.categoryId,
-        selectedCategoryName,
-      ),
-    [categoryQuery.data, form.categoryId, selectedCategoryName],
-  );
-
-  const fieldTypeOptions = useMemo(() => {
-    if (fieldTypeOptionsQuery.data?.length) return fieldTypeOptionsQuery.data;
-    return FIELD_TYPES.map((ft) => ({ label: ft, value: ft }));
-  }, [fieldTypeOptionsQuery.data]);
-
-  const seasonOptions = useMemo(() => {
-    if (seasonOptionsQuery.data?.length) return seasonOptionsQuery.data;
-    return SEASONS.map((s) => ({ label: s, value: s }));
-  }, [seasonOptionsQuery.data]);
 
   return (
     <div className="space-y-4">
@@ -117,14 +93,14 @@ export function CropForm({
           </Label>
           <AutocompleteSelect
             options={categoryOptions}
-            value={form.categoryId}
-            onChange={(v) => set("categoryId", v)}
-            placeholder={categoryQuery.isFetching ? "Loading categories..." : "Select Category"}
-            disabled={readOnly || categoryQuery.isFetching}
-            error={!!errors.categoryId}
+            value={form.category}
+            onChange={(v) => set("category", v)}
+            placeholder="Select Category"
+            disabled={readOnly}
+            error={!!errors.category}
             className="h-8 text-xs rounded-lg"
           />
-          {errors.categoryId && <p className="text-[11px] text-red-500">{errors.categoryId}</p>}
+          {errors.category && <p className="text-[11px] text-red-500">{errors.category}</p>}
         </div>
 
         <div className="space-y-1 md:col-span-2">
@@ -160,7 +136,7 @@ export function validateCropForm(form: CropFormValues) {
   const errors: Record<string, string> = {};
   if (!form.cropName.trim()) errors.cropName = "Crop name is required";
   if (!form.fieldType) errors.fieldType = "Field type is required";
-  if (!form.categoryId) errors.categoryId = "Category is required";
+  if (!form.category) errors.category = "Category is required";
   if (!form.season || form.season.length === 0) {
     errors.season = "At least one season must be selected";
   }

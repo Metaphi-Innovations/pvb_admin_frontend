@@ -351,7 +351,7 @@ export const MASTER_FILTER_FIELD_MAPS = {
   crop: {
     cropName: "crop_name",
     fieldType: "field_type",
-    categoryName: "category.categoryName",
+    category: "category",
     season: (value) => {
       const raw = Array.isArray(value) ? value.join(", ") : value;
       const trimmed = String(raw ?? "").trim();

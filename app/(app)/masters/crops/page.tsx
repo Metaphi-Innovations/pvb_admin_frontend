@@ -23,6 +23,9 @@ import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import {
   DEFAULT_CROP_FORM,
+  CATEGORIES,
+  FIELD_TYPES,
+  SEASONS,
   cropToForm,
   toCropRecord,
   validateCropApiForm,
@@ -163,11 +166,6 @@ export default function CropMasterPage() {
   const exportMutation = useExportCrops();
 
   const cropNameOptionsQuery = useCropFilterDropdown("crop_name", { enabled: isFilterOpen("cropName") });
-  const fieldTypeOptionsQuery = useCropFilterDropdown("field_type", { enabled: isFilterOpen("fieldType") });
-  const categoryOptionsQuery = useCropFilterDropdown("category__categoryName", {
-    enabled: isFilterOpen("categoryName"),
-  });
-  const seasonOptionsQuery = useCropFilterDropdown("season", { enabled: isFilterOpen("season") });
   const statusOptionsQuery = useCropFilterDropdown("is_active", { enabled: isFilterOpen("status") });
   const createdByOptionsQuery = useCropFilterDropdown("created_by_user__username", {
     enabled: isFilterOpen("createdBy"),
@@ -181,16 +179,16 @@ export default function CropMasterPage() {
     [cropNameOptionsQuery.data],
   );
   const fieldTypeOptions = useMemo(
-    () => fieldTypeOptionsQuery.data ?? [],
-    [fieldTypeOptionsQuery.data],
+    () => FIELD_TYPES.map((value) => ({ label: value, value })),
+    [],
   );
   const categoryOptions = useMemo(
-    () => categoryOptionsQuery.data ?? [],
-    [categoryOptionsQuery.data],
+    () => CATEGORIES.map((value) => ({ label: value, value })),
+    [],
   );
   const seasonOptions = useMemo(
-    () => seasonOptionsQuery.data ?? [],
-    [seasonOptionsQuery.data],
+    () => SEASONS.map((value) => ({ label: value, value })),
+    [],
   );
   const statusOptions = useMemo(() => {
     if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
@@ -358,7 +356,7 @@ export default function CropMasterPage() {
         width: "180px",
       },
       {
-        key: "categoryName",
+        key: "category",
         header: "Category",
         sortable: true,
         filterable: true,
@@ -479,7 +477,7 @@ export default function CropMasterPage() {
           crop_name: form.cropName,
           field_type: form.fieldType,
           season,
-          category_id: form.categoryId,
+          category: form.category,
         },
         {
           onSuccess: () => {
@@ -508,7 +506,7 @@ export default function CropMasterPage() {
           crop_name: form.cropName,
           field_type: form.fieldType,
           season,
-          category_id: form.categoryId,
+          category: form.category,
         },
       },
       {
@@ -555,11 +553,11 @@ export default function CropMasterPage() {
   const viewDrawer = active
     ? {
       title: active.cropName,
-      subtitle: active.categoryName || "Read-only crop details",
+      subtitle: active.category || "Read-only crop details",
       status: active.status,
       basicInfo: [
         { label: "Field Type", value: active.fieldType || "—" },
-        { label: "Category", value: active.categoryName || "—" },
+        { label: "Category", value: active.category || "—" },
         {
           label: "Season / Period",
           value: active.season.length > 0 ? active.season.join(", ") : "—",
