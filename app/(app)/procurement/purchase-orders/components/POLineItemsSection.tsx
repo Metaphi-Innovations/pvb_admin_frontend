@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { axiosInstance } from "@/api/axios";
 import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
 import {
   applyGstMasterToTaxRates,
@@ -20,8 +19,8 @@ import {
   calcPackingToBaseQty,
   enrichProductForProcurement,
   enrichProductFromDropdown,
+  resolvePOLineCostPrice,
 } from "@/lib/procurement/procurement-line-utils";
-import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { useProductDropdown } from "@/hooks/masters/use-products";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import type { PurchaseRequest } from "../../purchase-requests/pr-data";
@@ -87,7 +86,11 @@ function lineFromProduct(
 ): POLineItem | null {
   const info = enrichProductFromDropdown(productId, dbProducts);
   if (!info) return null;
-  const cp = resolvePurchaseCostPrice(productId, typeof supplierId === "number" ? supplierId : undefined);
+  const cp = resolvePOLineCostPrice(
+    productId,
+    dbProducts,
+    typeof supplierId === "number" ? supplierId : undefined,
+  );
   const gst = parseFloat(findProductRefGst(productId, dbProducts).replace(/%/g, "")) || 0;
   const taxRates = applyTaxSupplyToRates(gst, taxSupplyType);
   const orderUom = packagingUnitToOrderUom(info.packagingUnit);
@@ -209,46 +212,15 @@ export function POLineItemsSection({
     setInlineEditError(null);
   };
 
-  const quickAdd = async () => {
+  const quickAdd = () => {
     if (quickProductIds.length === 0) return;
     const packingQty = Number(quickQty) || 1;
-    let nextLines = [...form.lines];
-
-    const pricingPromises = quickProductIds.map(async (productId) => {
-      try {
-        const targetState = supplierState || form.state;
-        if (targetState) {
-          const res = await axiosInstance.post("/master/product/pricing", {
-            product_id: productId,
-            state_name: targetState,
-          });
-          if (res.data?.success && res.data?.data) {
-            return {
-              productId,
-              cost_price: res.data.data.cost_price,
-              success: true
-            };
-          }
-        }
-      } catch (err) {
-        console.error(`Failed to fetch pricing for product ${productId}:`, err);
-      }
-      return { productId, success: false };
-    });
-
-    const resolvedPricings = await Promise.all(pricingPromises);
-    const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
+    const nextLines = [...form.lines];
 
     for (const idStr of quickProductIds) {
       const productId = idStr;
       const line = lineFromProduct(productId, packingQty, form.supplierId, taxSupplyType, dbProducts);
       if (!line) continue;
-
-      const apiPricing = pricingMap.get(productId);
-      if (apiPricing && apiPricing.success) {
-        line.unitPrice = apiPricing.cost_price;
-        line.cpSource = "pricing_master";
-      }
 
       nextLines.push({
         ...line,
@@ -476,8 +448,7 @@ export function POLineItemsSection({
                   ? enrichProductFromDropdown(draft.productId, dbProducts)
                   : null;
                 const calcLine = getPreviewLine(line.uid);
-                const displayHsn =  draftInfo?.hsnCode ?? line.hsnCode;
-                console.log(":",line);
+                const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
                 const displayPackaging = draftInfo?.packagingUnit ?? line.packagingUnit;
                 const displayConversion = draftInfo?.conversionQty ?? line.conversionQty;
                 const displaySkuQty =
@@ -537,33 +508,23 @@ export function POLineItemsSection({
                         <AutocompleteSelect
                           options={productOptions}
                           value={draft.productId}
-                          onChange={async (val) => {
+                          onChange={(val) => {
                             const productId = String(val);
                             const gst = parseFloat(findProductRefGst(productId, dbProducts).replace(/%/g, "")) || 0;
                             const gstMasterId =
                               findGstMasterIdByTotalPct(gst) ?? getDefaultGstMasterId();
-                            let price = 0;
-                            try {
-                              const targetState = supplierState || form.state;
-                              if (targetState) {
-                                const res = await axiosInstance.post("/master/product/pricing", {
-                                  product_id: productId,
-                                  state_name: targetState,
-                                });
-                                if (res.data?.success && res.data?.data) {
-                                  price = res.data.data.cost_price;
-                                }
-                              }
-                            } catch (err) {
-                              console.error("Failed to fetch product pricing on change:", err);
-                            }
+                            const cp = resolvePOLineCostPrice(
+                              productId,
+                              dbProducts,
+                              asLocalSupplierId(form.supplierId),
+                            );
                             setInlineEditDraft((prev) =>
                               prev
                                 ? {
                                     ...prev,
                                     productId: String(val),
                                     gstMasterId: String(gstMasterId),
-                                    unitPrice: price ? String(price) : prev.unitPrice,
+                                    unitPrice: cp.amount ? String(cp.amount) : prev.unitPrice,
                                   }
                                 : prev,
                             );

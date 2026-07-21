@@ -74,6 +74,7 @@ export interface ProductListRecord {
   packSize: number | null;
   baseUnit: string;
   mrp: number | null;
+  costPrice?: number | null;
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
@@ -119,6 +120,7 @@ export type ProductFilterField =
   | "unit"
   | "pack_size"
   | "mrp"
+  | "cost_price"
   | "status"
   | "created_by_user__username"
   | "updated_by_user__username";
@@ -154,6 +156,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
   packSize: "pack_size",
   baseUnit: "unit",
   mrp: "mrp",
+  costPrice: "cost_price",
   status: "status",
 };
 
@@ -218,6 +221,27 @@ function formatDate(value: unknown): string {
 }
 
 function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const cleaned = value.replace(/,/g, "").trim();
+    if (!cleaned) return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof value === "object") {
+    const obj = value as { toJSON?: () => unknown; toString?: () => string };
+    if (typeof obj.toJSON === "function") {
+      return toNullableNumber(obj.toJSON());
+    }
+    if (typeof obj.toString === "function") {
+      const text = obj.toString().trim();
+      if (text && text !== "[object Object]") {
+        const n = Number(text.replace(/,/g, ""));
+        if (Number.isFinite(n)) return n;
+      }
+    }
+  }
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -283,6 +307,7 @@ function mapItem(
     packSize: toNullableNumber(raw.pack_size),
     baseUnit: asString(raw.base_unit ?? raw.unit),
     mrp: toNullableNumber(raw.mrp),
+    costPrice: toNullableNumber(raw.cost_price ?? raw.costPrice),
     status: toStatus(raw.status, raw.is_active),
     createdAt: formatDate(raw.created_at),
     updatedAt: formatDate(raw.updated_at),

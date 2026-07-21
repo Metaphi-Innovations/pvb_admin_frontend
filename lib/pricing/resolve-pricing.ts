@@ -2,7 +2,7 @@
  * Standard company pricing resolution.
  *
  * Priority:
- * - Purchase: Vendor Product Price → Pricing Master CP
+ * - Purchase: Vendor Product Price → Product Master CP
  * - Sales: Customer Product Price → Pricing Master DP/RP (by customer type)
  *
  * MRP is always sourced from Pricing Master only.
@@ -98,7 +98,7 @@ export function customerUsesRetailPrice(customerType: string): boolean {
 }
 
 /**
- * Purchase cost: Vendor Product Price → Pricing Master CP
+ * Purchase cost: Vendor Product Price → Product Master CP
  */
 export function resolvePurchaseCostPrice(
   productKey: string | number,
@@ -127,7 +127,7 @@ export function resolvePurchaseCostPrice(
   }
 
   return {
-    amount: pricing?.costPrice ?? 0,
+    amount: product.costPrice ?? 0,
     source: "pricing_master",
     mrp: standardMrp,
   };

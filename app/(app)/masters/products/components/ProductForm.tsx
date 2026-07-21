@@ -85,6 +85,7 @@ export interface ProductFormValues {
 	netWeightPerPackagingUnit: string;
 	grossWeight: string;
 	mrp: string;
+	costPrice: string;
 	status: ProductStatus;
 	inventoryAccount: string;
 	salesAccount: string;
@@ -116,6 +117,7 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
 	netWeightPerPackagingUnit: "",
 	grossWeight: "",
 	mrp: "",
+	costPrice: "",
 	status: "active",
 	inventoryAccount: "",
 	salesAccount: "",
@@ -171,7 +173,8 @@ export function productToFormValues(product: Product): ProductFormValues {
 			netWeight !== undefined ? String(netWeight) : "",
 		grossWeight:
 			product.grossWeight !== undefined ? String(product.grossWeight) : "",
-		mrp: product.mrp !== undefined ? String(product.mrp) : "",
+		mrp: product.mrp != null ? String(product.mrp) : "",
+		costPrice: product.costPrice != null ? String(product.costPrice) : "",
 		status: product.status,
 		inventoryAccount: product.inventoryAccount ?? acctDefaults.inventoryAccount,
 		salesAccount: product.salesAccount ?? acctDefaults.salesAccount,
@@ -824,6 +827,27 @@ export function ProductForm({
 						</p>
 						<FieldError msg={errors.mrp} />
 					</div>
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>Cost Price</Label>
+						<IndianRupeeInput
+							value={
+								form.costPrice && !isNaN(Number(form.costPrice))
+									? Number(form.costPrice)
+									: 0
+							}
+							onChange={(v) => set("costPrice", v > 0 ? String(v) : "")}
+							disabled={readOnly}
+							className={cn(
+								inputCls("costPrice"),
+								"h-8 text-xs font-normal rounded-input",
+							)}
+							placeholder='₹ 0'
+						/>
+						<p className='text-[10px] text-muted-foreground'>
+							This value is used as source in Pricing Master.
+						</p>
+						<FieldError msg={errors.costPrice} />
+					</div>
 				</div>
 			</div>
 
@@ -1124,6 +1148,9 @@ export function validateProductForm(
 	if (form.mrp && (isNaN(Number(form.mrp)) || Number(form.mrp) < 0)) {
 		errors.mrp = "MRP must be a valid amount";
 	}
+	if (form.costPrice && (isNaN(Number(form.costPrice)) || Number(form.costPrice) < 0)) {
+		errors.costPrice = "Cost price must be a valid amount";
+	}
 	return errors;
 }
 
@@ -1149,6 +1176,7 @@ export function formValuesToProduct(
 		parseOptionalNum(form.netWeightPerPackagingUnit);
 	const grossWeight = parseOptionalNum(form.grossWeight);
 	const mrp = parseOptionalNum(form.mrp);
+	const costPrice = parseOptionalNum(form.costPrice);
 	const acctDefaults = resolveProductAccountingDefaults();
 
 	return {
@@ -1178,6 +1206,7 @@ export function formValuesToProduct(
 		netWeightPerPackagingUnit,
 		grossWeight,
 		mrp,
+		costPrice,
 		status: form.status,
 		createdBy: base.createdBy ?? "Admin",
 		createdDate: base.createdDate ?? todayStr(),

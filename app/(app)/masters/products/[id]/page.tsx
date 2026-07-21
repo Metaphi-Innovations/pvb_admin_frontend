@@ -212,6 +212,7 @@ export default function ProductDetailPage() {
 			netWeightPerPackagingUnit: apiProduct.netWeight ?? undefined,
 			grossWeight: apiProduct.grossWeight ?? undefined,
 			mrp: apiProduct.mrp ?? undefined,
+			costPrice: apiProduct.costPrice != null ? apiProduct.costPrice : undefined,
 			status: apiProduct.status,
 			createdBy: apiProduct.createdBy || "Admin",
 			createdDate: apiProduct.createdAt || "",
@@ -336,6 +337,16 @@ export default function ProductDetailPage() {
 								}
 								amount
 								highlight
+							/>
+							<RecordKvRow
+								label='Cost Price'
+								value={
+									product.costPrice != null
+										? formatIndianRupeeDisplay(product.costPrice)
+										: undefined
+								}
+								amount
+								highlight
 								isLast
 							/>
 						</RecordSectionCard>
@@ -403,6 +414,13 @@ export default function ProductDetailPage() {
 						value:
 							product.mrp !== undefined && product.mrp > 0
 								? formatIndianRupeeDisplay(product.mrp)
+								: "—",
+					},
+					{
+						label: "Cost Price",
+						value:
+							product.costPrice != null
+								? formatIndianRupeeDisplay(product.costPrice)
 								: "—",
 					},
 					{ label: "GST %", value: product.gstRate || "—" },

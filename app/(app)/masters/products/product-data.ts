@@ -486,6 +486,8 @@ export interface Product {
   grossWeight?: number;
   /** Product-level MRP (not linked to Pricing Master). */
   mrp?: number;
+  /** Product-level cost price used by Pricing Master. */
+  costPrice?: number;
   status: ProductStatus;
   createdBy: string;
   createdDate: string;
@@ -1101,6 +1103,7 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     netWeightPerPackagingUnit,
     grossWeight,
     mrp: p.mrp !== undefined ? Number(p.mrp) : undefined,
+    costPrice: p.costPrice !== undefined ? Number(p.costPrice) : undefined,
     manufacturerProductCode: p.manufacturerProductCode ?? "",
     vendorProductCode: p.vendorProductCode ?? "",
     barcode: p.barcode ?? "",

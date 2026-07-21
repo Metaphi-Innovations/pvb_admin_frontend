@@ -69,6 +69,7 @@ export default function EditProductPage() {
       netWeightPerPackagingUnit: apiProduct.netWeight ?? undefined,
       grossWeight: apiProduct.grossWeight ?? undefined,
       mrp: apiProduct.mrp ?? undefined,
+      costPrice: apiProduct.costPrice != null ? apiProduct.costPrice : undefined,
       status: apiProduct.status,
       createdBy: apiProduct.createdBy || "Admin",
       createdDate: apiProduct.createdAt || "",
@@ -85,7 +86,11 @@ export default function EditProductPage() {
         })),
     };
 
-    setForm(productToFormValues(mappedProduct));
+    const nextForm = productToFormValues(mappedProduct);
+    if (apiProduct.costPrice != null) {
+      nextForm.costPrice = String(apiProduct.costPrice);
+    }
+    setForm(nextForm);
     setProductImages(getProductImages(mappedProduct));
     setProductUrls(getProductUrls(mappedProduct));
   }, [apiProduct]);
@@ -139,6 +144,7 @@ export default function EditProductPage() {
       net_weight: parseNum(form.netWeightPerPackagingUnit),
       gross_weight: parseNum(form.grossWeight),
       mrp: parseNum(form.mrp),
+      cost_price: parseNum(form.costPrice),
       is_active: form.status === "active",
       status: form.status === "active" ? "Active" : "Inactive",
       assets: buildProductApiAssets(productImages, productUrls),

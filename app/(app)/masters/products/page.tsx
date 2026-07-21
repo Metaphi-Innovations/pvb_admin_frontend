@@ -162,6 +162,9 @@ export default function ProductsPage() {
   const mrpOptionsQuery = useProductFilterDropdown("mrp", {
     enabled: isFilterOpen("mrp"),
   });
+  const costPriceOptionsQuery = useProductFilterDropdown("cost_price", {
+    enabled: isFilterOpen("costPrice"),
+  });
   const statusOptionsQuery = useProductFilterDropdown("status", {
     enabled: isFilterOpen("status"),
   });
@@ -200,6 +203,10 @@ export default function ProductsPage() {
     [baseUnitOptionsQuery.data],
   );
   const mrpOptions = useMemo(() => mrpOptionsQuery.data ?? [], [mrpOptionsQuery.data]);
+  const costPriceOptions = useMemo(
+    () => costPriceOptionsQuery.data ?? [],
+    [costPriceOptionsQuery.data],
+  );
   const statusOptions = useMemo(
     () =>
       statusOptionsQuery.data?.length
@@ -427,6 +434,23 @@ export default function ProductsPage() {
       ),
     },
     {
+      key: "costPrice",
+      header: "Cost Price",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: costPriceOptions,
+      width: "110px",
+      align: "right",
+      render: (_val, row) => (
+        <span className="font-semibold text-xs tabular-nums">
+          {row.costPrice !== null && row.costPrice !== undefined
+            ? formatIndianRupeeDisplay(row.costPrice)
+            : "—"}
+        </span>
+      ),
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -453,6 +477,7 @@ export default function ProductsPage() {
       packSizeOptions,
       baseUnitOptions,
       mrpOptions,
+      costPriceOptions,
       statusOptions,
     ],
   );

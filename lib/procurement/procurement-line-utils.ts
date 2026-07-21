@@ -195,6 +195,25 @@ export interface EnrichedProductLine {
 }
 
 import type { ProductDropdownItem } from "@/services/product-dropdown.service";
+import type { PriceSource } from "@/lib/pricing/resolve-pricing";
+
+export function resolvePOLineCostPrice(
+  productId: string | number,
+  dbProducts?: ProductDropdownItem[],
+  vendorId?: number,
+): { amount: number; source: PriceSource } {
+  const vendorPrice = resolvePurchaseCostPrice(productId, vendorId);
+  if (vendorPrice.source === "vendor_override") {
+    return { amount: vendorPrice.amount, source: vendorPrice.source };
+  }
+
+  const dbProd = (dbProducts || []).find((p) => String(p.product_id) === String(productId));
+  if (dbProd?.cost_price != null && dbProd.cost_price !== "") {
+    return { amount: Number(dbProd.cost_price) || 0, source: "pricing_master" };
+  }
+
+  return { amount: vendorPrice.amount, source: vendorPrice.source };
+}
 
 export function enrichProductFromDropdown(
   productId: string | number,

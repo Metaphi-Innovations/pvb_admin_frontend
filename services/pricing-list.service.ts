@@ -22,7 +22,6 @@ export interface PricingCreatePayload {
   product_id: string;
   state_name: string;
   customer_type_id: string;
-  cost_price?: number | null;
   dealer_price: number;
   is_active?: boolean;
 }
@@ -124,7 +123,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
   state: "state_name",
   customerType: "customer_type__customer_type_name",
   dealerPrice: "dealer_price",
-  costPrice: "cost_price",
+  costPrice: "product__cost_price",
   status: "is_active",
   createdAt: "created_at",
   updatedAt: "updated_at",
@@ -212,7 +211,7 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): PricingLi
     effectiveFrom: formatDate(raw.created_at),
     effectiveTo: "",
     priceListName: "",
-    costPrice: toNumber(raw.cost_price),
+    costPrice: toNumber(product.cost_price),
     mrp: toNumber(product.mrp),
     distributorPrice: dealerPrice,
     dealerPrice,

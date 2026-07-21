@@ -149,10 +149,9 @@ export function BulkPricingGrid({ lines, onChange, errors, onRemoveLine }: BulkP
                     </div>
                   </td>
                   <td className="px-2 py-1.5 align-top text-right">
-                    <PriceFieldCell
-                      value={line.costPrice}
-                      onChange={(v) => onChange(updateLine(lines, idx, { costPrice: v }))}
-                    />
+                    <span className="inline-block tabular-nums text-muted-foreground">
+                      {formatIndianRupeeDisplay(line.costPrice)}
+                    </span>
                   </td>
                   <td className="px-2 py-1.5 align-top text-right">
                     <PriceFieldCell
