@@ -129,6 +129,16 @@ export const API_ENDPOINTS = {
       FILTER_DROPDOWN: "/master/tds/filter-dropdown",
       DROPDOWN: "/master/tds/dropdown",
     },
+    TCS: {
+      LIST: "/master/tcs/list",
+      CREATE: "/master/tcs/create",
+      UPDATE: (id: string) => `/master/tcs/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/tcs/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/tcs/details/${id}`,
+      EXPORT: "/master/tcs/export",
+      FILTER_DROPDOWN: "/master/tcs/filter-dropdown",
+      DROPDOWN: "/master/tcs/dropdown",
+    },
     UNIT: {
       LIST: "/master/unit/list",
       CREATE: "/master/unit/create",
