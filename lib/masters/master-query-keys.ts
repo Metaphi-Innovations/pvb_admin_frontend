@@ -127,6 +127,18 @@ export const masterKeys = {
     dropdown: () => [...masterKeys.tds.all(), "dropdown"] as const,
   },
 
+  tcs: {
+    all: () => [...masterKeys.all, "tcs"] as const,
+    lists: () => [...masterKeys.tcs.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.tcs.lists(), params] as const,
+    details: () => [...masterKeys.tcs.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.tcs.details(), id] as const,
+    filterDropdowns: () => [...masterKeys.tcs.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.tcs.filterDropdowns(), fieldName] as const,
+    dropdown: () => [...masterKeys.tcs.all(), "dropdown"] as const,
+  },
+
   documentTypes: {
     all: () => [...masterKeys.all, "document-types"] as const,
     lists: () => [...masterKeys.documentTypes.all(), "list"] as const,
