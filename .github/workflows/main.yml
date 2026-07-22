@@ -23,10 +23,10 @@ jobs:
           rsync -av --delete \
                     --exclude='.git' \
                     --exclude='.env' \
-                    ./ /var/www/pvb.dev1.metaphi.in/                    
+                    ./ /var/www/pvb.dev1.metaphi.in/            
       - name: Install dependencies on pvb.dev1.metaphi.in
         working-directory: /var/www/pvb.dev1.metaphi.in
-        run: npm i && npm run build
+        run: rm -rf .next node_modules && npm i && npm run build
 
       - name: pm2 restart
         run: pm2 restart pvb.dev1.metaphi.in
