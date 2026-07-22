@@ -35,8 +35,8 @@ export const axiosInstance = axios.create({
 
 let getAccessTokenFn: () => string | null = () => null;
 let getRefreshTokenFn: () => string | null = () => null;
-let onTokenRefreshedFn: (access: string, refresh?: string) => void = () => {};
-let clearAuthFn: () => void = () => {};
+let onTokenRefreshedFn: (access: string, refresh?: string) => void = () => { };
+let clearAuthFn: () => void = () => { };
 
 export const setAuthTokenCallbacks = (
   getAccess: () => string | null,
@@ -139,7 +139,7 @@ axiosInstance.interceptors.response.use(
 
         if (response.data?.success && response.data?.data) {
           const { access, refresh: newRefresh } = response.data.data;
-          
+
           onTokenRefreshedFn(access, newRefresh);
 
           axiosInstance.defaults.headers.common.Authorization = `Bearer ${access}`;
@@ -150,7 +150,7 @@ axiosInstance.interceptors.response.use(
 
           return axiosInstance(originalRequest);
         } else {
-          throw new Error("Token refresh response structure is invalid.");
+          throw new Error("Token refresh response structure is invalid..");
         }
       } catch (refreshError) {
         processQueue(refreshError, null);
@@ -166,10 +166,10 @@ axiosInstance.interceptors.response.use(
     // Global Error Handling: Map backend response errors or network errors
     const backendData = error.response?.data as
       | {
-          message?: string;
-          error?: string;
-          validation_errors?: Array<{ path?: string; message?: string }>;
-        }
+        message?: string;
+        error?: string;
+        validation_errors?: Array<{ path?: string; message?: string }>;
+      }
       | undefined;
     const backendMessage =
       backendData?.message || backendData?.error || error.message || "An unexpected error occurred.";
