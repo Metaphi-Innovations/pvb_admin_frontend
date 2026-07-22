@@ -47,7 +47,7 @@ function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
   return {
     id: raw.packing_done_id,
     packingNo: raw.packing_done_no,
-    salesOrderNo: raw.packing_list_no || "",
+    salesOrderNo: raw.customer_snapshot?.source_document_no || raw.packing_list_no || "",
     customer: raw.customer_name || "",
     totalItems: Number(raw.total_items || 0),
     packedQuantity: Number(raw.total_packed_qty || 0),
@@ -56,7 +56,7 @@ function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
     status: raw.status as any,
     warehouse: raw.warehouse_name || "",
     sourceDocumentType: sourceDocType as any,
-    sourceDocumentNo: raw.packing_list_no || "",
+    sourceDocumentNo: raw.customer_snapshot?.source_document_no || raw.packing_list_no || "",
     sourceWarehouse: raw.source_warehouse || raw.warehouse_name || "",
     targetWarehouse: raw.target_warehouse || "",
     poNumber: raw.po_number || "",
@@ -78,7 +78,7 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     id: raw.packing_done_id,
     packingListId: raw.packing_list_id || raw.packing_list?.packing_list_id,
     packingNo: raw.packing_done_no,
-    salesOrderNo: raw.packing_list?.packing_number || "",
+    salesOrderNo: raw.customer_snapshot?.source_document_no || raw.packing_list?.packing_number || "",
     customer: customer,
     totalItems: products.length,
     packedQuantity: products.reduce((sum: number, p: any) => {
