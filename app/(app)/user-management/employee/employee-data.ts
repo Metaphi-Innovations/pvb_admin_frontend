@@ -285,6 +285,8 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "vendorCategory",   label: "Supplier Category",   actions: ["view","create","edit","delete"] },
       { id: "warehouseMaster",  label: "Warehouse",         actions: ["view","create","edit","delete"] },
       { id: "uomMaster",        label: "Units of Measure",  actions: ["view","create","edit","delete"] },
+      { id: "tds",              label: "TDS Master",        actions: ["view","create","edit","delete","export"] },
+      { id: "tcs",              label: "TCS Master",        actions: ["view","create","edit","delete","export"] },
       { id: "distributors",     label: "Distributors",      actions: ["view","create","edit","delete","export"] },
       { id: "retailers",        label: "Retailers",         actions: ["view","create","edit","delete","export"] },
     ],
