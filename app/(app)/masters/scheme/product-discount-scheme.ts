@@ -5,7 +5,7 @@ import {
   loadMasterRecords,
   type MasterStatus,
 } from "@/lib/masters/common";
-import { loadProducts } from "../products/product-data";
+import { formatPackSize, loadProducts } from "../products/product-data";
 import {
   buildProductPricingSnapshot,
   dateRangesOverlap,
@@ -341,9 +341,14 @@ const BLOCKING_APPROVAL_STATUSES = new Set(["approved", "active"]);
 
 export interface SchemeProductSelectOption {
   value: string;
+  /** Primary display line (name or formatted identity). */
   label: string;
+  /** Product master name only — used in summaries. */
+  productName?: string;
+  scientificName?: string;
   productCode?: string;
   sku?: string;
+  packSizeLabel?: string;
   category?: string;
   segment?: string;
   hsnCode?: string;
@@ -351,6 +356,20 @@ export interface SchemeProductSelectOption {
   sublabel?: string;
   searchText?: string;
   disabled?: boolean;
+}
+
+/** Preferred option text: Code/SKU — Name — Pack Size */
+export function formatSchemeProductOptionLabel(opt: {
+  productName?: string;
+  label?: string;
+  productCode?: string;
+  sku?: string;
+  packSizeLabel?: string;
+}): string {
+  const name = (opt.productName || opt.label || "").trim();
+  const code = (opt.productCode || opt.sku || "").trim();
+  const pack = (opt.packSizeLabel || "").trim();
+  return [code || null, name || null, pack || null].filter(Boolean).join(" — ");
 }
 
 function resolveProductSupplierName(product: ReturnType<typeof loadProducts>[number]): string {
@@ -364,9 +383,12 @@ export function loadSchemeProductSelectOptions(): SchemeProductSelectOption[] {
       const sku = p.sku.trim();
       const productCode = (p.productCode || "").trim();
       const supplierName = resolveProductSupplierName(p);
+      const packSizeLabel = formatPackSize(p);
+      const productName = p.productName;
       const sublabel = [
         productCode ? `Code: ${productCode}` : "",
         sku ? `SKU: ${sku}` : "",
+        packSizeLabel ? `Pack: ${packSizeLabel}` : "",
         p.category ? `Category: ${p.category}` : "",
         p.segment ? `Segment: ${p.segment}` : "",
         p.hsnCode ? `HSN: ${p.hsnCode}` : "",
@@ -377,9 +399,12 @@ export function loadSchemeProductSelectOptions(): SchemeProductSelectOption[] {
 
       return {
         value: String(p.id),
-        label: p.productName,
+        label: productName,
+        productName,
+        scientificName: p.scientificName || undefined,
         productCode: productCode || undefined,
         sku: sku || undefined,
+        packSizeLabel: packSizeLabel !== "—" ? packSizeLabel : undefined,
         category: p.category || undefined,
         segment: p.segment || undefined,
         hsnCode: p.hsnCode || undefined,
@@ -387,8 +412,10 @@ export function loadSchemeProductSelectOptions(): SchemeProductSelectOption[] {
         sublabel: sublabel || undefined,
         searchText: [
           productCode,
-          p.productName,
+          productName,
           sku,
+          p.scientificName,
+          packSizeLabel,
           supplierName,
           p.hsnCode,
           p.category,

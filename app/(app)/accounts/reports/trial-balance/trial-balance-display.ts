@@ -150,13 +150,35 @@ export function flattenTrialBalanceNormalRows(
   return flat;
 }
 
-/** Normal view — flat ledger row only. */
+/** Normal view — flat ledger row only (used by legacy export helpers). */
 export type TrialBalanceNormalLedgerRow = Extract<
   TrialBalanceNormalFlatRow,
   { type: "ledger" }
 >;
 
-/** Normal view — flat ledger balances only (no group hierarchy). */
+/** Normal view — primary account heads only (Particular | Debit | Credit). */
+export type TrialBalanceNormalPrimaryHeadRow = Extract<
+  TrialBalanceNormalFlatRow,
+  { type: "primary" }
+>;
+
+/** Normal view — main account heads (primary heads) with closing Debit / Credit. */
+export function flattenTrialBalanceNormalPrimaryHeadRows(
+  groups: TrialBalanceDetailedGroup[],
+): TrialBalanceNormalPrimaryHeadRow[] {
+  return buildPrimarySections(groups).map((section) => {
+    const closing = sumClosingAmounts([section]);
+    return {
+      type: "primary" as const,
+      primaryHeadId: section.primaryHeadId,
+      primaryHead: section.primaryHead,
+      debit: closing.debit,
+      credit: closing.credit,
+    };
+  });
+}
+
+/** @deprecated Prefer flattenTrialBalanceNormalPrimaryHeadRows for Normal Report UI. */
 export function flattenTrialBalanceNormalLedgerRows(
   groups: TrialBalanceDetailedGroup[],
 ): TrialBalanceNormalLedgerRow[] {

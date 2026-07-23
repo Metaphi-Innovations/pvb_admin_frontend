@@ -10,8 +10,13 @@ import {
   formatBenefit,
   formatValidity,
   isSchemeEditable,
+  SCHEME_CUSTOMER_OPTIONS,
+  SCHEME_EFFECT_MAP,
+  SCHEME_TYPE_DISPLAY_LABELS,
+  type SchemeCategory,
   type SchemeRecord,
 } from "../scheme-data";
+import { formatSchemeCustomerTypes } from "../scheme-unified-config";
 import {
   formatProductDiscountOperationalStatus,
   formatSchemeRupee,
@@ -47,7 +52,13 @@ import {
   isStandardSchemeRecord,
   isTurnoverRecord,
 } from "../standard-schemes";
-import { SCHEME_CUSTOMER_OPTIONS, SCHEME_EFFECT_MAP } from "../scheme-data";
+import {
+  buildSchemeWorkingSummary,
+  categoryShowsImpactFlags,
+  enrichSchemeUnifiedConfig,
+  schemeRecordToUnifiedForm,
+  schemeTypeDisplayLabel,
+} from "../scheme-unified-config";
 import SchemeDetailMetricsCards from "../components/SchemeDetailMetricsCards";
 import { getSchemeUtilizationStats } from "../scheme-analytics-data";
 
@@ -393,7 +404,7 @@ function StandardSchemeScopeTab({ record }: { record: SchemeRecord }) {
         <div className="rounded-lg border border-border bg-white px-4 py-3">
           <p className="mb-2 text-xs font-semibold">Outstanding Criteria</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <InfoItem label="Customer Type" value={record.customerType} />
+            <InfoItem label="Customer Type" value={formatSchemeCustomerTypes(record)} />
             <InfoItem label="Specific Customer" value={customers} />
             <InfoItem
               label="Minimum Outstanding"
@@ -443,7 +454,11 @@ function SchemeHeaderCard({ record }: { record: SchemeRecord }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-foreground">{record.schemeName}</h2>
-          <p className="text-[11px] text-muted-foreground">{record.schemeType}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {record.schemeCategory
+              ? schemeTypeDisplayLabel(record.schemeCategory as SchemeCategory)
+              : record.schemeType}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <SchemeStatusBadge active={operationalStatus === "Active"} />
@@ -453,9 +468,277 @@ function SchemeHeaderCard({ record }: { record: SchemeRecord }) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <InfoItem label="Scheme Code" value={record.schemeCode} />
-        <InfoItem label="Customer Type" value={record.customerType} />
+        <InfoItem label="Customer Type" value={formatSchemeCustomerTypes(record)} />
         <InfoItem label="Validity" value={formatValidity(record)} />
         <InfoItem label="Status" value={operationalStatus} />
+      </div>
+    </div>
+  );
+}
+
+function UnifiedConfigSummary({ record }: { record: SchemeRecord }) {
+  const enriched = enrichSchemeUnifiedConfig(record);
+  if (!enriched.schemeCategory && !enriched.conditionConfig && !enriched.benefitConfig) {
+    return null;
+  }
+
+  const form = schemeRecordToUnifiedForm(enriched);
+  const category = enriched.schemeCategory;
+  const condition = enriched.conditionConfig;
+  const benefit = enriched.benefitConfig;
+  const summary = buildSchemeWorkingSummary(form);
+  const showImpact = category ? categoryShowsImpactFlags(category) : false;
+
+  const paymentSlabs = condition?.paymentDaySlabs;
+  const turnoverSlabs = condition?.turnoverSlabs;
+  const specialAmountSlabs = condition?.specialDiscountAmountSlabs;
+  const specialQtySlabs = condition?.specialDiscountQuantitySlabs;
+  const isSpecialDiscount = category === "Special Discount";
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-border bg-white px-4 py-3">
+        <p className="mb-2 text-xs font-semibold">Scheme Details</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <InfoItem
+            label="Scheme Type"
+            value={
+              category
+                ? SCHEME_TYPE_DISPLAY_LABELS[category]
+                : "—"
+            }
+          />
+          {isSpecialDiscount && condition?.specialDiscountBasedOn ? (
+            <InfoItem
+              label="Based On"
+              value={
+                condition.specialDiscountBasedOn === "SALES_QUANTITY"
+                  ? "Sales Quantity"
+                  : "Sales Amount"
+              }
+            />
+          ) : null}
+          <InfoItem
+            label="Products"
+            value={
+              condition?.productScope === "SELECTED"
+                ? `${condition.productIds?.length ?? 0} selected`
+                : condition?.productScope === "ALL"
+                  ? "All Products"
+                  : isSpecialDiscount
+                    ? "All Products"
+                    : "—"
+            }
+          />
+          {isSpecialDiscount && condition?.specialDiscountUom ? (
+            <InfoItem label="UOM" value={condition.specialDiscountUom} />
+          ) : null}
+          {!isSpecialDiscount &&
+          condition?.discountType != null &&
+          condition.discountValue != null ? (
+            <>
+              <InfoItem label="Discount Type" value={condition.discountType} />
+              <InfoItem
+                label="Discount Value"
+                value={
+                  condition.discountType === "Fixed Amount"
+                    ? formatSchemeRupee(condition.discountValue)
+                    : `${condition.discountValue}%`
+                }
+              />
+            </>
+          ) : null}
+          {!isSpecialDiscount && condition?.applyDiscountOn ? (
+            <InfoItem label="Apply Discount On" value={condition.applyDiscountOn} />
+          ) : null}
+          {condition?.expiryWithinDays != null && condition.expiryWithinDays > 0 ? (
+            <InfoItem label="Expiry Within Days" value={condition.expiryWithinDays} />
+          ) : null}
+          {condition?.cashCalculationOn ? (
+            <InfoItem label="Calculation On" value={condition.cashCalculationOn} />
+          ) : null}
+          {condition?.turnoverPeriod ? (
+            <InfoItem label="Turnover Period" value={condition.turnoverPeriod} />
+          ) : null}
+          {condition?.turnoverCalculationOn ? (
+            <InfoItem label="Calculation On" value={condition.turnoverCalculationOn} />
+          ) : null}
+          {condition?.paymentCondition ? (
+            <InfoItem label="Payment Condition" value={condition.paymentCondition} />
+          ) : null}
+          {condition?.requiredPaymentPercentage != null &&
+          condition.requiredPaymentPercentage > 0 ? (
+            <InfoItem
+              label="Required Payment %"
+              value={`${condition.requiredPaymentPercentage}%`}
+            />
+          ) : null}
+          {condition?.paymentCalculationOn ? (
+            <InfoItem label="Calculation On" value={condition.paymentCalculationOn} />
+          ) : null}
+          <InfoItem
+            label="Benefit Provided Through"
+            value={benefit?.benefitThrough ?? "—"}
+          />
+          <InfoItem label="Benefit Given When" value={benefit?.benefitWhen ?? "—"} />
+          {showImpact ? (
+            <>
+              <InfoItem
+                label="Exclude from Turnover Discount"
+                value={enriched.deductFromTurnoverBase ? "Yes" : "No"}
+              />
+              <InfoItem
+                label="Exclude from Cash Discount"
+                value={enriched.deductFromCashDiscountBase ? "Yes" : "No"}
+              />
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {paymentSlabs && paymentSlabs.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-white">
+          <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold">
+            Payment Day Slabs
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px] text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/20 text-[10px] uppercase text-muted-foreground">
+                  <th className="px-3 py-2 text-left">From Day</th>
+                  <th className="px-3 py-2 text-left">To Day</th>
+                  <th className="px-3 py-2 text-right">Discount %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentSlabs.map((s) => (
+                  <tr key={s.id} className="border-b border-border/60">
+                    <td className="px-3 py-1.5 tabular-nums">{s.fromDay}</td>
+                    <td className="px-3 py-1.5 tabular-nums">{s.toDay}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {s.discountPercentage}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {turnoverSlabs && turnoverSlabs.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-white">
+          <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold">
+            Turnover Slabs
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px] text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/20 text-[10px] uppercase text-muted-foreground">
+                  <th className="px-3 py-2 text-left">Turnover From</th>
+                  <th className="px-3 py-2 text-left">Turnover To</th>
+                  <th className="px-3 py-2 text-right">Discount %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {turnoverSlabs.map((s) => (
+                  <tr key={s.id} className="border-b border-border/60">
+                    <td className="px-3 py-1.5 tabular-nums">{s.turnoverFrom}</td>
+                    <td className="px-3 py-1.5 tabular-nums">
+                      {s.turnoverTo == null ? "Above" : s.turnoverTo}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {s.discountPercentage}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {specialAmountSlabs && specialAmountSlabs.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-white">
+          <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold">
+            Achievement Slabs (Sales Amount)
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/20 text-[10px] uppercase text-muted-foreground">
+                  <th className="px-3 py-2 text-left">Eligible Sales From</th>
+                  <th className="px-3 py-2 text-left">Eligible Sales To</th>
+                  <th className="px-3 py-2 text-left">Type</th>
+                  <th className="px-3 py-2 text-right">Discount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {specialAmountSlabs.map((s) => (
+                  <tr key={s.id} className="border-b border-border/60">
+                    <td className="px-3 py-1.5 tabular-nums">
+                      {formatSchemeRupee(s.eligibleSalesFrom)}
+                    </td>
+                    <td className="px-3 py-1.5 tabular-nums">
+                      {s.eligibleSalesTo == null
+                        ? "Above"
+                        : formatSchemeRupee(s.eligibleSalesTo)}
+                    </td>
+                    <td className="px-3 py-1.5">{s.discountType}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {s.discountType === "Fixed Amount"
+                        ? formatSchemeRupee(s.discountValue)
+                        : `${s.discountValue}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {specialQtySlabs && specialQtySlabs.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-white">
+          <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs font-semibold">
+            Achievement Slabs (Sales Quantity)
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/20 text-[10px] uppercase text-muted-foreground">
+                  <th className="px-3 py-2 text-left">Qty From</th>
+                  <th className="px-3 py-2 text-left">Qty To</th>
+                  <th className="px-3 py-2 text-left">UOM</th>
+                  <th className="px-3 py-2 text-left">Type</th>
+                  <th className="px-3 py-2 text-right">Discount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {specialQtySlabs.map((s) => (
+                  <tr key={s.id} className="border-b border-border/60">
+                    <td className="px-3 py-1.5 tabular-nums">{s.quantityFrom}</td>
+                    <td className="px-3 py-1.5 tabular-nums">
+                      {s.quantityTo == null ? "Above" : s.quantityTo}
+                    </td>
+                    <td className="px-3 py-1.5">{s.uom || "—"}</td>
+                    <td className="px-3 py-1.5">{s.discountType}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {s.discountType === "Fixed Amount"
+                        ? formatSchemeRupee(s.discountValue)
+                        : `${s.discountValue}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-lg border border-border bg-white px-4 py-3">
+        <p className="mb-1.5 text-xs font-semibold">How This Scheme Will Work</p>
+        <p className="text-xs leading-relaxed text-foreground">{summary}</p>
       </div>
     </div>
   );
@@ -549,7 +832,7 @@ function StandardSchemeDetailsSection({ record }: { record: SchemeRecord }) {
         <div className="rounded-lg border border-border bg-white px-4 py-3">
           <p className="mb-2 text-xs font-semibold">Outstanding Criteria</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <InfoItem label="Customer Type" value={record.customerType} />
+            <InfoItem label="Customer Type" value={formatSchemeCustomerTypes(record)} />
             <InfoItem label="Specific Customer" value={customers} />
             <InfoItem
               label="Minimum Outstanding"
@@ -634,6 +917,7 @@ function SchemeDetailsTab({ record }: { record: SchemeRecord }) {
   return (
     <div className="space-y-3">
       <SchemeHeaderCard record={record} />
+      <UnifiedConfigSummary record={record} />
 
       {isProductDiscount && <SelectedStatesChips stateName={record.stateName} />}
 

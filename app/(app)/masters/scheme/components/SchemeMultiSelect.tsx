@@ -20,6 +20,8 @@ interface SchemeMultiSelectProps {
   error?: string;
   className?: string;
   maxSelection?: number;
+  /** Compact ERP density (Scheme Master unified form). */
+  dense?: boolean;
 }
 
 export function SchemeMultiSelect({
@@ -31,6 +33,7 @@ export function SchemeMultiSelect({
   error,
   className,
   maxSelection,
+  dense = false,
 }: SchemeMultiSelectProps) {
   const selected = options.filter((o) => selectedIds.includes(o.id));
   const allSelected = options.length > 0 && selectedIds.length === options.length;
@@ -67,15 +70,20 @@ export function SchemeMultiSelect({
   const showSelectAll = maxSelection !== 1 && options.length > 0;
 
   return (
-    <div className={cn("space-y-1", className)}>
-      <Label className="text-xs font-medium">{label}</Label>
+    <div className={cn(dense ? "space-y-0.5" : "space-y-1", className)}>
+      <Label className={cn(dense ? "text-[10px] font-medium text-muted-foreground" : "text-xs font-medium")}>
+        {label}
+      </Label>
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={cn(
-              "flex h-8 w-full items-center justify-between rounded-md border border-border bg-white px-2.5 text-xs text-left",
+              "flex w-full items-center justify-between rounded-md border border-border bg-white text-left",
               "hover:bg-muted/20 focus:outline-none focus:ring-1 focus:ring-brand-500",
+              dense
+                ? "scheme-ctrl h-7 px-2 text-[11px]"
+                : "h-8 px-2.5 text-xs",
               error && "border-red-400",
             )}
           >

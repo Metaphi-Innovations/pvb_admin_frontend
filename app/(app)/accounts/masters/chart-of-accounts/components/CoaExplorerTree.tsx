@@ -160,12 +160,6 @@ const TreeNode = memo(function TreeNodeComponent({
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
   const handleClick = () => {
-    // #region agent log
-    if (isLedger) {
-      const link = resolveCoaMasterLink(node, records);
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-A',location:'CoaExplorerTree.tsx:handleClick',message:'Tree ledger node clicked',data:{nodeId:node.id,name:node.accountName,nodeLevel:node.nodeLevel,hasOnLedgerOpen:Boolean(onLedgerOpen),linkCategory:link?.category??null,masterHref:link?.masterHref??null,erpSourceModule:node.erpSourceModule??null,erpSourceId:node.erpSourceId??null},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
     if (isLedger && onLedgerOpen) {
       onLedgerOpen(node);
       return;

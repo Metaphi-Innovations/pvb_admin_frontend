@@ -1,0 +1,318 @@
+/**
+ * Credit Note / Debit Note form density only.
+ * Scoped to `.credit-debit-note-form` — do not import outside CN/DN pages.
+ * Does not modify global CSS or components/ui/*.
+ */
+
+.credit-debit-note-form {
+  --cdn-ctrl-h: 30px;
+  --cdn-fs-page: 17px;
+  --cdn-fs-section: 10px;
+  --cdn-fs-label: 11px;
+  --cdn-fs-control: 12px;
+  --cdn-fs-body: 12px;
+  --cdn-fs-th: 10px;
+  --cdn-fs-helper: 10px;
+  --cdn-fs-grand: 13px;
+  --cdn-gap-card: 0.5rem;
+  --cdn-gap-field: 0.5rem 0.75rem;
+  --cdn-pad-card-x: 0.75rem;
+  --cdn-pad-card-y: 0.625rem;
+  --cdn-pad-header-y: 0.375rem;
+  font-family: inherit;
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Page title — medium/semibold, not oversized */
+.credit-debit-note-form .accounts-page-title {
+  font-size: var(--cdn-fs-page) !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.credit-debit-note-form .accounts-page-subtitle,
+.credit-debit-note-form .accounts-breadcrumb,
+.credit-debit-note-form .accounts-helper-text {
+  font-size: var(--cdn-fs-helper) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Section headers — template uppercase, distinct from labels */
+.credit-debit-note-form .cdn-section-title,
+.credit-debit-note-form .voucher-note-section-card__title {
+  font-size: var(--cdn-fs-section) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: hsl(var(--muted-foreground)) !important;
+  line-height: 1.2 !important;
+}
+
+.credit-debit-note-form .cdn-subsection-title {
+  font-size: var(--cdn-fs-section);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.2;
+  padding-bottom: 0.375rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+}
+
+/* Field labels — small medium, not bold */
+.credit-debit-note-form label,
+.credit-debit-note-form .accounts-form-label {
+  font-size: var(--cdn-fs-label) !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+  color: hsl(var(--muted-foreground)) !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
+.credit-debit-note-form label .text-red-500 {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* Card density */
+.credit-debit-note-form .voucher-note-section-card {
+  box-shadow: none;
+}
+
+.credit-debit-note-form .voucher-note-section-card__header {
+  padding: var(--cdn-pad-header-y) var(--cdn-pad-card-x) !important;
+  background: hsl(var(--muted) / 0.25) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+}
+
+.credit-debit-note-form .voucher-note-section-card__header .border-l-brand-600,
+.credit-debit-note-form .voucher-note-section-card__accent {
+  border-left-width: 0 !important;
+  padding-left: 0 !important;
+}
+
+.credit-debit-note-form .voucher-note-section-card__body {
+  padding: var(--cdn-pad-card-y) var(--cdn-pad-card-x) !important;
+}
+
+.credit-debit-note-form .voucher-note-section-card__body--flush {
+  padding: 0 !important;
+}
+
+.credit-debit-note-form .space-y-4 {
+  row-gap: var(--cdn-gap-card);
+}
+
+.credit-debit-note-form > .cdn-stack,
+.credit-debit-note-form .cdn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cdn-gap-card);
+}
+
+/* Field grids — content-fit, do not stretch short fields */
+.credit-debit-note-form .cdn-field-grid {
+  justify-items: start;
+  align-items: start;
+}
+
+.credit-debit-note-form .cdn-field-grid > * {
+  width: auto;
+  max-width: 100%;
+}
+
+/* Field widths — content-fit */
+.credit-debit-note-form .cdn-w-xs {
+  max-width: 7.5rem;
+  width: 7.5rem;
+}
+.credit-debit-note-form .cdn-w-sm {
+  max-width: 9.5rem;
+  width: 9.5rem;
+}
+.credit-debit-note-form .cdn-w-md {
+  max-width: 14rem;
+  width: 14rem;
+}
+.credit-debit-note-form .cdn-w-lg {
+  max-width: 18rem;
+  width: 18rem;
+}
+.credit-debit-note-form .cdn-w-ref {
+  max-width: 22rem;
+  width: 22rem;
+}
+
+.credit-debit-note-form .cdn-w-xs > *,
+.credit-debit-note-form .cdn-w-sm > *,
+.credit-debit-note-form .cdn-w-md > *,
+.credit-debit-note-form .cdn-w-lg > *,
+.credit-debit-note-form .cdn-w-ref > * {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Compact controls — ~30px (beat utility/component defaults) */
+.credit-debit-note-form input:not([type="checkbox"]):not([type="radio"]),
+.credit-debit-note-form select,
+.credit-debit-note-form button[role="combobox"],
+.credit-debit-note-form .accounts-filter-control,
+.credit-debit-note-form .cdn-control,
+.credit-debit-note-form .h-9,
+.credit-debit-note-form .h-8,
+.credit-debit-note-form .h-10,
+.credit-debit-note-form button.h-7,
+.credit-debit-note-form [data-accounts-date-input],
+.credit-debit-note-form .accounts-date-input,
+.credit-debit-note-form .accounts-date-filter-input {
+  height: var(--cdn-ctrl-h) !important;
+  min-height: var(--cdn-ctrl-h) !important;
+  max-height: var(--cdn-ctrl-h) !important;
+  font-size: var(--cdn-fs-control) !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  box-sizing: border-box;
+}
+
+.credit-debit-note-form textarea {
+  font-size: var(--cdn-fs-control) !important;
+  font-weight: 400 !important;
+  min-height: 56px !important;
+  max-height: 72px !important;
+}
+
+.credit-debit-note-form .text-sm {
+  font-size: var(--cdn-fs-control) !important;
+}
+
+/* Neutralize orange table header band inside note forms */
+.credit-debit-note-form table thead,
+.credit-debit-note-form table thead tr,
+.credit-debit-note-form .accounts-table-head-row {
+  background: hsl(var(--muted) / 0.35) !important;
+}
+
+.credit-debit-note-form .cdn-grand-total {
+  font-size: var(--cdn-fs-grand) !important;
+  font-weight: 600 !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Read-only plain text */
+.credit-debit-note-form .cdn-readonly,
+.credit-debit-note-form .voucher-note-readonly {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0.125rem 0 !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  font-size: var(--cdn-fs-control) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--foreground)) !important;
+  display: block;
+  line-height: 1.35;
+}
+
+.credit-debit-note-form .cdn-readonly--mono,
+.credit-debit-note-form .voucher-note-readonly.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+/* Tables */
+.credit-debit-note-form table {
+  font-size: var(--cdn-fs-body);
+}
+
+.credit-debit-note-form table thead th,
+.credit-debit-note-form .accounts-table-th {
+  font-size: var(--cdn-fs-th) !important;
+  font-weight: 600 !important;
+  color: hsl(var(--muted-foreground)) !important;
+  background: hsl(var(--muted) / 0.35) !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+
+.credit-debit-note-form table tbody td {
+  font-size: var(--cdn-fs-body) !important;
+  font-weight: 400 !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  vertical-align: middle;
+}
+
+.credit-debit-note-form table tbody input {
+  height: 26px !important;
+  min-height: 26px !important;
+  font-size: var(--cdn-fs-control) !important;
+  font-weight: 400 !important;
+}
+
+/* Amount summary block */
+.credit-debit-note-form .cdn-amount-summary {
+  width: 100%;
+  max-width: 340px;
+  margin-left: auto;
+}
+
+.credit-debit-note-form .cdn-amount-summary__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: var(--cdn-fs-body);
+  font-weight: 400;
+  line-height: 1.35;
+  padding: 0.125rem 0;
+}
+
+.credit-debit-note-form .cdn-amount-summary__row span:first-child {
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+}
+
+.credit-debit-note-form .cdn-amount-summary__row span:last-child {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+/* Segmented control */
+.credit-debit-note-form .cdn-segment button {
+  height: 26px !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+/* Header chips — less brand weight */
+.credit-debit-note-form .cdn-chip {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
+
+.credit-debit-note-form .cdn-chip--code {
+  border-color: hsl(var(--border)) !important;
+  background: hsl(var(--muted) / 0.35) !important;
+  color: hsl(var(--foreground)) !important;
+  font-weight: 500 !important;
+}
+
+/* Posting list dots — neutral, not orange */
+.credit-debit-note-form .cdn-posting-dot {
+  background: hsl(var(--muted-foreground) / 0.45) !important;
+}

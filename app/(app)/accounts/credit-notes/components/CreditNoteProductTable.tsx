@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated Obsolete quantity-based product editor.
+ * Credit Note now uses NoteReferenceDocumentDetails (read-only) + NoteParticularsTable.
+ * Kept for reference only — not imported by active routes.
+ */
+
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +18,8 @@ export interface CreditNoteProductTableProps {
   lines: CreditNoteLine[];
   readOnly?: boolean;
   onQtyChange: (lineId: string, qty: number) => void;
+  /** When true, tax amount is shown as IGST; otherwise split CGST/SGST. */
+  interstate?: boolean;
 }
 
 function lineAmounts(line: CreditNoteLine) {
@@ -35,6 +43,7 @@ export function CreditNoteProductTable({
   lines,
   readOnly,
   onQtyChange,
+  interstate = false,
 }: CreditNoteProductTableProps) {
   return (
     <div className="cnz-table-wrap">
@@ -52,7 +61,9 @@ export function CreditNoteProductTable({
             <th className="accounts-table-th text-right">Discount</th>
             <th className="accounts-table-th text-right">GST %</th>
             <th className="accounts-table-th text-right">Taxable</th>
-            <th className="accounts-table-th text-right">GST Amt</th>
+            <th className="accounts-table-th text-right">CGST</th>
+            <th className="accounts-table-th text-right">SGST</th>
+            <th className="accounts-table-th text-right">IGST</th>
             <th className="accounts-table-th text-right">Total</th>
           </tr>
         </thead>
@@ -66,6 +77,10 @@ export function CreditNoteProductTable({
                 ? Math.max(0, Math.round((line.invoiceQty - available) * 100) / 100)
                 : 0;
             const overMax = line.returnQty > maxQty + 0.0001;
+            const taxAmt = amounts?.taxAmt ?? 0;
+            const cgst = taxAmt > 0 && !interstate ? Math.round((taxAmt / 2) * 100) / 100 : 0;
+            const sgst = taxAmt > 0 && !interstate ? Math.round((taxAmt - cgst) * 100) / 100 : 0;
+            const igst = taxAmt > 0 && interstate ? taxAmt : 0;
             return (
               <tr key={line.id}>
                 <td className="font-medium leading-snug whitespace-normal">
@@ -100,7 +115,7 @@ export function CreditNoteProductTable({
                       min={0}
                       max={Number.isFinite(maxQty) ? maxQty : undefined}
                       className={cn(
-                        "cnz-cell-input h-7 w-[64px] text-xs text-right tabular-nums ml-auto",
+                        "cnz-cell-input h-8 w-[64px] text-xs text-right tabular-nums ml-auto",
                         overMax && "border-red-400",
                       )}
                       value={line.returnQty || ""}
@@ -118,9 +133,9 @@ export function CreditNoteProductTable({
                 <td className="cnz-num">
                   {amounts && amounts.taxable > 0 ? amounts.taxable.toFixed(2) : "0.00"}
                 </td>
-                <td className="cnz-num">
-                  {amounts && amounts.taxAmt > 0 ? amounts.taxAmt.toFixed(2) : "0.00"}
-                </td>
+                <td className="cnz-num">{cgst.toFixed(2)}</td>
+                <td className="cnz-num">{sgst.toFixed(2)}</td>
+                <td className="cnz-num">{igst.toFixed(2)}</td>
                 <td className="cnz-num font-semibold">
                   {amounts && amounts.amount > 0 ? amounts.amount.toFixed(2) : "0.00"}
                 </td>

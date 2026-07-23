@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useMemo } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CoaExplorerTree } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree";
@@ -9,8 +8,6 @@ import { requestCoaAddLedger } from "@/app/(app)/accounts/masters/chart-of-accou
 import { requestCoaAddSubGroup } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-group-bridge";
 import { useCoaNavigation } from "./CoaNavigationContext";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
-import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
-import { coaPartyMasterEditHref } from "@/lib/accounts/coa-party-master-routes";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { AccountsSidebarModuleHeader } from "./AccountsSidebarModuleHeader";
 import { ACCOUNTS_SIDEBAR_STICKY_HEAD_CLASS } from "@/lib/accounts/accounts-typography";
@@ -94,26 +91,10 @@ export function CoaSidebarNavTree({
     highlightedLedgerId,
   } = useCoaNavigation();
 
-  const router = useRouter();
   const canCreate = useCanCoa("create");
   const canEdit = useCanCoa("edit");
 
   const { setCollapsed, toggleCollapsed } = useAccountsSidebar();
-
-  const handleLedgerOpen = useCallback(
-    (node: ChartOfAccount) => {
-      const link = resolveCoaMasterLink(node, records);
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-A',location:'CoaSidebarNav.tsx:handleLedgerOpen',message:'Ledger open route selection',data:{nodeId:node.id,name:node.accountName,linkCategory:link?.category??null,sourceId:link?.sourceId??null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (link?.category === "customer" || link?.category === "vendor") {
-        router.push(coaPartyMasterEditHref(link.category, link.sourceId));
-        return;
-      }
-      selectNode(node);
-    },
-    [records, router, selectNode],
-  );
 
   if (collapsed) {
     return (
@@ -221,7 +202,6 @@ export function CoaSidebarNavTree({
             highlightedLedgerId={highlightedLedgerId}
             onSelect={selectNode}
             onToggle={toggleExpand}
-            onLedgerOpen={handleLedgerOpen}
             onAddLedger={requestCoaAddLedger}
             onAddSubGroup={requestCoaAddSubGroup}
             onRecordsChange={setRecords}

@@ -202,9 +202,6 @@ export default function NewCustomerPage() {
         msg: "Customer created successfully.",
         type: "success",
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'RET',location:'customers/new/page.tsx:persist',message:'Customer save leave target',data:{fromCoa,leaveHref,ledgerId:ledger?.id??null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const dest =
         fromCoa && ledger?.id != null
           ? `${CHART_OF_ACCOUNTS_HREF}?node=${ledger.id}`

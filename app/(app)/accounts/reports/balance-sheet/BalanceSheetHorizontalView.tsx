@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,6 @@ import {
   AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
-  AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import {
   buildBalanceSheetLedgerHref,
@@ -148,7 +147,7 @@ function SideAmountCell({
   );
 }
 
-export function BalanceSheetHorizontalView({
+export const BalanceSheetHorizontalView = memo(function BalanceSheetHorizontalView({
   statement,
   drillDownFilters,
 }: {
@@ -160,20 +159,24 @@ export function BalanceSheetHorizontalView({
     [statement],
   );
 
-  const defaultExpanded = useMemo(
-    () =>
+  const expandSeed = useMemo(() => {
+    const ids = [
+      ...collectBalanceSheetGroupIds(liabilities.tree),
+      ...collectBalanceSheetGroupIds(assets.tree),
+    ];
+    return ids.slice().sort().join("|");
+  }, [liabilities.tree, assets.tree]);
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setExpandedIds(
       new Set([
         ...collectBalanceSheetGroupIds(liabilities.tree),
         ...collectBalanceSheetGroupIds(assets.tree),
       ]),
-    [liabilities.tree, assets.tree],
-  );
-
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpanded);
-
-  useEffect(() => {
-    setExpandedIds(defaultExpanded);
-  }, [defaultExpanded]);
+    );
+  }, [expandSeed, liabilities.tree, assets.tree]);
 
   const toggle = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -190,113 +193,111 @@ export function BalanceSheetHorizontalView({
   );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full w-full">
-      <AccountsTableScroll className="flex-1 min-h-0">
-        <AccountsTable minWidth={720}>
-          <AccountsTableHead>
-            <AccountsTableHeadRow>
-              <AccountsTableHeadCell className="min-w-[200px] border-r border-border font-bold">
-                {liabilities.sectionTitle}
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell
-                align="right"
-                className="min-w-[120px] border-r-2 border-border font-bold"
-              >
-                {liabilities.amountColumnLabel}
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell className="min-w-[200px] border-r border-border font-bold">
-                {assets.sectionTitle}
-              </AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" className="min-w-[120px] font-bold">
-                {assets.amountColumnLabel}
-              </AccountsTableHeadCell>
-            </AccountsTableHeadRow>
-          </AccountsTableHead>
+    <div className="flex flex-col w-full">
+      <AccountsTable minWidth={720}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <AccountsTableHeadCell className="min-w-[200px] border-r border-border font-bold">
+              {liabilities.sectionTitle}
+            </AccountsTableHeadCell>
+            <AccountsTableHeadCell
+              align="right"
+              className="min-w-[120px] border-r-2 border-border font-bold"
+            >
+              {liabilities.amountColumnLabel}
+            </AccountsTableHeadCell>
+            <AccountsTableHeadCell className="min-w-[200px] border-r border-border font-bold">
+              {assets.sectionTitle}
+            </AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" className="min-w-[120px] font-bold">
+              {assets.amountColumnLabel}
+            </AccountsTableHeadCell>
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
 
-          <AccountsTableBody>
-            {zippedRows.length === 0 ? (
-              <AccountsTableRow>
-                <AccountsTableCell colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
-                  No entries
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ) : (
-              zippedRows.map((pair, index) => (
-                <AccountsTableRow
-                  key={`bs-row-${index}`}
-                  className={cn(
-                    "hover:bg-muted/20 transition-colors",
-                    (pair.liability && isBalanceSheetGroupHeading(pair.liability.item)) ||
-                      (pair.asset && isBalanceSheetGroupHeading(pair.asset.item))
-                      ? "bg-muted/10"
-                      : undefined,
-                  )}
-                >
-                  <AccountsTableCell className="border-r border-border/60 align-top py-1.5">
-                    {pair.liability ? (
-                      <ParticularCell
-                        item={pair.liability.item}
-                        depth={pair.liability.depth}
-                        hasChildren={pair.liability.hasChildren}
-                        expandedIds={expandedIds}
-                        onToggle={toggle}
-                        drillDownFilters={drillDownFilters}
-                      />
-                    ) : null}
-                  </AccountsTableCell>
-                  <AccountsTableCell
-                    align="right"
-                    money
-                    className="border-r-2 border-border align-top py-1.5"
-                  >
-                    <SideAmountCell item={pair.liability?.item ?? null} />
-                  </AccountsTableCell>
-                  <AccountsTableCell className="border-r border-border/60 align-top py-1.5">
-                    {pair.asset ? (
-                      <ParticularCell
-                        item={pair.asset.item}
-                        depth={pair.asset.depth}
-                        hasChildren={pair.asset.hasChildren}
-                        expandedIds={expandedIds}
-                        onToggle={toggle}
-                        drillDownFilters={drillDownFilters}
-                      />
-                    ) : null}
-                  </AccountsTableCell>
-                  <AccountsTableCell align="right" money className="align-top py-1.5">
-                    <SideAmountCell item={pair.asset?.item ?? null} />
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))
-            )}
-          </AccountsTableBody>
-
-          <AccountsTableFoot>
-            <AccountsTableRow className="border-t-2 border-brand-600 bg-brand-50/60">
-              <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-brand-800 py-2.5">
-                {liabilities.grandTotalLabel}
-              </AccountsTableCell>
-              <AccountsTableCell
-                align="right"
-                money
-                className="border-r-2 border-border font-bold text-xs text-brand-800 py-2.5"
-              >
-                {formatBsAmount(liabilities.grandTotal)}
-              </AccountsTableCell>
-              <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-brand-800 py-2.5">
-                {assets.grandTotalLabel}
-              </AccountsTableCell>
-              <AccountsTableCell
-                align="right"
-                money
-                className="font-bold text-xs text-brand-800 py-2.5"
-              >
-                {formatBsAmount(assets.grandTotal)}
+        <AccountsTableBody>
+          {zippedRows.length === 0 ? (
+            <AccountsTableRow>
+              <AccountsTableCell colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
+                No entries
               </AccountsTableCell>
             </AccountsTableRow>
-          </AccountsTableFoot>
-        </AccountsTable>
-      </AccountsTableScroll>
+          ) : (
+            zippedRows.map((pair, index) => (
+              <AccountsTableRow
+                key={`bs-row-${pair.liability?.item.id ?? "l"}-${pair.asset?.item.id ?? "a"}-${index}`}
+                className={cn(
+                  "hover:bg-muted/20 transition-colors",
+                  (pair.liability && isBalanceSheetGroupHeading(pair.liability.item)) ||
+                    (pair.asset && isBalanceSheetGroupHeading(pair.asset.item))
+                    ? "bg-muted/10"
+                    : undefined,
+                )}
+              >
+                <AccountsTableCell className="border-r border-border/60 align-top py-1.5">
+                  {pair.liability ? (
+                    <ParticularCell
+                      item={pair.liability.item}
+                      depth={pair.liability.depth}
+                      hasChildren={pair.liability.hasChildren}
+                      expandedIds={expandedIds}
+                      onToggle={toggle}
+                      drillDownFilters={drillDownFilters}
+                    />
+                  ) : null}
+                </AccountsTableCell>
+                <AccountsTableCell
+                  align="right"
+                  money
+                  className="border-r-2 border-border align-top py-1.5"
+                >
+                  <SideAmountCell item={pair.liability?.item ?? null} />
+                </AccountsTableCell>
+                <AccountsTableCell className="border-r border-border/60 align-top py-1.5">
+                  {pair.asset ? (
+                    <ParticularCell
+                      item={pair.asset.item}
+                      depth={pair.asset.depth}
+                      hasChildren={pair.asset.hasChildren}
+                      expandedIds={expandedIds}
+                      onToggle={toggle}
+                      drillDownFilters={drillDownFilters}
+                    />
+                  ) : null}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money className="align-top py-1.5">
+                  <SideAmountCell item={pair.asset?.item ?? null} />
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+
+        <AccountsTableFoot>
+          <AccountsTableRow className="border-t-2 border-brand-600 bg-brand-50/60">
+            <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-brand-800 py-2.5">
+              {liabilities.grandTotalLabel}
+            </AccountsTableCell>
+            <AccountsTableCell
+              align="right"
+              money
+              className="border-r-2 border-border font-bold text-xs text-brand-800 py-2.5"
+            >
+              {formatBsAmount(liabilities.grandTotal)}
+            </AccountsTableCell>
+            <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-brand-800 py-2.5">
+              {assets.grandTotalLabel}
+            </AccountsTableCell>
+            <AccountsTableCell
+              align="right"
+              money
+              className="font-bold text-xs text-brand-800 py-2.5"
+            >
+              {formatBsAmount(assets.grandTotal)}
+            </AccountsTableCell>
+          </AccountsTableRow>
+        </AccountsTableFoot>
+      </AccountsTable>
 
       <div
         className={cn(
@@ -335,4 +336,4 @@ export function BalanceSheetHorizontalView({
       </div>
     </div>
   );
-}
+});

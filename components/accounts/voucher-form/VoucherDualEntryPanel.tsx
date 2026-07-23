@@ -10,12 +10,11 @@ import {
   updateFormEntry,
 } from "@/lib/accounts/voucher-form-model";
 import type { VoucherFormTypeConfig } from "@/lib/accounts/voucher-form-config";
-import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
-import { ReceiptFormSection } from "@/components/accounts/voucher-simple-form-ui";
 import { isBankAccountLedger } from "@/lib/accounts/bank-coa-utils";
 import { getBankAccountByLedgerId } from "@/lib/accounts/bank-accounts-data";
 import { isBankAccountMappedToWarehouse, resolveWarehouseId } from "@/lib/accounts/bank-warehouse-mapping";
+import { getDualEntryGroupLabels } from "@/components/accounts/voucher-form/voucher-form-shell";
 
 export interface VoucherDualEntryPanelProps {
   entries: VoucherFormEntry[];
@@ -29,8 +28,14 @@ export interface VoucherDualEntryPanelProps {
   onQuickAddSuccess?: () => void;
   /** Limits bank ledgers to accounts mapped to this warehouse. */
   warehouseRef?: string | number | null;
-  /** Receipt-style voucher presentation — separate Debit/Credit headers and compact rows. */
-  variant?: "default" | "receipt";
+}
+
+function GroupHeading({ title }: { title: string }) {
+  return (
+    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+      {title}
+    </p>
+  );
 }
 
 export function VoucherDualEntryPanel({
@@ -43,7 +48,6 @@ export function VoucherDualEntryPanel({
   tdsAmount = 0,
   onQuickAddSuccess,
   warehouseRef,
-  variant = "default",
 }: VoucherDualEntryPanelProps) {
   const debitEntry = getFormEntry(entries, "DEBIT");
   const creditEntry = getFormEntry(entries, "CREDIT");
@@ -127,16 +131,13 @@ export function VoucherDualEntryPanel({
     if (changed) onEntriesChange(next);
   }, [warehouseRef, coaRecords, onEntriesChange]);
 
-  const isPremiumDualLayout =
-    variant === "receipt" ||
-    config.voucherType === "receipt" ||
-    config.voucherType === "payment" ||
-    config.voucherType === "contra";
-
   const disableQuickAdd =
     config.voucherType === "receipt" ||
     config.voucherType === "payment" ||
     config.voucherType === "contra";
+
+  const groups = getDualEntryGroupLabels(config.voucherType);
+  const creditFirst = config.creditAccountFirst === true || groups.creditFirst;
 
   const debitBlock = debitEntry ? (
     <VoucherEntryBlock
@@ -151,8 +152,8 @@ export function VoucherDualEntryPanel({
       quickAddScope={config.debitQuickAddScope}
       enableQuickAdd={!disableQuickAdd}
       showAmount={amountEditableOnDebit}
-      showLineRemark={!isPremiumDualLayout}
-      compact={isPremiumDualLayout}
+      showLineRemark={false}
+      compact
       onQuickAddSuccess={onQuickAddSuccess}
       onChange={(patch) => patchEntry("DEBIT", patch)}
     />
@@ -171,87 +172,40 @@ export function VoucherDualEntryPanel({
       quickAddScope={config.creditQuickAddScope}
       enableQuickAdd={!disableQuickAdd}
       showAmount={amountEditableOnCredit}
-      showLineRemark={!isPremiumDualLayout}
-      compact={isPremiumDualLayout}
+      showLineRemark={false}
+      compact
       onQuickAddSuccess={onQuickAddSuccess}
       onChange={(patch) => patchEntry("CREDIT", patch)}
     />
   ) : null;
 
-  const grossAmount =
-    config.voucherType === "receipt"
-      ? creditEntry?.amount ?? 0
-      : config.voucherType === "payment"
-        ? debitEntry?.amount ?? 0
-        : debitEntry?.amount ?? creditEntry?.amount ?? 0;
-
-  const bankSideAmount =
-    config.voucherType === "payment" && tdsAmount > 0
-      ? Math.max(0, grossAmount - tdsAmount)
-      : grossAmount;
-
-  const amount = grossAmount;
-
-  const renderEntryBlocks = () => {
-    if (isPremiumDualLayout) {
-      return (
-        <>
-          {config.creditAccountFirst ? (
-            <>
-              {creditBlock && <ReceiptFormSection title="Credit">{creditBlock}</ReceiptFormSection>}
-              {debitBlock && <ReceiptFormSection title="Debit">{debitBlock}</ReceiptFormSection>}
-            </>
-          ) : (
-            <>
-              {debitBlock && <ReceiptFormSection title="Debit">{debitBlock}</ReceiptFormSection>}
-              {creditBlock && <ReceiptFormSection title="Credit">{creditBlock}</ReceiptFormSection>}
-            </>
-          )}
-        </>
-      );
-    }
-
-    return config.creditAccountFirst ? (
-      <>
-        {creditBlock}
-        {debitBlock}
-      </>
-    ) : (
-      <>
-        {debitBlock}
-        {creditBlock}
-      </>
-    );
-  };
+  // tdsAmount kept for API compatibility with StandardVoucherForm callers
+  void tdsAmount;
 
   return (
-    <div className={cn(isPremiumDualLayout ? "space-y-0" : "space-y-2.5")}>
-      {renderEntryBlocks()}
-
-      {debitEntry?.accountId && creditEntry?.accountId && amount > 0 && !isPremiumDualLayout && (
-        <div className="rounded-md border border-border/50 bg-muted/15 px-2.5 py-2 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Voucher Entry
-          </p>
-          <p className="text-[12px] text-foreground">
-            <span className="font-semibold text-brand-700">Dr</span> {debitEntry.accountName}
-            <span className="tabular-nums text-muted-foreground ml-2">
-              {formatMoney(config.voucherType === "payment" ? grossAmount : bankSideAmount)}
-            </span>
-          </p>
-          <p className="text-[12px] text-foreground">
-            <span className="font-semibold text-navy-700">Cr</span> {creditEntry.accountName}
-            <span className="tabular-nums text-muted-foreground ml-2">
-              {formatMoney(config.voucherType === "payment" ? bankSideAmount : grossAmount)}
-            </span>
-          </p>
-          {config.voucherType === "payment" && tdsAmount > 0 && (
-            <p className="text-[12px] text-foreground">
-              <span className="font-semibold text-navy-700">Cr</span> TDS Payable
-              <span className="tabular-nums text-muted-foreground ml-2">{formatMoney(tdsAmount)}</span>
-            </p>
-          )}
-        </div>
+    <div className={cn("space-y-4")}>
+      {creditFirst ? (
+        <>
+          <div>
+            <GroupHeading title={groups.firstGroup} />
+            {creditBlock}
+          </div>
+          <div className="border-t border-border/50 pt-3">
+            <GroupHeading title={groups.secondGroup} />
+            {debitBlock}
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <GroupHeading title={groups.firstGroup} />
+            {debitBlock}
+          </div>
+          <div className="border-t border-border/50 pt-3">
+            <GroupHeading title={groups.secondGroup} />
+            {creditBlock}
+          </div>
+        </>
       )}
     </div>
   );

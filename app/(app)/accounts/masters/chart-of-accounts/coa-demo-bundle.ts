@@ -1,6 +1,7 @@
 /**
- * Bundled COA demo ledgers — always merged into loadChartOfAccounts().
- * Not stored in localStorage; available in every environment after deploy/refresh.
+ * Bundled COA demo ledgers — merge disabled.
+ * Unlocked Level-4 demo / sample / placeholder ledgers are no longer injected into COA.
+ * loadChartOfAccounts() keeps system nodes + user groups/ledgers only.
  */
 
 import type { AccountType, ChartOfAccount } from "../../data";
@@ -89,27 +90,18 @@ const SKIP_OPENING_SUBGROUPS = new Set([
   "Inventory / Stock-in-Hand",
 ]);
 
-/** Sundry debtors — 2 sample posting ledgers under Sundry Debtors */
-export const COA_DEMO_DEBTOR_SPECS: Array<{ name: string; openingBalance: number }> = [
-  { name: "ABC Agro Distributor", openingBalance: 50000 },
-  { name: "XYZ Traders", openingBalance: 47650 },
-];
+/** Sundry debtors — demo customer ledgers disabled (group remains). */
+export const COA_DEMO_DEBTOR_SPECS: Array<{ name: string; openingBalance: number }> = [];
 
-/** Sundry creditors — 2 sample posting ledgers */
-export const COA_DEMO_CREDITOR_SPECS: Array<{ name: string; openingBalance: number }> = [
-  { name: "Green Seeds Pvt. Ltd.", openingBalance: 42000 },
-  { name: "Bharat Fertilizers", openingBalance: 95000 },
-];
+/** Sundry creditors — demo supplier ledgers disabled (group remains). */
+export const COA_DEMO_CREDITOR_SPECS: Array<{ name: string; openingBalance: number }> = [];
 
-/** Bank group + current account posting ledgers (2 banks) */
+/** Bank group + current account posting ledgers — demo banks disabled (group remains). */
 export const COA_DEMO_BANK_SPECS: Array<{
   bankName: string;
   accountName: string;
   openingBalance: number;
-}> = [
-  { bankName: "HDFC Bank", accountName: "HDFC Current Account", openingBalance: 2000000 },
-  { bankName: "ICICI Bank", accountName: "ICICI Current Account", openingBalance: 850000 },
-];
+}> = [];
 
 function hashAmount(name: string, base: number, spread = 45000): number {
   let h = 0;
@@ -389,24 +381,10 @@ function withOpeningBalanceDifference(records: ChartOfAccount[]): ChartOfAccount
   return [...withoutDiff, diffLedger];
 }
 
-/** Merge bundled demo ledgers into a COA list (skip ERP-synced duplicates by parent+name). */
+/**
+ * Demo merge disabled — return COA records unchanged.
+ * No generic / party / bank / opening-balance-plug demo ledgers are appended.
+ */
 export function mergeBundledCoaDemoLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
-  const bundled = buildBundledCoaDemoLedgers(
-    records.filter((r) => r.nodeLevel !== "ledger"),
-  );
-
-  const existingKeys = new Set(
-    records
-      .filter((r) => r.nodeLevel === "ledger" && r.parentAccountId != null)
-      .map((r) => ledgerKey(r.parentAccountId!, r.accountName)),
-  );
-
-  const toAdd = bundled.filter((demo) => {
-    const key = ledgerKey(demo.parentAccountId!, demo.accountName);
-    return !existingKeys.has(key);
-  });
-
-  const merged = withOpeningBalanceDifference(toAdd.length === 0 ? records : [...records, ...toAdd]);
-
-  return merged;
+  return records;
 }

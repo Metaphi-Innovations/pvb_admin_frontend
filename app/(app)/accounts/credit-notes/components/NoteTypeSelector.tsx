@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * @deprecated Replaced by VoucherNoteSegmentControl for Reference Type.
+ * Not imported by active Credit / Debit Note routes.
+ */
 /** Compact neutral radio group — transaction mode, not navigation. */
 export interface NoteTypeOption<T extends string> {
   value: T;

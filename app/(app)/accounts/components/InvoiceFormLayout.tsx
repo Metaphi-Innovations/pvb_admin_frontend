@@ -28,12 +28,12 @@ export const INVOICE_FORM_READONLY_CLASS = cn(
 );
 export const INVOICE_FORM_HELPER_CLASS = ACCOUNTS_HELPER_TEXT_CLASS;
 export const INVOICE_FORM_CARD_CLASS =
-  "bg-white rounded-lg border border-border p-3 h-full";
-export const INVOICE_FORM_CARD_TITLE_CLASS = cn(ACCOUNTS_CARD_TITLE_CLASS, "text-foreground");
-export const INVOICE_FORM_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
+  "bg-white rounded-xl border border-border shadow-sm p-3 h-full";
+export const INVOICE_FORM_CARD_TITLE_CLASS = cn(ACCOUNTS_CARD_TITLE_CLASS, "text-navy-700");
+export const INVOICE_FORM_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2.5";
 export const INVOICE_FORM_TABLE_TH_CLASS =
-  "px-2.5 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap";
-export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-[13px] text-foreground align-middle";
+  "accounts-table-th px-2.5 py-2 text-[11px] font-semibold text-foreground whitespace-nowrap";
+export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-xs text-foreground align-middle";
 
 export function InvoiceFormLayout({
   title,
@@ -42,6 +42,7 @@ export function InvoiceFormLayout({
   backHref,
   onBackClick,
   actions,
+  stickyFooter,
   children,
 }: {
   title: string;
@@ -50,7 +51,10 @@ export function InvoiceFormLayout({
   backHref: string;
   /** When set, overrides default back navigation (e.g. unsaved-changes guard). */
   onBackClick?: () => void;
+  /** Legacy: actions in sticky header. Prefer stickyFooter for voucher-standard footers. */
   actions?: React.ReactNode;
+  /** Sticky bottom action bar (Cancel · Save Draft · Save & Post). */
+  stickyFooter?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -61,20 +65,26 @@ export function InvoiceFormLayout({
   };
 
   return (
-    <div className="min-h-full bg-background flex flex-col -m-3">
-      <header className="bg-white border-b border-border px-5 py-3 flex-shrink-0 sticky top-0 z-20 shadow-sm">
-        <div className="w-full flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+    <div
+      className={cn(
+        "bg-background flex flex-col -m-3",
+        stickyFooter ? "h-full min-h-0" : "min-h-full",
+      )}
+    >
+      <header className="bg-white border-b border-border px-5 py-2 flex-shrink-0 sticky top-0 z-20 shadow-sm">
+        <div className="w-full flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
               onClick={handleBack}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-muted/40 flex-shrink-0"
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-border/70 hover:bg-muted/40 flex-shrink-0"
               aria-label="Go back"
             >
-              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+              <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground truncate">
+              <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "truncate")}>{title}</h1>
+              <p className={cn(ACCOUNTS_PAGE_SUBTITLE_CLASS, "truncate")}>
                 {breadcrumb.map((b, i) => (
                   <span key={`${b.label}-${i}`}>
                     {i > 0 && <span className="mx-1">/</span>}
@@ -87,19 +97,33 @@ export function InvoiceFormLayout({
                     )}
                   </span>
                 ))}
+                {subtitle ? (
+                  <>
+                    <span className="mx-1">·</span>
+                    <span>{subtitle}</span>
+                  </>
+                ) : null}
               </p>
-              <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "truncate")}>{title}</h1>
-              {subtitle ? (
-                <p className={cn(ACCOUNTS_PAGE_SUBTITLE_CLASS, "truncate")}>{subtitle}</p>
-              ) : null}
             </div>
           </div>
-          {actions ? <div className="flex items-center gap-2 flex-shrink-0">{actions}</div> : null}
+          {!stickyFooter && actions ? (
+            <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>
+          ) : null}
         </div>
       </header>
-      <main className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="w-full max-w-none space-y-4">{children}</div>
+      <main
+        className={cn(
+          "flex-1 min-h-0 overflow-y-auto overscroll-contain",
+          stickyFooter ? "px-5 py-2 pb-3" : "px-5 py-3",
+        )}
+      >
+        <div className="w-full max-w-none space-y-3">{children}</div>
       </main>
+      {stickyFooter ? (
+        <div className="flex-shrink-0 bg-white border-t border-border px-5 py-1.5 z-20 shadow-[0_-2px_8px_rgba(15,23,42,0.05)]">
+          <div className="w-full">{stickyFooter}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
