@@ -7,13 +7,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { SCHEME_TYPES, type SchemeType } from "../scheme-data";
 
+const SCHEME_TYPE_OPTIONS = SCHEME_TYPES.filter(
+  (t) => t !== "Payment Discount Scheme",
+);
+
 const SCHEME_TYPE_DESCRIPTIONS: Record<SchemeType, string> = {
-  "Product Discount Scheme": "Direct discount applied on sales order lines.",
-  "Product Near Expiry Scheme": "Benefit for products with batches nearing expiry.",
-  "Cash Discount Scheme": "Incentive settled via credit note after sales order.",
-  "Festive Discount Scheme": "Seasonal or festival campaign benefit.",
-  "Turnover Discount Scheme": "Slab-based benefit on customer turnover.",
-  "Payment Discount Scheme": "Outstanding settlement waiver for payment collection via CN/JV.",
+  "Product Discount Scheme":
+    "Instant invoice discount (Product Discount). Not for Stock Transfer / Sample Order.",
+  "Product Near Expiry Scheme":
+    "Near-expiry benefit; settles via Credit Note after dispatch / batch allocation.",
+  "Cash Discount Scheme": "Cash discount; settles via Credit Note on receipt allocation.",
+  "Festive Discount Scheme": "Legacy festive campaign benefit; settles via Credit Note.",
+  "Turnover Discount Scheme": "Turnover slabs; settles via Credit Note at period end.",
+  "Payment Discount Scheme": "Payment-days slabs; settles via Credit Note on receipt allocation.",
+  "Special Discount Scheme":
+    "Achievement-based special discount (sales amount or quantity slabs); settles via Credit Note.",
 };
 
 interface SchemeTypeSelectProps {
@@ -48,7 +56,7 @@ export function SchemeTypeSelect({ value, onChange }: SchemeTypeSelectProps) {
             className="w-[var(--radix-popover-trigger-width)] p-0"
           >
             <div className="max-h-64 overflow-y-auto p-1">
-              {SCHEME_TYPES.map((type) => (
+              {SCHEME_TYPE_OPTIONS.map((type) => (
                 <button
                   key={type}
                   type="button"

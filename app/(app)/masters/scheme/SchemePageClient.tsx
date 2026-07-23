@@ -281,7 +281,9 @@ export default function SchemeMasterPage() {
       filterable: true,
       filterType: "text",
       width: "140px",
-      render: (_v, row) => <span className="text-[11px]">{row.schemeType}</span>,
+      render: (_v, row) => (
+        <span className="text-[11px]">{row.schemeCategory ?? row.schemeType}</span>
+      ),
     },
     {
       key: "productCount",

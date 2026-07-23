@@ -130,10 +130,10 @@ function SummaryCard({
           : "border-l-brand-600";
 
   return (
-    <div className={cn("bg-white rounded-xl border border-border p-3 shadow-sm border-l-4", accentClass)}>
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className={cn("text-base font-bold mt-1", MONEY_AMOUNT_CLASS)}>{value}</p>
-      {subLabel && <p className="text-xs text-muted-foreground mt-0.5">{subLabel}</p>}
+    <div className={cn("bg-white rounded-lg border border-border px-2.5 py-1.5 shadow-sm border-l-4 min-h-[44px]", accentClass)}>
+      <p className="accounts-summary-label">{label}</p>
+      <p className={cn("accounts-summary-value mt-0.5", MONEY_AMOUNT_CLASS)}>{value}</p>
+      {subLabel && <p className="text-[10px] text-muted-foreground mt-0.5">{subLabel}</p>}
     </div>
   );
 }

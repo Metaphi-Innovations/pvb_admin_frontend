@@ -201,13 +201,13 @@ export default function BankReconCompleteReviewPageClient({
   return (
     <AppLayout>
       <div className="max-w-[1200px] mx-auto space-y-3">
-        <div className="sticky top-0 z-10 bg-background border-b border-border py-3 flex flex-wrap items-center gap-2">
-          <Link href={bankReconWorkspacePath(accountId)} className="p-1.5 hover:bg-muted rounded-md">
-            <ArrowLeft className="w-4 h-4" />
+        <div className="sticky top-0 z-10 bg-background border-b border-border py-2 flex flex-wrap items-center gap-2">
+          <Link href={bankReconWorkspacePath(accountId)} className="w-7 h-7 inline-flex items-center justify-center hover:bg-muted rounded-md border border-border/70">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-navy-700">Complete Reconciliation</h1>
-            <p className="text-[11px] text-muted-foreground">
+            <h1 className="accounts-page-title">Complete Reconciliation</h1>
+            <p className="accounts-page-subtitle">
               {account.bankName} · {account.accountNickname} · Review before completion
             </p>
           </div>

@@ -25,9 +25,6 @@ export default function NewGenericLedgerPage() {
 
     const records = loadChartOfAccounts();
     const partyHref = coaPartyMasterCreateHref(id, records);
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-URL',location:'ledgers/new/page.tsx',message:'Generic ledger new direct-URL guard',data:{parentGroupId:id,partyHref},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (partyHref) {
       setRedirecting(true);
       router.replace(partyHref);

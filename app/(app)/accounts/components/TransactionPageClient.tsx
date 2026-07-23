@@ -3,8 +3,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Wallet } from "lucide-react";
+import { AccountsListingChrome } from "@/components/accounts/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
@@ -200,11 +199,10 @@ export default function TransactionPageClient({
 
   return (
     <AppLayout>
-      <div className="max-w-[1400px] mx-auto space-y-4">
-        <PageHeader
+      <div className="max-w-[1400px] mx-auto space-y-3">
+        <AccountsListingChrome
           title={title}
           description="ERP posting supported only for approved records."
-          icon={Wallet}
           breadcrumbs={[
             { label: "Accounts", href: "/accounts" },
             { label: title },
@@ -213,6 +211,8 @@ export default function TransactionPageClient({
             <>
               <Button
                 variant="outline"
+                size="sm"
+                className="h-8 text-xs"
                 onClick={() => {
                   postEntryAfterApproval({
                     txnType,
@@ -228,8 +228,8 @@ export default function TransactionPageClient({
               >
                 Post Approved Entry
               </Button>
-              <Button onClick={createDraft}>
-                <Plus className="w-4 h-4" /> New Entry
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={createDraft}>
+                <Plus className="w-3.5 h-3.5" /> New Entry
               </Button>
             </>
           }
@@ -238,11 +238,11 @@ export default function TransactionPageClient({
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
         <div className="relative max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-9 text-sm"
+            className="h-8 pl-8 text-xs accounts-filter-control"
             placeholder={`Search ${title}`}
           />
         </div>

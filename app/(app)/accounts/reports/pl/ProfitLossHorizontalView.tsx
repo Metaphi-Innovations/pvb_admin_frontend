@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatMoneyNumber, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
@@ -13,7 +13,6 @@ import {
   AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
-  AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import {
   buildPandLLedgerHref,
@@ -129,7 +128,7 @@ function sectionTotalRowClass(row: PandLSideDisplayRow | null): string | undefin
   return undefined;
 }
 
-export function ProfitLossHorizontalView({
+export const ProfitLossHorizontalView = memo(function ProfitLossHorizontalView({
   statement,
   drillDownFilters,
 }: {
@@ -142,7 +141,7 @@ export function ProfitLossHorizontalView({
   );
 
   return (
-    <AccountsTableScroll className="flex-1 min-h-0">
+    <div className="w-full">
       <AccountsTable minWidth={720}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
@@ -215,6 +214,6 @@ export function ProfitLossHorizontalView({
           </AccountsTableRow>
         </AccountsTableFoot>
       </AccountsTable>
-    </AccountsTableScroll>
+    </div>
   );
-}
+});

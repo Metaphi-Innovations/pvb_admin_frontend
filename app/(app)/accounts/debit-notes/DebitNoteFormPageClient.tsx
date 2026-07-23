@@ -2,33 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { SearchableSelect } from "../credit-notes/components/SearchableSelect";
-import { DebitNoteProductTable } from "./components/DebitNoteProductTable";
-import { FreshDebitNoteForm, computeFreshDebitTotals } from "./components/FreshDebitNoteForm";
 import {
-  applyReturnQtyToDebitLines,
   buildReferenceFromPurchaseInvoice,
   buildReferenceFromPurchaseReturn,
-  computeDebitTotals,
   createDebitNote,
-  DEBIT_REASONS,
-  FRESH_DEBIT_REASONS,
+  createEmptyDebitLine,
   getDebitNoteById,
-  getDebitLineMaxQty,
   getPendingDebitNoteRow,
   getVendorsForDebitNote,
+  listCreditablePurchaseInvoices,
+  listPurchaseReturnsForDebitNote,
   newDebitAttachmentId,
   normalizeDebitLine,
   postDebitNoteRecord,
   previewToDebitForm,
   updateDebitNote,
-  validateDebitNoteLines,
   type DebitNoteAttachment,
   type DebitNoteLine,
   type DebitReferencePreview,
@@ -38,22 +31,47 @@ import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
+import { roundMoney } from "@/lib/accounts/money-format";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import { VoucherGstSummaryCard } from "@/components/accounts/voucher-form/VoucherGstSummaryCard";
+import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
+import {
+  VoucherNoteField,
+  VoucherNoteFieldGrid,
+  VoucherNoteReadOnly,
+} from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
+import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
+import { VoucherNoteSegmentControl } from "@/components/accounts/voucher-form/VoucherNoteSegmentControl";
+import {
+  NoteParticularsTable,
+  computeNoteParticularTotals,
+} from "@/components/accounts/voucher-form/NoteParticularsTable";
+import { NoteReferenceDocumentDetails } from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
+import {
+  adaptPurchaseInvoiceReference,
+  adaptPurchaseReturnReference,
+} from "@/components/accounts/voucher-form/note-reference-model";
+import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
+import "@/components/accounts/voucher-form/note-form-compact.css";
 import {
   vendorMasterToTransactionFields,
   type VendorTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
-import { Download, Eye, Save, Trash2, Upload } from "lucide-react";
 import { getPurchaseInvoiceById } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { resolveWarehouseFromGrnNo } from "@/lib/accounts/bank-warehouse-mapping";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { Textarea } from "@/components/ui/textarea";
-import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
-import "../credit-notes/credit-note-workspace.css";
+import "../credit-notes/credit-note-tx.css";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
-type DebitBasis = "amount" | "quantity";
+type UiRefType = "direct" | "purchase_invoice" | "purchase_return";
+
+const REF_TYPE_OPTIONS: { value: UiRefType; label: string }[] = [
+  { value: "direct", label: "Direct" },
+  { value: "purchase_invoice", label: "Purchase Invoice" },
+  { value: "purchase_return", label: "Purchase Return" },
+];
 
 export default function DebitNoteFormPageClient({
   debitNoteId,
@@ -75,6 +93,25 @@ export default function DebitNoteFormPageClient({
     !isEdit && (mode === "purchase_invoice" || purchaseInvoiceId != null);
 
   const vendors = useMemo(() => getVendorsForDebitNote(), []);
+  const purchaseInvoices = useMemo(() => listCreditablePurchaseInvoices(), []);
+  const purchaseReturns = useMemo(() => listPurchaseReturnsForDebitNote(), []);
+
+  const [uiRefType, setUiRefType] = useState<UiRefType>(() => {
+    if (isFresh || (!isReturn && !isPurchaseInvoice)) return "direct";
+    if (isReturn) return "purchase_return";
+    if (isPurchaseInvoice) return "purchase_invoice";
+    return "direct";
+  });
+
+  const isSourceRefMode =
+    uiRefType === "purchase_invoice" || uiRefType === "purchase_return";
+  const isDirectMode = uiRefType === "direct";
+
+  const [particular, setParticular] = useState("");
+  const [particularQty, setParticularQty] = useState("1");
+  const [particularRate, setParticularRate] = useState("");
+  const [referenceInvoiceId, setReferenceInvoiceId] = useState("");
+  const [referenceReturnId, setReferenceReturnId] = useState("");
 
   const [debitNoteNo, setDebitNoteNo] = useState("");
   const [debitNoteDate, setDebitNoteDate] = useState(new Date().toISOString().slice(0, 10));
@@ -94,22 +131,42 @@ export default function DebitNoteFormPageClient({
   const [originalAmount, setOriginalAmount] = useState("");
   const [alreadyAdjusted, setAlreadyAdjusted] = useState("0");
   const [lines, setLines] = useState<DebitNoteLine[]>([]);
-  const [reason, setReason] = useState("");
   const [remarks, setRemarks] = useState("");
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
+  const [roundOff, setRoundOff] = useState(0);
 
   const [referenceNo, setReferenceNo] = useState("");
   const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<number | null>(null);
   const [adjustmentLedgerName, setAdjustmentLedgerName] = useState("");
-  const [taxableAmount, setTaxableAmount] = useState("");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstPct, setGstPct] = useState("18");
   const [narration, setNarration] = useState("");
 
-  const vendorLocked = (isReturn || isPurchaseInvoice) && Boolean(referencePreview);
+  const vendorLocked = Boolean(referencePreview) || isReturn || isPurchaseInvoice;
+  const refControlsLocked = isReturn || isPurchaseInvoice;
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
+
+  const purchaseInvoiceOptions = useMemo(
+    () =>
+      purchaseInvoices.map((inv) => ({
+        value: String(inv.id),
+        label: inv.invoiceNo,
+        sub: `${inv.vendorName} · ${inv.invoiceDate} · ${formatINR(inv.grandTotal)}`,
+      })),
+    [purchaseInvoices],
+  );
+
+  const purchaseReturnOptions = useMemo(
+    () =>
+      purchaseReturns.map((ret) => ({
+        value: String(ret.id),
+        label: ret.returnNumber,
+        sub: `${ret.supplierName} · ${ret.returnDate} · PO ${ret.poNumber}`,
+      })),
+    [purchaseReturns],
+  );
 
   const onVendorChange = (id: string, fields: VendorTransactionFields | null) => {
     setVendorId(id);
@@ -124,7 +181,47 @@ export default function DebitNoteFormPageClient({
     setShippingAddress(fields.shippingAddress);
   };
 
-  const applyPreview = (preview: DebitReferencePreview, retId: number, retNo: string) => {
+  const clearReference = () => {
+    if (isReturn || isPurchaseInvoice) return;
+    setReferencePreview(null);
+    setSourceInvoiceId(null);
+    setSourcePoId(null);
+    setSourceReturnId("");
+    setSourceReturnNo("");
+    setSourcePackingNo("");
+    setSourceDispatchNo("");
+    setOriginalAmount("");
+    setAlreadyAdjusted("0");
+    setLines([]);
+  };
+
+  const prefillParticularsFromPreview = (preview: DebitReferencePreview, fallbackName: string) => {
+    if (!particular.trim()) {
+      setParticular(preview.lineItems[0]?.productName || fallbackName);
+    }
+    const first = preview.lineItems[0];
+    if (first && !particularRate.trim()) {
+      const qty =
+        (first.purchaseReturnQty && first.purchaseReturnQty > 0
+          ? first.purchaseReturnQty
+          : first.eligibleReturnQty && first.eligibleReturnQty > 0
+            ? first.eligibleReturnQty
+            : first.invoiceQty) || 1;
+      setParticularQty(String(qty));
+      setParticularRate(String(first.unitPrice || ""));
+      const gstOn = (first.taxPct || 0) > 0 || (first.gstAmount || 0) > 0;
+      setGstApplicable(gstOn);
+      if (gstOn && first.taxPct > 0) setGstPct(String(first.taxPct));
+    }
+  };
+
+  /** Reference preview is display-only — do not load editable source lines by default. */
+  const applyPreview = (
+    preview: DebitReferencePreview,
+    retId: number,
+    retNo: string,
+    loadLines = false,
+  ) => {
     setReferencePreview(preview);
     const pre = previewToDebitForm(preview);
     setSourceInvoiceId(pre.sourceInvoiceId ?? null);
@@ -140,19 +237,18 @@ export default function DebitNoteFormPageClient({
     }
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
-    setReason("Purchase Return");
-    setRemarks(preview.dispatchStatus ? `Dispatch: ${preview.dispatchStatus}` : "");
-    if (pre.lineItems?.length) {
-      const withQty = pre.lineItems.map((l) => {
-        const normalized = normalizeDebitLine(l);
-        const qty = normalized.eligibleReturnQty ?? normalized.purchaseReturnQty ?? 0;
-        return applyReturnQtyToDebitLines([normalized], normalized.id, qty, alreadyAdjustedNum)[0];
-      });
-      setLines(withQty);
+    if (loadLines && pre.lineItems?.length) {
+      setLines(pre.lineItems.map((l) => normalizeDebitLine(l)));
+    } else {
+      setLines([]);
     }
   };
 
-  const applyPurchaseInvoicePreview = (preview: DebitReferencePreview, invoiceId: number) => {
+  const applyPurchaseInvoicePreview = (
+    preview: DebitReferencePreview,
+    invoiceId: number,
+    loadLines = false,
+  ) => {
     setReferencePreview(preview);
     const pre = previewToDebitForm(preview);
     setSourceInvoiceId(pre.sourceInvoiceId ?? invoiceId);
@@ -168,30 +264,110 @@ export default function DebitNoteFormPageClient({
     }
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
-    setReason("Purchase Invoice Adjustment");
-    setRemarks(`Against PI ${preview.sourceInvoiceNo ?? invoiceId}`);
-    if (pre.lineItems?.length) {
+    if (loadLines && pre.lineItems?.length) {
       setLines(pre.lineItems.map((l) => normalizeDebitLine(l)));
+    } else {
+      setLines([]);
     }
+  };
+
+  const onPurchaseInvoiceSelect = (id: string) => {
+    setReferenceInvoiceId(id);
+    setReferenceReturnId("");
+    if (!id) {
+      clearReference();
+      return;
+    }
+    const preview = buildReferenceFromPurchaseInvoice(Number(id));
+    if (preview) {
+      applyPurchaseInvoicePreview(preview, Number(id), false);
+      prefillParticularsFromPreview(preview, "Purchase invoice adjustment");
+    }
+  };
+
+  const onPurchaseReturnSelect = (id: string) => {
+    setReferenceReturnId(id);
+    setReferenceInvoiceId("");
+    if (!id) {
+      clearReference();
+      return;
+    }
+    const retId = Number(id);
+    const ret = purchaseReturns.find((r) => r.id === retId);
+    const pending = getPendingDebitNoteRow(retId);
+    const preview = buildReferenceFromPurchaseReturn(retId);
+    if (preview) {
+      applyPreview(
+        preview,
+        retId,
+        pending?.returnNumber ?? ret?.returnNumber ?? `PRET-${retId}`,
+        false,
+      );
+      prefillParticularsFromPreview(preview, "Purchase return");
+    }
+  };
+
+  const onUiRefTypeChange = (next: UiRefType) => {
+    if (isReturn || isPurchaseInvoice) return;
+    setUiRefType(next);
+    clearReference();
+    setReferenceInvoiceId("");
+    setReferenceReturnId("");
+    // #region agent log
+    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "e2f165",
+      },
+      body: JSON.stringify({
+        sessionId: "e2f165",
+        location: "DebitNoteFormPageClient.tsx:onUiRefTypeChange",
+        message: "DN ref type change",
+        data: { next, prev: uiRefType },
+        timestamp: Date.now(),
+        hypothesisId: "B",
+        runId: "pre-fix",
+      }),
+    }).catch(() => {});
+    // #endregion
   };
 
   useEffect(() => {
     if (!isReturn || returnId == null || isEdit) return;
+    setUiRefType("purchase_return");
+    setReferenceReturnId(String(returnId));
     const pending = getPendingDebitNoteRow(returnId);
     const preview = buildReferenceFromPurchaseReturn(returnId);
-    if (preview && pending) {
-      applyPreview(preview, returnId, pending.returnNumber);
-    } else if (preview) {
-      applyPreview(preview, returnId, `PRET-${returnId}`);
+    if (!preview) return;
+    const retNo = pending?.returnNumber ?? `PRET-${returnId}`;
+    applyPreview(preview, returnId, retNo, false);
+    if (pending?.returnDate) setDebitNoteDate(pending.returnDate);
+    const first = preview.lineItems[0];
+    if (first) {
+      const qty =
+        (first.purchaseReturnQty && first.purchaseReturnQty > 0
+          ? first.purchaseReturnQty
+          : first.invoiceQty) || 1;
+      setParticularQty(String(qty));
+      setParticularRate(String(first.unitPrice || ""));
+      setGstApplicable((first.taxPct || 0) > 0 || (first.gstAmount || 0) > 0);
+      if ((first.taxPct || 0) > 0) setGstPct(String(first.taxPct));
     }
+    setParticular((prev) => (prev.trim() ? prev : first?.productName || "Purchase return"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReturn, returnId, isEdit, vendors]);
 
   useEffect(() => {
     if (!isPurchaseInvoice || purchaseInvoiceId == null || isEdit) return;
+    setUiRefType("purchase_invoice");
+    setReferenceInvoiceId(String(purchaseInvoiceId));
     const preview = buildReferenceFromPurchaseInvoice(purchaseInvoiceId);
     if (preview) {
-      applyPurchaseInvoicePreview(preview, purchaseInvoiceId);
+      applyPurchaseInvoicePreview(preview, purchaseInvoiceId, false);
+      prefillParticularsFromPreview(preview, "Purchase invoice adjustment");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPurchaseInvoice, purchaseInvoiceId, isEdit, vendors]);
 
   useEffect(() => {
@@ -217,37 +393,140 @@ export default function DebitNoteFormPageClient({
     setSourceDispatchNo(rec.sourceDispatchNo ?? "");
     setOriginalAmount(String(rec.originalAmount));
     setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
-    setReason(rec.reason);
     setRemarks(rec.remarks);
+    setNarration(rec.remarks);
     setBankAccountId(rec.bankAccountId ?? null);
     setAttachments(rec.attachments ?? []);
+    setReferenceNo(rec.referenceNo ?? "");
+    setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
+    setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
+
     if (fresh) {
-      setReferenceNo(rec.referenceNo ?? "");
-      setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
-      setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
-      setTaxableAmount(String(rec.taxableAmount || rec.standaloneDebitAmount));
-      setGstApplicable((rec.gstAmount ?? 0) > 0);
-      setGstPct(String(rec.freshGstPct ?? 18));
-      setNarration(rec.remarks);
-    } else {
-      setLines(rec.lineItems.map((l) => normalizeDebitLine(l)));
-      if (rec.sourceReturnId) {
+      setUiRefType(
+        rec.sourceReturnId
+          ? "purchase_return"
+          : rec.sourceInvoiceId
+            ? "purchase_invoice"
+            : "direct",
+      );
+      if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
+      if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
+      const line = rec.lineItems[0];
+      const taxable = rec.taxableAmount ?? 0;
+      const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
+      const gstPctStr = String(rec.freshGstPct ?? line?.taxPct ?? 18);
+      if (line && line.returnQty > 0 && line.unitPrice > 0) {
+        setParticularQty(String(line.returnQty));
+        setParticularRate(String(line.unitPrice));
+      } else {
+        setParticularQty("1");
+        setParticularRate(
+          String(
+            taxable > 0
+              ? taxable
+              : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
+          ),
+        );
+      }
+      setGstApplicable(gstOn);
+      setGstPct(gstPctStr);
+      const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
+      const rateStr =
+        line && line.unitPrice > 0
+          ? String(line.unitPrice)
+          : String(
+              taxable > 0
+                ? taxable
+                : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
+            );
+      const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
+      const savedTotal = rec.standaloneDebitAmount || rec.currentDebitAmount || expected;
+      setRoundOff(roundMoney(savedTotal - expected));
+      setParticular(rec.reason || line?.productName || "");
+      if (rec.sourceInvoiceId) {
+        const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
+        if (p) setReferencePreview(p);
+      } else if (rec.sourceReturnId) {
         const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
         if (p) setReferencePreview(p);
       }
+      setLines([]);
+    } else {
+      setUiRefType(rec.sourceReturnId ? "purchase_return" : "purchase_invoice");
+      if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
+      if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
+      const line = rec.lineItems[0];
+      const taxable = rec.taxableAmount || 0;
+      const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
+      const gstPctStr =
+        line?.taxPct && line.taxPct > 0
+          ? String(line.taxPct)
+          : taxable > 0 && gstOn
+            ? String(Math.round(((rec.gstAmount ?? 0) / taxable) * 10000) / 100)
+            : "18";
+      if (line && line.returnQty > 0 && line.unitPrice > 0) {
+        setParticularQty(String(line.returnQty));
+        setParticularRate(String(line.unitPrice));
+      } else {
+        setParticularQty("1");
+        setParticularRate(String(taxable || line?.unitPrice || rec.currentDebitAmount || ""));
+      }
+      setGstApplicable(gstOn);
+      setGstPct(gstPctStr);
+      setParticular(line?.productName || rec.reason || "");
+      const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
+      const rateStr =
+        line && line.unitPrice > 0
+          ? String(line.unitPrice)
+          : String(taxable || rec.currentDebitAmount || "");
+      const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
+      setRoundOff(roundMoney((rec.currentDebitAmount ?? expected) - expected));
+      if (rec.sourceReturnId) {
+        const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
+        if (p) setReferencePreview(p);
+      } else if (rec.sourceInvoiceId) {
+        const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
+        if (p) setReferencePreview(p);
+      }
+      // Against-reference edit: keep preview for read-only display; clear lines so particulars drive amounts.
+      setLines([]);
     }
   }, [isEdit, debitNoteId, router, vendors]);
 
-  const freshTotals = computeFreshDebitTotals(taxableAmount, gstApplicable, gstPct);
-  const lineTotals = useMemo(() => computeDebitTotals(lines), [lines]);
-  const totalDebit = isFresh ? freshTotals.total : lineTotals.total;
+  const particularTotals = computeNoteParticularTotals(
+    particularQty,
+    particularRate,
+    gstApplicable,
+    gstPct,
+    false,
+  );
 
-  const onDebitQtyChange = (lineId: string, qty: number) => {
-    const line = lines.find((l) => l.id === lineId);
-    const max = line ? getDebitLineMaxQty(line) : qty;
-    const capped = Number.isFinite(max) ? Math.min(qty, max) : qty;
-    setLines((prev) => applyReturnQtyToDebitLines(prev, lineId, capped, alreadyAdjustedNum));
-  };
+  const displayTaxable = particularTotals.basicAmount;
+  const cgstDisplay = particularTotals.cgst;
+  const sgstDisplay = particularTotals.sgst;
+  const igstDisplay = particularTotals.igst;
+  const totalDebit = Math.max(0, particularTotals.total + roundOff);
+  const showGst = gstApplicable;
+
+  const referenceDocumentView = useMemo(() => {
+    if (!isSourceRefMode || !referencePreview) return null;
+    const base = {
+      documentDate: referencePreview.documentDate,
+      partyName: referencePreview.vendorName,
+      grandTotal: referencePreview.originalAmount,
+      lines: referencePreview.lineItems,
+    };
+    if (uiRefType === "purchase_return") {
+      return adaptPurchaseReturnReference({
+        ...base,
+        documentNumber: sourceReturnNo || referencePreview.sourceInvoiceNo,
+      });
+    }
+    return adaptPurchaseInvoiceReference({
+      ...base,
+      documentNumber: referencePreview.sourceInvoiceNo,
+    });
+  }, [isSourceRefMode, referencePreview, uiRefType, sourceReturnNo]);
 
   const resolveVendorName = (): string => {
     const v = vendors.find((x) => x.id === Number(vendorId));
@@ -266,61 +545,74 @@ export default function DebitNoteFormPageClient({
     return null;
   }, [referencePreview?.sourceGrnNo, sourceInvoiceId]);
 
+  const buildParticularLineItems = (): DebitNoteLine[] => {
+    if (particularTotals.total <= 0 && Math.abs(roundOff) < 0.005) return [];
+    const name = particular.trim() || "Adjustment";
+    const lineTotal = roundMoney(particularTotals.total + roundOff);
+    return [
+      normalizeDebitLine({
+        ...createEmptyDebitLine(),
+        productName: name,
+        returnQty: particularTotals.qty || 1,
+        unitPrice: particularTotals.rate || particularTotals.basicAmount,
+        taxPct: gstApplicable ? parseFloat(gstPct) || 0 : 0,
+        gstApplicable,
+        debitAmount: lineTotal,
+        gstAmount: particularTotals.gstAmount,
+        lineAmount: lineTotal,
+        adjustmentLedgerId: adjustmentLedgerId ?? undefined,
+        adjustmentLedgerName: adjustmentLedgerName || undefined,
+        lineRemarks: narration.trim() || remarks.trim(),
+      }),
+    ];
+  };
+
   const buildInput = (status: NoteWorkflowStatus) => {
-    if (isFresh) {
-      return {
-        debitNoteDate,
-        againstType: "standalone_adjustment" as const,
-        vendorId: vendorId ? Number(vendorId) : null,
-        vendorName: resolveVendorName(),
-        sourceInvoiceId: null,
-        sourceInvoiceNo: "",
-        sourcePoId: null,
-        sourcePoNo: "",
-        sourceGrnNo: "",
-        sourceQcNo: "",
-        originalAmount: freshTotals.total,
-        alreadyAdjustedAmount: 0,
-        standaloneDebitAmount: freshTotals.total,
-        taxableAmount: freshTotals.taxable,
-        gstAmount: freshTotals.gstAmount,
-        freshGstPct: gstApplicable ? freshTotals.rate : 0,
-        lineItems: [] as DebitNoteLine[],
-        reason,
-        remarks: narration || remarks,
-        referenceNo,
-        adjustmentLedgerId,
-        adjustmentLedgerName,
-        attachments,
-        status,
-        source: "manual" as const,
-        warehouse: warehouseRef ?? undefined,
-        bankAccountId,
-      };
-    }
+    const resolvedReason =
+      particular.trim() ||
+      narration.trim() ||
+      remarks.trim() ||
+      (isDirectMode
+        ? "Other"
+        : uiRefType === "purchase_return"
+          ? "Purchase Return"
+          : "Purchase Invoice Adjustment");
 
     return {
       debitNoteDate,
-      againstType: "purchase_invoice" as const,
+      againstType: isDirectMode
+        ? ("standalone_adjustment" as const)
+        : ("purchase_invoice" as const),
       vendorId: vendorId ? Number(vendorId) : null,
       vendorName: resolveVendorName(),
-      sourceInvoiceId,
+      sourceInvoiceId: sourceInvoiceId,
       sourceInvoiceNo: referencePreview?.sourceInvoiceNo ?? "",
       sourcePoId: sourcePoId ?? referencePreview?.sourcePoId ?? null,
       sourcePoNo: referencePreview?.sourcePoNo ?? "",
       sourceGrnNo: referencePreview?.sourceGrnNo ?? "",
       sourceQcNo: referencePreview?.sourceQcNo ?? "",
-      sourcePackingNo,
-      sourceDispatchNo,
-      originalAmount: parseFloat(originalAmount) || totalDebit,
-      alreadyAdjustedAmount: alreadyAdjustedNum,
-      standaloneDebitAmount: 0,
-      lineItems: lines.filter((l) => l.productName && l.returnQty > 0),
-      reason,
-      remarks,
+      sourcePackingNo: sourcePackingNo || undefined,
+      sourceDispatchNo: sourceDispatchNo || undefined,
+      originalAmount: roundMoney(particularTotals.total + roundOff),
+      alreadyAdjustedAmount: isDirectMode ? 0 : alreadyAdjustedNum,
+      standaloneDebitAmount: isDirectMode
+        ? roundMoney(particularTotals.total + roundOff)
+        : 0,
+      taxableAmount: particularTotals.basicAmount,
+      gstAmount: particularTotals.gstAmount,
+      freshGstPct: isDirectMode ? (gstApplicable ? particularTotals.ratePct : 0) : undefined,
+      lineItems: isDirectMode ? ([] as DebitNoteLine[]) : buildParticularLineItems(),
+      reason: resolvedReason,
+      remarks: narration || remarks,
+      referenceNo,
+      adjustmentLedgerId,
+      adjustmentLedgerName,
       attachments,
       status,
-      source: "purchase_return" as const,
+      source:
+        sourceReturnId || uiRefType === "purchase_return"
+          ? ("purchase_return" as const)
+          : ("manual" as const),
       sourceReturnId: sourceReturnId || undefined,
       sourceReturnNo: sourceReturnNo || undefined,
       warehouse: warehouseRef ?? undefined,
@@ -350,34 +642,36 @@ export default function DebitNoteFormPageClient({
       setError("Select a supplier before saving.");
       return false;
     }
-    if (!reason.trim()) {
-      setError("Select a reason / adjustment type.");
+    if (!adjustmentLedgerId && !adjustmentLedgerName) {
+      setError("Select an adjustment ledger.");
       return false;
     }
-    if (isFresh) {
-      if (!adjustmentLedgerId) {
-        setError("Select an adjustment ledger.");
-        return false;
-      }
-      if (freshTotals.total <= 0) {
-        setError("Enter a valid debit amount.");
-        return false;
-      }
-    } else {
+    if (!particular.trim()) {
+      setError("Enter a particular / description for the adjustment.");
+      return false;
+    }
+    if (particularTotals.total <= 0) {
+      setError("Enter a valid Qty and Rate for the particular.");
+      return false;
+    }
+    if (isSourceRefMode) {
       if (!referencePreview) {
-        setError(isPurchaseInvoice ? "Purchase invoice reference is missing." : "Purchase return reference is missing.");
+        setError(
+          uiRefType === "purchase_return"
+            ? "Select a purchase return."
+            : "Select a purchase invoice.",
+        );
         return false;
       }
-      validateDebitNoteLines(lines);
-      if (totalDebit <= 0) {
-        setError("Enter debit qty on at least one line.");
+      if (!(narration || remarks).trim()) {
+        setError("Narration is required.");
         return false;
       }
     }
     return true;
   };
 
-  const saveDraft = (redirect: "view" | "list" = "view") => {
+  const saveDraft = () => {
     setError(null);
     try {
       if (!validateForm()) return;
@@ -385,19 +679,19 @@ export default function DebitNoteFormPageClient({
         updateDebitNote(debitNoteId, buildInput("draft"));
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note saved as draft");
-        router.push(redirect === "list" ? DEBIT_NOTES_LIST_PATH : `${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
         const rec = createDebitNote(buildInput("draft"));
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note saved as draft");
-        router.push(redirect === "list" ? DEBIT_NOTES_LIST_PATH : `${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save debit note.");
     }
   };
 
-  const postNote = (redirect: "view" | "list" = "view") => {
+  const postNote = () => {
     setError(null);
     try {
       if (!validateForm()) return;
@@ -412,7 +706,7 @@ export default function DebitNoteFormPageClient({
         postDebitNoteRecord(id);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully");
-        router.push(redirect === "list" ? DEBIT_NOTES_LIST_PATH : `${DEBIT_NOTES_LIST_PATH}/${id}`);
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${id}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not post debit note.");
@@ -432,36 +726,44 @@ export default function DebitNoteFormPageClient({
     setBaselineReady(false);
     const id = window.setTimeout(() => setBaselineReady(true), 350);
     return () => window.clearTimeout(id);
-  }, [debitNoteId, isFresh, returnId]);
+  }, [debitNoteId, isFresh, returnId, purchaseInvoiceId]);
 
   const formSnapshot = useMemo(
     () => ({
       debitNoteDate,
       vendorId,
-      lines,
       remarks,
-      reason,
+      particular,
+      particularQty,
+      particularRate,
       referenceNo,
-      taxableAmount,
       gstApplicable,
       gstPct,
       narration,
       attachments,
       adjustmentLedgerId,
+      uiRefType,
+      referenceInvoiceId,
+      referenceReturnId,
+      roundOff,
     }),
     [
       debitNoteDate,
       vendorId,
-      lines,
       remarks,
-      reason,
+      particular,
+      particularQty,
+      particularRate,
       referenceNo,
-      taxableAmount,
       gstApplicable,
       gstPct,
       narration,
       attachments,
       adjustmentLedgerId,
+      uiRefType,
+      referenceInvoiceId,
+      referenceReturnId,
+      roundOff,
     ],
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
@@ -470,502 +772,304 @@ export default function DebitNoteFormPageClient({
     isDirty,
   });
 
-  const gstAmountDisplay = isFresh ? freshTotals.gstAmount : lineTotals.gstAmount;
-  const taxableDisplay = isFresh ? freshTotals.taxable : lineTotals.taxableAmount;
-  const cgstDisplay = Math.round((gstAmountDisplay / 2) * 100) / 100;
-  const sgstDisplay = cgstDisplay;
-  const igstDisplay = 0;
-  const basis: DebitBasis = isFresh ? "amount" : "quantity";
-
   const stickyActions = (
-    <div className="flex items-center justify-between w-full gap-2 flex-wrap">
-      <div className="flex items-center gap-1.5">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}
-        >
-          Back
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={requestCancel}
-        >
-          Cancel
-        </Button>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs font-medium gap-1.5"
-          onClick={() => saveDraft("view")}
-        >
-          <Save className="w-3.5 h-3.5" /> Save Draft
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => postNote("view")}
-        >
-          Save & Post
-        </Button>
-      </div>
-    </div>
+    <VoucherFormActionBar
+      onCancel={requestCancel}
+      onSaveDraft={saveDraft}
+      onSaveAndPost={postNote}
+    />
   );
+
+  const vendorLedgerName = vendorFields?.payableLedger || resolveVendorName() || "Not selected";
+  const creditAdjLedger = adjustmentLedgerName || "Not selected";
+
+  const postingSummary = (
+    <VoucherAccountingPostingSummary
+      embedded
+      compact
+      voucherTypeLabel="Debit Note"
+      debitLedgerLabel="Debit"
+      debitLedgerName={vendorLedgerName || "Not selected"}
+      creditLedgerLabel="Credit"
+      creditLedgerName={creditAdjLedger || "Not selected"}
+      voucherAmount={totalDebit}
+      voucherAmountLabel="Debit Note Amount"
+      gstAdjustments={
+        showGst
+          ? {
+              cgstLabel: "Input CGST Adjustment",
+              cgstAmount: cgstDisplay,
+              sgstLabel: "Input SGST Adjustment",
+              sgstAmount: sgstDisplay,
+              igstLabel: "Input IGST Adjustment",
+              igstAmount: igstDisplay,
+            }
+          : undefined
+      }
+      visibilityItems={defaultVisibilityForType("debit_note", {
+        gstApplicable: showGst,
+      })}
+    />
+  );
+
+  // #region agent log
+  useEffect(() => {
+    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "e2f165",
+      },
+      body: JSON.stringify({
+        sessionId: "e2f165",
+        location: "DebitNoteFormPageClient.tsx:render",
+        message: "DN render branch",
+        data: {
+          uiRefType,
+          isSourceRefMode,
+          hasPreview: Boolean(referencePreview),
+          hasRefDoc: Boolean(referenceDocumentView),
+          gstOn: gstApplicable,
+          particularQty,
+          particularRate,
+          usesSharedParticulars: true,
+        },
+        timestamp: Date.now(),
+        hypothesisId: "A",
+        runId: "pre-fix",
+      }),
+    }).catch(() => {});
+  }, [
+    uiRefType,
+    isSourceRefMode,
+    referencePreview,
+    referenceDocumentView,
+    gstApplicable,
+    particularQty,
+    particularRate,
+  ]);
+  // #endregion
 
   return (
     <>
-    <AccountsFormLayout
-      fullWidth
-      onBackClick={requestCancel}
-      title={title}
-      breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
-      code={debitNoteNo || undefined}
-      headerMeta={
-        <>
-          <span className="cn-ws__badge is-draft">{isEdit ? "Edit" : "Draft"}</span>
-          <span className="cn-ws__badge">
-            {basis === "amount" ? "Amount Based" : "Quantity Based"}
-          </span>
-          {debitNoteNo ? (
-            <span className="font-mono text-[11px] text-muted-foreground">{debitNoteNo}</span>
-          ) : (
-            <span className="text-[11px] text-muted-foreground">Auto number on save</span>
-          )}
-        </>
-      }
-      stickyFooter={stickyActions}
-    >
-      <div className="cn-ws">
-        {error ? <p className="cn-ws__error">{error}</p> : null}
-
-        {/* Basic Information */}
-        <section className="cn-ws__section">
-          <p className="cn-ws__label">Basic Information</p>
-          <div className="cn-ws__grid-3">
-            <div className="cn-ws__field" style={{ gridColumn: "span 1" }}>
-              <Label className="text-[11px] font-medium text-muted-foreground">Vendor</Label>
-              {vendorLocked ? (
-                <p className="cn-ws__ro font-medium truncate">{resolveVendorName() || "—"}</p>
-              ) : (
-                <SearchableSelect
-                  label=""
-                  options={vendors.map((v) => ({
-                    value: String(v.id),
-                    label: v.vendorName,
-                    sub: v.vendorCode,
-                  }))}
-                  value={vendorId}
-                  onChange={(id) => {
-                    const v = vendors.find((x) => x.id === Number(id));
-                    onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
-                  }}
-                  placeholder="Select supplier…"
-                  required
-                />
-              )}
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Debit Note Date
-              </Label>
-              <AccountsDateInput
-                value={debitNoteDate}
-                onChange={setDebitNoteDate}
-                aria-label="Debit note date"
-                className="h-9 text-sm"
-              />
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Debit Note No.
-              </Label>
-              <Input
-                className="h-9 text-sm font-mono bg-muted/20"
-                disabled
-                value={isEdit ? debitNoteNo : "Auto-generated"}
-              />
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Reference No.
-              </Label>
-              <Input
-                className="h-9 text-sm"
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                placeholder="Optional"
-                disabled={!isFresh}
-              />
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Accounts Payable
-              </Label>
-              <p className="cn-ws__ro truncate">
-                {vendorFields?.payableLedger || resolveVendorName() || "—"}
-              </p>
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">Status</Label>
-              <p className="cn-ws__ro capitalize">{isEdit ? "Draft / loaded" : "New"}</p>
-            </div>
-            {warehouseRef ? (
-              <div className="cn-ws__field" style={{ gridColumn: "1 / -1" }}>
-                <WarehouseMappedBankAccountSelect
-                  warehouseRef={warehouseRef}
-                  value={bankAccountId}
-                  onChange={(id) => setBankAccountId(id)}
-                  label="Bank Account (optional)"
-                />
-              </div>
-            ) : null}
-          </div>
-        </section>
-
-        {/* Basis */}
-        <section className="cn-ws__section">
-          <p className="cn-ws__label">Debit Note Basis</p>
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <span className="cn-ws__badge">
-              {basis === "amount" ? "Amount Based" : "Quantity Based"}
-            </span>
-            <span className="cn-ws__hint">
-              Source:{" "}
-              {isFresh
-                ? "Manual"
-                : isPurchaseInvoice
-                  ? "Purchase Invoice"
-                  : isReturn
-                    ? "Purchase Return"
-                    : "Reference document"}
-            </span>
-          </div>
-          {isFresh ? (
-            <p className="cn-ws__hint mt-1.5">
-              Quantity-based Debit Notes continue to be created from Purchase Return /
-              Purchase Invoice — this path is amount-based only.
-            </p>
-          ) : null}
-        </section>
-
-        {/* Reference */}
-        {isFresh ? (
-          <section className="cn-ws__section">
-            <p className="cn-ws__label">Reference Information</p>
-            <div className="cn-ws__grid-3">
-              <SearchableSelect
-                label="Reason"
-                value={reason}
-                onChange={setReason}
-                options={FRESH_DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
-                placeholder="Select reason…"
-                required
-              />
-              <div className="cn-ws__field">
-                <Label className="text-[11px] font-medium text-muted-foreground">
-                  Adjustment Ledger <span className="text-red-500">*</span>
-                </Label>
-                <GroupedLedgerSelect
-                  value={adjustmentLedgerId}
-                  onChange={(ledger) => {
-                    setAdjustmentLedgerId(ledger.id);
-                    setAdjustmentLedgerName(ledger.accountName);
-                  }}
-                  placeholder="Select adjustment ledger…"
-                  required
-                />
-              </div>
-              <div className="cn-ws__field">
-                <Label className="text-[11px] font-medium text-muted-foreground">
-                  Reference No.
-                </Label>
-                <Input
-                  className="h-9 text-sm"
-                  value={referenceNo}
-                  onChange={(e) => setReferenceNo(e.target.value)}
-                  placeholder="Invoice / PO / memo…"
-                />
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section className="cn-ws__section">
-            <p className="cn-ws__label">
-              {isPurchaseInvoice ? "Purchase Invoice Reference" : "Purchase Return Reference"}
-            </p>
-            <div className="cn-ws__grid-4">
-              {sourceReturnNo ? (
-                <div className="cn-ws__field">
-                  <span className="cn-ws__flabel">Return No.</span>
-                  <p className="cn-ws__ro font-mono">{sourceReturnNo}</p>
-                </div>
+      <div className="credit-debit-note-form h-full min-h-0 flex flex-col">
+        <AccountsFormLayout
+          fullWidth
+          onBackClick={requestCancel}
+          title={title}
+          breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
+          code={debitNoteNo || undefined}
+          headerMeta={
+            <div className="flex items-center gap-1.5">
+              <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                Draft
+              </span>
+              {debitNoteNo ? (
+                <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
+                  {debitNoteNo}
+                </span>
               ) : null}
-              <div className="cn-ws__field">
-                <span className="cn-ws__flabel">Purchase Invoice</span>
-                <p className="cn-ws__ro font-mono">
-                  {referencePreview?.sourceInvoiceNo || "—"}
-                </p>
-              </div>
-              <div className="cn-ws__field">
-                <span className="cn-ws__flabel">PO No.</span>
-                <p className="cn-ws__ro font-mono">
-                  {referencePreview?.sourcePoNo || "—"}
-                </p>
-              </div>
-              <div className="cn-ws__field">
-                <span className="cn-ws__flabel">GRN No.</span>
-                <p className="cn-ws__ro font-mono">
-                  {referencePreview?.sourceGrnNo || "—"}
-                </p>
-              </div>
-              <div className="cn-ws__field">
-                <span className="cn-ws__flabel">Invoice Amount</span>
-                <p className="cn-ws__ro tabular-nums">
-                  {referencePreview
-                    ? formatINR(referencePreview.originalAmount)
-                    : "—"}
-                </p>
-              </div>
-              <div className="cn-ws__field">
-                <span className="cn-ws__flabel">Already Debited</span>
-                <p className="cn-ws__ro tabular-nums">
-                  {referencePreview
-                    ? formatINR(referencePreview.alreadyAdjustedAmount)
-                    : "—"}
-                </p>
-              </div>
-              <div className="cn-ws__field">
-                <span className="cn-ws__flabel">Dispatch</span>
-                <p className="cn-ws__ro font-mono">
-                  {sourceDispatchNo || sourcePackingNo || "—"}
-                </p>
-              </div>
-              <div className="cn-ws__field">
-                <SearchableSelect
-                  label="Reason"
-                  value={reason}
-                  onChange={setReason}
-                  options={DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
-                  placeholder="Select reason…"
-                  required
-                />
-              </div>
             </div>
-            {(vendorFields || resolveVendorName()) && (
-              <p className="text-[11px] text-muted-foreground mt-2 truncate">
-                Vendor: {resolveVendorName()}
-                {billingAddress ? ` · Bill: ${billingAddress}` : ""}
-              </p>
-            )}
-          </section>
-        )}
+          }
+          stickyFooter={stickyActions}
+        >
+          <div className="cdn-stack pb-20">
+            {error ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-700">
+                {error}
+              </div>
+            ) : null}
 
-        {/* Particulars */}
-        <section className="cn-ws__section cn-ws__section--flush">
-          <div className="px-4 pt-2.5 pb-1">
-            <p className="cn-ws__label mb-0">
-              {isFresh ? "Particulars" : "Item Particulars"}
-            </p>
-          </div>
-          {isFresh ? (
-            <div className="px-4 pb-3">
-              <FreshDebitNoteForm
-                particularsOnly
-                vendorSelector={null}
-                debitNoteDate={debitNoteDate}
-                onDebitNoteDateChange={setDebitNoteDate}
-                reason={reason}
-                onReasonChange={setReason}
-                referenceNo={referenceNo}
-                onReferenceNoChange={setReferenceNo}
-                adjustmentLedgerId={adjustmentLedgerId}
-                adjustmentLedgerName={adjustmentLedgerName}
-                onAdjustmentLedgerChange={(l) => {
-                  setAdjustmentLedgerId(l.id);
-                  setAdjustmentLedgerName(l.accountName);
-                }}
-                taxableAmount={taxableAmount}
-                onTaxableAmountChange={setTaxableAmount}
-                gstPct={gstPct}
-                onGstPctChange={setGstPct}
-                gstApplicable={gstApplicable}
-                onGstApplicableChange={setGstApplicable}
-                narration={narration}
-                onNarrationChange={setNarration}
-              />
-            </div>
-          ) : lines.length > 0 ? (
-            <DebitNoteProductTable lines={lines} onQtyChange={onDebitQtyChange} />
-          ) : (
-            <p className="text-xs text-muted-foreground py-8 text-center border-t border-dashed border-border">
-              {isPurchaseInvoice
-                ? "Loading purchase invoice lines…"
-                : "Loading purchase return lines…"}
-            </p>
-          )}
-        </section>
+            <VoucherFormSectionCard title="Basic & Reference Details" compact>
+              <VoucherNoteFieldGrid columns={4}>
+                <VoucherNoteField label="Debit Note Number" width="sm">
+                  <VoucherNoteReadOnly mono>
+                    {isEdit ? debitNoteNo : debitNoteNo || "…"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Debit Note Date" width="sm">
+                  <AccountsDateInput
+                    value={debitNoteDate}
+                    onChange={setDebitNoteDate}
+                    aria-label="Debit note date"
+                    className="h-[30px] text-xs cdn-control"
+                  />
+                </VoucherNoteField>
+                <VoucherNoteField label="Reference Number" width="md">
+                  <Input
+                    className="h-[30px] text-xs cdn-control"
+                    value={referenceNo}
+                    onChange={(e) => setReferenceNo(e.target.value)}
+                    placeholder="Optional"
+                  />
+                </VoucherNoteField>
+                {warehouseRef ? (
+                  <VoucherNoteField label="Bank Account" width="lg">
+                    <WarehouseMappedBankAccountSelect
+                      warehouseRef={warehouseRef}
+                      value={bankAccountId}
+                      onChange={(id) => setBankAccountId(id)}
+                      label=""
+                    />
+                  </VoucherNoteField>
+                ) : null}
+                <VoucherNoteField label="Vendor" required width="md">
+                  {vendorLocked ? (
+                    <VoucherNoteReadOnly>{resolveVendorName() || "—"}</VoucherNoteReadOnly>
+                  ) : (
+                    <SearchableSelect
+                      label=""
+                      options={vendors.map((v) => ({
+                        value: String(v.id),
+                        label: v.vendorName,
+                        sub: v.vendorCode,
+                      }))}
+                      value={vendorId}
+                      onChange={(id) => {
+                        const v = vendors.find((x) => x.id === Number(id));
+                        onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
+                      }}
+                      placeholder="Select supplier…"
+                      required
+                    />
+                  )}
+                </VoucherNoteField>
+                <VoucherNoteField label="Vendor GSTIN" width="md">
+                  <VoucherNoteReadOnly mono>
+                    {vendorFields?.vendorGst || referencePreview?.vendorGstin || "—"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="AP Ledger" width="md">
+                  <VoucherNoteReadOnly>
+                    {vendorFields?.payableLedger || resolveVendorName() || "—"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Reference Type" span={2} width="ref">
+                  {refControlsLocked ? (
+                    <VoucherNoteReadOnly>
+                      {isReturn
+                        ? `Purchase Return${sourceReturnNo ? ` · ${sourceReturnNo}` : ""}`
+                        : `Purchase Invoice${
+                            referencePreview?.sourceInvoiceNo
+                              ? ` · ${referencePreview.sourceInvoiceNo}`
+                              : ""
+                          }`}
+                    </VoucherNoteReadOnly>
+                  ) : (
+                    <VoucherNoteSegmentControl
+                      hideLabel
+                      label="Reference Type"
+                      name="dn-ref-type"
+                      value={uiRefType}
+                      options={REF_TYPE_OPTIONS}
+                      onChange={onUiRefTypeChange}
+                    />
+                  )}
+                </VoucherNoteField>
+                {!refControlsLocked && uiRefType === "purchase_invoice" ? (
+                  <VoucherNoteField label="Reference Document" span={2} width="ref">
+                    <SearchableSelect
+                      label=""
+                      value={referenceInvoiceId}
+                      onChange={onPurchaseInvoiceSelect}
+                      options={purchaseInvoiceOptions}
+                      placeholder="Select purchase invoice"
+                      required
+                    />
+                  </VoucherNoteField>
+                ) : null}
+                {!refControlsLocked && uiRefType === "purchase_return" ? (
+                  <VoucherNoteField label="Reference Document" span={2} width="ref">
+                    <SearchableSelect
+                      label=""
+                      value={referenceReturnId}
+                      onChange={onPurchaseReturnSelect}
+                      options={purchaseReturnOptions}
+                      placeholder="Select purchase return"
+                      required
+                    />
+                  </VoucherNoteField>
+                ) : null}
+              </VoucherNoteFieldGrid>
+            </VoucherFormSectionCard>
 
-        {/* Tax & Summary */}
-        <div className="cn-ws__summary">
-          <div className="space-y-2">
-            <p className="cn-ws__hint">
-              {isFresh
-                ? "GST controls apply to the amount-based particular above."
-                : "Debit qty is capped at available quantity. Amounts follow existing GST logic."}
-            </p>
-            {totalDebit > 0 ? (
-              <LedgerImpactPreview
-                lines={debitNoteImpactResolved({
-                  vendorName: resolveVendorName() || "Supplier",
-                  taxable: taxableDisplay,
-                  taxAmount: gstAmountDisplay,
-                  grandTotal: totalDebit,
-                  adjustmentLedgerName: isFresh ? adjustmentLedgerName : undefined,
-                })}
+            {isSourceRefMode ? (
+              <NoteReferenceDocumentDetails
+                document={referenceDocumentView}
+                emptyMessage={
+                  uiRefType === "purchase_return"
+                    ? "Select a purchase return to view source details."
+                    : "Select a purchase invoice to view source details."
+                }
               />
             ) : null}
-          </div>
-          <div className="cn-ws__summary-rows">
-            <div>
-              <span className="cn-muted">Subtotal</span>
-              <span className="tabular-nums">{formatINR(taxableDisplay)}</span>
-            </div>
-            <div>
-              <span className="cn-muted">Discount</span>
-              <span className="tabular-nums">{formatINR(0)}</span>
-            </div>
-            <div>
-              <span className="cn-muted">CGST</span>
-              <span className="tabular-nums">{formatINR(cgstDisplay)}</span>
-            </div>
-            <div>
-              <span className="cn-muted">SGST</span>
-              <span className="tabular-nums">{formatINR(sgstDisplay)}</span>
-            </div>
-            <div>
-              <span className="cn-muted">IGST</span>
-              <span className="tabular-nums">{formatINR(igstDisplay)}</span>
-            </div>
-            <div>
-              <span className="cn-muted">Round Off</span>
-              <span className="tabular-nums">{formatINR(0)}</span>
-            </div>
-            <div className="cn-total">
-              <span>Grand Total</span>
-              <span className="tabular-nums">{formatINR(totalDebit)}</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Narration & Attachments */}
-        <section className="cn-ws__section">
-          <p className="cn-ws__label">Narration &amp; Attachments</p>
-          <div className="cn-ws__grid-3">
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Reason Summary
-              </Label>
-              <Input className="h-9 text-sm" value={reason || "—"} disabled />
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Internal Reference
-              </Label>
-              <Input
-                className="h-9 text-sm"
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                placeholder="Optional…"
-                disabled={!isFresh}
-              />
-            </div>
-            <div className="cn-ws__field">
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Attachment
-              </Label>
-              <div className="flex items-center gap-1.5">
-                <label className="inline-flex items-center gap-1 h-7 px-2 text-[11px] border rounded-md cursor-pointer hover:bg-muted/40">
-                  <Upload className="w-3.5 h-3.5" /> Upload
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      handleFile(f, f.name);
-                      e.target.value = "";
+            <VoucherFormSectionCard title="Particulars" flush compact>
+              <div className="cnz-items !shadow-none !border-0 !rounded-none">
+                <div className="px-3 py-2">
+                  <NoteParticularsTable
+                    particular={particular}
+                    onParticularChange={setParticular}
+                    adjustmentLedgerId={adjustmentLedgerId}
+                    onAdjustmentLedgerChange={(l) => {
+                      setAdjustmentLedgerId(l.id);
+                      setAdjustmentLedgerName(l.accountName);
                     }}
+                    qty={particularQty}
+                    onQtyChange={setParticularQty}
+                    rate={particularRate}
+                    onRateChange={setParticularRate}
+                    gstPct={gstPct}
+                    onGstPctChange={setGstPct}
+                    gstApplicable={gstApplicable}
+                    onGstApplicableChange={setGstApplicable}
+                    interstate={false}
+                    switchId="dn-gst-applicable"
                   />
-                </label>
-              </div>
-            </div>
-            <div className="cn-ws__field" style={{ gridColumn: "1 / -1" }}>
-              <Label className="text-[11px] font-medium text-muted-foreground">
-                Narration
-              </Label>
-              <Textarea
-                className="min-h-[64px] text-xs resize-none"
-                value={isFresh ? narration : remarks}
-                onChange={(e) => {
-                  if (isFresh) setNarration(e.target.value);
-                  else setRemarks(e.target.value);
-                }}
-                placeholder="Narration…"
-              />
-            </div>
-          </div>
-          {attachments.length > 0 ? (
-            <div className="mt-2 space-y-1">
-              {attachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="flex items-center gap-2 py-1 px-2 border rounded text-[11px]"
-                >
-                  <span className="font-medium">{att.documentName}</span>
-                  <span className="text-muted-foreground flex-1 truncate">{att.fileName}</span>
-                  {att.dataUrl ? (
-                    <>
-                      <button
-                        type="button"
-                        className="p-1 hover:bg-muted rounded"
-                        onClick={() => window.open(att.dataUrl, "_blank")}
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      <a
-                        href={att.dataUrl}
-                        download={att.fileName}
-                        className="p-1 hover:bg-muted rounded"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </a>
-                    </>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-red-50 text-red-600 rounded"
-                    onClick={() =>
-                      setAttachments((p) => p.filter((a) => a.id !== att.id))
-                    }
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                 </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
+              </div>
+              <VoucherGstSummaryCard
+                embedded
+                visible
+                showTaxRows={showGst}
+                taxableAmount={displayTaxable}
+                cgstAmount={cgstDisplay}
+                sgstAmount={sgstDisplay}
+                igstAmount={igstDisplay}
+                roundOff={roundOff}
+                grandTotal={totalDebit}
+                roundOffSlot={
+                  <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
+                }
+              />
+            </VoucherFormSectionCard>
+
+            <VoucherNarrationAttachmentsSection
+              compact
+              narration={narration || remarks}
+              onNarrationChange={(v) => {
+                setNarration(v);
+                setRemarks(v);
+              }}
+              narrationPlaceholder="Accounting narration for this debit note"
+              attachmentFiles={attachments.map((att) => ({
+                id: att.id,
+                fileName: att.fileName,
+                previewUrl: att.dataUrl,
+              }))}
+              onAddAttachmentFiles={(files) => {
+                files.forEach((f) => handleFile(f, f.name));
+              }}
+              onRemoveAttachment={(id) =>
+                setAttachments((prev) => prev.filter((a) => a.id !== id))
+              }
+              footerSlot={postingSummary}
+            />
+          </div>
+        </AccountsFormLayout>
       </div>
-    </AccountsFormLayout>
-    {discardDialog}
-    <AccountsToast toast={toast} onDismiss={dismissToast} />
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
+      {discardDialog}
     </>
   );
 }

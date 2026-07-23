@@ -31,7 +31,7 @@ import {
 } from "../expense-data";
 import { formatINR } from "../expense-utils";
 
-const fieldClass = "h-9 text-sm font-medium";
+const fieldClass = "h-8 min-h-8 text-[13px] accounts-form-input font-medium";
 const labelClass = "text-xs font-medium text-foreground";
 const PAYMENT_MODES: PaymentMode[] = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
 
