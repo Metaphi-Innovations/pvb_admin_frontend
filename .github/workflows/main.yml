@@ -20,11 +20,7 @@ jobs:
           pm2 -v
       - name: Copy files to deployment directory
         run: |
-          rsync -av --delete \
-                    --exclude='.git' \
-                    --exclude='node_modules' \
-                    --exclude='.env' \
-                    ./ /var/www/pvb.uat.metaphi.in/  
+          rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.env' ./ /var/www/pvb.uat.metaphi.in/
       - name: Install dependencies
         working-directory: /var/www/pvb.uat.metaphi.in
         run: npm i && npm run build
