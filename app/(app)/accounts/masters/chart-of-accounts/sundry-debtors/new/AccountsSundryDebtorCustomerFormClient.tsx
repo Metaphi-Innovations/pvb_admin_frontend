@@ -18,6 +18,7 @@ import {
   nextCustomerId,
   saveCustomers,
   todayStr,
+  type Customer,
 } from "@/app/(app)/masters/customers/customer-data";
 import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
@@ -152,7 +153,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
       const today = todayStr();
       const status = form.status === "draft" ? "active" : form.status;
 
-      let record;
+      let record: Customer;
       if (isEdit && customerId != null) {
         const existing = list.find((c) => c.id === customerId);
         if (!existing) throw new Error("Customer not found.");
