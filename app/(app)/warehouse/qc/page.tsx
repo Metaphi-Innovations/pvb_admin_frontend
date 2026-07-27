@@ -1,7 +1,5 @@
-"use client";
-
 import { redirect } from "next/navigation";
 
-export default function QcPage() {
+export default function QcPageRoot() {
   redirect("/warehouse/qc/purchase");
 }

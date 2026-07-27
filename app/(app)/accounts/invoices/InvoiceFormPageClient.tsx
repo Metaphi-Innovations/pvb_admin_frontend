@@ -74,6 +74,7 @@ import {
   type GoodsEInvoiceStatus,
 } from "./components/GoodsTransportStatutorySection";
 import { GoodsStatutoryGenerationSection } from "./components/GoodsStatutoryGenerationSection";
+import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
 import {
   calculateInvoiceTotals,
   createEmptyLine,
@@ -161,6 +162,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const customers = useMemo(() => getCustomersForInvoice(), []);
 
   const [invoiceNo, setInvoiceNo] = useState("");
+  const [previewInvoiceNo, setPreviewInvoiceNo] = useState("");
   const [customerId, setCustomerId] = useState<string>("");
   const [customerCode, setCustomerCode] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -229,7 +231,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [previewInvoiceNo, setPreviewInvoiceNo] = useState("");
 
   const patchTransport = useCallback((patch: Partial<GoodsTransportStatutoryState>) => {
     setTransport((prev) => ({ ...prev, ...patch }));
@@ -910,6 +911,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     destinationWarehouseState,
   ]);
 
+  // Preview SI number from DocumentSequence (create only)
+  useEffect(() => {
+    if (isEdit) return;
+    let cancelled = false;
+    const state = stateName.trim() || placeOfSupply.trim() || "Maharashtra";
+    SalesInvoiceNumberService.getPreviewNumber({ state })
+      .then((num) => {
+        if (!cancelled) setPreviewInvoiceNo(num);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewInvoiceNo("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, stateName, placeOfSupply]);
+
   const sezLutResolution = useMemo(
     () =>
       showSezSupply
@@ -1367,7 +1385,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     statutoryValueFingerprint,
   ]);
 
-  const submit = (asDraft: boolean) => {
+  const submit = async (asDraft: boolean) => {
     if (savingRef.current || saving) return;
     setError(null);
     setSuccess(null);
@@ -1504,7 +1522,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         router.push(`${INVOICES_LIST_PATH}/${invoiceId}`);
         router.refresh();
       } else {
-        const rec = createInvoice(buildInput(status));
+        const rec = await createInvoice(buildInput(status));
         dispatchAccountsDataChanged("sales-invoices");
         setSuccess(
           asDraft
@@ -1769,56 +1787,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           )}
         </InvoiceFormCard>
 
-        <InvoiceFormCard
-          title={
-            smGen
-              ? "Sample Order & Proforma Details"
-              : stGen || soGen
-                ? "Invoice Details"
-                : "Invoice & Dispatch Details"
-          }
-        >
-          {stGen ? (
-            <StockTransferInvoiceDetailsSection
-              isEdit={isEdit}
-              invoiceNo={invoiceNo}
-              previewInvoiceNo={previewInvoiceNo}
-              invoiceDate={invoiceDate}
-              onInvoiceDateChange={setInvoiceDate}
-              dispatchNo={dispatchRef}
-              dispatchDate={dispatchDate}
-              warehouseRef={warehouse}
-              bankAccountId={bankAccountId}
-              onBankAccountChange={handleBankAccountChange}
-              bankAccountHelper={
-                bankPrintDetails
-                  ? `${bankPrintDetails.bankName} · …${String(bankPrintDetails.accountNumber).slice(-4)}`
-                  : undefined
-              }
-            />
-          ) : smGen ? (
-            <SampleOrderProformaDetailsSection
-              isEdit={isEdit}
-              invoiceNo={invoiceNo}
-              previewInvoiceNo={previewInvoiceNo}
-              invoiceDate={invoiceDate}
-              onInvoiceDateChange={setInvoiceDate}
-              sampleOrderNo={salesOrderRef}
-              dispatchNo={dispatchRef}
-              dispatchDate={dispatchDate}
-              warehouseRef={warehouse}
-              bankAccountId={bankAccountId}
-              onBankAccountChange={handleBankAccountChange}
-              bankAccountHelper={
-                bankPrintDetails
-                  ? `${bankPrintDetails.bankName} · …${String(bankPrintDetails.accountNumber).slice(-4)}`
-                  : undefined
-              }
-            />
-          ) : (
+        <InvoiceFormCard title="Invoice & Dispatch Details">
           <SalesInvoiceDocumentInfoSection
             isEdit={isEdit}
-            invoiceNo={invoiceNo}
+            invoiceNo={isEdit ? invoiceNo : previewInvoiceNo}
             invoiceDate={invoiceDate}
             onInvoiceDateChange={setInvoiceDate}
             dueDate={dueDate}
@@ -1871,7 +1843,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 : undefined
             }
           />
-          )}
+          
           {showSezSupply && (
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
               <p className="text-xs font-medium text-slate-800">SEZ Customer — {getSezSupplyTypeLabel(sezSupplyType)}</p>

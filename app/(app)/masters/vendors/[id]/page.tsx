@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { AppLayout } from "@/components/layout/AppLayout";
 import {
   RecordDetailPage,
   RecordKvRow,
@@ -19,77 +20,87 @@ import {
   Phone,
   User,
 } from "lucide-react";
-import {
-  formatPaymentTerms,
-  getVendorById,
-  type Vendor,
-} from "../vendor-data";
-import { loadProductsForSupplier } from "../../products/product-data";
+import { useSupplier } from "@/hooks/masters/use-supplier";
 import { getGstCategoryLabel, deriveGstRegistered } from "@/lib/masters/gst-compliance";
 import { getActiveTDSMasters, formatTdsSummary } from "../../tds/tds-data";
 import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
-import { getVendorAccountingSummary } from "@/lib/accounts/erp-accounting-mapping";
 
 function formatMobile(code: string, mobile: string) {
   if (!mobile) return "—";
   return `${code} ${mobile}`.trim();
 }
 
-function formatAddress(vendor: Vendor) {
-  const a = vendor.billingAddress;
-  const lines = [a.line1, a.line2, a.city, a.state, a.pincode, a.country]
-    .filter(Boolean)
-    .join(", ");
-  return lines || "—";
-}
-
 export default function ViewVendorPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
-  const [vendor, setVendor] = useState<Vendor | null>(null);
+  const id = params.id as string;
+
+  const { data: vendor, isLoading, isError } = useSupplier(id);
 
   const tds = useMemo(() => {
-    if (!vendor?.tdsMasterId) return null;
-    return getActiveTDSMasters().find((t) => t.id === vendor.tdsMasterId) ?? null;
-  }, [vendor?.tdsMasterId]);
+    if (!vendor?.tdsSectionId) return null;
+    return getActiveTDSMasters().find((t) => t.id === Number(vendor.tdsSectionId) || t.sectionName === vendor.tdsSectionId) ?? null;
+  }, [vendor?.tdsSectionId]);
 
-  useEffect(() => {
-    const v = getVendorById(id);
-    if (!v) {
-      router.replace("/masters/vendors");
-      return;
-    }
-    setVendor(v);
-  }, [id, router]);
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center text-xs text-muted-foreground">
+          Loading supplier details…
+        </div>
+      </AppLayout>
+    );
+  }
 
-  if (!vendor) return null;
+  if (isError || !vendor) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center">
+          <p className="text-sm text-[#6B80A0]">Supplier not found.</p>
+          <Link href="/masters/vendors" className="mt-2 inline-block text-xs text-[#1554B4]">
+            Back to listing
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
 
   const gstRegistered = deriveGstRegistered(
-    vendor.gstApplicable,
-    vendor.gstNumber,
-    vendor.gstCategory,
+    vendor.gstRegistered,
+    vendor.gstinNumber,
+    vendor.registrationType,
   );
-  const accountingSummary = getVendorAccountingSummary(vendor);
-  const mappedProducts = loadProductsForSupplier(vendor.vendorName, vendor.vendorCode);
+
+  // Accounting Ledger Summary compliant with PartyAccountingSummary
+  const accountingSummary = {
+    ledgerId: null as number | null,
+    ledgerName: vendor.supplierName + " - Creditors",
+    ledgerCode: "20101-0" + vendor.supplierCode,
+    outstanding: 0,
+    coaHref: "/accounts/coa",
+    ledgerHref: `/accounts/ledger?id=${vendor.supplierUuid}`,
+    isSystemGenerated: true,
+  };
+
+  const mappedProducts = vendor.products ?? [];
 
   return (
     <RecordDetailPage
       listHref="/masters/vendors"
       listLabel="Suppliers"
-      recordName={vendor.vendorName}
+      recordName={vendor.supplierName}
       statusLabel={vendor.status === "active" ? "Active" : "Inactive"}
       statusVariant={vendor.status}
       metaItems={[
         ...(vendor.contactPerson
           ? [{ label: vendor.contactPerson, icon: User }]
           : []),
-        ...(vendor.mobile
+        ...(vendor.mobileNumber
           ? [{
-              label: formatMobile(vendor.mobileCountryCode, vendor.mobile),
-              icon: Phone,
-              href: `tel:${vendor.mobile}`,
-            }]
+            label: formatMobile(vendor.mobileCountryCode, vendor.mobileNumber),
+            icon: Phone,
+            href: `tel:${vendor.mobileNumber}`,
+          }]
           : []),
         ...(vendor.email
           ? [{ label: vendor.email, icon: Mail, href: `mailto:${vendor.email}` }]
@@ -100,21 +111,21 @@ export default function ViewVendorPage() {
           icon: Building2,
           iconBg: "#EEF3FB",
           iconColor: "#0C3F8A",
-          value: vendor.vendorType || "—",
+          value: vendor.supplierType?.supplier_type_name || "—",
           label: "Supplier Type",
         },
         {
           icon: FileText,
           iconBg: "#E6F7EF",
           iconColor: "#1E9E61",
-          value: vendor.gstNumber || "—",
+          value: vendor.gstinNumber || "—",
           label: "GST Number",
         },
         {
           icon: Clock,
           iconBg: "#FFFBEB",
           iconColor: "#D97706",
-          value: formatPaymentTerms(vendor),
+          value: vendor.paymentTerms || "30 Days",
           label: "Payment Terms",
         },
         {
@@ -135,13 +146,13 @@ export default function ViewVendorPage() {
           },
         ],
         summary: [
-          { label: "Supplier Code", value: vendor.vendorCode || "—", highlight: true },
-          { label: "Supplier Type", value: vendor.vendorType || "—" },
-          { label: "GST", value: vendor.gstNumber || "—" },
+          { label: "Supplier Code", value: vendor.supplierCode || "—", highlight: true },
+          { label: "Supplier Type", value: vendor.supplierType?.supplier_type_name || "—" },
+          { label: "GST", value: vendor.gstinNumber || "—" },
           { label: "PAN", value: vendor.panNumber || "—" },
-          { label: "Payment Terms", value: formatPaymentTerms(vendor) },
-          { label: "Created", value: vendor.createdDate },
-          { label: "Updated", value: vendor.updatedDate },
+          { label: "Payment Terms", value: vendor.paymentTerms || "30 Days" },
+          { label: "Created", value: vendor.createdAt },
+          { label: "Updated", value: vendor.updatedAt },
         ],
       }}
     >
@@ -151,152 +162,201 @@ export default function ViewVendorPage() {
           summary={accountingSummary}
           partyLabel="Supplier"
         />
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
-          <RecordKvRow label="Supplier Code" value={vendor.vendorCode || "—"} mono highlight />
-          <RecordKvRow label="Supplier Name" value={vendor.vendorName} highlight />
-          <RecordKvRow label="Supplier Type" value={vendor.vendorType || "—"} />
-          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor)} />
-          <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
-          <RecordKvRow
-            label="Mobile Number"
-            value={formatMobile(vendor.mobileCountryCode, vendor.mobile)}
-            mono
-            link={!!vendor.mobile}
-            href={vendor.mobile ? `tel:${vendor.mobile}` : undefined}
-          />
-          <RecordKvRow
-            label="Email Address"
-            value={vendor.email || "—"}
-            link={!!vendor.email}
-            href={vendor.email ? `mailto:${vendor.email}` : undefined}
-            isLast
-          />
-        </RecordSectionCard>
-
-        <RecordSectionCard title="Registered Address" icon={MapPin} accent="green">
-          <RecordKvRow label="Address Line 1" value={vendor.billingAddress.line1 || "—"} />
-          {vendor.billingAddress.line2 && (
-            <RecordKvRow label="Address Line 2" value={vendor.billingAddress.line2} />
-          )}
-          <RecordKvRow label="Pincode" value={vendor.billingAddress.pincode || "—"} mono />
-          <RecordKvRow label="City" value={vendor.billingAddress.city || "—"} />
-          {vendor.billingAddress.town ? (
-            <RecordKvRow label="Town" value={vendor.billingAddress.town} />
-          ) : null}
-          <RecordKvRow label="Country" value={vendor.billingAddress.country || "—"} />
-          <RecordKvRow label="State" value={vendor.billingAddress.state || "—"} isLast />
-        </RecordSectionCard>
-
-        <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
-          <RecordKvRow label="GST Registered" value={gstRegistered ? "Yes" : "No"} />
-          {gstRegistered && (
-            <>
-              <RecordKvRow
-                label="GST Registration Type"
-                value={getGstCategoryLabel(vendor.gstCategory ?? "regular")}
-              />
-              <RecordKvRow label="GSTIN Number" value={vendor.gstNumber} mono copy />
-            </>
-          )}
-          <RecordKvRow label="PAN Number" value={vendor.panNumber || "—"} mono copy />
-          <RecordKvRow label="TAN Number" value={vendor.tanNumber || "—"} mono copy />
-          <RecordKvRow label="MSME Registered" value={vendor.msmeRegistered ? "Yes" : "No"} />
-          {vendor.msmeRegistered && (
-            <RecordKvRow label="MSME Number" value={vendor.msmeNumber || "—"} mono copy />
-          )}
-          <RecordKvRow label="TDS Applicable" value={vendor.tdsApplicable ? "Yes" : "No"} />
-          {vendor.tdsApplicable ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
+            <RecordKvRow label="Supplier Code" value={vendor.supplierCode || "—"} mono highlight />
+            <RecordKvRow label="Supplier Name" value={vendor.supplierName} highlight />
+            <RecordKvRow label="Supplier Type" value={vendor.supplierType?.supplier_type_name || "—"} />
+            <RecordKvRow label="Payment Terms" value={vendor.paymentTerms || "30 Days"} />
+            <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
             <RecordKvRow
-              label="TDS Section"
-              value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : "—"}
+              label="Mobile Number"
+              value={formatMobile(vendor.mobileCountryCode, vendor.mobileNumber)}
               mono
+              link={!!vendor.mobileNumber}
+              href={vendor.mobileNumber ? `tel:${vendor.mobileNumber}` : undefined}
+            />
+            <RecordKvRow
+              label="Email Address"
+              value={vendor.email || "—"}
+              link={!!vendor.email}
+              href={vendor.email ? `mailto:${vendor.email}` : undefined}
               isLast
             />
-          ) : (
-            <RecordKvRow label="TDS Section" value="—" isLast />
-          )}
-        </RecordSectionCard>
+          </RecordSectionCard>
 
-        <RecordSectionCard title="Bank Details" icon={Landmark} accent="purple">
-          <RecordKvRow label="Account Holder" value={vendor.accountHolderName || "—"} highlight />
-          <RecordKvRow label="Bank Name" value={vendor.bankName || "—"} />
-          <RecordKvRow label="Branch" value={vendor.branch || "—"} />
-          <RecordKvRow label="Account Number" value={vendor.accountNumber || "—"} mono copy />
-          <RecordKvRow label="IFSC Code" value={vendor.ifscCode || "—"} mono copy />
-          <RecordKvRow
-            label="SWIFT Code"
-            value={vendor.swiftCode || "—"}
-            mono
-            copy
-            isLast
-          />
-        </RecordSectionCard>
+          <RecordSectionCard title="Registered Address" icon={MapPin} accent="green">
+            <RecordKvRow label="Address" value={vendor.registeredGstAddress || "—"} isLast />
+          </RecordSectionCard>
 
-        <RecordSectionCard title="Audit" icon={Clock} accent="orange">
-          <RecordKvRow label="Created By" value={vendor.createdBy} />
-          <RecordKvRow label="Created Date" value={vendor.createdDate} mono />
-          <RecordKvRow label="Updated By" value={vendor.updatedBy} />
-          <RecordKvRow label="Updated Date" value={vendor.updatedDate} mono />
-          <RecordKvRow
-            label="Status"
-            value={vendor.status === "active" ? "Active" : "Inactive"}
-            isLast
-          />
-        </RecordSectionCard>
+          <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
+            <RecordKvRow label="GST Registered" value={gstRegistered ? "Yes" : "No"} />
+            {gstRegistered && (
+              <>
+                <RecordKvRow
+                  label="GST Registration Type"
+                  value={getGstCategoryLabel(vendor.registrationType ?? "regular")}
+                />
+                <RecordKvRow label="GSTIN Number" value={vendor.gstinNumber} mono copy />
+              </>
+            )}
+            <RecordKvRow label="PAN Number" value={vendor.panNumber || "—"} mono copy />
+            <RecordKvRow label="TAN Number" value={vendor.tanNumber || "—"} mono copy />
+            <RecordKvRow label="TDS Applicable" value={vendor.tdsApplicable ? "Yes" : "No"} />
+            {vendor.tdsApplicable ? (
+              <RecordKvRow
+                label="TDS Section"
+                value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : vendor.tdsSectionId || "—"}
+                mono
+                isLast
+              />
+            ) : (
+              <RecordKvRow label="TDS Section" value="—" isLast />
+            )}
+          </RecordSectionCard>
 
-        <RecordSectionCard
-          title="Mapped Products"
-          icon={Package}
-          accent="blue"
-          className="lg:col-span-2"
-        >
-          {mappedProducts.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
-              No products linked to this supplier. Assign a supplier in Product Master.
-            </p>
-          ) : (
-            <div className="overflow-hidden border border-border rounded-lg">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/40 border-b border-border">
-                      <th className="px-3 py-2 text-left font-semibold text-foreground">Product Code</th>
-                      <th className="px-3 py-2 text-left font-semibold text-foreground">Product Name</th>
-                      <th className="px-3 py-2 text-left font-semibold text-foreground">SKU</th>
-                      <th className="px-3 py-2 text-left font-semibold text-foreground">Category</th>
-                      <th className="px-3 py-2 text-left font-semibold text-foreground">HSN</th>
-                      <th className="px-3 py-2 text-left font-semibold text-foreground">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mappedProducts.map((product) => (
-                      <tr
-                        key={product.id}
-                        className="border-b border-border/60 last:border-0 hover:bg-muted/20"
-                      >
-                        <td className="px-3 py-2">
-                          <Link
-                            href={`/masters/products/${product.id}`}
-                            className="font-mono font-semibold text-brand-700 hover:underline"
-                          >
-                            {product.productCode}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2 font-medium text-foreground">{product.productName}</td>
-                        <td className="px-3 py-2 font-mono text-muted-foreground">{product.sku || "—"}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{product.category || "—"}</td>
-                        <td className="px-3 py-2 font-mono text-muted-foreground">{product.hsnCode || "—"}</td>
-                        <td className="px-3 py-2 capitalize text-muted-foreground">{product.status}</td>
+          <RecordSectionCard title="Bank Details" icon={Landmark} accent="purple">
+            <RecordKvRow label="Account Holder" value={vendor.supplierName || "—"} highlight />
+            {vendor.bankAccounts && vendor.bankAccounts.length > 0 ? (
+              <>
+                <RecordKvRow label="Bank Name" value={String(vendor.bankAccounts[0].bank_name || "—")} />
+                <RecordKvRow label="Branch" value={String(vendor.bankAccounts[0].branch_name || "—")} />
+                <RecordKvRow label="Account Number" value={String(vendor.bankAccounts[0].account_number || "—")} mono copy />
+                <RecordKvRow label="IFSC Code" value={String(vendor.bankAccounts[0].ifsc_code || "—")} mono copy isLast />
+              </>
+            ) : (
+              <RecordKvRow label="Bank Details" value="—" isLast />
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Audit" icon={Clock} accent="orange">
+            <RecordKvRow label="Created By" value={vendor.createdBy} />
+            <RecordKvRow label="Created Date" value={vendor.createdAt} mono />
+            <RecordKvRow label="Updated By" value={vendor.updatedBy} />
+            <RecordKvRow label="Updated Date" value={vendor.updatedAt} mono />
+            <RecordKvRow
+              label="Status"
+              value={vendor.status === "active" ? "Active" : "Inactive"}
+              isLast
+            />
+          </RecordSectionCard>
+
+          <RecordSectionCard
+            title="Mapped Products"
+            icon={Package}
+            accent="blue"
+            className="lg:col-span-2"
+          >
+            {mappedProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                No products linked to this supplier. Assign a supplier in Product Master.
+              </p>
+            ) : (
+              <div className="overflow-hidden border border-border rounded-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted/40 border-b border-border">
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">Product Code</th>
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">Product Name</th>
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">SKU</th>
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {mappedProducts.map((product: any) => (
+                        <tr
+                          key={product.product_id}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2">
+                            <Link
+                              href={`/masters/products/${product.product_id}`}
+                              className="font-mono font-semibold text-brand-700 hover:underline"
+                            >
+                              {product.product_code}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 font-medium text-foreground">{product.product_name}</td>
+                          <td className="px-3 py-2 font-mono text-muted-foreground">{product.sku || "—"}</td>
+                          <td className="px-3 py-2 capitalize text-muted-foreground">{product.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
-        </RecordSectionCard>
-      </div>
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard
+            title="Media & Documents"
+            icon={FileText}
+            accent="purple"
+            className="lg:col-span-2"
+          >
+            {vendor.documents && vendor.documents.length > 0 ? (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Document Type
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          File Name
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Uploaded On
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {vendor.documents.map((doc) => (
+                        <tr
+                          key={doc.supplier_document_id}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2">
+                            {doc.document_name}
+                          </td>
+
+                          <td className="px-3 py-2 font-mono">
+                            {doc.file_name}
+                          </td>
+
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </td>
+
+                          <td className="px-3 py-2">
+                            <a
+                              href={doc.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-700 hover:underline"
+                            >
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="py-4 text-sm text-muted-foreground">
+                No documents uploaded.
+              </p>
+            )}
+          </RecordSectionCard>
+        </div>
       </div>
     </RecordDetailPage>
   );

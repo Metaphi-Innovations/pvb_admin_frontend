@@ -116,6 +116,7 @@ export function ensureNearExpiryPendingDemoCustomer(): Customer | undefined {
   const customer: Customer = {
     id: nextCustomerId(list),
     customerCode: "CUST-NE-ABC",
+    customerUuid: "uuid-ne-abc",
     customerName: NEAR_EXPIRY_PENDING_DEMO_CUSTOMER,
     customerType: "distributor",
     status: "active",

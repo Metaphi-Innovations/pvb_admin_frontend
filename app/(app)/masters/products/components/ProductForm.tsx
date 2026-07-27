@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	AlertCircle,
 	Eye,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { loadHSNMasters } from "../../hsn/hsn-data";
+// import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
 	type ProductImage,
@@ -38,21 +38,23 @@ import {
 	getMouFromUnit,
 	isAllowedProductImageFile,
 	isValidProductUrl,
-	loadActiveCategoryOptions,
+	// loadActiveCategoryOptions,
 	loadActiveCfuOptions,
 	loadActiveFormOptions,
-	loadActiveSegmentOptions,
-	loadActiveSupplierOptions,
-	loadProducts,
-	generateProductCode,
+	// loadActiveSegmentOptions,
+	// loadActiveSupplierOptions,
+	// loadProducts,
+	// generateProductCode,
 	normalizeProductUnit,
 	resolveProductCodeForSave,
 	resolveProductTaxFromHsn,
-	resolveSupplierCode,
+	// resolveSupplierCode,
 	todayStr,
 } from "../product-data";
 import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import { ListingStatusToggle } from "@/components/listing";
+import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown, useCfuDropdown, useFormulationDropdown } from "@/hooks/masters";
 
 export interface ProductFormValues {
 	productCode: string;
@@ -61,9 +63,14 @@ export interface ProductFormValues {
 	productName: string;
 	scientificName: string;
 	segment: string;
+	segmentId?: string;
 	category: string;
+	categoryId?: string;
+	subCategory?: string;
 	form: string;
+	formId?: string;
 	cfu: string;
+	cfuId?: string;
 	authority: string;
 	sku: string;
 	hsnCode: string;
@@ -78,6 +85,7 @@ export interface ProductFormValues {
 	netWeightPerPackagingUnit: string;
 	grossWeight: string;
 	mrp: string;
+	costPrice: string;
 	status: ProductStatus;
 	inventoryAccount: string;
 	salesAccount: string;
@@ -109,6 +117,7 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
 	netWeightPerPackagingUnit: "",
 	grossWeight: "",
 	mrp: "",
+	costPrice: "",
 	status: "active",
 	inventoryAccount: "",
 	salesAccount: "",
@@ -138,9 +147,13 @@ export function productToFormValues(product: Product): ProductFormValues {
 		productName: product.productName,
 		scientificName: product.scientificName ?? "",
 		segment: product.segment,
+		segmentId: product.segmentId,
 		category: product.category,
+		categoryId: product.categoryId,
 		form: product.form ?? product.formulation ?? "",
+		formId: product.formId,
 		cfu: product.cfu ?? "",
+		cfuId: product.cfuId,
 		authority: product.authority ?? "",
 		sku: product.sku ?? "",
 		hsnCode: product.hsnCode,
@@ -160,7 +173,8 @@ export function productToFormValues(product: Product): ProductFormValues {
 			netWeight !== undefined ? String(netWeight) : "",
 		grossWeight:
 			product.grossWeight !== undefined ? String(product.grossWeight) : "",
-		mrp: product.mrp !== undefined ? String(product.mrp) : "",
+		mrp: product.mrp != null ? String(product.mrp) : "",
+		costPrice: product.costPrice != null ? String(product.costPrice) : "",
 		status: product.status,
 		inventoryAccount: product.inventoryAccount ?? acctDefaults.inventoryAccount,
 		salesAccount: product.salesAccount ?? acctDefaults.salesAccount,
@@ -253,6 +267,7 @@ function applyPackagingCalculations(values: ProductFormValues): ProductFormValue
 	return next;
 }
 
+
 export function ProductForm({
 	form,
 	onChange,
@@ -260,6 +275,7 @@ export function ProductForm({
 	onClearError,
 	productImages = [],
 	productUrls = [],
+	previewNumber,
 	onImageAdd,
 	onImageRemove,
 	onUrlAdd,
@@ -275,54 +291,126 @@ export function ProductForm({
 	productUrls?: ProductUrl[];
 	onImageAdd?: (items: ProductImage[]) => void;
 	onImageRemove?: (id: string) => void;
+	previewNumber?: string;
 	onUrlAdd?: (item: ProductUrl) => void;
 	onUrlRemove?: (id: string) => void;
 	readOnly?: boolean;
 	isNew?: boolean;
 }) {
+
+	const computeProductCode = (netWeight: string, apiCode?: string) => {
+		// console.log("netWeight", netWeight);
+		// console.log("apiCode", apiCode);
+		const weightNum = parseFloat(netWeight) * 1000;
+		if (isNaN(weightNum) || !apiCode) return apiCode ?? "";
+
+		const match = apiCode.match(/^(.*?)(\d+)$/);
+		if (!match) return apiCode;
+
+		const [, prefix, numericPart] = match;
+
+		const lastDigit = Number(numericPart.slice(-1));
+		const nextDigit = lastDigit + 1;
+
+		const newNumber = `${weightNum}${nextDigit}`;
+
+		// Keep existing generation; only omit the PROD- prefix from the stored code.
+		return `${prefix}${newNumber}`.replace(/^PROD-/i, "");
+	};
+
 	const set = <K extends keyof ProductFormValues>(
 		key: K,
 		value: ProductFormValues[K],
 	) => {
 		let next = { ...form, [key]: value } as ProductFormValues;
+
 		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
 			next = applyPackagingCalculations(next);
+
+			if (isNew && previewNumber && next.netWeightPerPackagingUnit) {
+				next.productCode = computeProductCode(
+					next.netWeightPerPackagingUnit,
+					previewNumber
+				);
+				onClearError("productCode");
+			}
 		}
+
 		onChange(next);
 		onClearError(key);
 	};
 
-	const handleCategoryChange = (category: string) => {
-		const next = { ...form, category };
-		if (isNew && category) {
-			next.productCode = generateProductCode(category, loadProducts());
-			onClearError("productCode");
-		}
-		onChange(next);
-		onClearError("category");
-	};
+	useEffect(() => {
+		if (isNew && previewNumber && form.netWeightPerPackagingUnit) {
+			const generated = computeProductCode(
+				form.netWeightPerPackagingUnit,
+				previewNumber
+			);
 
-	const handleSupplierChange = (supplier: string) => {
-		const code = resolveSupplierCode(supplier);
+			if (generated && generated !== form.productCode) {
+				onChange({ ...form, productCode: generated });
+				onClearError("productCode");
+			}
+		}
+	}, [previewNumber, form.netWeightPerPackagingUnit]);
+
+	const handleSupplierChange = (supplierId: string) => {
+		const supplierItem = suppliersData?.find((s) => s.supplier_id === supplierId);
 		onChange({
 			...form,
-			supplier,
-			supplierCode: code || form.supplierCode,
+			supplier: supplierId,
+			supplierCode: supplierItem?.supplierCode || form.supplierCode,
 		});
 		onClearError("supplier");
 		onClearError("supplierCode");
 	};
 
-	const segmentOptions = useMemo(() => loadActiveSegmentOptions(), []);
-	const categoryOptions = useMemo(() => loadActiveCategoryOptions(), []);
-	const formOptions = useMemo(() => loadActiveFormOptions(), []);
-	const cfuOptions = useMemo(() => loadActiveCfuOptions(), []);
-	const supplierOptions = useMemo(() => loadActiveSupplierOptions(), []);
+	const { data: categoriesData } = useCategoriesDropdown();
+	const { data: segmentsData } = useSegmentsDropdown();
+	const { data: hsnData } = useHsnDropdown();
+	const { data: suppliersData } = useSuppliersDropdown();
+	const { data: cfuData } = useCfuDropdown();
+	const { data: formulationData } = useFormulationDropdown();
 
-	const hsnMasters = typeof window !== "undefined" ? loadHSNMasters() : [];
-	const hsnOptions = hsnMasters
-		.filter((h) => h.status === "active")
-		.map((h) => ({ value: h.hsnCode, label: h.hsnCode }));
+	const segmentOptions = useMemo(() => {
+		if (!segmentsData) return [];
+		return segmentsData.map((s) => ({ value: s.id, label: s.segmentName }));
+	}, [segmentsData]);
+
+	const categoryOptions = useMemo(() => {
+		if (!categoriesData) return [];
+		return categoriesData.map((c) => ({ value: c.id, label: c.categoryName }));
+	}, [categoriesData]);
+
+	const handleCategoryChange = (categoryId: string) => {
+		const label =
+			categoryOptions.find((option) => option.value === categoryId)?.label ?? "";
+		onChange({ ...form, categoryId, category: label });
+		onClearError("category");
+	};
+
+	const cfuOptions = useMemo(() => {
+		if (!cfuData) return [];
+		return cfuData.map((c) => ({ value: c.id, label: c.cfuName }));
+	}, [cfuData]);
+
+	const formOptions = useMemo(() => {
+		if (!formulationData) return [];
+		return formulationData.map((f) => ({ value: f.id, label: f.label }));
+	}, [formulationData]);
+
+	const supplierOptions = useMemo(() => {
+		if (!suppliersData) return [];
+		return suppliersData.map((s) => ({
+			value: s.supplier_id,
+			label: s.supplierName,
+		}));
+	}, [suppliersData]);
+
+	const hsnOptions = useMemo(() => {
+		if (!hsnData) return [];
+		return hsnData.map((h) => ({ value: h.id, label: h.hsnDescription }));
+	}, [hsnData]);
 
 	const unitOptions = useMemo(() => [...PRODUCT_UNIT_OPTIONS], []);
 
@@ -350,20 +438,20 @@ export function ProductForm({
 		form.baseUnit,
 	);
 
-	const handleHSNChange = (hsnCode: string) => {
-		if (!hsnCode) {
+	const handleHSNChange = (hsnUuid: string) => {
+		if (!hsnUuid) {
 			onChange({ ...form, hsnCode: "", hsnId: "", gstRate: "", gstId: "" });
 			onClearError("hsnCode");
 			onClearError("gstRate");
 			return;
 		}
-		const tax = resolveProductTaxFromHsn(hsnCode);
+		const hsnItem = hsnData?.find((h) => h.id === hsnUuid);
 		onChange({
 			...form,
-			hsnCode,
-			hsnId: tax ? String(tax.hsnId) : "",
-			gstRate: tax?.gstRate ?? "",
-			gstId: tax?.gstId ? String(tax.gstId) : "",
+			hsnCode: hsnUuid,           // store UUID — matches dropdown value & API hsn_id
+			hsnId: hsnUuid,
+			gstRate: hsnItem?.gstRate ?? "",
+			gstId: hsnItem?.gstId ?? "",
 		});
 		onClearError("hsnCode");
 		onClearError("gstRate");
@@ -435,13 +523,13 @@ export function ProductForm({
 							onChange={(e) =>
 								set("productCode", e.target.value.toUpperCase())
 							}
-							placeholder='Auto-generated from category — editable'
+							placeholder='Auto-generated'
 							className={cn("font-mono", inputCls("productCode"))}
-							disabled={readOnly}
+							disabled={true}
 						/>
-						<p className='text-[10px] text-muted-foreground leading-snug'>
-							Auto-filled when category is selected. You can edit if needed.
-						</p>
+						{/* <p className='text-[10px] text-muted-foreground leading-snug'>
+							Auto-filled.
+						</p> */}
 						<FieldError msg={errors.productCode} />
 					</div>
 
@@ -511,8 +599,14 @@ export function ProductForm({
 					<SelectField
 						label='Segment'
 						required
-						value={form.segment}
-						onChange={(v) => set("segment", v)}
+						value={form.segmentId || ""}
+						onChange={(segmentId) => {
+							const label =
+								segmentOptions.find((option) => option.value === segmentId)
+									?.label ?? "";
+							onChange({ ...form, segmentId, segment: label });
+							onClearError("segment");
+						}}
 						options={segmentOptions}
 						placeholder='Select segment…'
 						disabled={readOnly}
@@ -522,7 +616,7 @@ export function ProductForm({
 					<SelectField
 						label='Category'
 						required
-						value={form.category}
+						value={form.categoryId || ""}
 						onChange={handleCategoryChange}
 						options={categoryOptions}
 						placeholder='Select category…'
@@ -533,8 +627,13 @@ export function ProductForm({
 					<SelectField
 						label='Form'
 						required
-						value={form.form}
-						onChange={(v) => set("form", v)}
+						value={form.formId || ""}
+						onChange={(formId) => {
+							const label =
+								formOptions.find((option) => option.value === formId)?.label ?? "";
+							onChange({ ...form, formId, form: label });
+							onClearError("form");
+						}}
 						options={formOptions}
 						placeholder='Select form…'
 						disabled={readOnly}
@@ -543,8 +642,13 @@ export function ProductForm({
 
 					<SelectField
 						label='CFU'
-						value={form.cfu}
-						onChange={(v) => set("cfu", v)}
+						value={form.cfuId || ""}
+						onChange={(cfuId) => {
+							const label =
+								cfuOptions.find((option) => option.value === cfuId)?.label ?? "";
+							onChange({ ...form, cfuId, cfu: label });
+							onClearError("cfu");
+						}}
 						options={cfuOptions}
 						placeholder='Select CFU…'
 						disabled={readOnly}
@@ -723,6 +827,44 @@ export function ProductForm({
 						</p>
 						<FieldError msg={errors.mrp} />
 					</div>
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>Cost Price</Label>
+						<IndianRupeeInput
+							value={
+								form.costPrice && !isNaN(Number(form.costPrice))
+									? Number(form.costPrice)
+									: 0
+							}
+							onChange={(v) => set("costPrice", v > 0 ? String(v) : "")}
+							disabled={readOnly}
+							className={cn(
+								inputCls("costPrice"),
+								"h-8 text-xs font-normal rounded-input",
+							)}
+							placeholder='₹ 0'
+						/>
+						<p className='text-[10px] text-muted-foreground'>
+							This value is used as source in Pricing Master.
+						</p>
+						<FieldError msg={errors.costPrice} />
+					</div>
+				</div>
+			</div>
+
+			{/* Status */}
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead label='Status' />
+				<div className='flex items-center gap-3'>
+					<ListingStatusToggle
+						active={form.status === "active"}
+						onChange={(val) =>
+							!readOnly &&
+							set("status", val ? "active" : "inactive")
+						}
+					/>
+					<span className='text-xs text-muted-foreground'>
+						{form.status === "active" ? "Active" : "Inactive"}
+					</span>
 				</div>
 			</div>
 
@@ -784,6 +926,7 @@ export function ProductForm({
 												src={preview}
 												alt={image.name}
 												className='object-cover w-full h-full'
+												crossOrigin='anonymous'
 											/>
 										) : (
 											<ImageIcon className='w-5 h-5 m-auto text-muted-foreground' />
@@ -923,6 +1066,7 @@ export function ProductForm({
 							src={getImagePreviewUrl(previewImage)}
 							alt={previewImage.name}
 							className='max-h-[70vh] w-full object-contain'
+							crossOrigin='anonymous'
 						/>
 					)}
 				</DialogContent>
@@ -971,9 +1115,9 @@ export function validateProductForm(
 	const productCode = resolveProductCodeForSave(form.category, form.productCode);
 
 	if (!form.productName.trim()) errors.productName = "Product name is required";
-	if (!form.segment) errors.segment = "Segment is required";
-	if (!form.category) errors.category = "Category is required";
-	if (!form.form) errors.form = "Form is required";
+	if (!form.segmentId) errors.segment = "Segment is required";
+	if (!form.categoryId) errors.category = "Category is required";
+	if (!form.formId) errors.form = "Form is required";
 	if (!productCode) {
 		errors.productCode = "Product code is required";
 	}
@@ -1004,6 +1148,9 @@ export function validateProductForm(
 	if (form.mrp && (isNaN(Number(form.mrp)) || Number(form.mrp) < 0)) {
 		errors.mrp = "MRP must be a valid amount";
 	}
+	if (form.costPrice && (isNaN(Number(form.costPrice)) || Number(form.costPrice) < 0)) {
+		errors.costPrice = "Cost price must be a valid amount";
+	}
 	return errors;
 }
 
@@ -1029,6 +1176,7 @@ export function formValuesToProduct(
 		parseOptionalNum(form.netWeightPerPackagingUnit);
 	const grossWeight = parseOptionalNum(form.grossWeight);
 	const mrp = parseOptionalNum(form.mrp);
+	const costPrice = parseOptionalNum(form.costPrice);
 	const acctDefaults = resolveProductAccountingDefaults();
 
 	return {
@@ -1058,6 +1206,7 @@ export function formValuesToProduct(
 		netWeightPerPackagingUnit,
 		grossWeight,
 		mrp,
+		costPrice,
 		status: form.status,
 		createdBy: base.createdBy ?? "Admin",
 		createdDate: base.createdDate ?? todayStr(),

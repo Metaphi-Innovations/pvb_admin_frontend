@@ -37,6 +37,7 @@ export function MasterListingSheets({
   viewDrawer,
   formContent,
   formError,
+  saving = false,
   statusActive,
   onStatusChange,
 }: {
@@ -53,6 +54,7 @@ export function MasterListingSheets({
   >;
   formContent: React.ReactNode;
   formError?: string;
+  saving?: boolean;
   statusActive?: boolean;
   onStatusChange?: (active: boolean) => void;
 }) {
@@ -105,8 +107,9 @@ export function MasterListingSheets({
               size="sm"
               className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
               onClick={onSave}
+              disabled={saving}
             >
-              Save
+              {saving ? "Saving..." : "Save"}
             </Button>
           </SheetFooter>
         </SheetContent>

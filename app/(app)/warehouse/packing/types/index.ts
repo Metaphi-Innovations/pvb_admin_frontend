@@ -6,15 +6,21 @@ export interface PackedBatchAllocation {
 
 export interface SalesOrderProduct {
   product: string;
+  productId?: string;
   sku: string;
-  orderedQty: number;
+  ordered_cases: number;
   packedQty: number;
-  pendingQty: number;
+  pending_cases: number;
+  orderBaseQty: number;
+  packedBaseQty: number;
+  pendingBaseQty: number;
+  packSize: number;
   batchNumber?: string;
   grnNo?: string;
   mfgDate?: string;
   expDate?: string;
   lineId?: string;
+  quantity_type?: string;
 }
 
 export interface SalesOrderRecord {
@@ -45,8 +51,11 @@ export interface SalesOrderRecord {
 export interface PackedProduct {
   product: string;
   sku: string;
-  orderedQty: number;
+  ordered_cases: number;
   packedQty: number;
+  orderBaseQty: number;
+  packedBaseQty: number;
+  packSize: number;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
   lineId?: string;
@@ -80,6 +89,7 @@ export interface PackingNearExpirySchemeEntry {
 
 export interface PackingRecord {
   id: string;
+  packingListId?: string;
   packingNo: string;
   salesOrderNo: string;
   customer: string;
@@ -87,7 +97,7 @@ export interface PackingRecord {
   packedQuantity: number;
   packingDate: string;
   packedBy: string;
-  status: "Packed" | "Dispatched" | "Cancelled";
+  status: "Packed" | "Dispatched" | "Cancelled" | "Ready For Dispatch";
   warehouse: string;
   products: PackedProduct[];
   nearExpirySchemes?: PackingNearExpirySchemeEntry[];

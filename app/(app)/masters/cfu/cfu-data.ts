@@ -1,32 +1,64 @@
-import {
-  MASTER_CURRENT_USER,
-  masterToday,
-  type BaseMasterRecord,
-  type MasterStatus,
-} from "@/lib/masters/common";
+import type { CfuListRecord } from "@/services/cfu-list.service";
 
-export const CFU_STORAGE_KEY = "ds_master_cfu_v2";
+export type CfuStatus = "active" | "inactive";
 
-export interface CfuRecord extends BaseMasterRecord {
+export interface CfuRecord {
+  id: number;
+  cfuUuid: string;
   cfuName: string;
   description: string;
+  status: CfuStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
 }
 
 export interface CfuForm {
   cfuName: string;
   description: string;
-  status: MasterStatus;
 }
 
 export const DEFAULT_CFU_FORM: CfuForm = {
   cfuName: "",
   description: "",
-  status: "active",
 };
 
+export function toCfuRecord(item: CfuListRecord): CfuRecord {
+  return {
+    id: item.id,
+    cfuUuid: item.cfuUuid,
+    cfuName: item.cfuName,
+    description: item.description,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdAt: item.createdAt,
+    updatedBy: item.updatedBy || "—",
+    updatedAt: item.updatedAt,
+  };
+}
+
+export function cfuToForm(record: CfuRecord): CfuForm {
+  return {
+    cfuName: record.cfuName,
+    description: record.description,
+  };
+}
+
+export function validateCfuApiForm(form: CfuForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.cfuName.trim()) errors.cfuName = "CFU name is required.";
+  return errors;
+}
+
+/** @deprecated Used by products module until CFU dropdown API is wired there */
+export const CFU_STORAGE_KEY = "ds_master_cfu_v2";
+
+/** @deprecated Local seed fallback for products dropdown */
 export const CFU_SEED: CfuRecord[] = [
   {
     id: 1,
+    cfuUuid: "",
     cfuName: "1×10⁸ cells/ml",
     description: "Standard microbial count for liquid formulations",
     status: "active",
@@ -37,6 +69,7 @@ export const CFU_SEED: CfuRecord[] = [
   },
   {
     id: 2,
+    cfuUuid: "",
     cfuName: "1×10⁹ cells/g",
     description: "High density CFU for solid formulations",
     status: "active",
@@ -47,6 +80,7 @@ export const CFU_SEED: CfuRecord[] = [
   },
   {
     id: 3,
+    cfuUuid: "",
     cfuName: "5×10⁷ cells/ml",
     description: "Lower concentration variant",
     status: "inactive",
@@ -56,54 +90,3 @@ export const CFU_SEED: CfuRecord[] = [
     updatedAt: "2024-06-01",
   },
 ];
-
-export function cfuToForm(r: CfuRecord): CfuForm {
-  return {
-    cfuName: r.cfuName,
-    description: r.description,
-    status: r.status,
-  };
-}
-
-export function formToCfu(
-  form: CfuForm,
-  id: number,
-  existing?: CfuRecord,
-): CfuRecord {
-  const now = masterToday();
-  return {
-    id,
-    cfuName: form.cfuName.trim(),
-    description: form.description.trim(),
-    status: form.status,
-    createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
-    updatedBy: "Admin User",
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  };
-}
-
-export function findCfuDuplicate(
-  name: string,
-  records: CfuRecord[],
-  excludeId?: number,
-): CfuRecord | undefined {
-  const normalized = name.trim().toLowerCase();
-  return records.find(
-    (r) => r.id !== excludeId && r.cfuName.trim().toLowerCase() === normalized,
-  );
-}
-
-export function validateCfuForm(
-  form: CfuForm,
-  records: CfuRecord[],
-  excludeId?: number,
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (!form.cfuName.trim()) {
-    errors.cfuName = "CFU name is required.";
-  } else if (findCfuDuplicate(form.cfuName, records, excludeId)) {
-    errors.cfuName = "CFU name must be unique.";
-  }
-  return errors;
-}

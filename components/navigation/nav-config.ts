@@ -88,6 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Scheme", href: "/masters/scheme" },
       { label: "Segment", href: "/masters/segment" },
       { label: "TDS", href: "/masters/tds" },
+      { label: "TCS", href: "/masters/tcs" },
       { label: "Unit", href: "/masters/uom" },
       { label: "Supplier Type", href: "/masters/vendor-type" },
       { label: "Supplier Master", href: "/masters/vendors" },
@@ -130,7 +131,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Packing", href: "/warehouse/packing" },
       { label: "Dispatch", href: "/warehouse/dispatch" },
       { label: "Reorder Level", href: "/warehouse/reorder-level" },
-      { label: "Stock Overview", href: "/warehouse/stockoverview" },
+      { label: "Stock Overview", href: "/warehouse/stock-overview" },
     ],
   },
   {

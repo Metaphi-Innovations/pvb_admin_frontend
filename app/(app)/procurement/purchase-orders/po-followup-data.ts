@@ -21,7 +21,7 @@ export function followUpTypeLabel(type?: string): string {
 
 export interface POFollowUpEntry {
   id: string;
-  poId: number;
+  poId: string | number;
   followUpAt: string;
   followUpType?: POFollowUpType;
   nextFollowUpAt?: string;
@@ -34,7 +34,7 @@ export interface POFollowUpEntry {
 export interface POFollowUpSummary {
   totalFollowUps: number;
   lastFollowUpAt: string | null;
-  lastSpokeWith: string | null;
+  nextFollowUpAt: string | null;
   availability: POFollowUpAvailability;
 }
 
@@ -46,6 +46,7 @@ export interface POFollowUpExportFields {
 
 const STORAGE_KEY = "ds_procurement_po_followups_v2";
 const LEGACY_STORAGE_KEY = "ds_procurement_po_followups_v1";
+let followUpLocalStorageCleared = false;
 
 function uid(): string {
   return `fu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -79,105 +80,46 @@ export function followUpAvailabilityLabel(status: POFollowUpAvailability): strin
   return status === "followup_available" ? "Follow-up Available" : "No Follow-up";
 }
 
-const SEED: POFollowUpEntry[] = [
-  {
-    id: "fu-seed-1",
-    poId: 1,
-    followUpAt: "2026-06-12T11:30:00.000Z",
-    followUpType: "call",
-    spokeWith: "Rajesh Patel",
-    remarks: "Supplier confirmed dispatch by Friday.",
-    createdBy: "Krishma",
-    createdAt: "2026-06-12T11:30:00.000Z",
-  },
-  {
-    id: "fu-seed-2",
-    poId: 1,
-    followUpAt: "2026-06-15T16:15:00.000Z",
-    followUpType: "dispatch",
-    spokeWith: "Dispatch Team",
-    remarks: "Material dispatched. LR copy shared.",
-    createdBy: "Krishma",
-    createdAt: "2026-06-15T16:15:00.000Z",
-  },
-];
-
-interface LegacyFollowUp {
-  id: string;
-  poId: number;
-  followUpDate?: string;
-  contactPerson?: string;
-  discussionNotes?: string;
-  createdBy: string;
-  createdAt: string;
-  spokeWith?: string;
-  remarks?: string;
-  followUpAt?: string;
-}
-
-function migrateLegacyEntry(raw: LegacyFollowUp): POFollowUpEntry {
-  if (raw.followUpAt && raw.spokeWith !== undefined) {
-    return raw as POFollowUpEntry;
-  }
-  const followUpAt = raw.createdAt || (raw.followUpDate ? `${raw.followUpDate}T10:00:00.000Z` : new Date().toISOString());
-  return {
-    id: raw.id,
-    poId: raw.poId,
-    followUpAt,
-    spokeWith: raw.spokeWith || raw.contactPerson || "—",
-    remarks: raw.remarks || raw.discussionNotes || "",
-    createdBy: raw.createdBy,
-    createdAt: raw.createdAt || followUpAt,
-  };
-}
-
-function loadFromStorage(): POFollowUpEntry[] {
-  if (typeof window === "undefined") return SEED;
+function clearFollowUpLocalStorage(): void {
+  if (typeof window === "undefined" || followUpLocalStorageCleared) return;
+  followUpLocalStorageCleared = true;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return (JSON.parse(raw) as LegacyFollowUp[]).map(migrateLegacyEntry);
-    }
-    const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacyRaw) {
-      const migrated = (JSON.parse(legacyRaw) as LegacyFollowUp[]).map(migrateLegacyEntry);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
-    return SEED;
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
-    return SEED;
+    // ignore quota / private-mode errors
   }
 }
 
+/** Local mock storage removed — follow-ups are API-backed. */
 export function loadAllFollowUps(): POFollowUpEntry[] {
-  return loadFromStorage();
+  clearFollowUpLocalStorage();
+  return [];
 }
 
-export function saveAllFollowUps(entries: POFollowUpEntry[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+export function saveAllFollowUps(_entries: POFollowUpEntry[]): void {
+  clearFollowUpLocalStorage();
 }
 
-export function loadFollowUpsForPO(poId: number): POFollowUpEntry[] {
+export function loadFollowUpsForPO(poId: string | number): POFollowUpEntry[] {
+  const key = String(poId);
   return loadAllFollowUps()
-    .filter((e) => e.poId === poId)
+    .filter((e) => String(e.poId) === key)
     .sort((a, b) => b.followUpAt.localeCompare(a.followUpAt));
 }
 
-export function getPOFollowUpSummary(poId: number): POFollowUpSummary {
+export function getPOFollowUpSummary(poId: string | number): POFollowUpSummary {
   const entries = loadFollowUpsForPO(poId);
   const latest = entries[0];
   return {
     totalFollowUps: entries.length,
     lastFollowUpAt: latest?.followUpAt ?? null,
-    lastSpokeWith: latest?.spokeWith ?? null,
+    nextFollowUpAt: latest?.nextFollowUpAt ?? null,
     availability: entries.length > 0 ? "followup_available" : "no_followup",
   };
 }
 
-export function getPOFollowUpExportFields(poId: number): POFollowUpExportFields {
+export function getPOFollowUpExportFields(poId: string | number): POFollowUpExportFields {
   const summary = getPOFollowUpSummary(poId);
   return {
     totalFollowUps: summary.totalFollowUps,

@@ -5,57 +5,77 @@ import { Button } from "@/components/ui/button";
 import { RecordSectionCard } from "@/components/record-detail";
 import { ProcBadge } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
+import { formatListingDate } from "../../components/listing/ListingCells";
 import {
-  addPOFollowUp,
   canAddPOFollowUp,
   formatFollowUpDateTime,
-  getPOFollowUpSummary,
-  loadFollowUpsForPO,
+  type AddFollowUpInput,
+  type POFollowUpEntry,
 } from "../po-followup-data";
 import { AddFollowUpModal } from "./AddFollowUpModal";
 import { FollowUpActivityFeed } from "./FollowUpActivityFeed";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export function VendorFollowUpPanel({
   po,
-  onPOUpdated,
+  followups = [],
+  onSubmitFollowUp,
+  submitting = false,
   onToast,
 }: {
   po: PurchaseOrder;
-  onPOUpdated: (updated: PurchaseOrder) => void;
+  followups?: POFollowUpEntry[];
+  onSubmitFollowUp: (input: AddFollowUpInput) => void;
+  submitting?: boolean;
   onToast?: (msg: string) => void;
 }) {
-  const [entries, setEntries] = useState(() => loadFollowUpsForPO(po.id));
   const [modalOpen, setModalOpen] = useState(false);
-
-  const refresh = useCallback(() => {
-    setEntries(loadFollowUpsForPO(po.id));
-  }, [po.id]);
+  const [entries, setEntries] = useState(followups);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    setEntries(followups);
+  }, [followups]);
 
-  const summary = getPOFollowUpSummary(po.id);
+  const summary = useMemo(() => {
+    const latest = entries[0];
+    return {
+      totalFollowUps: entries.length,
+      lastFollowUpAt: latest?.followUpAt ?? null,
+      nextFollowUpAt: latest?.nextFollowUpAt ?? null,
+      availability: entries.length > 0 ? "followup_available" : "no_followup",
+    } as const;
+  }, [entries]);
 
   return (
     <>
       <div className="space-y-4">
-        <RecordSectionCard title="Supplier Follow-up" icon={MessageSquare} accent="orange">
+        <RecordSectionCard
+          title="Supplier Follow-up"
+          icon={MessageSquare}
+          accent="orange"
+        >
           <div className="space-y-2.5 text-xs">
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Last Follow-up Date</span>
               <span className="text-foreground text-right">
-                {summary.lastFollowUpAt ? formatFollowUpDateTime(summary.lastFollowUpAt) : "—"}
+                {summary.lastFollowUpAt
+                  ? formatFollowUpDateTime(summary.lastFollowUpAt)
+                  : "—"}
               </span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Last Spoke With</span>
-              <span className="text-foreground text-right">{summary.lastSpokeWith || "—"}</span>
+              <span className="text-muted-foreground">Next Follow-up</span>
+              <span className="text-foreground text-right">
+                {summary.nextFollowUpAt
+                  ? formatListingDate(summary.nextFollowUpAt.slice(0, 10))
+                  : "—"}
+              </span>
             </div>
             <div className="flex justify-between gap-2 border-t border-border pt-2">
               <span className="text-muted-foreground">Total Follow-ups</span>
-              <span className="font-semibold tabular-nums text-foreground">{summary.totalFollowUps}</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {summary.totalFollowUps}
+              </span>
             </div>
           </div>
 
@@ -64,6 +84,7 @@ export function VendorFollowUpPanel({
               size="sm"
               className="mt-3 h-8 w-full text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
               onClick={() => setModalOpen(true)}
+              disabled={submitting}
             >
               <Plus className="w-3.5 h-3.5" /> Follow-up &amp; Activities
             </Button>
@@ -80,7 +101,11 @@ export function VendorFollowUpPanel({
         </RecordSectionCard>
 
         <RecordSectionCard title="Recent Activity" accent="blue">
-          <FollowUpActivityFeed entries={entries.slice(0, 3)} showTitle={false} compact />
+          <FollowUpActivityFeed
+            entries={entries.slice(0, 3)}
+            showTitle={false}
+            compact
+          />
           {entries.length > 3 && (
             <button
               type="button"
@@ -97,11 +122,11 @@ export function VendorFollowUpPanel({
         open={modalOpen}
         onOpenChange={setModalOpen}
         po={po}
+        entries={entries}
         readOnly={!canAddPOFollowUp(po)}
+        submitting={submitting}
         onSubmit={(input) => {
-          const { updatedPo } = addPOFollowUp(po, input);
-          onPOUpdated(updatedPo);
-          refresh();
+          onSubmitFollowUp(input);
           onToast?.("Follow-up saved.");
         }}
       />
@@ -110,29 +135,25 @@ export function VendorFollowUpPanel({
 }
 
 export function FollowUpListingCell({
-  poId,
+  followUpCount = 0,
   onViewHistory,
 }: {
-  poId: number;
+  followUpCount?: number;
   onViewHistory: () => void;
 }) {
-  const summary = getPOFollowUpSummary(poId);
+  const availability = followUpCount > 0 ? "followup_available" : "no_followup";
   return (
     <div className="py-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
-      <ProcBadge status={summary.availability} />
-      {summary.lastFollowUpAt && (
-        <>
-          <p className="text-[10px] text-muted-foreground tabular-nums leading-tight">
-            {formatFollowUpDateTime(summary.lastFollowUpAt).split(" ").slice(0, 2).join(" ")}
-          </p>
-          <button
-            type="button"
-            className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
-            onClick={onViewHistory}
-          >
-            View
-          </button>
-        </>
+      <ProcBadge status={availability} />
+
+      {followUpCount > 0 && (
+        <button
+          type="button"
+          className="block text-[10px] text-brand-600 hover:underline"
+          onClick={onViewHistory}
+        >
+          View
+        </button>
       )}
     </div>
   );

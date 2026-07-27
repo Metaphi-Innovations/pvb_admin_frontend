@@ -29,6 +29,7 @@ import {
   validateCircularReporting, todayStr, loadEmployees, nextEmployeeId,
   applyEmployeeStatusChange,
 } from "../employee-data";
+import { geoFieldsForRole } from "../user-api-data";
 import { type EmployeeDocument } from "../employee-documents";
 import { EmployeeDocumentsSection } from "./EmployeeDocumentsSection";
 import { EmployeeListingStatusCell } from "./EmployeeListingStatusCell";
@@ -60,7 +61,18 @@ interface EmployeeFormProps {
   onSave: (emp: Employee) => void;
   onStatusSave?: (emp: Employee) => void;
   onCancel: () => void;
-  departments: Array<{ id: number; name: string }>;
+  departments: Array<{ id: number | string; name: string }>;
+  generatedEmployeeId?: string;
+  apiRoles?: Array<{ id: string; name: string; geoLevel?: string; departmentId?: string }>;
+  permissionTemplateOptions?: Array<{ value: string; label: string }>;
+  onApplyPermissionTemplate?: (
+    templateId: string,
+  ) => Promise<{ webSet: Set<string>; mobileSet: Set<string> } | null>;
+  approvalUserOptions?: ACOption[];
+  reportingManagerOptions?: ACOption[];
+  onRoleIdChange?: (roleId: string | null) => void;
+  onValidationFail?: (errors: Record<string, string>) => void;
+  isSubmitting?: boolean;
 }
 
 type EmployeeFormState = Partial<Employee> & {
@@ -144,11 +156,12 @@ function validateStructuredAddress(
   addr: StructuredAddress,
   prefix: string,
   errors: Record<string, string>,
+  options?: { skipPostalMasterCheck?: boolean },
 ) {
   if (!addr.line1.trim()) errors[`${prefix}_line1`] = "Required";
   if (!addr.pincode.trim()) errors[`${prefix}_pincode`] = "Required";
   else if (!isValidPincodeFormat(addr.pincode)) errors[`${prefix}_pincode`] = "Enter a valid 6-digit pincode";
-  else if (!lookupPostalPincode(addr.pincode, addr.town)) {
+  else if (!options?.skipPostalMasterCheck && !lookupPostalPincode(addr.pincode, addr.town)) {
     errors[`${prefix}_pincode`] = "Pincode not found in Postal Master.";
   }
   if (!addr.city.trim()) errors[`${prefix}_city`] = "Required";
@@ -289,7 +302,7 @@ function FormSectionHeader({ tab }: { tab: FormTabId }) {
 // ── Autocomplete (searchable dropdown) ───────────────────────────────────────
 
 interface ACOption { label: string; value: string | number; sub?: string }
-interface ApprovalLevel { uid: string; empId: number | null; name: string; role: string; employeeCode: string }
+interface ApprovalLevel { uid: string; empId: number | string | null; name: string; role: string; employeeCode: string }
 interface GeoMappingRow {
   geoZone: string;
   geoRegion: string;
@@ -676,6 +689,8 @@ function PermissionsTab({
   setActiveMobilePerms,
   role,
   roleType,
+  permissionTemplateOptions,
+  onApplyPermissionTemplate,
 }: {
   activeWebPerms: Set<string>;
   setActiveWebPerms: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -683,6 +698,10 @@ function PermissionsTab({
   setActiveMobilePerms: React.Dispatch<React.SetStateAction<Set<string>>>;
   role?: string;
   roleType?: string;
+  permissionTemplateOptions?: Array<{ value: string; label: string }>;
+  onApplyPermissionTemplate?: (
+    templateId: string,
+  ) => Promise<{ webSet: Set<string>; mobileSet: Set<string> } | null>;
 }) {
   const [section, setSection] = useState<"web" | "mobile" | string>("web");
   const [openMods, setOpenMods] = useState<Set<string>>(new Set([PERMISSION_REGISTRY[0].id]));
@@ -697,29 +716,44 @@ function PermissionsTab({
 
   // Load active templates
   const templates = loadNewPermissionTemplates().filter(t => t.status === "Active");
-  const templateOptions = templates.map(t => ({
-    value: t.id,
-    label: t.templateName,
-  }));
+  const templateOptions = permissionTemplateOptions?.length
+    ? permissionTemplateOptions
+    : templates.map(t => ({
+      value: String(t.id),
+      label: t.templateName,
+    }));
 
   const hasCheckedPermissions = () => {
     return activeWebPerms.size > 0 || activeMobilePerms.size > 0;
   };
 
-  const applyTemplate = (tpl: PermissionTemplate) => {
-    setSelectedTemplateId(tpl.id);
-    setSection(tpl.accessType);
+  const applyTemplate = async (tpl: PermissionTemplate | { id: string; accessType?: string; webPermissions?: any[]; mobilePermissions?: any[] }) => {
+    if (onApplyPermissionTemplate && "id" in tpl && typeof tpl.id === "string") {
+      const applied = await onApplyPermissionTemplate(tpl.id);
+      if (applied) {
+        setSelectedTemplateId(tpl.id);
+        setActiveWebPerms(applied.webSet);
+        setActiveMobilePerms(applied.mobileSet);
+        if (applied.mobileSet.size > 0 && applied.webSet.size === 0) setSection("mobile");
+        else setSection("web");
+      }
+      return;
+    }
+
+    const legacyTpl = tpl as PermissionTemplate;
+    setSelectedTemplateId(legacyTpl.id);
+    setSection(legacyTpl.accessType);
     
-    if (tpl.accessType === "web") {
+    if (legacyTpl.accessType === "web") {
       const webSet = new Set<string>();
-      tpl.webPermissions.forEach(p => {
+      legacyTpl.webPermissions.forEach(p => {
         webSet.add(`${p.moduleKey}.${p.actionKey}`);
       });
       setActiveWebPerms(webSet);
       setActiveMobilePerms(new Set());
     } else {
       const mobileSet = new Set<string>();
-      tpl.mobilePermissions.forEach(p => {
+      legacyTpl.mobilePermissions.forEach(p => {
         mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
       });
       setActiveMobilePerms(mobileSet);
@@ -727,23 +761,24 @@ function PermissionsTab({
     }
   };
 
-  const handleTemplateSelect = (val: string) => {
-    const tpl = templates.find(t => t.id === val);
-    if (!tpl) return;
-
+  const handleTemplateSelect = async (val: string) => {
+    if (!val) return;
     if (hasCheckedPermissions()) {
       setPendingTemplateId(val);
       setShowConfirmModal(true);
-    } else {
-      applyTemplate(tpl);
+      return;
     }
+    const tpl = permissionTemplateOptions?.length
+      ? { id: val }
+      : templates.find(t => String(t.id) === val);
+    if (tpl) await applyTemplate(tpl as PermissionTemplate);
   };
 
-  const confirmTemplateChange = () => {
-    const tpl = templates.find(t => t.id === pendingTemplateId);
-    if (tpl) {
-      applyTemplate(tpl);
-    }
+  const confirmTemplateChange = async () => {
+    const tpl = permissionTemplateOptions?.length
+      ? { id: pendingTemplateId }
+      : templates.find(t => String(t.id) === pendingTemplateId);
+    if (tpl) await applyTemplate(tpl as PermissionTemplate);
     setPendingTemplateId("");
     setShowConfirmModal(false);
   };
@@ -1245,9 +1280,28 @@ function isDescendantOf(node: GeoNode, ancestorLevel: GeoLevel, ancestorName: st
 
 // ── Main Form ─────────────────────────────────────────────────────────────────
 
-export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onCancel, departments }: EmployeeFormProps) {
+export default function EmployeeForm({
+  mode,
+  employee,
+  onSave,
+  onStatusSave,
+  onCancel,
+  departments,
+  generatedEmployeeId,
+  apiRoles,
+  permissionTemplateOptions,
+  onApplyPermissionTemplate,
+  approvalUserOptions,
+  reportingManagerOptions,
+  onRoleIdChange,
+  onValidationFail,
+  isSubmitting,
+}: EmployeeFormProps) {
   const allEmployees = loadEmployees();
-  const newEmpId = mode === "add" ? nextEmployeeId(allEmployees) : (employee?.employeeId || "");
+  const isApiMode = Boolean(onRoleIdChange);
+  const newEmpId = mode === "add"
+    ? (generatedEmployeeId ?? (isApiMode ? "" : nextEmployeeId(allEmployees)))
+    : (employee?.employeeId || "");
   const initialGeoMappings = (() => {
     if (employee?.geoMappings?.length) {
       return employee.geoMappings.map((mapping) => toGeoMappingRow(mapping));
@@ -1279,6 +1333,12 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
     hydratePostalMaster().catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    if (mode === "add" && generatedEmployeeId) {
+      setFormState((prev) => ({ ...prev, employeeId: generatedEmployeeId }));
+    }
+  }, [generatedEmployeeId, mode]);
+
   const [form, setFormState] = useState<EmployeeFormState>(employee || {
     firstName: "", lastName: "", fullName: "",
     email: "", mobile: "", countryCode: "+91", alternativeMobile: "",
@@ -1299,7 +1359,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   const converted = useMemo(() => convertToSets(initPerms), [initPerms]);
   const [activeWebPerms, setActiveWebPerms] = useState<Set<string>>(converted.webSet);
   const [activeMobilePerms, setActiveMobilePerms] = useState<Set<string>>(converted.mobileSet);
-  const [pendingRoleId, setPendingRoleId] = useState<number | null>(null);
+  const [pendingRoleId, setPendingRoleId] = useState<number | string | null>(null);
   const [showRoleChangeWarning, setShowRoleChangeWarning] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [currentAddr, setCurrentAddr] = useState<StructuredAddress>(() =>
@@ -1328,10 +1388,15 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   // ── Dynamic approval chain ──────────────────────────────────────────────────
   const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>(() => {
     const levels: ApprovalLevel[] = [];
-    const resolve = (id?: number | null, name?: string, role?: string): ApprovalLevel | null => {
+    const resolve = (id?: number | string | null, name?: string, role?: string): ApprovalLevel | null => {
       if (!id) return null;
-      const emp = allEmployees.find(e => e.id === id);
-      return makeApprovalLevel({ empId: id, name: emp?.fullName || name || "", role: emp?.role || role || "", employeeCode: emp?.employeeId || "" });
+      const emp = typeof id === "number" ? allEmployees.find((e) => e.id === id) : undefined;
+      return makeApprovalLevel({
+        empId: id,
+        name: emp?.fullName || name || "",
+        role: emp?.role || role || "",
+        employeeCode: emp?.employeeId || "",
+      });
     };
     const l1 = resolve(employee?.approvalLevel1Id, employee?.approvalLevel1Name, employee?.approvalLevel1Role);
     const l2 = resolve(employee?.approvalLevel2Id, employee?.approvalLevel2Name, employee?.approvalLevel2Role);
@@ -1345,6 +1410,10 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   });
   const [draggedApprovalUid, setDraggedApprovalUid] = useState<string | null>(null);
   const [dragOverApprovalUid, setDragOverApprovalUid] = useState<string | null>(null);
+
+  const resetApprovalChain = () => {
+    setApprovalLevels([makeApprovalLevel()]);
+  };
 
   const set = (key: string, value: any) => {
     setFormState(prev => {
@@ -1362,6 +1431,8 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
         setActiveMobilePerms(new Set());
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
+        if (isApiMode) onRoleIdChange?.(null);
+        resetApprovalChain();
       }
       if (key === "salesType") {
         upd.roleId = null; upd.role = "";
@@ -1369,6 +1440,8 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
         upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
+        if (isApiMode) onRoleIdChange?.(null);
+        resetApprovalChain();
       }
       // Cascade geo resets
       if (key === "geoZone") {
@@ -1401,10 +1474,15 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
     setErrors(prev => ({ ...prev, [key]: "" }));
   };
 
-  const applyRoleAndTemplate = (targetRoleId: number) => {
+  const applyRoleAndTemplate = (targetRoleId: number | string) => {
+    const selectedApiRole = apiRoles?.find((r) => String(r.id) === String(targetRoleId));
     const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
-    const r = allRoles.find(x => x.id === targetRoleId);
+    const r = selectedApiRole
+      ? { id: selectedApiRole.id, name: selectedApiRole.name, fullName: selectedApiRole.name }
+      : allRoles.find(x => String(x.id) === String(targetRoleId));
     if (!r) return;
+
+    onRoleIdChange?.(String(targetRoleId));
 
     // Fetch newly selected role's template
     const allRolesMaster = loadRoles();
@@ -1442,6 +1520,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
     }));
     setGeoMappings([emptyGeoMapping()]);
+    resetApprovalChain();
     setErrors(prev => ({
       ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("geoMapping_"))),
       roleId: "",
@@ -1452,7 +1531,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
     setActiveMobilePerms(mobileSet);
   };
 
-  const handleRoleChange = (newRoleIdVal: number) => {
+  const handleRoleChange = (newRoleIdVal: number | string) => {
     const hasExistingPerms = activeWebPerms.size > 0 || activeMobilePerms.size > 0;
     if (hasExistingPerms) {
       setPendingRoleId(newRoleIdVal);
@@ -1496,6 +1575,9 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   const deptOptions = departments.map(d => ({ label: d.name, value: d.id }));
 
   const roleOptions = useMemo(() => {
+    if (isApiMode || apiRoles !== undefined) {
+      return (apiRoles ?? []).map((r) => ({ label: r.name, value: r.id }));
+    }
     if (!form.roleType) return [];
     if (form.roleType === "Field User") {
       if (!form.salesType) return [];
@@ -1503,10 +1585,11 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       return list.map(r => ({ label: r.fullName, value: r.id }));
     }
     return ADMIN_ROLES.map(r => ({ label: r.fullName, value: r.id }));
-  }, [form.roleType, form.salesType]);
+  }, [isApiMode, apiRoles, form.roleType, form.salesType]);
 
-  // Reporting manager options — suggested (direct superior) first, all active users available
+  // Reporting manager options — all users from API when integrated
   const managerOptions = useMemo(() => {
+    if (reportingManagerOptions !== undefined) return reportingManagerOptions;
     const aboveRoles = form.role ? (ROLES_ABOVE[form.role] || []) : [];
     const directRole = aboveRoles[0] || "";
     const geoMatch = (e: Employee) =>
@@ -1533,12 +1616,50 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
         value: e.id,
         sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}${e.geoZone ? ` · ${e.geoZone}` : e.geoRegion ? ` · ${e.geoRegion}` : ""}`,
       }));
-  }, [employee?.id, form.role, form.geoZone, form.geoRegion]);
+  }, [employee?.id, form.role, form.geoZone, form.geoRegion, reportingManagerOptions]);
+
+  // ── Flexible approval options from API when integrated ──
+  const allApprovalOptions: ACOption[] = useMemo(() => {
+    if (approvalUserOptions !== undefined) return approvalUserOptions;
+
+    const aboveRoles = ROLES_ABOVE[form.role || ""] || [];
+    const directRole = aboveRoles[0] || "";
+    const geoMatch = (e: Employee) =>
+      (form.geoZone && e.geoZone && e.geoZone === form.geoZone) ||
+      (form.geoRegion && e.geoRegion && e.geoRegion === form.geoRegion);
+
+    const priority = (e: Employee): number => {
+      const isDirect = e.role === directRole;
+      const isHigher = aboveRoles.includes(e.role);
+      const isGeo = geoMatch(e);
+      if (isDirect && isGeo) return 0;
+      if (isDirect) return 1;
+      if (isHigher && isGeo) return 2;
+      if (isHigher) return 3;
+      return 4;
+    };
+
+    return allEmployees
+      .filter(e => e.status === "active" && e.id !== employee?.id)
+      .sort((a, b) => {
+        const diff = priority(a) - priority(b);
+        return diff !== 0 ? diff : a.fullName.localeCompare(b.fullName);
+      })
+      .map(e => ({
+        label: e.fullName,
+        value: e.id,
+        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}${e.geoZone ? ` · ${e.geoZone}` : e.geoRegion ? ` · ${e.geoRegion}` : ""}`,
+      }));
+  }, [employee?.id, form.role, form.geoZone, form.geoRegion, approvalUserOptions]);
 
   const geoFields: string[] = useMemo(() => {
+    const selectedApiRole = apiRoles?.find((r) => String(r.id) === String(form.roleId));
+    if (selectedApiRole?.geoLevel) {
+      return geoFieldsForRole(selectedApiRole.geoLevel, selectedApiRole.name);
+    }
     if (form.roleType !== "Field User" || !form.role) return [];
     return ROLE_GEO_FIELDS[form.role] || [];
-  }, [form.roleType, form.role]);
+  }, [apiRoles, form.roleId, form.roleType, form.role]);
 
   const getGeoOptionsMap = (mapping: GeoMappingRow): Record<string, ACOption[]> => {
     const zoneOptions = geoNodes
@@ -1592,38 +1713,6 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
     };
   };
 
-  // ── Flexible approval options — ALL active users, hierarchy-suggested first ──
-  const allApprovalOptions: ACOption[] = useMemo(() => {
-    const aboveRoles = ROLES_ABOVE[form.role || ""] || [];
-    const directRole = aboveRoles[0] || "";
-    const geoMatch = (e: Employee) =>
-      (form.geoZone && e.geoZone && e.geoZone === form.geoZone) ||
-      (form.geoRegion && e.geoRegion && e.geoRegion === form.geoRegion);
-
-    const priority = (e: Employee): number => {
-      const isDirect = e.role === directRole;
-      const isHigher = aboveRoles.includes(e.role);
-      const isGeo = geoMatch(e);
-      if (isDirect && isGeo) return 0;
-      if (isDirect) return 1;
-      if (isHigher && isGeo) return 2;
-      if (isHigher) return 3;
-      return 4;
-    };
-
-    return allEmployees
-      .filter(e => e.status === "active" && e.id !== employee?.id)
-      .sort((a, b) => {
-        const diff = priority(a) - priority(b);
-        return diff !== 0 ? diff : a.fullName.localeCompare(b.fullName);
-      })
-      .map(e => ({
-        label: e.fullName,
-        value: e.id,
-        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}${e.geoZone ? ` · ${e.geoZone}` : e.geoRegion ? ` · ${e.geoRegion}` : ""}`,
-      }));
-  }, [employee?.id, form.role, form.geoZone, form.geoRegion]);
-
   // ── Approval chain helpers ──────────────────────────────────────────────────
   const addApprovalLevel = () =>
     setApprovalLevels(prev => [...prev, makeApprovalLevel()]);
@@ -1640,16 +1729,17 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       return arr;
     });
 
-  const setApprovalLevelUser = (idx: number, empId: number | "") => {
-    const emp = empId ? allEmployees.find(e => e.id === empId) : null;
+  const setApprovalLevelUser = (idx: number, empId: number | string | "") => {
+    const fromApi = approvalUserOptions?.find((o) => String(o.value) === String(empId));
+    const emp = !fromApi ? (empId ? allEmployees.find(e => String(e.id) === String(empId)) : null) : null;
     setApprovalLevels(prev => {
       const arr = [...prev];
       arr[idx] = {
         uid: arr[idx].uid,
-        empId: emp ? emp.id : null,
-        name: emp?.fullName || "",
-        role: emp?.role || "",
-        employeeCode: emp?.employeeId || "",
+        empId: empId || null,
+        name: fromApi?.label || emp?.fullName || "",
+        role: fromApi?.sub?.split("·")[1]?.trim() || emp?.role || "",
+        employeeCode: fromApi?.sub?.split("·")[0]?.trim() || emp?.employeeId || "",
       };
       return arr;
     });
@@ -1759,19 +1849,36 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   };
 
   // ── Validation ────────────────────────────────────────────────────────────────
+  const resolveErrorTab = (key: string): FormTabId => {
+    if (key.startsWith("geoMapping_") || key === "permissions") return "employment";
+    if (
+      [
+        "departmentId",
+        "employeeType",
+        "roleType",
+        "salesType",
+        "roleId",
+        "reportingManagerId",
+      ].includes(key)
+    ) {
+      return "employment";
+    }
+    return "personal";
+  };
+
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!form.firstName?.trim()) e.firstName = "Required";
     if (!form.lastName?.trim()) e.lastName = "Required";
     const eErr = validateEmail(form.email || "");
     if (eErr) e.email = eErr;
-    else {
+    else if (!isApiMode) {
       const eu = validateEmailUnique(form.email || "", allEmployees, employee?.id);
       if (eu) e.email = eu;
     }
     const mErr = validateMobile(form.mobile || "");
     if (mErr) e.mobile = mErr;
-    else {
+    else if (!isApiMode) {
       const mu = validateMobileUnique(form.mobile || "", allEmployees, employee?.id);
       if (mu) e.mobile = mu;
     }
@@ -1783,8 +1890,14 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
     if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Required";
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
-    validateStructuredAddress(currentAddr, "current", e);
-    if (!sameAddress) validateStructuredAddress(permanentAddr, "permanent", e);
+    validateStructuredAddress(currentAddr, "current", e, {
+      skipPostalMasterCheck: isApiMode,
+    });
+    if (!sameAddress) {
+      validateStructuredAddress(permanentAddr, "permanent", e, {
+        skipPostalMasterCheck: isApiMode,
+      });
+    }
     if (form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
         geoFields.forEach((field) => {
@@ -1802,8 +1915,13 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       alert("Only one access type is allowed (Web Portal OR Mobile).");
     }
     const cErr = validateCircularReporting(form.id || 0, form.reportingManagerId || null, allEmployees);
-    if (cErr) e.reportingManagerId = cErr;
+    if (cErr && !isApiMode) e.reportingManagerId = cErr;
     setErrors(e);
+    if (Object.keys(e).length > 0) {
+      const firstKey = Object.keys(e)[0];
+      setActiveTab(resolveErrorTab(firstKey));
+      onValidationFail?.(e);
+    }
     return Object.keys(e).length === 0;
   };
 
@@ -1824,9 +1942,10 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
 
     // Resolve role name from id
     const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
-    const roleObj = allRoles.find(r => r.id === form.roleId);
+    const roleObj = apiRoles?.find((r) => String(r.id) === String(form.roleId))
+      || allRoles.find(r => String(r.id) === String(form.roleId));
     const dept = departments.find(d => d.id === form.departmentId);
-    const rm = allEmployees.find(e => e.id === form.reportingManagerId);
+    const rm = managerOptions.find((o) => String(o.value) === String(form.reportingManagerId));
     const now = todayStr();
 
     const resolvedPermanent = sameAddress ? currentAddr : permanentAddr;
@@ -1880,9 +1999,9 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       roleType: form.roleType,
       salesType: form.salesType,
       roleId: form.roleId || null,
-      role: roleObj?.name || "",
+      role: ("name" in (roleObj || {}) ? (roleObj as { name: string }).name : (roleObj as { fullName?: string })?.fullName) || "",
       reportingManagerId: form.reportingManagerId || null,
-      reportingManager: rm?.fullName || "",
+      reportingManager: rm?.label || "",
       status: (form.status as any) || (mode === "add" ? "inactive" : "draft"),
       joiningDate: form.joiningDate || now,
       geoZone: geoMappings[0]?.geoZone || "",
@@ -1937,10 +2056,15 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
             "text-[11px] font-mono font-semibold px-2 py-0.5 rounded",
             mode === "add" ? "bg-muted/40 text-muted-foreground" : "bg-brand-50 text-brand-700"
           )}>
-            {mode === "add" ? `ID: ${newEmpId}` : employee?.employeeId}
+            {mode === "add" ? `ID: ${newEmpId || "Loading…"}` : employee?.employeeId}
           </span>
-          <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
-            <Save className="w-3.5 h-3.5" /> Save
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={handleSave}
+            disabled={isSubmitting}
+          >
+            <Save className="w-3.5 h-3.5" /> {isSubmitting ? "Saving…" : "Save"}
           </Button>
         </div>
       }
@@ -2038,6 +2162,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                 onSameAsCurrentChange={setSameAddress}
                 currentErrors={mapAddressErrors("current", errors)}
                 permanentErrors={mapAddressErrors("permanent", errors)}
+                usePincodeApi={isApiMode}
               />
             </div>
 
@@ -2068,6 +2193,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                     value={emergencyAddr}
                     onChange={setEmergencyAddr}
                     errors={mapAddressErrors("emergency", errors)}
+                    usePincodeApi={isApiMode}
                   />
                 </div>
               </div>
@@ -2107,7 +2233,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                   <Label className="text-xs font-medium">Employee ID</Label>
                   <div className="h-8 px-2.5 border border-border rounded-lg bg-muted/30 flex items-center">
                     <span className="font-mono text-xs font-semibold text-brand-700">
-                      {mode === "add" ? newEmpId : employee?.employeeId}
+                      {mode === "add" ? (newEmpId || "Loading…") : employee?.employeeId}
                     </span>
                     <span className="ml-auto text-[10px] text-muted-foreground">Auto</span>
                   </div>
@@ -2193,7 +2319,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                 {form.roleType && (form.roleType !== "Field User" || form.salesType) && (
                   <div className="grid grid-cols-2 gap-3">
                     <AC label="Role" required value={form.roleId || ""}
-                      onChange={v => handleRoleChange(v as number)}
+                      onChange={v => handleRoleChange(v as number | string)}
                       options={roleOptions}
                       placeholder="Select role"
                       error={errors.roleId} />
@@ -2383,7 +2509,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                       <AC
                         label=""
                         value={lvl.empId || ""}
-                        onChange={v => setApprovalLevelUser(i, v as number | "")}
+                        onChange={v => setApprovalLevelUser(i, v as number | string | "")}
                         options={allApprovalOptions}
                         placeholder={`Search name, ID, role, department…`}
                       />
@@ -2468,6 +2594,8 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                   setActiveMobilePerms={setActiveMobilePerms}
                   role={form.role}
                   roleType={form.roleType}
+                  permissionTemplateOptions={permissionTemplateOptions}
+                  onApplyPermissionTemplate={onApplyPermissionTemplate}
                 />
               </div>
             )}

@@ -1,6 +1,7 @@
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 import { hydrateOrderLineItems, loadOrders } from "./orders-data";
-import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
+const getDispatchRecords = (): any[] => [];
+
 
 export function isSampleOrderDispatch(d: DispatchRecord): boolean {
   const type =

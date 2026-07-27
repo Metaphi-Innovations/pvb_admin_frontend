@@ -50,6 +50,7 @@ export interface MobileGroupDef { id: string; label: string; features: MobileFea
 
 export interface Employee {
   id: number;
+  userUuid?: string;
   employeeId: string;           // Auto-generated EMP-0001
   firstName: string;
   lastName: string;
@@ -63,14 +64,14 @@ export interface Employee {
   gender?: "Male" | "Female" | "Other";
   dob?: string;
   // Employment
-  departmentId: number | null;
+  departmentId: number | string | null;
   department: string;
   employeeType?: "Full-time" | "Part-time" | "Contract" | "Trainee";
   roleType?: RoleType;
   salesType?: SalesType;
-  roleId: number | null;
+  roleId: number | string | null;
   role: string;
-  reportingManagerId: number | null;
+  reportingManagerId: number | string | null;
   reportingManager: string;
   status: "active" | "inactive" | "draft" | "archived";
   joiningDate: string;
@@ -146,15 +147,24 @@ export interface Employee {
   // Permissions
   permissions?: UserPermissions;
   // Approval Chain
-  approvalLevel1Id?: number | null;
+  approvalLevel1Id?: number | string | null;
   approvalLevel1Name?: string;
   approvalLevel1Role?: string;
-  approvalLevel2Id?: number | null;
+  approvalLevel2Id?: number | string | null;
   approvalLevel2Name?: string;
   approvalLevel2Role?: string;
-  approvalLevel3Id?: number | null;
+  approvalLevel3Id?: number | string | null;
   approvalLevel3Name?: string;
   approvalLevel3Role?: string;
+  approvalLevels?: Array<{
+    level: string;
+    approverId: string;
+    name: string;
+    employeeId: string;
+    designation: string;
+    department: string;
+    role: string;
+  }>;
   // Legacy fields (kept for backward compat)
   designation?: string;
   branch?: string;
@@ -275,6 +285,8 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "vendorCategory",   label: "Supplier Category",   actions: ["view","create","edit","delete"] },
       { id: "warehouseMaster",  label: "Warehouse",         actions: ["view","create","edit","delete"] },
       { id: "uomMaster",        label: "Units of Measure",  actions: ["view","create","edit","delete"] },
+      { id: "tds",              label: "TDS Master",        actions: ["view","create","edit","delete","export"] },
+      { id: "tcs",              label: "TCS Master",        actions: ["view","create","edit","delete","export"] },
       { id: "distributors",     label: "Distributors",      actions: ["view","create","edit","delete","export"] },
       { id: "retailers",        label: "Retailers",         actions: ["view","create","edit","delete","export"] },
     ],
@@ -603,20 +615,23 @@ export function validateMobileUnique(mobile: string, employees: Employee[], excl
 }
 
 export function validateCircularReporting(
-  employeeId: number,
-  reportingManagerId: number | null,
+  employeeId: number | string,
+  reportingManagerId: number | string | null,
   employees: Employee[]
 ): string | null {
   if (!reportingManagerId) return null;
-  if (employeeId === reportingManagerId) return "Cannot report to yourself";
+  if (String(employeeId) === String(reportingManagerId)) return "Cannot report to yourself";
+  if (typeof reportingManagerId === "string" || typeof employeeId === "string") return null;
+
   const visited = new Set<number>();
   let current: number | null = reportingManagerId;
   while (current !== null) {
     if (visited.has(current)) return "Circular reporting detected";
     visited.add(current);
-    const emp = employees.find(e => e.id === current);
+    const emp = employees.find((e) => e.id === current);
     if (!emp) break;
-    current = emp.reportingManagerId || null;
+    const next = emp.reportingManagerId;
+    current = typeof next === "number" ? next : null;
   }
   return null;
 }

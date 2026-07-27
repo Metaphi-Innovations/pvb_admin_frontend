@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 export default function CreateStockTransferGrnRoutePage() {
   const searchParams = useSearchParams();
-  const dispatchId = Number(searchParams.get("dispatchId") || "0");
+  const dispatchId = searchParams.get("dispatchId") || undefined;
 
   return <StockTransferCreate dispatchId={dispatchId} />;
 }

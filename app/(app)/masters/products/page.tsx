@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import {
@@ -12,21 +12,31 @@ import {
   Package,
   XCircle,
 } from "lucide-react";
-import {
-  type Product,
-  type ProductStatus,
-  getProductCode,
-  loadActiveCategoryOptions,
-  loadActiveSupplierOptions,
-  loadProducts,
-  saveProducts,
-} from "./product-data";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
+
+import {
+  useProducts,
+  useToggleProductStatus,
+  useExportProducts,
+  useProductFilterDropdown,
+} from "@/hooks/masters";
+import { sortStateToOrdering, type ProductListRecord } from "@/app/(app)/masters/products/apis";
+import {
+  buildListApiFilters,
+  MASTER_FILTER_FIELD_MAPS,
+} from "@/lib/masters/list-api-filters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
+import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+
+// ---------------------------------------------------------------------------
+// KPI card
+// ---------------------------------------------------------------------------
 
 function KpiCard({
   label,
@@ -54,57 +64,273 @@ function KpiCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
+  return (
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <XCircle className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function ProductsPage() {
   const router = useRouter();
-  const pathname = usePathname();
-  const [records, setRecords] = useState<Product[]>([]);
-  const [filters, setFilters] = useState<FilterState>({});
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [sort, setSort] = useState<SortState>({ key: "productName", direction: "asc" });
-  const [toast, setToast] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
+  // ---- ordering / api-filters / status ----
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
+
+  const apiFilters = useMemo(
+    () => buildListApiFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.product, ["search"]),
+    [appliedFilters],
+  );
+
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: appliedSearch,
+      status: "all",
+      apiFilters,
+      ordering,
+    }),
+    [page, pageSize, appliedSearch, apiFilters, ordering],
+  );
+
+  const productCodeOptionsQuery = useProductFilterDropdown("product_code", {
+    enabled: isFilterOpen("productCode"),
+  });
+  const productNameOptionsQuery = useProductFilterDropdown("product_name", {
+    enabled: isFilterOpen("productName"),
+  });
+  const skuOptionsQuery = useProductFilterDropdown("sku", {
+    enabled: isFilterOpen("sku"),
+  });
+  const supplierCodeOptionsQuery = useProductFilterDropdown("supplier_code", {
+    enabled: isFilterOpen("supplierCode"),
+  });
+  const supplierNameOptionsQuery = useProductFilterDropdown("supplier_name", {
+    enabled: isFilterOpen("supplier"),
+  });
+  const hsnCodeOptionsQuery = useProductFilterDropdown("hsnCode", {
+    enabled: isFilterOpen("hsnCode"),
+  });
+  const categoryOptionsQuery = useProductFilterDropdown("categoryName", {
+    enabled: isFilterOpen("category"),
+  });
+  const packSizeOptionsQuery = useProductFilterDropdown("pack_size", {
+    enabled: isFilterOpen("packSize"),
+  });
+  const baseUnitOptionsQuery = useProductFilterDropdown("unit", {
+    enabled: isFilterOpen("baseUnit"),
+  });
+  const mrpOptionsQuery = useProductFilterDropdown("mrp", {
+    enabled: isFilterOpen("mrp"),
+  });
+  const costPriceOptionsQuery = useProductFilterDropdown("cost_price", {
+    enabled: isFilterOpen("costPrice"),
+  });
+  const statusOptionsQuery = useProductFilterDropdown("status", {
+    enabled: isFilterOpen("status"),
+  });
+
+  const productCodeOptions = useMemo(
+    () => productCodeOptionsQuery.data ?? [],
+    [productCodeOptionsQuery.data],
+  );
+  const productNameOptions = useMemo(
+    () => productNameOptionsQuery.data ?? [],
+    [productNameOptionsQuery.data],
+  );
+  const skuOptions = useMemo(() => skuOptionsQuery.data ?? [], [skuOptionsQuery.data]);
+  const supplierCodeOptions = useMemo(
+    () => supplierCodeOptionsQuery.data ?? [],
+    [supplierCodeOptionsQuery.data],
+  );
+  const supplierNameOptions = useMemo(
+    () => supplierNameOptionsQuery.data ?? [],
+    [supplierNameOptionsQuery.data],
+  );
+  const hsnCodeOptions = useMemo(
+    () => hsnCodeOptionsQuery.data ?? [],
+    [hsnCodeOptionsQuery.data],
+  );
+  const categoryOptions = useMemo(
+    () => categoryOptionsQuery.data ?? [],
+    [categoryOptionsQuery.data],
+  );
+  const packSizeOptions = useMemo(
+    () => packSizeOptionsQuery.data ?? [],
+    [packSizeOptionsQuery.data],
+  );
+  const baseUnitOptions = useMemo(
+    () => baseUnitOptionsQuery.data ?? [],
+    [baseUnitOptionsQuery.data],
+  );
+  const mrpOptions = useMemo(() => mrpOptionsQuery.data ?? [], [mrpOptionsQuery.data]);
+  const costPriceOptions = useMemo(
+    () => costPriceOptionsQuery.data ?? [],
+    [costPriceOptionsQuery.data],
+  );
+  const statusOptions = useMemo(
+    () =>
+      statusOptionsQuery.data?.length
+        ? statusOptionsQuery.data
+        : [
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+          ],
+    [statusOptionsQuery.data],
+  );
+
+  // ---- queries / mutations ----
+  const listQuery = useProducts(listParams);
+  const toggleStatusMutation = useToggleProductStatus();
+  const exportMutation = useExportProducts();
+
+  const records = listQuery.data?.items ?? [];
+  const totalRecords = listQuery.data?.total ?? 0;
+
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+      resource: "products",
+      notFoundMessage: "Product list endpoint not found.",
+      serverMessage: "Server error while loading products.",
+    })
+    : null;
+
+  // ---- reset page on filter / sort change ----
   useEffect(() => {
-    setRecords(loadProducts());
-  }, [pathname]);
+    setPage(1);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
-  const supplierFilterOptions = useMemo(
-    () => loadActiveSupplierOptions().map((o) => ({ label: o.label, value: o.value })),
-    [],
-  );
-  const categoryFilterOptions = useMemo(
-    () => loadActiveCategoryOptions().map((o) => ({ label: o.label, value: o.value })),
-    [],
-  );
+  // ---- auto-dismiss toast ----
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  const updateStatus = (productId: number, status: ProductStatus) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const updated = records.map((item) =>
-      item.id === productId ? { ...item, status, updatedBy: "Admin", updatedDate: today } : item,
+  // ---- status toggle ----
+  const updateStatus = (row: ProductListRecord) => {
+    const id = row.productUuid;
+    if (!id) {
+      setToast({ msg: "Product id missing. Unable to update status.", type: "error" });
+      return;
+    }
+    const nextActive = row.status?.toLowerCase() !== "active";
+    toggleStatusMutation.mutate(
+      { id, isActive: nextActive },
+      {
+        onSuccess: () =>
+          setToast({
+            msg: `Product status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          }),
+        onError: (error) =>
+          setToast({
+            msg: getErrorMessage(error, "Failed to update product status."),
+            type: "error",
+          }),
+      },
     );
-    setRecords(updated);
-    saveProducts(updated);
-    setToast("Status updated.");
-    setTimeout(() => setToast(null), 3200);
   };
 
-  const columns: ColumnConfig<Product>[] = [
+  // ---- export ----
+  const handleExport = () => {
+    exportMutation.mutate(
+      { search: appliedSearch, status: "all", ordering, apiFilters },
+      {
+        onError: (error) =>
+          setToast({
+            msg: getErrorMessage(error, "Failed to export products."),
+            type: "error",
+          }),
+      },
+    );
+  };
+
+  // ---- add ----
+  const handleAdd = () => router.push("/masters/products/add");
+
+  const handleFilterChange = (next: FilterState) => {
+    const normalized: FilterState = { ...next };
+    const statusVal = normalized.status;
+    const statusToken = Array.isArray(statusVal)
+      ? String(statusVal[0] ?? "").toLowerCase()
+      : String(statusVal ?? "").toLowerCase();
+    if (statusToken === "all") {
+      delete normalized.status;
+    }
+    setFilters(normalized);
+    applyFilters(normalized);
+    setPage(1);
+  };
+
+  // ---- KPIs ----
+  const active = records.filter((r) => r.status === "active").length;
+  const inactive = records.filter((r) => r.status === "inactive").length;
+
+  // ---- columns ----
+  const columns: ColumnConfig<ProductListRecord>[] = useMemo(
+    () => [
     {
       key: "productCode",
       header: "Product Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: productCodeOptions,
       width: "120px",
       render: (_val, row) => (
-        <span className="font-mono text-xs">{getProductCode(row)}</span>
+        <span className="font-mono text-xs">{row.productCode || "—"}</span>
       ),
     },
     {
       key: "productName",
       header: "Product Name",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: productNameOptions,
       width: "180px",
       render: (_val, row) => (
-        <Link href={`/masters/products/${row.id}`} className="block group/name">
+        <Link href={`/masters/products/${row.productUuid}`} className="block group/name">
           <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">
             {row.productName}
           </p>
@@ -115,6 +341,9 @@ export default function ProductsPage() {
       key: "sku",
       header: "SKU",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: skuOptions,
       width: "120px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.sku || "—"}</span>
@@ -124,6 +353,9 @@ export default function ProductsPage() {
       key: "supplierCode",
       header: "Supplier Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierCodeOptions,
       width: "110px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.supplierCode || "—"}</span>
@@ -135,7 +367,7 @@ export default function ProductsPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: supplierFilterOptions,
+      filterOptions: supplierNameOptions,
       width: "140px",
       render: (_val, row) => (
         <span className="text-xs">{row.supplier || "—"}</span>
@@ -145,6 +377,9 @@ export default function ProductsPage() {
       key: "hsnCode",
       header: "HSN Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: hsnCodeOptions,
       width: "90px",
       render: (_val, row) => (
         <span className="font-mono text-xs">{row.hsnCode || "—"}</span>
@@ -156,7 +391,7 @@ export default function ProductsPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: categoryFilterOptions,
+      filterOptions: categoryOptions,
       width: "110px",
       render: (_val, row) => row.category || "—",
     },
@@ -164,16 +399,20 @@ export default function ProductsPage() {
       key: "packSize",
       header: "Pack Size",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: packSizeOptions,
       width: "90px",
-      render: (_val, row) => {
-        const size = row.packSize ?? row.unitSize;
-        return size !== undefined && size !== null ? String(size) : "—";
-      },
+      render: (_val, row) =>
+        row.packSize !== null && row.packSize !== undefined ? String(row.packSize) : "—",
     },
     {
       key: "baseUnit",
       header: "Base Unit",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: baseUnitOptions,
       width: "90px",
       render: (_val, row) => row.baseUnit || "—",
     },
@@ -181,12 +420,32 @@ export default function ProductsPage() {
       key: "mrp",
       header: "MRP",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: mrpOptions,
       width: "100px",
       align: "right",
       render: (_val, row) => (
         <span className="font-semibold text-xs tabular-nums">
-          {row.mrp !== undefined && row.mrp > 0
+          {row.mrp !== null && row.mrp !== undefined && row.mrp > 0
             ? formatIndianRupeeDisplay(row.mrp)
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "costPrice",
+      header: "Cost Price",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: costPriceOptions,
+      width: "110px",
+      align: "right",
+      render: (_val, row) => (
+        <span className="font-semibold text-xs tabular-nums">
+          {row.costPrice !== null && row.costPrice !== undefined
+            ? formatIndianRupeeDisplay(row.costPrice)
             : "—"}
         </span>
       ),
@@ -197,141 +456,46 @@ export default function ProductsPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "100px",
       render: (_val, row) => (
         <ListingStatusToggle
           active={isActiveStatus(row.status)}
-          onChange={() => updateStatus(row.id, isActiveStatus(row.status) ? "inactive" : "active")}
+          onChange={() => updateStatus(row)}
         />
       ),
     },
-  ];
+  ],
+    [
+      productCodeOptions,
+      productNameOptions,
+      skuOptions,
+      supplierCodeOptions,
+      supplierNameOptions,
+      hsnCodeOptions,
+      categoryOptions,
+      packSizeOptions,
+      baseUnitOptions,
+      mrpOptions,
+      costPriceOptions,
+      statusOptions,
+    ],
+  );
 
-  const actions: ActionItemConfig<Product>[] = [
+  const actions: ActionItemConfig<ProductListRecord>[] = [
     {
       label: "View",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/masters/products/${row.id}`),
+      onClick: (row) => router.push(`/masters/products/${row.productUuid}`),
     },
     {
       label: "Edit",
       action: "edit",
       icon: Edit2,
-      onClick: (row) => router.push(`/masters/products/${row.id}/edit`),
+      onClick: (row) => router.push(`/masters/products/${row.productUuid}/edit`),
     },
   ];
-
-  const filtered = useMemo(() => {
-    let result = [...records];
-
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (item) =>
-          getProductCode(item).toLowerCase().includes(q) ||
-          item.productName.toLowerCase().includes(q) ||
-          (item.supplier || "").toLowerCase().includes(q) ||
-          (item.supplierCode || "").toLowerCase().includes(q) ||
-          item.sku.toLowerCase().includes(q) ||
-          (item.hsnCode || "").toLowerCase().includes(q),
-      );
-    }
-
-    result = applyFilters(result, filters);
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        if (sort.key === "mrp") {
-          const av = a.mrp ?? 0;
-          const bv = b.mrp ?? 0;
-          return sort.direction === "asc" ? av - bv : bv - av;
-        }
-        if (sort.key === "packSize") {
-          const av = a.packSize ?? a.unitSize ?? 0;
-          const bv = b.packSize ?? b.unitSize ?? 0;
-          return sort.direction === "asc" ? av - bv : bv - av;
-        }
-        const av = String(a[sort.key as keyof Product] ?? "").toLowerCase();
-        const bv = String(b[sort.key as keyof Product] ?? "").toLowerCase();
-        return sort.direction === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-      });
-    }
-
-    return result;
-  }, [records, filters, sort]);
-
-  const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
-  }, [filtered, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort, pageSize]);
-
-  const handleExport = () => {
-    const headers = [
-      "Product Code",
-      "Product Name",
-      "SKU",
-      "Supplier Code",
-      "Supplier Name",
-      "HSN Code",
-      "Category",
-      "Pack Size",
-      "Base Unit",
-      "MRP",
-      "Status",
-    ];
-
-    const rows = filtered.map((item) => [
-      getProductCode(item),
-      item.productName,
-      item.sku || "",
-      item.supplierCode || "",
-      item.supplier || "",
-      item.hsnCode || "",
-      item.category || "",
-      item.packSize ?? item.unitSize ?? "",
-      item.baseUnit || "",
-      item.mrp ?? "",
-      item.status,
-    ]);
-
-    const csvString = [
-      headers.join(","),
-      ...rows.map((row) =>
-        row
-          .map((val) => {
-            const str = String(val ?? "").replace(/"/g, '""');
-            return `"${str}"`;
-          })
-          .join(","),
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "product-master-export.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleAdd = () => {
-    router.push("/masters/products/add");
-  };
-
-  const total = records.length;
-  const active = records.filter((item) => item.status === "active").length;
-  const inactive = records.filter((item) => item.status === "inactive").length;
 
   return (
     <AppLayout>
@@ -344,21 +508,27 @@ export default function ProductsPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <KpiCard label="Total Products" value={total} icon={Package} accent />
+          <KpiCard label="Total Products" value={totalRecords} icon={Package} accent />
           <KpiCard label="Active" value={active} icon={CheckCircle2} color="bg-emerald-50" />
           <KpiCard label="Inactive" value={inactive} icon={XCircle} color="bg-slate-100" />
         </div>
 
-        <MasterListing<Product>
+        {listError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {listError}
+          </div>
+        )}
+
+        <MasterListing<ProductListRecord>
           columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
+          data={records}
+          totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
-          onFilterChange={setFilters}
+          onFilterChange={handleFilterChange}
           actions={actions}
           onAdd={handleAdd}
           addLabel="Add Product"
@@ -367,13 +537,12 @@ export default function ProductsPage() {
           searchPlaceholder="Search product code, name, supplier, SKU, HSN..."
           currentFilters={filters}
           currentSort={sort}
+          onOpenFilter={handleOpenFilter}
         />
       </div>
 
       {toast && (
-        <div className="fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600">
-          {toast}
-        </div>
+        <Toast toast={toast} onDismiss={() => setToast(null)} />
       )}
     </AppLayout>
   );

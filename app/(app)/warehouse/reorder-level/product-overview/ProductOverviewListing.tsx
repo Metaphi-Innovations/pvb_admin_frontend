@@ -1,21 +1,30 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye } from "lucide-react";
+import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 
 import { ReorderLevel } from "../types";
 import Link from "next/link";
-import { PRODUCT_OPTIONS, WAREHOUSE_OPTIONS, STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { ReorderLevelService, toOrdering } from "../services";
+import { ListingStatusToggle } from "@/components/listing";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 
-interface ProductOverviewListingProps {
-  allRecords: ReorderLevel[];
-}
+const STOCK_STATUS_OPTIONS = [
+  { label: "In Stock", value: "in stock" },
+  { label: "Low Stock", value: "low stock" },
+];
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" };
+  const cfg = status === "Low Stock"
+    ? { bg: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" }
+    : { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
   return (
     <span className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
@@ -24,58 +33,53 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function ProductOverviewListing({ allRecords }: ProductOverviewListingProps) {
+export function ProductOverviewListing() {
   const router = useRouter();
-
-  // Table state
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
+  const {
+    draftFilters,
+    setDraftFilters,
+    appliedFilters,
+    applyFilters,
+  } = useAppliedListFilters();
+  const [sort, setSort] = useState<SortState>({ key: "updatedDate", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [records, setRecords] = useState<ReorderLevel[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ReorderLevel | null>(null);
+  const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
+  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
 
-  // Processing
-  const processed = useMemo(() => {
-    let result = [...allRecords];
-    Object.keys(filters).forEach(key => {
-      const val = filters[key];
-      if (!val) return;
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(r =>
-          r.product.toLowerCase().includes(q) ||
-          r.sku.toLowerCase().includes(q) ||
-          r.warehouse.toLowerCase().includes(q)
-        );
-      } else if (key === "product") {
-        result = result.filter(r => (val as string[]).includes(r.product));
-      } else if (key === "warehouse") {
-        result = result.filter(r => (val as string[]).includes(r.warehouse));
-      } else if (key === "status") {
-        result = result.filter(r => (val as string[]).includes(r.status));
-      }
-    });
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const numKeys = ["currentStock", "reservedStock", "reorderLevelQty"];
-        if (numKeys.includes(sort.key)) {
-          const diff = (a[sort.key as keyof ReorderLevel] as number) - (b[sort.key as keyof ReorderLevel] as number);
-          return sort.direction === "asc" ? diff : -diff;
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    ReorderLevelService.list({
+      page,
+      pageSize,
+      search: String(appliedFilters.search ?? ""),
+      ordering: toOrdering(sort.key, sort.direction),
+      reorder_type: "OVERALL",
+      filters: appliedFilters,
+      signal: controller.signal,
+    })
+      .then((result) => {
+        setRecords(result.items);
+        setTotalRecords(result.total);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setError((err as { message?: string })?.message || "Failed to load reorder levels.");
         }
-        const vA = String(a[sort.key as keyof ReorderLevel] || "");
-        const vB = String(b[sort.key as keyof ReorderLevel] || "");
-        return sort.direction === "asc" ? vA.localeCompare(vB) : vB.localeCompare(vA);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
-    }
-    return result;
-  }, [allRecords, filters, sort]);
+    return () => controller.abort();
+  }, [page, pageSize, sort.key, sort.direction, appliedFilters]);
 
-  const paginated = useMemo(() => {
-    const s = (page - 1) * pageSize;
-    return processed.slice(s, s + pageSize);
-  }, [processed, page, pageSize]);
-
-  // Helper
   const numCol = (key: string, header: string, w = "120px"): ColumnConfig<ReorderLevel> => ({
     key: key as keyof ReorderLevel,
     header,
@@ -92,7 +96,7 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: PRODUCT_OPTIONS,
+      filterOptions: filterOptions.product || [],
       width: "160px",
       render: (val, row) => (
         <Link
@@ -104,13 +108,32 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
       )
     },
     {
-      key: "warehouse",
-      header: "Warehouse",
+      key: "productCode",
+      header: "Product Code",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: WAREHOUSE_OPTIONS,
-      width: "150px",
+      filterOptions: filterOptions.productCode || [],
+      width: "130px",
+      render: (v: any) => <span className="font-mono text-xs text-foreground font-semibold">{v}</span>,
+    },
+    {
+      key: "category",
+      header: "Category",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.category || [],
+      width: "140px",
+    },
+    {
+      key: "unit",
+      header: "Unit",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.unit || [],
+      width: "100px",
     },
     numCol("currentStock", "Current Stock"),
     numCol("reservedStock", "Reserved Stock", "130px"),
@@ -121,32 +144,140 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: STOCK_STATUS_OPTIONS,
       width: "155px",
       render: (v: any) => <StatusBadge status={v} />,
+    },
+    {
+      key: "activeStatus",
+      header: "Active",
+      sortable: false,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      width: "110px",
+      render: (_v: any, row) => (
+        <ListingStatusToggle
+          active={row.isActive}
+          onChange={() => {
+            ReorderLevelService.toggleStatus(row.id)
+              .then(() => {
+                setRecords((prev) =>
+                  prev.map((item) => (item.id === row.id ? { ...item, isActive: !item.isActive } : item)),
+                );
+              })
+              .catch(() => undefined);
+          }}
+        />
+      ),
     },
   ];
 
   const actions: ActionItemConfig<ReorderLevel>[] = [
     { label: "View", action: "view", icon: Eye, onClick: (row) => router.push(`/warehouse/reorder-level/view/${row.id}`) },
+    { label: "Edit", action: "edit", icon: Pencil, onClick: (row) => router.push(`/warehouse/reorder-level/edit/${row.id}`) },
+    { label: "Delete", action: "delete", icon: Trash2, onClick: (row) => setDeleteTarget(row) },
   ];
 
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    ReorderLevelService.delete(deleteTarget.id)
+      .then(() => {
+        setDeleteTarget(null);
+        setPage(1);
+      })
+      .catch(() => {
+        setDeleteTarget(null);
+      });
+  };
+
+  const handleOpenFilter = (columnKey: string) => {
+    const keyMap: Record<string, "product_name" | "product_code" | "category_name" | "unit_name"> = {
+      product: "product_name",
+      productCode: "product_code",
+      category: "category_name",
+      unit: "unit_name",
+    };
+    const field = keyMap[columnKey];
+    if (!field || filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
+
+    setLoadingFilters((prev) => new Set(prev).add(columnKey));
+    ReorderLevelService.filterDropdown(field, { reorder_type: "OVERALL" })
+      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
+      .finally(() => {
+        setLoadingFilters((prev) => {
+          const next = new Set(prev);
+          next.delete(columnKey);
+          return next;
+        });
+      });
+  };
+
   return (
-    <MasterListing<ReorderLevel>
-      columns={columns}
-      data={paginated}
-      totalRecords={processed.length}
-      page={page}
-      pageSize={pageSize}
-      onPageChange={setPage}
-      onPageSizeChange={setPageSize}
-      onSortChange={setSort}
-      onFilterChange={setFilters}
-      actions={actions}
-      onAdd={() => router.push("/warehouse/reorder-level/create?from=overview")}
-      addLabel="Set Reorder Level"
-      emptyMessage=""
-      searchPlaceholder="Search product, SKU or warehouse..."
-    />
+    <>
+      {error ? <p className="mb-2 text-xs text-red-600">{error}</p> : null}
+      <MasterListing<ReorderLevel>
+        columns={columns}
+        data={records}
+        loading={loading}
+        totalRecords={totalRecords}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        onSortChange={setSort}
+        onFilterChange={(next) => {
+          setDraftFilters(next);
+          applyFilters(next);
+          setPage(1);
+        }}
+        actions={actions}
+        onAdd={() => router.push("/warehouse/reorder-level/create?from=overview")}
+        addLabel="Set Reorder Level"
+        emptyMessage=""
+        searchPlaceholder="Search product or code..."
+        currentFilters={draftFilters}
+        currentSort={sort}
+        onOpenFilter={handleOpenFilter}
+        onExport={() =>
+          ReorderLevelService.export({
+            search: String(appliedFilters.search ?? ""),
+            ordering: toOrdering(sort.key, sort.direction),
+            reorder_type: "OVERALL",
+            export_type: "excel",
+            filters: appliedFilters,
+          })
+        }
+      />
+
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center">
+                <Trash2 className="w-4 h-4 text-rose-500" />
+              </div>
+              Delete Reorder Level?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Remove overall reorder configuration for{" "}
+            <span className="font-semibold text-foreground">{deleteTarget?.product}</span>?
+            This cannot be undone.
+          </p>
+          <DialogFooter className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs bg-rose-600 hover:bg-rose-700 text-white gap-1" onClick={handleDeleteConfirm}>
+              <Trash2 className="w-3 h-3" /> Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

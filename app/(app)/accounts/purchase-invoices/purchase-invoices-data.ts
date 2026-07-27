@@ -216,12 +216,18 @@ const STORAGE_KEY = PURCHASE_INVOICE_STORAGE_KEY;
 export { PurchaseInvoiceStorageQuotaError };
 export { hasPurchaseInvoiceAttachment } from "./purchase-invoice-storage";
 
+function toNumericId(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function lineFromPO(line: POLineItem): PurchaseInvoiceLine {
   const taxPct = line.cgstPct + line.sgstPct + line.igstPct;
   const taxable = Math.max(0, line.netAmount - (line.taxAmount ?? 0));
   return {
     id: line.uid,
-    productId: line.productId,
+    productId: typeof line.productId === "number" ? line.productId : null,
     productName: line.productName,
     description: line.description,
     invoiceQty: line.orderedQty,
@@ -605,10 +611,10 @@ export function createPurchaseFromPOUpload(
     invoiceNo: nextPurchaseNo(all),
     invoiceDate: input.vendorInvoiceDate,
     vendorInvoiceNo: input.vendorInvoiceNo.trim(),
-    vendorId: po.supplierId,
+    vendorId: toNumericId(po.supplierId) ?? 0,
     vendorName: po.supplierName,
     vendorGst: po.supplierGstin ?? "",
-    poId: po.id,
+    poId: toNumericId(po.id),
     poNumber: po.poNumber,
     poDate: po.poDate,
     grnId: null,
@@ -709,7 +715,7 @@ export function createManualPurchaseEntry(input: ManualPurchaseInput): PurchaseI
     vendorId: vendor.id,
     vendorName: vendor.vendorName,
     vendorGst: vendor.gstNumber ?? "",
-    poId: po?.id ?? null,
+    poId: po ? toNumericId(po.id) : null,
     poNumber: po?.poNumber ?? "",
     poDate: po?.poDate ?? "",
     grnId: null,

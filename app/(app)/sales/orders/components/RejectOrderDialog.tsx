@@ -8,7 +8,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { AlertTriangle, AlertCircle } from "lucide-react";
-import { type SalesOrder, rejectSalesOrder } from "../orders-data";
+import { type SalesOrder } from "../orders-data";
+import { useApproveRejectSalesOrder } from "@/hooks/sales/use-sales-orders";
 
 interface RejectOrderDialogProps {
   order: SalesOrder | null;
@@ -25,6 +26,7 @@ export default function RejectOrderDialog({
 }: RejectOrderDialogProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const rejectMutation = useApproveRejectSalesOrder();
 
   const handleClose = () => {
     setReason("");
@@ -34,15 +36,24 @@ export default function RejectOrderDialog({
 
   const handleConfirm = () => {
     if (!order) return;
-    const result = rejectSalesOrder(order.id, reason);
-    if ("error" in result) {
-      setError(result.error);
+    if (!reason.trim()) {
+      setError("Rejection reason is required.");
       return;
     }
-    onSuccess(result);
-    setReason("");
-    setError("");
-    onClose();
+    rejectMutation.mutate(
+      { id: order.id, action: "REJECT", remarks: reason },
+      {
+        onSuccess: (updatedOrder) => {
+          onSuccess(updatedOrder);
+          setReason("");
+          setError("");
+          onClose();
+        },
+        onError: (err: any) => {
+          setError(err?.message || "Failed to reject sales order.");
+        },
+      }
+    );
   };
 
   if (!order) return null;
@@ -88,6 +99,7 @@ export default function RejectOrderDialog({
               size="sm"
               className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
               onClick={handleConfirm}
+              disabled={rejectMutation.isPending}
             >
               Confirm Reject
             </Button>

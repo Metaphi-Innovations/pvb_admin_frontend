@@ -40,27 +40,17 @@ export function PurchaseReturnBatchDetailsTable({
 }: PurchaseReturnBatchDetailsTableProps) {
   const batchNumber = product.batchNumber;
 
-  if (!batchNumber || requiredQty <= 0) return null;
+  if (!batchNumber) return null;
 
   const rowQty = selections[batchNumber] ?? 0;
-  const isSelected = rowQty > 0;
+  const isSelected = selections[batchNumber] !== undefined;
 
   const handleQtyChange = (value: string) => {
     const parsed = parseInt(value, 10);
-    const maxAllowed = getMaxBatchPackingQty(
-      batchNumber,
-      selections,
-      requiredQty,
-      requiredQty,
-    );
-    const qty = Number.isNaN(parsed) ? 0 : Math.max(0, Math.min(parsed, maxAllowed));
+    const qty = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
 
     const next = { ...selections };
-    if (qty <= 0) {
-      delete next[batchNumber];
-    } else {
-      next[batchNumber] = qty;
-    }
+    next[batchNumber] = qty;
     onSelectionsChange(next);
   };
 
@@ -73,6 +63,7 @@ export function PurchaseReturnBatchDetailsTable({
         <table className="w-full min-w-[800px] border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-muted/40">
+              <th className="px-3 py-2 w-8"></th>
               {[
                 "Batch No.",
                 "GRN No.",
@@ -95,6 +86,24 @@ export function PurchaseReturnBatchDetailsTable({
           </thead>
           <tbody>
             <tr className="border-b border-border/60 bg-brand-50/30">
+              <td className="px-3 py-2.5 text-center w-8">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded accent-brand-600"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    const next = { ...selections };
+                    if (checked) {
+                      next[batchNumber] = 0;
+                    } else {
+                      next[batchNumber] = undefined as unknown as number;
+                    }
+                    onSelectionsChange(next);
+                  }}
+                  aria-label={`Select batch ${batchNumber}`}
+                />
+              </td>
               <td className="px-3 py-2.5 font-mono text-xs font-semibold text-brand-700">
                 {batchNumber}
               </td>
@@ -110,10 +119,10 @@ export function PurchaseReturnBatchDetailsTable({
               <td className="px-3 py-2.5 text-right">
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-semibold tabular-nums text-foreground">
-                    {product.orderedQty}
+                    {product.ordered_cases}
                   </span>
                   <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
-                    {formatCaseLoose(product.orderedQty, caseSize) || "0 Ls"}
+                    {formatCaseLoose(product.ordered_cases, caseSize) || "0 Ls"}
                   </span>
                 </div>
               </td>
@@ -123,6 +132,7 @@ export function PurchaseReturnBatchDetailsTable({
                     <Input
                       type="number"
                       min={0}
+                      disabled={!isSelected}
                       value={!isSelected && rowQty === 0 ? "" : Math.floor(rowQty / caseSize)}
                       onChange={(e) => {
                         const newCases = parseInt(e.target.value || "0", 10);
@@ -134,7 +144,10 @@ export function PurchaseReturnBatchDetailsTable({
                         );
                       }}
                       placeholder="0"
-                      className="h-8 w-14 text-xs font-bold text-center tabular-nums"
+                      className={cn(
+                        "h-8 w-14 text-xs font-bold text-center tabular-nums",
+                        !isSelected && "cursor-not-allowed opacity-50",
+                      )}
                     />
                     <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Cases
@@ -146,6 +159,7 @@ export function PurchaseReturnBatchDetailsTable({
                       type="number"
                       min={0}
                       max={caseSize - 1}
+                      disabled={!isSelected}
                       value={!isSelected && rowQty === 0 ? "" : rowQty % caseSize}
                       onChange={(e) => {
                         const newLoose = parseInt(e.target.value || "0", 10);
@@ -157,7 +171,10 @@ export function PurchaseReturnBatchDetailsTable({
                         );
                       }}
                       placeholder="0"
-                      className="h-8 w-12 text-xs font-bold text-center tabular-nums"
+                      className={cn(
+                        "h-8 w-12 text-xs font-bold text-center tabular-nums",
+                        !isSelected && "cursor-not-allowed opacity-50",
+                      )}
                     />
                     <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Loose

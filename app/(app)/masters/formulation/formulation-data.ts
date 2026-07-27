@@ -8,6 +8,7 @@ import {
 export const FORMULATION_STORAGE_KEY = "ds_master_formulation_v1";
 
 export interface FormulationRecord extends BaseMasterRecord {
+  formulationUuid?: string;
   formulationName: string;
   formulationCode: string;
   description: string;
@@ -17,15 +18,22 @@ export interface FormulationForm {
   formulationName: string;
   formulationCode: string;
   description: string;
-  status: MasterStatus;
+  status?: MasterStatus;
 }
 
 export const DEFAULT_FORMULATION_FORM: FormulationForm = {
   formulationName: "",
   formulationCode: "",
   description: "",
-  status: "active",
 };
+
+export function validateFormulationApiForm(form: FormulationForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.formulationName.trim()) {
+    errors.formulationName = "Form name is required.";
+  }
+  return errors;
+}
 
 export const FORMULATION_SEED: FormulationRecord[] = [
   { id: 1, formulationName: "Wettable Powder", formulationCode: "FORM-001", description: "Wettable powder formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-10", updatedAt: "2024-01-10" },
@@ -35,7 +43,11 @@ export const FORMULATION_SEED: FormulationRecord[] = [
 ];
 
 export function formulationToForm(r: FormulationRecord): FormulationForm {
-  return { formulationName: r.formulationName, formulationCode: r.formulationCode, description: r.description, status: r.status };
+  return {
+    formulationName: r.formulationName,
+    formulationCode: r.formulationCode,
+    description: r.description,
+  };
 }
 
 export function formToFormulation(form: FormulationForm, id: number, existing?: FormulationRecord): FormulationRecord {
@@ -45,7 +57,7 @@ export function formToFormulation(form: FormulationForm, id: number, existing?: 
     formulationName: form.formulationName.trim(),
     formulationCode: form.formulationCode.trim(),
     description: form.description.trim(),
-    status: form.status,
+    status: form.status ?? existing?.status ?? "active",
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
     updatedBy: MASTER_CURRENT_USER,
     createdAt: existing?.createdAt ?? now,

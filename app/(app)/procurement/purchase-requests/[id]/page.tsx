@@ -1,41 +1,37 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Activity,
-  Check,
   CheckCircle2,
   Edit2,
-  IndianRupee,
   ListOrdered,
   ShoppingCart,
-  X,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { PurchaseRequestForm, prToFormValues } from "../components/PurchaseRequestForm";
-import { PRApprovalModal, type PRApprovalAction } from "../components/PRApprovalModal";
 import {
-  getPRById,
-  loadPurchaseRequests,
-  savePurchaseRequests,
-  approvePR,
-  rejectPR,
-  PR_STATUS_CFG,
-  type PRStatus,
-} from "../pr-data";
-import {
-  getPRTotalAmount,
-  getPRTotalItems,
-} from "../pr-listing-utils";
-import { formatCurrency } from "@/lib/procurement/utils";
+  PurchaseRequestForm,
+} from "../components/PurchaseRequestForm";
+import { ProcurementApprovalModal } from "../../components/ProcurementApprovalModal";
 import { Toast } from "../../components/ProcurementUI";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { getPRStatusLabel } from "@/lib/procurement/pr-status";
+import {
+  detailToFormValues,
+  useApproveRejectPurchaseRequest,
+  useDeletePurchaseRequest,
+  usePurchaseRequest,
+} from "@/hooks/procurement";
 
-function prStatusVariant(status: PRStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "approved" || status === "fully_converted") return "active";
+function prStatusVariant(
+  status: string,
+): "active" | "inactive" | "draft" | "blocked" | "neutral" {
+  if (status === "approved") return "active";
   if (status === "draft") return "draft";
   if (status === "rejected") return "blocked";
   if (status === "pending_approval") return "neutral";
@@ -45,53 +41,77 @@ function prStatusVariant(status: PRStatus): "active" | "inactive" | "draft" | "b
 export default function PRViewPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
-  const [pr, setPr] = useState(getPRById(id));
+  const id = String(params.id ?? "");
+  const detailQuery = usePurchaseRequest(id);
+  const approveRejectMutation = useApproveRejectPurchaseRequest();
+  const deleteMutation = useDeletePurchaseRequest();
+
   const [approvalOpen, setApprovalOpen] = useState(false);
-  const [approvalAction, setApprovalAction] = useState<PRApprovalAction>("approve");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [approvalAction, setApprovalAction] = useState<"approve" | "reject">(
+    "approve",
+  );
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: "success" | "error";
+  } | null>(null);
 
-  useEffect(() => setPr(getPRById(id)), [id]);
+  const detail = detailQuery.data;
+  const formValues = useMemo(
+    () => (detail ? detailToFormValues(detail) : null),
+    [detail],
+  );
 
-  const formValues = useMemo(() => (pr ? prToFormValues(pr) : null), [pr]);
+  if (detailQuery.isLoading) {
+    return (
+      <div className="p-8 text-sm text-muted-foreground">
+        Loading purchase request…
+      </div>
+    );
+  }
 
-  if (!pr || !formValues) {
+  if (!detail || !formValues) {
     return (
       <div className="p-8 text-sm font-semibold text-muted-foreground">
         Purchase Request not found.{" "}
-        <Link href="/procurement/purchase-requests" className="text-brand-600 hover:underline">
+        <Link
+          href="/procurement/purchase-requests"
+          className="text-brand-600 hover:underline"
+        >
           Back to listing
         </Link>
       </div>
     );
   }
 
-  const openApproval = (action: PRApprovalAction) => {
-    setApprovalAction(action);
-    setApprovalOpen(true);
-  };
-
-  const statusLabel = PR_STATUS_CFG[pr.status]?.label ?? pr.status;
-  const totalAmount = getPRTotalAmount(pr);
+  const statusLabel = getPRStatusLabel(detail.status);
+  const totalQty = detail.lines.reduce(
+    (sum, line) => sum + (line.totalQtyBase || line.requestedQty || 0),
+    0,
+  );
 
   const headerActions = (
     <>
-      {["draft", "rejected"].includes(pr.status) && (
+      {["draft", "rejected"].includes(detail.status) && (
         <Button
           variant="outline"
           size="sm"
           className="h-8 text-xs gap-1.5"
-          onClick={() => router.push(`/procurement/purchase-requests/${id}/edit`)}
+          onClick={() =>
+            router.push(`/procurement/purchase-requests/${id}/edit`)
+          }
         >
           <Edit2 className="w-3.5 h-3.5" /> Edit
         </Button>
       )}
-      {pr.status === "pending_approval" && (
+      {detail.status === "pending_approval" && (
         <>
           <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={() => openApproval("approve")}
+            onClick={() => {
+              setApprovalAction("approve");
+              setApprovalOpen(true);
+            }}
           >
             <CheckCircle2 className="w-3.5 h-3.5" /> Approve
           </Button>
@@ -99,19 +119,48 @@ export default function PRViewPage() {
             variant="outline"
             size="sm"
             className="h-8 text-xs gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
-            onClick={() => openApproval("reject")}
+            onClick={() => {
+              setApprovalAction("reject");
+              setApprovalOpen(true);
+            }}
           >
             <XCircle className="w-3.5 h-3.5" /> Reject
           </Button>
         </>
       )}
-      {pr.status === "approved" && (
+      {detail.status === "approved" && detail.poStatus !== "created" && (
         <Button
           size="sm"
           className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => router.push(`/procurement/purchase-orders/new?prId=${id}`)}
+          onClick={() =>
+            router.push(`/procurement/purchase-orders/new?prId=${id}`)
+          }
         >
           <ShoppingCart className="w-3.5 h-3.5" /> Create PO
+        </Button>
+      )}
+      {detail.status === "draft" && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+          disabled={deleteMutation.isPending}
+          onClick={() => {
+            if (!window.confirm("Delete this draft purchase request?")) return;
+            deleteMutation.mutate(id, {
+              onSuccess: () => {
+                router.push("/procurement/purchase-requests?toast=pr-deleted");
+              },
+              onError: (err) => {
+                setToast({
+                  msg: getErrorMessage(err, "Failed to delete."),
+                  type: "error",
+                });
+              },
+            });
+          }}
+        >
+          <Trash2 className="w-3.5 h-3.5" /> Delete
         </Button>
       )}
     </>
@@ -123,23 +172,23 @@ export default function PRViewPage() {
         listHref="/procurement/purchase-requests"
         listLabel="Purchase Requests"
         recordName="Purchase Request"
-        recordCode={pr.prNumber}
+        recordCode={detail.prNumber}
         statusLabel={statusLabel}
-        statusVariant={prStatusVariant(pr.status)}
+        statusVariant={prStatusVariant(detail.status)}
         kpis={[
-          {
-            icon: IndianRupee,
-            iconBg: "bg-emerald-100",
-            iconColor: "text-emerald-700",
-            value: formatCurrency(totalAmount),
-            label: "Total Amount",
-          },
           {
             icon: ListOrdered,
             iconBg: "bg-blue-100",
             iconColor: "text-blue-700",
-            value: String(getPRTotalItems(pr)),
+            value: String(detail.lines.length),
             label: "Line Items",
+          },
+          {
+            icon: ListOrdered,
+            iconBg: "bg-emerald-100",
+            iconColor: "text-emerald-700",
+            value: String(totalQty),
+            label: "Total Qty",
           },
           {
             icon: Activity,
@@ -155,26 +204,43 @@ export default function PRViewPage() {
           form={formValues}
           onChange={() => {}}
           readOnly
-          prNumber={pr.prNumber}
+          prNumber={detail.prNumber}
         />
       </RecordDetailPage>
 
-      <PRApprovalModal
+      <ProcurementApprovalModal
         open={approvalOpen}
-        onClose={() => setApprovalOpen(false)}
-        pr={pr}
+        onOpenChange={setApprovalOpen}
+        documentNo={detail.prNumber}
+        documentLabel="Purchase Request"
         action={approvalAction}
         onConfirm={(remarks) => {
-          const updated =
-            approvalAction === "approve" ? approvePR(pr, remarks) : rejectPR(pr, remarks);
-          savePurchaseRequests(
-            loadPurchaseRequests().map((p) => (p.id === updated.id ? updated : p)),
+          approveRejectMutation.mutate(
+            {
+              id,
+              action: approvalAction,
+              remarks: remarks || undefined,
+            },
+            {
+              onSuccess: () => {
+                setToast({
+                  msg:
+                    approvalAction === "approve"
+                      ? "PR approved."
+                      : "PR rejected.",
+                  type: "success",
+                });
+                setApprovalOpen(false);
+                void detailQuery.refetch();
+              },
+              onError: (err) => {
+                setToast({
+                  msg: getErrorMessage(err, "Action failed."),
+                  type: "error",
+                });
+              },
+            },
           );
-          setPr(updated);
-          setToast({
-            msg: approvalAction === "approve" ? "PR approved." : "PR rejected.",
-            type: "success",
-          });
         }}
       />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

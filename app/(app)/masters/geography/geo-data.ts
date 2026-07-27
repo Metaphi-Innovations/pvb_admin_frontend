@@ -410,16 +410,24 @@ export function getGstCodeForState(stateName: string): string | undefined {
 /** State dropdown options with GST code suffix, e.g. Maharashtra (27) */
 export function getStateSelectOptions(nodes?: GeoNode[]) {
   const list = nodes ?? loadGeoNodes();
-  return list
-    .filter((n) => n.level === "State" && n.status === "active")
-    .map((s) => {
-      const name = s.name.replace(/\s+State$/i, "");
-      const code = getGstCodeForState(name);
-      return {
-        value: name,
-        label: code ? `${name} (${code})` : name,
-      };
+  const seen = new Set<string>();
+  const options: { value: string; label: string }[] = [];
+
+  for (const s of list) {
+    if (s.level !== "State" || s.status !== "active") continue;
+    const name = s.name.replace(/\s+State$/i, "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const code = getGstCodeForState(name);
+    options.push({
+      value: name,
+      label: code ? `${name} (${code})` : name,
     });
+  }
+
+  return options;
 }
 
 function hierarchyFromPinNode(

@@ -7,6 +7,9 @@ import {
   createEmptyLineItem as createEmptySalesLine,
   calculateOrderTotalsSummary,
   recalculateLineItem,
+  recalculateExpense,
+  type TaxSupplyType,
+  resolveTaxSupplyType,
 } from "@/app/(app)/sales/orders/orders-data";
 
 import type { PackedBatchAllocation } from "@/app/(app)/warehouse/packing/types";
@@ -22,6 +25,7 @@ export type TransferStatus =
   | "pending_approval"
   | "confirmed"
   | "pending_packing"
+  | "ready_for_packing"
   | "packing_in_progress"
   | "packed"
   | "ready_to_dispatch"
@@ -49,6 +53,11 @@ export interface TransferLineItem extends SalesOrderLineItem {
   pendingQty?: number;
   receivedQty?: number;
   batchAllocations?: PackedBatchAllocation[];
+  batchInventoryId?: string;
+  packingUnit?: string;
+  baseUnit?: string;
+  unitsPerPackingUnit?: number;
+  quantityType?: "Case" | "Piece";
 }
 
 export interface StockTransfer {
@@ -120,7 +129,7 @@ export function createEmptyLineItem(): SalesOrderLineItem {
 
 export function normalizeTransferStatus(status: TransferStatus): TransferStatus {
   if (status === "pending") return "pending_approval";
-  if (status === "approved") return "confirmed";
+  if (status === "confirmed") return "approved";
   return status;
 }
 
@@ -128,8 +137,8 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   pending_approval: "Pending Approval",
   pending: "Pending Approval",
-  confirmed: "Confirmed",
-  approved: "Confirmed",
+  confirmed: "Approved",
+  approved: "Approved",
   pending_packing: "Pending Packing",
   packing_in_progress: "Packing In Progress",
   packed: "Packed",
@@ -454,28 +463,7 @@ export function validateStockTransferForm(form: StockTransferFormValues): Record
       if (!line.productId || line.quantity <= 0) {
         errors.lineItems = "Each line must have a product and transfer qty greater than zero";
       }
-      if (line.batchNumber && line.expiryDate) {
-        const batchStatus = getStockStatus(line.expiryDate);
-        if (batchStatus === "Expired") {
-          errors[`line_${index}_batch`] = `Batch ${line.batchNumber} is expired and cannot be transferred`;
-        }
-      }
-      if (line.quantity > (line.availableStock ?? 0)) {
-        errors[`line_${index}_qty`] = `Transfer qty cannot exceed available qty (${line.availableStock ?? 0})`;
-      }
-      if (sourceWh && line.productName) {
-        const batches = getAvailableBatchRowsForTransfer(
-          sourceWh.warehouseName,
-          line.productName,
-          line.productCode,
-        );
-        if (line.batchNumber) {
-          const batch = batches.find((b) => b.batchNumber === line.batchNumber);
-          if (batch && line.quantity > batch.availableQty) {
-            errors[`line_${index}_qty`] = `Transfer qty exceeds batch available qty (${batch.availableQty})`;
-          }
-        }
-      }
+
     });
   }
   return errors;
@@ -493,7 +481,11 @@ export function buildTransferFromForm(
 
   const totalItems = form.lineItems.length;
   const totalQuantity = form.lineItems.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
-  const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses || []);
+
+  const taxSupplyType = resolveTaxSupplyType(sourceWh.state || "", targetWh.state || "");
+  const recalculatedExpenses = (form.additionalExpenses || []).map((e) => recalculateExpense(e, taxSupplyType));
+
+  const totals = calculateOrderTotalsSummary(form.lineItems, recalculatedExpenses, { taxSupplyType });
   const today = todayStr();
 
   const transfers = loadTransfers();
@@ -521,7 +513,7 @@ export function buildTransferFromForm(
     remarks: form.remarks?.trim() || "",
     status: finalStatus,
     lineItems: form.lineItems,
-    additionalExpenses: form.additionalExpenses || [],
+    additionalExpenses: recalculatedExpenses,
     totalAmount: totals.grandTotal,
     totalItems,
     totalQuantity,
@@ -570,7 +562,7 @@ export function cancelStockTransfer(id: number, reason: string): StockTransfer |
 export function canCancelTransfer(transfer: StockTransfer): boolean {
   if (transfer.status === "cancelled") return false;
   const status = normalizeTransferStatus(transfer.status);
-  return ["draft", "pending_approval", "confirmed", "rejected"].includes(status);
+  return ["draft", "pending_approval", "confirmed", "approved", "rejected"].includes(status);
 }
 
 export function canDownloadNote(transfer: StockTransfer): boolean {
@@ -643,11 +635,15 @@ export function rejectStockTransfer(id: number, reason: string = "Stock transfer
 
 export function canGeneratePackingList(transfer: StockTransfer): boolean {
   const status = normalizeTransferStatus(transfer.status);
-  if (transfer.status === "cancelled" || status === "rejected") return false;
+  if (status === "cancelled" || status === "rejected") return false;
   if (status === "draft" || status === "pending_approval") return false;
   if (transfer.packingStatus === "Completed" || transfer.packingStatus === "packed") return false;
   if (!transfer.sourceWarehouseId || !transfer.targetWarehouseId) return false;
-  return transfer.lineItems.some(l => l.productId && l.quantity > 0);
+  
+  const hasItems = (transfer.lineItems && transfer.lineItems.length > 0)
+    ? transfer.lineItems.some(l => l.productId && l.quantity > 0)
+    : (transfer.totalItems ?? 0) > 0 || (transfer.totalQuantity ?? 0) > 0;
+  return hasItems;
 }
 
 export function generatePackingListForTransfer(id: number): StockTransfer | { error: string } {

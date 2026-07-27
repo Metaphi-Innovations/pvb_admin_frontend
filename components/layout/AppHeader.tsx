@@ -24,6 +24,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useFY, FINANCIAL_YEARS, FY_STATUS_CONFIG, type FinancialYear } from "@/lib/fy-store";
+import { useAuth } from "@/lib/auth/auth-context";
 
 const NOTIFICATIONS = [
   { id: 1, type: "approval", title: "PO #2340 awaiting approval",     time: "2 min ago",  read: false },
@@ -207,19 +208,13 @@ function FYSelector() {
 }
 
 function AppHeaderInner() {
-  const [userData, setUserData] = useState<{ username?: string; email?: string } | null>(null);
+  const { user, logout } = useAuth();
 
-  React.useEffect(() => {
-    void import("@/services/auth.service").then(({ AuthService }) => {
-      setUserData(AuthService.getUserData());
-    });
-  }, []);
-
-  const username = userData?.username || "Admin";
-  const email = userData?.email || "admin@gmail.com";
-  const userRole = userData?.username === "Admin" ? "Administrator" : "User";
+  const username = user?.username || "User";
+  const email = user?.email || "";
+  const userRole = user?.user_type || user?.role_type || "User";
   const shortName = username.split(" ")[0];
-  const initials = username.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+  const initials = username.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) || "U";
 
   return (
     <header className="h-12 bg-white border-b border-border/50 flex items-center px-4 gap-3 z-[90] sticky top-[56px]">
@@ -314,7 +309,7 @@ function AppHeaderInner() {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
-              void import("@/services/auth.service").then(({ AuthService }) => AuthService.logout());
+              void logout();
             }}
             className="text-xs gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50"
           >

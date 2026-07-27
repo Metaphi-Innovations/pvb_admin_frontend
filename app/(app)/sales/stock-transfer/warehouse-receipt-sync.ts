@@ -45,11 +45,10 @@ export function getDispatchedStockTransfersForGrn(
     .filter((t) => {
       if (!["in_transit", "grn_pending"].includes(t.status)) return false;
       if (t.grnNumber || links[t.transferNumber]) return false;
-      if (
-        destinationWarehouse !== "All" &&
-        t.targetWarehouseName !== destinationWarehouse
-      ) {
-        return false;
+      if (destinationWarehouse !== "All") {
+        const matchesId = String(t.targetWarehouseId) === destinationWarehouse;
+        const matchesName = t.targetWarehouseName === destinationWarehouse;
+        if (!matchesId && !matchesName) return false;
       }
       return true;
     });

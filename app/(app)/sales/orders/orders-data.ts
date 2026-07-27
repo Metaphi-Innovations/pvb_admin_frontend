@@ -9,6 +9,7 @@ import {
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
+import { getCustomerAddressesForSalesOrder } from "./sales-order-address-utils";
 import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
 /** Orders above this amount require approval on submit (not draft). */
@@ -18,11 +19,15 @@ export type OrderStatus =
   | "draft"
   | "pending_approval"
   | "approved"
+  | "APPROVED"
   | "rejected"
   | "confirmed"
   | "cancelled"
   | "dispatched"
-  | "delivered";
+  | "delivered"
+  | "Ready For Packing"
+  | "Fully Packed"
+  | "Partially Packed";
 
 export type PackingStatus =
   | "draft"
@@ -39,10 +44,6 @@ export const APPROVAL_ORDER_STATUSES: OrderStatus[] = ["pending_approval", "appr
 /** Statuses that may be changed on edit. */
 export const EDITABLE_ORDER_STATUSES: OrderStatus[] = [
   "draft",
-  "pending_approval",
-  "approved",
-  "rejected",
-  "confirmed",
 ];
 
 export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
@@ -75,6 +76,7 @@ export interface SalesOrderLineItem {
   quantityType?: "Case" | "Piece";
   caseQuantity?: number;
   pieceQuantity?: number;
+  packSize?: number;
   quantity: number;
   /** Dealer price (DP) from Pricing Master */
   dealerPrice: number;
@@ -108,6 +110,10 @@ export interface SalesOrderLineItem {
   cgstAmount?: number;
   sgstAmount?: number;
   igstAmount?: number;
+  cgstPercentage?: number;
+  sgstPercentage?: number;
+  igstPercentage?: number;
+  gstPercentage?: number;
   lineTotal: number;
   /** Split form only: parent line when qty is taken from original order */
   splitSourceLineId?: string;
@@ -222,17 +228,17 @@ const SEED_CUSTOMERS: {
   code: string;
   territory: string;
 }[] = [
-  { id: 1, name: "Green Valley Agro", code: "CUST-001", territory: "North Zone" },
-  { id: 2, name: "Kisan Fertilizers Ltd", code: "CUST-002", territory: "South Zone" },
-  { id: 3, name: "Farmtech Solutions", code: "CUST-003", territory: "East Zone" },
-  { id: 4, name: "AgroPlus Distributors", code: "CUST-004", territory: "West Zone" },
-  { id: 5, name: "Sunrise Crops", code: "CUST-005", territory: "North Zone" },
-  { id: 6, name: "Rural Inputs Co.", code: "CUST-006", territory: "Central Zone" },
-  { id: 7, name: "BioGrow Agro", code: "CUST-007", territory: "South Zone" },
-  { id: 8, name: "Fertile Lands Ltd", code: "CUST-008", territory: "East Zone" },
-  { id: 9, name: "CropCare India", code: "CUST-009", territory: "West Zone" },
-  { id: 10, name: "Seeds & More", code: "CUST-010", territory: "North Zone" },
-];
+    { id: 1, name: "Green Valley Agro", code: "CUST-001", territory: "North Zone" },
+    { id: 2, name: "Kisan Fertilizers Ltd", code: "CUST-002", territory: "South Zone" },
+    { id: 3, name: "Farmtech Solutions", code: "CUST-003", territory: "East Zone" },
+    { id: 4, name: "AgroPlus Distributors", code: "CUST-004", territory: "West Zone" },
+    { id: 5, name: "Sunrise Crops", code: "CUST-005", territory: "North Zone" },
+    { id: 6, name: "Rural Inputs Co.", code: "CUST-006", territory: "Central Zone" },
+    { id: 7, name: "BioGrow Agro", code: "CUST-007", territory: "South Zone" },
+    { id: 8, name: "Fertile Lands Ltd", code: "CUST-008", territory: "East Zone" },
+    { id: 9, name: "CropCare India", code: "CUST-009", territory: "West Zone" },
+    { id: 10, name: "Seeds & More", code: "CUST-010", territory: "North Zone" },
+  ];
 
 const SEED_SALESMEN: { id: number; name: string }[] = [
   { id: 1, name: "Rajesh Kumar" },
@@ -424,8 +430,11 @@ export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function parseGstRate(gstRate: string): number {
-  const n = parseFloat(gstRate.replace("%", "").trim());
+export function parseGstRate(gstRate: any): number {
+  if (typeof gstRate === "number") return gstRate;
+  if (!gstRate) return 0;
+  const str = String(gstRate);
+  const n = parseFloat(str.replace("%", "").trim());
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -634,6 +643,10 @@ export function applyLineTaxFields(
     sgstAmount: breakdown.sgstAmount,
     igstAmount: breakdown.igstAmount,
     gstAmount: breakdown.gstAmount,
+    cgstPercentage: breakdown.cgstRate,
+    sgstPercentage: breakdown.sgstRate,
+    igstPercentage: breakdown.igstRate,
+    gstPercentage: breakdown.cgstRate + breakdown.sgstRate + breakdown.igstRate,
   });
 }
 
@@ -676,45 +689,45 @@ export interface OrderTotalsSummary {
 }
 
 export function calculateExpenseNet(
-	expense: Pick<SalesOrderAdditionalExpense, "amount">,
+  expense: Pick<SalesOrderAdditionalExpense, "amount">,
 ): number {
-	return Math.round(Math.max(0, expense.amount || 0) * 100) / 100;
+  return Math.round(Math.max(0, expense.amount || 0) * 100) / 100;
 }
 
 export function recalculateExpense(
-	expense: SalesOrderAdditionalExpense,
-	taxSupplyType: TaxSupplyType = "intra",
+  expense: SalesOrderAdditionalExpense,
+  taxSupplyType: TaxSupplyType = "intra",
 ): SalesOrderAdditionalExpense {
-	const netAmount = calculateExpenseNet(expense);
-	const rate = parseGstRate(expense.gstRate || "0");
-	let cgstAmount = 0;
-	let sgstAmount = 0;
-	let igstAmount = 0;
+  const netAmount = calculateExpenseNet(expense);
+  const rate = parseGstRate(expense.gstRate || "0");
+  let cgstAmount = 0;
+  let sgstAmount = 0;
+  let igstAmount = 0;
 
-	if (rate > 0) {
-		if (taxSupplyType === "intra") {
-			const halfRate = rate / 2;
-			cgstAmount = Math.round(netAmount * (halfRate / 100) * 100) / 100;
-			sgstAmount = Math.round(netAmount * (halfRate / 100) * 100) / 100;
-		} else {
-			igstAmount = Math.round(netAmount * (rate / 100) * 100) / 100;
-		}
-	}
+  if (rate > 0) {
+    if (taxSupplyType === "intra") {
+      const halfRate = rate / 2;
+      cgstAmount = Math.round(netAmount * (halfRate / 100) * 100) / 100;
+      sgstAmount = Math.round(netAmount * (halfRate / 100) * 100) / 100;
+    } else {
+      igstAmount = Math.round(netAmount * (rate / 100) * 100) / 100;
+    }
+  }
 
-	const gstAmount = cgstAmount + sgstAmount + igstAmount;
-	const totalAmount = Math.round((netAmount + gstAmount) * 100) / 100;
+  const gstAmount = cgstAmount + sgstAmount + igstAmount;
+  const totalAmount = Math.round((netAmount + gstAmount) * 100) / 100;
 
-	return {
-		...expense,
-		discountType: "percent",
-		discountValue: 0,
-		netAmount,
-		cgstAmount,
-		sgstAmount,
-		igstAmount,
-		gstAmount,
-		totalAmount,
-	};
+  return {
+    ...expense,
+    discountType: "percent",
+    discountValue: 0,
+    netAmount,
+    cgstAmount,
+    sgstAmount,
+    igstAmount,
+    gstAmount,
+    totalAmount,
+  };
 }
 
 export function createEmptyExpense(): SalesOrderAdditionalExpense {
@@ -843,8 +856,17 @@ export function loadProductCatalog(): ProductCatalogItem[] {
   return PRODUCT_CATALOG.filter(p => p.status === "active");
 }
 
-export function getProductById(id: number): ProductCatalogItem | undefined {
-  return PRODUCT_CATALOG.find(p => p.id === id);
+let dynamicProducts: ProductCatalogItem[] | null = null;
+
+export function setDynamicProducts(products: ProductCatalogItem[] | null) {
+  dynamicProducts = products;
+}
+
+export function getProductById(id: any): ProductCatalogItem | undefined {
+  if (dynamicProducts) {
+    return dynamicProducts.find(p => String(p.id) === String(id));
+  }
+  return PRODUCT_CATALOG.find(p => String(p.id) === String(id));
 }
 
 export { getCustomersForTransactionDropdown, loadCustomers };
@@ -1084,10 +1106,10 @@ export function applySchemePricingToLine(
   const dealerPrice =
     context?.stateName && context.customerMasterType
       ? resolveSalesOrderDealerPrice({
-          productId: product.id,
-          stateName: context.stateName,
-          customerMasterType: context.customerMasterType,
-        })
+        productId: product.id,
+        stateName: context.stateName,
+        customerMasterType: context.customerMasterType,
+      })
       : product.sellingPrice;
 
   if (
@@ -1396,7 +1418,12 @@ export function canDownloadPI(order: SalesOrder): boolean {
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
-  if (order.status === "draft") return false;
+
+  // Only allow generating packing list if status is APPROVED or Ready For Packing
+  if (order.status !== "APPROVED" && order.status !== "approved" && order.status !== "Ready For Packing") {
+    return false;
+  }
+
   const hydrated = hydrateOrderLineItems(order);
   return hydrated.lineItems.some(l => l.productId && l.quantity > 0);
 }
@@ -1447,16 +1474,24 @@ export function buildOrderFromForm(
   const warehouse = warehouses.find(w => w.id === form.warehouseId);
   if (!customer || !salesman) return null;
 
+  const addresses = customer ? getCustomerAddressesForSalesOrder(customer) : [];
+  const shipTo = addresses.find(a => a.id === form.shipToAddressId);
+  const destState = shipTo?.state ?? customer?.stateName ?? "";
+  const taxSupplyType = resolveTaxSupplyType(warehouse?.state ?? "", destState);
+
   const sezLut = resolveSezLutSupply({
     customerGstCategory:
       customer.gstCategory ||
       (customer.gstApplicable ? "regular" : "unregistered"),
     transactionDate: form.orderDate,
   });
+
+  const recalculatedExpenses = (form.additionalExpenses ?? []).map(e => recalculateExpense(e, taxSupplyType));
+
   const totalAmount = calculateOrderTotalsSummary(
     form.lineItems,
-    form.additionalExpenses ?? [],
-    { sezLutApplies: sezLut.appliesLut },
+    recalculatedExpenses,
+    { sezLutApplies: sezLut.appliesLut, taxSupplyType },
   ).grandTotal;
   const finalStatus = resolveSubmitStatus(totalAmount, form.status, asDraft);
   const requiresApproval = orderRequiresApproval(totalAmount) && !asDraft;
@@ -1476,7 +1511,7 @@ export function buildOrderFromForm(
     deliveryDate: form.deliveryDate,
     status: finalStatus,
     lineItems: form.lineItems,
-    additionalExpenses: (form.additionalExpenses ?? []).map(e => recalculateExpense(e)),
+    additionalExpenses: recalculatedExpenses,
     totalAmount,
     requiresApproval,
     approvalStatus,

@@ -22,6 +22,11 @@ export function formToPR(
     approvedDate?: string;
   },
 ): PurchaseRequest {
+  const warehouseNum =
+    form.warehouseId != null && /^\d+$/.test(form.warehouseId)
+      ? Number(form.warehouseId)
+      : null;
+
   return recalcPR({
     id: meta.id,
     prNumber: meta.prNumber,
@@ -30,14 +35,16 @@ export function formToPR(
     department: form.department,
     priority: form.priority,
     state: form.state,
-    warehouseId: form.warehouseId,
+    warehouseId: warehouseNum,
     warehouseName: form.warehouseName,
     requiredByDate: form.requiredByDate,
     purpose: form.purpose,
     remarks: form.remarks,
     status: meta.status,
-    lines: form.lines.filter((l) => l.productId > 0),
-    attachments: form.attachments,
+    lines: form.lines.filter(
+      (l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0",
+    ),
+    attachments: form.existingAttachments,
     convertedPoIds: meta.convertedPoIds ?? [],
     createdBy: meta.createdBy,
     createdDate: meta.createdDate,

@@ -21,21 +21,21 @@ import {
 	emptyContact,
 	todayStr,
 } from "../vendor-data";
-import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
-import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
-import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
+// import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
+// import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
+// import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
 import { SearchableSelect } from "../../customers/components/SearchableSelect";
 import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
-import { PhoneInput } from "@/components/ui/PhoneInput";
+// import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+// import {
+// 	Select,
+// 	SelectContent,
+// 	SelectItem,
+// 	SelectTrigger,
+// 	SelectValue,
+// } from "@/components/ui/select";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
@@ -61,6 +61,8 @@ import {
 	VendorTabBar,
 	fieldClass,
 } from "./VendorFormLayout";
+import { useDropdownSupplierTypes, useTdsDropdown, usePincode, useSupplierPreviewNumber } from "@/hooks/masters";
+import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
 import {
 	PartyMasterAccountingFields,
 } from "@/components/accounts/PartyMasterAccountingFields";
@@ -181,9 +183,8 @@ function Toast({
 }) {
 	return (
 		<div
-			className={`fixed top-5 right-5 z-[100] px-4 py-2.5 rounded-lg shadow-lg text-sm text-white ${
-				type === "success" ? "bg-emerald-600" : "bg-red-600"
-			}`}
+			className={`fixed top-5 right-5 z-[100] px-4 py-2.5 rounded-lg shadow-lg text-sm text-white ${type === "success" ? "bg-emerald-600" : "bg-red-600"
+				}`}
 		>
 			{msg}
 			<button type='button' className='ml-3 opacity-80' onClick={onDismiss}>
@@ -192,18 +193,86 @@ function Toast({
 		</div>
 	);
 }
+function FieldError({ msg }: { msg?: string }) {
+	if (!msg) return null;
+	return <p className='text-[11px] text-red-500 leading-tight mt-0.5'>{msg}</p>;
+}
+
+const FIELD_TAB_MAP: Record<string, TabId> = {
+	vendorType: "basic",
+	vendorName: "basic",
+	mobile: "basic",
+	email: "basic",
+	gstin: "basic",
+	panNumber: "basic",
+	tanNumber: "basic",
+	tdsMasterId: "basic",
+	msmeNumber: "basic",
+	address: "basic",
+	pincode: "basic",
+	paymentType: "banking",
+	creditDays: "banking",
+	advancePercentage: "banking",
+	accountNumber: "banking",
+	confirmAccountNumber: "banking",
+	ifscCode: "banking",
+};
+
+const FIELD_FOCUS_ORDER = [
+	"vendorType",
+	"vendorName",
+	"mobile",
+	"email",
+	"gstin",
+	"panNumber",
+	"tanNumber",
+	"tdsMasterId",
+	"msmeNumber",
+	"address",
+	"pincode",
+	"paymentType",
+	"creditDays",
+	"advancePercentage",
+	"accountNumber",
+	"confirmAccountNumber",
+	"ifscCode",
+] as const;
+
+function resolveFieldTab(key: string): TabId {
+	if (key.startsWith("contact_")) return "contact";
+	return FIELD_TAB_MAP[key] ?? "basic";
+}
+
+function firstErrorFieldKey(errors: Record<string, string>): string | null {
+	const keys = Object.keys(errors).filter((k) => !k.startsWith("_"));
+	if (keys.length === 0) return null;
+	for (const key of FIELD_FOCUS_ORDER) {
+		if (errors[key]) return key;
+	}
+	const contactKey = keys
+		.filter((k) => k.startsWith("contact_"))
+		.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))[0];
+	return contactKey ?? keys[0];
+}
 
 export function VendorForm({
 	form,
 	onChange,
 	readOnly,
 	vendorCode,
+	errors = {},
+	onClearError,
+	errorFocusToken = 0,
 }: {
 	form: VendorFormValues;
 	onChange: (f: VendorFormValues) => void;
 	readOnly?: boolean;
 	/** Auto-generated code preview (add) or stored code (edit). */
 	vendorCode?: string;
+	errors?: Record<string, string>;
+	onClearError?: (key: string) => void;
+	/** Bump after failed submit to switch tab / focus first invalid field. */
+	errorFocusToken?: number;
 }) {
 	const { selectedFY } = useFY();
 	const [tab, setTab] = useState<TabId>("basic");
@@ -223,6 +292,29 @@ export function VendorForm({
 		setGeoNodes(loadGeoNodes());
 	}, []);
 
+	useEffect(() => {
+		if (!errorFocusToken) return;
+		const firstKey = firstErrorFieldKey(errors);
+		if (!firstKey) return;
+		const nextTab = resolveFieldTab(firstKey);
+		setTab(nextTab);
+		const timer = window.setTimeout(() => {
+			const el = document.querySelector<HTMLElement>(`[data-field="${firstKey}"]`);
+			if (!el) return;
+			el.scrollIntoView({ behavior: "smooth", block: "center" });
+			const focusable =
+				el.matches("input,select,textarea,button,[tabindex]")
+					? el
+					: el.querySelector<HTMLElement>("input,select,textarea,button,[tabindex]");
+			focusable?.focus?.();
+		}, 80);
+		return () => window.clearTimeout(timer);
+		// Only react to submit-driven focus tokens.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [errorFocusToken]);
+
+	const clearErr = (key: string) => onClearError?.(key);
+
 	/** Default Opening Balance Date to selected FY start when empty (new vendors). */
 	useEffect(() => {
 		if (form.openingBalanceDate?.trim()) return;
@@ -235,8 +327,47 @@ export function VendorForm({
 
 	const gstRegistered = form.gstRegistered;
 
-	const vendorTypeOptions = useMemo(() => loadActiveVendorTypeOptions(), []);
-	const tdsMasters = useMemo(() => getActiveTDSMasters(), []);
+	const { data: supplierTypeData = [], isLoading: loadingSupplierTypes } =
+		useDropdownSupplierTypes();
+	const supplierTypeOptions = useMemo(
+		() =>
+			(supplierTypeData ?? []).map((item) => ({
+				value: item.supplier_type_id,
+				label: item.supplierTypeName,
+			})),
+		[supplierTypeData],
+	);
+	const { data: tdsData, isLoading: loadingTds } = useTdsDropdown();
+	const tdsOptions = useMemo(
+		() =>
+			(tdsData ?? []).map((item) => ({
+				value: item.tdsUuid,
+				label: item.sectionCode,
+			})),
+		[tdsData],
+	);
+
+	const pincodeValue = form.billingAddress.pincode?.trim();
+	const isCompletePincode = !!pincodeValue && pincodeValue.length === 6;
+	const {
+		data: pincodeResult,
+		isFetching: fetchingPincode,
+		isError: pincodeError,
+	} = usePincode(isCompletePincode ? pincodeValue : null);
+
+	useEffect(() => {
+		if (!pincodeResult || pincodeResult.length === 0) return;
+		const match = pincodeResult[0];
+		set("billingAddress", {
+			...form.billingAddress,
+			pincodeId: match.id,
+			// city: match.officename || form.billingAddress.city,
+			state: match.statename || form.billingAddress.state,
+			district: match.district || form.billingAddress.district,
+		} as typeof form.billingAddress);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeResult]);
+
 	const stateOptions = useMemo(
 		() => getStateSelectOptions(geoNodes),
 		[geoNodes],
@@ -255,13 +386,25 @@ export function VendorForm({
 	const set = <K extends keyof VendorFormValues>(
 		k: K,
 		v: VendorFormValues[K],
-	) => onChange({ ...form, [k]: v });
+	) => {
+		clearErr(String(k));
+		if (k === "gstNumber") clearErr("gstin");
+		if (k === "accountNumber" || k === "confirmAccountNumber") {
+			clearErr("accountNumber");
+			clearErr("confirmAccountNumber");
+		}
+		onChange({ ...form, [k]: v });
+	};
 
 	const inputCls = cn(
 		ERP.input,
 		"border-border/70 rounded-md bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30",
 	);
+	const errInput = (key: string) =>
+		cn(inputCls, errors[key] && "border-red-400 focus-visible:ring-red-300");
 	const bankFieldClass = inputCls;
+	const errBank = (key: string) =>
+		cn(bankFieldClass, errors[key] && "border-red-400 focus-visible:ring-red-300");
 
 	const billingAsBranch = useMemo(
 		() => ({
@@ -287,6 +430,8 @@ export function VendorForm({
 		state: string;
 		pincode: string;
 	}) => {
+		clearErr("address");
+		clearErr("pincode");
 		set("billingAddress", {
 			...form.billingAddress,
 			line1: addr.address,
@@ -342,10 +487,18 @@ export function VendorForm({
 	};
 
 	const updateContact = (uid: string, patch: Partial<VendorContact>) => {
-		set(
-			"contacts",
-			form.contacts.map((c) => (c.uid === uid ? { ...c, ...patch } : c)),
-		);
+		const idx = form.contacts.findIndex((c) => c.uid === uid);
+		if (idx >= 0) {
+			if (patch.mobile !== undefined) clearErr(`contact_${idx}_mobile`);
+			if (patch.email !== undefined) clearErr(`contact_${idx}_email`);
+			if (patch.name !== undefined || patch.designation !== undefined) {
+				clearErr(`contact_${idx}_name`);
+			}
+		}
+		onChange({
+			...form,
+			contacts: form.contacts.map((c) => (c.uid === uid ? { ...c, ...patch } : c)),
+		});
 	};
 
 	const addContact = () => {
@@ -464,18 +617,22 @@ export function VendorForm({
 						<ErpFormSection title='Basic Information'>
 							<div className={ERP.sectionGap}>
 								<div className={ERP.grid3}>
-									<div className={ERP.field}>
+									<div className={ERP.field} data-field='vendorType'>
 										<Label className={ERP.label}>
 											Supplier Type <span className='text-red-500'>*</span>
 										</Label>
 										<AutocompleteSelect
-											disabled={readOnly}
+											disabled={readOnly || loadingSupplierTypes}
 											value={form.vendorType}
 											onChange={(value) => set("vendorType", String(value))}
-											options={vendorTypeOptions}
-											placeholder='Select supplier type...'
+											options={supplierTypeOptions}
+											placeholder={
+												loadingSupplierTypes ? "Loading supplier types…" : "Select supplier type..."
+											}
 											className={inputCls}
+											error={!!errors.vendorType}
 										/>
+										<FieldError msg={errors.vendorType} />
 									</div>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Supplier Code</Label>
@@ -489,7 +646,7 @@ export function VendorForm({
 											className='h-8 text-xs font-mono bg-muted/30 cursor-not-allowed'
 										/>
 									</div>
-									<div className={ERP.field}>
+									<div className={ERP.field} data-field='vendorName'>
 										<Label className={ERP.label}>
 											Supplier Name <span className='text-red-500'>*</span>
 										</Label>
@@ -497,9 +654,10 @@ export function VendorForm({
 											disabled={readOnly}
 											value={form.vendorName}
 											onChange={(e) => set("vendorName", e.target.value)}
-											className={inputCls}
+											className={errInput("vendorName")}
 											placeholder='Trade / display name'
 										/>
+										<FieldError msg={errors.vendorName} />
 									</div>
 								</div>
 
@@ -514,7 +672,7 @@ export function VendorForm({
 											placeholder='Primary contact name'
 										/>
 									</div>
-									<div className={ERP.field}>
+									<div className={ERP.field} data-field='mobile'>
 										<Label className={ERP.label}>Mobile Number</Label>
 										<MobileRow
 											countryCode={form.mobileCountryCode}
@@ -522,18 +680,21 @@ export function VendorForm({
 											onCountryCode={(v) => set("mobileCountryCode", v)}
 											onMobile={(v) => set("mobile", v)}
 											disabled={readOnly}
+											hasError={!!errors.mobile}
 										/>
+										<FieldError msg={errors.mobile} />
 									</div>
-									<div className={ERP.field}>
+									<div className={ERP.field} data-field='email'>
 										<Label className={ERP.label}>Email Address</Label>
 										<Input
 											type='email'
 											disabled={readOnly}
 											value={form.email}
 											onChange={(e) => set("email", e.target.value)}
-											className={inputCls}
+											className={errInput("email")}
 											placeholder='vendor@company.com'
 										/>
+										<FieldError msg={errors.email} />
 									</div>
 								</div>
 							</div>
@@ -562,6 +723,7 @@ export function VendorForm({
 								/>
 							}
 						>
+							<div data-field='gstin'>
 							<GstRegistrationFields
 								showRegisteredToggle={false}
 								namePrefix='vendor'
@@ -571,6 +733,7 @@ export function VendorForm({
 									gstin: form.gstNumber,
 								}}
 								onChange={(gst) => {
+									clearErr("gstin");
 									const gstCategory = buildGstCategory(
 										gst.gstRegistered,
 										gst.gstRegistrationType,
@@ -588,6 +751,7 @@ export function VendorForm({
 								fetchingGst={fetchingGst}
 								onFetchGst={handleFetchGst}
 								inputClassName={inputCls}
+								errors={{ gstin: errors.gstin }}
 								footer={
 									<div
 										className={cn(
@@ -596,7 +760,7 @@ export function VendorForm({
 										)}
 									>
 										<div className={ERP.grid2}>
-											<div className={ERP.field}>
+											<div className={ERP.field} data-field='panNumber'>
 												<Label className={ERP.label}>
 													PAN Number <span className='text-red-500'>*</span>
 												</Label>
@@ -606,12 +770,13 @@ export function VendorForm({
 													onChange={(e) =>
 														set("panNumber", e.target.value.toUpperCase())
 													}
-													className={cn(inputCls, "font-mono uppercase")}
+													className={cn(errInput("panNumber"), "font-mono uppercase")}
 													maxLength={10}
 													placeholder='ABCDE1234F'
 												/>
+												<FieldError msg={errors.panNumber} />
 											</div>
-											<div className={ERP.field}>
+											<div className={ERP.field} data-field='tanNumber'>
 												<Label className={ERP.label}>TAN Number</Label>
 												<Input
 													disabled={readOnly}
@@ -619,10 +784,11 @@ export function VendorForm({
 													onChange={(e) =>
 														set("tanNumber", e.target.value.toUpperCase())
 													}
-													className={cn(inputCls, "font-mono uppercase")}
+													className={cn(errInput("tanNumber"), "font-mono uppercase")}
 													maxLength={10}
 													placeholder='AAAA99999A'
 												/>
+												<FieldError msg={errors.tanNumber} />
 											</div>
 										</div>
 										<div className="flex flex-wrap items-end gap-3">
@@ -644,56 +810,96 @@ export function VendorForm({
 												</div>
 											</div>
 											{form.tdsApplicable ? (
-												<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
+												<div className={cn(ERP.field, "min-w-[200px] flex-1")} data-field='tdsMasterId'>
 													<Label className={ERP.label}>
 														TDS Section <span className='text-red-500'>*</span>
 													</Label>
 													<SearchableSelect
 														value={form.tdsMasterId}
 														onChange={(value) => set("tdsMasterId", value)}
-														options={toTdsSelectOptions(tdsMasters)}
-														placeholder='Select TDS...'
-														disabled={readOnly}
+														options={tdsOptions}
+														placeholder={loadingTds ? "Loading TDS sections…" : "Select TDS..."}
+														disabled={readOnly || loadingTds}
+														error={!!errors.tdsMasterId}
 													/>
+													<FieldError msg={errors.tdsMasterId} />
 												</div>
 											) : null}
 										</div>
 									</div>
 								}
 							/>
+							</div>
 						</ErpFormSection>
 
 						<ErpFormSection title='Compliance & Certifications' bodyClassName='p-2'>
-							<ComplianceCertificationsGrid
-								rows={["msme"]}
-								values={{
-									msmeRegistered: form.msmeRegistered,
-									msmeNumber: form.msmeNumber,
-									fssaiRegistered: false,
-									fssai: "",
-									cibRegistered: false,
-									cibRegn: "",
-									fcoRegistered: false,
-									fcoRegn: "",
-								}}
-								onChange={(compliance) =>
-									onChange({
-										...form,
-										msmeRegistered: compliance.msmeRegistered,
-										msmeNumber: compliance.msmeNumber,
-									})
-								}
-								readOnly={readOnly}
-							/>
+							<div data-field='msmeNumber'>
+								<ComplianceCertificationsGrid
+									rows={["msme"]}
+									values={{
+										msmeRegistered: form.msmeRegistered,
+										msmeNumber: form.msmeNumber,
+										fssaiRegistered: false,
+										fssai: "",
+										cibRegistered: false,
+										cibRegn: "",
+										fcoRegistered: false,
+										fcoRegn: "",
+									}}
+									onChange={(compliance) => {
+										clearErr("msmeNumber");
+										onChange({
+											...form,
+											msmeRegistered: compliance.msmeRegistered,
+											msmeNumber: compliance.msmeNumber,
+										});
+									}}
+									readOnly={readOnly}
+									errors={{ msmeNumber: errors.msmeNumber }}
+								/>
+							</div>
 						</ErpFormSection>
 
-						<ErpFormSection title='Registered Address'>
+						{/* <ErpFormSection title='Registered Address'>
 							<BranchAddressFields
 								address={billingAsBranch}
 								onChange={setBillingFromBranch}
 								readOnly={readOnly}
 								stateOptions={stateOptions}
 							/>
+						</ErpFormSection> */}
+						<ErpFormSection
+							title='Registered Address'
+							headerRight={
+								isCompletePincode ? (
+									fetchingPincode ? (
+										<span className='flex items-center gap-1 text-[11px] text-muted-foreground'>
+											<Loader2 className='w-3 h-3 animate-spin' /> Looking up pincode…
+										</span>
+									) : pincodeError || (pincodeResult && pincodeResult.length === 0) ? (
+										<span className='text-[11px] text-red-600'>Pincode not found</span>
+									) : pincodeResult && pincodeResult.length > 0 ? (
+										<span className='flex items-center gap-1 text-[11px] text-emerald-600'>
+											<Check className='w-3 h-3' /> Pincode matched
+										</span>
+									) : null
+								) : null
+							}
+						>
+							<div data-field='address'>
+								<div data-field='pincode'>
+									<BranchAddressFields
+										address={billingAsBranch}
+										onChange={setBillingFromBranch}
+										readOnly={readOnly}
+										stateOptions={stateOptions}
+										errors={{
+											address: errors.address,
+											pincode: errors.pincode,
+										}}
+									/>
+								</div>
+							</div>
 						</ErpFormSection>
 					</div>
 				)}
@@ -722,15 +928,22 @@ export function VendorForm({
 										label='Contact Person Name'
 										className='col-span-1 md:col-span-2'
 									>
-										<Input
-											disabled={readOnly}
-											value={c.name}
-											onChange={(e) =>
-												updateContact(c.uid, { name: e.target.value })
-											}
-											className={fieldClass}
-											placeholder='e.g. Rajesh Kumar'
-										/>
+										<div data-field={`contact_${idx}_name`}>
+											<Input
+												disabled={readOnly}
+												value={c.name}
+												onChange={(e) =>
+													updateContact(c.uid, { name: e.target.value })
+												}
+												className={cn(
+													fieldClass,
+													errors[`contact_${idx}_name`] &&
+														"border-red-400 focus-visible:ring-red-300",
+												)}
+												placeholder='e.g. Rajesh Kumar'
+											/>
+											<FieldError msg={errors[`contact_${idx}_name`]} />
+										</div>
 									</Field>
 									<Field
 										label='Designation'
@@ -750,27 +963,38 @@ export function VendorForm({
 										label='Mobile Number'
 										className='col-span-1 md:col-span-3'
 									>
-										<MobileRow
-											countryCode={c.countryCode}
-											mobile={c.mobile}
-											onCountryCode={(v) =>
-												updateContact(c.uid, { countryCode: v })
-											}
-											onMobile={(v) => updateContact(c.uid, { mobile: v })}
-											disabled={readOnly}
-										/>
+										<div data-field={`contact_${idx}_mobile`}>
+											<MobileRow
+												countryCode={c.countryCode}
+												mobile={c.mobile}
+												onCountryCode={(v) =>
+													updateContact(c.uid, { countryCode: v })
+												}
+												onMobile={(v) => updateContact(c.uid, { mobile: v })}
+												disabled={readOnly}
+												hasError={!!errors[`contact_${idx}_mobile`]}
+											/>
+											<FieldError msg={errors[`contact_${idx}_mobile`]} />
+										</div>
 									</Field>
 									<Field label='Email ID' className='col-span-1 md:col-span-3'>
-										<Input
-											type='email'
-											disabled={readOnly}
-											value={c.email}
-											onChange={(e) =>
-												updateContact(c.uid, { email: e.target.value })
-											}
-											className={fieldClass}
-											placeholder='e.g. rajesh@company.com'
-										/>
+										<div data-field={`contact_${idx}_email`}>
+											<Input
+												type='email'
+												disabled={readOnly}
+												value={c.email}
+												onChange={(e) =>
+													updateContact(c.uid, { email: e.target.value })
+												}
+												className={cn(
+													fieldClass,
+													errors[`contact_${idx}_email`] &&
+														"border-red-400 focus-visible:ring-red-300",
+												)}
+												placeholder='e.g. rajesh@company.com'
+											/>
+											<FieldError msg={errors[`contact_${idx}_email`]} />
+										</div>
 									</Field>
 									{!readOnly && form.contacts.length > 1 && (
 										<div className='flex items-end justify-start col-span-1 pb-1 md:col-span-1 md:justify-center'>
@@ -805,16 +1029,30 @@ export function VendorForm({
 				{tab === "banking" && (
 					<div className={ERP.sectionGap}>
 						<ErpFormSection title='Payment Terms'>
-							<PaymentTermsFields
-								values={{
-									paymentType: form.paymentType,
-									creditDays: form.creditDays,
-									advancePercentage: form.advancePercentage,
-								}}
-								onChange={(patch) => onChange({ ...form, ...patch })}
-								readOnly={readOnly}
-								inputClassName={bankFieldClass}
-							/>
+							<div data-field='paymentType'>
+								<PaymentTermsFields
+									values={{
+										paymentType: form.paymentType,
+										creditDays: form.creditDays,
+										advancePercentage: form.advancePercentage,
+									}}
+									onChange={(patch) => {
+										if (patch.paymentType !== undefined) clearErr("paymentType");
+										if (patch.creditDays !== undefined) clearErr("creditDays");
+										if (patch.advancePercentage !== undefined) {
+											clearErr("advancePercentage");
+										}
+										onChange({ ...form, ...patch });
+									}}
+									errors={{
+										paymentType: errors.paymentType,
+										creditDays: errors.creditDays,
+										advancePercentage: errors.advancePercentage,
+									}}
+									readOnly={readOnly}
+									inputClassName={bankFieldClass}
+								/>
+							</div>
 						</ErpFormSection>
 
 						<ErpFormSection title='Bank Details'>
@@ -846,25 +1084,27 @@ export function VendorForm({
 										className={bankFieldClass}
 									/>
 								</div>
-								<div className={ERP.field}>
+								<div className={ERP.field} data-field='accountNumber'>
 									<Label className={ERP.label}>Account Number</Label>
 									<Input
 										disabled={readOnly}
 										value={form.accountNumber}
 										onChange={(e) => set("accountNumber", e.target.value)}
-										className={cn(bankFieldClass, "font-mono")}
+										className={cn(errBank("accountNumber"), "font-mono")}
 									/>
+									<FieldError msg={errors.accountNumber} />
 								</div>
-								<div className={ERP.field}>
+								<div className={ERP.field} data-field='confirmAccountNumber'>
 									<Label className={ERP.label}>Confirm Account Number</Label>
 									<Input
 										disabled={readOnly}
 										value={form.confirmAccountNumber}
 										onChange={(e) => set("confirmAccountNumber", e.target.value)}
-										className={cn(bankFieldClass, "font-mono")}
+										className={cn(errBank("confirmAccountNumber"), "font-mono")}
 									/>
+									<FieldError msg={errors.confirmAccountNumber} />
 								</div>
-								<div className={ERP.field}>
+								<div className={ERP.field} data-field='ifscCode'>
 									<Label className={ERP.label}>IFSC Code</Label>
 									<Input
 										disabled={readOnly}
@@ -872,8 +1112,9 @@ export function VendorForm({
 										onChange={(e) =>
 											set("ifscCode", e.target.value.toUpperCase())
 										}
-										className={cn(bankFieldClass, "font-mono uppercase")}
+										className={cn(errBank("ifscCode"), "font-mono uppercase")}
 									/>
+									<FieldError msg={errors.ifscCode} />
 								</div>
 								<div className={ERP.field}>
 									<Label className={ERP.label}>SWIFT Code</Label>

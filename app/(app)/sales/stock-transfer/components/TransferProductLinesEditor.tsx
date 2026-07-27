@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -18,9 +18,10 @@ import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import {
   createEmptyLineItem,
-  getAvailableBatchRowsForTransfer,
   type TransferLineItem,
 } from "../stock-transfer-data";
+import { getStockStatus } from "@/lib/accounts/inventory-accounting-data";
+import { StockTransferService } from "@/services/stock-transfer.service";
 
 const TAX_HEAD =
   "px-2 py-1.5 text-left text-[10px] font-semibold text-foreground whitespace-nowrap";
@@ -38,6 +39,8 @@ interface TransferProductLinesEditorProps {
   targetWarehouseId: number | null;
   onChange: (lines: TransferLineItem[]) => void;
   error?: string;
+  errors?: Record<string, string>;
+  taxSupplyType?: TaxSupplyType;
 }
 
 export default function TransferProductLinesEditor({
@@ -47,18 +50,21 @@ export default function TransferProductLinesEditor({
   targetWarehouseId,
   onChange,
   error,
+  errors,
+  taxSupplyType: propTaxSupplyType,
 }: TransferProductLinesEditorProps) {
-  const sourceWarehouseName = useMemo(() => {
-    if (!sourceWarehouseId) return "";
-    return loadWarehouses().find((w) => w.id === sourceWarehouseId)?.warehouseName ?? "";
+  useEffect(() => {
+    setWarehouseBatches({});
+    setTopSelectedBatch(null);
   }, [sourceWarehouseId]);
 
   const taxSupplyType: TaxSupplyType = useMemo(() => {
+    if (propTaxSupplyType) return propTaxSupplyType;
     const source = loadWarehouses().find((w) => w.id === sourceWarehouseId);
     const target = loadWarehouses().find((w) => w.id === targetWarehouseId);
     if (!source || !target) return "intra";
     return source.state === target.state ? "intra" : "inter";
-  }, [sourceWarehouseId, targetWarehouseId]);
+  }, [sourceWarehouseId, targetWarehouseId, propTaxSupplyType]);
 
   const removeLine = (id: string) => {
     onChange(lines.filter((l) => l.id !== id));
@@ -139,14 +145,7 @@ export default function TransferProductLinesEditor({
       return next;
     });
   };
-  const topBatches = useMemo(() => {
-    if (!sourceWarehouseName || !topSelectedProduct) return [];
-    return getAvailableBatchRowsForTransfer(
-      sourceWarehouseName,
-      topSelectedProduct.name,
-      topSelectedProduct.code
-    );
-  }, [sourceWarehouseName, topSelectedProduct]);
+  const [warehouseBatches, setWarehouseBatches] = useState<Record<string | number, any[]>>({});
 
   const handleAddProductFromTop = () => {
     if (!sourceWarehouseId) {
@@ -157,10 +156,7 @@ export default function TransferProductLinesEditor({
       setLocalError("Please select a product.");
       return;
     }
-    if (!topSelectedBatch) {
-      setLocalError("Please select a batch.");
-      return;
-    }
+
     const qty = topQuantityType === "Case"
       ? (topCaseQuantity * (topSelectedProduct.packSize || 1))
       : (topCaseQuantity * (topSelectedProduct.packSize || 1)) + topPieceQuantity;
@@ -169,17 +165,13 @@ export default function TransferProductLinesEditor({
       setLocalError("Transfer Qty must be greater than zero.");
       return;
     }
-    if (qty > topSelectedBatch.availableQty) {
-      setLocalError("Transfer Qty cannot exceed available quantity.");
-      return;
-    }
 
     // Check duplicate
     const exists = lines.some(
-      (l) => l.productId === topSelectedProduct.id && l.batchNumber === topSelectedBatch.batchNumber
+      (l) => l.productId === topSelectedProduct.id && l.quantityType === topQuantityType
     );
     if (exists) {
-      setLocalError(`Batch "${topSelectedBatch.batchNumber}" of product "${topSelectedProduct.name}" is already added.`);
+      setLocalError(`Product "${topSelectedProduct.name}" with type "${topQuantityType}" is already added.`);
       return;
     }
 
@@ -187,13 +179,12 @@ export default function TransferProductLinesEditor({
     newLine.productId = topSelectedProduct.id;
     newLine.productCode = topSelectedProduct.code;
     newLine.productName = topSelectedProduct.name;
-    newLine.batchNumber = topSelectedBatch.batchNumber;
-    newLine.mfgDate = topSelectedBatch.mfgDate;
-    newLine.expiryDate = topSelectedBatch.expiryDate;
-    newLine.availableStock = topSelectedBatch.availableQty;
-    newLine.dealerPrice = topSelectedProduct.sellingPrice;
-    newLine.unitPrice = topSelectedProduct.sellingPrice;
-    newLine.finalRate = topSelectedProduct.sellingPrice;
+    // Using MRP as fallback or some default, let's use 0 or something.
+    // Wait, cp price is usually fetched from the batch. If there's no batch, we can set it to 0 or product cost price.
+    // Let's use 0 for now since batch is unknown.
+    newLine.dealerPrice = 0;
+    newLine.unitPrice = 0;
+    newLine.finalRate = 0;
     newLine.gstRate = topSelectedProduct.gstRate;
     newLine.quantityType = topQuantityType;
     newLine.caseQuantity = topCaseQuantity;
@@ -214,7 +205,6 @@ export default function TransferProductLinesEditor({
     newLine = recalculateLineItem(newLine) as TransferLineItem;
     onChange([...lines, newLine]);
     setTopSelectedProduct(null);
-    setTopSelectedBatch(null);
     setTopCaseQuantity(0);
     setTopPieceQuantity(0);
     setLocalError(null);
@@ -228,7 +218,7 @@ export default function TransferProductLinesEditor({
       <ProductItemDetailsSection
         mode="stock-transfer"
         title="Products"
-        description="Manage products, batches, quantities, and taxes for this stock transfer."
+        description="Manage products, quantities, and taxes for this stock transfer."
         items={lines}
         totalQuantity={totalQuantity}
         totalAmount={totalAmount}
@@ -242,31 +232,6 @@ export default function TransferProductLinesEditor({
             products={products}
             onSelect={(p) => {
               setTopSelectedProduct(p);
-              setLocalError(null);
-              const batches = sourceWarehouseName
-                ? getAvailableBatchRowsForTransfer(sourceWarehouseName, p.name, p.code)
-                : [];
-              if (batches.length > 0) {
-                setTopSelectedBatch(batches[0]);
-              } else {
-                setTopSelectedBatch(null);
-              }
-            }}
-          />
-        }
-        customBatchSelectorArea={
-          <BatchSelect
-            productName={topSelectedProduct ? topSelectedProduct.name : ""}
-            productCode={topSelectedProduct ? topSelectedProduct.code : ""}
-            batches={topBatches}
-            value={topSelectedBatch ? topSelectedBatch.batchNumber : undefined}
-            disabled={!topSelectedProduct || !sourceWarehouseName}
-            alreadyAddedBatchNumbers={lines
-              .filter((l) => l.productId === topSelectedProduct?.id)
-              .map((l) => l.batchNumber)
-              .filter((bn): bn is string => typeof bn === "string")}
-            onSelect={(b) => {
-              setTopSelectedBatch(b);
               setLocalError(null);
             }}
           />
@@ -282,6 +247,8 @@ export default function TransferProductLinesEditor({
                   setTopQuantityType(type);
                   if (type === "Case") {
                     setTopPieceQuantity(0);
+                  } else {
+                    setTopCaseQuantity(0);
                   }
                 }}
               >
@@ -299,9 +266,10 @@ export default function TransferProductLinesEditor({
               <Input
                 type="number"
                 min={0}
+                disabled={topQuantityType === "Piece"}
                 value={topCaseQuantity || ""}
                 onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
-                className="h-8 text-xs w-20 bg-white"
+                className="h-8 text-xs w-20 bg-white disabled:opacity-50"
               />
             </div>
             <div className="space-y-1">
@@ -335,9 +303,6 @@ export default function TransferProductLinesEditor({
             {[
               { h: "Product", className: "w-[240px]" },
               { h: "SKU" },
-              { h: "Batch No." },
-              { h: "Expiry" },
-              { h: "Available", className: "w-16" },
               { h: "Type", className: "w-[80px]" },
               { h: "Cases", className: "w-20" },
               { h: "Pieces", className: "w-20" },
@@ -376,16 +341,10 @@ export default function TransferProductLinesEditor({
           </tr>
         }
         customTableBody={
-          lines.map((line) => {
-            const batches = sourceWarehouseName
-              ? getAvailableBatchRowsForTransfer(
-                sourceWarehouseName,
-                line.productName,
-                line.productCode,
-              )
-              : [];
+          lines.map((line, idx) => {
+            const batches = warehouseBatches[line.productId ?? ""] || [];
             const product = products.find((p) => p.id === line.productId);
-            const selectedBatch = batches.find((b) => b.batchNumber === line.batchNumber);
+            const selectedBatch = batches.find((b: any) => b.batchNumber === line.batchNumber);
             const isNearExpiry = selectedBatch?.status === "Near Expiry";
             const isExpired = selectedBatch?.status === "Expired";
             const taxBreakdown =
@@ -395,6 +354,7 @@ export default function TransferProductLinesEditor({
 
             const isEditing = editingId === line.id;
             const draftLine = isEditing && editDraft ? (editDraft as TransferLineItem) : line;
+            const lineError = errors?.[`line_${idx}_qty`] || errors?.[`line_${idx}_batch`];
 
             return (
               <tr
@@ -416,51 +376,28 @@ export default function TransferProductLinesEditor({
                         finalRate: p.sellingPrice,
                         gstRate: p.gstRate,
                         batchNumber: undefined,
+                        batchInventoryId: undefined,
                         expiryDate: undefined,
                         mfgDate: undefined,
                       });
                     }}
                   />
+                  {lineError && (
+                    <p className="text-[10px] text-red-500 font-semibold mt-1">{lineError}</p>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
                   {line.productCode || "—"}
                 </td>
-                <td className="px-3 py-2 min-w-[200px]">
-                  <BatchSelect
-                    productName={line.productName}
-                    productCode={line.productCode}
-                    batches={batches}
-                    value={line.batchNumber}
-                    disabled={!line.productId || !sourceWarehouseName}
-                    alreadyAddedBatchNumbers={lines
-                      .filter((l) => l.id !== line.id && l.productId === line.productId)
-                      .map((l) => l.batchNumber)
-                      .filter((bn): bn is string => typeof bn === "string")}
-                    onSelect={(batch) => {
-                      updateLine(line.id, {
-                        batchNumber: batch.batchNumber,
-                        mfgDate: batch.mfgDate,
-                        expiryDate: batch.expiryDate,
-                        availableStock: batch.availableQty,
-                      });
-                    }}
-                  />
-                  {isNearExpiry && (
-                    <p className="text-[10px] text-amber-700 flex items-center gap-1 mt-1">
-                      <AlertTriangle className="w-3 h-3" /> Near expiry
-                    </p>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{line.expiryDate || "—"}</td>
-                <td className="px-3 py-2 text-xs font-bold text-center">
-                  {line.batchNumber ? line.availableStock ?? 0 : "—"}
-                </td>
                 <td className='px-2 py-1.5 w-[80px]'>
                   {isEditing ? (
                     <Select
-                      disabled={!line.batchNumber || isExpired}
                       value={draftLine.quantityType || "Piece"}
-                      onValueChange={(value) => updateDraft({ quantityType: value as "Case" | "Piece" })}
+                      onValueChange={(value) => {
+                        const type = value as "Case" | "Piece";
+                        const resetUpdates = type === "Case" ? { pieceQuantity: 0 } : { caseQuantity: 0 };
+                        updateDraft({ quantityType: type, ...resetUpdates });
+                      }}
                     >
                       <SelectTrigger className="h-7 text-xs rounded border-border bg-white w-full px-2">
                         <SelectValue placeholder="Type" />
@@ -479,10 +416,10 @@ export default function TransferProductLinesEditor({
                     <Input
                       type="number"
                       min={0}
-                      disabled={!line.batchNumber || isExpired}
+                      disabled={draftLine.quantityType === "Piece"}
                       value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
                       onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
-                      className="h-7 text-xs w-full"
+                      className="h-7 text-xs w-full disabled:opacity-50"
                     />
                   ) : (
                     <span className="text-xs">{line.caseQuantity || 0}</span>
@@ -493,7 +430,7 @@ export default function TransferProductLinesEditor({
                     <Input
                       type="number"
                       min={0}
-                      disabled={(!line.batchNumber || isExpired) || draftLine.quantityType === "Case"}
+                      disabled={draftLine.quantityType === "Case"}
                       value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
                       onChange={(e) => updateDraft({ pieceQuantity: e.target.value ? Number(e.target.value) : 0 })}
                       className="h-7 text-xs w-full disabled:opacity-50"
@@ -729,101 +666,4 @@ function ProductSelect({
   );
 }
 
-function BatchSelect({
-  productName,
-  productCode,
-  batches,
-  value,
-  disabled,
-  alreadyAddedBatchNumbers = [],
-  onSelect,
-}: {
-  productName: string;
-  productCode: string;
-  batches: ReturnType<typeof getAvailableBatchRowsForTransfer>;
-  value?: string;
-  disabled?: boolean;
-  alreadyAddedBatchNumbers?: string[];
-  onSelect: (batch: (typeof batches)[number]) => void;
-}) {
-  const [open, setOpen] = useState(false);
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className="w-full min-w-[180px] h-8 px-2 text-xs text-left border border-border rounded-lg flex items-center justify-between disabled:opacity-50"
-        >
-          <span className={value ? "truncate" : "text-muted-foreground"}>
-            {value ? (
-              <span>
-                <span className="text-foreground">{productName || batches[0]?.productName}</span>
-                {" · "}
-                <span className="font-mono font-semibold">{value}</span>
-              </span>
-            ) : (
-              "Select batch…"
-            )}
-          </span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-1 max-h-[280px] overflow-y-auto">
-        {batches.length === 0 ? null : (
-          batches.map((batch) => {
-            const isExpired = batch.status === "Expired";
-            const isAlreadyAdded = alreadyAddedBatchNumbers.includes(batch.batchNumber);
-            return (
-              <button
-                key={batch.batchNumber}
-                type="button"
-                disabled={isExpired || isAlreadyAdded}
-                onClick={() => {
-                  if (isExpired || isAlreadyAdded) return;
-                  onSelect(batch);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "w-full px-3 py-2.5 text-xs text-left rounded-lg transition-colors",
-                  (isExpired || isAlreadyAdded)
-                    ? "opacity-50 cursor-not-allowed bg-red-50/50"
-                    : "hover:bg-muted/60",
-                  value === batch.batchNumber && !isExpired && "bg-brand-50",
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-foreground truncate">
-                      {batch.productName}
-                    </p>
-                    <p className="font-mono text-[11px] text-brand-700 mt-0.5">
-                      {batch.batchNumber}
-                      {productCode ? ` · ${productCode}` : ""}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Exp {batch.expiryDate} · Mfg {batch.mfgDate}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold tabular-nums">{batch.availableQty}</p>
-                    <p className="text-[10px] text-muted-foreground">avail.</p>
-                    {isAlreadyAdded ? (
-                      <p className="text-[10px] text-brand-600 font-semibold bg-brand-50 px-1 py-0.5 rounded mt-0.5">Added</p>
-                    ) : batch.status === "Near Expiry" && (
-                      <p className="text-[10px] text-amber-700 flex items-center gap-0.5 justify-end mt-0.5">
-                        <AlertTriangle className="w-3 h-3" /> Near Expiry
-                      </p>
-                    )}
-                    {isExpired && <p className="text-[10px] text-red-600 mt-0.5">Expired</p>}
-                  </div>
-                </div>
-              </button>
-            );
-          })
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}

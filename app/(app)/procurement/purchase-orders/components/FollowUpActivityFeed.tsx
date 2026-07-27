@@ -1,5 +1,6 @@
 "use client";
 
+import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
 import { formatListingDate } from "../../components/listing/ListingCells";
 import {
@@ -25,6 +26,15 @@ function PanelTitle({ label }: { label: string }) {
       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
     </div>
   );
+}
+
+function sanitizeRemarkHtml(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return DOMPurify.sanitize(trimmed, {
+    ALLOWED_TAGS: ["p", "br", "strong", "b", "em", "i", "u", "s", "ul", "ol", "li"],
+    ALLOWED_ATTR: [],
+  });
 }
 
 export function FollowUpActivityFeed({
@@ -79,6 +89,7 @@ function FollowUpActivityItem({
   if (entry.nextFollowUpAt) {
     meta.push(`Next: ${formatListingDate(entry.nextFollowUpAt.slice(0, 10))}`);
   }
+  const sanitizedRemark = sanitizeRemarkHtml(entry.remarks);
 
   if (compact) {
     return (
@@ -108,7 +119,14 @@ function FollowUpActivityItem({
               </span>
             </div>
             <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed text-foreground">
-              {entry.remarks.trim() || "No remarks added"}
+              {sanitizedRemark ? (
+                <span
+                  className="[&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5"
+                  dangerouslySetInnerHTML={{ __html: sanitizedRemark }}
+                />
+              ) : (
+                "No remarks added"
+              )}
             </p>
             {meta.length > 0 && (
               <p className="mt-1 text-[10px] text-muted-foreground">{meta.join(" · ")}</p>
@@ -146,9 +164,14 @@ function FollowUpActivityItem({
             </span>
           </div>
           <div className="mt-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-            <p className="whitespace-pre-wrap text-xs text-foreground">
-              {entry.remarks.trim() || "No remarks added"}
-            </p>
+            {sanitizedRemark ? (
+              <div
+                className="text-xs text-foreground [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5"
+                dangerouslySetInnerHTML={{ __html: sanitizedRemark }}
+              />
+            ) : (
+              <p className="whitespace-pre-wrap text-xs text-foreground">No remarks added</p>
+            )}
           </div>
           {meta.length > 0 && (
             <div className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">

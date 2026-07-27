@@ -23,7 +23,7 @@ export function TdsRateInput({
 				value={value}
 				onChange={(e) => onChange(sanitizeTdsRateInput(e.target.value))}
 				className={cn(className, showSuffix && "pr-7")}
-				placeholder="e.g. 10 or As per slab"
+				placeholder="e.g. 10"
 			/>
 			{showSuffix && (
 				<span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">

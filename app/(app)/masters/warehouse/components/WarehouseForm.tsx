@@ -22,9 +22,10 @@ import {
 	Plus,
 } from "lucide-react";
 import {
-	WAREHOUSE_STATUSES,
+	// WAREHOUSE_STATUSES,
 	OPERATED_BY_OPTIONS,
-	type WarehouseStatus,
+	WarehouseType,
+	// type WarehouseStatus,
 	type OperatedBy,
 	type WarehouseContact,
 	type WarehouseDocument,
@@ -51,6 +52,7 @@ import {
 	fetchGstRegistrationDetailsAsync,
 	GST_REGISTRATION_TYPE_DEFAULT,
 } from "@/lib/masters/gst-compliance";
+import { useCfDropdown, usePincode } from "@/hooks/masters";
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -111,6 +113,46 @@ function CountryCodePicker({
 	);
 }
 
+type ApiWarehouseStatus = "Active" | "Inactive" | "Under Maintenance" | "Closed";
+
+export interface ApiWarehouseMaster {
+	id: number;
+	warehouseCode: string; // Auto Generated, e.g. "WH-0001"
+	warehouseName: string;
+	warehouseType: WarehouseType;
+	gstApplicable: boolean;
+	gstNumber: string;
+	gstRegistrationType?: string;
+	registeredLegalName?: string;
+	registeredAddress?: string;
+	accountHolderName?: string;
+	bankName?: string;
+	branch?: string;
+	accountNumber?: string;
+	ifscCode?: string;
+	swiftCode?: string;
+	contactPerson: string;
+	mobileNumber: string;
+	emailAddress: string;
+	address: string; // Address Line 1
+	addressLine2?: string;
+	town?: string;
+	state: string;
+	district: string;
+	city: string;
+	pincode: string;
+	manager: string;
+	status: ApiWarehouseStatus;
+	operatedBy: OperatedBy;
+	customerType?: string;
+	contacts: WarehouseContact[];
+	documents: WarehouseDocument[];
+	createdBy: string;
+	createdDate: string;
+	updatedBy: string;
+	updatedDate: string;
+}
+
 export interface WarehouseFormValues {
 	warehouseName: string;
 	gstApplicable: boolean;
@@ -132,7 +174,7 @@ export interface WarehouseFormValues {
 	district: string;
 	city: string;
 	pincode: string;
-	status: WarehouseStatus;
+	status: ApiWarehouseStatus;
 	operatedBy: OperatedBy;
 	customerType: string;
 	contacts: WarehouseContact[];
@@ -160,7 +202,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	district: "",
 	city: "",
 	pincode: "",
-	status: "active",
+	status: "Active",
 	operatedBy: "Self",
 	customerType: "",
 	contacts: [
@@ -178,7 +220,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	documents: [],
 };
 
-export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormValues {
+export function warehouseRecordToForm(record: ApiWarehouseMaster): WarehouseFormValues {
 	let contacts = record.contacts;
 	if (!contacts || contacts.length === 0) {
 		contacts = [
@@ -227,7 +269,7 @@ export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormVal
 export function warehouseFormToRecordFields(
 	form: WarehouseFormValues,
 ): Pick<
-	WarehouseMaster,
+	ApiWarehouseMaster,
 	| "warehouseName"
 	| "warehouseType"
 	| "gstApplicable"
@@ -833,6 +875,27 @@ export function WarehouseForm({
 		]);
 	};
 
+	const pincodeQuery = usePincode(
+		/^\d{6}$/.test(form.pincode.trim()) ? form.pincode.trim() : null,
+	);
+	const pincodeRecords = pincodeQuery.data ?? [];
+
+	useEffect(() => {
+		if (pincodeRecords.length === 0) return;
+
+		const first = pincodeRecords[0];
+
+		updateWarehouseAddress({
+			...warehouseAddress,
+			state: first.statename || warehouseAddress.state,
+			district: first.district || warehouseAddress.district,
+			...(pincodeRecords.length === 1
+				? { town: first.officename || warehouseAddress.town, city: first.officename || warehouseAddress.city }
+				: {}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeRecords]);
+
 	const addSelectedDocumentTypes = () => {
 		if (bulkDocumentTypeIds.length === 0) return;
 		const incompleteIndex = (form.documents || []).findIndex(
@@ -956,45 +1019,25 @@ export function WarehouseForm({
 		window.open(safeUrl, "_blank", "noopener,noreferrer");
 	};
 
+	const cfDropdownQuery = useCfDropdown();
+
 	const cfCustomers = useMemo(() => {
-		try {
-			const allCustomers = loadCustomers();
-			const filtered = allCustomers.filter((customer) => {
-				// Always include currently selected customer so it shows and prefills
-				if (form.customerType && customer.customerName === form.customerType) {
-					return true;
-				}
-				return isCustomerCf(customer);
-			});
+		const items = cfDropdownQuery.data ?? [];
 
-			const options = filtered.map((customer) => {
-				const suffix =
-					(customer.mobile || "").trim() || (customer.gstin || "").trim();
-				return {
-					value: customer.customerName,
-					label: suffix
-						? `${customer.customerName} — ${suffix}`
-						: customer.customerName,
-				};
-			});
+		const options = items.map((customer) => {
+			const suffix = (customer.mobile_no || "").trim();
+			return {
+				value: customer.customer_id,
+				label: suffix ? `${customer.customer_name} — ${suffix}` : customer.customer_name,
+			};
+		});
 
-			// If the currently selected customer is not in the list, force add it
-			if (
-				form.customerType &&
-				!options.some((o) => o.value === form.customerType)
-			) {
-				options.push({
-					value: form.customerType,
-					label: form.customerType,
-				});
-			}
-
-			return options;
-		} catch (e) {
-			console.error("Failed to load C&F customers:", e);
-			return [];
+		if (form.customerType && !options.some((o) => o.value === form.customerType)) {
+			options.push({ value: form.customerType, label: form.customerType });
 		}
-	}, [form.customerType]);
+
+		return options;
+	}, [cfDropdownQuery.data, form.customerType]);
 
 	const set = <K extends keyof WarehouseFormValues>(
 		key: K,
@@ -1167,6 +1210,7 @@ export function WarehouseForm({
 			"h-8 text-xs",
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
+
 
 	return (
 		<div className='w-full space-y-3'>
@@ -1443,22 +1487,22 @@ export function WarehouseForm({
 					headerRight={
 						<div className='ml-auto'>
 							<GstRegisteredToggleControl
-							label='GST Applicable'
-							active={form.gstApplicable}
-							onChange={(yes) => {
-								onChange({
-									...form,
-									gstApplicable: yes,
-									gstRegistrationType: yes
-										? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
-										: GST_REGISTRATION_TYPE_DEFAULT,
-									gstin: yes ? form.gstin : "",
-									registeredLegalName: yes ? form.registeredLegalName : "",
-									registeredAddress: yes ? form.registeredAddress : "",
-								});
-								if (!yes) onClearError("gstin");
-							}}
-						/>
+								label='GST Applicable'
+								active={form.gstApplicable}
+								onChange={(yes) => {
+									onChange({
+										...form,
+										gstApplicable: yes,
+										gstRegistrationType: yes
+											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+											: GST_REGISTRATION_TYPE_DEFAULT,
+										gstin: yes ? form.gstin : "",
+										registeredLegalName: yes ? form.registeredLegalName : "",
+										registeredAddress: yes ? form.registeredAddress : "",
+									});
+									if (!yes) onClearError("gstin");
+								}}
+							/>
 						</div>
 					}
 				>

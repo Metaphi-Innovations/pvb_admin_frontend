@@ -11,6 +11,7 @@ import {
   formValuesToCustomer,
   validateCustomerForm,
   type CustomerFormValues,
+  type CustomerTypeWithDocs,
 } from "@/app/(app)/masters/customers/components/CustomerForm";
 import {
   generateCustomerCodeForType,
@@ -20,6 +21,7 @@ import {
   todayStr,
   type Customer,
 } from "@/app/(app)/masters/customers/customer-data";
+import { loadCustomerTypes } from "@/app/(app)/masters/customer-types/customer-type-data";
 import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
@@ -91,6 +93,15 @@ export default function AccountsSundryDebtorCustomerFormClient({
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(!isEdit);
 
+  const customerTypes = React.useMemo(() => {
+    return loadCustomerTypes().map((ct) => ({
+      id: String(ct.id),
+      customerType: ct.customerType,
+      customerInitialCode: ct.initialCode,
+      documents: (ct.documentTypes as any) || [],
+    }));
+  }, []);
+
   useEffect(() => {
     if (!isEdit || customerId == null) return;
     const found = loadCustomers().find((c) => c.id === customerId);
@@ -99,10 +110,10 @@ export default function AccountsSundryDebtorCustomerFormClient({
       setTimeout(() => onClose(), 1200);
       return;
     }
-    setForm(customerToFormValues(found));
+    setForm(customerToFormValues(found, customerTypes));
     setCustomerCode(found.customerCode);
     setReady(true);
-  }, [isEdit, customerId, onClose]);
+  }, [isEdit, customerId, onClose, customerTypes]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -306,6 +317,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
             onClearError={clearErr}
             isAdd={!isEdit}
             customerCode={customerCode}
+            customerTypes={customerTypes}
             showComplianceValidityDates
           />
         </div>

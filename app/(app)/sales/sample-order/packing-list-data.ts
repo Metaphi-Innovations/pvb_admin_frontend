@@ -75,6 +75,7 @@ export interface PackingListLine {
   unitsPerPackingUnit: number;
   orderedBaseQty: number;
   hasPackingConfig: boolean;
+  quantityType?: "Case" | "Piece";
   allocations: CartonAllocation[];
 }
 
@@ -304,7 +305,7 @@ export function createPackingList(
   return {
     id: nextPackingListId(lists),
     packingListNumber: generatePackingListNumber(lists),
-    salesOrderId: order.id,
+    salesOrderId: typeof order.id === "number" ? order.id : parseInt(String(order.id), 10) || 0,
     salesOrderNumber: order.soNumber,
     customerName: order.customerName,
     warehouseId,

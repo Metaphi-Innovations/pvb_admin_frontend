@@ -8,7 +8,6 @@ import {
   Edit,
   FileText,
   Package,
-  Split,
   Trash2,
   CheckCircle2,
   XCircle,
@@ -29,28 +28,26 @@ import {
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
-import { downloadProformaInvoice } from "../pi-document";
 import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-data";
 import {
   type SalesOrder,
   type OrderStatus,
-  getOrderById,
-  hydrateOrderLineItems,
   formatOrderStatus,
-  calculateOrderTotalsSummary,
   canEditOrder,
-  canSplitOrder,
   canCancelOrder,
-  canDownloadPI,
   canGeneratePackingList,
-  approveSalesOrder,
-  canApproveOrder,
   formatApprovalStatus,
   resolveApprovalStatus,
-  getProductById,
   getSampleOrderDisplayRecipient,
   SAMPLE_BILLING_DETAILS,
+  getProductById,
 } from "../orders-data";
+import {
+  useSampleOrder,
+  useUpdateSampleOrderStatus,
+} from "@/hooks/sales/use-sample-orders";
+import { useCustomer } from "@/hooks/masters/use-customers";
+import { SampleOrderService } from "@/services/sample-order.service";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "packed", "delivered", "dispatched"].includes(status)) return "active";
@@ -60,8 +57,8 @@ function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft
   return "inactive";
 }
 
-function approvalTone(status: ReturnType<typeof resolveApprovalStatus>): "pending" | "approved" | "rejected" | "neutral" {
-  if (status === "pending_approval") return "pending";
+function approvalTone(status: string): "pending" | "approved" | "rejected" | "neutral" {
+  if (status === "pending_approval" || status === "submitted") return "pending";
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
   return "neutral";
@@ -71,31 +68,32 @@ export default function ViewSalesOrderPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = Number(params.id);
+  const id = String(params.id);
   const approvalMode = searchParams.get("from") === "approval";
 
-  const [order, setOrder] = useState<SalesOrder | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState("overview");
 
-  const refresh = () => {
-    const o = getOrderById(id);
-    if (o) setOrder(hydrateOrderLineItems(o));
-  };
-
-  useEffect(() => {
-    refresh();
-  }, [id]);
+  const { data: order, isLoading, refetch } = useSampleOrder(id);
+  const { data: billingCustomer } = useCustomer("1a15aac2-1e1d-4337-8642-0d1cd6e1366c");
+  const updateStatusMutation = useUpdateSampleOrderStatus();
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-sm">
+        Loading sample order details…
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -106,33 +104,84 @@ export default function ViewSalesOrderPage() {
     );
   }
 
-  const totals = calculateOrderTotalsSummary(order.lineItems);
-  const packingList = order.packingListId ? getPackingListById(order.packingListId) : undefined;
+  const packingListIdNum = typeof order.packingListId === "string" ? parseInt(order.packingListId, 10) : order.packingListId;
+  const packingList = (packingListIdNum && !isNaN(packingListIdNum)) ? getPackingListById(packingListIdNum) : undefined;
 
   const editable = canEditOrder(order);
-  const splittable = canSplitOrder(order);
   const cancellable = canCancelOrder(order);
-  const piAllowed = canDownloadPI(order);
   const packingAllowed = canGeneratePackingList(order);
-  const pendingApproval = canApproveOrder(order);
+  const pendingApproval = order.status === "pending_approval";
   const showApprovalActions = pendingApproval;
   const approvalStatus = resolveApprovalStatus(order);
 
-  const formatRupee = (_n: number) => "₹0.00";
+  const formatRupee = (value: number) =>
+    `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
-  const handleApprove = () => {
-    const result = approveSalesOrder(order.id);
-    if ("error" in result) {
-      showToast(result.error, "error");
-      return;
+  const handleDownloadNote = async () => {
+    try {
+      showToast("Downloading sample note...");
+      const blob = await SampleOrderService.downloadNote(id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sample-note-${order.soNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      showToast("Failed to download note.", "error");
     }
-    router.push("/sales/sample-order?tab=pending_approval&toast=approved");
   };
 
-  const handleRejectSuccess = (_updated: SalesOrder) => {
-    router.push("/sales/sample-order?tab=pending_approval&toast=rejected");
+  const handleApprove = () => {
+    updateStatusMutation.mutate(
+      { id, status: "approved" },
+      {
+        onSuccess: () => {
+          refetch();
+          showToast("Sample Order approved successfully.");
+          setApproveOpen(false);
+        },
+        onError: () => {
+          showToast("Failed to approve order.", "error");
+        }
+      }
+    );
+  };
+
+  const handleReject = (reason: string) => {
+    updateStatusMutation.mutate(
+      { id, status: "rejected", remarks: reason },
+      {
+        onSuccess: () => {
+          refetch();
+          showToast("Sample Order rejected successfully.");
+          setRejectOpen(false);
+        },
+        onError: () => {
+          showToast("Failed to reject order.", "error");
+        }
+      }
+    );
+  };
+
+  const handleCancel = (reason: string) => {
+    updateStatusMutation.mutate(
+      { id, status: "cancelled", remarks: reason },
+      {
+        onSuccess: () => {
+          refetch();
+          showToast("Sample Order cancelled successfully.");
+          setCancelOpen(false);
+        },
+        onError: () => {
+          showToast("Failed to cancel order.", "error");
+        }
+      }
+    );
   };
 
   const quickActions: RecordDetailSidebarProps["quickActions"] = [];
@@ -143,13 +192,12 @@ export default function ViewSalesOrderPage() {
       onClick: () => router.push(`/sales/sample-order/${order.id}/edit`),
     });
   }
-  if (!showApprovalActions && piAllowed) {
-    quickActions.push({
-      label: "Sample Issue Note",
-      icon: FileText,
-      onClick: () => downloadProformaInvoice(order),
-    });
-  }
+  // Download Note is always allowed for viewing
+  quickActions.push({
+    label: "Download Sample Note",
+    icon: FileText,
+    onClick: handleDownloadNote,
+  });
   if (!showApprovalActions && packingAllowed) {
     quickActions.push({
       label: "Generate Packing List",
@@ -157,13 +205,7 @@ export default function ViewSalesOrderPage() {
       onClick: () => router.push(`/sales/sample-order/${order.id}/packing-list/new`),
     });
   }
-  if (!showApprovalActions && splittable) {
-    quickActions.push({
-      label: "Split Order",
-      icon: Split,
-      onClick: () => router.push(`/sales/sample-order/${order.id}/split`),
-    });
-  }
+
   if (!showApprovalActions && cancellable) {
     quickActions.push({
       label: "Cancel Order",
@@ -198,10 +240,10 @@ export default function ViewSalesOrderPage() {
     quickActions,
     summary: [
       { label: "Salesperson", value: getSampleOrderDisplayRecipient(order) },
-      { label: "Billing", value: SAMPLE_BILLING_DETAILS.companyName },
+      { label: "Billing", value: billingCustomer?.customerName || SAMPLE_BILLING_DETAILS.companyName },
       { label: "Order Date", value: order.orderDate },
       { label: "Warehouse", value: order.warehouseName || "—" },
-      { label: "Grand Total", value: formatRupee(0), highlight: true },
+      { label: "Grand Total", value: formatRupee(order.totalAmount), highlight: true },
     ],
     approval: approvalItems,
   };
@@ -253,13 +295,13 @@ export default function ViewSalesOrderPage() {
         recordCode={order.soNumber}
         statusLabel={formatOrderStatus(order.status)}
         statusVariant={orderStatusVariant(order.status)}
-        metaItems={[{ label: (order.issuedToEmployeeRole ?? order.territory) || "—" }]}
+        metaItems={[{ label: order.territory || "—" }]}
         kpis={[
           {
             icon: IndianRupee,
             iconBg: "bg-emerald-100",
             iconColor: "text-emerald-700",
-            value: formatRupee(0),
+            value: formatRupee(order.totalAmount),
             label: "Order Value",
           },
           {
@@ -294,52 +336,38 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Remarks" value={order.remarks || "—"} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
-              <RecordKvRow label="Total Amount" value={formatRupee(0)} amount isLast />
+              <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
             </RecordSectionCard>
 
             <RecordSectionCard title="Billing" accent="slate">
-              <RecordKvRow label="Company" value={SAMPLE_BILLING_DETAILS.companyName} />
-              <RecordKvRow label="Address" value={SAMPLE_BILLING_DETAILS.address} />
-              <RecordKvRow label="GSTIN" value={SAMPLE_BILLING_DETAILS.gstin} mono />
-              <RecordKvRow label="Mobile" value={SAMPLE_BILLING_DETAILS.mobile} />
+              <RecordKvRow label="Company" value={billingCustomer?.customerName || SAMPLE_BILLING_DETAILS.companyName} />
+              <RecordKvRow label="Address" value={billingCustomer?.registeredGstAddress || SAMPLE_BILLING_DETAILS.address} />
+              <RecordKvRow label="GSTIN" value={billingCustomer?.gstinNo || SAMPLE_BILLING_DETAILS.gstin} mono />
+              <RecordKvRow label="Mobile" value={billingCustomer?.mobileNo || SAMPLE_BILLING_DETAILS.mobile} />
               <RecordKvRow label="Contact No." value={SAMPLE_BILLING_DETAILS.contactNo} isLast />
             </RecordSectionCard>
 
             <div className="space-y-4">
-              {(order.referenceOrderNumber || order.parentOrderNumber || order.splitFromOrderNumber) && (
-                <RecordSectionCard title="Split Reference" accent="purple">
-                  {order.referenceOrderNumber && (
-                    <RecordKvRow label="Reference Order" value={order.referenceOrderNumber} mono />
-                  )}
-                  {order.parentOrderNumber && (
-                    <RecordKvRow label="Parent Order" value={order.parentOrderNumber} mono />
-                  )}
-                  {order.splitFromOrderNumber && (
-                    <RecordKvRow label="Split From" value={order.splitFromOrderNumber} mono isLast />
-                  )}
-                </RecordSectionCard>
-              )}
-
               {order.status === "cancelled" && (
                 <RecordSectionCard title="Cancellation" accent="orange">
-                  <RecordKvRow label="Reason" value={order.cancellationReason} />
-                  <RecordKvRow label="Cancelled By" value={order.cancelledBy} />
-                  <RecordKvRow label="Cancelled Date" value={order.cancelledDate} isLast />
+                  <RecordKvRow label="Reason" value={order.cancellationReason || "—"} />
+                  <RecordKvRow label="Cancelled By" value={order.cancelledBy || "—"} />
+                  <RecordKvRow label="Cancelled Date" value={order.cancelledDate || "—"} isLast />
                 </RecordSectionCard>
               )}
 
-              {(order.approvalStatus === "approved" || order.status === "approved") && (
+              {(order.status === "approved") && (
                 <RecordSectionCard title="Approval" accent="green">
-                  <RecordKvRow label="Approved By" value={order.approvedBy} />
-                  <RecordKvRow label="Approved Date" value={order.approvedDate} isLast />
+                  <RecordKvRow label="Approved By" value={order.approvedBy || "—"} />
+                  <RecordKvRow label="Approved Date" value={order.approvedDate || "—"} isLast />
                 </RecordSectionCard>
               )}
 
-              {(order.approvalStatus === "rejected" || order.status === "rejected") && (
+              {(order.status === "rejected") && (
                 <RecordSectionCard title="Rejection" accent="orange">
-                  <RecordKvRow label="Reason" value={order.rejectionReason} />
-                  <RecordKvRow label="Rejected By" value={order.rejectedBy} />
-                  <RecordKvRow label="Rejected Date" value={order.rejectedDate} isLast />
+                  <RecordKvRow label="Reason" value={order.rejectionReason || "—"} />
+                  <RecordKvRow label="Rejected By" value={order.rejectedBy || "—"} />
+                  <RecordKvRow label="Rejected Date" value={order.rejectedDate || "—"} isLast />
                 </RecordSectionCard>
               )}
 
@@ -379,7 +407,7 @@ export default function ViewSalesOrderPage() {
                   <tr className="border-b bg-muted/40 border-border">
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold w-16">Unit</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Batch</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Expiry</th>
@@ -390,7 +418,11 @@ export default function ViewSalesOrderPage() {
                 </thead>
                 <tbody>
                   {order.lineItems.map(line => {
-                    const product = line.productId ? getProductById(line.productId) : undefined;
+                    const product = line.productId ? getProductById(String(line.productId)) : undefined;
+                    const packSize = product?.packSize || 1;
+                    const cases = Math.floor(line.quantity / packSize);
+                    const loose = line.quantity % packSize;
+
                     return (
                       <tr key={line.id} className="border-b border-border/60">
                         <td className="px-4 py-2">
@@ -398,13 +430,18 @@ export default function ViewSalesOrderPage() {
                           <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                         </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
-                        <td className="px-4 py-2 text-xs">{line.unit || product?.uom || "—"}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">
+                          <div className="flex flex-col items-end">
+                            <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
+                            <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-xs">{line.unit || "—"}</td>
                         <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{line.batchNumber || "—"}</td>
                         <td className="px-4 py-2 text-xs text-muted-foreground">{line.expiryDate || "—"}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(0)}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{product?.gstRate || "0%"}</td>
-                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(0)}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount === 100 ? "0%" : `${100 - line.discount}%`}</td>
+                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
                       </tr>
                     );
                   })}
@@ -413,7 +450,7 @@ export default function ViewSalesOrderPage() {
             </div>
             <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
               <div className="w-full max-w-xs space-y-1 text-xs">
-                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(0)}</span></div>
+                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(order.totalAmount)}</span></div>
               </div>
             </div>
           </div>
@@ -424,10 +461,7 @@ export default function ViewSalesOrderPage() {
         order={order}
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        onSuccess={() => {
-          refresh();
-          showToast("Sample Order cancelled successfully.");
-        }}
+        onConfirm={handleCancel}
       />
 
       <ApproveOrderDialog
@@ -441,7 +475,7 @@ export default function ViewSalesOrderPage() {
         order={order}
         open={rejectOpen}
         onClose={() => setRejectOpen(false)}
-        onSuccess={handleRejectSuccess}
+        onConfirm={handleReject}
       />
 
       {toast && (
@@ -458,6 +492,3 @@ export default function ViewSalesOrderPage() {
     </>
   );
 }
-
-
-

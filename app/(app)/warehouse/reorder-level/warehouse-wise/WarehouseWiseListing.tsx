@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -12,17 +12,23 @@ import {
 
 import { ReorderLevel } from "../types";
 import Link from "next/link";
-import { deleteReorder } from "../services";
-import { PRODUCT_OPTIONS, STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { ReorderLevelService, toOrdering } from "../services";
+import { ListingStatusToggle } from "@/components/listing";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+
+const STOCK_STATUS_OPTIONS = [
+  { label: "In Stock", value: "in stock" },
+  { label: "Low Stock", value: "low stock" },
+];
 
 interface WarehouseWiseListingProps {
-  warehouseRecords: ReorderLevel[];
-  selectedWarehouse: string;
-  reload: () => void;
+  selectedWarehouseId?: string;
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" };
+  const cfg = status === "Low Stock"
+    ? { bg: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" }
+    : { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
   return (
     <span className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
@@ -31,57 +37,60 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, reload }: WarehouseWiseListingProps) {
+export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListingProps) {
   const router = useRouter();
+  const {
+    draftFilters,
+    setDraftFilters,
+    appliedFilters,
+    applyFilters,
+  } = useAppliedListFilters();
+  const [records, setRecords] = useState<ReorderLevel[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  // Table state
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
+  const [sort, setSort] = useState<SortState>({ key: "updatedDate", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [deleteTarget, setDeleteTarget] = useState<ReorderLevel | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
+  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
 
-  // Processing
-  const processed = useMemo(() => {
-    let result = [...warehouseRecords];
-    Object.keys(filters).forEach(key => {
-      const val = filters[key];
-      if (!val) return;
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(r =>
-          r.product.toLowerCase().includes(q) ||
-          r.sku.toLowerCase().includes(q) ||
-          r.category.toLowerCase().includes(q)
-        );
-      } else if (key === "product") {
-        result = result.filter(r => (val as string[]).includes(r.product));
-      } else if (key === "status") {
-        result = result.filter(r => (val as string[]).includes(r.status));
-      }
-    });
+  useEffect(() => {
+    setPage(1);
+  }, [selectedWarehouseId]);
 
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const numKeys = ["currentStock", "reservedStock", "reorderLevelQty"];
-        if (numKeys.includes(sort.key)) {
-          const diff = (a[sort.key as keyof ReorderLevel] as number) - (b[sort.key as keyof ReorderLevel] as number);
-          return sort.direction === "asc" ? diff : -diff;
-        }
-        const vA = String(a[sort.key as keyof ReorderLevel] || "");
-        const vB = String(b[sort.key as keyof ReorderLevel] || "");
-        return sort.direction === "asc" ? vA.localeCompare(vB) : vB.localeCompare(vA);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    ReorderLevelService.list({
+      page,
+      pageSize,
+      search: String(appliedFilters.search ?? ""),
+      ordering: toOrdering(sort.key, sort.direction),
+      reorder_type: "WAREHOUSE",
+      warehouse_id: selectedWarehouseId,
+      filters: appliedFilters,
+      signal: controller.signal,
+    })
+      .then((result) => {
+        setRecords(result.items);
+        setTotalRecords(result.total);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError((err as { message?: string })?.message || "Failed to load reorder levels.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
-    }
-    return result;
-  }, [warehouseRecords, filters, sort]);
 
-  const paginated = useMemo(() => {
-    const s = (page - 1) * pageSize;
-    return processed.slice(s, s + pageSize);
-  }, [processed, page, pageSize]);
+    return () => controller.abort();
+  }, [page, pageSize, sort.key, sort.direction, appliedFilters, selectedWarehouseId]);
 
-  // Helper
   const numCol = (key: string, header: string, w = "120px"): ColumnConfig<ReorderLevel> => ({
     key: key as keyof ReorderLevel,
     header,
@@ -98,7 +107,7 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: PRODUCT_OPTIONS,
+      filterOptions: filterOptions.product || [],
       width: "160px",
       render: (val, row) => (
         <Link
@@ -110,11 +119,32 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
       )
     },
     {
-      key: "sku",
-      header: "SKU",
+      key: "productCode",
+      header: "Product Code",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.productCode || [],
       width: "130px",
       render: (v: any) => <span className="font-mono text-xs text-foreground font-semibold">{v}</span>,
+    },
+    {
+      key: "category",
+      header: "Category",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.category || [],
+      width: "140px",
+    },
+    {
+      key: "unit",
+      header: "Unit",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.unit || [],
+      width: "100px",
     },
     numCol("currentStock", "Current Stock"),
     numCol("reservedStock", "Reserved Stock", "130px"),
@@ -125,9 +155,35 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: STOCK_STATUS_OPTIONS,
       width: "155px",
       render: (v: any) => <StatusBadge status={v} />,
+    },
+    {
+      key: "activeStatus",
+      header: "Active",
+      sortable: false,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      width: "110px",
+      render: (_v: any, row) => (
+        <ListingStatusToggle
+          active={row.isActive}
+          onChange={() => {
+            ReorderLevelService.toggleStatus(row.id)
+              .then(() => {
+                setRecords((prev) =>
+                  prev.map((item) => (item.id === row.id ? { ...item, isActive: !item.isActive } : item)),
+                );
+              })
+              .catch(() => undefined);
+          }}
+        />
+      ),
     },
   ];
 
@@ -139,28 +195,80 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
 
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
-    deleteReorder(deleteTarget.id);
-    setDeleteTarget(null);
-    reload();
+    ReorderLevelService.delete(deleteTarget.id)
+      .then(() => {
+        setDeleteTarget(null);
+        setPage(1);
+      })
+      .catch(() => {
+        setDeleteTarget(null);
+      });
+  };
+
+  const handleOpenFilter = (columnKey: string) => {
+    const keyMap: Record<string, "product_name" | "product_code" | "category_name" | "unit_name" | "warehouse_name"> = {
+      product: "product_name",
+      productCode: "product_code",
+      category: "category_name",
+      unit: "unit_name",
+      warehouse: "warehouse_name",
+    };
+    const field = keyMap[columnKey];
+    if (!field || filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
+
+    setLoadingFilters((prev) => new Set(prev).add(columnKey));
+    ReorderLevelService.filterDropdown(field, {
+      reorder_type: "WAREHOUSE",
+      warehouse_id: selectedWarehouseId,
+    })
+      .then((options) => {
+        setFilterOptions((prev) => ({ ...prev, [columnKey]: options }));
+      })
+      .finally(() => {
+        setLoadingFilters((prev) => {
+          const next = new Set(prev);
+          next.delete(columnKey);
+          return next;
+        });
+      });
   };
 
   return (
     <>
+      {error ? <p className="mb-2 text-xs text-red-600">{error}</p> : null}
       <MasterListing<ReorderLevel>
         columns={columns}
-        data={paginated}
-        totalRecords={processed.length}
+        data={records}
+        loading={loading}
+        totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         onSortChange={setSort}
-        onFilterChange={setFilters}
+        onFilterChange={(next) => {
+          setDraftFilters(next);
+          applyFilters(next);
+          setPage(1);
+        }}
         actions={actions}
-        onAdd={() => router.push(`/warehouse/reorder-level/create?warehouse=${encodeURIComponent(selectedWarehouse)}`)}
+        onAdd={() => router.push(`/warehouse/reorder-level/create?warehouse=${encodeURIComponent(selectedWarehouseId || "")}`)}
         addLabel="Set Reorder Level"
         emptyMessage=""
-        searchPlaceholder="Search product or SKU..."
+        searchPlaceholder="Search product or code..."
+        currentFilters={draftFilters}
+        currentSort={sort}
+        onOpenFilter={handleOpenFilter}
+        onExport={() =>
+          ReorderLevelService.export({
+            search: String(appliedFilters.search ?? ""),
+            ordering: toOrdering(sort.key, sort.direction),
+            reorder_type: "WAREHOUSE",
+            warehouse_id: selectedWarehouseId,
+            export_type: "excel",
+            filters: appliedFilters,
+          })
+        }
       />
 
       {/* Delete Confirmation Dialog */}

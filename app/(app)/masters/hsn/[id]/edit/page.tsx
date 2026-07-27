@@ -98,7 +98,7 @@ export default function EditHSNPage() {
 		const records = loadHSNMasters();
 		const normalizedForm = {
 			...form,
-			hsnCode: sanitizeHsnCodeInput(form.hsnCode),
+			hsnCode: sanitizeHsnCodeInput(form.hsnCode ?? ""),
 		};
 		const fieldErrors = validateHsnForm(normalizedForm, records, record.id);
 		if (Object.keys(fieldErrors).length > 0) {
@@ -187,7 +187,7 @@ export default function EditHSNPage() {
 							</Label>
 							<AutocompleteSelect
 								options={gstOptions}
-								value={form.gstRate}
+								value={form.gstRate ?? ""}
 								onChange={(value) => set("gstRate", value)}
 								placeholder='Select GST rate…'
 								error={!!errors.gstRate}

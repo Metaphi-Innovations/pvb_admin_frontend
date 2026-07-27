@@ -27,6 +27,8 @@ export function BranchAddressFields({
 	readOnly,
 	errors = {},
 	stateOptions = [],
+	townOptions: townOptionsProp,
+	forceGeographyLocked = false,
 	showTown = true,
 	showDistrict = false,
 }: {
@@ -44,6 +46,10 @@ export function BranchAddressFields({
 		pincode?: string;
 	};
 	stateOptions?: { value: string; label: string }[];
+	/** When provided, overrides postal-master town options (e.g. pincode API). */
+	townOptions?: string[];
+	/** Force lock city/town/state after external pincode API resolution. */
+	forceGeographyLocked?: boolean;
 	/** When false, hides the Town field (e.g. vendor registered address). */
 	showTown?: boolean;
 	/** When true, shows District (auto-filled from pincode). */
@@ -54,6 +60,7 @@ export function BranchAddressFields({
 
 	const country = address.country ?? "India";
 	const isIndia = country === "India";
+	const hasTownOverride = Array.isArray(townOptionsProp);
 
 	useEffect(() => {
 		let active = true;
@@ -66,12 +73,16 @@ export function BranchAddressFields({
 	}, []);
 
 	useEffect(() => {
+		if (hasTownOverride) {
+			setTownOptions(townOptionsProp ?? []);
+			return;
+		}
 		if (!postalReady || address.pincode.length !== 6) {
 			setTownOptions([]);
 			return;
 		}
 		setTownOptions(getTownsForPincode(address.pincode));
-	}, [postalReady, address.pincode]);
+	}, [postalReady, address.pincode, hasTownOverride, townOptionsProp]);
 
 	// Resolve geography when postal master finishes loading after pincode entry
 	useEffect(() => {
@@ -118,11 +129,31 @@ export function BranchAddressFields({
 	const fieldClass = cn(ERP.input, "border-border/70 rounded-md bg-white");
 
 	const pincodeResolved = useMemo(() => {
+		// API-driven pincode flow owns geography; don't lock from postal master.
+		if (onPincodeChange) return null;
+		if (forceGeographyLocked && address.pincode.length === 6 && address.state) {
+			return {
+				pincode: address.pincode,
+				city: address.city,
+				town: address.town ?? "",
+				district: address.district ?? "",
+				state: address.state,
+			};
+		}
 		if (!postalReady || address.pincode.length !== 6) return null;
 		return lookupPostalPincode(address.pincode, address.town);
-	}, [postalReady, address.pincode, address.town]);
+	}, [
+		onPincodeChange,
+		forceGeographyLocked,
+		postalReady,
+		address.pincode,
+		address.town,
+		address.city,
+		address.district,
+		address.state,
+	]);
 
-	const geographyLocked = Boolean(pincodeResolved);
+	const geographyLocked = Boolean(pincodeResolved) || forceGeographyLocked;
 
 	const applyPostalLocation = (digits: string, preferredTown?: string) => {
 		const loc = lookupPostalPincode(digits, preferredTown);
@@ -324,7 +355,12 @@ export function BranchAddressFields({
 				{isIndia && stateOptions.length > 0 ? (
 					<AutocompleteSelect
 						disabled={readOnly || geographyLocked}
-						value={address.state}
+						value={
+							stateOptions.find(
+								(opt) =>
+									opt.value.toLowerCase() === address.state.trim().toLowerCase(),
+							)?.value || address.state
+						}
 						onChange={(value) => set("state", String(value))}
 						options={stateOptions}
 						placeholder="Select state..."

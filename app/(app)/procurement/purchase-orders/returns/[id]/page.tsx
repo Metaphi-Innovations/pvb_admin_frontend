@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Send, IndianRupee } from "lucide-react";
+import { Send, IndianRupee, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecordDetailPage } from "@/components/record-detail";
 import { formatCurrency } from "@/lib/procurement/utils";
@@ -11,38 +11,48 @@ import { PReturnFormLayout } from "../../../purchase-returns/components/PReturnF
 import { PReturnFormFooter } from "../../../purchase-returns/components/PReturnFormFooter";
 import { PurchaseReturnForm } from "../../../purchase-returns/components/PurchaseReturnForm";
 import {
-  getPurchaseReturnById,
   PURCHASE_RETURN_STATUS_CFG,
-  submitPurchaseReturn,
   type PurchaseReturn,
-} from "../../../purchase-returns/purchase-return-data";
-import { getPOById } from "../../po-data";
-import { recalcPurchaseReturn } from "../../../purchase-returns/purchase-return-calc";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import {
-  buildReturnableLinesForPO,
+  canEditPurchaseReturn,
+  parsePurchaseReturnNavSource,
   purchaseReturnListHref,
   purchaseReturnRoutes,
+  resolvePurchaseReturnBackHref,
+  resolvePurchaseReturnRedirectWithToast,
   validateReturnItems,
-} from "../../../purchase-returns/purchase-return-utils";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import { usePurchaseReturn, useUpdatePurchaseReturn } from "@/hooks/procurement";
+import { useFlashToast } from "../../../hooks/useFlashToast";
+import { Toast } from "../../../components/ProcurementUI";
 
 export default function PurchaseReturnDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+      <PurchaseReturnDetailContent />
+    </Suspense>
+  );
+}
+
+function PurchaseReturnDetailContent() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const searchParams = useSearchParams();
+  const id = String(params.id);
+  const from = parsePurchaseReturnNavSource(searchParams.get("from"));
+  const backHref = resolvePurchaseReturnBackHref(from);
   const [record, setRecord] = useState<PurchaseReturn | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const detailQuery = usePurchaseReturn(id);
+  const updateMutation = useUpdatePurchaseReturn();
+
+  useFlashToast(setToast);
 
   useEffect(() => {
-    const existing = getPurchaseReturnById(id);
-    if (!existing) return;
-    const po = getPOById(existing.poId);
-    if (!po) {
-      setRecord(existing);
-      return;
-    }
-    const freshLines = buildReturnableLinesForPO(po, existing.id, existing.items);
-    setRecord(recalcPurchaseReturn({ ...existing, items: freshLines }, po));
-  }, [id]);
+    if (detailQuery.data) setRecord(detailQuery.data);
+  }, [detailQuery.data]);
 
   if (!record) {
     return (
@@ -56,7 +66,9 @@ export default function PurchaseReturnDetailPage() {
   }
 
   const statusCfg = PURCHASE_RETURN_STATUS_CFG[record.status];
-  const isDraft = record.status === "draft";
+  // View page draft branch is Draft-only (Edit permissions for PO Return live on the Edit page).
+  const isDraft = record.status === "Draft" || record.status === "draft";
+  const canEdit = canEditPurchaseReturn(record);
 
   const handleSubmit = () => {
     const e = validateReturnItems(record.items);
@@ -64,57 +76,96 @@ export default function PurchaseReturnDetailPage() {
       setErrors(e);
       return;
     }
-    submitPurchaseReturn(record);
-    router.push(`${purchaseReturnListHref()}&toast=pret-submitted`);
+    updateMutation.mutate(
+      { id: String(record.id), record },
+      {
+        onSuccess: () =>
+          router.push(resolvePurchaseReturnRedirectWithToast(from, "pret-submitted")),
+      },
+    );
   };
 
   if (isDraft) {
     return (
-      <PReturnFormLayout
-        mode="view"
-        returnNumber={record.returnNumber}
-        footer={
-          <PReturnFormFooter
-            readOnly
-            onCancel={() => router.push(purchaseReturnListHref())}
-          />
-        }
-      >
+      <>
+        {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+        <PReturnFormLayout
+          mode="view"
+          returnNumber={record.returnNumber}
+          backHref={backHref}
+          footer={
+            <PReturnFormFooter
+              readOnly
+              onCancel={() => router.push(backHref)}
+            />
+          }
+        >
         <div className="flex justify-end gap-2 mb-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => router.push(purchaseReturnRoutes.edit(id))}
-          >
-            Edit Draft
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={handleSubmit}
-          >
-            <Send className="w-3.5 h-3.5" /> Submit
-          </Button>
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => router.push(purchaseReturnRoutes.edit(id, from))}
+            >
+              Edit Draft
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              onClick={handleSubmit}
+            >
+              <Send className="w-3.5 h-3.5" /> Submit
+            </Button>
+          )}
         </div>
         <PurchaseReturnForm record={record} onChange={() => {}} readOnly errors={errors} />
-      </PReturnFormLayout>
+        </PReturnFormLayout>
+      </>
     );
   }
 
   return (
-    <RecordDetailPage
-      listHref={purchaseReturnListHref()}
+    <>
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      <RecordDetailPage
+      listHref={backHref}
       listLabel="Purchase Order"
       recordName="Purchase Return"
       recordCode={record.returnNumber}
-      statusLabel={statusCfg.label}
+      statusLabel={statusCfg?.label ?? record.status}
       statusVariant={
-        record.status === "returned" || record.status === "approved"
+        record.status === "Received_By_Supplier"
           ? "active"
-          : record.status === "draft"
+          : record.status === "Draft"
             ? "draft"
             : "neutral"
+      }
+      headerActions={
+        record.packingListId ? (
+          <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+            <Link
+              href={
+                record.status === "Ready For Packing" ||
+                record.status === "PO_return" ||
+                record.status === "Draft" ||
+                record.status === "Partially Packed"
+                  ? `/warehouse/packing/create/${record.packingListId}`
+                  : "/warehouse/packing/purchase-return"
+              }
+            >
+              <Package className="h-3.5 w-3.5" />
+              {record.status === "Ready For Packing" ||
+              record.status === "PO_return" ||
+              record.status === "Draft" ||
+              record.status === "Partially Packed"
+                ? "Continue to Packing"
+                : `View Packing (${record.packingListNo || "PL"})`}
+            </Link>
+          </Button>
+        ) : undefined
       }
       kpis={[
         {
@@ -144,6 +195,7 @@ export default function PurchaseReturnDetailPage() {
       onTabChange={() => {}}
     >
       <PurchaseReturnForm record={record} onChange={() => {}} readOnly />
-    </RecordDetailPage>
+      </RecordDetailPage>
+    </>
   );
 }

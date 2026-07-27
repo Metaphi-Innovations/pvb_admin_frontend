@@ -33,6 +33,7 @@ export function resolveWarehouseOrderType(record: {
   if (
     docType === "Sample Order" ||
     docType === "sample_order" ||
+    docType === "sample" ||
     docNo.startsWith("SM-") ||
     docNo.startsWith("SMP-")
   ) {
