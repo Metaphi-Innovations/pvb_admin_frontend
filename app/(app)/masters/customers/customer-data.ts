@@ -78,6 +78,7 @@ export interface BranchDocument {
 export interface CustomerBranch {
 	branchName: string;
 	isMain?: boolean;
+	salesManId?: string;
 	billingAddress: BranchAddress;
 	shippingAddress: BranchAddress;
 	documents: BranchDocument[];

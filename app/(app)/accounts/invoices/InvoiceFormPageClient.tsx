@@ -42,6 +42,7 @@ import { InvoiceAdditionalExpensesEditor } from "./components/InvoiceAdditionalE
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
 import { SalesInvoiceDocumentInfoSection } from "./components/SalesInvoiceDocumentInfoSection";
 import { getDispatchById } from "@/lib/accounts/dispatch-invoice-bridge";
+import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
 import {
   calculateInvoiceTotals,
   createEmptyLine,
@@ -101,6 +102,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const customers = useMemo(() => getCustomersForInvoice(), []);
 
   const [invoiceNo, setInvoiceNo] = useState("");
+  const [previewInvoiceNo, setPreviewInvoiceNo] = useState("");
   const [customerId, setCustomerId] = useState<string>("");
   const [customerCode, setCustomerCode] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -492,6 +494,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     return false;
   }, [gstTreatment, placeOfSupply, stateName]);
 
+  // Preview SI number from DocumentSequence (create only)
+  useEffect(() => {
+    if (isEdit) return;
+    let cancelled = false;
+    const state = stateName.trim() || placeOfSupply.trim() || "Maharashtra";
+    SalesInvoiceNumberService.getPreviewNumber({ state })
+      .then((num) => {
+        if (!cancelled) setPreviewInvoiceNo(num);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewInvoiceNo("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, stateName, placeOfSupply]);
+
   const sezLutResolution = useMemo(
     () =>
       showSezSupply
@@ -585,7 +604,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const isStockTransferInvoice = invoiceType === "stock_transfer";
 
-  const submit = (asDraft: boolean) => {
+  const submit = async (asDraft: boolean) => {
     setError(null);
     if (!customerName.trim()) {
       setError(
@@ -613,7 +632,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         updateInvoice(invoiceId, buildInput(status));
         router.push(`${INVOICES_LIST_PATH}/${invoiceId}`);
       } else {
-        const rec = createInvoice(buildInput(status));
+        const rec = await createInvoice(buildInput(status));
         router.push(`${INVOICES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
@@ -692,7 +711,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         <InvoiceFormCard title="Invoice & Dispatch Details">
           <SalesInvoiceDocumentInfoSection
             isEdit={isEdit}
-            invoiceNo={invoiceNo}
+            invoiceNo={isEdit ? invoiceNo : previewInvoiceNo}
             invoiceDate={invoiceDate}
             onInvoiceDateChange={setInvoiceDate}
             dueDate={dueDate}

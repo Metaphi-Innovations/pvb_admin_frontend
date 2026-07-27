@@ -231,8 +231,20 @@ function buildBackendWriteBody(
 }
 
 export const StockTransferService = {
-  async getNextNumber(signal?: AbortSignal): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.SALES.STOCK_TRANSFER.NEXT_NUMBER, { signal });
+  async getNextNumber(
+    fromWarehouseId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.STOCK_TRANSFER.NEXT_NUMBER,
+      {
+        signal,
+        params: fromWarehouseId
+          ? { from_warehouse_id: fromWarehouseId }
+          : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
     return response.data?.data?.transfer_no || "";
   },
 

@@ -22,6 +22,7 @@ import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/p
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
 import { useSupplierDropdown, useSupplierDetail } from "@/hooks/masters/use-suppliers";
 import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
+import { usePurchaseOrderPreviewNumber } from "@/hooks/procurement";
 import { axiosInstance } from "@/api/axios";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
@@ -58,7 +59,7 @@ const INDIAN_STATES = [
 ];
 
 export type POFormErrors = Partial<
-	Record<"supplierId" | "warehouseId" | "poDate" | "lines", string>
+	Record<"supplierId" | "warehouseId" | "poDate" | "state" | "lines", string>
 >;
 
 function isSupplierSelected(supplierId: POFormValues["supplierId"]): boolean {
@@ -81,6 +82,9 @@ export function validatePOForm(form: POFormValues): POFormErrors {
 	if (!form.warehouseId) {
 		e.warehouseId = "Warehouse is required";
 	}
+	if (!form.state?.trim()) {
+		e.state = "State is required";
+	}
 	if (!form.poDate?.trim()) {
 		e.poDate = "PO date is required";
 	}
@@ -93,7 +97,13 @@ export function validatePOForm(form: POFormValues): POFormErrors {
 	return e;
 }
 
-const PO_ERROR_FIELD_ORDER = ["supplierId", "poDate", "warehouseId", "lines"] as const;
+const PO_ERROR_FIELD_ORDER = [
+	"supplierId",
+	"poDate",
+	"state",
+	"warehouseId",
+	"lines",
+] as const;
 
 export function focusFirstPOError(errors: POFormErrors) {
 	for (const key of PO_ERROR_FIELD_ORDER) {
@@ -214,7 +224,7 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		creditDays: 30,
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
-		state: pr?.state ?? "",
+		state: pr?.state ?? "Maharashtra",
 		warehouseId: pr?.warehouseId ?? null,
 		warehouseName: pr?.warehouseName ?? "",
 		deliveryAddress: "",
@@ -309,14 +319,18 @@ export function PurchaseOrderForm({
 	form,
 	onChange,
 	readOnly,
-	poNumber = "",
+	poNumber: poNumberProp = "",
+	onPoNumberChange,
 	status,
 	submittedDate,
 	errors = {},
 }: {
 	form: POFormValues;
 	onChange: (f: POFormValues) => void;
+	/** Optional controlled PO number from parent (edit/view). Create mode fetches by state. */
 	poNumber?: string;
+	/** Notified when preview PO number changes (create mode). */
+	onPoNumberChange?: (poNumber: string) => void;
 	readOnly?: boolean;
 	status?: string;
 	submittedDate?: string;
@@ -330,6 +344,23 @@ export function PurchaseOrderForm({
 	const { data: dbSupplierDetail } = useSupplierDetail(
 		isDbSupplier ? String(form.supplierId) : null
 	);
+	const shouldPreviewPoNumber = !readOnly && typeof onPoNumberChange === "function";
+	const previewQuery = usePurchaseOrderPreviewNumber(
+		form.state || "Maharashtra",
+		shouldPreviewPoNumber,
+	);
+	const fetchedPoNumber = previewQuery.data ?? "";
+	const poNumber = shouldPreviewPoNumber
+		? fetchedPoNumber || poNumberProp
+		: poNumberProp;
+	const poNumberLoading =
+		shouldPreviewPoNumber &&
+		(previewQuery.isLoading || previewQuery.isFetching);
+
+	useEffect(() => {
+		if (!shouldPreviewPoNumber || !onPoNumberChange) return;
+		onPoNumberChange(fetchedPoNumber);
+	}, [shouldPreviewPoNumber, fetchedPoNumber, onPoNumberChange]);
 	const prList = loadPurchaseRequests().filter((p) =>
 		["approved", "partially_converted"].includes(p.status),
 	);
@@ -436,7 +467,9 @@ export function PurchaseOrderForm({
 			: form.sourcePrId && /^\d+$/.test(String(form.sourcePrId))
 				? getPRById(Number(form.sourcePrId)) ?? null
 				: null;
-	const displayPoNo = poNumber || "Auto-generated";
+	const displayPoNo = poNumberLoading && !poNumber
+		? "Generating…"
+		: poNumber || "Auto-generated";
 	const totalGst =
 		preview.summary.totalCgst +
 		preview.summary.totalSgst +
@@ -820,7 +853,11 @@ export function PurchaseOrderForm({
 							<Input
 								value={displayPoNo}
 								readOnly
-								className={cn(inputCls, "bg-muted/30 font-mono text-muted-foreground")}
+								className={cn(
+									inputCls,
+									"bg-muted/30 font-mono text-muted-foreground",
+									poNumberLoading && "opacity-70",
+								)}
 							/>
 						</div>
 						{/* <div className="space-y-1">
@@ -934,7 +971,7 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div>
-						<div className="space-y-1">
+						<div id="po-field-state" className="space-y-1">
 							<Label className="text-xs font-medium">State</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.state} />
@@ -944,8 +981,12 @@ export function PurchaseOrderForm({
 									value={form.state}
 									onChange={(v) => onStateChange(String(v))}
 									placeholder="Select state"
+									error={!!errors.state}
 									className={inputCls}
 								/>
+							)}
+							{errors.state && (
+								<p className="text-[11px] text-red-500">{errors.state}</p>
 							)}
 						</div>
 						<div id="po-field-warehouseId" className="space-y-1">

@@ -1,8 +1,11 @@
 import { axiosInstance as api } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 
-export async function getPreviewNumber(): Promise<string> {
-  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.PREVIEW_NUMBER);
+export async function getPreviewNumber(warehouseId?: string | null): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.PREVIEW_NUMBER, {
+    params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+    headers: { "Cache-Control": "no-cache" },
+  });
   const data = response.data?.data;
   return typeof data === "string" ? data : data?.dispatchNumber || data?.dispatch_number || "";
 }
@@ -60,6 +63,23 @@ export async function revertDispatch(id: string) {
   return response.data;
 }
 
+export async function downloadDeliveryChallan(id: string): Promise<void> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id), {
+    responseType: "blob",
+  });
+  const blob = response.data as Blob;
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const disposition = response.headers?.["content-disposition"] as string | undefined;
+  const matched = disposition?.match(/filename="?([^"]+)"?/i);
+  link.download = matched?.[1] || `delivery-challan-${id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export async function getFilterDropdown(fieldName: string, sourceType?: string) {
   const params: any = { field_name: fieldName };
   if (sourceType) params.source_type = sourceType;
@@ -76,4 +96,60 @@ export async function getPackingDoneList(payload: any = {}) {
 export async function getPackingDoneById(id: string) {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.DETAILS(id));
   return response.data?.data;
+}
+
+export interface PackedOrderDropdownItem {
+  order_id: string;
+  order_number: string;
+  order_status: string | null;
+  source_type: string;
+  label: string;
+  packing_list: {
+    packing_list_id: string;
+    packing_number: string;
+    status: string;
+    warehouse_id: string;
+    warehouse_name: string;
+    customer_name: string;
+    order_amount: number;
+    order_date: string | null;
+    expected_delivery_date: string | null;
+    customer_snapshot: unknown;
+    remarks: string | null;
+    generated_at: string | null;
+    created_at: string;
+    packing_dones: Array<{
+      packing_done_id: string;
+      packing_done_no: string;
+      status: string;
+      packing_date: string | null;
+      warehouse_id: string | null;
+    }>;
+    products: Array<{
+      packing_list_product_id: string;
+      source_item_id: string | null;
+      product_id: string;
+      product_code: string | null;
+      product_name: string | null;
+      product_snapshot: unknown;
+      batch_code: string | null;
+      batch_snapshot: unknown;
+      order_base_qty: number;
+      packed_base_qty: number;
+      pending_base_qty: number;
+      quantity_type: string | null;
+      remarks: string | null;
+    }>;
+  };
+}
+
+export async function getPackedOrdersDropdown(params?: {
+  source_type?: string;
+  warehouse_id?: string;
+}): Promise<PackedOrderDropdownItem[]> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.PACKING_LIST.ORDERS_DROPDOWN, {
+    params: params || {},
+  });
+  const data = response.data?.data;
+  return Array.isArray(data) ? data : [];
 }

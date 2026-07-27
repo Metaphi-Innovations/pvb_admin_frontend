@@ -17,5 +17,10 @@ export const salesOrderKeys = {
     [...salesOrderKeys.filterDropdowns(), fieldName] as const,
   details: () => [...salesOrderKeys.all, "detail"] as const,
   detail: (id: string | number) => [...salesOrderKeys.details(), String(id)] as const,
-  nextSoNumber: () => [...salesOrderKeys.all, "next-so-number"] as const,
+  nextSoNumber: (warehouseId?: string | null) =>
+    [
+      ...salesOrderKeys.all,
+      "next-so-number",
+      warehouseId ? String(warehouseId) : "none",
+    ] as const,
 } as const;

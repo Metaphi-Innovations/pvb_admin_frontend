@@ -5,87 +5,129 @@ import { useParams, useRouter } from "next/navigation";
 import { PRFormLayout } from "../../components/PRFormLayout";
 import {
   PurchaseRequestForm,
-  prToFormValues,
   type PRFormValues,
 } from "../../components/PurchaseRequestForm";
 import { PRFormFooter } from "../../components/PRFormFooter";
-import { formToPR, submitPR, todayStr } from "../../components/pr-form-utils";
-import { getPRById, loadPurchaseRequests, savePurchaseRequests } from "../../pr-data";
-import { CURRENT_USER } from "@/lib/procurement/config";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import {
+  detailToFormValues,
+  usePurchaseRequest,
+  usePurchaseRequestPreviewNumber,
+  useUpdatePurchaseRequest,
+} from "@/hooks/procurement";
 
 const EDITABLE_STATUSES = ["draft", "rejected"] as const;
 
 export default function EditPRPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const id = String(params.id ?? "");
+  const detailQuery = usePurchaseRequest(id);
+  const updateMutation = useUpdatePurchaseRequest();
   const [form, setForm] = useState<PRFormValues | null>(null);
-  const [pr, setPr] = useState(getPRById(id));
+  const [error, setError] = useState<string | null>(null);
+
+  const detail = detailQuery.data;
+  const canEdit = useMemo(
+    () =>
+      !!detail &&
+      EDITABLE_STATUSES.includes(
+        detail.status as (typeof EDITABLE_STATUSES)[number],
+      ),
+    [detail],
+  );
 
   useEffect(() => {
-    const p = getPRById(id);
-    setPr(p);
-    if (!p) return;
-    if (!EDITABLE_STATUSES.includes(p.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!detail) return;
+    if (
+      !EDITABLE_STATUSES.includes(
+        detail.status as (typeof EDITABLE_STATUSES)[number],
+      )
+    ) {
       router.replace(`/procurement/purchase-requests/${id}`);
       return;
     }
-    setForm(prToFormValues(p));
-  }, [id, router]);
+    setForm(detailToFormValues(detail));
+  }, [detail, id, router]);
 
-  const canEdit = useMemo(
-    () => !!pr && EDITABLE_STATUSES.includes(pr.status as (typeof EDITABLE_STATUSES)[number]),
-    [pr],
+  const previewQuery = usePurchaseRequestPreviewNumber(
+    form?.state || "Maharashtra",
+    Boolean(form) && !detail?.prNumber,
   );
+  const prNumber = detail?.prNumber || previewQuery.data || "";
 
-  if (!form || !pr) {
+  if (detailQuery.isLoading || !form) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">Purchase request not found.</div>
+      <div className="p-8 text-sm text-muted-foreground">
+        {detailQuery.isError
+          ? "Purchase request not found."
+          : "Loading purchase request…"}
+      </div>
     );
   }
 
-  if (!canEdit) {
+  if (!canEdit || !detail) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">This purchase request cannot be edited.</div>
+      <div className="p-8 text-sm text-muted-foreground">
+        This purchase request cannot be edited.
+      </div>
     );
   }
 
   const persist = (asSubmit: boolean) => {
-    const today = todayStr();
-    let record = formToPR(form, {
-      id: pr.id,
-      prNumber: pr.prNumber,
-      status: pr.status,
-      createdBy: pr.createdBy,
-      createdDate: pr.createdDate,
-      activity: [...pr.activity, { date: today, action: "Updated", by: CURRENT_USER }],
-      convertedPoIds: pr.convertedPoIds,
-      approvedBy: pr.approvedBy,
-      approvedDate: pr.approvedDate,
-    });
-    if (asSubmit) record = submitPR(record);
-    savePurchaseRequests(loadPurchaseRequests().map((p) => (p.id === id ? record : p)));
-    router.push(
-      `/procurement/purchase-requests?toast=${asSubmit ? "pr-submitted" : "pr-saved"}`,
+    setError(null);
+    if (asSubmit) {
+      if (!form.requiredByDate) {
+        setError("Required By Date is required to submit.");
+        return;
+      }
+      if (!form.lines.some((l) => l.productId && String(l.productId) !== "0")) {
+        setError("Add at least one product before submitting.");
+        return;
+      }
+    }
+    updateMutation.mutate(
+      {
+        id,
+        form,
+        status: asSubmit ? "pending_approval" : "draft",
+      },
+      {
+        onSuccess: () => {
+          router.push(
+            `/procurement/purchase-requests?toast=${asSubmit ? "pr-submitted" : "pr-saved"}`,
+          );
+        },
+        onError: (err) => {
+          setError(getErrorMessage(err, "Failed to update purchase request."));
+        },
+      },
     );
   };
 
   return (
     <PRFormLayout
       mode="edit"
-      prNumber={pr.prNumber}
-      status={pr.status}
+      prNumber={prNumber}
+      status={detail.status}
       footer={
         <PRFormFooter
           onCancel={() => router.push(`/procurement/purchase-requests/${id}`)}
           onSaveDraft={() => persist(false)}
           onSubmit={() => persist(true)}
           showSubmit
-          saveLabel="Update Purchase Request"
+          saveLabel={
+            updateMutation.isPending ? "Saving…" : "Update Purchase Request"
+          }
         />
       }
     >
-      <PurchaseRequestForm form={form} onChange={setForm} prNumber={pr.prNumber} />
+      {error && (
+        <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <PurchaseRequestForm form={form} onChange={setForm} prNumber={prNumber} />
     </PRFormLayout>
   );
 }

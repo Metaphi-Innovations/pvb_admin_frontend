@@ -21,6 +21,8 @@ export interface PRAttachment {
   size: string;
   uploadedAt: string;
   uploadedBy: string;
+  /** Present when loaded from API */
+  url?: string;
 }
 
 export interface PRLineItem {

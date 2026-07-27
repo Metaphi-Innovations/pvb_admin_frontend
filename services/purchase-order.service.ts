@@ -480,7 +480,7 @@ function buildWriteBody(
     po_status: backendStatus,
     payment_type: form.paymentType || null,
     credit_days: form.creditDays ?? null,
-    state: form.state || null,
+    state: form.state?.trim() || "Maharashtra",
     warehouse_id: toUuidOrNull(form.warehouseId),
     warehouse_name: form.warehouseName || null,
     delivery_address: form.deliveryAddress || null,
@@ -669,10 +669,19 @@ export const PurchaseOrderService = {
     return data as Record<string, unknown>;
   },
 
-  async getPreviewNumber(signal?: AbortSignal): Promise<string> {
+  async getPreviewNumber(
+    state?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const resolvedState = state?.trim() || "Maharashtra";
     const response = await axiosInstance.get(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.PREVIEW_NUMBER,
-      { signal },
+      {
+        signal,
+        params: { state: resolvedState },
+        // Bust caches that ignore query-string variance (304 without ?state=).
+        headers: { "Cache-Control": "no-cache" },
+      },
     );
     const payload = response.data as Record<string, unknown>;
     const data = payload.data;

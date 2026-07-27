@@ -100,11 +100,23 @@ export function usePurchaseOrder(id: string | null | undefined) {
   });
 }
 
-export function usePurchaseOrderPreviewNumber(enabled = true) {
+export function usePurchaseOrderPreviewNumber(
+  state?: string | null,
+  enabled = true,
+) {
+  const resolvedState = (state?.trim() || "Maharashtra").trim();
   return useQuery({
-    queryKey: [...purchaseOrderKeys.all, "preview-number"] as const,
-    queryFn: ({ signal }) => PurchaseOrderService.getPreviewNumber(signal),
-    enabled,
+    queryKey: [
+      ...purchaseOrderKeys.all,
+      "preview-number",
+      resolvedState,
+    ] as const,
+    queryFn: ({ signal }) =>
+      PurchaseOrderService.getPreviewNumber(resolvedState, signal),
+    enabled: Boolean(enabled && resolvedState),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -171,7 +183,12 @@ export function useCreatePurchaseOrder() {
         files: input.files ?? input.form.attachments,
       }),
     onSuccess: async () => {
-      await invalidatePoQueries(queryClient);
+      await Promise.all([
+        invalidatePoQueries(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: [...purchaseOrderKeys.all, "preview-number"],
+        }),
+      ]);
     },
   });
 }

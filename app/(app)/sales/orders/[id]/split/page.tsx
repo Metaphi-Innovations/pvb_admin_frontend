@@ -47,7 +47,10 @@ export default function SplitSalesOrderPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [creditDialog, setCreditDialog] = useState<CustomerCreditSummary | null>(null);
 
-  const { data: nextOrderNumber } = useNextSoNumber();
+  const { data: nextOrderNumber } = useNextSoNumber(
+    form?.warehouseId ?? originalOrder?.warehouseId,
+    Boolean(form?.warehouseId ?? originalOrder?.warehouseId),
+  );
   const { data: loadedOrder, isLoading: loadingOrder } = useSalesOrder(id);
   const { data: customerData } = useCustomersDropdown();
   const { data: salesmanData } = useSalesmenDropdown();

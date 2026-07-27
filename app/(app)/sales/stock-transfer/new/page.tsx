@@ -39,11 +39,13 @@ export default function AddStockTransferPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const { data: nextNumber, isLoading: loadingNo } = useNextStockTransferNumber();
+  const { data: nextNumber, isLoading: loadingNo } = useNextStockTransferNumber(
+    form.sourceWarehouseId,
+  );
   const createMutation = useCreateStockTransfer();
   const { data: productData } = useProductsDropdown();
 
-  const transferNumber = nextNumber || "Loading...";
+  const transferNumber = nextNumber || (loadingNo ? "Loading..." : "Select from warehouse…");
 
   useEffect(() => {
     if (productData) {

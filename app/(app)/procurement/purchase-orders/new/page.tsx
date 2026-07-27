@@ -1,7 +1,7 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   PurchaseOrderForm,
   defaultPOForm,
@@ -13,10 +13,7 @@ import {
 import { POFormLayout } from "../components/POFormLayout";
 import { POFormFooter } from "../components/POFormFooter";
 import { POFormPageSkeleton } from "../components/POSkeletons";
-import {
-  useCreatePurchaseOrder,
-  usePurchaseOrderPreviewNumber,
-} from "@/hooks/procurement";
+import { useCreatePurchaseOrder } from "@/hooks/procurement";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 export default function NewPOPage() {
@@ -29,23 +26,22 @@ export default function NewPOPage() {
 
 function NewPOContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   // Phase 1: direct PO only — ignore prId from URL until PR-based creation is enabled
-  // const prIdParam = searchParams.get("prId");
-  // const prId = prIdParam && /^\d+$/.test(prIdParam) ? Number(prIdParam) : null;
   const [form, setForm] = useState<POFormValues | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<POFormErrors>({});
-  const previewQuery = usePurchaseOrderPreviewNumber(true);
+  const [poNumber, setPoNumber] = useState("");
   const createMutation = useCreatePurchaseOrder();
-
-  const poNumber = previewQuery.data ?? "";
 
   useEffect(() => {
     setForm(defaultPOForm(null));
     // setForm(defaultPOForm(prId));
   }, []);
   // }, [prId]);
+
+  const handlePoNumberChange = useCallback((next: string) => {
+    setPoNumber(next);
+  }, []);
 
   if (!form) return <POFormPageSkeleton />;
 
@@ -70,7 +66,7 @@ function NewPOContent() {
     createMutation.mutate(
       {
         form,
-        poNumber: submit ? poNumber : poNumber || undefined,
+        poNumber: poNumber || undefined,
         status: submit ? "approved" : "draft",
       },
       {
@@ -105,7 +101,7 @@ function NewPOContent() {
       <PurchaseOrderForm
         form={form}
         onChange={handleFormChange}
-        poNumber={poNumber}
+        onPoNumberChange={handlePoNumberChange}
         status="draft"
         errors={errors}
       />

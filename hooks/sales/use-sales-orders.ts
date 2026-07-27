@@ -18,10 +18,19 @@ export function useSalesOrder(id: string | number | null | undefined) {
   });
 }
 
-export function useNextSoNumber() {
+export function useNextSoNumber(
+  warehouseId?: string | number | null,
+  enabled = true,
+) {
+  const resolvedWarehouseId = warehouseId ? String(warehouseId) : null;
   return useQuery({
-    queryKey: salesOrderKeys.nextSoNumber(),
-    queryFn: ({ signal }) => SalesOrderService.getNextSoNumber(signal),
+    queryKey: salesOrderKeys.nextSoNumber(resolvedWarehouseId),
+    queryFn: ({ signal }) =>
+      SalesOrderService.getNextSoNumber(resolvedWarehouseId, signal),
+    enabled: Boolean(enabled && resolvedWarehouseId),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -95,7 +104,12 @@ export function useCreateSalesOrder() {
     mutationFn: ({ form, options }: { form: SalesOrderFormValues; options: { soNumber: string; status: string } }) =>
       SalesOrderService.create(form, options),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: salesOrderKeys.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: salesOrderKeys.lists() }),
+        queryClient.invalidateQueries({
+          queryKey: [...salesOrderKeys.all, "next-so-number"],
+        }),
+      ]);
     },
   });
 }
