@@ -230,6 +230,11 @@ export interface InvoiceRecord {
 	 */
 	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
+	/**
+	 * Service Invoice only — optional selected Income ledger for Cr revenue.
+	 * When omitted, posting resolves the approved default "Service Income" ledger.
+	 */
+	incomeLedgerId?: number | null;
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
@@ -936,6 +941,8 @@ export type InvoiceFormInput = {
 	dispatchDate?: string;
 	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
+	/** Service Invoice — optional Income ledger override for posting. */
+	incomeLedgerId?: number | null;
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;

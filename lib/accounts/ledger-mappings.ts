@@ -20,6 +20,11 @@ import {
   isGstMappingKey,
   resolveGstLedger,
 } from "@/lib/accounts/gst-accounting";
+import {
+  isSystemControlledMappingKey,
+  resolveApprovedSystemLedger,
+  systemLedgerKeyForMapping,
+} from "@/lib/accounts/system-ledger-resolver";
 
 export type LedgerMappingKey =
   | "sales_revenue"
@@ -216,8 +221,17 @@ export function resolveMappingLedger(
     erpSourceModule?: string;
     erpSourceId?: number;
     gstRatePct?: number;
+    /** Prefer this COA parent when creating (e.g. Sundry Debtors from COA Add). */
+    parentGroupId?: number;
   },
 ): ChartOfAccount | null {
+  // Product Sales / Stock in Hand — stable system identity only; never find-or-create by partyName.
+  if (isSystemControlledMappingKey(mappingKey)) {
+    const systemKey = systemLedgerKeyForMapping(mappingKey);
+    if (!systemKey) return null;
+    return resolveApprovedSystemLedger(systemKey);
+  }
+
   const mappings = loadLedgerMappings();
   const mapping = mappings.find((m) => m.mappingKey === mappingKey && m.isActive);
   if (!mapping) return null;
@@ -225,6 +239,29 @@ export function resolveMappingLedger(
   if (mapping.coaAccountId) {
     const fixed = loadChartOfAccounts().find((r) => r.id === mapping.coaAccountId);
     if (fixed) return fixed;
+  }
+
+  // Stable source-link lookup before name match or create (idempotent backfill).
+  if (options?.erpSourceModule && options?.erpSourceId != null) {
+    const all = loadChartOfAccounts();
+    const bySource = all.find(
+      (r) =>
+        r.nodeLevel === "ledger" &&
+        r.erpSourceModule === options.erpSourceModule &&
+        r.erpSourceId === options.erpSourceId,
+    );
+    if (bySource) return bySource;
+    const byMasterId = all.find(
+      (r) =>
+        r.nodeLevel === "ledger" &&
+        r.masterId === options.erpSourceId &&
+        (r.erpSourceModule === options.erpSourceModule ||
+          (options.erpSourceModule === "customer_master" && r.masterType === "customer") ||
+          (options.erpSourceModule === "vendor_master" && r.masterType === "vendor") ||
+          (options.erpSourceModule === "bank_master" && r.masterType === "bank") ||
+          (options.erpSourceModule === "warehouse_master" && r.masterType === "warehouse")),
+    );
+    if (byMasterId) return byMasterId;
   }
 
   if (isGstMappingKey(mappingKey)) {
@@ -250,11 +287,20 @@ export function resolveMappingLedger(
   if (!options?.createIfMissing) return candidates[0] ?? null;
 
   const records = loadChartOfAccounts();
-  const subGroup = records.find(
-    (r) =>
-      r.nodeLevel === "account_group" &&
-      r.accountName.toLowerCase() === mapping.subGroupName.toLowerCase(),
-  );
+  const preferredParent =
+    options?.parentGroupId != null
+      ? records.find(
+          (r) =>
+            r.id === options.parentGroupId && r.nodeLevel === "account_group",
+        )
+      : undefined;
+  const subGroup =
+    preferredParent ??
+    records.find(
+      (r) =>
+        r.nodeLevel === "account_group" &&
+        r.accountName.toLowerCase() === mapping.subGroupName.toLowerCase(),
+    );
   if (!subGroup) return null;
 
   const id = nextId(records);
@@ -293,4 +339,84 @@ export function resolveMappingLedger(
 export function getMappingPath(mappingKey: LedgerMappingKey): string {
   const m = DEFAULT_MAPPING_TARGETS[mappingKey];
   return m ? `${m.module} › ${m.subGroupName}` : mappingKey;
+}
+
+/** Approved default income ledger for Service Invoice posting (never Product Sales / General). */
+export const SERVICE_INCOME_LEDGER_NAME = "Service Income";
+
+export const SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR =
+  "Service Income ledger is required. Select an Income ledger on the Service Invoice, or create a ledger named \"Service Income\" under Service Revenue.";
+
+function normalizeLedgerName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function isBlockedServiceRevenueLedger(
+  ledger: ChartOfAccount,
+  productSalesId: number | null | undefined,
+): boolean {
+  const name = normalizeLedgerName(ledger.accountName);
+  if (productSalesId != null && ledger.id === productSalesId) return true;
+  if (name === "product sales") return true;
+  if (name === "general" || name === "general sales") return true;
+  return false;
+}
+
+function isActiveIncomeLedger(ledger: ChartOfAccount): boolean {
+  return (
+    ledger.nodeLevel === "ledger" &&
+    ledger.status === "active" &&
+    ledger.accountType === "Income"
+  );
+}
+
+/**
+ * Service Invoice revenue ledger — never Product Sales, never General, never auto-creates.
+ *
+ * Priority:
+ * 1. Explicitly selected Income ledger (when the form provides one)
+ * 2. Approved default ledger named "Service Income" under Service Revenue
+ * 3. Ledger named "Service Income" elsewhere under Income (non-system)
+ * 4. null → caller must fail closed
+ */
+export function resolveServiceInvoiceRevenueLedger(options?: {
+  selectedLedgerId?: number | null;
+  records?: ChartOfAccount[];
+}): ChartOfAccount | null {
+  const records = options?.records ?? loadChartOfAccounts();
+  const productSales = resolveApprovedSystemLedger("PRODUCT_SALES", records, {
+    backfillAlias: false,
+  });
+  const productSalesId = productSales?.id ?? null;
+
+  const selectedId = options?.selectedLedgerId;
+  if (selectedId != null) {
+    const selected = records.find((r) => r.id === selectedId && r.nodeLevel === "ledger");
+    if (
+      selected &&
+      isActiveIncomeLedger(selected) &&
+      !isBlockedServiceRevenueLedger(selected, productSalesId)
+    ) {
+      return selected;
+    }
+    // Invalid / blocked selection must not fall through to silent alternatives.
+    return null;
+  }
+
+  const underServiceRevenue = getLedgersUnderSubGroupName("Service Revenue", records).filter(
+    (l) => isActiveIncomeLedger(l) && !isBlockedServiceRevenueLedger(l, productSalesId),
+  );
+  const defaultUnderGroup = underServiceRevenue.find(
+    (l) => normalizeLedgerName(l.accountName) === normalizeLedgerName(SERVICE_INCOME_LEDGER_NAME),
+  );
+  if (defaultUnderGroup) return defaultUnderGroup;
+
+  const anyServiceIncome = records.find(
+    (l) =>
+      isActiveIncomeLedger(l) &&
+      !isBlockedServiceRevenueLedger(l, productSalesId) &&
+      !l.isSystem &&
+      normalizeLedgerName(l.accountName) === normalizeLedgerName(SERVICE_INCOME_LEDGER_NAME),
+  );
+  return anyServiceIncome ?? null;
 }

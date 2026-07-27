@@ -25,6 +25,10 @@ import {
   inferInterstateFromPlaceOfSupply,
   normalizeGstAmounts,
 } from "@/lib/accounts/gst-accounting";
+import {
+  resolveServiceInvoiceRevenueLedger,
+  SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
+} from "@/lib/accounts/ledger-mappings";
 
 function taxableFromGrand(inv: {
   subtotal: number;
@@ -72,6 +76,18 @@ export function maybePostSalesInvoice(invoice: InvoiceRecord): PostingResult | n
   const gstBreakdowns = aggregateLineGstByRate(lineInputs, interstate);
   const tax = aggregateLineGst(lineInputs, interstate);
 
+  // Service invoices credit selected Income / Service Income — never Product Sales or General.
+  const isServiceInvoice = invoice.sourceType === "service";
+  const serviceRevenueLedger = isServiceInvoice
+    ? resolveServiceInvoiceRevenueLedger({ selectedLedgerId: invoice.incomeLedgerId })
+    : null;
+  if (isServiceInvoice && !serviceRevenueLedger) {
+    return {
+      success: false,
+      error: SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
+    };
+  }
+
   const revenueResult = postSalesInvoice({
     invoiceId: invoice.id,
     invoiceNo: invoice.invoiceNo,
@@ -81,19 +97,23 @@ export function maybePostSalesInvoice(invoice: InvoiceRecord): PostingResult | n
     taxableAmount: taxableFromGrand(invoice),
     ...tax,
     gstBreakdowns,
+    revenueLedgerId: serviceRevenueLedger?.id ?? null,
   });
 
   if (!revenueResult.success) return revenueResult;
 
-  postSalesInvoiceCogs({
-    invoiceId: invoice.id,
-    invoiceNo: invoice.invoiceNo,
-    date: invoice.invoiceDate,
-    lines: invoice.lineItems.map((l) => ({
-      productName: l.productName,
-      qty: l.qty,
-    })),
-  });
+  // Inventory COGS only for product sales — not service invoices.
+  if (!isServiceInvoice) {
+    postSalesInvoiceCogs({
+      invoiceId: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      date: invoice.invoiceDate,
+      lines: invoice.lineItems.map((l) => ({
+        productName: l.productName,
+        qty: l.qty,
+      })),
+    });
+  }
 
   return revenueResult;
 }

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   AccountsTable,
@@ -843,9 +842,14 @@ function TrialBalancePageBody({
       {mounted && exceptions.length > 0 && (
         <TrialBalanceExceptionsPanel exceptions={exceptions} />
       )}
-      <AccountsListingTableCard className="trial-balance-compact flex-1 min-h-0">
-        {filterSummaryItems.length > 0 && <ReportFilterSummary items={filterSummaryItems} />}
+      <div className="accounts-listing-card trial-balance-compact flex flex-col flex-1 min-h-0">
+        {filterSummaryItems.length > 0 && (
+          <div className="flex-shrink-0 px-2">
+            <ReportFilterSummary items={filterSummaryItems} />
+          </div>
+        )}
         <AccountsTableListing
+          className="flex-1 min-h-0"
           footer={
             <>
               <BalanceStatusBanner
@@ -1117,7 +1121,7 @@ function TrialBalancePageBody({
             </AccountsTable>
           ) : null}
         </AccountsTableListing>
-      </AccountsListingTableCard>
+      </div>
     </AccountsPageShell>
   );
 }

@@ -61,12 +61,17 @@ import {
 	VendorTabBar,
 	fieldClass,
 } from "./VendorFormLayout";
+import {
+	PartyMasterAccountingFields,
+} from "@/components/accounts/PartyMasterAccountingFields";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "contact", label: "Contact Information" },
 	{ id: "banking", label: "Bank & Commercial" },
 	{ id: "documents", label: "Documents & Remarks" },
+	{ id: "accounting", label: "Accounting" },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]["id"];
@@ -200,6 +205,7 @@ export function VendorForm({
 	/** Auto-generated code preview (add) or stored code (edit). */
 	vendorCode?: string;
 }) {
+	const { selectedFY } = useFY();
 	const [tab, setTab] = useState<TabId>("basic");
 	const [fetchingGst, setFetchingGst] = useState(false);
 	const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -216,6 +222,16 @@ export function VendorForm({
 	useEffect(() => {
 		setGeoNodes(loadGeoNodes());
 	}, []);
+
+	/** Default Opening Balance Date to selected FY start when empty (new vendors). */
+	useEffect(() => {
+		if (form.openingBalanceDate?.trim()) return;
+		const iso = fyOpeningDateIso(selectedFY.id);
+		if (!iso) return;
+		onChange({ ...form, openingBalanceDate: iso });
+		// Only when date is empty / FY changes — intentionally omit form from deps.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedFY.id]);
 
 	const gstRegistered = form.gstRegistered;
 
@@ -1014,6 +1030,24 @@ export function VendorForm({
 								className='min-h-[80px] text-sm resize-none rounded-lg border-border/70'
 							/>
 						</section>
+					</div>
+				)}
+
+				{tab === "accounting" && (
+					<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
+						<PartyMasterAccountingFields
+							values={{
+								openingBalance: form.openingBalance,
+								balanceType: form.balanceType,
+								openingBalanceDate: form.openingBalanceDate,
+								billWiseAccounting: form.billWiseAccounting,
+								accountingDescription: form.accountingDescription,
+							}}
+							onChange={(next) => onChange({ ...form, ...next })}
+							disabled={readOnly}
+							fyHintLabel={selectedFY.start}
+							descriptionLabel='Opening Balance Remarks'
+						/>
 					</div>
 				)}
 			</div>

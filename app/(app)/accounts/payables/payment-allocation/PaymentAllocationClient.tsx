@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
+import { AccountsSummaryCards } from "@/components/accounts/AccountsSummaryCards";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   applyVendorPaymentAllocation,
@@ -43,16 +46,15 @@ import {
   ReportFilterRow,
   ReportFinancialYearFilter,
   ReportVendorFilter,
+  ReportSearchFilter,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsRichTable,
   AccountsTableScroll,
   type AccountsRichColumnDef,
 } from "@/components/accounts/AccountsTable";
-import {
-  AccountsTablePagination,
-  AccountsTableToolbar,
-} from "@/components/accounts/AccountsTableListing";
+import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import { cn } from "@/lib/utils";
 
 const ALLOCATION_STATUS_OPTIONS: { value: PaymentAllocationStatus | "all"; label: string }[] = [
@@ -61,8 +63,6 @@ const ALLOCATION_STATUS_OPTIONS: { value: PaymentAllocationStatus | "all"; label
   { value: "partially_allocated", label: "Partially Allocated" },
   { value: "fully_allocated", label: "Fully Allocated" },
 ];
-
-const STATUS_FILTER_OPTIONS = ["unallocated", "partially_allocated", "fully_allocated"];
 
 function AllocationWorkspace({
   vendorId,
@@ -139,120 +139,119 @@ function AllocationWorkspace({
 
   if (!context) {
     return (
-      <div className="p-8 text-center text-sm text-muted-foreground">
-        Supplier not found.{" "}
-        <button type="button" onClick={onBack} className="text-brand-600 hover:underline">
-          Go back
-        </button>
-      </div>
+      <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          Supplier not found.{" "}
+          <button type="button" onClick={onBack} className="text-brand-600 hover:underline">
+            Go back
+          </button>
+        </div>
+      </AccountsListingTableCard>
     );
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-shrink-0 px-2 py-1.5 border-b border-border/60 bg-white flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="h-9 text-sm font-medium gap-1" onClick={onBack}>
-          <ArrowLeft className="w-4 h-4" /> All Suppliers
+    <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
+      <div className="flex-shrink-0 px-3 py-1.5 border-b border-border/60 bg-white flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "gap-1")}
+          onClick={onBack}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> All Suppliers
         </Button>
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0 p-4 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-xl border border-border bg-muted/10 p-4 text-xs">
-          {[
-            ["Supplier Name", context.vendorName],
-            ["Supplier Code", context.vendorCode],
-            ["Total Outstanding", formatMoney(context.totalOutstanding)],
-            ["Total Payment Available", formatMoney(context.totalPaymentAvailable)],
-            ["Unallocated Balance", formatMoney(context.unallocatedBalance)],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
-              <p className="font-semibold mt-0.5 tabular-nums">{value}</p>
-            </div>
-          ))}
-        </div>
+      <AccountsSummaryCards
+        items={[
+          { label: "Supplier Name", value: context.vendorName },
+          { label: "Supplier Code", value: context.vendorCode },
+          { label: "Total Outstanding", value: formatMoney(context.totalOutstanding) },
+          { label: "Total Payment Available", value: formatMoney(context.totalPaymentAvailable) },
+          { label: "Unallocated Balance", value: formatMoney(context.unallocatedBalance) },
+        ]}
+      />
 
-        {error && (
-          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p className="flex-shrink-0 mx-3 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
 
-        <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="accounts-table w-full min-w-[1000px]">
-              <thead className="border-b bg-muted/20">
-                <tr>
-                  {[
-                    "Select",
-                    "Invoice No.",
-                    "Invoice Date",
-                    "Due Date",
-                    "Invoice Amount",
-                    "Outstanding",
-                    "Allocate Amount",
-                  ].map((h) => (
-                    <th key={h} className="text-left whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
+      <AccountsTableScroll className="flex-1 min-h-0">
+        <table className="accounts-table w-full min-w-[1000px]">
+          <thead className="border-b bg-muted/20">
+            <tr>
+              {[
+                "Select",
+                "Invoice No.",
+                "Invoice Date",
+                "Due Date",
+                "Invoice Amount",
+                "Outstanding",
+                "Allocate Amount",
+              ].map((h) => (
+                <th key={h} className="text-left whitespace-nowrap">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {context.openBills.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="accounts-table-empty">
+                  No open invoices for this supplier.
+                </td>
+              </tr>
+            ) : (
+              context.openBills.map((bill) => (
+                <tr key={bill.billId} className="accounts-table-row group">
+                  <td className="px-3 py-2">
+                    <Checkbox
+                      checked={!!selected[bill.billId]}
+                      onCheckedChange={() => toggleBill(bill.billId, bill.outstanding)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
+                    {bill.billNo}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums">{bill.billDate}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums">{bill.dueDate}</td>
+                  <td className={cn("px-3 py-2 text-xs text-right", MONEY_CELL_CLASS)}>
+                    {formatMoney(bill.billAmount)}
+                  </td>
+                  <td className={cn("px-3 py-2 text-xs text-right font-semibold", MONEY_CELL_CLASS)}>
+                    {formatMoney(bill.outstanding)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <AccountsMoneyInput
+                      className="h-8 text-xs font-medium w-32"
+                      disabled={!selected[bill.billId]}
+                      value={amounts[bill.billId] ?? ""}
+                      onChange={(v) => {
+                        const num = Number(v) || 0;
+                        const capped = Math.min(num, bill.outstanding);
+                        setAmounts((a) => ({ ...a, [bill.billId]: String(capped) }));
+                      }}
+                    />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {context.openBills.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-xs text-muted-foreground">
-                      No open invoices for this supplier.
-                    </td>
-                  </tr>
-                ) : (
-                  context.openBills.map((bill) => (
-                    <tr key={bill.billId} className="accounts-table-row group">
-                      <td className="px-3 py-2.5">
-                        <Checkbox
-                          checked={!!selected[bill.billId]}
-                          onCheckedChange={() => toggleBill(bill.billId, bill.outstanding)}
-                        />
-                      </td>
-                      <td className="px-3 py-2.5 text-xs font-mono font-semibold text-brand-700">
-                        {bill.billNo}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs tabular-nums">{bill.billDate}</td>
-                      <td className="px-3 py-2.5 text-xs tabular-nums">{bill.dueDate}</td>
-                      <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
-                        {formatMoney(bill.billAmount)}
-                      </td>
-                      <td className={cn("px-3 py-2.5 text-xs text-right font-semibold", MONEY_CELL_CLASS)}>
-                        {formatMoney(bill.outstanding)}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <AccountsMoneyInput
-                          className="h-9 text-sm font-medium w-32"
-                          disabled={!selected[bill.billId]}
-                          value={amounts[bill.billId] ?? ""}
-                          onChange={(v) => {
-                            const num = Number(v) || 0;
-                            const capped = Math.min(num, bill.outstanding);
-                            setAmounts((a) => ({ ...a, [bill.billId]: String(capped) }));
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+              ))
+            )}
+          </tbody>
+        </table>
+      </AccountsTableScroll>
 
-      <div className="flex-shrink-0 border-t border-border bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex-shrink-0 border-t border-border bg-white px-3 py-2 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-4 text-xs">
           <span>
             Selected Invoices: <strong>{selectedCount}</strong>
           </span>
           <span>
-            Total Outstanding (selected): <strong className="tabular-nums">{formatMoney(totalOutstandingSelected)}</strong>
+            Total Outstanding (selected):{" "}
+            <strong className="tabular-nums">{formatMoney(totalOutstandingSelected)}</strong>
           </span>
           <span>
             Total Allocation: <strong className="tabular-nums">{formatMoney(totalSelected)}</strong>
@@ -263,13 +262,13 @@ function AllocationWorkspace({
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/accounts/payables/outstanding/${vendorId}`}>
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium">
+            <Button variant="outline" size="sm" className={ACCOUNTS_ACTION_BUTTON_CLASS}>
               View Outstanding
             </Button>
           </Link>
           <Button
             size="sm"
-            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white border-0")}
             onClick={handleSave}
             disabled={saving || totalSelected <= 0 || context.unallocatedBalance <= 0}
           >
@@ -277,7 +276,7 @@ function AllocationWorkspace({
           </Button>
         </div>
       </div>
-    </div>
+    </AccountsListingTableCard>
   );
 }
 
@@ -330,7 +329,7 @@ const COLUMNS: AccountsRichColumnDef<PaymentAllocationVendorRow>[] = [
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 px-2 text-sm text-brand-700"
+        className="h-7 px-2 text-xs text-brand-700"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -375,7 +374,7 @@ function PaymentAllocationTable({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-sm text-brand-700"
+                className="h-7 px-2 text-xs text-brand-700"
                 onClick={(e) => {
                   e.stopPropagation();
                   onAllocate(r.vendorId);
@@ -391,7 +390,7 @@ function PaymentAllocationTable({
 
   return (
     <>
-      <AccountsTableScroll>
+      <AccountsTableScroll className="flex-1 min-h-0">
         <AccountsRichTable
           columns={columns}
           rows={pagedRows}
@@ -414,7 +413,7 @@ function PaymentAllocationTable({
   );
 }
 
-function PaymentAllocationToolbar({
+function PaymentAllocationFilterEnd({
   search,
   onSearchChange,
   exportMeta,
@@ -443,12 +442,19 @@ function PaymentAllocationToolbar({
   }, [visible, exportMeta]);
 
   return (
-    <AccountsTableToolbar
-      search={{ value: search, onChange: onSearchChange, placeholder: "Search supplier…" }}
-      onExcel={handleExportExcel}
-      onPdf={handleExportPdf}
-      exportDisabled={exporting || visible.length === 0}
-    />
+    <>
+      <ReportSearchFilter
+        value={search}
+        onChange={onSearchChange}
+        placeholder="Search supplier…"
+        className="min-w-[180px] max-w-[220px] flex-none basis-auto"
+      />
+      <AccountsExportMenu
+        onExcel={() => void handleExportExcel()}
+        onPdf={handleExportPdf}
+        disabled={exporting || visible.length === 0}
+      />
+    </>
   );
 }
 
@@ -529,7 +535,10 @@ export default function PaymentAllocationClient() {
   if (activeVendorId && Number.isFinite(activeVendorId)) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Payables", "Payment Allocation")}
+        breadcrumbs={[
+          ...accountsBreadcrumb("Payables", "Outstanding", "/accounts/payables/outstanding"),
+          { label: "Payment Allocation" },
+        ]}
         title="Payment Allocation"
         description="Allocate supplier payments against open purchase invoices."
         layout="split"
@@ -565,14 +574,34 @@ export default function PaymentAllocationClient() {
       defaultSortDir="desc"
     >
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Payables", "Payment Allocation")}
+        breadcrumbs={[
+          ...accountsBreadcrumb("Payables", "Outstanding", "/accounts/payables/outstanding"),
+          { label: "Payment Allocation" },
+        ]}
         title="Payment Allocation"
         description="Select a supplier to allocate unallocated payment vouchers against open purchase invoices."
+        actions={
+          <Link href="/accounts/payables/outstanding">
+            <Button variant="outline" size="sm" className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "gap-1")}>
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Outstanding
+            </Button>
+          </Link>
+        }
         filters={
-          <ReportFilterRow>
+          <ReportFilterRow
+            end={
+              <PaymentAllocationFilterEnd
+                search={search}
+                onSearchChange={setSearch}
+                exportMeta={exportMeta}
+                exporting={exporting}
+                onExportingChange={setExporting}
+              />
+            }
+          >
             <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
             <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
-            <div className="space-y-1 min-w-[160px]">
+            <div className="space-y-0.5 min-w-[160px]">
               <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
                 Payment Status
               </Label>
@@ -580,7 +609,7 @@ export default function PaymentAllocationClient() {
                 value={allocationStatus}
                 onValueChange={(v) => setAllocationStatus(v as PaymentAllocationStatus | "all")}
               >
-                <SelectTrigger className="h-9 text-sm font-medium mt-0 w-[160px]">
+                <SelectTrigger className="h-8 text-xs accounts-filter-control mt-0 w-[160px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -597,14 +626,7 @@ export default function PaymentAllocationClient() {
         layout="split"
         className="h-full min-h-0"
       >
-        <div className="flex flex-col flex-1 min-h-0">
-          <PaymentAllocationToolbar
-            search={search}
-            onSearchChange={setSearch}
-            exportMeta={exportMeta}
-            exporting={exporting}
-            onExportingChange={setExporting}
-          />
+        <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
           <PaymentAllocationTable
             page={page}
             pageSize={pageSize}
@@ -612,7 +634,7 @@ export default function PaymentAllocationClient() {
             onPageSizeChange={setPageSize}
             onAllocate={setActiveVendorId}
           />
-        </div>
+        </AccountsListingTableCard>
       </AccountsPageShell>
     </AccountsColumnFilterProvider>
   );

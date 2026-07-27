@@ -24,7 +24,7 @@ export const RECEIPT_SECTION_HEADER =
 
 export const RECEIPT_SECTION_TITLE = "accounts-card-title text-navy-700";
 
-export const RECEIPT_SECTION_BODY = "px-4 py-3";
+export const RECEIPT_SECTION_BODY = "px-3.5 py-2";
 
 export const RECEIPT_TOTAL_SECTION =
   "flex justify-end items-baseline gap-3 px-3 py-2 border-t border-border bg-white";
@@ -49,7 +49,7 @@ export const RECEIPT_FIELD_NUMBER = "w-[136px]";
 export const RECEIPT_FIELD_REFERENCE = "w-[190px]";
 export const RECEIPT_FIELD_MODE = "w-[170px]";
 
-export const RECEIPT_ROW_GAP = "gap-2.5";
+export const RECEIPT_ROW_GAP = "gap-2";
 
 export const RECEIPT_LEDGER_SELECT = {
   compact: true,
@@ -58,7 +58,7 @@ export const RECEIPT_LEDGER_SELECT = {
 } as const;
 
 export const RECEIPT_NARRATION_INPUT =
-  "min-h-[64px] max-h-28 h-auto py-2 resize-y text-[13px]";
+  "min-h-[60px] max-h-36 h-[60px] py-1.5 resize-y text-[13px]";
 
 /** Prefer shared Accounts tokens; kept for voucher form imports */
 export const VOUCHER_PAGE_TITLE_CLASS = "accounts-page-title";
@@ -91,7 +91,7 @@ export const VOUCHER_PREVIEW_TEXT_CLASS = VOUCHER_BODY_TEXT;
 export const VOUCHER_ERROR_CLASS =
   "mb-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-2.5 py-1.5";
 
-export const VOUCHER_HEADER_GRID = "flex flex-wrap items-start gap-x-2 gap-y-2";
+export const VOUCHER_HEADER_GRID = "flex flex-wrap items-start gap-x-2 gap-y-1.5";
 
 export const VOUCHER_FIELD_DATE = "w-[136px]";
 export const VOUCHER_FIELD_NUMBER = "w-[136px]";
@@ -108,15 +108,15 @@ export const VOUCHER_AMOUNT_WIDTH = "w-full min-w-0";
 export const VOUCHER_REMARK_WIDTH = "w-full min-w-0";
 
 export const VOUCHER_ROW_EQUAL_4 =
-  "grid grid-cols-1 sm:grid-cols-4 gap-3 items-start";
+  "grid grid-cols-1 sm:grid-cols-4 gap-2 items-start";
 
 /** Equal 3-column grid for receipt/payment detail rows */
 export const VOUCHER_ROW_EQUAL_3 =
-  "grid grid-cols-1 sm:grid-cols-3 gap-3 items-start";
+  "grid grid-cols-1 sm:grid-cols-3 gap-2 items-start";
 
 /** Equal 2-column grid for contra / bank+remark rows that need only two fields */
 export const VOUCHER_ROW_EQUAL_2 =
-  "grid grid-cols-1 sm:grid-cols-2 gap-3 items-start";
+  "grid grid-cols-1 sm:grid-cols-2 gap-2 items-start";
 
 export const VOUCHER_ROW_BANK = VOUCHER_ROW_EQUAL_3;
 export const VOUCHER_ROW_PARTY = VOUCHER_ROW_EQUAL_3;
@@ -160,13 +160,13 @@ export function VoucherDetailsTableRow({
     <div
       className={cn(
         columns === 1
-          ? "grid grid-cols-1 gap-3 items-start"
+          ? "grid grid-cols-1 gap-2 items-start"
           : columns === 2
             ? VOUCHER_ROW_EQUAL_2
             : columns === 4
               ? VOUCHER_ROW_EQUAL_4
               : VOUCHER_ROW_EQUAL_3,
-        "px-3 py-2.5",
+        "px-3 py-1.5",
         className,
       )}
     >
@@ -183,7 +183,7 @@ export function VoucherDetailsTableBand({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("px-3 py-2.5", className)}>{children}</div>;
+  return <div className={cn("px-3 py-1.5", className)}>{children}</div>;
 }
 
 export function resolveVoucherFormId(voucherId?: number): number | null {
@@ -198,7 +198,7 @@ export function VoucherFormField({
   children,
   className,
   labelClassName,
-  spacingClassName = "space-y-1",
+  spacingClassName = "space-y-0.5",
 }: {
   label: string;
   required?: boolean;

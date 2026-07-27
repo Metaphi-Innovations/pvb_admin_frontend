@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 
 export interface VoucherGstAdjustmentRows {
   cgstLabel: string;
@@ -11,6 +10,16 @@ export interface VoucherGstAdjustmentRows {
   sgstAmount: number;
   igstLabel: string;
   igstAmount: number;
+}
+
+/** Frontend accounting preview line for Payment / Receipt adjustments. */
+export interface VoucherAdjustmentPreviewLine {
+  id: string;
+  adjustmentType: string;
+  ledgerId: number | null;
+  ledgerName: string;
+  debitOrCredit: "debit" | "credit";
+  amount: number;
 }
 
 export interface VoucherAccountingPostingSummaryProps {
@@ -22,8 +31,13 @@ export interface VoucherAccountingPostingSummaryProps {
   creditLedgerName?: string;
   voucherAmount?: number;
   voucherAmountLabel?: string;
+  /** Net cash/bank after adjustments — shown when settlement preview is active. */
+  netCashBankAmount?: number;
+  netCashBankLabel?: string;
   totalDebit?: number;
   totalCredit?: number;
+  /** Adjustment rows included in the accounting preview (Dr/Cr + ledger). */
+  adjustmentPreviewLines?: VoucherAdjustmentPreviewLine[];
   gstAdjustments?: VoucherGstAdjustmentRows;
   visibilityItems: string[];
   className?: string;
@@ -76,8 +90,11 @@ function PostingBody({
   creditLedgerName,
   voucherAmount,
   voucherAmountLabel,
+  netCashBankAmount,
+  netCashBankLabel,
   totalDebit,
   totalCredit,
+  adjustmentPreviewLines,
   gstAdjustments,
   visibilityItems,
   compact,
@@ -88,29 +105,33 @@ function PostingBody({
   creditLedgerName?: string;
   voucherAmount?: number;
   voucherAmountLabel: string;
+  netCashBankAmount?: number;
+  netCashBankLabel: string;
   totalDebit?: number;
   totalCredit?: number;
+  adjustmentPreviewLines?: VoucherAdjustmentPreviewLine[];
   gstAdjustments?: VoucherGstAdjustmentRows;
   visibilityItems: string[];
   compact?: boolean;
 }) {
   const showJournalTotals = totalDebit != null || totalCredit != null;
   const showAmount = voucherAmount != null && !showJournalTotals;
+  const adjLines = (adjustmentPreviewLines ?? []).filter((l) => l.amount > 0);
 
   return (
-    <div className={cn("grid grid-cols-1 md:grid-cols-2", compact ? "gap-3" : "gap-4")}>
-      <div className={cn("min-w-0", compact ? "space-y-2" : "space-y-3")}>
+    <div className={cn("grid grid-cols-1 md:grid-cols-2", compact ? "gap-2" : "gap-3")}>
+      <div className={cn("min-w-0", compact ? "space-y-1" : "space-y-1.5")}>
         <p
           className={cn(
             "uppercase tracking-widest text-muted-foreground",
             compact ? "text-[10px] font-semibold" : "text-[10px] font-bold",
           )}
         >
-          Accounting Impact
+          Accounting Entry
         </p>
 
         {showJournalTotals ? (
-          <div className={compact ? "space-y-1.5" : "space-y-2.5"}>
+          <div className="space-y-1">
             <div className="flex items-center justify-between gap-3 text-[12px] font-normal">
               <span className="text-muted-foreground">Total Debit</span>
               <span className="tabular-nums">{formatMoney(totalDebit ?? 0)}</span>
@@ -121,7 +142,7 @@ function PostingBody({
             </div>
           </div>
         ) : (
-          <div className={compact ? "space-y-1.5" : "space-y-2.5"}>
+          <div className="space-y-1">
             <ImpactRow
               label={debitLedgerLabel}
               value={debitLedgerName || "—"}
@@ -140,8 +161,42 @@ function PostingBody({
                 <span className="cdn-grand-total tabular-nums">{formatMoney(voucherAmount ?? 0)}</span>
               </div>
             ) : null}
+            {netCashBankAmount != null ? (
+              <div className="flex items-center justify-between gap-3 text-[12px]">
+                <span className="text-muted-foreground">{netCashBankLabel}</span>
+                <span className="tabular-nums font-medium">{formatMoney(netCashBankAmount)}</span>
+              </div>
+            ) : null}
           </div>
         )}
+
+        {adjLines.length > 0 ? (
+          <div className={cn("border-t border-border/50", compact ? "space-y-1 pt-1.5" : "space-y-1.5 pt-2")}>
+            <p
+              className={cn(
+                "uppercase tracking-wider text-muted-foreground",
+                compact ? "text-[10px] font-semibold" : "text-[10px] font-bold",
+              )}
+            >
+              Adjustment Entries
+            </p>
+            {adjLines.map((line) => (
+              <div
+                key={line.id}
+                className="flex items-start justify-between gap-3 text-[12px] font-normal"
+              >
+                <span className="text-muted-foreground min-w-0">
+                  <span className="uppercase text-[10px] tracking-wide mr-1">
+                    {line.debitOrCredit === "debit" ? "Dr" : "Cr"}
+                  </span>
+                  {line.adjustmentType}
+                  {line.ledgerName ? ` — ${line.ledgerName}` : ""}
+                </span>
+                <span className="tabular-nums flex-shrink-0">{formatMoney(line.amount)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {gstAdjustments ? (
           <div className={cn("border-t border-border/50", compact ? "space-y-1 pt-1.5" : "space-y-1.5 pt-2")}>
@@ -203,67 +258,45 @@ function PostingBody({
 }
 
 /**
- * Read-only Accounting Posting Summary for the six voucher modules only.
- * Informational — no posting logic or validation.
+ * Live Debit/Credit + Posting Visibility preview body.
+ * Always rendered without its own section card — embed inside Accounting Impact.
+ * Informational only — no posting logic or validation.
  */
 export function VoucherAccountingPostingSummary({
-  voucherTypeLabel,
   debitLedgerLabel = "Debit",
   debitLedgerName,
   creditLedgerLabel = "Credit",
   creditLedgerName,
   voucherAmount,
   voucherAmountLabel = "Voucher Amount",
+  netCashBankAmount,
+  netCashBankLabel = "Net Cash / Bank",
   totalDebit,
   totalCredit,
+  adjustmentPreviewLines,
   gstAdjustments,
   visibilityItems,
   className,
   compact = false,
-  embedded = false,
 }: VoucherAccountingPostingSummaryProps) {
-  const body = (
-    <PostingBody
-      debitLedgerLabel={debitLedgerLabel}
-      debitLedgerName={debitLedgerName}
-      creditLedgerLabel={creditLedgerLabel}
-      creditLedgerName={creditLedgerName}
-      voucherAmount={voucherAmount}
-      voucherAmountLabel={voucherAmountLabel}
-      totalDebit={totalDebit}
-      totalCredit={totalCredit}
-      gstAdjustments={gstAdjustments}
-      visibilityItems={visibilityItems}
-      compact={compact}
-    />
-  );
-
-  if (embedded) {
-    return (
-      <div className={className}>
-        <p className="cdn-subsection-title">Accounting Posting Summary</p>
-        {voucherTypeLabel ? (
-          <p className="text-[10px] text-muted-foreground font-normal -mt-1 mb-2">
-            Preview for {voucherTypeLabel}. Draft saves do not post to ledgers.
-          </p>
-        ) : null}
-        {body}
-      </div>
-    );
-  }
-
   return (
-    <VoucherFormSectionCard
-      title="Accounting Posting Summary"
-      helper={
-        voucherTypeLabel
-          ? `Preview for ${voucherTypeLabel}. Draft saves do not post to ledgers.`
-          : "Informational preview of accounting impact when this voucher is posted."
-      }
-      className={className}
-      compact={compact}
-    >
-      {body}
-    </VoucherFormSectionCard>
+    <div className={className}>
+      <PostingBody
+        debitLedgerLabel={debitLedgerLabel}
+        debitLedgerName={debitLedgerName}
+        creditLedgerLabel={creditLedgerLabel}
+        creditLedgerName={creditLedgerName}
+        voucherAmount={voucherAmount}
+        voucherAmountLabel={voucherAmountLabel}
+        netCashBankAmount={netCashBankAmount}
+        netCashBankLabel={netCashBankLabel}
+        totalDebit={totalDebit}
+        totalCredit={totalCredit}
+        adjustmentPreviewLines={adjustmentPreviewLines}
+        gstAdjustments={gstAdjustments}
+        visibilityItems={visibilityItems}
+        compact={compact}
+      />
+    </div>
   );
 }

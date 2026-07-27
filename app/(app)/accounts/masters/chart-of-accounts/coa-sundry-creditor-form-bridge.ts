@@ -1,6 +1,11 @@
-/** Opens the Accounts Sundry Creditors supplier form inside Chart of Accounts (keeps sidebar). */
+/** Opens the Vendor form inside Chart of Accounts (keeps Accounts sidebar). */
 
-type OpenHandler = ((parentGroupId: number) => void) | null;
+export type SundryCreditorFormOpenArgs = {
+  parentGroupId: number;
+  vendorId?: number;
+};
+
+type OpenHandler = ((args: SundryCreditorFormOpenArgs) => void) | null;
 
 let openHandler: OpenHandler = null;
 
@@ -8,9 +13,12 @@ export function registerSundryCreditorVendorFormHandler(handler: OpenHandler): v
   openHandler = handler;
 }
 
-export function requestSundryCreditorVendorForm(parentGroupId: number): boolean {
+export function requestSundryCreditorVendorForm(
+  parentGroupId: number,
+  vendorId?: number,
+): boolean {
   if (openHandler) {
-    openHandler(parentGroupId);
+    openHandler({ parentGroupId, vendorId });
     return true;
   }
   return false;

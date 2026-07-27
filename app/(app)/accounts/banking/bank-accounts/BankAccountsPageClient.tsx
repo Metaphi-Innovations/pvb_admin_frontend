@@ -62,13 +62,6 @@ type BankAccountRow = BankAccountMaster & {
   mappedWarehouseNames: string[];
 };
 
-function formatBankReconciledDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${d} ${months[parseInt(m, 10) - 1]} ${y}`;
-}
-
 function formatMappedWarehousesCompact(names: string[]): string {
   if (names.length === 0) return "—";
   if (names.length === 1) return names[0]!;
@@ -116,7 +109,6 @@ function exportBankAccountsCsv(rows: BankAccountRow[]) {
     "Account Type",
     "Opening Balance",
     "Current Balance",
-    "Reconciliation",
     "Mapped Warehouses",
     "Status",
   ];
@@ -130,7 +122,6 @@ function exportBankAccountsCsv(rows: BankAccountRow[]) {
       r.accountType,
       r.openingBalance,
       r.currentBalance,
-      r.reconciliationEnabled ? "Yes" : "No",
       getMappedWarehouseLabels(r).join("; "),
       r.status,
     ]
@@ -232,7 +223,6 @@ function BankAccountsTable({
             <SortTh label="Account Type" colKey="accountType" />
             <SortTh label="Opening Balance" colKey="openingBalance" filterType="amount" align="right" />
             <SortTh label="Current Balance" colKey="currentBalance" filterType="amount" align="right" />
-            <SortTh label="Reconciliation" colKey="reconciliationEnabled" filterType="text" />
             <SortTh label="Mapped Warehouses" colKey="mappedWarehousesLabel" filterType="text" />
             <SortTh label="Status" colKey="status" filterType="text" />
             <AccountsColumnHeader
@@ -248,7 +238,7 @@ function BankAccountsTable({
         <AccountsTableBody>
           {visible.length === 0 ? (
             <AccountsTableEmpty
-              colSpan={12}
+              colSpan={11}
               message={
                 search
                   ? "No bank accounts match your search."
@@ -286,21 +276,6 @@ function BankAccountsTable({
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="whitespace-nowrap">
                   <MoneyAmount amount={account.currentBalance} side={account.balanceType} className="text-xs" />
-                </AccountsTableCell>
-                <AccountsTableCell className="bank-accounts-recon-cell whitespace-nowrap text-xs">
-                  {account.reconciliationEnabled ? (
-                    <span className="text-emerald-700 font-medium">Yes</span>
-                  ) : (
-                    <span className="text-muted-foreground">No</span>
-                  )}
-                  {account.lastReconciledDate ? (
-                    <span
-                      className="text-muted-foreground ml-1"
-                      title={`Last reconciled ${formatBankReconciledDate(account.lastReconciledDate)}`}
-                    >
-                      · {formatBankReconciledDate(account.lastReconciledDate)}
-                    </span>
-                  ) : null}
                 </AccountsTableCell>
                 <AccountsTableCell className={cn("bank-accounts-wh-cell", "whitespace-nowrap")}>
                   <MappedWarehousesCell names={account.mappedWarehouseNames} />
@@ -394,9 +369,6 @@ export default function BankAccountsPageClient() {
 
   const getCellValue = useCallback(
     (row: BankAccountRow, key: string) => {
-      if (key === "reconciliationEnabled") {
-        return row.reconciliationEnabled ? "Yes" : "No";
-      }
       return (row as unknown as Record<string, unknown>)[key];
     },
     [],
@@ -422,7 +394,6 @@ export default function BankAccountsPageClient() {
           accountType: { type: "text" },
           openingBalance: { type: "amount" },
           currentBalance: { type: "amount" },
-          reconciliationEnabled: { type: "text" },
           mappedWarehousesLabel: { type: "text" },
           status: { type: "text" },
         }}

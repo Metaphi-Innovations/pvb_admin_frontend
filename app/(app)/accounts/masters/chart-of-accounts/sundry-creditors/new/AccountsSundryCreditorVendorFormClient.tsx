@@ -8,19 +8,21 @@ import { VendorForm } from "@/app/(app)/masters/vendors/components/VendorForm";
 import {
   DEFAULT_VENDOR_FORM,
   formToVendor,
+  generateVendorCodeForType,
+  loadVendors,
+  nextId,
+  saveVendors,
+  todayStr,
   validateVendorForm,
+  vendorToForm,
+  type Vendor,
   type VendorFormValues,
 } from "@/app/(app)/masters/vendors/vendor-data";
-import {
-  createAccountsVendorLedger,
-  generateAccountsVendorCode,
-  nextAccountsVendorId,
-  loadAccountsVendorLedgers,
-  todayStr,
-} from "@/lib/accounts/accounts-vendor-ledger";
-import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { syncVendorLedger } from "@/lib/accounts/erp-accounting-mapping";
+import { CURRENT_USER } from "@/lib/procurement/config";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 import {
   ACCOUNTS_PAGE_SUBTITLE_CLASS,
   ACCOUNTS_PAGE_TITLE_CLASS,
@@ -55,35 +57,59 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export interface AccountsSundryCreditorVendorFormProps {
   parentGroupId: number;
+  /** When set, edit existing Vendor Master (same form / save path). */
+  vendorId?: number;
   onClose: () => void;
   onSaved?: (ledgerId: number, parentGroupId: number | null) => void;
 }
 
 /**
- * Exact Supplier Master form (Basic Details / Contact / Bank & Commercial / Documents).
- * Rendered inside Accounts Chart of Accounts main panel — sidebar stays visible.
- * Saves only to Accounts storage (never ERP Supplier Master).
+ * Same Vendor Master form (incl. Accounting tab) embedded in Accounts COA.
+ * Saves Vendor Master once and syncs the linked Sundry Creditor ledger.
  */
 export default function AccountsSundryCreditorVendorFormClient({
   parentGroupId,
+  vendorId,
   onClose,
   onSaved,
 }: AccountsSundryCreditorVendorFormProps) {
   const mounted = useClientMounted();
   const canCreate = useCanCoa("create");
+  const canEdit = useCanCoa("edit");
+  const { selectedFY } = useFY();
+  const isEdit = vendorId != null;
 
-  const [form, setForm] = useState<VendorFormValues>(DEFAULT_VENDOR_FORM);
+  const [form, setForm] = useState<VendorFormValues>(() => ({
+    ...DEFAULT_VENDOR_FORM,
+    openingBalanceDate: fyOpeningDateIso(selectedFY.id),
+    balanceType: "Credit",
+  }));
   const [vendorCode, setVendorCode] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [ready, setReady] = useState(!isEdit);
 
   useEffect(() => {
+    if (!isEdit || vendorId == null) return;
+    const found = loadVendors().find((v) => v.id === vendorId);
+    if (!found) {
+      setToast({ msg: "Vendor not found.", type: "error" });
+      setTimeout(() => onClose(), 1200);
+      return;
+    }
+    setForm(vendorToForm(found));
+    setVendorCode(found.vendorCode);
+    setReady(true);
+  }, [isEdit, vendorId, onClose]);
+
+  useEffect(() => {
+    if (isEdit) return;
     if (!form.vendorType) {
       setVendorCode("");
       return;
     }
-    setVendorCode(generateAccountsVendorCode(form.vendorType));
-  }, [form.vendorType]);
+    setVendorCode(generateVendorCodeForType(form.vendorType, loadVendors()));
+  }, [form.vendorType, isEdit]);
 
   const showToast = (msg: string, type: ToastState["type"]) => {
     setToast({ msg, type });
@@ -91,8 +117,8 @@ export default function AccountsSundryCreditorVendorFormClient({
   };
 
   const handleSave = () => {
-    if (!canCreate) {
-      showToast("You do not have permission to create ledgers.", "error");
+    if (isEdit ? !canEdit : !canCreate) {
+      showToast("You do not have permission to save this vendor.", "error");
       return;
     }
 
@@ -112,33 +138,59 @@ export default function AccountsSundryCreditorVendorFormClient({
 
     setSaving(true);
     try {
+      const list = loadVendors();
       const today = todayStr();
-      const vendor = formToVendor(form, {
-        id: nextAccountsVendorId(loadAccountsVendorLedgers()),
-        vendorCode,
-        status: "active",
-        createdBy: ACCOUNTS_CURRENT_USER,
-        createdDate: today,
-        updatedBy: ACCOUNTS_CURRENT_USER,
-        updatedDate: today,
-      });
 
-      const { ledger } = createAccountsVendorLedger(vendor, parentGroupId);
-      showToast("Supplier ledger created in Accounts.", "success");
+      let record: Vendor;
+      if (isEdit && vendorId != null) {
+        const existing = list.find((v) => v.id === vendorId);
+        if (!existing) throw new Error("Vendor not found.");
+        record = formToVendor(form, {
+          id: existing.id,
+          vendorCode: existing.vendorCode,
+          status: existing.status === "inactive" ? "inactive" : "active",
+          createdBy: existing.createdBy,
+          createdDate: existing.createdDate,
+          updatedBy: CURRENT_USER,
+          updatedDate: today,
+        });
+        saveVendors(list.map((v) => (v.id === record.id ? record : v)));
+      } else {
+        record = formToVendor(form, {
+          id: nextId(list),
+          vendorCode,
+          status: "active",
+          createdBy: CURRENT_USER,
+          createdDate: today,
+          updatedBy: CURRENT_USER,
+          updatedDate: today,
+        });
+        saveVendors([...list, record]);
+      }
+
+      const ledger = syncVendorLedger(record, { parentGroupId });
+      if (!ledger) {
+        throw new Error("Vendor saved but linked ledger could not be created.");
+      }
+
+      showToast(
+        isEdit ? "Vendor and ledger updated." : "Vendor created with linked ledger.",
+        "success",
+      );
       setTimeout(() => {
-        onSaved?.(ledger.id, ledger.parentAccountId);
+        onSaved?.(ledger.id, ledger.parentAccountId ?? parentGroupId);
         onClose();
       }, 500);
     } catch (saveErr) {
       showToast(
-        saveErr instanceof Error ? saveErr.message : "Failed to save supplier ledger.",
+        saveErr instanceof Error ? saveErr.message : "Failed to save vendor.",
         "error",
       );
       setSaving(false);
     }
   };
 
-  if (!mounted) {
+  if (!mounted || !ready) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -146,12 +198,12 @@ export default function AccountsSundryCreditorVendorFormClient({
     );
   }
 
-  if (!canCreate) {
+  if (isEdit ? !canEdit : !canCreate) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
         <p className="text-sm font-medium text-amber-800">Access restricted</p>
         <p className="text-xs text-muted-foreground">
-          You do not have permission to create ledgers under Chart of Accounts.
+          You do not have permission to {isEdit ? "edit" : "create"} vendor ledgers.
         </p>
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
           Back
@@ -175,9 +227,11 @@ export default function AccountsSundryCreditorVendorFormClient({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>Add Supplier</h1>
+            <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>
+              {isEdit ? "Edit Vendor" : "Add Vendor"}
+            </h1>
             <p className={ACCOUNTS_PAGE_SUBTITLE_CLASS}>
-              Accounts → Chart of Accounts → Sundry Creditors → Add
+              Accounts → Chart of Accounts → Sundry Creditors → {isEdit ? "Edit" : "Add"}
               {vendorCode ? (
                 <>
                   {" · "}
@@ -195,7 +249,7 @@ export default function AccountsSundryCreditorVendorFormClient({
             onClick={onClose}
             disabled={saving}
           >
-            Discard
+            Cancel
           </Button>
           <Button
             size="sm"
@@ -203,7 +257,7 @@ export default function AccountsSundryCreditorVendorFormClient({
             onClick={handleSave}
             disabled={saving}
           >
-            <Save className="h-3.5 w-3.5" /> Save
+            <Save className="h-3.5 w-3.5" /> {isEdit ? "Update" : "Save"}
           </Button>
         </div>
       </div>

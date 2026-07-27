@@ -1,10 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const PaymentRunsPageClient = lazyAccountsPage(
-  () => import("./PaymentRunsPageClient"),
-  { label: "Payment Runs", pathnameHint: "/accounts/payables/payment-runs" },
-);
-
-export default function PaymentRunsPage() {
-  return <PaymentRunsPageClient />;
+/** Orphaned demo Payment Runs — no active workflow links. */
+export default function PaymentRunsRedirectPage() {
+  redirect("/accounts/payables/outstanding");
 }

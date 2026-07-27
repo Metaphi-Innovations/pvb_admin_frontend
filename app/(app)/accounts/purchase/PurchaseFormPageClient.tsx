@@ -139,12 +139,22 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
       title={isEdit ? "Edit Manual Purchase" : "Manual Purchase Entry"}
       breadcrumb={[...PURCHASE_BREADCRUMB]}
       code={purchaseNo || undefined}
-      footer={
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(PURCHASE_LIST_PATH)}>
-            Cancel
+      stickyFooter={
+        <div className="flex items-center justify-between gap-2 w-full">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => router.push(PURCHASE_LIST_PATH)}
+          >
+            Discard Form
           </Button>
-          <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={submit}>
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={submit}
+          >
             Save Purchase
           </Button>
         </div>
@@ -160,11 +170,11 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Purchase No.</Label>
-              <Input className="h-9 text-sm font-medium bg-muted/30" disabled value={isEdit ? purchaseNo : "Auto-generated"} />
+              <Input className="h-8 text-xs bg-muted/30" disabled value={isEdit ? purchaseNo : "Auto-generated"} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Source</Label>
-              <Input className="h-9 text-sm font-medium bg-muted/30" disabled value="Manual Entry" />
+              <Input className="h-8 text-xs bg-muted/30" disabled value="Manual Entry" />
             </div>
           </div>
           <SearchableSelect
@@ -178,43 +188,43 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Supplier Invoice No. *</Label>
-              <Input className="h-9 text-sm font-medium" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
+              <Input className="h-8 text-xs" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Supplier Invoice Date *</Label>
-              <Input type="date" className="h-9 text-sm font-medium" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <Input type="date" className="h-8 text-xs" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Invoice Amount *</Label>
-              <AccountsMoneyInput className="h-9 text-sm font-medium" value={invoiceAmount} onChange={(v) => onAmountChange("invoice", String(v))} />
+              <AccountsMoneyInput className="h-8 text-xs" value={invoiceAmount} onChange={(v) => onAmountChange("invoice", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Tax Amount *</Label>
-              <AccountsMoneyInput className="h-9 text-sm font-medium" value={taxAmount} onChange={(v) => onAmountChange("tax", String(v))} />
+              <AccountsMoneyInput className="h-8 text-xs" value={taxAmount} onChange={(v) => onAmountChange("tax", String(v))} />
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">Total Amount *</Label>
-              <AccountsMoneyInput className="h-9 text-sm font-medium" value={totalAmount} onChange={(v) => onAmountChange("total", String(v))} />
+              <AccountsMoneyInput className="h-8 text-xs" value={totalAmount} onChange={(v) => onAmountChange("total", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">PO Reference</Label>
-              <Input className="h-9 text-sm font-medium font-mono" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
+              <Input className="h-8 text-xs font-mono" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">GRN Reference</Label>
-              <Input className="h-9 text-sm font-medium font-mono" value={grnRef} onChange={(e) => setGrnRef(e.target.value)} />
+              <Input className="h-8 text-xs font-mono" value={grnRef} onChange={(e) => setGrnRef(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Due Date</Label>
-              <Input type="date" className="h-9 text-sm font-medium" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Input type="date" className="h-8 text-xs" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Branch</Label>
-              <Input className="h-9 text-sm font-medium" value={branch} onChange={(e) => setBranch(e.target.value)} />
+              <Input className="h-8 text-xs" value={branch} onChange={(e) => setBranch(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Warehouse</Label>
-              <Input className="h-9 text-sm font-medium" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} />
+              <Input className="h-8 text-xs" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} />
             </div>
           </div>
         </Section>

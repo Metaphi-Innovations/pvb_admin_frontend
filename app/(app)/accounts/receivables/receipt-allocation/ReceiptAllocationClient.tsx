@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
+import { AccountsSummaryCards } from "@/components/accounts/AccountsSummaryCards";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   applyCustomerReceiptAllocation,
@@ -51,6 +53,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
+import { cn } from "@/lib/utils";
 
 const RECEIPT_STATUS_OPTIONS: { value: ReceiptAllocationStatus | "all"; label: string }[] = [
   { value: "all", label: "All statuses" },
@@ -105,7 +110,7 @@ function AvailableReceiptsTable({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-sm"
+                  className="h-7 text-xs"
                   onClick={() => onSelectCustomer(String(r.customerId))}
                 >
                   Allocate
@@ -194,7 +199,7 @@ function OpenInvoicesAllocationTable({
               </AccountsTableCell>
               <AccountsTableCell align="right">
                 <AccountsMoneyInput
-                  className="h-9 text-sm font-medium w-28 ml-auto"
+                  className="h-8 text-xs font-medium w-28 ml-auto"
                   disabled={!selected[inv.invoiceId] || !activeReceipt}
                   value={amounts[inv.invoiceId] ?? ""}
                   onChange={(v) => onAmountChange(inv.invoiceId, String(v))}
@@ -367,9 +372,19 @@ export default function ReceiptAllocationClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Receivables", "Receipt Allocation")}
+      breadcrumbs={[
+        ...accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding"),
+        { label: "Receipt Allocation" },
+      ]}
       title="Receipt Allocation"
       description="Allocate customer receipt vouchers against open sales invoices."
+      actions={
+        <Link href="/accounts/receivables/outstanding">
+          <Button variant="outline" size="sm" className={ACCOUNTS_ACTION_BUTTON_CLASS}>
+            Back to Outstanding
+          </Button>
+        </Link>
+      }
       filters={
         <ReportFilterRow>
           <ReportDateRangeFilter
@@ -386,66 +401,42 @@ export default function ReceiptAllocationClient() {
             onChange={(v) => setCustomerId(v === "all" ? "" : v)}
             customers={customers}
           />
-          <div className="space-y-1 min-w-[150px]">
-            <label className="text-xs font-medium uppercase text-muted-foreground leading-none">
+          <div className="space-y-0.5 min-w-[150px]">
+            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
               Receipt Status
-            </label>
-            <select
+            </Label>
+            <Select
               value={receiptStatus}
-              onChange={(e) => setReceiptStatus(e.target.value as ReceiptAllocationStatus | "all")}
-              className="h-7 w-full text-sm rounded-md border border-border bg-white px-2"
+              onValueChange={(v) => setReceiptStatus(v as ReceiptAllocationStatus | "all")}
             >
-              {RECEIPT_STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-8 text-xs accounts-filter-control mt-0 w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RECEIPT_STATUS_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search receipt…" />
         </ReportFilterRow>
       }
       layout="split"
       className="h-full min-h-0"
-      footer={
-        customerId ? (
-          <div className="px-4 py-2.5 flex items-center justify-between gap-4 bg-muted/10 border-t border-border text-xs">
-            <div className="flex flex-wrap gap-4">
-              <span>
-                Total Selected Invoices: <strong>{totalSelected}</strong>
-              </span>
-              <span>
-                Total Outstanding: <strong>{formatMoney(totalOutstandingSelected)}</strong>
-              </span>
-              <span>
-                Total Allocation: <strong>{formatMoney(totalAllocation)}</strong>
-              </span>
-              <span>
-                Remaining Balance: <strong>{formatMoney(remainingBalance)}</strong>
-              </span>
-            </div>
-            <Button
-              size="sm"
-              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
-              disabled={!activeReceipt}
-              onClick={saveAllocation}
-            >
-              Save Allocation
-            </Button>
-          </div>
-        ) : undefined
-      }
     >
-      <div className="flex flex-col flex-1 min-h-0">
+      <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
         {!customerId ? (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center space-y-2">
+          <div className="flex-1 flex items-center justify-center p-6 min-h-0 overflow-auto">
+            <div className="text-center space-y-2 w-full max-w-lg">
               <p className="text-sm font-medium">Select a customer to allocate receipts</p>
               <p className="text-xs text-muted-foreground">
                 Choose a customer from the filter above to view open invoices and allocate receipts.
               </p>
               {filteredReceipts.length > 0 && (
-                <div className="mt-4 text-left max-w-lg mx-auto">
+                <div className="mt-4 text-left">
                   <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                     Available Receipts
                   </p>
@@ -472,23 +463,24 @@ export default function ReceiptAllocationClient() {
         ) : (
           <>
             {summary && (
-              <div className="flex-shrink-0 border-b border-border/60 bg-white px-4 py-3">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                  {[
-                    ["Customer Name", summary.customerName],
-                    ["Customer Code", summary.customerCode],
-                    ["Total Outstanding", formatMoney(summary.totalOutstanding)],
-                    ["Total Receipt Available", formatMoney(summary.totalReceiptAvailable)],
-                    ["Unallocated Balance", formatMoney(summary.unallocatedBalance)],
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
-                      <p className="font-medium mt-0.5">{value}</p>
-                    </div>
-                  ))}
-                </div>
+              <>
+                <AccountsSummaryCards
+                  items={[
+                    { label: "Customer Name", value: summary.customerName },
+                    { label: "Customer Code", value: summary.customerCode },
+                    { label: "Total Outstanding", value: formatMoney(summary.totalOutstanding) },
+                    {
+                      label: "Total Receipt Available",
+                      value: formatMoney(summary.totalReceiptAvailable),
+                    },
+                    {
+                      label: "Unallocated Balance",
+                      value: formatMoney(summary.unallocatedBalance),
+                    },
+                  ]}
+                />
                 {summary.unallocatedReceipts.length > 1 && (
-                  <div className="mt-3 max-w-xs">
+                  <div className="flex-shrink-0 px-3 py-2 border-b border-border/60 max-w-xs">
                     <p className="text-xs uppercase text-muted-foreground font-semibold mb-1">
                       Receipt to Allocate
                     </p>
@@ -496,7 +488,7 @@ export default function ReceiptAllocationClient() {
                       value={selectedReceiptId ? String(selectedReceiptId) : ""}
                       onValueChange={(v) => setSelectedReceiptId(Number(v))}
                     >
-                      <SelectTrigger className="h-9 text-sm font-medium">
+                      <SelectTrigger className="h-8 text-xs accounts-filter-control">
                         <SelectValue placeholder="Select receipt" />
                       </SelectTrigger>
                       <SelectContent>
@@ -509,8 +501,12 @@ export default function ReceiptAllocationClient() {
                     </Select>
                   </div>
                 )}
-                {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-              </div>
+                {error && (
+                  <p className="flex-shrink-0 px-3 py-1.5 text-xs text-red-600 border-b border-border/60">
+                    {error}
+                  </p>
+                )}
+              </>
             )}
 
             <AccountsColumnFilterProvider
@@ -538,9 +534,37 @@ export default function ReceiptAllocationClient() {
                 />
               </AccountsTableScroll>
             </AccountsColumnFilterProvider>
+
+            <div className="flex-shrink-0 px-3 py-2 flex items-center justify-between gap-4 bg-muted/10 border-t border-border text-xs">
+              <div className="flex flex-wrap gap-4">
+                <span>
+                  Total Selected Invoices: <strong>{totalSelected}</strong>
+                </span>
+                <span>
+                  Total Outstanding: <strong>{formatMoney(totalOutstandingSelected)}</strong>
+                </span>
+                <span>
+                  Total Allocation: <strong>{formatMoney(totalAllocation)}</strong>
+                </span>
+                <span>
+                  Remaining Balance: <strong>{formatMoney(remainingBalance)}</strong>
+                </span>
+              </div>
+              <Button
+                size="sm"
+                className={cn(
+                  ACCOUNTS_ACTION_BUTTON_CLASS,
+                  "bg-brand-600 hover:bg-brand-700 text-white border-0",
+                )}
+                disabled={!activeReceipt}
+                onClick={saveAllocation}
+              >
+                Save Allocation
+              </Button>
+            </div>
           </>
         )}
-      </div>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

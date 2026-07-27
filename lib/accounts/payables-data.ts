@@ -84,6 +84,8 @@ export interface VendorOutstandingRow {
   notDueAmount: number;
   lastPurchaseDate: string;
   lastPaymentDate: string;
+  /** Earliest due date among open bills; "—" when none open. */
+  oldestDueDate: string;
   status: PayableStatus;
 }
 
@@ -124,6 +126,7 @@ export interface SupplierInvoiceOutstandingRow {
   dueDate: string;
   billAmount: number;
   paidAmount: number;
+  debitNoteAdjusted: number;
   outstanding: number;
   overdueDays: number;
   status: PayableStatus;
@@ -431,12 +434,14 @@ export function computeVendorOutstanding(
 
     let overdueAmount = 0;
     let notDueAmount = 0;
+    let oldestDueDate = "";
     for (const bill of filteredBills) {
       const out = getBillOutstanding(bill);
       if (out <= 0.009) continue;
       const dueDate = getPurchaseDueDate(bill.invoiceDate, vendor);
       if (daysBetween(dueDate, asOfDate) > 0) overdueAmount += out;
       else notDueAmount += out;
+      if (!oldestDueDate || dueDate < oldestDueDate) oldestDueDate = dueDate;
     }
     overdueAmount = round2(overdueAmount);
     notDueAmount = round2(notDueAmount + vendorCreditNotes);
@@ -471,6 +476,7 @@ export function computeVendorOutstanding(
       notDueAmount,
       lastPurchaseDate,
       lastPaymentDate: lastPaymentDateForVendor(vendorId, vendor.vendorName),
+      oldestDueDate: oldestDueDate || "—",
       status,
     });
   }
@@ -725,6 +731,18 @@ export function getPaymentAllocationByVoucherId(voucherId: number): PaymentAlloc
   return loadPaymentAllocationRecords().find((r) => r.voucherId === voucherId);
 }
 
+export function computePaymentAllocationSummary() {
+  const rows = loadPaymentAllocationRecords();
+  const pending = rows.filter((r) => r.unallocatedAmount > 0.009);
+  return {
+    unallocatedPayments: rows.filter((r) => r.status === "unallocated").length,
+    partiallyAllocated: rows.filter((r) => r.status === "partially_allocated").length,
+    fullyAllocated: rows.filter((r) => r.status === "fully_allocated").length,
+    pendingAllocationCount: pending.length,
+    totalUnallocatedAmount: round2(pending.reduce((s, r) => s + r.unallocatedAmount, 0)),
+  };
+}
+
 /** Allocate a single posted payment voucher against supplier bills (mirrors receipt allocation). */
 export function applyPaymentAllocation(
   voucherId: number,
@@ -857,6 +875,7 @@ export function computeSupplierInvoiceOutstanding(
       dueDate: billRow.dueDate,
       billAmount: bill.grandTotal,
       paidAmount: bill.amountPaid,
+      debitNoteAdjusted: bill.amountDebited,
       outstanding: billRow.outstanding,
       overdueDays: billRow.daysOverdue,
       status: billRow.status,

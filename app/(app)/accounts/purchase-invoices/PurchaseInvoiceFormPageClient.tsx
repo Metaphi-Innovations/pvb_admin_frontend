@@ -28,6 +28,7 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
@@ -298,7 +299,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
             <Button
               variant="outline"
               size="sm"
-              className="mt-4 h-9 text-sm"
+              className="mt-4 h-8 text-xs"
               onClick={() => router.push("/accounts/purchase-invoices")}
             >
               Back to List
@@ -721,7 +722,7 @@ function GrnPurchaseInvoiceForm({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 text-sm font-medium"
+                  className="h-8 text-xs"
                   onClick={() => {
                     setSelectedGrn(null);
                     setShowGrnSelector(true);
@@ -774,13 +775,13 @@ function GrnPurchaseInvoiceForm({
                 value={invoiceDate}
                 onChange={setInvoiceDate}
                 aria-label="Invoice date"
-                className="h-9 text-sm font-medium mt-1"
+                className="h-8 text-xs mt-1"
               />
             </div>
             <div>
               <Label className="text-xs">Supplier Invoice No *</Label>
               <Input
-                className="h-9 text-sm font-medium mt-1"
+                className="h-8 text-xs mt-1"
                 value={vendorInvoiceNo}
                 onChange={(e) => setVendorInvoiceNo(e.target.value)}
                 placeholder="e.g. INV/AC/2026/001"
@@ -793,7 +794,7 @@ function GrnPurchaseInvoiceForm({
                 value={dueDate}
                 onChange={setDueDate}
                 aria-label="Due date"
-                className="h-9 text-sm font-medium mt-1"
+                className="h-8 text-xs mt-1"
               />
             </div>
           </div>
@@ -877,7 +878,7 @@ function GrnPurchaseInvoiceForm({
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-9 text-sm font-medium font-mono bg-muted/25"
+                        className="h-8 text-xs font-mono bg-muted/25"
                         readOnly
                         value={line.batchNumber ?? ""}
                         placeholder="—"
@@ -885,7 +886,7 @@ function GrnPurchaseInvoiceForm({
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-9 text-sm font-medium font-mono bg-muted/25"
+                        className="h-8 text-xs font-mono bg-muted/25"
                         readOnly
                         value={line.hsnCode}
                         placeholder="HSN"
@@ -895,7 +896,7 @@ function GrnPurchaseInvoiceForm({
                       <Input
                         type="number"
                         className={cn(
-                          "h-9 text-sm font-medium text-right",
+                          "h-8 text-xs text-right",
                           ocrSourced && !canEditOcrFields && "bg-muted/25",
                         )}
                         value={line.qty}
@@ -905,7 +906,7 @@ function GrnPurchaseInvoiceForm({
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-9 text-sm font-medium bg-muted/25"
+                        className="h-8 text-xs bg-muted/25"
                         readOnly
                         value={line.unit}
                       />
@@ -913,7 +914,7 @@ function GrnPurchaseInvoiceForm({
                     <td className="py-1.5 pr-2">
                       <AccountsMoneyInput
                         className={cn(
-                          "h-9 text-sm font-medium text-right",
+                          "h-8 text-xs text-right",
                           ocrSourced && !canEditOcrFields && "bg-muted/25",
                         )}
                         value={line.rate}
@@ -924,7 +925,7 @@ function GrnPurchaseInvoiceForm({
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-9 text-sm font-medium text-right"
+                        className="h-8 text-xs text-right"
                         value={line.discountPct}
                         onChange={(e) => updateLine(idx, { discountPct: Number(e.target.value) || 0 })}
                       />
@@ -932,7 +933,7 @@ function GrnPurchaseInvoiceForm({
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-9 text-sm font-medium text-right bg-muted/25"
+                        className="h-8 text-xs text-right bg-muted/25"
                         readOnly
                         value={line.gstPct}
                       />
@@ -960,7 +961,7 @@ function GrnPurchaseInvoiceForm({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-sm font-medium gap-1 mt-2"
+            className="h-8 text-xs gap-1 mt-2"
             onClick={addLine}
           >
             <Plus className="w-4 h-4" /> Add Line
@@ -1022,6 +1023,8 @@ function GrnPurchaseInvoiceForm({
           })}
         />
 
+        <AccountingImpactSection docKey="purchase_invoice" />
+
         {/* Action Buttons */}
         <div className="flex items-center gap-2 pt-2">
           <Button
@@ -1031,7 +1034,7 @@ function GrnPurchaseInvoiceForm({
             className="h-8 text-xs font-medium"
             onClick={requestCancel}
           >
-            Cancel
+            Discard Form
           </Button>
           <Button
             size="sm"
@@ -1039,7 +1042,7 @@ function GrnPurchaseInvoiceForm({
             onClick={doSave}
             disabled={saving || !selectedGrn}
           >
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-3.5 h-3.5" />
             Create & Post Invoice
           </Button>
         </div>

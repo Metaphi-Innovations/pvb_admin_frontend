@@ -9,6 +9,7 @@ import { loadBankReconTransactions, type BankReconTransactionRecord } from "@/li
 import { canCategorizeTransaction } from "@/lib/accounts/bank-recon-categorize-service";
 import { BankReconMatchStatusBadge, BankReconSourceBadge } from "./BankReconBadges";
 import { BankReconCategorizeSheet } from "./BankReconCategorizeSheet";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 
 interface BankReconCategorizeTabProps {
   bankAccountId: string;
@@ -41,6 +42,8 @@ export function BankReconCategorizeTab({ bankAccountId, onRefresh, registerTick 
         </div>
         <span className="text-[11px] text-muted-foreground">{rows.length} eligible</span>
       </div>
+
+      <AccountingImpactSection docKey="bank_recon_adjustment" compact />
 
       <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
         {rows.length === 0 ? (

@@ -38,6 +38,12 @@ import {
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./SearchableSelect";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import {
+	PartyMasterAccountingFields,
+	DEFAULT_PARTY_MASTER_ACCOUNTING,
+	partyAccountingFromMaster,
+} from "@/components/accounts/PartyMasterAccountingFields";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 import {
@@ -237,6 +243,12 @@ export interface CustomerFormValues {
 	accountNumber: string;
 	confirmAccountNumber: string;
 	swiftCode: string;
+	/** Linked Sundry Debtor ledger accounting (source of truth on Customer Master) */
+	openingBalance: string;
+	balanceType: "Debit" | "Credit";
+	openingBalanceDate: string;
+	billWiseAccounting: boolean;
+	accountingDescription: string;
 	requiredDocuments: {
 		documentTypeId: string;
 		documentName: string;
@@ -318,6 +330,11 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	accountNumber: "",
 	confirmAccountNumber: "",
 	swiftCode: "",
+	openingBalance: DEFAULT_PARTY_MASTER_ACCOUNTING.openingBalance,
+	balanceType: DEFAULT_PARTY_MASTER_ACCOUNTING.balanceType,
+	openingBalanceDate: DEFAULT_PARTY_MASTER_ACCOUNTING.openingBalanceDate,
+	billWiseAccounting: DEFAULT_PARTY_MASTER_ACCOUNTING.billWiseAccounting,
+	accountingDescription: DEFAULT_PARTY_MASTER_ACCOUNTING.accountingDescription,
 	requiredDocuments: [],
 	additionalDocuments: [],
 
@@ -429,6 +446,13 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 		accountNumber: c.bankAccountNo || "",
 		confirmAccountNumber: c.bankAccountNo || "",
 		swiftCode: c.swiftCode || "",
+		...partyAccountingFromMaster({
+			openingBalance: c.openingBalance,
+			balanceType: c.balanceType,
+			openingBalanceDate: c.openingBalanceDate,
+			billWiseAccounting: c.billWiseAccounting,
+			accountingDescription: c.accountingDescription,
+		}),
 		requiredDocuments: c.documents?.requiredDocuments || [],
 		additionalDocuments: c.documents?.additionalDocuments || [],
 
@@ -715,6 +739,7 @@ export function CustomerForm({
 	customerCode,
 	showComplianceValidityDates = false,
 }: CustomerFormProps) {
+	const { selectedFY } = useFY();
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
 	);
@@ -723,6 +748,16 @@ export function CustomerForm({
 		() => getStateSelectOptions(geoNodes),
 		[geoNodes],
 	);
+
+	/** Default Opening Balance Date to selected FY start when empty (new customers). */
+	useEffect(() => {
+		if (form.openingBalanceDate?.trim()) return;
+		const iso = fyOpeningDateIso(selectedFY.id);
+		if (!iso) return;
+		onChange({ ...form, openingBalanceDate: iso });
+		// Only when date is empty / FY changes — intentionally omit form from deps.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedFY.id]);
 
 	const [expandedBranches, setExpandedBranches] = useState<
 		Record<number, boolean>
@@ -1272,6 +1307,9 @@ export function CustomerForm({
 					</TabsTrigger>
 					<TabsTrigger value='commercial' className='text-xs'>
 						Bank & Commercial
+					</TabsTrigger>
+					<TabsTrigger value='accounting' className='text-xs'>
+						Accounting
 					</TabsTrigger>
 				</TabsList>
 
@@ -2244,6 +2282,24 @@ export function CustomerForm({
 						</div>
 					</div>
 				</TabsContent>
+
+				{/* ── TAB 4: ACCOUNTING ── */}
+				<TabsContent value='accounting' className='mt-0'>
+					<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
+						<PartyMasterAccountingFields
+							values={{
+								openingBalance: form.openingBalance,
+								balanceType: form.balanceType,
+								openingBalanceDate: form.openingBalanceDate,
+								billWiseAccounting: form.billWiseAccounting,
+								accountingDescription: form.accountingDescription,
+							}}
+							onChange={(next) => onChange({ ...form, ...next })}
+							disabled={readOnly}
+							fyHintLabel={selectedFY.start}
+						/>
+					</div>
+				</TabsContent>
 			</Tabs>
 
 			{/* Hidden File Input */}
@@ -2602,6 +2658,15 @@ export function formValuesToCustomer(
 		accountHolderName: form.accountHolderName.trim(),
 		branch: form.branch.trim(),
 		swiftCode: form.swiftCode.trim(),
+
+		openingBalance: (() => {
+			const n = Number(String(form.openingBalance).replace(/,/g, "").trim());
+			return Number.isFinite(n) && n >= 0 ? n : 0;
+		})(),
+		balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+		openingBalanceDate: form.openingBalanceDate.trim() || undefined,
+		billWiseAccounting: form.billWiseAccounting !== false,
+		accountingDescription: form.accountingDescription.trim() || undefined,
 
 		createdBy: base.createdBy ?? "Admin",
 		createdDate: base.createdDate ?? todayStr(),

@@ -33,6 +33,8 @@ import {
   recalcAllCreditLines,
   updateCreditNote,
   validateCreditNoteLines,
+  calcCreditLineAmounts,
+  getCreditLineMaxQty,
   type CreditNoteCreationMode,
   type CreditNoteLine,
   type CreditNoteLinkedInvoice,
@@ -54,6 +56,10 @@ import { getPendingCreditNoteRow } from "./pending-credit-notes-data";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
+import {
+  attachWorkflowOnCreate,
+  submitDocumentForApproval,
+} from "@/lib/accounts/accounts-workflow-persist";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { getInvoiceById } from "@/app/(app)/accounts/invoices/invoices-data";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
@@ -61,6 +67,7 @@ import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/Vouch
 import { VoucherGstSummaryCard } from "@/components/accounts/voucher-form/VoucherGstSummaryCard";
 import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
 import {
   VoucherNoteField,
@@ -69,11 +76,15 @@ import {
 } from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
 import { VoucherNoteSegmentControl } from "@/components/accounts/voucher-form/VoucherNoteSegmentControl";
-import {
-  NoteParticularsTable,
-  computeNoteParticularTotals,
-} from "@/components/accounts/voucher-form/NoteParticularsTable";
+import { NoteParticularsTable, computeNoteParticularTotals } from "@/components/accounts/voucher-form/NoteParticularsTable";
 import { NoteReferenceDocumentDetails } from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
+import { NoteQuantityLinesTable } from "@/components/accounts/voucher-form/NoteQuantityLinesTable";
+import { mapNoteLineToQuantityView } from "@/components/accounts/voucher-form/note-quantity-line-map";
+import {
+  NoteInventoryImpactBanner,
+  NoteNoInventoryImpactBanner,
+} from "@/components/accounts/voucher-form/NoteScenarioBanners";
+import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import {
   adaptSalesInvoiceReference,
   adaptSalesReturnReference,
@@ -84,11 +95,18 @@ import "./credit-note-tx.css";
 
 type FormMode = "fresh" | "return" | "scheme";
 type UiRefType = "direct" | "sales_invoice" | "sales_return";
+/** Against invoice: product-wise qty vs single amount particular. */
+type InvoiceAdjustmentBasis = "quantity" | "amount";
 
 const REF_TYPE_OPTIONS: { value: UiRefType; label: string }[] = [
   { value: "direct", label: "Direct" },
   { value: "sales_invoice", label: "Sales Invoice" },
   { value: "sales_return", label: "Sales Return" },
+];
+
+const INVOICE_BASIS_OPTIONS: { value: InvoiceAdjustmentBasis; label: string }[] = [
+  { value: "amount", label: "Amount" },
+  { value: "quantity", label: "Quantity" },
 ];
 
 export default function CreditNoteFormPageClient({
@@ -143,6 +161,8 @@ export default function CreditNoteFormPageClient({
     if (isReturn) return "sales_return";
     return "sales_invoice";
   });
+  const [invoiceAdjustmentBasis, setInvoiceAdjustmentBasis] =
+    useState<InvoiceAdjustmentBasis>("amount");
   const [creditNoteNo, setCreditNoteNo] = useState("");
   const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
@@ -235,7 +255,26 @@ export default function CreditNoteFormPageClient({
     if (loadLines && pre.lineItems?.length) {
       setLines(
         recalcAllCreditLines(
-          pre.lineItems.map((l) => normalizeCreditLine(l)),
+          pre.lineItems.map((l) => {
+            const salesRet = l.salesReturnQty ?? 0;
+            if (salesRet > 0) {
+              // Sales return: lock current qty to returned quantity
+              const withQty = normalizeCreditLine({ ...l, returnQty: salesRet });
+              const calc = calcCreditLineAmounts(withQty);
+              return normalizeCreditLine({
+                ...withQty,
+                creditAmount: calc.amount,
+                gstAmount: calc.taxAmt,
+              });
+            }
+            // Sales invoice quantity mode: blank qty until user enters
+            return normalizeCreditLine({
+              ...l,
+              returnQty: 0,
+              creditAmount: 0,
+              gstAmount: 0,
+            });
+          }),
           preview.alreadyAdjustedAmount,
         ),
       );
@@ -291,22 +330,22 @@ export default function CreditNoteFormPageClient({
     }
     const preview = buildReferenceFromInvoice(Number(id));
     if (preview) {
-      // Reference preview is display-only — do not load editable source lines.
-      applyReferencePreview(preview, false);
+      const loadProductLines = invoiceAdjustmentBasis === "quantity";
+      applyReferencePreview(preview, loadProductLines);
       const c = customers.find((x) => x.id === preview.customerId);
       if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-      if (!directParticular.trim()) {
-        setDirectParticular(preview.lineItems[0]?.productName || "Sales invoice adjustment");
-      }
-      const first = preview.lineItems[0];
-      if (first && !particularRate.trim()) {
-        const qty =
-          first.invoiceQty > 0 ? first.invoiceQty : 1;
-        setParticularQty(String(qty));
-        setParticularRate(String(first.unitPrice || ""));
-        const gstOn = (first.taxPct || 0) > 0;
-        setDirectGstApplicable(gstOn);
-        if (gstOn) setDirectGstPct(String(first.taxPct));
+      if (!loadProductLines) {
+        if (!directParticular.trim()) {
+          setDirectParticular(preview.lineItems[0]?.productName || "Sales invoice adjustment");
+        }
+        const first = preview.lineItems[0];
+        if (first && !particularRate.trim()) {
+          setParticularQty("1");
+          setParticularRate(String(first.unitPrice || ""));
+          const gstOn = (first.taxPct || 0) > 0;
+          setDirectGstApplicable(gstOn);
+          if (gstOn) setDirectGstPct(String(first.taxPct));
+        }
       }
     }
   };
@@ -324,7 +363,8 @@ export default function CreditNoteFormPageClient({
     if (preview && ret) {
       setSourceReturnId(ret.id);
       setSourceReturnNo(ret.returnNumber);
-      applyReferencePreview(preview, false);
+      // Return lines are source of truth — load product rows; do not recreate manually.
+      applyReferencePreview(preview, true);
       if (preview.sourceInvoiceId && preview.sourceInvoiceNo) {
         setLinkedInvoices([{ id: preview.sourceInvoiceId, invoiceNo: preview.sourceInvoiceNo }]);
       }
@@ -332,23 +372,9 @@ export default function CreditNoteFormPageClient({
         (x) => x.id === preview.customerId || x.customerName === ret.customer,
       );
       if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-      if (!directParticular.trim()) {
-        setDirectParticular(preview.lineItems[0]?.productName || "Sales return");
-      }
-      const first = preview.lineItems[0];
-      if (first && !particularRate.trim()) {
-        const qty =
-          (first.salesReturnQty && first.salesReturnQty > 0
-            ? first.salesReturnQty
-            : first.eligibleReturnQty && first.eligibleReturnQty > 0
-              ? first.eligibleReturnQty
-              : first.invoiceQty) || 1;
-        setParticularQty(String(qty));
-        setParticularRate(String(first.unitPrice || ""));
-        const gstOn = (first.taxPct || 0) > 0;
-        setDirectGstApplicable(gstOn);
-        if (gstOn) setDirectGstPct(String(first.taxPct));
-      }
+      setDirectParticular("");
+      setParticularQty("1");
+      setParticularRate("");
     }
   };
 
@@ -390,23 +416,11 @@ export default function CreditNoteFormPageClient({
     setSourceReturnNo(ret.returnNumber);
     if (pending?.returnDate) setCreditNoteDate(pending.returnDate);
 
-    // Display-only reference; particulars drive totals (not editable source product table).
-    applyReferencePreview(preview, false);
-
-    const first = preview.lineItems[0];
-    if (first) {
-      const qty =
-        (first.salesReturnQty && first.salesReturnQty > 0
-          ? first.salesReturnQty
-          : first.invoiceQty) || 1;
-      setParticularQty(String(qty));
-      setParticularRate(String(first.unitPrice || ""));
-      setDirectGstApplicable((first.taxPct || 0) > 0 || (first.gstAmount || 0) > 0);
-      if ((first.taxPct || 0) > 0) setDirectGstPct(String(first.taxPct));
-    }
-    setDirectParticular((prev) =>
-      prev.trim() ? prev : first?.productName || "Sales return",
-    );
+    // Return-based CN: load complete product lines (qty-locked table), not a single particular.
+    applyReferencePreview(preview, true);
+    setDirectParticular("");
+    setParticularQty("1");
+    setParticularRate("");
 
     if (pending?.linkedInvoiceIds.length) {
       setLinkedInvoices(
@@ -626,7 +640,6 @@ export default function CreditNoteFormPageClient({
       setAttachmentName(rec.attachmentName ?? "");
     } else {
       const loadedLines = rec.lineItems.length ? rec.lineItems.map((l) => normalizeCreditLine(l)) : [];
-      setLines(recalcAllCreditLines(loadedLines, rec.alreadyAdjustedAmount));
       if (rec.sourceInvoiceId) {
         const p = buildReferenceFromInvoice(rec.sourceInvoiceId);
         if (p) setReferencePreview(p);
@@ -634,40 +647,56 @@ export default function CreditNoteFormPageClient({
         const p = buildReferenceFromSalesReturn(rec.sourceReturnId);
         if (p) setReferencePreview(p);
       }
-      const line = rec.lineItems[0];
-      const taxable = rec.taxableValue || 0;
-      const gstOn = (rec.taxCreditAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
-      const gstPctStr =
-        line?.taxPct && line.taxPct > 0
-          ? String(line.taxPct)
-          : taxable > 0 && gstOn
-            ? String(Math.round(((rec.taxCreditAmount ?? 0) / taxable) * 10000) / 100)
-            : "18";
-      if (line && line.returnQty > 0 && line.unitPrice > 0) {
-        setParticularQty(String(line.returnQty));
-        setParticularRate(String(line.unitPrice));
-      } else {
-        setParticularQty("1");
-        setParticularRate(String(taxable || line?.unitPrice || rec.currentCreditAmount || ""));
-      }
-      setDirectGstApplicable(gstOn);
-      setDirectGstPct(gstPctStr);
-      setDirectParticular(line?.productName || rec.reason || "");
-      const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
-      const rateStr =
-        line && line.unitPrice > 0
-          ? String(line.unitPrice)
-          : String(taxable || rec.currentCreditAmount || "");
-      const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-      setAdjustment(roundMoney((rec.currentCreditAmount ?? expected) - expected));
       if (rec.adjustmentLedgerId) {
         setAdjustmentLedgerId(rec.adjustmentLedgerId);
         setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
       }
-      // Against-reference edit: keep preview for read-only display; clear editable source lines
-      // for non-scheme so particulars table drives amounts.
-      if (!rec.schemeEntitlementId && !rec.schemeSettlementKey) {
+
+      const keepQtyLines =
+        Boolean(rec.sourceReturnId) ||
+        Boolean(rec.schemeEntitlementId) ||
+        Boolean(rec.schemeSettlementKey) ||
+        loadedLines.some((l) => (l.invoiceQty ?? 0) > 0);
+
+      if (keepQtyLines) {
+        if (rec.sourceReturnId) setUiRefType("sales_return");
+        else if (!rec.schemeEntitlementId && !rec.schemeSettlementKey) {
+          setInvoiceAdjustmentBasis("quantity");
+        }
+        setLines(recalcAllCreditLines(loadedLines, rec.alreadyAdjustedAmount));
+        setDirectParticular("");
+        setParticularQty("1");
+        setParticularRate("");
+        setAdjustment(0);
+      } else {
+        setInvoiceAdjustmentBasis("amount");
         setLines([]);
+        const line = rec.lineItems[0];
+        const taxable = rec.taxableValue || 0;
+        const gstOn = (rec.taxCreditAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
+        const gstPctStr =
+          line?.taxPct && line.taxPct > 0
+            ? String(line.taxPct)
+            : taxable > 0 && gstOn
+              ? String(Math.round(((rec.taxCreditAmount ?? 0) / taxable) * 10000) / 100)
+              : "18";
+        if (line && line.returnQty > 0 && line.unitPrice > 0) {
+          setParticularQty(String(line.returnQty));
+          setParticularRate(String(line.unitPrice));
+        } else {
+          setParticularQty("1");
+          setParticularRate(String(taxable || line?.unitPrice || rec.currentCreditAmount || ""));
+        }
+        setDirectGstApplicable(gstOn);
+        setDirectGstPct(gstPctStr);
+        setDirectParticular(line?.productName || rec.reason || "");
+        const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
+        const rateStr =
+          line && line.unitPrice > 0
+            ? String(line.unitPrice)
+            : String(taxable || rec.currentCreditAmount || "");
+        const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
+        setAdjustment(roundMoney((rec.currentCreditAmount ?? expected) - expected));
       }
     }
   }, [isEdit, creditNoteId, router, customers]);
@@ -689,6 +718,12 @@ export default function CreditNoteFormPageClient({
   const isSourceRefMode =
     !isScheme && (uiRefType === "sales_invoice" || uiRefType === "sales_return");
   const isDirectMode = !isScheme && uiRefType === "direct";
+  const isReturnRefMode = !isScheme && uiRefType === "sales_return";
+  const isInvoiceQtyMode =
+    !isScheme && uiRefType === "sales_invoice" && invoiceAdjustmentBasis === "quantity";
+  const isInvoiceAmountMode =
+    !isScheme && uiRefType === "sales_invoice" && invoiceAdjustmentBasis === "amount";
+  const usesQuantityLines = isReturnRefMode || isInvoiceQtyMode;
 
   const particularTotals = computeNoteParticularTotals(
     particularQty,
@@ -729,7 +764,7 @@ export default function CreditNoteFormPageClient({
   const againstLinesForTax = lines.filter(
     (l) => l.productName && (l.returnQty > 0 || l.creditAmount > 0),
   );
-  const taxBreakup = isScheme
+  const taxBreakup = isScheme || usesQuantityLines
     ? computeNoteTaxBreakup(againstLinesForTax, interstate)
     : computeNoteTaxBreakup(
         [
@@ -741,15 +776,64 @@ export default function CreditNoteFormPageClient({
         interstate,
       );
 
-  const subTotal = isScheme ? taxBreakup.taxableValue : particularTotals.basicAmount;
+  const subTotal =
+    isScheme || usesQuantityLines ? taxBreakup.taxableValue : particularTotals.basicAmount;
   const grandTotal = Math.max(
     0,
-    (isScheme ? taxBreakup.total : particularTotals.total) + (isScheme ? 0 : adjustment),
+    (isScheme || usesQuantityLines ? taxBreakup.total : particularTotals.total) +
+      (isScheme ? 0 : adjustment),
   );
-  const cgstDisplay = isScheme ? taxBreakup.cgstAmount : particularTotals.cgst;
-  const sgstDisplay = isScheme ? taxBreakup.sgstAmount : particularTotals.sgst;
-  const igstDisplay = isScheme ? taxBreakup.igstAmount : particularTotals.igst;
+  const cgstDisplay =
+    isScheme || usesQuantityLines ? taxBreakup.cgstAmount : particularTotals.cgst;
+  const sgstDisplay =
+    isScheme || usesQuantityLines ? taxBreakup.sgstAmount : particularTotals.sgst;
+  const igstDisplay =
+    isScheme || usesQuantityLines ? taxBreakup.igstAmount : particularTotals.igst;
   const original = parseFloat(originalAmount) || grandTotal;
+  const alreadyAdjustedNumSafe = parseFloat(alreadyAdjusted) || 0;
+
+  const quantityLineViews = useMemo(
+    () =>
+      lines
+        .filter((l) => Boolean(l.productName?.trim()))
+        .map((l) => mapNoteLineToQuantityView(l, { interstate })),
+    [lines, interstate],
+  );
+
+  const quantityLinesEmptyMessage = (() => {
+    if (isReturnRefMode) {
+      if (!referencePreview) return "Select a sales return to load product lines.";
+      return "Product lines could not be loaded for the selected Sales Return.";
+    }
+    if (referenceInvoiceId || referencePreview) {
+      return "Product lines could not be loaded for the selected Sales Invoice.";
+    }
+    return "Select a sales invoice to load product lines.";
+  })();
+
+  const handleQuantityLineQtyChange = (lineId: string, qty: number) => {
+    setLines((prev) => {
+      const next = prev.map((line) => {
+        if (line.id !== lineId) return line;
+        const max = isInvoiceQtyMode
+          ? line.invoiceQty > 0
+            ? line.invoiceQty
+            : getCreditLineMaxQty(line)
+          : getCreditLineMaxQty(line);
+        const clamped = Number.isFinite(max)
+          ? Math.min(Math.max(0, qty), max)
+          : Math.max(0, qty);
+        const updated = normalizeCreditLine({ ...line, returnQty: clamped });
+        const calc = calcCreditLineAmounts(updated);
+        return normalizeCreditLine({
+          ...updated,
+          creditAmount: calc.amount,
+          gstAmount: calc.taxAmt,
+        });
+      });
+      return recalcAllCreditLines(next, alreadyAdjustedNumSafe);
+    });
+  };
 
   const resolveCustomerName = (): string => {
     if (selectedCustomer) return selectedCustomer.customerName;
@@ -758,8 +842,11 @@ export default function CreditNoteFormPageClient({
     return "";
   };
 
-  /** Shared save lines from generic Particulars (direct + invoice/return). */
+  /** Shared save lines from generic Particulars (direct + amount-based invoice). */
   const buildParticularLineItems = (): CreditNoteLine[] => {
+    if (usesQuantityLines) {
+      return againstLinesForTax;
+    }
     if (particularTotals.total <= 0 && Math.abs(adjustment) < 0.005) return [];
     const particular = directParticular.trim() || "Adjustment";
     const lineTotal = roundMoney(particularTotals.total + adjustment);
@@ -775,7 +862,8 @@ export default function CreditNoteFormPageClient({
         gstApplicable: directGstApplicable,
         creditAmount: lineTotal,
         gstAmount: particularTotals.gstAmount,
-        lineAmount: lineTotal,
+        adjustmentLedgerId,
+        adjustmentLedgerName,
       }),
     ];
   };
@@ -948,6 +1036,41 @@ export default function CreditNoteFormPageClient({
     }
   };
 
+  const submitForApproval = () => {
+    setError(null);
+    try {
+      if (ledgerConfigError) {
+        setError(ledgerConfigError);
+        return;
+      }
+      if (!resolveCustomerName().trim()) {
+        setError("Select a customer before submitting.");
+        return;
+      }
+      if (schemeEntitlementId && !adjustmentLedgerId && !adjustmentLedgerName.trim()) {
+        setError(SCHEME_ENTITLEMENT_LEDGER_ERROR);
+        return;
+      }
+      if (!validateForPost()) return;
+      let id = creditNoteId;
+      if (isEdit && creditNoteId != null) {
+        updateCreditNote(creditNoteId, buildInput("pending_approval"), { requireAmount: true });
+      } else {
+        const rec = createCreditNote(buildInput("pending_approval"), { requireAmount: true });
+        id = rec.id;
+        attachWorkflowOnCreate("credit_note", rec.id);
+      }
+      if (id != null) {
+        submitDocumentForApproval("credit_note", id);
+        dispatchAccountsDataChanged("credit-notes");
+        showToast("Credit note submitted for approval");
+        router.push(`${CREDIT_NOTES_LIST_PATH}/${id}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not submit for approval.");
+    }
+  };
+
   const postNote = () => {
     setError(null);
     if (!validateForPost()) return;
@@ -1042,10 +1165,14 @@ export default function CreditNoteFormPageClient({
 
   const stickyActions = readOnly ? undefined : (
     <VoucherFormActionBar
-      onCancel={requestCancel}
+      onDiscard={requestCancel}
       onSaveDraft={saveDraft}
+      onSubmitForApproval={submitForApproval}
+      showSubmitForApproval
       onSaveAndPost={postNote}
+      saveAndPostLabel="Save & Post"
       saveDraftDisabled={Boolean(ledgerConfigError)}
+      submitForApprovalDisabled={Boolean(ledgerConfigError)}
       saveAndPostDisabled={Boolean(ledgerConfigError)}
     />
   );
@@ -1056,7 +1183,6 @@ export default function CreditNoteFormPageClient({
 
   const postingSummary = (
     <VoucherAccountingPostingSummary
-      embedded
       compact
       voucherTypeLabel="Credit Note"
       debitLedgerLabel="Debit"
@@ -1133,8 +1259,8 @@ export default function CreditNoteFormPageClient({
         code={creditNoteNo || undefined}
         headerMeta={
           <div className="flex items-center gap-1.5">
-            <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
-              Draft
+            <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 capitalize">
+              {status.replaceAll("_", " ")}
             </span>
             {creditNoteNo ? (
               <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
@@ -1179,14 +1305,20 @@ export default function CreditNoteFormPageClient({
                 />
               </VoucherNoteField>
               {warehouseRef ? (
-                <VoucherNoteField label="Bank Account" width="lg">
-                  <WarehouseMappedBankAccountSelect
-                    warehouseRef={warehouseRef}
-                    value={bankAccountId}
-                    onChange={(id) => setBankAccountId(id)}
-                    label=""
-                    disabled={readOnly}
-                  />
+                <VoucherNoteField label="Bank Account (optional — refund only)" width="lg">
+                  <div className="space-y-1">
+                    <WarehouseMappedBankAccountSelect
+                      warehouseRef={warehouseRef}
+                      value={bankAccountId}
+                      onChange={(id) => setBankAccountId(id)}
+                      label=""
+                      disabled={readOnly}
+                    />
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      Not required for a normal Credit Note (AR + adjustment + GST). Use only if
+                      settling an immediate bank refund with this note.
+                    </p>
+                  </div>
                 </VoucherNoteField>
               ) : null}
               <VoucherNoteField
@@ -1264,17 +1396,55 @@ export default function CreditNoteFormPageClient({
                 )}
               </VoucherNoteField>
               {!isReturn && !isScheme && uiRefType === "sales_invoice" ? (
-                <VoucherNoteField label="Reference Document" span={2} width="ref">
-                  <SearchableSelect
-                    label=""
-                    value={referenceInvoiceId}
-                    onChange={onInvoiceSelect}
-                    options={invoiceOptions}
-                    placeholder="Select invoice"
-                    required
-                    disabled={readOnly}
-                  />
-                </VoucherNoteField>
+                <>
+                  <VoucherNoteField label="Reference Document" span={2} width="ref">
+                    <SearchableSelect
+                      label=""
+                      value={referenceInvoiceId}
+                      onChange={onInvoiceSelect}
+                      options={invoiceOptions}
+                      placeholder="Select invoice"
+                      required
+                      disabled={readOnly}
+                    />
+                  </VoucherNoteField>
+                  <VoucherNoteField label="Adjustment Basis" span={2} width="ref">
+                    <VoucherNoteSegmentControl
+                      hideLabel
+                      label="Adjustment Basis"
+                      name="cn-invoice-basis"
+                      value={invoiceAdjustmentBasis}
+                      options={INVOICE_BASIS_OPTIONS}
+                      onChange={(next) => {
+                        setInvoiceAdjustmentBasis(next);
+                        if (referenceInvoiceId) {
+                          const preview = buildReferenceFromInvoice(Number(referenceInvoiceId));
+                          if (preview) {
+                            applyReferencePreview(preview, next === "quantity");
+                            if (next === "quantity") {
+                              setDirectParticular("");
+                              setParticularQty("1");
+                              setParticularRate("");
+                            } else if (!directParticular.trim()) {
+                              setDirectParticular(
+                                preview.lineItems[0]?.productName || "Sales invoice adjustment",
+                              );
+                              const first = preview.lineItems[0];
+                              if (first && !particularRate.trim()) {
+                                setParticularQty("1");
+                                setParticularRate(String(first.unitPrice || ""));
+                                const gstOn = (first.taxPct || 0) > 0;
+                                setDirectGstApplicable(gstOn);
+                                if (gstOn) setDirectGstPct(String(first.taxPct));
+                              }
+                            }
+                          }
+                        }
+                      }}
+                      disabled={readOnly || refControlsLocked}
+                    />
+                  </VoucherNoteField>
+                </>
               ) : null}
               {!isReturn && !isScheme && uiRefType === "sales_return" ? (
                 <VoucherNoteField label="Reference Document" span={2} width="ref">
@@ -1301,6 +1471,19 @@ export default function CreditNoteFormPageClient({
                   <VoucherNoteField label="Scheme Period" width="md">
                     <VoucherNoteReadOnly>{schemePeriod || "—"}</VoucherNoteReadOnly>
                   </VoucherNoteField>
+                  <VoucherNoteField label="Eligible Amount" width="md">
+                    <VoucherNoteReadOnly>
+                      {formatINR(eligibleBase ?? original)}
+                    </VoucherNoteReadOnly>
+                  </VoucherNoteField>
+                  <VoucherNoteField label="Approved Amount" width="md">
+                    <VoucherNoteReadOnly>
+                      {formatINR(schemeSettlementAmount ?? grandTotal)}
+                    </VoucherNoteReadOnly>
+                  </VoucherNoteField>
+                  <VoucherNoteField label="Mapped Ledger" width="md">
+                    <VoucherNoteReadOnly>{adjustmentLedgerName || "—"}</VoucherNoteReadOnly>
+                  </VoucherNoteField>
                   <VoucherNoteField label="Calculation Reference" span={2} width="ref">
                     <VoucherNoteReadOnly>{calculationReference || "—"}</VoucherNoteReadOnly>
                   </VoucherNoteField>
@@ -1318,6 +1501,13 @@ export default function CreditNoteFormPageClient({
                   : "Select a sales invoice to view source details."
               }
             />
+          ) : null}
+
+          {isReturnRefMode ? (
+            <NoteInventoryImpactBanner returnDocumentLabel="Sales Return" />
+          ) : null}
+          {isDirectMode || isScheme || isInvoiceAmountMode ? (
+            <NoteNoInventoryImpactBanner />
           ) : null}
 
           <VoucherFormSectionCard title="Particulars" flush compact>
@@ -1381,6 +1571,33 @@ export default function CreditNoteFormPageClient({
                       })}
                     </tbody>
                   </table>
+                </div>
+              ) : usesQuantityLines ? (
+                <div className="space-y-2">
+                  <div className="px-3 pt-2 max-w-sm">
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">
+                      Adjustment Ledger <span className="text-red-500">*</span>
+                    </p>
+                    <GroupedLedgerSelect
+                      value={adjustmentLedgerId}
+                      onChange={(l) => {
+                        setAdjustmentLedgerId(l.id);
+                        setAdjustmentLedgerName(l.accountName);
+                      }}
+                      placeholder="Select adjustment ledger"
+                      required
+                      disabled={readOnly}
+                      compact
+                    />
+                  </div>
+                  <NoteQuantityLinesTable
+                    lines={quantityLineViews}
+                    readOnly={readOnly}
+                    qtyLocked={isReturnRefMode}
+                    currentQtyLabel="Qty"
+                    onCurrentQtyChange={handleQuantityLineQtyChange}
+                    emptyMessage={quantityLinesEmptyMessage}
+                  />
                 </div>
               ) : (
                 <div className="px-3 py-2">
@@ -1446,8 +1663,9 @@ export default function CreditNoteFormPageClient({
               if (f) setAttachmentName(f.name);
             }}
             onRemoveAttachment={() => setAttachmentName("")}
-            footerSlot={postingSummary}
           />
+
+          <AccountingImpactSection docKey="credit_note" compact entryPreview={postingSummary} />
         </div>
       </AccountsFormLayout>
       </div>

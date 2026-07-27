@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { VendorForm } from "../../components/VendorForm";
@@ -17,6 +17,7 @@ import {
 } from "../../vendor-data";
 import { ensureVendorLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { CURRENT_USER } from "@/lib/procurement/config";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 
 function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error"; onDismiss: () => void }) {
   return (
@@ -36,7 +37,16 @@ function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error
 export default function EditVendorPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = Number(params.id);
+  const returnToParam = searchParams.get("returnTo");
+  const fromCoa =
+    searchParams.get("source") === "chart-of-accounts" ||
+    searchParams.get("from") === "coa";
+  const leaveHref =
+    returnToParam ||
+    (fromCoa ? CHART_OF_ACCOUNTS_HREF : `/masters/vendors/${id}`);
+
   const [form, setForm] = useState<VendorFormValues | null>(null);
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -44,12 +54,12 @@ export default function EditVendorPage() {
   useEffect(() => {
     const v = getVendorById(id);
     if (!v) {
-      router.replace("/masters/vendors");
+      router.replace(fromCoa ? leaveHref : "/masters/vendors");
       return;
     }
     setForm(vendorToForm(v));
     setStatus(v.status);
-  }, [id, router]);
+  }, [id, router, fromCoa, leaveHref]);
 
   const save = () => {
     if (!form) return;
@@ -74,7 +84,7 @@ export default function EditVendorPage() {
       ensureVendorLedgerFromMaster(updated);
     }
     setToast({ msg: "Supplier updated.", type: "success" });
-    setTimeout(() => router.push(`/masters/vendors/${id}`), 700);
+    setTimeout(() => router.push(leaveHref), 700);
   };
 
   if (!form) return null;
@@ -84,8 +94,12 @@ export default function EditVendorPage() {
   return (
     <FormContainer
       title="Edit Supplier"
-      description={`Masters → Supplier Master → ${vendor?.vendorName ?? "Edit"}`}
-      onBack={() => router.push(`/masters/vendors/${id}`)}
+      description={
+        fromCoa
+          ? "Accounts → Chart of Accounts → Sundry Creditors → Edit"
+          : `Masters → Supplier Master → ${vendor?.vendorName ?? "Edit"}`
+      }
+      onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
           {vendor?.vendorCode && (
@@ -93,7 +107,7 @@ export default function EditVendorPage() {
               {vendor.vendorCode}
             </span>
           )}
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.push(`/masters/vendors/${id}`)}>
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.push(leaveHref)}>
             Cancel
           </Button>
           <Button className="h-9 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 text-white" onClick={save}>

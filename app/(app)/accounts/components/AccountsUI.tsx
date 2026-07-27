@@ -128,7 +128,8 @@ export function SectionTabs({
   active,
   onChange,
   counts,
-  compact,
+  /** Defaults to compact (COA density). Pass `false` only for rare oversized tab rows. */
+  compact = true,
 }: {
   tabs: { id: string; label: string }[];
   active: string;
@@ -137,35 +138,45 @@ export function SectionTabs({
   compact?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-0 border-b border-border/60 overflow-x-auto">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          onClick={() => onChange(t.id)}
-          className={cn(
-            "font-medium whitespace-nowrap border-b-2 -mb-px leading-none",
-            compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm",
-            active === t.id
-              ? "border-brand-600 text-brand-700"
-              : "border-transparent text-slate-600 hover:text-slate-800",
-          )}
-        >
-          {t.label}
-          {counts != null && counts[t.id] != null ? (
-            <span
-              className={cn(
-                "ml-1.5 tabular-nums font-semibold",
-                compact
-                  ? "text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground"
-                  : "opacity-70 text-[11px]",
-              )}
-            >
-              ({counts[t.id]})
-            </span>
-          ) : null}
-        </button>
-      ))}
+    <div
+      role="tablist"
+      className={cn(
+        "inline-flex max-w-full items-center overflow-x-auto",
+        "rounded-lg border border-border bg-muted/40",
+        compact ? "gap-0.5 p-0.5" : "gap-1 p-1.5 rounded-xl",
+      )}
+    >
+      {tabs.map((t) => {
+        const isActive = active === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(t.id)}
+            className={cn(
+              "shrink-0 whitespace-nowrap rounded-md transition-all",
+              compact ? "px-2.5 py-1 text-xs" : "px-5 py-2.5 text-sm rounded-lg",
+              isActive
+                ? "bg-white font-semibold text-brand-600 shadow-sm"
+                : "font-medium text-slate-600 hover:bg-white/70 hover:text-foreground",
+            )}
+          >
+            {t.label}
+            {counts != null && counts[t.id] != null ? (
+              <span
+                className={cn(
+                  "ml-1.5 tabular-nums font-semibold text-[10px] text-muted-foreground",
+                  isActive && "text-brand-600/80",
+                )}
+              >
+                ({counts[t.id]})
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

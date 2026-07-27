@@ -16,8 +16,24 @@ import {
 
 export type VoucherFormLayout = "dual-simple" | "journal-grid";
 
-const RECEIPT_PAYMENT_MODES = ["Cash", "Cheque", "NEFT/RTGS", "UPI", "IMPS", "Other"] as const;
-const CONTRA_TRANSFER_MODES = ["Bank Transfer", "Cash Deposit", "Cash Withdrawal", "Cheque", "Other"] as const;
+/** Separate NEFT / RTGS / Bank Transfer for instrument-field clarity. */
+const RECEIPT_PAYMENT_MODES = [
+  "Cash",
+  "Cheque",
+  "Bank Transfer",
+  "NEFT",
+  "RTGS",
+  "IMPS",
+  "UPI",
+  "Other",
+] as const;
+const CONTRA_TRANSFER_MODES = [
+  "Bank Transfer",
+  "Cash Deposit",
+  "Cash Withdrawal",
+  "Cheque",
+  "Other",
+] as const;
 
 export interface VoucherFormTypeConfig {
   voucherType: VoucherTypeCode;
@@ -89,7 +105,7 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         voucherNumberLabel: "Receipt No.",
         transactionModeLabel: "Mode of Receipt",
         transactionModeOptions: RECEIPT_PAYMENT_MODES,
-        defaultTransactionMode: "NEFT/RTGS",
+        defaultTransactionMode: "NEFT",
         debitAccountLabel: "Cash / Bank Ledger",
         creditAccountLabel: "Customer / Income / Other Ledger",
         debitAccountPlaceholder: "Select cash or bank ledger…",
@@ -119,7 +135,7 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         voucherNumberLabel: "Payment No.",
         transactionModeLabel: "Mode of Payment",
         transactionModeOptions: RECEIPT_PAYMENT_MODES,
-        defaultTransactionMode: "NEFT/RTGS",
+        defaultTransactionMode: "NEFT",
         debitAccountLabel: "Vendor / Expense / Other Ledger",
         creditAccountLabel: "Cash / Bank Ledger",
         debitAccountPlaceholder: "Select vendor, expense, payable…",

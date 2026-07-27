@@ -75,6 +75,16 @@ export interface AccountingVoucher {
   entryMode?: VoucherEntryMode;
   /** Payment mode for receipt/payment simple entry */
   paymentMode?: string;
+  /** Instrument type mirrors transaction mode (Cash / Cheque / NEFT / …). */
+  instrumentType?: string;
+  /** Cheque number or primary instrument number. */
+  instrumentNumber?: string;
+  /** Cheque date (cheque modes only). */
+  instrumentDate?: string;
+  /** UTR / electronic transaction reference. */
+  transactionReference?: string;
+  /** Electronic transaction date (not bank clearing date). */
+  transactionDate?: string;
   workflow?: AccountsDocumentWorkflow;
   createdBy: string;
   updatedBy: string;
@@ -460,7 +470,9 @@ export function createVoucher(type: VoucherTypeCode, partial: CreateVoucherInput
         ? "receipt_voucher"
         : type === "payment"
           ? "payment_voucher"
-          : "journal_entry",
+          : type === "contra"
+            ? "contra_voucher"
+            : "journal_entry",
     row.id,
   );
   return row;

@@ -158,6 +158,12 @@ export function generateAccountsCustomerCode(customerType: string): string {
   return generateCustomerCodeForType(customerType, existing);
 }
 
+export interface CreateAccountsCustomerLedgerOptions {
+  openingBalance?: number;
+  balanceType?: "Debit" | "Credit";
+  billWiseAccounting?: boolean;
+}
+
 export interface CreateAccountsCustomerLedgerResult {
   ledger: ChartOfAccount;
   record: AccountsCustomerLedgerRecord;
@@ -170,6 +176,7 @@ export interface CreateAccountsCustomerLedgerResult {
 export function createAccountsCustomerLedger(
   customer: Customer,
   parentGroupId?: number | null,
+  options?: CreateAccountsCustomerLedgerOptions,
 ): CreateAccountsCustomerLedgerResult {
   const records = loadChartOfAccounts();
   const parent =
@@ -206,6 +213,13 @@ export function createAccountsCustomerLedger(
     throw new Error("A ledger with this name already exists under Sundry Debtors.");
   }
 
+  const openingBalance =
+    options?.openingBalance != null && Number.isFinite(options.openingBalance)
+      ? Math.max(0, options.openingBalance)
+      : 0;
+  const balanceType = options?.balanceType === "Credit" ? "Credit" : "Debit";
+  const billWiseAccounting = options?.billWiseAccounting ?? true;
+
   const ledgerId = nextId(records);
   const ledger: ChartOfAccount = {
     id: ledgerId,
@@ -220,12 +234,12 @@ export function createAccountsCustomerLedger(
     status: customerRecord.status === "active" ? "active" : "inactive",
     usedIn: ["sales"],
     isSystem: false,
-    openingBalance: 0,
-    balanceType: "Debit",
+    openingBalance,
+    balanceType,
     gstApplicable: customerRecord.gstApplicable,
     tdsApplicable: customerRecord.tdsApplicable,
     costCenterApplicable: false,
-    billWiseAccounting: true,
+    billWiseAccounting,
     bankAccountFlag: false,
     ledgerKind: "MASTER",
     masterType: "customer",

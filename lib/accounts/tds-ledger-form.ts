@@ -11,6 +11,7 @@ import {
   type TDSMaster,
 } from "@/app/(app)/masters/tds/tds-data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import {
   inferTdsLedgerKind,
   type TdsLedgerKind,
@@ -113,6 +114,10 @@ export function validateTdsLedgerForm(
   const parent = records.find((r) => r.id === form.parentGroupId);
   if (!parent || parent.nodeLevel !== "account_group") {
     return "TDS ledgers must be created under a valid TDS group.";
+  }
+  const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
+  if (addPolicy.blocked) {
+    return addPolicy.reason ?? "Manual ledger creation is not allowed under this group.";
   }
 
   const existing = findExistingTdsSectionLedger(

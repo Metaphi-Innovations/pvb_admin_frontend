@@ -32,7 +32,7 @@ export interface VoucherDualEntryPanelProps {
 
 function GroupHeading({ title }: { title: string }) {
   return (
-    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
       {title}
     </p>
   );
@@ -183,14 +183,14 @@ export function VoucherDualEntryPanel({
   void tdsAmount;
 
   return (
-    <div className={cn("space-y-4")}>
+    <div className={cn("space-y-2")}>
       {creditFirst ? (
         <>
           <div>
             <GroupHeading title={groups.firstGroup} />
             {creditBlock}
           </div>
-          <div className="border-t border-border/50 pt-3">
+          <div className="border-t border-border/50 pt-2">
             <GroupHeading title={groups.secondGroup} />
             {debitBlock}
           </div>
@@ -201,7 +201,7 @@ export function VoucherDualEntryPanel({
             <GroupHeading title={groups.firstGroup} />
             {debitBlock}
           </div>
-          <div className="border-t border-border/50 pt-3">
+          <div className="border-t border-border/50 pt-2">
             <GroupHeading title={groups.secondGroup} />
             {creditBlock}
           </div>

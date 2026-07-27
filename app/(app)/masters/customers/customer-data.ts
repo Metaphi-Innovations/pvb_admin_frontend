@@ -166,6 +166,14 @@ export interface Customer {
 	branch?: string;
 	swiftCode?: string;
 
+	/** Linked Sundry Debtor ledger — Customer Master is source of truth */
+	openingBalance?: number;
+	balanceType?: "Debit" | "Credit";
+	/** ISO date YYYY-MM-DD */
+	openingBalanceDate?: string;
+	billWiseAccounting?: boolean;
+	accountingDescription?: string;
+
 	createdBy: string;
 	createdDate: string;
 	updatedBy: string;

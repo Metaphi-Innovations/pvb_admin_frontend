@@ -1144,7 +1144,7 @@ export function PurchaseInvoiceDirectForm({
 
         <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onCancel}>
 
-          Cancel
+          Discard Form
 
         </Button>
 

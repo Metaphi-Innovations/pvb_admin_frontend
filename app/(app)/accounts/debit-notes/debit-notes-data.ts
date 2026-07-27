@@ -225,6 +225,11 @@ function nextDebitNoteNo(records: DebitNoteRecord[]): string {
   return `DN-${String(max + 1).padStart(4, "0")}`;
 }
 
+/** Preview of the next auto DN number for create forms (assigned on save). */
+export function peekNextDebitNoteNo(): string {
+  return nextDebitNoteNo(loadDebitNotes());
+}
+
 function appendActivity(
   existing: NoteActivityEntry[],
   action: string,

@@ -35,6 +35,11 @@ import { ensureTdsAccountingLedgers, resolveTdsPayableLedger } from "@/lib/accou
 import { roundMoney } from "@/lib/accounts/money-format";
 import { notifyVoucherPosted } from "@/lib/accounts/voucher-posting-notify";
 import { applyGenericBillWiseFromPostedVoucher } from "@/lib/accounts/generic-bill-wise-store";
+import {
+  isSystemControlledMappingKey,
+  missingSystemLedgerError,
+  systemLedgerKeyForMapping,
+} from "@/lib/accounts/system-ledger-resolver";
 
 export type ErpSourceModule =
   | "procurement"
@@ -97,6 +102,19 @@ function resolveLineToLedger(line: PostingLineInput): { ledgerId: number | null;
       if (!ledger) {
         const label = formatGstPostingLedgerDisplayName(line.mappingKey, line.gstRatePct);
         return { ledgerId: null, error: `${label} posting ledger is not configured.` };
+      }
+      return { ledgerId: ledger.id };
+    }
+
+    // Product Sales / Stock in Hand — never create "General" or legacy inventory-named ledgers.
+    if (isSystemControlledMappingKey(line.mappingKey)) {
+      const systemKey = systemLedgerKeyForMapping(line.mappingKey);
+      if (!systemKey) {
+        return { ledgerId: null, error: "Required system ledger is missing or invalid." };
+      }
+      const ledger = resolveMappingLedger(line.mappingKey, "", { createIfMissing: false });
+      if (!ledger) {
+        return { ledgerId: null, error: missingSystemLedgerError(systemKey) };
       }
       return { ledgerId: ledger.id };
     }
@@ -270,7 +288,6 @@ export function postGrnAccepted(input: {
     lines: [
       {
         mappingKey: "purchase_inventory",
-        partyName: "Inventory / Stock-in-Hand",
         debit: inventoryValue,
         credit: 0,
         remarks: `Stock-in — ${input.grnNo}`,
@@ -310,7 +327,6 @@ export function postPurchaseInvoice(input: {
   const lines: PostingLineInput[] = [
     {
       mappingKey: "purchase_inventory",
-      partyName: "Inventory / Stock-in-Hand",
       debit: input.taxableAmount,
       credit: 0,
       remarks: `Purchase — ${input.invoiceNo}`,
@@ -506,6 +522,11 @@ export function postSalesInvoice(input: {
   igst: number;
   gstBreakdowns?: GstRateBreakdown[];
   gstRatePct?: number;
+  /**
+   * When set, credit this ledger instead of PRODUCT_SALES (service invoices).
+   * Product sales must omit this and resolve the approved system ledger.
+   */
+  revenueLedgerId?: number | null;
 }): PostingResult {
   ensureGstAccountingLedgers();
   const taxTotal = roundMoney(input.cgst + input.sgst + input.igst);
@@ -513,6 +534,22 @@ export function postSalesInvoice(input: {
     input.grandTotal != null && input.grandTotal > 0
       ? roundMoney(input.grandTotal)
       : roundMoney(input.taxableAmount + taxTotal);
+
+  const revenueLine: PostingLineInput =
+    input.revenueLedgerId != null
+      ? {
+          ledgerId: input.revenueLedgerId,
+          debit: 0,
+          credit: input.taxableAmount,
+          remarks: `Revenue — ${input.invoiceNo}`,
+        }
+      : {
+          mappingKey: "sales_revenue",
+          debit: 0,
+          credit: input.taxableAmount,
+          remarks: `Revenue — ${input.invoiceNo}`,
+        };
+
   const lines: PostingLineInput[] = [
     {
       mappingKey: "sales_receivable",
@@ -521,12 +558,7 @@ export function postSalesInvoice(input: {
       credit: 0,
       remarks: `Receivable — ${input.customerName}`,
     },
-    {
-      mappingKey: "sales_revenue",
-      debit: 0,
-      credit: input.taxableAmount,
-      remarks: `Revenue — ${input.invoiceNo}`,
-    },
+    revenueLine,
   ];
 
   if (input.gstBreakdowns?.length) {
@@ -588,7 +620,6 @@ export function postSalesInvoiceCogs(input: {
       },
       {
         mappingKey: "stock_inventory",
-        partyName: "Inventory / Stock-in-Hand",
         debit: 0,
         credit: cogsTotal,
         remarks: `Inventory reduction — ${input.invoiceNo}`,
@@ -651,7 +682,6 @@ export function postSampleOrderInventoryExpense(input: {
       },
       {
         mappingKey: "stock_inventory",
-        partyName: "Inventory / Stock-in-Hand",
         debit: 0,
         credit: expenseTotal,
         remarks: `Inventory reduction (sample issue) — ${input.invoiceNo}`,
@@ -850,7 +880,6 @@ export function postStockReconciliation(input: {
     ? [
         {
           mappingKey: "stock_inventory",
-          partyName: "Inventory / Stock-in-Hand",
           debit: abs,
           credit: 0,
         },
@@ -872,7 +901,6 @@ export function postStockReconciliation(input: {
         },
         {
           mappingKey: "stock_inventory",
-          partyName: "Inventory / Stock-in-Hand",
           debit: 0,
           credit: abs,
         },

@@ -1,6 +1,11 @@
-/** Opens the Accounts Sundry Debtors customer form inside Chart of Accounts (keeps sidebar). */
+/** Opens the Customer form inside Chart of Accounts (keeps Accounts sidebar). */
 
-type OpenHandler = ((parentGroupId: number) => void) | null;
+export type SundryDebtorFormOpenArgs = {
+  parentGroupId: number;
+  customerId?: number;
+};
+
+type OpenHandler = ((args: SundryDebtorFormOpenArgs) => void) | null;
 
 let openHandler: OpenHandler = null;
 
@@ -8,9 +13,12 @@ export function registerSundryDebtorCustomerFormHandler(handler: OpenHandler): v
   openHandler = handler;
 }
 
-export function requestSundryDebtorCustomerForm(parentGroupId: number): boolean {
+export function requestSundryDebtorCustomerForm(
+  parentGroupId: number,
+  customerId?: number,
+): boolean {
   if (openHandler) {
-    openHandler(parentGroupId);
+    openHandler({ parentGroupId, customerId });
     return true;
   }
   return false;

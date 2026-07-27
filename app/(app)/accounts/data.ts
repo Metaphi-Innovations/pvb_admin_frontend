@@ -4,11 +4,18 @@ import {
   EXPECTED_SYSTEM_NODE_COUNT,
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
-import { isBundledCoaDemoLedger, mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
+import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
 import { stripMisplacedGstLedgers } from "./masters/chart-of-accounts/coa-gst-duplicate-cleanup";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
-export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
+export type RecordStatus =
+  | "draft"
+  | "pending_approval"
+  | "sent_back"
+  | "approved"
+  | "rejected"
+  | "posted"
+  | "cancelled";
 
 export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity";
 
@@ -232,8 +239,21 @@ function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
   };
 }
 
+/** True when the ledger has stable master/ERP ownership that must never be treated as obsolete seed. */
+function hasStableMasterOrErpLink(record: ChartOfAccount): boolean {
+  return Boolean(
+    record.isSystemGenerated ||
+      record.erpSourceModule ||
+      record.masterId != null ||
+      record.erpSourceId != null ||
+      record.ledgerKind === "MASTER",
+  );
+}
+
 function isRemovedSeedLedger(record: ChartOfAccount): boolean {
   if (record.nodeLevel !== "ledger") return false;
+  // Master-linked / ERP-sourced ledgers are never obsolete seeds — preserve by ownership, not name.
+  if (hasStableMasterOrErpLink(record)) return false;
   if (REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
   return REMOVED_SEED_LEDGER_NAMES.has(record.accountName.trim().toLowerCase());
 }
@@ -266,23 +286,18 @@ function normalizeStructuralNode(
   };
 }
 
-function isManualSubGroupLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (record.nodeLevel !== "ledger") return false;
-  if (record.isSystemGenerated || record.erpSourceModule) return false;
-  return allNodes.some(
-    (c) => c.parentAccountId === record.id && c.nodeLevel === "ledger",
-  );
-}
-
 /**
- * User Level-4 ledgers only. ERP party/product/warehouse/bank/GST-rate/TDS-section
- * ledgers and demo bundle entries are not retained — those belong in Masters.
+ * Non-system ledgers retained across structure enforcement on normal COA load/save.
+ *
+ * Master-linked / ERP-sourced / system-generated flags indicate stronger ownership and
+ * must increase preservation — never trigger deletion. Demo-marked rows are also kept;
+ * demo cleanup is a separate, explicit process (merge remains disabled).
+ *
+ * System hierarchy copies are excluded here because they are rebuilt from SYSTEM_COA_NODES.
  */
-function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (record.isSystem || record.isSystemGenerated) return false;
-  if (record.erpSourceModule) return false;
-  if (isBundledCoaDemoLedger(record)) return false;
-  return !isManualSubGroupLedger(record, allNodes);
+function shouldKeepUserLedger(record: ChartOfAccount, _allNodes: ChartOfAccount[]): boolean {
+  if (record.isSystem) return false;
+  return true;
 }
 
 const LEGACY_STATUTORY_GROUP_NAMES = new Set([
@@ -303,7 +318,8 @@ function isLegacyStatutoryGroup(record: ChartOfAccount): boolean {
   );
 }
 
-function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
+/** Merge stored COA with system seed. Non-destructive for valid user/master-linked ledgers. */
+export function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   const mergedSystem = SYSTEM_COA_NODES.map((sys) => ({
     ...sys,
     status: "active" as const,
@@ -366,6 +382,18 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     remainingGroups = next;
   }
 
+  // Keep unresolved user groups — do not drop them during normal load (parent may be repaired later).
+  for (const r of remainingGroups) {
+    if (groupById.has(r.id)) continue;
+    userGroups.push({
+      ...r,
+      alias: r.alias ?? "",
+      isSystem: false,
+      openingBalance: 0,
+    });
+    groupById.set(r.id, r);
+  }
+
   const userLedgers: ChartOfAccount[] = [];
   const ledgerById = new Map<number, ChartOfAccount>();
   let remaining = [...rawUserLedgers];
@@ -412,6 +440,19 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     }
     if (next.length === remaining.length) break;
     remaining = next;
+  }
+
+  // Keep unresolved ledgers (including master-linked) — never drop on normal load due to parent gaps.
+  for (const r of remaining) {
+    if (ledgerById.has(r.id)) continue;
+    const normalized = normalizeLedger({
+      ...r,
+      nodeLevel: "ledger",
+      openingBalance: r.openingBalance ?? 0,
+      isSystem: false,
+    });
+    userLedgers.push(normalized);
+    ledgerById.set(normalized.id, normalized);
   }
 
   const combined = stripMisplacedGstLedgers(
