@@ -24,6 +24,7 @@ import {
   INVOICE_FORM_INPUT_CLASS,
   INVOICE_FORM_LABEL_CLASS,
 } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   calcGstLineSplit,
@@ -61,6 +62,7 @@ import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting"
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { formatINR } from "@/app/(app)/accounts/invoices/invoice-utils";
 import { cn } from "@/lib/utils";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 
 function computeDueDate(baseDate: string, creditDays: number): string {
   const d = new Date(`${baseDate}T12:00:00`);
@@ -263,38 +265,15 @@ export default function ServiceInvoiceFormPageClient() {
       subtitle="Accounts → Transactions → Sales Invoice → Service"
       breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice")}
       backHref="/accounts/transactions/invoices"
-      actions={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            disabled={saving}
-            onClick={() => router.push("/accounts/transactions/invoices")}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            disabled={saving}
-            onClick={() => save("draft")}
-          >
-            Save Draft
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-            disabled={saving}
-            onClick={() => save("sent")}
-          >
-            Save & Post
-          </Button>
-        </>
+      stickyFooter={
+        <VoucherFormActionBar
+          onDiscard={() => router.push("/accounts/transactions/invoices")}
+          onSaveDraft={() => save("draft")}
+          onSaveAndPost={() => save("sent")}
+          discardDisabled={saving}
+          saveDraftDisabled={saving}
+          saveAndPostDisabled={saving}
+        />
       }
     >
       {error ? (
@@ -576,6 +555,8 @@ export default function ServiceInvoiceFormPageClient() {
             </div>
           </div>
         </InvoiceFormCard>
+
+        <AccountingImpactSection docKey="service_invoice" />
       </div>
     </InvoiceFormLayout>
   );

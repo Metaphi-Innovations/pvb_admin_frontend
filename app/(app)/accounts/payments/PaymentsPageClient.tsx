@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ export default function PaymentsPageClient() {
   return (
     <AppLayout>
       <div className="max-w-[1680px] mx-auto space-y-3">
-        <PageHeader
+        <AccountsListingChrome
           title="Payments"
           description="Process and track outgoing payments for purchases and approved TA/DA claims."
           breadcrumbs={PAYMENTS_BREADCRUMB}
@@ -95,16 +95,16 @@ export default function PaymentsPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-sm font-medium gap-1.5"
+                className="h-8 text-xs font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-4 h-4" />
+                <FileSpreadsheet className="w-3.5 h-3.5" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Button size="sm" className="h-8 text-xs font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
                 <Link href={`${PAYMENTS_LIST_PATH}/new`}>
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   Record Payment
                 </Link>
               </Button>

@@ -342,6 +342,10 @@ export function describeInvalidLedgerParentMessage(
   parent: ChartOfAccount,
   records: ChartOfAccount[],
 ): string {
+  const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
+  if (addPolicy.blocked) {
+    return addPolicy.reason ?? "Manual ledger creation is not allowed under this group.";
+  }
   if (parent.nodeLevel === "primary_head") {
     return "Ledgers cannot be created under a Primary Head (e.g. Assets). Add a Sub-Group under this head first, then create the ledger under that group.";
   }
@@ -390,7 +394,11 @@ export function buildSubGroupParentOptions(records: ChartOfAccount[]): LedgerPar
 
 export function getValidLedgerParents(records: ChartOfAccount[]): ChartOfAccount[] {
   return records
-    .filter((r) => canAddLedgerUnder(r, records))
+    .filter(
+      (r) =>
+        canAddLedgerUnder(r, records) &&
+        !resolveCoaAddLedgerPolicy(r, records).blocked,
+    )
     .sort((a, b) => {
       const pathA = getAncestorPath(records, a.id).map((n) => n.accountCode).join("/");
       const pathB = getAncestorPath(records, b.id).map((n) => n.accountCode).join("/");
@@ -696,19 +704,30 @@ export function validateLedgerForm(
   if (!form.parentGroupId) return "Please select a Parent Group.";
   const parent = records.find((r) => r.id === form.parentGroupId);
   if (!parent) return "Please select a valid Parent Group.";
-  if (!canAddLedgerUnder(parent, records)) {
-    if (getCoaHierarchyLevel(records, parent.id) >= COA_MAX_HIERARCHY_LEVEL) {
-      return COA_MAX_HIERARCHY_MESSAGE;
+
+  const existing =
+    editingId != null ? records.find((r) => r.id === editingId) : undefined;
+  const parentChanged =
+    existing == null || existing.parentAccountId !== form.parentGroupId;
+
+  // Create + re-parent: enforce structural + statutory eligibility.
+  // In-place edits keep the current parent (do not strand existing invalid children).
+  if (parentChanged) {
+    if (!canAddLedgerUnder(parent, records)) {
+      if (getCoaHierarchyLevel(records, parent.id) >= COA_MAX_HIERARCHY_LEVEL) {
+        return COA_MAX_HIERARCHY_MESSAGE;
+      }
+      if (parent.nodeLevel === "ledger") {
+        return LEDGER_UNDER_LEDGER_ERROR;
+      }
+      return "Ledgers must be created under a Level 3 Sub Group.";
     }
-    if (parent.nodeLevel === "ledger") {
-      return LEDGER_UNDER_LEDGER_ERROR;
+    const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
+    if (addPolicy.blocked) {
+      return addPolicy.reason ?? "Manual ledger creation is not allowed under this group.";
     }
-    return "Ledgers must be created under a Level 3 Sub Group.";
   }
-  const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
-  if (addPolicy.blocked) {
-    return addPolicy.reason ?? "Manual ledger creation is not allowed under this group.";
-  }
+
   const dup = records.find(
     (r) =>
       r.id !== editingId &&
@@ -750,7 +769,7 @@ export function getLedgerDeleteBlockReason(
 
 /**
  * Level-4 ledgers are deletable by default.
- * Locked system ledgers (Stock in Hand, GST, TDS/TCS Payable) stay locked.
+ * Locked system ledgers (Stock in Hand, Product Sales, GST, TDS/TCS Payable) stay locked.
  * Transaction presence is validated on confirm via getLedgerDeleteBlockReason.
  */
 export function canDeleteLedger(record: ChartOfAccount, records?: ChartOfAccount[]): boolean {

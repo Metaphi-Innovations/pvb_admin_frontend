@@ -350,16 +350,11 @@ export const ACCOUNTS_TRANSACTIONS_NAV: AccountsNavLink[] = [
 /** Demo accounting menu — Receivables */
 export const ACCOUNTS_RECEIVABLES_NAV: AccountsNavLink[] = [
   { label: "Customer Outstanding", href: "/accounts/receivables/outstanding", icon: Users },
-  { label: "Customer Ageing", href: "/accounts/receivables/ageing", icon: CalendarRange },
-  { label: "Collection Tracking", href: "/accounts/receivables/collections", icon: TrendingUp },
-  { label: "Receipt Allocation", href: "/accounts/receivables/receipt-allocation", icon: Receipt },
 ];
 
 /** Demo accounting menu — Payables */
 export const ACCOUNTS_PAYABLES_NAV: AccountsNavLink[] = [
-  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
-  { label: "Supplier Ageing", href: "/accounts/payables/ageing", icon: CalendarRange },
-  { label: "Payment Allocation", href: "/accounts/payables/payment-allocation", icon: Receipt },
+  { label: "Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
 ];
 
 /** Demo accounting menu — Banking */
@@ -649,8 +644,8 @@ export function isAccountsNavActive(
 const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
   coa: "Chart of Accounts — browse structure and maintain ledgers.",
   transactions: "Sales, purchase, credit/debit notes, vouchers, and journal entries.",
-  receivables: "Customer outstanding, collections and receipt allocation.",
-  payables: "Supplier outstanding and payment tracking.",
+  receivables: "Customer outstanding — invoices, ageing, collection, and pending receipt allocation.",
+  payables: "Vendor outstanding and payment visibility.",
   banking: "Company bank accounts, bank book, cash book and reconciliation.",
   reports: "Trial balance, P&L, balance sheet and financial reports.",
 };
@@ -674,6 +669,7 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
   "Sales Register": "Posted sales tax invoices register",
 
   "Customer Outstanding": "Open customer balances",
+  Outstanding: "Open party balances",
 
   "Pending Supplier Bills": "GRN-completed bills to enter",
 
@@ -738,12 +734,12 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
     right: ["Receipt Voucher", "Payment Voucher", "Journal Voucher", "Contra Voucher"],
   },
   receivables: {
-    left: ["Customer Outstanding", "Customer Ageing", "Collection Tracking"],
-    right: ["Receipt Allocation"],
+    left: ["Customer Outstanding"],
+    right: [],
   },
   payables: {
-    left: ["Supplier Outstanding", "Supplier Ageing"],
-    right: ["Payment Allocation"],
+    left: ["Outstanding"],
+    right: [],
   },
   banking: {
     left: ["Bank Accounts", "Bank Book", "Cash Book"],

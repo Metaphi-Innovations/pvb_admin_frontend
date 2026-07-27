@@ -95,12 +95,14 @@ import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { sampleOrderInventoryImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { getOrderById } from "@/app/(app)/sales/orders/orders-data";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import {
   useTransactionFormCancel,
 } from "@/components/accounts/TransactionFormCancel";
+import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
 import {
   customerMasterToTransactionFields,
   type CustomerTransactionFields,
@@ -1615,63 +1617,59 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       )}
       backHref={INVOICES_LIST_PATH}
       onBackClick={requestCancel}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs font-medium"
-            onClick={requestCancel}
-          >
-            Cancel
-          </Button>
-          {stGen ? (
-            <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
-              Stock Transfer
-            </span>
-          ) : null}
-          {smGen ? (
-            <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
-              Sample Order
-            </span>
-          ) : null}
-          {!isSalesOrderGeneration &&
-            !isStockTransferGeneration &&
-            !isSampleOrderGeneration && (
+      stickyFooter={
+        isSalesOrderGeneration ||
+        isStockTransferGeneration ||
+        isSampleOrderGeneration ? (
+          <div className="flex items-center justify-between gap-2 w-full">
             <Button
-              variant="outline"
+              type="button"
+              variant="ghost"
               size="sm"
-              className="h-8 text-xs font-medium"
-              onClick={() => submit(true)}
+              className="h-8 text-xs gap-1.5 text-muted-foreground"
+              onClick={requestCancel}
               disabled={saving}
             >
-              Save Draft
+              Discard Form
             </Button>
-          )}
-          <Button
-            size="sm"
-            className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white border-0"
-            onClick={
-              isSalesOrderGeneration ||
-              isStockTransferGeneration ||
-              isSampleOrderGeneration
-                ? handleTopGenerateClick
-                : () => submit(false)
-            }
-            disabled={saving}
-          >
-            {saving
-              ? "Saving…"
-              : isSampleOrderGeneration
-                ? "Generate Proforma Invoice"
-                : isStockTransferGeneration
-                  ? "Generate Stock Transfer Invoice"
-                  : isSalesOrderGeneration
-                    ? "Generate Invoice"
-                    : "Post Invoice"}
-          </Button>
-        </div>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {stGen ? (
+                <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
+                  Stock Transfer
+                </span>
+              ) : null}
+              {smGen ? (
+                <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
+                  Sample Order
+                </span>
+              ) : null}
+              <Button
+                size="sm"
+                className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white border-0"
+                onClick={handleTopGenerateClick}
+                disabled={saving}
+              >
+                {saving
+                  ? "Saving…"
+                  : isSampleOrderGeneration
+                    ? "Generate Proforma Invoice"
+                    : isStockTransferGeneration
+                      ? "Generate Stock Transfer Invoice"
+                      : "Generate Invoice"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <VoucherFormActionBar
+            onDiscard={requestCancel}
+            onSaveDraft={() => submit(true)}
+            onSaveAndPost={() => submit(false)}
+            saveAndPostLabel={saving ? "Saving…" : "Post Invoice"}
+            discardDisabled={saving}
+            saveDraftDisabled={saving}
+            saveAndPostDisabled={saving}
+          />
+        )
       }
     >
       {error && (
@@ -2252,6 +2250,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             </div>
           </Section>
         )}
+
+        <AccountingImpactSection
+          docKey="sales_invoice"
+          className={compactGen ? "mt-2" : undefined}
+        />
       </div>
     </InvoiceFormLayout>
     {discardDialog}

@@ -1,10 +1,9 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Banknote } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
@@ -13,9 +12,8 @@ import {
   ReportLedgerMultiFilter,
   ReportVoucherTypeMultiFilter,
   ReportFilterSummary,
+  ReportSearchFilter,
   useReportDateRange,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import {
   buildEntityFilterSummary,
@@ -29,7 +27,6 @@ import {
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { cn } from "@/lib/utils";
 import {
   buildCashBookStatement,
   CASH_BOOK_VOUCHER_TYPE_OPTIONS,
@@ -310,28 +307,11 @@ function CashBookPageBody({
               onChange={setVoucherTypes}
               options={cashVoucherTypeOptions}
             />
-            <div className="space-y-1 min-w-[200px] flex-1">
-              <Label className={filterLabelClass}>Search</Label>
-              <div className="relative">
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Voucher no., type, particular, narration…"
-                  className={cn(filterControlClass, "mt-0 pr-8")}
-                  disabled={!effectiveLedgerId}
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label="Clear search"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Voucher no., type, particular, narration…"
+            />
           </ReportFilterRow>
           <ReportFilterSummary items={filterSummaryItems} />
         </>
@@ -339,12 +319,13 @@ function CashBookPageBody({
       layout="split"
       className="h-full min-h-0"
     >
+      <AccountsListingTableCard className="flex-1 min-h-0">
       <div className="flex flex-col flex-1 min-h-0">
         {!effectiveLedgerId ? (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center space-y-2 max-w-sm">
-              <Banknote className="w-10 h-10 text-muted-foreground mx-auto" />
-              <p className="text-sm font-medium text-foreground">
+          <div className="flex-1 flex items-center justify-center p-4">
+            <div className="text-center space-y-1.5 max-w-sm">
+              <Banknote className="w-8 h-8 text-muted-foreground mx-auto" />
+              <p className="text-xs font-medium text-foreground">
                 Please select a cash ledger to view the cash book.
               </p>
             </div>
@@ -354,15 +335,15 @@ function CashBookPageBody({
             {statement && <AccountsSummaryBar items={summaryItems} />}
 
             {showNoTransactions ? (
-              <div className="flex-1 flex items-center justify-center p-8">
-                <p className="text-sm text-muted-foreground text-center max-w-md">
+              <div className="flex-1 flex items-center justify-center p-4">
+                <p className="text-xs text-muted-foreground text-center max-w-md">
                   No Cash Book transactions found for the selected period.
                 </p>
               </div>
             ) : showNoFilterResults ? (
-              <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center space-y-2">
-                  <p className="text-sm text-muted-foreground">
+              <div className="flex-1 flex items-center justify-center p-4">
+                <div className="text-center space-y-1.5">
+                  <p className="text-xs text-muted-foreground">
                     No transactions match your search or voucher type filter.
                   </p>
                   <button
@@ -387,6 +368,7 @@ function CashBookPageBody({
           </>
         )}
       </div>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

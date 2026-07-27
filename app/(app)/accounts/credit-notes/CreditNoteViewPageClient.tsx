@@ -109,7 +109,18 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                   className="h-7 text-xs text-red-600"
                   onClick={() => setCancelOpen(true)}
                 >
-                  Cancel Note
+                  Cancel Voucher
+                </Button>
+              ) : null}
+              {record.status === "posted" || record.status === "approved" || record.status === "processed" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs text-navy-700"
+                  disabled
+                  title="Creates a linked opposite voucher — backend wiring pending"
+                >
+                  Reverse Voucher
                 </Button>
               ) : null}
             </div>

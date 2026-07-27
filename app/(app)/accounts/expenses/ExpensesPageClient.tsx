@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { Wallet, Banknote, FileSpreadsheet } from "lucide-react";
+import { Banknote, FileSpreadsheet } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import {
   filterPayments,
@@ -91,10 +91,9 @@ export default function ExpensesPageClient() {
   return (
     <AppLayout>
       <div className="max-w-[1600px] mx-auto space-y-3">
-        <PageHeader
+        <AccountsListingChrome
           title="Expenses"
           description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR → TA/DA Claims."
-          icon={Wallet}
           breadcrumbs={EXPENSE_BREADCRUMB}
         />
 

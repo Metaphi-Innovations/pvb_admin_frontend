@@ -1,0 +1,652 @@
+/**
+ * Scheme Master — compact guided configuration (accordion wizard).
+ * Visual only; scoped to `.scheme-master-form-dense`.
+ * Colours follow Dharitri Sutra tokens only:
+ * brand orange accents, neutral dark text, muted greys, white cards, border-border.
+ * Labels/headers use black/dark gray — never navy/blue.
+ */
+
+.scheme-master-form-dense {
+  --scheme-ctrl-h: 30px;
+  --scheme-gap-x: 0.625rem;
+  --scheme-gap-y: 0.5rem;
+  --scheme-label-gap: 0.1875rem;
+  --scheme-anim: 200ms ease;
+  /* Design system — no green / no navy-blue typography for labels */
+  --scheme-brand: #d96a10; /* brand-600 */
+  --scheme-brand-soft: #fff3e8; /* brand-50 */
+  --scheme-brand-border: #ffcb90; /* brand-200 */
+  --scheme-brand-text: #b85508; /* brand-700 */
+  --scheme-text: #0f172a; /* foreground — headings, values, table headers */
+  --scheme-label: #334155; /* slate-700 — field / group labels */
+}
+
+.scheme-master-form-dense.scheme-form-shell {
+  width: 100%;
+  max-width: none;
+}
+
+/* ── Progress strip — ERP milestone row (not consumer onboarding) ── */
+.scheme-master-form-dense .scheme-wizard-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.125rem;
+  margin-bottom: 0.625rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: transparent;
+  border-radius: 0;
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  color: #94a3b8; /* future / muted grey */
+  transition: color var(--scheme-anim), background var(--scheme-anim);
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-item:hover {
+  color: var(--scheme-brand-text);
+  background: var(--scheme-brand-soft);
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-item.is-active {
+  color: var(--scheme-brand-text);
+  font-weight: 600;
+  background: var(--scheme-brand-soft);
+  box-shadow: none;
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-item.is-done {
+  color: var(--scheme-brand); /* orange completed — never green */
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-tick {
+  color: var(--scheme-brand);
+  font-weight: 700;
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-label {
+  font-size: 0.75rem;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-item.is-active .scheme-wizard-progress-label {
+  font-weight: 600;
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-sep {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.15rem;
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: auto;
+  height: auto;
+  background: transparent;
+}
+
+.scheme-master-form-dense .scheme-wizard-progress-sep::before {
+  content: "→";
+}
+
+/* ── Wizard stack — thin grey border, white, no heavy outline ── */
+.scheme-master-form-dense .scheme-wizard-stack {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem; /* rounded-xl */
+  background: #fff;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.scheme-master-form-dense .scheme-wizard-step {
+  border-bottom: 1px solid hsl(var(--border));
+  background: #fff;
+}
+
+.scheme-master-form-dense .scheme-wizard-step:last-child {
+  border-bottom: none;
+}
+
+.scheme-master-form-dense .scheme-wizard-step.is-open {
+  /* No heavy black / coloured outer ring — open state uses left accent only */
+  outline: none;
+  box-shadow: none;
+}
+
+.scheme-master-form-dense .scheme-wizard-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--scheme-anim), border-color var(--scheme-anim);
+}
+
+.scheme-master-form-dense .scheme-wizard-step.is-open .scheme-wizard-trigger {
+  background: hsl(var(--muted) / 0.3);
+  border-left-color: var(--scheme-brand); /* orange active indicator */
+}
+
+.scheme-master-form-dense .scheme-wizard-trigger:hover {
+  background: hsl(var(--muted) / 0.2);
+}
+
+.scheme-master-form-dense .scheme-wizard-step-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: #fff;
+  color: var(--scheme-brand);
+  flex-shrink: 0;
+}
+
+.scheme-master-form-dense .scheme-wizard-step.is-done .scheme-wizard-step-mark {
+  background: var(--scheme-brand-soft);
+  border-color: var(--scheme-brand-border);
+  color: var(--scheme-brand); /* orange tick — never green */
+}
+
+.scheme-master-form-dense .scheme-wizard-step-mark svg {
+  color: inherit;
+  stroke: currentColor;
+}
+
+.scheme-master-form-dense .scheme-wizard-step-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: #cbd5e1;
+}
+
+.scheme-master-form-dense .scheme-wizard-step.is-open .scheme-wizard-step-dot {
+  background: var(--scheme-brand);
+}
+
+.scheme-master-form-dense .scheme-wizard-step-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--scheme-text); /* black section titles */
+}
+
+.scheme-master-form-dense .scheme-wizard-chevron {
+  color: #94a3b8;
+  transition: transform var(--scheme-anim);
+}
+
+/* Accordion panel */
+.scheme-master-form-dense .scheme-wizard-panel {
+  display: grid;
+  transition: grid-template-rows var(--scheme-anim);
+}
+
+.scheme-master-form-dense .scheme-wizard-panel-closed {
+  grid-template-rows: 0fr;
+}
+
+.scheme-master-form-dense .scheme-wizard-panel-open {
+  grid-template-rows: 1fr;
+}
+
+.scheme-master-form-dense .scheme-wizard-panel-inner {
+  overflow: hidden;
+  padding: 0;
+  background: #fff;
+  border: 0;
+  box-shadow: none;
+}
+
+.scheme-master-form-dense .scheme-wizard-panel-open .scheme-wizard-panel-inner {
+  padding: 0.625rem 0.75rem 0.75rem;
+  border-top: 1px solid hsl(var(--border) / 0.7);
+}
+
+/* ── Field rows (content-fit) ── */
+.scheme-master-form-dense .scheme-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: var(--scheme-gap-y) var(--scheme-gap-x);
+}
+
+.scheme-master-form-dense .scheme-row + .scheme-row {
+  margin-top: var(--scheme-gap-y);
+}
+
+.scheme-master-form-dense .scheme-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--scheme-label-gap);
+  min-width: 0;
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+.scheme-master-form-dense .scheme-w-code {
+  width: 8.125rem;
+  flex: 0 0 8.125rem;
+}
+
+.scheme-master-form-dense .scheme-w-status {
+  width: 8.75rem;
+  flex: 0 0 8.75rem;
+}
+
+.scheme-master-form-dense .scheme-w-date {
+  width: 9.375rem;
+  flex: 0 0 9.375rem;
+}
+
+.scheme-master-form-dense .scheme-w-num {
+  width: 7.5rem;
+  flex: 0 0 7.5rem;
+}
+
+.scheme-master-form-dense .scheme-w-select-sm {
+  width: 9.5rem;
+  flex: 0 0 9.5rem;
+}
+
+.scheme-master-form-dense .scheme-w-select-md {
+  width: 13.75rem;
+  flex: 0 0 13.75rem;
+}
+
+.scheme-master-form-dense .scheme-w-discount-setup {
+  width: 17.5rem;
+  max-width: 17.5rem;
+  flex: 0 0 17.5rem;
+}
+
+.scheme-master-form-dense .scheme-w-disc-type {
+  width: 10.5rem;
+  flex: 0 0 10.5rem;
+}
+
+.scheme-master-form-dense .scheme-w-disc-value {
+  width: 8.75rem;
+  flex: 0 0 8.75rem;
+}
+
+.scheme-master-form-dense .scheme-w-category {
+  width: 13.75rem;
+  flex: 0 0 13.75rem;
+}
+
+.scheme-master-form-dense .scheme-w-name {
+  width: 25rem;
+  max-width: 25rem;
+  flex: 0 0 25rem;
+}
+
+.scheme-master-form-dense .scheme-w-customer {
+  width: 25rem;
+  max-width: 25rem;
+  flex: 0 0 25rem;
+}
+
+.scheme-master-form-dense .scheme-w-state {
+  width: 17rem;
+  max-width: 17rem;
+  flex: 0 0 17rem;
+}
+
+.scheme-master-form-dense .scheme-w-customer-type {
+  width: 17rem;
+  max-width: 17rem;
+  flex: 0 0 17rem;
+}
+
+.scheme-master-form-dense .scheme-w-products-scope {
+  width: 14.5rem;
+  max-width: 14.5rem;
+  flex: 0 0 14.5rem;
+}
+
+.scheme-master-form-dense .scheme-w-products {
+  width: 25rem;
+  max-width: 25rem;
+  flex: 0 0 25rem;
+}
+
+.scheme-master-form-dense .scheme-w-desc {
+  width: 40.625rem;
+  max-width: min(40.625rem, 100%);
+  flex: 0 1 40.625rem;
+}
+
+.scheme-master-form-dense .scheme-w-state > *,
+.scheme-master-form-dense .scheme-w-customer-type > *,
+.scheme-master-form-dense .scheme-w-customer > *,
+.scheme-master-form-dense .scheme-w-products > *,
+.scheme-master-form-dense .scheme-w-name > *,
+.scheme-master-form-dense .scheme-w-desc > * {
+  width: 100%;
+  max-width: 100%;
+}
+
+.scheme-master-form-dense .scheme-field-label,
+.scheme-master-form-dense label {
+  font-size: 0.6875rem !important;
+  line-height: 1.2 !important;
+  font-weight: 600 !important;
+  color: var(--scheme-label) !important;
+  white-space: nowrap;
+}
+
+.scheme-master-form-dense input:not([type="checkbox"]):not([type="radio"]),
+.scheme-master-form-dense textarea,
+.scheme-master-form-dense button[role="combobox"],
+.scheme-master-form-dense [data-radix-select-trigger],
+.scheme-master-form-dense .scheme-ctrl {
+  height: var(--scheme-ctrl-h) !important;
+  min-height: var(--scheme-ctrl-h) !important;
+  max-height: var(--scheme-ctrl-h) !important;
+  width: 100%;
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  border-radius: 0.375rem !important;
+  box-sizing: border-box;
+}
+
+.scheme-master-form-dense textarea.scheme-desc {
+  height: auto !important;
+  min-height: 3.75rem !important;
+  max-height: 5.5rem !important;
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+  resize: vertical;
+}
+
+/* ── Slabs ── */
+.scheme-master-form-dense .scheme-slab-wrap {
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  width: fit-content;
+  max-width: 100%;
+  background: #fff;
+}
+
+.scheme-master-form-dense .scheme-pd-rules-wrap {
+  max-width: 56rem;
+}
+
+.scheme-master-form-dense .scheme-pd-rules-table .scheme-pd-col-product {
+  width: 20rem;
+  min-width: 16rem;
+  max-width: 22.5rem;
+}
+
+.scheme-master-form-dense .scheme-pd-rules-table .scheme-pd-col-type {
+  width: 10.5rem;
+  min-width: 10rem;
+  max-width: 11.25rem;
+}
+
+.scheme-master-form-dense .scheme-pd-rules-table .scheme-pd-col-value {
+  width: 8.5rem;
+  min-width: 7.5rem;
+  max-width: 9.375rem;
+}
+
+.scheme-master-form-dense .scheme-pd-rules-table .scheme-pd-col-apply {
+  width: 12.5rem;
+  min-width: 11.25rem;
+  max-width: 13.75rem;
+}
+
+.scheme-master-form-dense .scheme-slab-table {
+  width: auto;
+  min-width: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.scheme-master-form-dense .scheme-slab-table thead tr {
+  background: hsl(var(--muted) / 0.4);
+}
+
+.scheme-master-form-dense .scheme-slab-table th {
+  padding: 0.375rem 0.5rem !important;
+  font-size: 0.625rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--scheme-text) !important; /* neutral dark — never navy/blue */
+  text-align: left;
+  border-bottom: 1px solid hsl(var(--border));
+  white-space: nowrap;
+}
+
+.scheme-master-form-dense .scheme-slab-table td {
+  padding: 0.25rem 0.375rem !important;
+  vertical-align: middle;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+}
+
+.scheme-master-form-dense .scheme-slab-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.scheme-master-form-dense .scheme-slab-table tbody tr:hover {
+  background: hsl(var(--muted) / 0.2);
+}
+
+.scheme-master-form-dense .scheme-slab-table .scheme-ctrl,
+.scheme-master-form-dense .scheme-slab-table input,
+.scheme-master-form-dense .scheme-slab-table [data-radix-select-trigger] {
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  font-size: 0.6875rem !important;
+}
+
+.scheme-master-form-dense .scheme-slab-table .scheme-w-num-cell {
+  width: 8.125rem;
+  min-width: 8.125rem;
+  max-width: 8.125rem;
+}
+
+.scheme-master-form-dense .scheme-slab-table .scheme-w-turnover-cell {
+  width: 10.5rem;
+  min-width: 10.5rem;
+  max-width: 10.5rem;
+}
+
+.scheme-master-form-dense .scheme-slab-table th.w-8,
+.scheme-master-form-dense .scheme-slab-table td.w-8,
+.scheme-master-form-dense .scheme-slab-table td.text-center {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  max-width: 2.25rem;
+}
+
+.scheme-master-form-dense .scheme-slab-actions {
+  margin-top: 0.5rem;
+}
+
+/* ── Benefit read-only strip (legacy; unused in condition UI) ── */
+.scheme-master-form-dense .scheme-benefit-readonly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  margin-top: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid hsl(var(--border));
+  max-width: 28rem;
+}
+
+.scheme-master-form-dense .scheme-benefit-readonly-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.scheme-master-form-dense .scheme-benefit-readonly-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--scheme-label);
+}
+
+.scheme-master-form-dense .scheme-benefit-readonly-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--scheme-text);
+}
+
+/* ── Impact switches ── */
+.scheme-master-form-dense .scheme-impact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-width: 26rem;
+}
+
+.scheme-master-form-dense .scheme-impact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  background: #fff;
+  cursor: pointer;
+}
+
+.scheme-master-form-dense .scheme-flag-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--scheme-text);
+}
+
+/* ── Review — ERP summary card (white + grey border; no blue fill) ── */
+.scheme-master-form-dense .scheme-review-panel {
+  max-width: 42rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid hsl(var(--border));
+  box-shadow: none;
+}
+
+.scheme-master-form-dense .scheme-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.scheme-master-form-dense .scheme-review-item dt {
+  margin: 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--scheme-label); /* neutral dark gray — not navy/blue */
+}
+
+.scheme-master-form-dense .scheme-review-item dd {
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--scheme-text);
+}
+
+.scheme-master-form-dense .scheme-summary-text {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #475569;
+  max-width: 42rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.scheme-master-form-dense .scheme-review-narrative {
+  margin-top: 0.625rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid hsl(var(--border));
+  background: transparent;
+}
+
+.scheme-master-form-dense .scheme-error-banner {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 0.5rem;
+  max-width: 42rem;
+}
+
+@media (max-width: 639px) {
+  .scheme-master-form-dense .scheme-w-code,
+  .scheme-master-form-dense .scheme-w-status,
+  .scheme-master-form-dense .scheme-w-date,
+  .scheme-master-form-dense .scheme-w-num,
+  .scheme-master-form-dense .scheme-w-select-sm,
+  .scheme-master-form-dense .scheme-w-select-md,
+  .scheme-master-form-dense .scheme-w-discount-setup,
+  .scheme-master-form-dense .scheme-w-disc-type,
+  .scheme-master-form-dense .scheme-w-disc-value,
+  .scheme-master-form-dense .scheme-w-category,
+  .scheme-master-form-dense .scheme-w-state,
+  .scheme-master-form-dense .scheme-w-customer-type,
+  .scheme-master-form-dense .scheme-w-products-scope {
+    flex: 0 1 auto;
+    width: calc(50% - 0.35rem);
+    max-width: 100%;
+  }
+
+  .scheme-master-form-dense .scheme-w-name,
+  .scheme-master-form-dense .scheme-w-customer,
+  .scheme-master-form-dense .scheme-w-products,
+  .scheme-master-form-dense .scheme-w-desc {
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .scheme-master-form-dense .scheme-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scheme-master-form-dense .scheme-slab-wrap {
+    width: 100%;
+  }
+}

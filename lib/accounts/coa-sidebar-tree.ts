@@ -25,6 +25,7 @@ import {
   isBankAccountsSubGroup,
   isBankGroupNode,
 } from "@/lib/accounts/bank-coa-utils";
+import { isStatutoryTaxPayableParent } from "@/lib/accounts/coa-statutory-tax-display";
 import type { CoaVisualLevel } from "@/app/(app)/accounts/masters/chart-of-accounts/components/coa-tree-visual";
 
 const CONTAINER_SPECIALIZED_TYPES = new Set<CoaSpecializedGroupType>([
@@ -135,6 +136,11 @@ function collectSidebarLedgers(
       if (isBankGroupNode(child)) continue;
 
       if (child.nodeLevel === "ledger") {
+        // TDS/TCS Payable nest section projections — do not flatten into this level
+        if (isStatutoryTaxPayableParent(child)) {
+          addLedger(child);
+          continue;
+        }
         if (ledgerHasChildLedgers(child.id, records)) {
           addLedger(child);
           walk(child.id);
@@ -183,15 +189,23 @@ export function getCoaSidebarTreeChildren(
       return collectSidebarLedgers(records, parentId);
     }
     if (parent.specializedGroupType === "gst_duties") {
-      const directLedgers = getDirectChildren(records, parentId).filter(
-        (child) => child.nodeLevel === "ledger",
+      // Direct statutory ledgers; TDS/TCS Payable nest their master-projected children.
+      const direct = getDirectChildren(records, parentId).filter(
+        (child) => child.nodeLevel === "ledger" && child.parentAccountId === parentId,
       );
       return [
         ...collectSidebarLevel3Subgroups(records, parentId),
-        ...directLedgers,
+        ...direct,
       ].sort((a, b) => a.accountName.localeCompare(b.accountName));
     }
     return collectSidebarLevel3Subgroups(records, parentId);
+  }
+
+  // TDS Payable / TCS Payable — expand to show master-projected section ledgers
+  if (parent.nodeLevel === "ledger" && isStatutoryTaxPayableParent(parent)) {
+    return getDirectChildren(records, parentId)
+      .filter((c) => c.nodeLevel === "ledger")
+      .sort((a, b) => a.accountName.localeCompare(b.accountName));
   }
 
   return [];
@@ -204,12 +218,14 @@ export function coaSidebarNodeHasChildren(
   return getCoaSidebarTreeChildren(records, parentId).length > 0;
 }
 
-/** Ledgers never expand in the sidebar; structural nodes expand when they have sidebar children. */
+/** Ledgers never expand in the sidebar except statutory TDS/TCS Payable parents. */
 export function coaSidebarNodeShowsExpandChevron(
   node: ChartOfAccount,
   records: ChartOfAccount[],
 ): boolean {
-  if (node.nodeLevel === "ledger") return false;
+  if (node.nodeLevel === "ledger") {
+    return isStatutoryTaxPayableParent(node) && coaSidebarNodeHasChildren(records, node.id);
+  }
   return coaSidebarNodeHasChildren(records, node.id);
 }
 
@@ -254,8 +270,8 @@ export function getCoaSidebarExpandableIds(records: ChartOfAccount[]): number[] 
   return records
     .filter(
       (r) =>
-        r.nodeLevel !== "ledger" &&
         !r.bankGroupFlag &&
+        (r.nodeLevel !== "ledger" || isStatutoryTaxPayableParent(r)) &&
         coaSidebarNodeHasChildren(records, r.id),
     )
     .map((r) => r.id);

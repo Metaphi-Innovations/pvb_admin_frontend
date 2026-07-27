@@ -8,13 +8,13 @@ import {
   canEditLedger,
   describeInvalidLedgerParentMessage,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { isAddLedgerBlocked, resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import {
   registerCoaAddLedgerHandlers,
   requestCoaSpecializedLedgerForm,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
 import { registerCoaEditLedgerHandler } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-edit-ledger-bridge";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import {
   isCustomerOrSupplierLinkedLedger,
@@ -23,9 +23,14 @@ import {
 import {
   coaPartyMasterCreateHref,
   coaPartyMasterEditHref,
+  resolveCoaPartyMasterKindById,
 } from "@/lib/accounts/coa-party-master-routes";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { requestSundryDebtorCustomerForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-sundry-debtor-form-bridge";
+import { requestSundryCreditorVendorForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-sundry-creditor-form-bridge";
+import { requestCoaBankForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-bank-form-bridge";
+import { resolveCoaLedgerBehaviorById } from "@/lib/accounts/coa-ledger-behavior";
 import { useCoaNavigation } from "./CoaNavigationContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +40,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+/** Prefer in-COA embed (Accounts sidebar stays). Fall back to Masters only if COA page handlers are absent. */
+function openPartyLedgerCreateInCoa(parentGroupId: number, list: ChartOfAccount[]): boolean {
+  const kind = resolveCoaPartyMasterKindById(parentGroupId, list);
+  if (kind === "customer") return requestSundryDebtorCustomerForm(parentGroupId);
+  if (kind === "vendor") return requestSundryCreditorVendorForm(parentGroupId);
+  return false;
+}
+
+/** Bank Accounts group → existing Bank Account master form (never Generic Ledger).
+ * Cash-in-Hand (kind "cash") is intentionally excluded — it uses Generic Ledger. */
+function openBankAccountCreate(
+  parentGroupId: number,
+  list: ChartOfAccount[],
+  router: ReturnType<typeof useRouter>,
+): boolean {
+  if (resolveCoaLedgerBehaviorById(parentGroupId, list).kind !== "bank") return false;
+  if (requestCoaBankForm(parentGroupId)) return true;
+  // Fallback when COA page embed is not mounted — still never use Generic Ledger.
+  const returnTo = encodeURIComponent(
+    `${CHART_OF_ACCOUNTS_HREF}?node=${parentGroupId}`,
+  );
+  router.push(
+    `/accounts/banking/bank-accounts/new?bankGroupId=${parentGroupId}&source=chart-of-accounts&returnTo=${returnTo}`,
+  );
+  return true;
+}
 
 function genericLedgerNewHref(parentGroupId?: number | null): string {
   const base = `${CHART_OF_ACCOUNTS_HREF}/ledgers/new`;
@@ -73,11 +105,24 @@ export function CoaAddLedgerHost() {
       const parentGroupId =
         parent && canAddLedgerUnder(parent, list) ? preferredParentId! : null;
 
+      if (parentGroupId != null && parent && isAddLedgerBlocked(parent, list)) {
+        setBlockMessage(
+          resolveCoaAddLedgerPolicy(parent, list).reason ??
+            "Manual ledger creation is not allowed under this group.",
+        );
+        return;
+      }
+
+      if (parentGroupId != null && openPartyLedgerCreateInCoa(parentGroupId, list)) {
+        return;
+      }
+
+      if (parentGroupId != null && openBankAccountCreate(parentGroupId, list, router)) {
+        return;
+      }
+
       if (parentGroupId != null) {
         const partyHref = coaPartyMasterCreateHref(parentGroupId, list);
-        // #region agent log
-        fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H1',location:'CoaAddLedgerHost.tsx:openGlobalAdd',message:'Global add party route',data:{parentGroupId,parentName:parent?.accountName??null,specializedGroupType:parent?.specializedGroupType??null,accountCode:parent?.accountCode??null,partyHref,behaviorKind:parent?resolveCoaLedgerBehavior(parent,list).kind:null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (partyHref) {
           router.push(partyHref);
           return;
@@ -104,10 +149,16 @@ export function CoaAddLedgerHost() {
       }
       const list = records.length > 0 ? records : loadChartOfAccounts();
       const parent = list.find((r) => r.id === parentGroupId);
+      if (parent && isAddLedgerBlocked(parent, list)) {
+        setBlockMessage(
+          resolveCoaAddLedgerPolicy(parent, list).reason ??
+            "Manual ledger creation is not allowed under this group.",
+        );
+        return;
+      }
+      if (openPartyLedgerCreateInCoa(parentGroupId, list)) return;
+      if (openBankAccountCreate(parentGroupId, list, router)) return;
       const partyHref = parent ? coaPartyMasterCreateHref(parentGroupId, list) : null;
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H2',location:'CoaAddLedgerHost.tsx:openAddUnderParent',message:'COA Add under parent',data:{parentGroupId,parentName:parent?.accountName??null,specializedGroupType:parent?.specializedGroupType??null,accountCode:parent?.accountCode??null,partyHref,behaviorKind:parent?resolveCoaLedgerBehavior(parent,list).kind:null,canAdd:parent?canAddLedgerUnder(parent,list):false},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (partyHref) {
         router.push(partyHref);
         return;
@@ -121,9 +172,6 @@ export function CoaAddLedgerHost() {
         );
         return;
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H3',location:'CoaAddLedgerHost.tsx:genericFallback',message:'Falling back to generic ledger form',data:{parentGroupId,href:genericLedgerNewHref(parentGroupId)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       router.push(genericLedgerNewHref(parentGroupId));
     },
     [canCreate, records, router],
@@ -142,11 +190,44 @@ export function CoaAddLedgerHost() {
         return;
       }
       const link = resolveCoaMasterLink(row, list);
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'H-C',location:'CoaAddLedgerHost.tsx:openEdit',message:'Edit ledger route selection',data:{ledgerId,name:row.accountName,linkCategory:link?.category??null,sourceId:link?.sourceId??null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (link?.category === "customer" || link?.category === "vendor") {
-        router.push(coaPartyMasterEditHref(link.category, link.sourceId));
+      if (link?.category === "customer") {
+        const parentId = row.parentAccountId;
+        if (
+          parentId != null &&
+          requestSundryDebtorCustomerForm(parentId, link.sourceId)
+        ) {
+          return;
+        }
+        router.push(
+          `${coaPartyMasterEditHref(link.category, link.sourceId)}?source=chart-of-accounts&returnTo=${encodeURIComponent(`${CHART_OF_ACCOUNTS_HREF}?node=${parentId ?? ""}`)}`,
+        );
+        return;
+      }
+      if (link?.category === "vendor") {
+        const parentId = row.parentAccountId;
+        if (
+          parentId != null &&
+          requestSundryCreditorVendorForm(parentId, link.sourceId)
+        ) {
+          return;
+        }
+        router.push(
+          `${coaPartyMasterEditHref(link.category, link.sourceId)}?source=chart-of-accounts&returnTo=${encodeURIComponent(`${CHART_OF_ACCOUNTS_HREF}?node=${parentId ?? ""}`)}`,
+        );
+        return;
+      }
+      if (link?.category === "bank") {
+        const parentId = row.parentAccountId;
+        if (parentId != null && requestCoaBankForm(parentId, link.sourceId)) {
+          return;
+        }
+        const returnTo =
+          parentId != null
+            ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}`
+            : CHART_OF_ACCOUNTS_HREF;
+        router.push(
+          `/accounts/banking/bank-accounts/${link.sourceId}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
+        );
         return;
       }
       setEditConfirmTarget(row);

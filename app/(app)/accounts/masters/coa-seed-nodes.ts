@@ -401,13 +401,17 @@ function systemLedgerNode(
     balanceType: ledger.balanceType,
     gstApplicable: ledger.gstApplicable ?? false,
     tdsApplicable: ledger.tdsApplicable ?? false,
-    alias: ledger.tdsApplicable
-      ? "tds:payable"
-      : GST_INPUT_LEDGER_NAMES.has(nameLower)
-        ? `gst:input_${nameLower.includes("cgst") ? "cgst" : nameLower.includes("sgst") ? "sgst" : "igst"}`
-        : GST_OUTPUT_LEDGER_NAMES.has(nameLower)
-          ? `gst:output_${nameLower.includes("cgst") ? "cgst" : nameLower.includes("sgst") ? "sgst" : "igst"}`
-          : "",
+    alias: ledger.systemKey
+      ? `sys:${ledger.systemKey}`
+      : ledger.tdsApplicable
+        ? "tds:payable"
+        : nameLower === "tcs payable"
+          ? "tcs:payable"
+          : GST_INPUT_LEDGER_NAMES.has(nameLower)
+            ? `gst:input_${nameLower.includes("cgst") ? "cgst" : nameLower.includes("sgst") ? "sgst" : "igst"}`
+            : GST_OUTPUT_LEDGER_NAMES.has(nameLower)
+              ? `gst:output_${nameLower.includes("cgst") ? "cgst" : nameLower.includes("sgst") ? "sgst" : "igst"}`
+              : "",
     createdBy: "System",
     updatedBy: "System",
   });
@@ -533,6 +537,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 17;
+export const COA_SYSTEM_REVISION = 18;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

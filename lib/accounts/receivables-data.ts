@@ -159,6 +159,8 @@ export interface CustomerOutstandingRow {
   notDueAmount: number;
   lastInvoiceDate: string;
   lastReceiptDate: string;
+  /** Earliest due date among open invoices; "—" when none open. */
+  oldestDueDate: string;
   status: ReceivableStatus;
 }
 
@@ -641,11 +643,13 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
 
     let overdueAmount = 0;
     let notDueAmount = 0;
+    let oldestDueDate = "";
     for (const inv of custInvoices) {
       const out = getInvoiceOutstanding(inv);
       if (out <= 0.009) continue;
       if (daysBetween(inv.dueDate, asOfDate) > 0) overdueAmount += out;
       else notDueAmount += out;
+      if (!oldestDueDate || inv.dueDate < oldestDueDate) oldestDueDate = inv.dueDate;
     }
     overdueAmount = round2(overdueAmount);
     notDueAmount = round2(notDueAmount);
@@ -682,6 +686,7 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
       notDueAmount,
       lastInvoiceDate,
       lastReceiptDate: lastReceiptDateForCustomer(customerId, customer.customerName),
+      oldestDueDate: oldestDueDate || "—",
       status: customerStatusFromInvoices(custInvoices, asOfDate),
     });
   }
@@ -925,11 +930,14 @@ export function getReceiptAllocationByVoucherId(voucherId: number): ReceiptAlloc
 
 export function computeReceiptAllocationSummary() {
   const rows = loadReceiptAllocationRecords();
+  const pending = rows.filter((r) => r.unallocatedAmount > 0.009);
   return {
     unallocatedReceipts: rows.filter((r) => r.status === "unallocated").length,
     partiallyAllocated: rows.filter((r) => r.status === "partially_allocated").length,
     fullyAllocated: rows.filter((r) => r.status === "fully_allocated").length,
-    totalUnallocatedAmount: round2(rows.reduce((s, r) => s + r.unallocatedAmount, 0)),
+    /** Receipts with any remaining unallocated balance (includes partial). */
+    pendingAllocationCount: pending.length,
+    totalUnallocatedAmount: round2(pending.reduce((s, r) => s + r.unallocatedAmount, 0)),
   };
 }
 

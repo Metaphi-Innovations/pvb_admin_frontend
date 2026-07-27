@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated Obsolete quantity-based product editor.
+ * Debit Note now uses NoteReferenceDocumentDetails (read-only) + NoteParticularsTable.
+ * Kept for reference only — not imported by active routes.
+ */
+
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -8,9 +14,8 @@ import {
   type DebitNoteLine,
 } from "../debit-notes-data";
 
-const TH =
-  "px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap bg-muted/40";
-const TD = "px-2 py-1 align-middle text-xs text-foreground";
+const TH = "accounts-table-th text-[11px]";
+const TD = "accounts-table-td text-xs";
 
 export interface DebitNoteProductTableProps {
   lines: DebitNoteLine[];
@@ -24,7 +29,11 @@ function lineAmounts(line: DebitNoteLine) {
   const rate = 1 + (line.taxPct || 0) / 100;
   const taxable = Math.round((debit / rate) * 100) / 100;
   const taxAmt = Math.round((debit - taxable) * 100) / 100;
-  return { taxable, taxAmt, amount: debit };
+  // Display split using existing tax amount (same half/half pattern as form summary).
+  const cgst = taxAmt > 0 ? Math.round((taxAmt / 2) * 100) / 100 : 0;
+  const sgst = taxAmt > 0 ? Math.round((taxAmt - cgst) * 100) / 100 : 0;
+  const igst = 0;
+  return { taxable, taxAmt, amount: debit, cgst, sgst, igst };
 }
 
 export function DebitNoteProductTable({
@@ -33,21 +42,24 @@ export function DebitNoteProductTable({
   onQtyChange,
 }: DebitNoteProductTableProps) {
   return (
-    <div className="cn-ws__table-wrap">
-      <table className="cn-ws__table min-w-[1180px]">
+    <div className="cnz-table-wrap">
+      <table className="cnz-table accounts-table min-w-[1180px]">
         <thead>
           <tr>
             <th className={cn(TH, "text-left min-w-[200px]")}>Product</th>
             <th className={cn(TH, "text-left")}>SKU</th>
             <th className={cn(TH, "text-left")}>Batch</th>
-            <th className={cn(TH, "text-right")}>Original Qty</th>
-            <th className={cn(TH, "text-right")}>Previously Debited Qty</th>
+            <th className={cn(TH, "text-right")}>Original Quantity</th>
+            <th className={cn(TH, "text-right")}>Previously Debited Quantity</th>
             <th className={cn(TH, "text-right")}>Available Qty</th>
             <th className={cn(TH, "text-right")}>Debit Qty</th>
             <th className={cn(TH, "text-right")}>Rate</th>
             <th className={cn(TH, "text-right")}>Discount</th>
             <th className={cn(TH, "text-right")}>GST %</th>
-            <th className={cn(TH, "text-right")}>GST</th>
+            <th className={cn(TH, "text-right")}>Taxable</th>
+            <th className={cn(TH, "text-right")}>CGST</th>
+            <th className={cn(TH, "text-right")}>SGST</th>
+            <th className={cn(TH, "text-right")}>IGST</th>
             <th className={cn(TH, "text-right")}>Amount</th>
           </tr>
         </thead>
@@ -89,7 +101,7 @@ export function DebitNoteProductTable({
                       min={0}
                       max={Number.isFinite(maxQty) ? maxQty : undefined}
                       className={cn(
-                        "h-7 w-[68px] text-xs text-right tabular-nums ml-auto",
+                        "h-8 w-[68px] text-xs text-right tabular-nums ml-auto",
                         overMax && "border-red-400",
                       )}
                       value={line.returnQty || ""}
@@ -107,7 +119,16 @@ export function DebitNoteProductTable({
                   {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
                 </td>
                 <td className={cn(TD, "cn-num font-mono")}>
-                  {amounts ? amounts.taxAmt.toFixed(2) : "—"}
+                  {amounts ? amounts.taxable.toFixed(2) : "—"}
+                </td>
+                <td className={cn(TD, "cn-num font-mono")}>
+                  {amounts ? amounts.cgst.toFixed(2) : "—"}
+                </td>
+                <td className={cn(TD, "cn-num font-mono")}>
+                  {amounts ? amounts.sgst.toFixed(2) : "—"}
+                </td>
+                <td className={cn(TD, "cn-num font-mono")}>
+                  {amounts ? amounts.igst.toFixed(2) : "—"}
                 </td>
                 <td className={cn(TD, "cn-num font-mono font-semibold")}>
                   {amounts && amounts.amount > 0 ? amounts.amount.toFixed(2) : "—"}

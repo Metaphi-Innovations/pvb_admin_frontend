@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
@@ -34,6 +35,7 @@ import {
   INVOICE_FORM_INPUT_CLASS,
   INVOICE_FORM_TABLE_TD_CLASS,
 } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
 import {
   createManualPurchaseEntry,
   updateManualPurchaseEntry,
@@ -284,35 +286,15 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
       )}
       backHref={PURCHASE_LIST_PATH}
       onBackClick={requestCancel}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={INVOICE_FORM_INPUT_CLASS}
-            onClick={requestCancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={INVOICE_FORM_INPUT_CLASS}
-            disabled={saving}
-            onClick={() => doSave(false)}
-          >
-            Save Draft
-          </Button>
-          <Button
-            size="sm"
-            className={cn(INVOICE_FORM_INPUT_CLASS, "bg-brand-600 hover:bg-brand-700 text-white border-0")}
-            disabled={saving}
-            onClick={() => doSave(true)}
-          >
-            Post Invoice
-          </Button>
-        </div>
+      stickyFooter={
+        <VoucherFormActionBar
+          onDiscard={requestCancel}
+          onSaveDraft={() => doSave(false)}
+          onSaveAndPost={() => doSave(true)}
+          saveAndPostLabel="Post Invoice"
+          saveDraftDisabled={saving}
+          saveAndPostDisabled={saving}
+        />
       }
     >
       {error && (
@@ -530,6 +512,8 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         lines={impactLines}
         className="border border-slate-200 rounded-lg"
       />
+
+      <AccountingImpactSection docKey="purchase_invoice" className="mt-4" />
     </InvoiceFormLayout>
     {discardDialog}
     </>

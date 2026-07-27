@@ -32,10 +32,10 @@ export function VoucherNarrationSection({
     <Textarea
       className={cn(
         variant === "premium" ? RECEIPT_INPUT_CLASS : VOUCHER_INPUT_CLASS,
-        variant === "premium" ? RECEIPT_NARRATION_INPUT : "min-h-[72px] max-h-32 h-auto py-2 resize-y",
+        variant === "premium" ? RECEIPT_NARRATION_INPUT : "min-h-[60px] max-h-36 h-[60px] py-1.5 resize-y",
         VOUCHER_FIELD_NARRATION,
       )}
-      rows={3}
+      rows={2}
       value={narration}
       onChange={(e) => onChange(e.target.value)}
       placeholder="Optional narration…"

@@ -2,10 +2,10 @@
  * Accounts module typography — use these classes/constants only under `/accounts/**`
  * and `components/accounts/**`. Do not use in other ERP modules.
  *
- * Dense enterprise scale (Bank Reconciliation reference):
- * - Page title: ~17px
+ * Dense enterprise scale (see docs/accounts-ui-standard.md):
+ * - Page title: ~17px semibold
  * - Subtitle / filter labels: 10–11px
- * - Filter controls / buttons: h-8 (32px), 12px text
+ * - Form + filter controls / buttons: h-8 (32px), 12–13px text
  * - Table header: 11px semibold
  * - Table body: 12px
  * - KPI value: ~15px · KPI label: 10px

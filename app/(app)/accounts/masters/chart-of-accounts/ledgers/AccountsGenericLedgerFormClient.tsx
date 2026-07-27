@@ -26,6 +26,13 @@ import { useClientMounted } from "@/lib/use-client-mounted";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
+import {
+  isAddLedgerBlocked,
+  STATUTORY_NO_MANUAL_LEDGER_REASON,
+} from "@/lib/accounts/coa-add-ledger-policy";
+import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
+import { getBankAccountByLedgerId } from "@/lib/accounts/bank-accounts-data";
 
 interface ToastState {
   msg: string;
@@ -85,6 +92,7 @@ export default function AccountsGenericLedgerFormClient({
   const [toast, setToast] = useState<ToastState | null>(null);
   const [ready, setReady] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [statutoryBlocked, setStatutoryBlocked] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -99,7 +107,31 @@ export default function AccountsGenericLedgerFormClient({
 
     if (mode === "edit") {
       const row = list.find((r) => r.id === ledgerId && r.nodeLevel === "ledger");
-      if (!row || !canEditLedger(row, list)) {
+      if (!row) {
+        setNotFound(true);
+        setReady(true);
+        return;
+      }
+
+      // Bank-linked ledgers are owned by Bank Account Form — never Generic.
+      const masterLink = resolveCoaMasterLink(row, list);
+      const bankAccountId =
+        masterLink?.category === "bank"
+          ? masterLink.sourceId
+          : getBankAccountByLedgerId(row.id)?.id;
+      if (bankAccountId != null) {
+        const parentId = row.parentAccountId;
+        const returnTo =
+          parentId != null
+            ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}`
+            : CHART_OF_ACCOUNTS_HREF;
+        router.replace(
+          `/accounts/banking/bank-accounts/${bankAccountId}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
+        );
+        return;
+      }
+
+      if (!canEditLedger(row, list)) {
         setNotFound(true);
         setReady(true);
         return;
@@ -114,15 +146,37 @@ export default function AccountsGenericLedgerFormClient({
 
     const parent =
       parentGroupId != null ? list.find((r) => r.id === parentGroupId) : undefined;
+
+    // Direct URL / deep-link with a statutory parent — do not render a usable form.
+    if (parent && isAddLedgerBlocked(parent, list)) {
+      setStatutoryBlocked(true);
+      setFormError(STATUTORY_NO_MANUAL_LEDGER_REASON);
+      setReady(true);
+      router.replace(coaReturnHref(parent.id));
+      return;
+    }
+
     const lockedParent =
-      parent && canAddLedgerUnder(parent, list) ? parentGroupId! : null;
+      parent && canAddLedgerUnder(parent, list) && !isAddLedgerBlocked(parent, list)
+        ? parentGroupId!
+        : null;
+    const cashParent =
+      parent != null &&
+      lockedParent != null &&
+      resolveCoaLedgerBehavior(parent, list).kind === "cash";
 
     setForm({
       ...DEFAULT_LEDGER_FORM,
       ...(lockedParent != null
         ? {
             parentGroupId: lockedParent,
-            balanceType: defaultBalanceTypeForParent(list, lockedParent),
+            // Cash-in-Hand is an Asset group — default Dr; bill-wise stays No.
+            balanceType: cashParent
+              ? "Debit"
+              : defaultBalanceTypeForParent(list, lockedParent),
+            billWiseAccounting: cashParent
+              ? false
+              : DEFAULT_LEDGER_FORM.billWiseAccounting,
           }
         : {}),
     });
@@ -132,7 +186,7 @@ export default function AccountsGenericLedgerFormClient({
       setFormError(describeInvalidLedgerParentMessage(parent, list));
     }
     setReady(true);
-  }, [mounted, mode, ledgerId, parentGroupId]);
+  }, [mounted, mode, ledgerId, parentGroupId, router]);
 
   const goBack = () => {
     const nodeId =
@@ -188,7 +242,16 @@ export default function AccountsGenericLedgerFormClient({
       type: "success",
     });
     setTimeout(() => {
-      router.push(coaReturnHref(savedId));
+      // Cash-in-Hand: return to the group listing (keep Cash-in-Hand selected).
+      // Other generic adds still open the new ledger node.
+      const parentId = form.parentGroupId ?? parentGroupId;
+      const parentNode =
+        parentId != null ? list.find((r) => r.id === parentId) : undefined;
+      const returnToCashGroup =
+        mode === "add" &&
+        parentNode != null &&
+        resolveCoaLedgerBehavior(parentNode, list).kind === "cash";
+      router.push(coaReturnHref(returnToCashGroup ? parentId! : savedId));
     }, 700);
   };
 
@@ -232,6 +295,19 @@ export default function AccountsGenericLedgerFormClient({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
         <p className="text-sm text-muted-foreground">Ledger not found or cannot be edited.</p>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={goBack}>
+          Back to Chart of Accounts
+        </Button>
+      </div>
+    );
+  }
+
+  if (statutoryBlocked) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+        <p className="text-xs text-muted-foreground max-w-sm">
+          {STATUTORY_NO_MANUAL_LEDGER_REASON}
+        </p>
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={goBack}>
           Back to Chart of Accounts
         </Button>

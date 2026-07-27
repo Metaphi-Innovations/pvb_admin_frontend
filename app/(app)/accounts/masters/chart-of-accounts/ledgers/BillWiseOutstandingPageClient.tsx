@@ -146,11 +146,9 @@ function summarizeReferences(rows: BillWiseReferenceRow[]) {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-3 shadow-sm min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        {label}
-      </p>
-      <p className="text-sm font-bold text-foreground mt-1 tabular-nums truncate">{value}</p>
+    <div className="bg-white rounded-lg border border-border px-2.5 py-1.5 shadow-sm min-w-0 min-h-[44px] flex flex-col justify-center">
+      <p className="accounts-summary-label">{label}</p>
+      <p className="accounts-summary-value mt-0.5 tabular-nums truncate">{value}</p>
     </div>
   );
 }

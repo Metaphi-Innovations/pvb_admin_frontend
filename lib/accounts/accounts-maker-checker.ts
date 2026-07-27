@@ -20,6 +20,7 @@ export type AccountsVoucherCategory =
   | "journal_entry"
   | "receipt_voucher"
   | "payment_voucher"
+  | "contra_voucher"
   | "bank_recon_adjustment"
   | "opening_balance"
   | "stock_opening"
@@ -83,6 +84,7 @@ export const ACCOUNTS_VOUCHER_CATEGORY_LABELS: Record<AccountsVoucherCategory, s
   journal_entry: "Journal Entry",
   receipt_voucher: "Receipt Voucher",
   payment_voucher: "Payment Voucher",
+  contra_voucher: "Contra Voucher",
   bank_recon_adjustment: "Bank Reconciliation Adjustment",
   opening_balance: "Opening Balance",
   stock_opening: "Stock Opening",
@@ -94,7 +96,7 @@ export const WORKFLOW_STATUS_LABELS: Record<AccountsVoucherWorkflowStatus, strin
   draft: "Draft",
   pending_approval: "Pending Approval",
   sent_back: "Sent Back",
-  posted: "Posted",
+  posted: "Approved & Posted",
   rejected: "Rejected",
   cancelled: "Cancelled",
 };

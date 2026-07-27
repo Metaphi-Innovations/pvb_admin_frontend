@@ -72,6 +72,10 @@ export interface CreditNoteLine {
   sku?: string;
   hsn?: string;
   batchNo?: string;
+  /** Frontend display — from source invoice/return when available. */
+  mfgDate?: string;
+  expiryDate?: string;
+  uom?: string;
   description: string;
   invoiceQty: number;
   /** Max creditable qty from sales return (when applicable). */
@@ -81,6 +85,13 @@ export interface CreditNoteLine {
   unitPrice: number;
   discountPct: number;
   taxPct: number;
+  /** Source GST % retained when GST Applicable is toggled off in UI. */
+  sourceTaxPct?: number;
+  /** UI: GST Applicable switch. Defaults to taxPct > 0. */
+  gstApplicable?: boolean;
+  /** Per-row adjustment ledger (frontend; note-level ledger still used on save). */
+  adjustmentLedgerId?: number | null;
+  adjustmentLedgerName?: string;
   gstAmount: number;
   lineAmount: number;
   returnQty: number;
@@ -511,7 +522,7 @@ function findInvoiceForSalesReturnRecord(ret: SalesReturnRecord): InvoiceRecord 
 function matchSalesReturnProductToLine(
   ret: SalesReturnRecord,
   line: CreditNoteLine,
-): { returnQty: number; batchNo: string } | null {
+): { returnQty: number; batchNo: string; batchExpiryDate?: string; sku?: string } | null {
   const key = line.productName.trim().toLowerCase();
   const skuKey = (line.sku ?? "").trim().toLowerCase();
   const match = ret.products.find((p) => {
@@ -524,6 +535,8 @@ function matchSalesReturnProductToLine(
   return {
     returnQty: getProductReturnPieces(match),
     batchNo: match.batchNo ?? "",
+    batchExpiryDate: match.batchExpiryDate,
+    sku: match.sku,
   };
 }
 
@@ -553,6 +566,8 @@ export function buildReferenceFromSalesReturn(returnId: string): CreditReference
     return normalizeCreditLine({
       ...line,
       batchNo: matched?.batchNo ?? line.batchNo ?? "",
+      expiryDate: matched?.batchExpiryDate ?? line.expiryDate ?? "",
+      sku: matched?.sku || line.sku,
       salesReturnQty,
       eligibleReturnQty,
       returnQty: 0,
@@ -579,6 +594,7 @@ function invoiceLineToCreditLine(l: import("../invoices/invoices-data").InvoiceL
     const product = loadProducts().find((p) => p.id === l.productId);
     sku = product?.sku ?? "";
   }
+  const taxPct = l.taxPct ?? 0;
   return {
     id: `line-${l.id}`,
     sourceLineId: l.id,
@@ -586,11 +602,17 @@ function invoiceLineToCreditLine(l: import("../invoices/invoices-data").InvoiceL
     productName: l.productName,
     sku,
     hsn: l.hsn ?? "",
+    batchNo: l.batchNo ?? "",
+    mfgDate: l.manufacturingDate ?? "",
+    expiryDate: l.expiryDate ?? "",
+    uom: l.unit ?? "",
     description: l.description,
     invoiceQty: l.qty,
     unitPrice: l.unitPrice,
     discountPct: l.discountPct,
-    taxPct: l.taxPct,
+    taxPct,
+    sourceTaxPct: taxPct,
+    gstApplicable: taxPct > 0,
     gstAmount: taxAmt,
     lineAmount: l.amount,
     returnQty: 0,

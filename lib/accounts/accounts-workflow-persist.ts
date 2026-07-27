@@ -145,7 +145,9 @@ function saveVoucherWorkflow(id: number, workflow: AccountsDocumentWorkflow): vo
       ? "journal_entry"
       : all[idx].voucherType === "receipt"
         ? "receipt_voucher"
-        : "payment_voucher",
+        : all[idx].voucherType === "contra"
+          ? "contra_voucher"
+          : "payment_voucher",
     workflow,
   );
   all[idx] = {
@@ -173,6 +175,7 @@ export function getDocumentWorkflow(
     case "journal_entry":
     case "receipt_voucher":
     case "payment_voucher":
+    case "contra_voucher":
       return getVoucherById(documentId)?.workflow;
     default:
       return undefined;
@@ -212,6 +215,7 @@ export function persistDocumentWorkflow(
     case "journal_entry":
     case "receipt_voucher":
     case "payment_voucher":
+    case "contra_voucher":
       saveVoucherWorkflow(documentId, workflow);
       break;
     default:

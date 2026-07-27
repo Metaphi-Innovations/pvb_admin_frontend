@@ -2,7 +2,10 @@ import type {
   TrialBalanceDetailedFlatRow,
   TrialBalanceDetailedLedgerRow,
 } from "./trial-balance-data";
-import type { TrialBalanceNormalLedgerRow } from "./trial-balance-display";
+import type {
+  TrialBalanceNormalLedgerRow,
+  TrialBalanceNormalPrimaryHeadRow,
+} from "./trial-balance-display";
 
 /** Particular / ledger name must be a non-empty string to render in Trial Balance. */
 export function isValidTrialBalanceParticular(
@@ -46,7 +49,12 @@ export function filterValidTrialBalanceLedgerRows<
   return rows.filter(isValidTrialBalanceLedgerRow);
 }
 
-export function isRenderableTrialBalanceNormalRow(row: TrialBalanceNormalLedgerRow): boolean {
+export function isRenderableTrialBalanceNormalRow(
+  row: TrialBalanceNormalLedgerRow | TrialBalanceNormalPrimaryHeadRow,
+): boolean {
+  if (row.type === "primary") {
+    return isValidTrialBalanceParticular(row.primaryHead);
+  }
   return isValidTrialBalanceLedgerRow(row.ledger);
 }
 

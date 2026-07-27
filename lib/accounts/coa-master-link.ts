@@ -378,87 +378,103 @@ export function ledgerDetailHref(ledgerId: number): string {
   return coaHrefForLedger(ledgerId);
 }
 
-/** Backfill party links + COA source refs for existing ledgers (non-destructive). */
+/** Backfill party links + COA source refs for existing ledgers (non-destructive, idempotent). */
+let coaMasterLinkBackfillRunning = false;
+
 export function backfillCoaMasterLinks(): void {
   if (typeof window === "undefined") return;
+  if (coaMasterLinkBackfillRunning) return;
+  coaMasterLinkBackfillRunning = true;
+  try {
+    const records = loadChartOfAccounts();
+    let changed = false;
 
-  const records = loadChartOfAccounts();
-  let changed = false;
+    const patchLedger = (ledgerId: number, patch: Partial<ChartOfAccount>) => {
+      const idx = records.findIndex((r) => r.id === ledgerId);
+      if (idx < 0) return;
+      const cur = records[idx];
+      // Skip no-op patches so repeated loads do not rewrite identical storage.
+      if (
+        cur.isSystemGenerated === patch.isSystemGenerated &&
+        cur.erpSourceModule === patch.erpSourceModule &&
+        cur.erpSourceId === patch.erpSourceId
+      ) {
+        return;
+      }
+      records[idx] = { ...cur, ...patch };
+      changed = true;
+    };
 
-  const patchLedger = (ledgerId: number, patch: Partial<ChartOfAccount>) => {
-    const idx = records.findIndex((r) => r.id === ledgerId);
-    if (idx < 0) return;
-    records[idx] = { ...records[idx], ...patch };
-    changed = true;
-  };
-
-  for (const bank of loadBankAccountMasters()) {
-    upsertErpPartyLink({
-      ledgerId: bank.coaLedgerId,
-      erpSourceModule: "bank_master",
-      erpSourceId: bank.id,
-      partyCode: bank.accountNumber || `BANK-${bank.id}`,
-      partyName: formatBankAccountMaster(bank),
-    });
-    patchLedger(bank.coaLedgerId, {
-      isSystemGenerated: true,
-      erpSourceModule: "bank_master",
-      erpSourceId: bank.id,
-    });
-  }
-
-  for (const customer of loadCustomers()) {
-    if (customer.status !== "active") continue;
-    const link = findErpPartyLink("customer_master", customer.id);
-    if (link) {
-      patchLedger(link.ledgerId, {
+    for (const bank of loadBankAccountMasters()) {
+      upsertErpPartyLink({
+        ledgerId: bank.coaLedgerId,
+        erpSourceModule: "bank_master",
+        erpSourceId: bank.id,
+        partyCode: bank.accountNumber || `BANK-${bank.id}`,
+        partyName: formatBankAccountMaster(bank),
+      });
+      patchLedger(bank.coaLedgerId, {
         isSystemGenerated: true,
-        erpSourceModule: "customer_master",
-        erpSourceId: customer.id,
+        erpSourceModule: "bank_master",
+        erpSourceId: bank.id,
       });
     }
-  }
 
-  for (const vendor of loadVendors()) {
-    if (vendor.status !== "active") continue;
-    const link = findErpPartyLink("vendor_master", vendor.id);
-    if (link) {
-      patchLedger(link.ledgerId, {
+    for (const customer of loadCustomers()) {
+      if (customer.status !== "active") continue;
+      const link = findErpPartyLink("customer_master", customer.id);
+      if (link) {
+        patchLedger(link.ledgerId, {
+          isSystemGenerated: true,
+          erpSourceModule: "customer_master",
+          erpSourceId: customer.id,
+        });
+      }
+    }
+
+    for (const vendor of loadVendors()) {
+      if (vendor.status !== "active") continue;
+      const link = findErpPartyLink("vendor_master", vendor.id);
+      if (link) {
+        patchLedger(link.ledgerId, {
+          isSystemGenerated: true,
+          erpSourceModule: "vendor_master",
+          erpSourceId: vendor.id,
+        });
+      }
+    }
+
+    for (const warehouse of loadWarehouses()) {
+      const link = findErpPartyLink("warehouse_master", warehouse.id);
+      if (link) {
+        patchLedger(link.ledgerId, {
+          isSystemGenerated: true,
+          erpSourceModule: "warehouse_master",
+          erpSourceId: warehouse.id,
+        });
+      }
+    }
+
+    for (const ledger of records.filter((r) => r.nodeLevel === "ledger")) {
+      const link = resolveCoaMasterLink(ledger, records);
+      if (!link || findErpPartyLinkByLedgerId(ledger.id)) continue;
+
+      upsertErpPartyLink({
+        ledgerId: ledger.id,
+        erpSourceModule: link.sourceModule,
+        erpSourceId: link.sourceId,
+        partyCode: link.sourceCode || String(link.sourceId),
+        partyName: link.sourceName,
+      });
+      patchLedger(ledger.id, {
         isSystemGenerated: true,
-        erpSourceModule: "vendor_master",
-        erpSourceId: vendor.id,
+        erpSourceModule: link.sourceModule,
+        erpSourceId: link.sourceId,
       });
     }
+
+    if (changed) saveChartOfAccounts(records);
+  } finally {
+    coaMasterLinkBackfillRunning = false;
   }
-
-  for (const warehouse of loadWarehouses()) {
-    const link = findErpPartyLink("warehouse_master", warehouse.id);
-    if (link) {
-      patchLedger(link.ledgerId, {
-        isSystemGenerated: true,
-        erpSourceModule: "warehouse_master",
-        erpSourceId: warehouse.id,
-      });
-    }
-  }
-
-  for (const ledger of records.filter((r) => r.nodeLevel === "ledger")) {
-    const link = resolveCoaMasterLink(ledger, records);
-    if (!link || findErpPartyLinkByLedgerId(ledger.id)) continue;
-
-    upsertErpPartyLink({
-      ledgerId: ledger.id,
-      erpSourceModule: link.sourceModule,
-      erpSourceId: link.sourceId,
-      partyCode: link.sourceCode || String(link.sourceId),
-      partyName: link.sourceName,
-    });
-    patchLedger(ledger.id, {
-      isSystemGenerated: true,
-      erpSourceModule: link.sourceModule,
-      erpSourceId: link.sourceId,
-    });
-  }
-
-  if (changed) saveChartOfAccounts(records);
 }

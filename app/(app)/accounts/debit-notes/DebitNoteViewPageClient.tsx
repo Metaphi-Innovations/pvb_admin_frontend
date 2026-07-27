@@ -16,10 +16,12 @@ import {
 } from "@/lib/accounts/accounts-maker-checker";
 import {
   canEditDebitNote,
+  cancelDebitNote,
   DEBIT_NOTE_SOURCE_LABELS,
   getDebitNoteById,
   type DebitNoteRecord,
 } from "./debit-notes-data";
+import { DebitNoteCancelDialog } from "./components/DebitNoteCancelDialog";
 import { downloadDebitNotePdf } from "./debit-note-pdf";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
@@ -29,6 +31,7 @@ import "../credit-notes/credit-note-workspace.css";
 export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: number }) {
   const router = useRouter();
   const [record, setRecord] = useState<DebitNoteRecord | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const refresh = () => {
     const r = getDebitNoteById(debitNoteId);
@@ -57,6 +60,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         : "cn-ws__badge";
 
   return (
+    <>
     <AccountsFormLayout
       fullWidth
       title="View Debit Note"
@@ -101,6 +105,32 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                 }
               >
                 Edit
+              </Button>
+            ) : null}
+            {record.status !== "cancelled" &&
+            record.status !== "posted" &&
+            record.status !== "approved" &&
+            record.status !== "processed" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-red-600"
+                onClick={() => setCancelOpen(true)}
+              >
+                Cancel Voucher
+              </Button>
+            ) : null}
+            {record.status === "posted" ||
+            record.status === "approved" ||
+            record.status === "processed" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-navy-700"
+                disabled
+                title="Creates a linked opposite voucher — backend wiring pending"
+              >
+                Reverse Voucher
               </Button>
             ) : null}
           </div>
@@ -357,5 +387,16 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         ) : null}
       </div>
     </AccountsFormLayout>
+    <DebitNoteCancelDialog
+      open={cancelOpen}
+      onClose={() => setCancelOpen(false)}
+      debitNoteNo={record.debitNoteNo}
+      onConfirm={(reason) => {
+        cancelDebitNote(record.id, reason);
+        setCancelOpen(false);
+        refresh();
+      }}
+    />
+    </>
   );
 }

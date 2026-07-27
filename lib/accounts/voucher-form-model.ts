@@ -89,16 +89,47 @@ export interface VoucherFormModel {
   financialYearName?: string;
   entryMode: VoucherEntryMode;
   entries: VoucherFormEntry[];
+  /** Mirrors transaction mode for instrument classification. */
+  instrumentType?: string;
+  /** Cheque number (cheque modes). */
+  instrumentNumber?: string;
+  /** Cheque date — not bank clearing date. */
+  instrumentDate?: string;
+  /** UTR / electronic transaction reference. */
+  transactionReference?: string;
+  /** Electronic transaction date — not bank clearing date. */
+  transactionDate?: string;
+}
+
+export interface VoucherInstrumentExtras {
+  chequeNumber?: string;
+  chequeDate?: string;
+  /** UTR / transaction reference for electronic modes */
+  transactionReference?: string;
+  transactionDate?: string;
+}
+
+export interface VoucherFormAdjustmentExtra {
+  id: string;
+  adjustmentType: string;
+  ledgerId: number | null;
+  ledgerName: string;
+  debitOrCredit: "debit" | "credit";
+  amount: number;
 }
 
 export interface VoucherFormExtras {
-  /** Payment TDS gross-up */
+  /** Payment TDS gross-up (legacy single-field; prefer adjustmentRows). */
   tdsAmount?: number;
   tdsSectionMasterId?: number | null;
   expenseHeadLedgerId?: number | null;
   expenseHeadLedgerName?: string;
   /** Warehouse / branch context for bank account mapping on receipt & payment vouchers. */
   warehouseRef?: string;
+  /** Mode-dependent instrument details (cheque / UTR). Not bank clearing date. */
+  instrument?: VoucherInstrumentExtras;
+  /** Generic ledger-based adjustments (TDS, bank charges, discount, round off, other). */
+  adjustmentRows?: VoucherFormAdjustmentExtra[];
 }
 
 let _entryIdSeq = 0;
@@ -650,6 +681,11 @@ export function accountingVoucherToFormModel(
     financialYearName: voucher.financialYearName,
     entryMode,
     entries,
+    instrumentType: voucher.instrumentType ?? voucher.paymentMode ?? "",
+    instrumentNumber: voucher.instrumentNumber ?? "",
+    instrumentDate: voucher.instrumentDate ?? "",
+    transactionReference: voucher.transactionReference ?? "",
+    transactionDate: voucher.transactionDate ?? "",
   };
 }
 
@@ -670,6 +706,11 @@ export function createNewFormModel(
     entries: isJournal
       ? createDefaultJournalEntries(voucherType)
       : createDefaultDualEntries(voucherType as "receipt" | "payment" | "contra"),
+    instrumentType: transactionModeDefault,
+    instrumentNumber: "",
+    instrumentDate: "",
+    transactionReference: "",
+    transactionDate: "",
   };
 }
 
@@ -678,6 +719,7 @@ export function formModelToCreatePayload(
   extras?: VoucherFormExtras,
   coaRecords?: ChartOfAccount[],
 ) {
+  const instrument = extras?.instrument;
   return {
     date: model.voucherDate,
     financialYearId: model.financialYearId ?? null,
@@ -685,6 +727,12 @@ export function formModelToCreatePayload(
     referenceNo: model.referenceNumber,
     narration: model.narration,
     paymentMode: model.transactionMode,
+    instrumentType: model.instrumentType || model.transactionMode,
+    instrumentNumber: model.instrumentNumber || instrument?.chequeNumber || "",
+    instrumentDate: model.instrumentDate || instrument?.chequeDate || "",
+    transactionReference:
+      model.transactionReference || instrument?.transactionReference || "",
+    transactionDate: model.transactionDate || instrument?.transactionDate || "",
     lines: formModelToVoucherLines(model, extras, coaRecords),
     status: "draft" as const,
     entryMode: model.entryMode,

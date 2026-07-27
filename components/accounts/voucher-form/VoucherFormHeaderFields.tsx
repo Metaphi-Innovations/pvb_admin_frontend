@@ -45,6 +45,11 @@ export interface VoucherFormHeaderFieldsProps {
   financialYears?: FinancialYear[];
   onChange: (patch: Partial<VoucherFormModel>) => void;
   variant?: "default" | "receipt";
+  /**
+   * When true, hide the generic Reference Number field — instrument fields
+   * (cheque / UTR) are rendered separately based on payment mode.
+   */
+  hideReferenceNumber?: boolean;
 }
 
 export function VoucherFormHeaderFields({
@@ -57,12 +62,13 @@ export function VoucherFormHeaderFields({
   financialYears = [],
   onChange,
   variant = "default",
+  hideReferenceNumber = false,
 }: VoucherFormHeaderFieldsProps) {
   const isReceipt = variant === "receipt";
   const inputClass = isReceipt ? RECEIPT_INPUT_CLASS : VOUCHER_INPUT_CLASS;
   const previewClass = isReceipt ? RECEIPT_PREVIEW_TEXT_CLASS : VOUCHER_PREVIEW_TEXT_CLASS;
   const labelClass = isReceipt ? RECEIPT_LABEL_CLASS : undefined;
-  const fieldSpacing = isReceipt ? "space-y-1" : "space-y-1";
+  const fieldSpacing = "space-y-0.5";
   const previewHeight = isReceipt ? "h-9" : "h-9";
   const fieldDate = isReceipt ? RECEIPT_FIELD_DATE : VOUCHER_FIELD_DATE;
   const fieldNumber = isReceipt ? RECEIPT_FIELD_NUMBER : VOUCHER_FIELD_NUMBER;
@@ -104,6 +110,7 @@ export function VoucherFormHeaderFields({
         />
       </VoucherFormField>
 
+      {!hideReferenceNumber && (
       <VoucherFormField
         label="Reference Number"
         className={fieldReference}
@@ -118,6 +125,7 @@ export function VoucherFormHeaderFields({
           disabled={readOnly}
         />
       </VoucherFormField>
+      )}
 
       {config.showTransactionMode !== false && (
         <VoucherFormField

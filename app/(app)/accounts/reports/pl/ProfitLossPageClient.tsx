@@ -180,23 +180,23 @@ export default function ProfitLossPageClient() {
 
   const ledgerGroupOptions = useMemo(
     () => (mounted ? getPandLLedgerGroupOptions() : []),
-    [mounted, plFilters],
+    [mounted, dataRevision],
   );
   const ledgerOptions = useMemo(
     () => (mounted ? mergeLedgerOptions(getPandLLedgerOptions, ledgerGroupIds) : []),
-    [mounted, ledgerGroupIds, plFilters],
+    [mounted, ledgerGroupIds, dataRevision],
   );
   const branchOptions = useMemo(
     () => (mounted ? getPandLBranchOptions() : [...REPORT_BRANCH_OPTIONS]),
-    [mounted, plFilters],
+    [mounted, dataRevision],
   );
   const warehouseOptions = useMemo(
     () => (mounted ? getPandLWarehouseOptions() : []),
-    [mounted, plFilters],
+    [mounted, dataRevision],
   );
   const partyOptions = useMemo(
     () => (mounted ? getPandLActivePartyOptions() : []),
-    [mounted, plFilters],
+    [mounted, dataRevision],
   );
 
   const warehouseSelectOptions = useMemo(
@@ -445,14 +445,14 @@ export default function ProfitLossPageClient() {
       title="Profit & Loss"
       description="Income and expense statement for the selected period."
       hideDescription
-      layout="split"
-      className="h-full min-h-0"
+      layout="form"
+      className="min-h-0"
       subHeader={
         <ProfitLossViewTabs value={activeTab} onChange={setActiveTab} />
       }
       filters={filterBar}
     >
-      <AccountsListingTableCard className="trial-balance-compact flex flex-col flex-1 min-h-0 overflow-hidden">
+      <AccountsListingTableCard className="trial-balance-compact flex flex-col !overflow-visible !flex-none">
         {mounted && datesReady && (
           <p className="flex-shrink-0 px-3 py-1 border-b border-border/60 text-left text-[11px] text-muted-foreground">
             <span className="font-medium text-foreground">Period:</span>{" "}

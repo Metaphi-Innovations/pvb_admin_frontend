@@ -16,8 +16,24 @@ import {
 
 export type VoucherFormLayout = "dual-simple" | "journal-grid";
 
-const RECEIPT_PAYMENT_MODES = ["Cash", "Cheque", "NEFT/RTGS", "UPI", "IMPS", "Other"] as const;
-const CONTRA_TRANSFER_MODES = ["Bank Transfer", "Cash Deposit", "Cash Withdrawal", "Cheque", "Other"] as const;
+/** Separate NEFT / RTGS / Bank Transfer for instrument-field clarity. */
+const RECEIPT_PAYMENT_MODES = [
+  "Cash",
+  "Cheque",
+  "Bank Transfer",
+  "NEFT",
+  "RTGS",
+  "IMPS",
+  "UPI",
+  "Other",
+] as const;
+const CONTRA_TRANSFER_MODES = [
+  "Bank Transfer",
+  "Cash Deposit",
+  "Cash Withdrawal",
+  "Cheque",
+  "Other",
+] as const;
 
 export interface VoucherFormTypeConfig {
   voucherType: VoucherTypeCode;
@@ -89,9 +105,9 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         voucherNumberLabel: "Receipt No.",
         transactionModeLabel: "Mode of Receipt",
         transactionModeOptions: RECEIPT_PAYMENT_MODES,
-        defaultTransactionMode: "NEFT/RTGS",
-        debitAccountLabel: "Account (Dr)",
-        creditAccountLabel: "Account (Cr)",
+        defaultTransactionMode: "NEFT",
+        debitAccountLabel: "Cash / Bank Ledger",
+        creditAccountLabel: "Customer / Income / Other Ledger",
         debitAccountPlaceholder: "Select cash or bank ledger…",
         creditAccountPlaceholder: "Select customer, income, capital, loan or liability…",
         debitQuickAddScope: undefined,
@@ -119,9 +135,9 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         voucherNumberLabel: "Payment No.",
         transactionModeLabel: "Mode of Payment",
         transactionModeOptions: RECEIPT_PAYMENT_MODES,
-        defaultTransactionMode: "NEFT/RTGS",
-        debitAccountLabel: "Account (Dr)",
-        creditAccountLabel: "Account (Cr)",
+        defaultTransactionMode: "NEFT",
+        debitAccountLabel: "Vendor / Expense / Other Ledger",
+        creditAccountLabel: "Cash / Bank Ledger",
         debitAccountPlaceholder: "Select vendor, expense, payable…",
         creditAccountPlaceholder: "Select bank, cash, OD or CC account…",
         debitQuickAddScope: "payment_debit",
@@ -151,13 +167,13 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
         layout: "dual-simple",
         pageSubtitle:
           "Transfer funds between Bank, Cash-in-Hand, OD and CC accounts — debit one account and credit another for the same amount.",
-        detailsSectionTitle: "Contra Entry",
+        detailsSectionTitle: "Transfer Details",
         voucherNumberLabel: "Contra No.",
         transactionModeLabel: "Mode of Transfer",
         transactionModeOptions: CONTRA_TRANSFER_MODES,
         defaultTransactionMode: "Bank Transfer",
-        debitAccountLabel: "Account (Dr)",
-        creditAccountLabel: "Account (Cr)",
+        debitAccountLabel: "Destination Cash / Bank Account",
+        creditAccountLabel: "Source Cash / Bank Account",
         debitAccountPlaceholder: "Select bank, cash, OD or CC account…",
         creditAccountPlaceholder: "Select bank, cash, OD or CC account…",
         debitQuickAddScope: undefined,

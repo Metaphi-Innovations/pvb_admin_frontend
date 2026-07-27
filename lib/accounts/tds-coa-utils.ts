@@ -17,11 +17,17 @@ export function parseTdsSectionCode(name: string): string | null {
 }
 
 export function isTdsReceivableGroup(node: ChartOfAccount): boolean {
-  return node.nodeLevel === "account_group" && node.accountName === TDS_RECEIVABLE_GROUP;
+  return (
+    (node.nodeLevel === "account_group" || node.nodeLevel === "ledger") &&
+    node.accountName === TDS_RECEIVABLE_GROUP
+  );
 }
 
 export function isTdsPayableGroup(node: ChartOfAccount): boolean {
-  return node.nodeLevel === "account_group" && node.accountName === TDS_PAYABLE_GROUP;
+  return (
+    (node.nodeLevel === "account_group" || node.nodeLevel === "ledger") &&
+    node.accountName === TDS_PAYABLE_GROUP
+  );
 }
 
 export function isTdsCoaNode(node: ChartOfAccount, records: ChartOfAccount[]): boolean {

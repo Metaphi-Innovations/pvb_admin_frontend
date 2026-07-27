@@ -80,8 +80,8 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
   },
   {
     kind: "product",
-    label: "Product Ledger",
-    source: "ERP Product Master",
+    label: "Stock in Hand (System)",
+    source: "Warehouse Stock Valuation",
     metadata: ["inventory"],
     stableCodes: ["1213"],
     aliases: [

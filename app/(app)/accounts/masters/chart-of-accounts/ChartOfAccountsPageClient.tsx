@@ -13,11 +13,16 @@ import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-d
 import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
 import {
+  isStatutoryTaxPayableParent,
+  isStatutoryTaxSectionProjection,
+} from "@/lib/accounts/coa-statutory-tax-display";
+import {
   getCoaDisplayPath,
 } from "@/lib/accounts/coa-tree-children";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
+import { resolveCoaAddActionLabel, isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
 import type { ChartOfAccount } from "../../data";
 import { loadChartOfAccounts } from "../../data";
 import {
@@ -99,11 +104,13 @@ const BankAccountFormClient = dynamic(
 
 const HIGHLIGHT_MS = 4000;
 
-/** Ledger detail view for posting ledgers only (TDS and bank name containers excluded). */
+/** Ledger detail view for posting ledgers only (TDS/TCS statutory nodes excluded). */
 function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
   if (!isPostingLedger(node, records)) return false;
   if (node.bankGroupFlag) return false;
   if (isTdsCoaNode(node, records)) return false;
+  if (isStatutoryTaxPayableParent(node)) return false;
+  if (isStatutoryTaxSectionProjection(node)) return false;
   return true;
 }
 
@@ -137,7 +144,13 @@ export default function ChartOfAccountsPageClient() {
   const [datesReady, setDatesReady] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [sundryDebtorFormParentId, setSundryDebtorFormParentId] = useState<number | null>(null);
+  const [sundryDebtorEditCustomerId, setSundryDebtorEditCustomerId] = useState<number | undefined>(
+    undefined,
+  );
   const [sundryCreditorFormParentId, setSundryCreditorFormParentId] = useState<number | null>(null);
+  const [sundryCreditorEditVendorId, setSundryCreditorEditVendorId] = useState<number | undefined>(
+    undefined,
+  );
   const [warehouseFormParentId, setWarehouseFormParentId] = useState<number | null>(null);
   const [tdsFormParentId, setTdsFormParentId] = useState<number | null>(null);
   const [masterLinkedForm, setMasterLinkedForm] = useState<{
@@ -145,6 +158,9 @@ export default function ChartOfAccountsPageClient() {
     parentGroupId: number;
   } | null>(null);
   const [bankFormParentId, setBankFormParentId] = useState<number | null>(null);
+  const [bankFormEditAccountId, setBankFormEditAccountId] = useState<number | undefined>(
+    undefined,
+  );
 
   const canCreate = useCanCoa("create");
   const canEdit = useCanCoa("edit");
@@ -156,32 +172,59 @@ export default function ChartOfAccountsPageClient() {
   }, [openTransaction]);
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9961b5'},body:JSON.stringify({sessionId:'9961b5',runId:'post-fix',hypothesisId:'S4',location:'ChartOfAccountsPageClient.tsx:mount',message:'COA page client mounted',data:{},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }, []);
-
-  useEffect(() => {
     ensureCoaPostingLedgerTransactionsOnPageLoad();
   }, []);
 
   useEffect(() => {
-    registerSundryDebtorCustomerFormHandler((parentGroupId) => {
+    registerSundryDebtorCustomerFormHandler(({ parentGroupId, customerId }) => {
+      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const parent = list.find((r) => r.id === parentGroupId);
+      // Open form first so the selection-dismiss effect keeps it when parent is selected.
+      setSundryDebtorEditCustomerId(customerId);
       setSundryDebtorFormParentId(parentGroupId);
+      if (parent) {
+        const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
+        ensureExpanded([...ancestorIds, parent.id]);
+        selectNode(parent);
+      }
     });
-    registerSundryCreditorVendorFormHandler((parentGroupId) => {
+    registerSundryCreditorVendorFormHandler(({ parentGroupId, vendorId }) => {
+      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const parent = list.find((r) => r.id === parentGroupId);
+      // Open form first so the selection-dismiss effect keeps it when parent is selected.
+      setSundryCreditorEditVendorId(vendorId);
       setSundryCreditorFormParentId(parentGroupId);
+      if (parent) {
+        const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
+        ensureExpanded([...ancestorIds, parent.id]);
+        selectNode(parent);
+      }
     });
     registerWarehouseFormHandler((parentGroupId) => {
       setWarehouseFormParentId(parentGroupId);
     });
     registerTdsLedgerFormHandler((parentGroupId) => {
+      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const parent = list.find((r) => r.id === parentGroupId);
+      // Statutory Duties & Taxes / TDS Payable / TCS Payable — no manual TDS children.
+      if (parent && isAddLedgerBlocked(parent, list)) return;
       setTdsFormParentId(parentGroupId);
     });
     registerCoaMasterLinkedFormHandler((kind, parentGroupId) => {
       setMasterLinkedForm({ kind, parentGroupId });
     });
-    registerCoaBankFormHandler(setBankFormParentId);
+    registerCoaBankFormHandler(({ parentGroupId, accountId }) => {
+      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const parent = list.find((r) => r.id === parentGroupId);
+      // Open form first so the selection-dismiss effect keeps it when parent is selected.
+      setBankFormEditAccountId(accountId);
+      setBankFormParentId(parentGroupId);
+      if (parent) {
+        const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
+        ensureExpanded([...ancestorIds, parent.id]);
+        selectNode(parent);
+      }
+    });
     return () => {
       registerSundryDebtorCustomerFormHandler(null);
       registerSundryCreditorVendorFormHandler(null);
@@ -190,7 +233,7 @@ export default function ChartOfAccountsPageClient() {
       registerCoaMasterLinkedFormHandler(null);
       registerCoaBankFormHandler(null);
     };
-  }, []);
+  }, [records, ensureExpanded, selectNode]);
 
   const isLedgerStatementView = Boolean(
     !showRoot && selectedNode && isCoaLedgerDetailView(selectedNode, records),
@@ -210,7 +253,7 @@ export default function ChartOfAccountsPageClient() {
     !showRoot &&
       selectedNode &&
       selectedNode.nodeLevel === "ledger" &&
-      isGroupingLedger(selectedNode, records),
+      (isGroupingLedger(selectedNode, records) || isStatutoryTaxPayableParent(selectedNode)),
   );
 
   const isTdsLedgerSummaryView = Boolean(
@@ -247,15 +290,33 @@ export default function ChartOfAccountsPageClient() {
     if (selectedNode) setShowRoot(false);
   }, [selectedNode]);
 
-  /** Dismiss full-page add forms when the user picks another node in the COA tree. */
+  /** Dismiss full-page add forms when the user picks a different COA node.
+   * Keep the form open when (re)selecting the same parent group being added under. */
   useEffect(() => {
-    setSundryDebtorFormParentId(null);
-    setSundryCreditorFormParentId(null);
-    setWarehouseFormParentId(null);
-    setTdsFormParentId(null);
-    setMasterLinkedForm(null);
-    setBankFormParentId(null);
+    const id = selectedNode?.id;
+    setSundryDebtorFormParentId((prev) =>
+      prev != null && id !== prev ? null : prev,
+    );
+    setSundryCreditorFormParentId((prev) =>
+      prev != null && id !== prev ? null : prev,
+    );
+    setWarehouseFormParentId((prev) =>
+      prev != null && id !== prev ? null : prev,
+    );
+    setTdsFormParentId((prev) =>
+      prev != null && id !== prev ? null : prev,
+    );
+    setMasterLinkedForm((prev) =>
+      prev != null && id !== prev.parentGroupId ? null : prev,
+    );
+    setBankFormParentId((prev) =>
+      prev != null && id !== prev ? null : prev,
+    );
   }, [selectedNode?.id]);
+
+  useEffect(() => {
+    if (bankFormParentId == null) setBankFormEditAccountId(undefined);
+  }, [bankFormParentId]);
 
   useEffect(() => {
     setContentSearch("");
@@ -463,7 +524,8 @@ export default function ChartOfAccountsPageClient() {
     const parentId =
       selectedNode &&
       !showRoot &&
-      canAddLedgerUnder(selectedNode, records)
+      canAddLedgerUnder(selectedNode, records) &&
+      !isAddLedgerBlocked(selectedNode, records)
         ? selectedNode.id
         : null;
     if (parentId == null) return;
@@ -497,7 +559,10 @@ export default function ChartOfAccountsPageClient() {
 
   const handleSundryCreditorSaved = useCallback(
     (ledgerId: number, parentId: number | null) => {
-      handlePartyLedgerSaved(ledgerId, parentId, () => setSundryCreditorFormParentId(null));
+      handlePartyLedgerSaved(ledgerId, parentId, () => {
+        setSundryCreditorFormParentId(null);
+        setSundryCreditorEditVendorId(undefined);
+      });
     },
     [handlePartyLedgerSaved],
   );
@@ -516,7 +581,11 @@ export default function ChartOfAccountsPageClient() {
     [handlePartyLedgerSaved],
   );
 
-  const newLedgerLabel = useMemo(() => "Add Ledger", []);
+  /** Cash-in-Hand only uses "Add Cash Ledger"; all other groups keep "Add Ledger". */
+  const newLedgerLabel = useMemo(() => {
+    if (!selectedNode) return "Add Ledger";
+    return resolveCoaAddActionLabel(selectedNode, records);
+  }, [selectedNode, records]);
 
   const showMaxHierarchyNotice = Boolean(
     canCreate &&
@@ -526,7 +595,7 @@ export default function ChartOfAccountsPageClient() {
       showCoaMaxHierarchyMessage(selectedNode, records),
   );
 
-  /** Add Ledger only when a Level 3 Sub Group is selected. */
+  /** Add Ledger only when a Level 3 Sub Group is selected and policy allows it. */
   const canShowNewLedger =
     canCreate &&
     !isLedgerStatementView &&
@@ -534,14 +603,19 @@ export default function ChartOfAccountsPageClient() {
     !showMaxHierarchyNotice &&
     Boolean(selectedNode) &&
     !showRoot &&
-    canAddLedgerUnder(selectedNode!, records);
+    canAddLedgerUnder(selectedNode!, records) &&
+    !isAddLedgerBlocked(selectedNode!, records);
 
   if (sundryDebtorFormParentId != null) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         <AccountsSundryDebtorCustomerFormClient
           parentGroupId={sundryDebtorFormParentId}
-          onClose={() => setSundryDebtorFormParentId(null)}
+          customerId={sundryDebtorEditCustomerId}
+          onClose={() => {
+            setSundryDebtorFormParentId(null);
+            setSundryDebtorEditCustomerId(undefined);
+          }}
           onSaved={handleSundryDebtorSaved}
         />
       </div>
@@ -553,7 +627,11 @@ export default function ChartOfAccountsPageClient() {
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         <AccountsSundryCreditorVendorFormClient
           parentGroupId={sundryCreditorFormParentId}
-          onClose={() => setSundryCreditorFormParentId(null)}
+          vendorId={sundryCreditorEditVendorId}
+          onClose={() => {
+            setSundryCreditorFormParentId(null);
+            setSundryCreditorEditVendorId(undefined);
+          }}
           onSaved={handleSundryCreditorSaved}
         />
       </div>
@@ -603,10 +681,17 @@ export default function ChartOfAccountsPageClient() {
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         <BankAccountFormClient
+          accountId={bankFormEditAccountId}
           presetGroupId={bankFormParentId}
-          onClose={() => setBankFormParentId(null)}
+          onClose={() => {
+            setBankFormParentId(null);
+            setBankFormEditAccountId(undefined);
+          }}
           onSaved={(ledgerId, parentId) =>
-            handlePartyLedgerSaved(ledgerId, parentId, () => setBankFormParentId(null))
+            handlePartyLedgerSaved(ledgerId, parentId, () => {
+              setBankFormParentId(null);
+              setBankFormEditAccountId(undefined);
+            })
           }
         />
       </div>

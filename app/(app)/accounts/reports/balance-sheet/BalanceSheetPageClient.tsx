@@ -434,11 +434,11 @@ export default function BalanceSheetPageClient() {
       title="Balance Sheet"
       description="Asset and liability statement as on the selected date."
       hideDescription
-      layout="split"
-      className="h-full min-h-0"
+      layout="form"
+      className="min-h-0"
       filters={filterBar}
     >
-      <AccountsListingTableCard className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <AccountsListingTableCard className="flex flex-col !overflow-visible !flex-none">
         <BalanceSheetReportSummary
           financialYearLabel={financialYearLabel}
           asOnDate={asOnDate}

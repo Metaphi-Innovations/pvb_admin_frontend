@@ -126,9 +126,6 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                 ["Branch", account.branchName || "—"],
                 ["Account Type", account.accountType],
                 ["COA Ledger", ledger.accountName],
-                ["Reconciliation Enabled", account.reconciliationEnabled ? "Yes" : "No"],
-                ["Default Receipts", account.defaultForReceipts ? "Yes" : "No"],
-                ["Default Payments", account.defaultForPayments ? "Yes" : "No"],
                 ["Mapped Warehouses", getMappedWarehouseLabels(account).join(", ") || "—"],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-border/40 bg-slate-50/40 px-3 py-2.5">
@@ -166,16 +163,12 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
               <p className="text-sm text-muted-foreground">
                 Reconciliation status: <span className="font-medium capitalize text-foreground">{account.reconciliationStatus}</span>
               </p>
-              {account.reconciliationEnabled ? (
-                <Link
-                  href="/accounts/banking/reconciliation"
-                  className="inline-flex h-8 items-center px-3 text-xs border border-border rounded-lg hover:bg-muted/40 text-brand-700"
-                >
-                  Open Bank Reconciliation →
-                </Link>
-              ) : (
-                <p className="text-xs text-muted-foreground">Reconciliation is disabled for this account.</p>
-              )}
+              <Link
+                href="/accounts/banking/reconciliation"
+                className="inline-flex h-8 items-center px-3 text-xs border border-border rounded-lg hover:bg-muted/40 text-brand-700"
+              >
+                Open Bank Reconciliation →
+              </Link>
             </div>
           )}
           {tab === "statement" && (
