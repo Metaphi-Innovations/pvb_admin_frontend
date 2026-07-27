@@ -20,6 +20,7 @@ export interface CustomerBranchDocument {
 export interface CustomerBranchPayload {
     branch_name: string;
     is_main_branch: boolean;
+    sales_man_id?: string | null;
     billing_country: string;
     billing_address_line_1: string;
     billing_address_line_2: string;
@@ -47,8 +48,6 @@ export interface CustomerCreatePayload {
     country_code: string;
     mobile_no: string;
     email: string;
-
-    sales_man_id: string;
 
     cib_applicable: boolean;
     cib_reg_no?: string;
@@ -107,9 +106,6 @@ export interface CustomerListRecord {
     countryCode: string;
     mobileNo: string;
     email: string;
-
-    salesMan: string;
-    salesManId?: string;
 
     cibApplicable: boolean;
     cibRegNo?: string;
@@ -193,11 +189,6 @@ export interface CustomerDropdownItem {
         customer_type_name: string;
     } | null;
 
-    sales_man?: {
-        sales_man_id: string;
-        sales_man_name: string;
-    } | null;
-
     mobile_no?: string | null;
     email?: string | null;
 
@@ -236,7 +227,6 @@ const SORT_FIELD_MAP: Record<string, string> = {
     customerType: "customer_type__customer_type_name",
     mobileNo: "mobile_no",
     email: "email",
-    salesMan: "sales_man__sales_man_name",
     paymentType: "payment_type",
     creditLimit: "credit_limit",
     creditDays: "credit_days",
@@ -252,7 +242,6 @@ const FILTER_FIELD_MAP: Record<string, string> = {
     email: "email",
 
     customerType: "customer_type_id",
-    salesMan: "sales_man_id",
 
     gstApplicable: "gst_applicable",
     gstin: "gstin_no",
@@ -298,7 +287,7 @@ function mapFilters(filters: Record<string, unknown> = {}) {
             const toDate = String(audit.toDate ?? "").trim();
 
             if (user) {
-                mapped["sales_man.username"] = user;
+                // Audit username filter is not backed by customer-level salesman anymore
             }
             if (key === "createdBy") {
                 if (fromDate) mapped.created_at_from = fromDate;
@@ -400,7 +389,6 @@ function mapItem(
     const srNo = Number(raw.sr_no);
 
     const customerTypeObj = raw.customer_type as Record<string, unknown> | null | undefined;
-    const salesManObj = raw.sales_man as Record<string, unknown> | null | undefined;
     const tdsSectionObj = raw.tds_section as Record<string, unknown> | null | undefined;
 
     return {
@@ -419,12 +407,6 @@ function mapItem(
         countryCode: asString(raw.country_code),
         mobileNo: asString(raw.mobile_no),
         email: asString(raw.email),
-
-        salesMan: readNestedName(
-            salesManObj?.sales_man_name ?? salesManObj,
-            raw.sales_man_name
-        ),
-        salesManId: readNestedId(salesManObj, raw.sales_man_id),
 
         cibApplicable: Boolean(raw.cib_applicable),
         cibRegNo: asString(raw.cib_reg_no),

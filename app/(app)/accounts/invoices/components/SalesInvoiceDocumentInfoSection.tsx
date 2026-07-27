@@ -66,7 +66,11 @@ export function SalesInvoiceDocumentInfoSection({
           <InvoiceFormInput
             disabled
             className="bg-slate-50 text-slate-700 font-mono"
-            value={isEdit ? invoiceNo : "Auto-generated"}
+            value={
+              isEdit
+                ? invoiceNo
+                : invoiceNo || "Loading preview…"
+            }
           />
         </InvoiceFormField>
         <InvoiceFormField label="Invoice Date">

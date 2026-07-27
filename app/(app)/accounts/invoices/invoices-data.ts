@@ -29,6 +29,7 @@ import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-sche
 import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
 import { nextInvoiceDocumentNo } from "@/lib/accounts/invoice-type";
+import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
 import {
   mergeSalesInvoiceSeed,
   buildSalesInvoiceSeed,
@@ -669,7 +670,7 @@ export type InvoiceFormInput = {
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 };
 
-export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
+export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRecord> {
 	for (const line of input.lineItems) {
 		if (!line.productId) continue;
 		const product = loadProducts().find((p) => p.id === line.productId);
@@ -681,7 +682,20 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	const all = loadInvoices();
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
 	const invoiceType = input.invoiceType ?? "sales";
-	const invoiceNo = nextInvoiceNo(all, invoiceType, input.invoiceDate);
+
+	const stateForNumber =
+		input.state?.trim() || input.placeOfSupply?.trim() || "Maharashtra";
+	let invoiceNo: string;
+	try {
+		const allocated = await SalesInvoiceNumberService.allocateNumber({
+			state: stateForNumber,
+		});
+		invoiceNo =
+			allocated.invoice_no || nextInvoiceNo(all, invoiceType, input.invoiceDate);
+	} catch {
+		invoiceNo = nextInvoiceNo(all, invoiceType, input.invoiceDate);
+	}
+
 	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
 		? input.nearExpirySchemeSettlements.map((entry) => ({
 				...entry,

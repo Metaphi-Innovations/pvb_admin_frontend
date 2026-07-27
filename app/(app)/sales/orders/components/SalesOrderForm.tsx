@@ -453,6 +453,27 @@ export default function SalesOrderForm({
 		})).filter((w) => w.status === "active") as any;
 	}, [backendWarehousesData]);
 
+	// Create form: default to any active Maharashtra warehouse once the list loads.
+	useEffect(() => {
+		if (mode !== "add") return;
+		if (form.warehouseId) return;
+		if (!warehouses.length) return;
+		const maharashtraWarehouse = warehouses.find(
+			(w: any) =>
+				String(w.state || "")
+					.trim()
+					.toLowerCase() === "maharashtra",
+		);
+		if (!maharashtraWarehouse) return;
+		onChange({
+			...form,
+			warehouseId: maharashtraWarehouse.id,
+			warehouseName: maharashtraWarehouse.name || "",
+		});
+		// Only seed once when warehouses arrive and no warehouse is selected yet.
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-time default
+	}, [mode, warehouses, form.warehouseId]);
+
 	const set = <K extends keyof SalesOrderFormValues>(
 		key: K,
 		val: SalesOrderFormValues[K],

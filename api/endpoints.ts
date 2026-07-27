@@ -260,6 +260,19 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/procurement/purchase-order-return/update/${id}`,
       DETAILS: (id: string) => `/procurement/purchase-order-return/details/${id}`,
     },
+    PURCHASE_REQUEST: {
+      LIST: "/procurement/purchase-request/list",
+      SUMMARY: "/procurement/purchase-request/summary",
+      FILTER_DROPDOWN: "/procurement/purchase-request/filter-dropdown",
+      EXPORT: "/procurement/purchase-request/export",
+      PREVIEW_NUMBER: "/procurement/purchase-request/preview-number",
+      CREATE: "/procurement/purchase-request/create",
+      DETAILS: (id: string) => `/procurement/purchase-request/${id}`,
+      UPDATE: (id: string) => `/procurement/purchase-request/update/${id}`,
+      DELETE: (id: string) => `/procurement/purchase-request/delete/${id}`,
+      APPROVE_REJECT: (id: string) =>
+        `/procurement/purchase-request/approve-reject/${id}`,
+    },
   },
   SALES: {
     SALES_ORDER: {
@@ -399,6 +412,7 @@ export const API_ENDPOINTS = {
     },
     PACKING_LIST: {
       BATCHES: "/warehouse/packing-list/batches",
+      ORDERS_DROPDOWN: "/warehouse/packing-list/orders-dropdown",
       FILTER_DROPDOWN: "/warehouse/packing-list/filter-dropdown",
       LIST: "/warehouse/packing-list/list",
       CREATE: "/warehouse/packing-list/create",
@@ -412,6 +426,7 @@ export const API_ENDPOINTS = {
       CREATE: "/warehouse/dispatch/create",
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
+      DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
@@ -439,6 +454,12 @@ export const API_ENDPOINTS = {
       LIST: "/warehouse/grnqc/qc/list",
       DETAILS: (id: string) => `/warehouse/grnqc/qc/${id}`,
       FILTER_DROPDOWN: "/warehouse/grnqc/qc/filter-dropdown",
+    },
+  },
+  ACCOUNTS: {
+    SALES_INVOICE: {
+      PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
+      ALLOCATE: "/accounts/sales-invoice/allocate",
     },
   },
 };

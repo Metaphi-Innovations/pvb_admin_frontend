@@ -221,9 +221,21 @@ export default function CustomerDetailPage() {
   const canToggle =
     perms.canEdit && customer.status !== "blocked" && customer.status !== "draft";
   const creditLimitVal = customer.creditLimit ?? 0;
+  const mainBranch =
+    Array.isArray(customer.branches)
+      ? (customer.branches as Array<Record<string, unknown>>).find(
+          (b) => Boolean(b.is_main_branch ?? b.isMain),
+        ) ?? (customer.branches as Array<Record<string, unknown>>)[0]
+      : undefined;
+  const mainBranchSalesMan = mainBranch?.sales_man as Record<string, unknown> | null | undefined;
+  const mainBranchSalesManName =
+    (typeof mainBranchSalesMan?.username === "string" && mainBranchSalesMan.username) ||
+    [mainBranchSalesMan?.first_name, mainBranchSalesMan?.last_name].filter(Boolean).join(" ") ||
+    "—";
 
   const tabs = [
     { value: "overview", label: "Overview" },
+    { value: "branch", label: "Branch" },
     { value: "tax", label: "Tax & Compliance" },
     { value: "bank", label: "Bank Details" },
     { value: "commercial", label: "Commercial" },
@@ -381,60 +393,103 @@ export default function CustomerDetailPage() {
                 </RecordSectionCard>
               </div>
             </div>
-            );
+          </div>
+        );
 
-            case "tax":
-            return (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
-                <RecordKvRow
-                  label="GST Registered"
-                  value={customer.gstApplicable ? "Yes" : "No"}
-                />
-                {customer.gstApplicable && (
-                    <>
+      case "branch":
+        return (
+          <div className="grid grid-cols-1 gap-4">
+            <RecordSectionCard title="Branches" icon={Landmark} accent="purple">
+              {Array.isArray(customer.branches) && customer.branches.length > 0 ? (
+                (customer.branches as Array<Record<string, unknown>>).map((branch, idx) => {
+                  const name = String(branch.branch_name ?? branch.branchName ?? `Branch #${idx + 1}`);
+                  const isMain = Boolean(branch.is_main_branch ?? branch.isMain);
+                  const salesManObj = branch.sales_man as Record<string, unknown> | null | undefined;
+                  const salesman =
+                    (typeof salesManObj?.username === "string" && salesManObj.username) ||
+                    [salesManObj?.first_name, salesManObj?.last_name].filter(Boolean).join(" ") ||
+                    "—";
+                  const billing = [
+                    branch.billing_address_line_1 ?? branch.billingAddress,
+                    branch.billing_city,
+                    branch.billing_state,
+                    branch.billing_pincode,
+                  ]
+                    .map((v) => (typeof v === "string" ? v.trim() : ""))
+                    .filter(Boolean)
+                    .join(", ");
+                  return (
+                    <div key={String(branch.branch_id ?? idx)} className="space-y-0">
                       <RecordKvRow
-                        label="GST Registration Type"
-                        value={getGstCategoryLabel(customer.registrationType ?? "regular")}
-                      />
-                      <RecordKvRow label="GSTIN" value={customer.gstinNo ?? "—"} mono copy />
-                      <RecordKvRow
-                        label="Registered Company Name"
-                        value={customer.registeredLegalName || "—"}
+                        label={isMain ? `${name} (Main)` : name}
+                        value={billing || "—"}
                       />
                       <RecordKvRow
-                        label="Registered Address"
-                        value={customer.registeredGstAddress || "—"}
+                        label="Salesman"
+                        value={salesman}
+                        isLast={idx === (customer.branches?.length ?? 0) - 1}
                       />
-                      <RecordKvRow
-                        label="GST Code"
-                        value="—"
-                        mono
-                      />
-                    </>
-                  )}
-                <RecordKvRow label="PAN Number" value={customer.panNo || "—"} mono copy />
-                <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
-                {customer.tdsApplicable && (
+                    </div>
+                  );
+                })
+              ) : (
+                <RecordKvRow label="Branches" value="No branches configured" isLast />
+              )}
+            </RecordSectionCard>
+          </div>
+        );
+
+      case "tax":
+        return (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
+              <RecordKvRow
+                label="GST Registered"
+                value={customer.gstApplicable ? "Yes" : "No"}
+              />
+              {customer.gstApplicable && (
+                <>
                   <RecordKvRow
-                    label="TDS Section"
-                    value={customer.tdsSectionId ?? "—"}
-                    mono
-                    isLast
+                    label="GST Registration Type"
+                    value={getGstCategoryLabel(customer.registrationType ?? "regular")}
                   />
-                )}
-              </RecordSectionCard>
+                  <RecordKvRow label="GSTIN" value={customer.gstinNo ?? "—"} mono copy />
+                  <RecordKvRow
+                    label="Registered Company Name"
+                    value={customer.registeredLegalName || "—"}
+                  />
+                  <RecordKvRow
+                    label="Registered Address"
+                    value={customer.registeredGstAddress || "—"}
+                  />
+                  <RecordKvRow
+                    label="GST Code"
+                    value="—"
+                    mono
+                  />
+                </>
+              )}
+              <RecordKvRow label="PAN Number" value={customer.panNo || "—"} mono copy />
+              <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
+              {customer.tdsApplicable && (
+                <RecordKvRow
+                  label="TDS Section"
+                  value={customer.tdsSectionId ?? "—"}
+                  mono
+                  isLast
+                />
+              )}
+            </RecordSectionCard>
 
-              <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
-                <RecordKvRow label="MSME Registered" value={customer.msmeApplicable ? "Yes" : "No"} />
-                {customer.msmeApplicable && (
-                  <RecordKvRow label="MSME Number" value={customer.msmeRegNo || "—"} mono copy />
-                )}
-                <RecordKvRow label="FSSAI Applicable" value={customer.fssaiApplicable ? "Yes" : "No"} />
-                <RecordKvRow label="CIB Applicable" value={customer.cibApplicable ? "Yes" : "No"} />
-                <RecordKvRow label="FCO Applicable" value={customer.fcoApplicable ? "Yes" : "No"} isLast />
-              </RecordSectionCard>
-            </div>
+            <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
+              <RecordKvRow label="MSME Registered" value={customer.msmeApplicable ? "Yes" : "No"} />
+              {customer.msmeApplicable && (
+                <RecordKvRow label="MSME Number" value={customer.msmeRegNo || "—"} mono copy />
+              )}
+              <RecordKvRow label="FSSAI Applicable" value={customer.fssaiApplicable ? "Yes" : "No"} />
+              <RecordKvRow label="CIB Applicable" value={customer.cibApplicable ? "Yes" : "No"} />
+              <RecordKvRow label="FCO Applicable" value={customer.fcoApplicable ? "Yes" : "No"} isLast />
+            </RecordSectionCard>
           </div>
         );
 
@@ -514,12 +569,7 @@ export default function CustomerDetailPage() {
                   label="Credit Status"
                   value="—"
                 />
-                <RecordKvRow label="Payment Terms" value={payLabel} />
-                <RecordKvRow
-                  label="Sales Man"
-                  value={customer.salesMan}
-                  isLast
-                />
+                <RecordKvRow label="Payment Terms" value={payLabel} isLast />
               </RecordSectionCard>
 
               <RecordSectionCard title="Credit Usage" icon={CreditCard} accent="green">
@@ -722,7 +772,7 @@ export default function CustomerDetailPage() {
           summary: [
             { label: "Credit Limit", value: formatCreditLimit(creditLimitVal), highlight: true },
             { label: "Payment Terms", value: payLabel },
-            { label: "Sales Man", value: customer.salesMan || "—" },
+            { label: "Sales Man", value: mainBranchSalesManName },
             { label: "Territory", value: customer.territoryName || "—" },
             { label: "Created", value: customer.createdAt },
             { label: "Updated", value: customer.updatedAt },

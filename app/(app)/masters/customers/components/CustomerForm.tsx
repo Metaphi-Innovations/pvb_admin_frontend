@@ -142,6 +142,7 @@ export interface BranchDocument {
 export interface CustomerBranch {
 	branchName: string;
 	isMain?: boolean;
+	salesManId?: string;
 	billingAddress: BranchAddress;
 	shippingAddress: BranchAddress;
 	documents: BranchDocument[];
@@ -204,7 +205,6 @@ export interface CustomerFormValues {
 	districtId: string;
 	territoryId: string;
 	pincode: string;
-	salesManId: string;
 	creditLimit: string;
 	paymentType: PaymentType | "";
 	creditDays: string;
@@ -283,7 +283,6 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	districtId: "",
 	territoryId: "",
 	pincode: "",
-	salesManId: "",
 	creditLimit: "",
 	paymentType: "credit",
 	creditDays: "30",
@@ -316,6 +315,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 		{
 			branchName: "Main Branch",
 			isMain: true,
+			salesManId: "",
 			billingAddress: {
 				address: "",
 				addressLine2: "",
@@ -381,7 +381,6 @@ export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWit
 		districtId: c.districtId != null ? String(c.districtId) : "",
 		territoryId: c.territoryId != null ? String(c.territoryId) : "",
 		pincode: c.pincode || "",
-		salesManId: c.salesManId != null ? String(c.salesManId) : "",
 		creditLimit: c.creditLimit ? String(c.creditLimit) : "",
 		creditSource: c.creditSource ?? (c.linkedDistributorId ? "distributor_conversion" : "direct"),
 		linkedDistributorId: c.linkedDistributorId != null ? String(c.linkedDistributorId) : "",
@@ -906,6 +905,7 @@ function branchToPayload(
 		payload: {
 			branch_name: branch.branchName || `Branch #${idx + 1}`,
 			is_main_branch: !!branch.isMain,
+			sales_man_id: branch.salesManId || null,
 
 			billing_country: branch.billingAddress.country || "India",
 			billing_address_line_1: branch.billingAddress.address,
@@ -1591,22 +1591,6 @@ export function CustomerForm({
 										/>
 										<FieldError msg={errors.email} />
 									</div>
-
-									<div className={ERP.field}>
-										<Label className={ERP.label}>
-											Salesman <span className='text-red-500'>*</span>
-										</Label>
-										<SearchableSelect
-											value={form.salesManId}
-											onChange={(value) => set('salesManId', value)}
-											options={salesOptions}
-											placeholder='Search sales person...'
-											searchPlaceholder='Name, ID, mobile...'
-											disabled={readOnly}
-											error={!!errors.salesManId}
-										/>
-										<FieldError msg={errors.salesManId} />
-									</div>
 								</div>
 
 								{form.status === 'blocked' && (
@@ -1907,6 +1891,7 @@ export function CustomerForm({
 												...form.branches,
 												{
 													branchName: `Branch #${newIdx + 1}`,
+													salesManId: "",
 													billingAddress: {
 														address: "",
 														addressLine2: "",
@@ -2076,6 +2061,34 @@ export function CustomerForm({
 										{/* Collapsible Details */}
 										{isExpanded && (
 											<div className='p-2.5 space-y-2 duration-200 animate-in fade-in-50'>
+												<ErpFormSection title='Branch Details'>
+													<div className={ERP.grid3}>
+														<div className={ERP.field}>
+															<Label className={ERP.label}>
+																Salesman <span className='text-red-500'>*</span>
+															</Label>
+															<SearchableSelect
+																value={branch.salesManId || ""}
+																onChange={(value) => {
+																	const updated = [...form.branches];
+																	updated[bIdx] = {
+																		...updated[bIdx],
+																		salesManId: value,
+																	};
+																	onChange({ ...form, branches: updated });
+																	onClearError?.(`branch_${bIdx}_salesManId`);
+																}}
+																options={salesOptions}
+																placeholder='Search sales person...'
+																searchPlaceholder='Name, ID, mobile...'
+																disabled={readOnly}
+																error={!!errors[`branch_${bIdx}_salesManId`]}
+															/>
+															<FieldError msg={errors[`branch_${bIdx}_salesManId`]} />
+														</div>
+													</div>
+												</ErpFormSection>
+
 												<ErpFormSection title='Address'>
 													{!readOnly && gstAddressSnapshot && (
 														<div className='flex justify-end mb-1'>
@@ -2487,6 +2500,13 @@ export interface CustomerApiBranch {
 	branch_id?: string;
 	branch_name: string;
 	is_main_branch: boolean;
+	sales_man_id?: string | null;
+	sales_man?: {
+		user_id?: string;
+		username?: string;
+		first_name?: string;
+		last_name?: string;
+	} | null;
 	billing_country?: string;
 	billing_address_line_1?: string;
 	billing_address_line_2?: string;
@@ -2514,7 +2534,6 @@ export interface CustomerApiRecord {
 	mobile_no: string;
 	email?: string;
 	customer_type_id: string;
-	sales_man_id?: string;
 	cib_applicable?: boolean;
 	cib_reg_no?: string;
 	fco_applicable?: boolean;
@@ -2560,6 +2579,7 @@ function apiBranchToFormBranch(b: CustomerApiBranch): CustomerBranch {
 	return {
 		branchName: b.branch_name ?? "",
 		isMain: !!b.is_main_branch,
+		salesManId: b.sales_man_id ?? b.sales_man?.user_id ?? "",
 		billingAddress: {
 			address: b.billing_address_line_1 ?? "",
 			addressLine2: b.billing_address_line_2 ?? "",
@@ -2597,7 +2617,7 @@ export function customerApiRecordToFormValues(
 
 	const branches: CustomerBranch[] = record.branches?.length
 		? record.branches.map(apiBranchToFormBranch)
-		: DEFAULT_CUSTOMER_FORM.branches;
+		: DEFAULT_CUSTOMER_FORM.branches.map((b) => ({ ...b }));
 
 	return {
 		...DEFAULT_CUSTOMER_FORM,
@@ -2636,7 +2656,6 @@ export function customerApiRecordToFormValues(
 		address: branches[0]?.billingAddress?.address ?? "",
 		pincode: branches[0]?.billingAddress?.pincode ?? "",
 
-		salesManId: record.sales_man_id ?? "",
 		creditLimit: record.credit_limit != null ? String(record.credit_limit) : "",
 		...structuredToFormValues(
 			resolveStructuredPaymentTerms({
@@ -2685,7 +2704,6 @@ export function validateCustomerForm(
 		if (!isAdd && !form.gstMasterId)
 			e.gstMasterId = "Select GST code from master";
 	}
-	if (!form.salesManId) e.salesManId = "Salesman is required";
 	if (form.pan.trim() && !validatePAN(form.pan))
 		e.pan = "Enter a valid PAN number (e.g. ABCDE1234F)";
 	if (form.msmeRegistered) {
@@ -2720,8 +2738,12 @@ export function validateCustomerForm(
 		}
 	}
 
-	// Validate branch-wise document uploads
+	// Validate branch-wise salesman + document uploads
 	form.branches.forEach((branch, bIdx) => {
+		if (!branch.salesManId?.trim()) {
+			e[`branch_${bIdx}_salesManId`] = `Salesman is required for ${branch.branchName || `Branch #${bIdx + 1}`}`;
+		}
+
 		const missing = branch.documents.some(
 			(doc) => doc.required && !doc.fileName,
 		);
@@ -2819,7 +2841,6 @@ export function customerRecordToFormValues(
 		address: branches[0]?.billingAddress?.address ?? "",
 		pincode: branches[0]?.billingAddress?.pincode ?? "",
 
-		salesManId: record.salesManId ?? "",
 		creditLimit: record.creditLimit != null ? String(record.creditLimit) : "",
 		...structuredToFormValues(
 			resolveStructuredPaymentTerms({
@@ -2852,7 +2873,6 @@ export function formValuesToUpdatePayload(
 		country_code: form.countryCode,
 		mobile_no: form.mobile.trim(),
 		email: form.email.trim(),
-		sales_man_id: form.salesManId,
 
 		cib_applicable: form.cibRegistered,
 		cib_reg_no: form.cibRegistered ? form.cibRegn : "",
@@ -2903,7 +2923,6 @@ export function formValuesToCreatePayload(
 		country_code: form.countryCode,
 		mobile_no: form.mobile.trim(),
 		email: form.email.trim(),
-		sales_man_id: form.salesManId,
 
 		cib_applicable: form.cibRegistered,
 		cib_reg_no: form.cibRegistered ? form.cibRegn : "",
@@ -2953,7 +2972,12 @@ export function formValuesToCustomer(
 ): Customer {
 	const nodes = geoNodes ?? loadGeoNodes();
 	const staff = employees ?? getActiveSalesEmployees();
-	const sales = staff.find((e) => e.id === Number(form.salesManId));
+	const mainBranchSalesManId = (
+		form.branches.find((b) => b.isMain) ||
+		form.branches.find((b) => b.branchName === "Main Branch") ||
+		form.branches[0]
+	)?.salesManId;
+	const sales = staff.find((e) => String(e.id) === String(mainBranchSalesManId));
 
 	const mainBranch =
 		form.branches.find((b) => b.isMain) ||
@@ -3027,7 +3051,7 @@ export function formValuesToCustomer(
 		territoryName: "",
 		pincode: cleanMainBranch?.billingAddress?.pincode?.trim() || "",
 
-		salesManId: form.salesManId ? Number(form.salesManId) : null,
+		salesManId: mainBranchSalesManId ? Number(mainBranchSalesManId) || null : null,
 		salesManName:
 			sales?.fullName ??
 			(sales ? `${sales.firstName} ${sales.lastName}`.trim() : ""),

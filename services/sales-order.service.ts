@@ -318,8 +318,20 @@ function buildBackendWriteBody(
 }
 
 export const SalesOrderService = {
-  async getNextSoNumber(signal?: AbortSignal): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.SALES.SALES_ORDER.NEXT_SO_NUMBER, { signal });
+  async getNextSoNumber(
+    warehouseId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SALES_ORDER.NEXT_SO_NUMBER,
+      {
+        signal,
+        params: warehouseId
+          ? { warehouse_id: warehouseId }
+          : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
     return response.data?.data?.so_number || "";
   },
 

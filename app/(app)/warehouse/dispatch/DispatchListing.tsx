@@ -23,7 +23,7 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, downloadDeliveryChallan, getDispatchById } from "./services";
 import {
   DELIVERY_STATUS_BADGE_CONFIG,
   TRANSPORTER_OPTIONS,
@@ -60,6 +60,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
   const [challanTarget, setChallanTarget] = useState<any>(null);
+  const [challanDownloading, setChallanDownloading] = useState(false);
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
   const [closeTarget, setCloseTarget] = useState<any>(null);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
@@ -540,7 +541,17 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
                 <div className="bg-brand-600 px-5 py-3 flex items-center justify-between">
                   <div>
                     <p className="text-white font-bold text-sm">DELIVERY CHALLAN</p>
-                    <p className="text-brand-100 text-xs">{challanTarget.dispatch_number || challanTarget.dispatch_no || challanTarget.dispatchNumber}</p>
+                    <p className="text-brand-100 text-xs">
+                      {challanTarget.challan_number ||
+                        challanTarget.challanNumber ||
+                        "Assigned on download"}
+                    </p>
+                    <p className="text-brand-200/80 text-[10px] mt-0.5">
+                      Dispatch:{" "}
+                      {challanTarget.dispatch_number ||
+                        challanTarget.dispatch_no ||
+                        challanTarget.dispatchNumber}
+                    </p>
                   </div>
                   <Truck className="w-8 h-8 text-brand-200" />
                 </div>
@@ -595,8 +606,27 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
               <Printer className="w-3 h-3" /> Print
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1">
-              <Download className="w-3 h-3" /> Download PDF
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              disabled={challanDownloading || !challanTarget?.id}
+              onClick={async () => {
+                if (!challanTarget?.id) return;
+                setChallanDownloading(true);
+                try {
+                  await downloadDeliveryChallan(challanTarget.id);
+                  const refreshed = await getDispatchById(challanTarget.id).catch(() => null);
+                  if (refreshed) setChallanTarget(refreshed);
+                  fetchData();
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setChallanDownloading(false);
+                }
+              }}
+            >
+              <Download className="w-3 h-3" />
+              {challanDownloading ? "Downloading..." : "Download PDF"}
             </Button>
           </DialogFooter>
         </DialogContent>

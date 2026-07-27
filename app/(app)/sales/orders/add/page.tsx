@@ -64,7 +64,10 @@ export default function AddSalesOrderPage() {
 		null,
 	);
 
-	const { data: nextOrderNumber, isLoading: loadingOrderNumber } = useNextSoNumber();
+	const { data: nextOrderNumber, isLoading: loadingOrderNumber } = useNextSoNumber(
+		form.warehouseId,
+		Boolean(form.warehouseId),
+	);
 	const createMutation = useCreateSalesOrder();
 
 	const { data: customerData } = useCustomersDropdown();
@@ -72,7 +75,13 @@ export default function AddSalesOrderPage() {
 	const { data: productData } = useProductsDropdown();
 	const { data: pricingData } = useProductPricingDropdown();
 
-	const orderNumber = nextOrderNumber || "SO-2026-0001";
+	const orderNumber =
+		nextOrderNumber ||
+		(loadingOrderNumber
+			? "…"
+			: form.warehouseId
+				? ""
+				: "Select warehouse");
 
 	useEffect(() => {
 		if (customerData) {

@@ -224,9 +224,8 @@ export function enrichProductFromDropdown(
   // 1. Try to find in dbProducts (API list)
   const dbProd = (dbProducts || []).find((p) => String(p.product_id) === String(productId));
   if (dbProd) {
-    const numId = Number(dbProd.product_id);
     return {
-      productId: isNaN(numId) ? dbProd.product_id : numId,
+      productId: dbProd.product_id,
       productCode: dbProd.product_code || dbProd.sku || "",
       productName: dbProd.product_name,
       sku: dbProd.sku || "",

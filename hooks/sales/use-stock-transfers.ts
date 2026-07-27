@@ -8,7 +8,8 @@ const stockTransferKeys = {
   list: (params: any) => [...stockTransferKeys.lists(), params] as const,
   details: () => [...stockTransferKeys.all, "detail"] as const,
   detail: (id: string | number) => [...stockTransferKeys.details(), id] as const,
-  nextNumber: () => [...stockTransferKeys.all, "next-number"] as const,
+  nextNumber: (fromWarehouseId?: string | number | null) =>
+    [...stockTransferKeys.all, "next-number", fromWarehouseId ?? ""] as const,
   dropdowns: () => [...stockTransferKeys.all, "dropdowns"] as const,
   filterDropdown: (fieldName: string) => [...stockTransferKeys.all, "filter-dropdown", fieldName] as const,
   summary: () => [...stockTransferKeys.all, "summary"] as const,
@@ -42,10 +43,17 @@ export function useStockTransfer(id: string | null | undefined) {
   });
 }
 
-export function useNextStockTransferNumber() {
+export function useNextStockTransferNumber(
+  fromWarehouseId?: string | number | null,
+) {
+  const warehouseId =
+    fromWarehouseId != null && fromWarehouseId !== ""
+      ? String(fromWarehouseId)
+      : null;
   return useQuery({
-    queryKey: stockTransferKeys.nextNumber(),
-    queryFn: ({ signal }) => StockTransferService.getNextNumber(signal),
+    queryKey: stockTransferKeys.nextNumber(warehouseId),
+    queryFn: ({ signal }) =>
+      StockTransferService.getNextNumber(warehouseId, signal),
   });
 }
 
