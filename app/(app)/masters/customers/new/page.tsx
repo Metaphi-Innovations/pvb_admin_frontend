@@ -197,16 +197,12 @@ export default function NewCustomerPage() {
       }
     }
     if (!asDraft && status !== "draft") {
-      const ledger = ensureCustomerLedgerFromMaster(record);
+      ensureCustomerLedgerFromMaster(record);
       setToast({
         msg: "Customer created successfully.",
         type: "success",
       });
-      const dest =
-        fromCoa && ledger?.id != null
-          ? `${CHART_OF_ACCOUNTS_HREF}?node=${ledger.id}`
-          : leaveHref;
-      setTimeout(() => router.push(dest), 1000);
+      setTimeout(() => router.push(leaveHref), 1000);
       return;
     }
     setToast({

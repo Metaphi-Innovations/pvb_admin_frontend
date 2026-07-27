@@ -20,7 +20,7 @@ export function VoucherNoteFieldGrid({
   return (
     <div
       className={cn(
-        "cdn-field-grid grid gap-x-3 gap-y-2",
+        "cdn-field-grid grid gap-x-2.5 gap-y-1",
         columns === 4
           ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
           : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -66,7 +66,7 @@ export function VoucherNoteField({
   return (
     <div
       className={cn(
-        "space-y-1 min-w-0",
+        "space-y-0.5 min-w-0",
         span === 2 && "sm:col-span-2",
         className,
       )}

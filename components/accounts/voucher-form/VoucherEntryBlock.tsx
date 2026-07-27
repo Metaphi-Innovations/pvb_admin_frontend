@@ -233,7 +233,7 @@ export function VoucherEntryBlock({
   const moneyInputClass = compact ? RECEIPT_MONEY_INPUT_CLASS : VOUCHER_MONEY_INPUT_CLASS;
   const previewClass = compact ? RECEIPT_PREVIEW_TEXT_CLASS : VOUCHER_PREVIEW_TEXT_CLASS;
   const labelClass = compact ? RECEIPT_LABEL_CLASS : undefined;
-  const fieldSpacing = compact ? "space-y-1" : "space-y-1";
+  const fieldSpacing = "space-y-0.5";
   const previewHeight = compact ? "h-9" : "h-8";
   const selectItemClass = compact ? "text-[12px]" : "text-xs";
   const ledgerSelectProps = compact ? RECEIPT_LEDGER_SELECT : VOUCHER_LEDGER_SELECT_COMPACT;
@@ -243,8 +243,8 @@ export function VoucherEntryBlock({
     <div
       className={cn(
         compact
-          ? "space-y-1.5"
-          : "rounded-lg border border-border bg-muted/10 px-3 py-2.5 space-y-2",
+          ? "space-y-1"
+          : "rounded-lg border border-border bg-muted/10 px-2.5 py-2 space-y-1.5",
         className,
       )}
     >
@@ -254,7 +254,7 @@ export function VoucherEntryBlock({
           "min-w-[640px]",
           showEntryType
             ? cn(
-                "grid grid-cols-1 sm:grid-cols-2 gap-3 items-start",
+                "grid grid-cols-1 sm:grid-cols-2 gap-2 items-start",
                 rowAction
                   ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(100px,0.7fr)_minmax(120px,0.9fr)_minmax(120px,0.9fr)_minmax(110px,0.8fr)_40px]"
                   : "lg:grid-cols-5",

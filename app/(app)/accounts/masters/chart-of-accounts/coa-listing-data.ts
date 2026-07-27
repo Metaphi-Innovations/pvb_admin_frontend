@@ -24,6 +24,10 @@ import {
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
 import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
+import {
+  isStockInHandLedger,
+  resolveStockInHandDisplayBalance,
+} from "@/lib/accounts/coa-stock-in-hand";
 
 export type CoaLedgerSourceLabel =
   | "Manual"
@@ -132,7 +136,9 @@ export function buildCoaLedgerListingRows(
     .sort((a, b) => a.accountName.localeCompare(b.accountName));
 
   let rows = ledgers.map((ledger) => {
-    const current = computeLedgerCurrentBalance(ledger);
+    const current = isStockInHandLedger(ledger)
+      ? resolveStockInHandDisplayBalance()
+      : computeLedgerCurrentBalance(ledger);
     const tds = resolveTdsLedgerUsageInfo(ledger);
     return {
       ledger,
@@ -268,43 +274,39 @@ function collectDescendantPostingLedgers(
 
 
 function ledgerPeriodBalances(
-
   ledger: ChartOfAccount,
-
   movement: { totalDebit: number; totalCredit: number },
-
 ) {
+  /** Stock in Hand current/closing balance = ERP total inventory value (COA display). */
+  if (isStockInHandLedger(ledger)) {
+    const display = resolveStockInHandDisplayBalance();
+    const openingSigned = openingSignedBalance(ledger);
+    const opening = fromSignedBalance(openingSigned);
+    return {
+      openingAmount: opening.amount,
+      openingSide: opening.balanceType,
+      periodDebit: movement.totalDebit,
+      periodCredit: movement.totalCredit,
+      closingAmount: display.amount,
+      closingSide: display.balanceType,
+    };
+  }
 
   const openingSigned = openingSignedBalance(ledger);
-
   const opening = fromSignedBalance(openingSigned);
-
   const closing = computePeriodClosingBalance(
-
     ledger,
-
     movement.totalDebit,
-
     movement.totalCredit,
-
   );
-
   return {
-
     openingAmount: opening.amount,
-
     openingSide: opening.balanceType,
-
     periodDebit: movement.totalDebit,
-
     periodCredit: movement.totalCredit,
-
     closingAmount: closing.amount,
-
     closingSide: closing.balanceType,
-
   };
-
 }
 
 

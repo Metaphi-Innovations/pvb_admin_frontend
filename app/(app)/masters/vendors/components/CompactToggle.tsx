@@ -24,9 +24,11 @@ export function CompactToggle({
       role="switch"
       aria-checked={checked}
       disabled={disabled}
+      contentEditable={false}
       onClick={() => !disabled && onCheckedChange(!checked)}
       className={cn(
         "relative inline-flex h-6 w-[52px] shrink-0 items-center rounded-full transition-colors duration-200",
+        "select-none caret-transparent",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50",
         checked ? "bg-brand-600" : "bg-slate-300",
         disabled && "opacity-50 cursor-not-allowed",
@@ -34,16 +36,18 @@ export function CompactToggle({
       )}
     >
       <span
+        aria-hidden="true"
         className={cn(
-          "absolute text-[10px] font-semibold leading-none select-none z-[1]",
+          "absolute text-[10px] font-semibold leading-none select-none caret-transparent pointer-events-none z-[1]",
           checked ? "left-2 text-white" : "right-2 text-slate-600",
         )}
       >
         {checked ? activeLabel : inactiveLabel}
       </span>
       <span
+        aria-hidden="true"
         className={cn(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200",
+          "pointer-events-none absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200",
           checked ? "translate-x-[30px]" : "translate-x-0.5",
         )}
       />

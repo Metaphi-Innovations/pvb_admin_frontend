@@ -19,6 +19,7 @@ export function Switch({ checked, onCheckedChange, disabled, className, id }: Sw
       role="switch"
       aria-checked={checked}
       disabled={disabled}
+      contentEditable={false}
       onMouseDown={(e) => {
         // Prevent the button from taking focus on pointer click so no sticky
         // orange ring remains. Keyboard users still receive focus via Tab.
@@ -34,7 +35,8 @@ export function Switch({ checked, onCheckedChange, disabled, className, id }: Sw
       className={cn(
         "relative inline-flex h-[20px] w-[36px] shrink-0 cursor-pointer items-center rounded-full",
         "border-2 border-transparent transition-colors duration-200",
-        "outline-none",
+        // Hide text caret inside the control; keep keyboard focus-visible ring.
+        "select-none caret-transparent outline-none",
         // Mouse / programmatic focus: never show orange ring
         "focus:outline-none focus:ring-0 focus:ring-offset-0",
         // Keyboard only: compact, subtle focus-visible
@@ -45,6 +47,7 @@ export function Switch({ checked, onCheckedChange, disabled, className, id }: Sw
       )}
     >
       <span
+        aria-hidden="true"
         className={cn(
           "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm",
           "transition-transform duration-200",

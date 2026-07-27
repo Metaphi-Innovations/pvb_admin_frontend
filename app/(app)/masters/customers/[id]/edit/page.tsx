@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   type CustomerFormValues,
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../../customer-permissions";
 import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 
@@ -48,7 +49,16 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function EditCustomerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { id } = useParams<{ id: string }>();
+  const returnToParam = searchParams.get("returnTo");
+  const fromCoa =
+    searchParams.get("source") === "chart-of-accounts" ||
+    searchParams.get("from") === "coa";
+  const leaveHref =
+    returnToParam ||
+    (fromCoa ? CHART_OF_ACCOUNTS_HREF : `/masters/customers/${id}`);
+
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -115,7 +125,7 @@ export default function EditCustomerPage() {
       ensureCustomerLedgerFromMaster(updated);
     }
     setToast({ msg: "Customer updated successfully.", type: "success" });
-    setTimeout(() => router.push(`/masters/customers/${id}`), 900);
+    setTimeout(() => router.push(leaveHref), 900);
   };
 
   if (allowed === false) {
@@ -159,14 +169,18 @@ export default function EditCustomerPage() {
   return (
     <FormContainer
       title="Edit Customer"
-      description="Masters → Customer Master → Edit"
-      onBack={() => router.back()}
+      description={
+        fromCoa
+          ? "Accounts → Chart of Accounts → Sundry Debtors → Edit"
+          : "Masters → Customer Master → Edit"
+      }
+      onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customerCode}
           </span>
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.push(leaveHref)}>
             Discard
           </Button>
           <Button variant="default" size="sm" onClick={handleSave}>

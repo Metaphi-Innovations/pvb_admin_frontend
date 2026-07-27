@@ -24,7 +24,7 @@ export interface VoucherNarrationAttachmentsSectionProps {
   className?: string;
   /** Credit / Debit Note density. Default false for other vouchers. */
   compact?: boolean;
-  /** Optional content rendered below narration/attachments (e.g. posting summary). */
+  /** Optional content rendered below narration/attachments (legacy; prefer Accounting Impact). */
   footerSlot?: React.ReactNode;
 }
 
@@ -52,19 +52,26 @@ export function VoucherNarrationAttachmentsSection({
       className={className}
       compact={compact}
     >
-      <div className={cn("grid grid-cols-1 md:grid-cols-2", compact ? "gap-2.5" : "gap-3")}>
-        <div className={cn("min-w-0", compact ? "space-y-1" : "space-y-1.5")}>
-          <Label className={cn(compact ? "text-[11px] font-medium text-muted-foreground" : "text-xs font-medium")}>
+      <div className={cn("grid grid-cols-1 md:grid-cols-2", compact ? "gap-2" : "gap-2.5")}>
+        <div className="min-w-0 space-y-0.5">
+          <Label
+            className={cn(
+              compact
+                ? "text-[11px] font-medium text-muted-foreground"
+                : "text-xs font-medium",
+            )}
+          >
             Narration
           </Label>
           <Textarea
             className={cn(
               "resize-y rounded-lg border border-border",
+              "min-h-[60px] max-h-36 h-[60px] py-1.5",
               compact
-                ? "min-h-[56px] max-h-20 h-auto py-1.5 text-xs focus-visible:ring-1 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                : "min-h-[72px] max-h-28 h-auto py-2 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400",
+                ? "text-xs focus-visible:ring-1 focus-visible:ring-brand-300 focus-visible:border-brand-400"
+                : "text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400",
             )}
-            rows={compact ? 2 : 3}
+            rows={2}
             value={narration}
             onChange={(e) => onNarrationChange(e.target.value)}
             placeholder={narrationPlaceholder}
@@ -82,7 +89,13 @@ export function VoucherNarrationAttachmentsSection({
         />
       </div>
       {footerSlot ? (
-        <div className={cn(compact ? "mt-2.5 pt-2.5 border-t border-border/60" : "mt-3 pt-3 border-t border-border")}>
+        <div
+          className={cn(
+            compact
+              ? "mt-2 pt-2 border-t border-border/60"
+              : "mt-2.5 pt-2.5 border-t border-border",
+          )}
+        >
           {footerSlot}
         </div>
       ) : null}

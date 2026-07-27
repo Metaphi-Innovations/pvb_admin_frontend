@@ -1,7 +1,5 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const CollectionTrackingClient = lazyAccountsPage(() => import("./CollectionTrackingClient"));
-
-export default function Page() {
-  return <CollectionTrackingClient />;
+export default function CollectionTrackingRedirectPage() {
+  redirect("/accounts/receivables/outstanding?view=collection");
 }

@@ -1,7 +1,5 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const VendorAgeingClient = lazyAccountsPage(() => import("./VendorAgeingClient"));
-
-export default function Page() {
-  return <VendorAgeingClient />;
+export default function VendorAgeingRedirectPage() {
+  redirect("/accounts/payables/outstanding?view=ageing");
 }

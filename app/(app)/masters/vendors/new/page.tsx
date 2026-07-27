@@ -19,6 +19,7 @@ import {
 import { ensureVendorLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { CURRENT_USER } from "@/lib/procurement/config";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 
 function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error"; onDismiss: () => void }) {
   return (
@@ -38,9 +39,13 @@ function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error
 export default function NewVendorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { selectedFY } = useFY();
   const returnToParam = searchParams.get("returnTo");
-  const fromCoa = searchParams.get("source") === "chart-of-accounts";
-  const parentNodeId = searchParams.get("parentNodeId");
+  const fromCoa =
+    searchParams.get("source") === "chart-of-accounts" ||
+    searchParams.get("from") === "coa";
+  const parentNodeId =
+    searchParams.get("parentNodeId") || searchParams.get("coaParent");
   const leaveHref =
     returnToParam ||
     (fromCoa
@@ -49,7 +54,10 @@ export default function NewVendorPage() {
         : CHART_OF_ACCOUNTS_HREF
       : "/masters/vendors");
 
-  const [form, setForm] = useState<VendorFormValues>(DEFAULT_VENDOR_FORM);
+  const [form, setForm] = useState<VendorFormValues>(() => ({
+    ...DEFAULT_VENDOR_FORM,
+    openingBalanceDate: fyOpeningDateIso(selectedFY.id),
+  }));
   const [vendorCode, setVendorCode] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
@@ -83,19 +91,23 @@ export default function NewVendorPage() {
       updatedDate: today,
     });
     saveVendors([...list, record]);
-    const ledger = ensureVendorLedgerFromMaster(record);
+    const parentGroupId = parentNodeId != null ? Number(parentNodeId) : NaN;
+    ensureVendorLedgerFromMaster(
+      record,
+      Number.isFinite(parentGroupId) ? { parentGroupId } : undefined,
+    );
     setToast({ msg: "Supplier created.", type: "success" });
-    const dest =
-      fromCoa && ledger?.id != null
-        ? `${CHART_OF_ACCOUNTS_HREF}?node=${ledger.id}`
-        : leaveHref;
-    setTimeout(() => router.push(dest), 700);
+    setTimeout(() => router.push(leaveHref), 700);
   };
 
   return (
     <FormContainer
       title="Create Supplier"
-      description="Masters → Supplier Master → New"
+      description={
+        fromCoa
+          ? "Accounts → Chart of Accounts → Sundry Creditors → Add"
+          : "Masters → Supplier Master → New"
+      }
       onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">

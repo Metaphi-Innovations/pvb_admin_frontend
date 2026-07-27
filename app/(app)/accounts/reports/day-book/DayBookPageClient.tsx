@@ -8,8 +8,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -575,7 +577,7 @@ function DayBookPageBody({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-sm font-medium"
+                className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "h-8 text-xs font-medium")}
                 onClick={clearFilters}
               >
                 Clear Filters
@@ -588,6 +590,7 @@ function DayBookPageBody({
       layout="split"
       className="h-full min-h-0"
     >
+      <AccountsListingTableCard className="flex-1 min-h-0">
       <div className="flex flex-col flex-1 min-h-0">
         <AccountsTableScroll>
           <AccountsTable minWidth={1180} className="text-xs financial-report">
@@ -708,6 +711,7 @@ function DayBookPageBody({
           </>
         )}
       </div>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

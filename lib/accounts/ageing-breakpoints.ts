@@ -4,7 +4,7 @@
 
 export type AgeingBreakpoints = number[];
 
-export const DEFAULT_AGEING_BREAKPOINTS: AgeingBreakpoints = [0, 90];
+export const DEFAULT_AGEING_BREAKPOINTS: AgeingBreakpoints = [0, 30, 60, 90];
 
 export interface GeneratedAgeingBucket {
   index: number;

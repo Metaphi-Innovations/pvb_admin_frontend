@@ -27,6 +27,8 @@ import {
 } from "@/lib/accounts/bank-account-display";
 import { DEMO_BANK_SPECS } from "@/lib/accounts/banking-demo-spec";
 import { ensureClientReviewBankingSeed } from "@/lib/accounts/banking-client-review-seed";
+import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
+import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 import {
   defaultMappedWarehouseIds,
   filterBankAccountsForWarehouse,
@@ -616,9 +618,43 @@ export function syncMastersFromCoaLedgers(): void {
   if (changed) saveBankAccountMasters(masters);
 }
 
+/** Idempotent: ensure at least one posting cash ledger under Cash-in-Hand. */
+export function ensureDefaultCashLedger(): ChartOfAccount | null {
+  if (typeof window === "undefined") return null;
+  const existing = getLedgersUnderSubGroupName("Cash-in-Hand").filter(
+    (l) => l.status === "active",
+  );
+  if (existing.length > 0) return existing[0];
+
+  const records = loadChartOfAccounts();
+  const parent = records.find(
+    (r) => r.nodeLevel === "account_group" && r.accountName === "Cash-in-Hand",
+  );
+  if (!parent) return null;
+
+  const form = defaultLedgerForm(parent.id, "Cash", {
+    openingBalance: "0",
+    balanceType: "Debit",
+    status: "active",
+  });
+  const code = generateLedgerCode(records);
+  const ledger = formToLedger(form, nextId(records), code, records);
+  const ledgerRow: ChartOfAccount = {
+    ...ledger,
+    isSystemGenerated: true,
+    ledgerKind: "MASTER",
+    description: "Default cash ledger for receipt / payment / contra vouchers",
+  };
+  saveChartOfAccounts([...records, ledgerRow]);
+  dispatchCoaChanged();
+  dispatchAccountsDataChanged("coa");
+  return ledgerRow;
+}
+
 /** Idempotent bank master + COA sync — call from useEffect / demo seed, not during render. */
 export function ensureBankAccountsReady(): void {
   ensureClientReviewBankingSeed();
+  ensureDefaultCashLedger();
   syncMastersFromCoaLedgers();
 }
 

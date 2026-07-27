@@ -1,9 +1,5 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const CustomerOutstandingReportClient = lazyAccountsPage(() =>
-  import("./CustomerOutstandingReportClient"),
-);
-
-export default function CustomerOutstandingReportPage() {
-  return <CustomerOutstandingReportClient />;
+export default function CustomerOutstandingReportRedirect() {
+  redirect("/accounts/receivables/outstanding");
 }

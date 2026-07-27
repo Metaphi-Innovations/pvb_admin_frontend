@@ -38,7 +38,6 @@ const RECORDS_KEY = "ds_manual_bank_recon_records_v1";
 export function resolveManualReconHdfcMaster(): BankAccountMaster | null {
   const masters = loadBankAccountMasters().filter((m) => m.status === "active");
   return (
-    masters.find((m) => m.defaultForReceipts) ??
     masters.find((m) => m.bankName.toLowerCase().includes("hdfc")) ??
     masters[0] ??
     null

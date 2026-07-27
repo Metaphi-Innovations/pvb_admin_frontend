@@ -395,7 +395,7 @@ export default function ManualBankReconciliationPageClient() {
   useEffect(() => {
     if (bankOptions.length === 0) return;
     if (bankAccountId && bankOptions.some((b) => String(b.masterId) === bankAccountId)) return;
-    const defaultBank = bankOptions.find((b) => b.defaultForReceipts) ?? bankOptions[0];
+    const defaultBank = bankOptions[0];
     if (defaultBank) setBankAccountId(String(defaultBank.masterId));
   }, [bankOptions, bankAccountId]);
 

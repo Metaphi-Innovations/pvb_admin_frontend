@@ -34,7 +34,7 @@ export function VoucherAttachmentSection({
   className,
 }: VoucherAttachmentSectionProps) {
   return (
-    <div className={cn("space-y-1.5 min-w-0", className)}>
+    <div className={cn("space-y-1 min-w-0", className)}>
       <Label className="text-xs font-medium">Attachment</Label>
 
       {!readOnly ? (

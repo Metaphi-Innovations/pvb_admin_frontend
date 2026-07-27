@@ -1,5 +1,6 @@
 /**
  * COA ledger detail accounting — voucher lines only, filtered by ledgerId.
+ * Stock in Hand closing/current balance uses ERP inventory valuation for display.
  */
 
 import type { ChartOfAccount } from "../../data";
@@ -8,6 +9,10 @@ import type {
   CoaTransactionRow,
 } from "@/lib/accounts/coa-accounting-view";
 import { buildLedgerAccountingSummary } from "@/lib/accounts/coa-accounting-view";
+import {
+  isStockInHandLedger,
+  resolveStockInHandDisplayBalance,
+} from "@/lib/accounts/coa-stock-in-hand";
 
 export interface CoaLedgerDetailRow extends CoaTransactionRow {
   partyName?: string;
@@ -21,6 +26,15 @@ export function buildCoaLedgerDetailSummary(
   dateTo: string,
 ): CoaLedgerAccountingSummary & { transactions: CoaLedgerDetailRow[] } {
   const summary = buildLedgerAccountingSummary(ledger, records, dateFrom, dateTo);
+  if (isStockInHandLedger(ledger)) {
+    const display = resolveStockInHandDisplayBalance(dateTo || undefined);
+    return {
+      ...summary,
+      currentBalance: display.amount,
+      balanceType: display.balanceType,
+      transactions: summary.transactions as CoaLedgerDetailRow[],
+    };
+  }
   return {
     ...summary,
     transactions: summary.transactions as CoaLedgerDetailRow[],

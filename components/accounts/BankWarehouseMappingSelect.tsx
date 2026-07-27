@@ -34,7 +34,7 @@ export function BankWarehouseMappingSelect({
   }, [options]);
 
   return (
-    <div className="space-y-1.5 sm:col-span-2">
+    <div className="space-y-1.5">
       <ReportMultiSelect
         label="Mapped Warehouses *"
         values={stringValues}
@@ -50,17 +50,17 @@ export function BankWarehouseMappingSelect({
           {value.map((id) => (
             <span
               key={id}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-muted/40 border border-border rounded-md text-foreground font-medium"
             >
               {labelById.get(String(id)) ?? `Warehouse ${id}`}
               {!disabled && (
                 <button
                   type="button"
                   onClick={() => onChange(value.filter((v) => v !== id))}
-                  className="p-0.5 rounded hover:bg-brand-100"
+                  className="p-0.5 rounded hover:bg-muted"
                   aria-label={`Remove ${labelById.get(String(id))}`}
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3 h-3 text-muted-foreground" />
                 </button>
               )}
             </span>

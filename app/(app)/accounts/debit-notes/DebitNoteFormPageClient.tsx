@@ -19,9 +19,12 @@ import {
   listPurchaseReturnsForDebitNote,
   newDebitAttachmentId,
   normalizeDebitLine,
+  peekNextDebitNoteNo,
   postDebitNoteRecord,
   previewToDebitForm,
   updateDebitNote,
+  getDebitLineMaxQty,
+  calcDebitFromQty,
   type DebitNoteAttachment,
   type DebitNoteLine,
   type DebitReferencePreview,
@@ -29,6 +32,10 @@ import {
 } from "./debit-notes-data";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
+import {
+  attachWorkflowOnCreate,
+  submitDocumentForApproval,
+} from "@/lib/accounts/accounts-workflow-persist";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { roundMoney } from "@/lib/accounts/money-format";
@@ -36,6 +43,7 @@ import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/Vouch
 import { VoucherGstSummaryCard } from "@/components/accounts/voucher-form/VoucherGstSummaryCard";
 import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
 import {
   VoucherNoteField,
@@ -49,6 +57,13 @@ import {
   computeNoteParticularTotals,
 } from "@/components/accounts/voucher-form/NoteParticularsTable";
 import { NoteReferenceDocumentDetails } from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
+import { NoteQuantityLinesTable } from "@/components/accounts/voucher-form/NoteQuantityLinesTable";
+import { mapNoteLineToQuantityView } from "@/components/accounts/voucher-form/note-quantity-line-map";
+import {
+  NoteInventoryImpactBanner,
+  NoteNoInventoryImpactBanner,
+} from "@/components/accounts/voucher-form/NoteScenarioBanners";
+import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import {
   adaptPurchaseInvoiceReference,
   adaptPurchaseReturnReference,
@@ -66,11 +81,17 @@ import "../credit-notes/credit-note-tx.css";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
 type UiRefType = "direct" | "purchase_invoice" | "purchase_return";
+type InvoiceAdjustmentBasis = "quantity" | "amount";
 
 const REF_TYPE_OPTIONS: { value: UiRefType; label: string }[] = [
   { value: "direct", label: "Direct" },
   { value: "purchase_invoice", label: "Purchase Invoice" },
   { value: "purchase_return", label: "Purchase Return" },
+];
+
+const INVOICE_BASIS_OPTIONS: { value: InvoiceAdjustmentBasis; label: string }[] = [
+  { value: "amount", label: "Amount" },
+  { value: "quantity", label: "Quantity" },
 ];
 
 export default function DebitNoteFormPageClient({
@@ -106,6 +127,14 @@ export default function DebitNoteFormPageClient({
   const isSourceRefMode =
     uiRefType === "purchase_invoice" || uiRefType === "purchase_return";
   const isDirectMode = uiRefType === "direct";
+  const [invoiceAdjustmentBasis, setInvoiceAdjustmentBasis] =
+    useState<InvoiceAdjustmentBasis>("amount");
+  const isReturnRefMode = uiRefType === "purchase_return";
+  const isInvoiceQtyMode =
+    uiRefType === "purchase_invoice" && invoiceAdjustmentBasis === "quantity";
+  const isInvoiceAmountMode =
+    uiRefType === "purchase_invoice" && invoiceAdjustmentBasis === "amount";
+  const usesQuantityLines = isReturnRefMode || isInvoiceQtyMode;
 
   const [particular, setParticular] = useState("");
   const [particularQty, setParticularQty] = useState("1");
@@ -238,7 +267,22 @@ export default function DebitNoteFormPageClient({
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
     if (loadLines && pre.lineItems?.length) {
-      setLines(pre.lineItems.map((l) => normalizeDebitLine(l)));
+      // Purchase return: lock qty to returned quantity and compute debit amounts.
+      setLines(
+        pre.lineItems.map((l) => {
+          const retQty =
+            (l.purchaseReturnQty && l.purchaseReturnQty > 0
+              ? l.purchaseReturnQty
+              : l.eligibleReturnQty && l.eligibleReturnQty > 0
+                ? l.eligibleReturnQty
+                : l.returnQty) || 0;
+          const updated = normalizeDebitLine({ ...l, returnQty: retQty });
+          return normalizeDebitLine({
+            ...updated,
+            debitAmount: calcDebitFromQty(updated),
+          });
+        }),
+      );
     } else {
       setLines([]);
     }
@@ -265,7 +309,12 @@ export default function DebitNoteFormPageClient({
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
     if (loadLines && pre.lineItems?.length) {
-      setLines(pre.lineItems.map((l) => normalizeDebitLine(l)));
+      // Invoice quantity mode: load product rows with blank qty (user enters debit qty).
+      setLines(
+        pre.lineItems.map((l) =>
+          normalizeDebitLine({ ...l, returnQty: 0, debitAmount: 0 }),
+        ),
+      );
     } else {
       setLines([]);
     }
@@ -280,8 +329,15 @@ export default function DebitNoteFormPageClient({
     }
     const preview = buildReferenceFromPurchaseInvoice(Number(id));
     if (preview) {
-      applyPurchaseInvoicePreview(preview, Number(id), false);
-      prefillParticularsFromPreview(preview, "Purchase invoice adjustment");
+      const loadProductLines = invoiceAdjustmentBasis === "quantity";
+      applyPurchaseInvoicePreview(preview, Number(id), loadProductLines);
+      if (!loadProductLines) {
+        prefillParticularsFromPreview(preview, "Purchase invoice adjustment");
+      } else {
+        setParticular("");
+        setParticularQty("1");
+        setParticularRate("");
+      }
     }
   };
 
@@ -301,9 +357,11 @@ export default function DebitNoteFormPageClient({
         preview,
         retId,
         pending?.returnNumber ?? ret?.returnNumber ?? `PRET-${retId}`,
-        false,
+        true,
       );
-      prefillParticularsFromPreview(preview, "Purchase return");
+      setParticular("");
+      setParticularQty("1");
+      setParticularRate("");
     }
   };
 
@@ -341,20 +399,12 @@ export default function DebitNoteFormPageClient({
     const preview = buildReferenceFromPurchaseReturn(returnId);
     if (!preview) return;
     const retNo = pending?.returnNumber ?? `PRET-${returnId}`;
-    applyPreview(preview, returnId, retNo, false);
+    // Purchase Return DN: load complete product lines (qty-locked), not a single particular.
+    applyPreview(preview, returnId, retNo, true);
     if (pending?.returnDate) setDebitNoteDate(pending.returnDate);
-    const first = preview.lineItems[0];
-    if (first) {
-      const qty =
-        (first.purchaseReturnQty && first.purchaseReturnQty > 0
-          ? first.purchaseReturnQty
-          : first.invoiceQty) || 1;
-      setParticularQty(String(qty));
-      setParticularRate(String(first.unitPrice || ""));
-      setGstApplicable((first.taxPct || 0) > 0 || (first.gstAmount || 0) > 0);
-      if ((first.taxPct || 0) > 0) setGstPct(String(first.taxPct));
-    }
-    setParticular((prev) => (prev.trim() ? prev : first?.productName || "Purchase return"));
+    setParticular("");
+    setParticularQty("1");
+    setParticularRate("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReturn, returnId, isEdit, vendors]);
 
@@ -369,6 +419,11 @@ export default function DebitNoteFormPageClient({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPurchaseInvoice, purchaseInvoiceId, isEdit, vendors]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    setDebitNoteNo(peekNextDebitNoteNo());
+  }, [isEdit]);
 
   useEffect(() => {
     if (!isEdit || debitNoteId == null) return;
@@ -401,16 +456,29 @@ export default function DebitNoteFormPageClient({
     setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
     setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
 
-    if (fresh) {
-      setUiRefType(
-        rec.sourceReturnId
-          ? "purchase_return"
-          : rec.sourceInvoiceId
-            ? "purchase_invoice"
-            : "direct",
-      );
-      if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
-      if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
+    if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
+    if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
+
+    if (rec.sourceReturnId) {
+      // Purchase Return DN: restore locked quantity lines (never a single particular fallback).
+      setUiRefType("purchase_return");
+      let loaded = rec.lineItems.length
+        ? rec.lineItems.map((l) => normalizeDebitLine(l))
+        : [];
+      const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
+      if (p) {
+        setReferencePreview(p);
+        if (!loaded.length && p.lineItems?.length) {
+          loaded = p.lineItems.map((l) => normalizeDebitLine(l));
+        }
+      }
+      setLines(loaded);
+      setParticular("");
+      setParticularQty("1");
+      setParticularRate("");
+      setRoundOff(0);
+    } else if (fresh) {
+      setUiRefType(rec.sourceInvoiceId ? "purchase_invoice" : "direct");
       const line = rec.lineItems[0];
       const taxable = rec.taxableAmount ?? 0;
       const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
@@ -446,50 +514,56 @@ export default function DebitNoteFormPageClient({
       if (rec.sourceInvoiceId) {
         const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
         if (p) setReferencePreview(p);
-      } else if (rec.sourceReturnId) {
-        const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
-        if (p) setReferencePreview(p);
       }
       setLines([]);
     } else {
-      setUiRefType(rec.sourceReturnId ? "purchase_return" : "purchase_invoice");
-      if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
-      if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
-      const line = rec.lineItems[0];
-      const taxable = rec.taxableAmount || 0;
-      const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
-      const gstPctStr =
-        line?.taxPct && line.taxPct > 0
-          ? String(line.taxPct)
-          : taxable > 0 && gstOn
-            ? String(Math.round(((rec.gstAmount ?? 0) / taxable) * 10000) / 100)
-            : "18";
-      if (line && line.returnQty > 0 && line.unitPrice > 0) {
-        setParticularQty(String(line.returnQty));
-        setParticularRate(String(line.unitPrice));
-      } else {
-        setParticularQty("1");
-        setParticularRate(String(taxable || line?.unitPrice || rec.currentDebitAmount || ""));
-      }
-      setGstApplicable(gstOn);
-      setGstPct(gstPctStr);
-      setParticular(line?.productName || rec.reason || "");
-      const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
-      const rateStr =
-        line && line.unitPrice > 0
-          ? String(line.unitPrice)
-          : String(taxable || rec.currentDebitAmount || "");
-      const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-      setRoundOff(roundMoney((rec.currentDebitAmount ?? expected) - expected));
-      if (rec.sourceReturnId) {
-        const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
-        if (p) setReferencePreview(p);
-      } else if (rec.sourceInvoiceId) {
+      setUiRefType("purchase_invoice");
+      const loaded = rec.lineItems.length
+        ? rec.lineItems.map((l) => normalizeDebitLine(l))
+        : [];
+      const keepQty =
+        loaded.some((l) => (l.invoiceQty ?? 0) > 0) && loaded.length > 0;
+      if (rec.sourceInvoiceId) {
         const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
         if (p) setReferencePreview(p);
       }
-      // Against-reference edit: keep preview for read-only display; clear lines so particulars drive amounts.
-      setLines([]);
+      if (keepQty) {
+        setInvoiceAdjustmentBasis("quantity");
+        setLines(loaded);
+        setParticular("");
+        setParticularQty("1");
+        setParticularRate("");
+        setRoundOff(0);
+      } else {
+        setInvoiceAdjustmentBasis("amount");
+        setLines([]);
+        const line = rec.lineItems[0];
+        const taxable = rec.taxableAmount || 0;
+        const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
+        const gstPctStr =
+          line?.taxPct && line.taxPct > 0
+            ? String(line.taxPct)
+            : taxable > 0 && gstOn
+              ? String(Math.round(((rec.gstAmount ?? 0) / taxable) * 10000) / 100)
+              : "18";
+        if (line && line.returnQty > 0 && line.unitPrice > 0) {
+          setParticularQty(String(line.returnQty));
+          setParticularRate(String(line.unitPrice));
+        } else {
+          setParticularQty("1");
+          setParticularRate(String(taxable || line?.unitPrice || rec.currentDebitAmount || ""));
+        }
+        setGstApplicable(gstOn);
+        setGstPct(gstPctStr);
+        setParticular(line?.productName || rec.reason || "");
+        const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
+        const rateStr =
+          line && line.unitPrice > 0
+            ? String(line.unitPrice)
+            : String(taxable || rec.currentDebitAmount || "");
+        const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
+        setRoundOff(roundMoney((rec.currentDebitAmount ?? expected) - expected));
+      }
     }
   }, [isEdit, debitNoteId, router, vendors]);
 
@@ -501,12 +575,74 @@ export default function DebitNoteFormPageClient({
     false,
   );
 
-  const displayTaxable = particularTotals.basicAmount;
-  const cgstDisplay = particularTotals.cgst;
-  const sgstDisplay = particularTotals.sgst;
-  const igstDisplay = particularTotals.igst;
-  const totalDebit = Math.max(0, particularTotals.total + roundOff);
-  const showGst = gstApplicable;
+  const againstLines = lines.filter(
+    (l) => l.productName && (l.returnQty > 0 || l.debitAmount > 0),
+  );
+  const qtyLinesTaxable = againstLines.reduce((s, l) => {
+    const debit = l.debitAmount > 0 ? l.debitAmount : calcDebitFromQty(l);
+    const rate = 1 + (l.taxPct || 0) / 100;
+    return s + (rate > 0 ? debit / rate : debit);
+  }, 0);
+  const qtyLinesTotal = againstLines.reduce(
+    (s, l) => s + (l.debitAmount > 0 ? l.debitAmount : calcDebitFromQty(l)),
+    0,
+  );
+  const qtyLinesGst = Math.max(0, qtyLinesTotal - qtyLinesTaxable);
+
+  const displayTaxable = usesQuantityLines
+    ? roundMoney(qtyLinesTaxable)
+    : particularTotals.basicAmount;
+  const cgstDisplay = usesQuantityLines
+    ? roundMoney(qtyLinesGst / 2)
+    : particularTotals.cgst;
+  const sgstDisplay = usesQuantityLines
+    ? roundMoney(qtyLinesGst - qtyLinesGst / 2)
+    : particularTotals.sgst;
+  const igstDisplay = usesQuantityLines ? 0 : particularTotals.igst;
+  const totalDebit = Math.max(
+    0,
+    (usesQuantityLines ? roundMoney(qtyLinesTotal) : particularTotals.total) + roundOff,
+  );
+  const showGst = usesQuantityLines ? qtyLinesGst > 0 : gstApplicable;
+  const originalNum = parseFloat(originalAmount) || totalDebit;
+  const alreadyAdjustedNumSafe = parseFloat(alreadyAdjusted) || 0;
+
+  const quantityLineViews = useMemo(
+    () =>
+      lines
+        .filter((l) => Boolean(l.productName?.trim()))
+        .map((l) => mapNoteLineToQuantityView(l, { interstate: false })),
+    [lines],
+  );
+
+  const quantityLinesEmptyMessage = (() => {
+    if (isReturnRefMode) {
+      if (!referencePreview) return "Select a purchase return to load product lines.";
+      return "Product lines could not be loaded for the selected Purchase Return.";
+    }
+    if (referenceInvoiceId || referencePreview) {
+      return "Product lines could not be loaded for the selected Purchase Invoice.";
+    }
+    return "Select a purchase invoice to load product lines.";
+  })();
+
+  const handleQuantityLineQtyChange = (lineId: string, qty: number) => {
+    setLines((prev) =>
+      prev.map((line) => {
+        if (line.id !== lineId) return line;
+        // Invoice qty mode: hard-cap at invoice quantity. Return mode uses eligible max.
+        const max = isInvoiceQtyMode
+          ? line.invoiceQty > 0
+            ? line.invoiceQty
+            : getDebitLineMaxQty(line)
+          : getDebitLineMaxQty(line);
+        const clamped = Number.isFinite(max) ? Math.min(Math.max(0, qty), max) : Math.max(0, qty);
+        const updated = normalizeDebitLine({ ...line, returnQty: clamped });
+        const debit = calcDebitFromQty(updated);
+        return normalizeDebitLine({ ...updated, debitAmount: debit });
+      }),
+    );
+  };
 
   const referenceDocumentView = useMemo(() => {
     if (!isSourceRefMode || !referencePreview) return null;
@@ -546,6 +682,9 @@ export default function DebitNoteFormPageClient({
   }, [referencePreview?.sourceGrnNo, sourceInvoiceId]);
 
   const buildParticularLineItems = (): DebitNoteLine[] => {
+    if (usesQuantityLines) {
+      return againstLines;
+    }
     if (particularTotals.total <= 0 && Math.abs(roundOff) < 0.005) return [];
     const name = particular.trim() || "Adjustment";
     const lineTotal = roundMoney(particularTotals.total + roundOff);
@@ -593,15 +732,17 @@ export default function DebitNoteFormPageClient({
       sourceQcNo: referencePreview?.sourceQcNo ?? "",
       sourcePackingNo: sourcePackingNo || undefined,
       sourceDispatchNo: sourceDispatchNo || undefined,
-      originalAmount: roundMoney(particularTotals.total + roundOff),
-      alreadyAdjustedAmount: isDirectMode ? 0 : alreadyAdjustedNum,
+      originalAmount: isDirectMode
+        ? roundMoney(particularTotals.total + roundOff)
+        : originalNum || roundMoney(particularTotals.total + roundOff),
+      alreadyAdjustedAmount: isDirectMode ? 0 : alreadyAdjustedNumSafe,
       standaloneDebitAmount: isDirectMode
         ? roundMoney(particularTotals.total + roundOff)
         : 0,
-      taxableAmount: particularTotals.basicAmount,
-      gstAmount: particularTotals.gstAmount,
+      taxableAmount: displayTaxable,
+      gstAmount: usesQuantityLines ? roundMoney(qtyLinesGst) : particularTotals.gstAmount,
       freshGstPct: isDirectMode ? (gstApplicable ? particularTotals.ratePct : 0) : undefined,
-      lineItems: isDirectMode ? ([] as DebitNoteLine[]) : buildParticularLineItems(),
+      lineItems: buildParticularLineItems(),
       reason: resolvedReason,
       remarks: narration || remarks,
       referenceNo,
@@ -646,13 +787,24 @@ export default function DebitNoteFormPageClient({
       setError("Select an adjustment ledger.");
       return false;
     }
-    if (!particular.trim()) {
-      setError("Enter a particular / description for the adjustment.");
-      return false;
-    }
-    if (particularTotals.total <= 0) {
-      setError("Enter a valid Qty and Rate for the particular.");
-      return false;
+    if (usesQuantityLines) {
+      if (againstLines.length === 0 || qtyLinesTotal <= 0) {
+        setError(
+          isReturnRefMode
+            ? "Return product lines are required."
+            : "Enter debit qty on at least one product line.",
+        );
+        return false;
+      }
+    } else {
+      if (!particular.trim()) {
+        setError("Enter a particular / description for the adjustment.");
+        return false;
+      }
+      if (particularTotals.total <= 0) {
+        setError("Enter a valid Qty and Rate for the particular.");
+        return false;
+      }
     }
     if (isSourceRefMode) {
       if (!referencePreview) {
@@ -688,6 +840,29 @@ export default function DebitNoteFormPageClient({
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save debit note.");
+    }
+  };
+
+  const submitForApproval = () => {
+    setError(null);
+    try {
+      if (!validateForm()) return;
+      let id = debitNoteId;
+      if (isEdit && debitNoteId != null) {
+        updateDebitNote(debitNoteId, buildInput("pending_approval"));
+      } else {
+        const rec = createDebitNote(buildInput("pending_approval"));
+        id = rec.id;
+        attachWorkflowOnCreate("debit_note", rec.id);
+      }
+      if (id != null) {
+        submitDocumentForApproval("debit_note", id);
+        dispatchAccountsDataChanged("debit-notes");
+        showToast("Debit note submitted for approval");
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${id}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not submit for approval.");
     }
   };
 
@@ -774,9 +949,12 @@ export default function DebitNoteFormPageClient({
 
   const stickyActions = (
     <VoucherFormActionBar
-      onCancel={requestCancel}
+      onDiscard={requestCancel}
       onSaveDraft={saveDraft}
+      onSubmitForApproval={submitForApproval}
+      showSubmitForApproval
       onSaveAndPost={postNote}
+      saveAndPostLabel="Save & Post"
     />
   );
 
@@ -785,7 +963,6 @@ export default function DebitNoteFormPageClient({
 
   const postingSummary = (
     <VoucherAccountingPostingSummary
-      embedded
       compact
       voucherTypeLabel="Debit Note"
       debitLedgerLabel="Debit"
@@ -884,7 +1061,7 @@ export default function DebitNoteFormPageClient({
               <VoucherNoteFieldGrid columns={4}>
                 <VoucherNoteField label="Debit Note Number" width="sm">
                   <VoucherNoteReadOnly mono>
-                    {isEdit ? debitNoteNo : debitNoteNo || "…"}
+                    {debitNoteNo || "…"}
                   </VoucherNoteReadOnly>
                 </VoucherNoteField>
                 <VoucherNoteField label="Debit Note Date" width="sm">
@@ -904,13 +1081,19 @@ export default function DebitNoteFormPageClient({
                   />
                 </VoucherNoteField>
                 {warehouseRef ? (
-                  <VoucherNoteField label="Bank Account" width="lg">
-                    <WarehouseMappedBankAccountSelect
-                      warehouseRef={warehouseRef}
-                      value={bankAccountId}
-                      onChange={(id) => setBankAccountId(id)}
-                      label=""
-                    />
+                  <VoucherNoteField label="Bank Account (optional — refund only)" width="lg">
+                    <div className="space-y-1">
+                      <WarehouseMappedBankAccountSelect
+                        warehouseRef={warehouseRef}
+                        value={bankAccountId}
+                        onChange={(id) => setBankAccountId(id)}
+                        label=""
+                      />
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        Not required for a normal Debit Note (AP + adjustment + GST). Use only if
+                        settling an immediate bank refund with this note.
+                      </p>
+                    </div>
                   </VoucherNoteField>
                 ) : null}
                 <VoucherNoteField label="Vendor" required width="md">
@@ -939,7 +1122,7 @@ export default function DebitNoteFormPageClient({
                     {vendorFields?.vendorGst || referencePreview?.vendorGstin || "—"}
                   </VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="AP Ledger" width="md">
+                <VoucherNoteField label="AP Ledger (Payable)" width="md">
                   <VoucherNoteReadOnly>
                     {vendorFields?.payableLedger || resolveVendorName() || "—"}
                   </VoucherNoteReadOnly>
@@ -967,16 +1150,52 @@ export default function DebitNoteFormPageClient({
                   )}
                 </VoucherNoteField>
                 {!refControlsLocked && uiRefType === "purchase_invoice" ? (
-                  <VoucherNoteField label="Reference Document" span={2} width="ref">
-                    <SearchableSelect
-                      label=""
-                      value={referenceInvoiceId}
-                      onChange={onPurchaseInvoiceSelect}
-                      options={purchaseInvoiceOptions}
-                      placeholder="Select purchase invoice"
-                      required
-                    />
-                  </VoucherNoteField>
+                  <>
+                    <VoucherNoteField label="Reference Document" span={2} width="ref">
+                      <SearchableSelect
+                        label=""
+                        value={referenceInvoiceId}
+                        onChange={onPurchaseInvoiceSelect}
+                        options={purchaseInvoiceOptions}
+                        placeholder="Select purchase invoice"
+                        required
+                      />
+                    </VoucherNoteField>
+                    <VoucherNoteField label="Adjustment Basis" span={2} width="ref">
+                      <VoucherNoteSegmentControl
+                        hideLabel
+                        label="Adjustment Basis"
+                        name="dn-invoice-basis"
+                        value={invoiceAdjustmentBasis}
+                        options={INVOICE_BASIS_OPTIONS}
+                        onChange={(next) => {
+                          setInvoiceAdjustmentBasis(next);
+                          if (referenceInvoiceId) {
+                            const preview = buildReferenceFromPurchaseInvoice(
+                              Number(referenceInvoiceId),
+                            );
+                            if (preview) {
+                              applyPurchaseInvoicePreview(
+                                preview,
+                                Number(referenceInvoiceId),
+                                next === "quantity",
+                              );
+                              if (next === "quantity") {
+                                setParticular("");
+                                setParticularQty("1");
+                                setParticularRate("");
+                              } else {
+                                prefillParticularsFromPreview(
+                                  preview,
+                                  "Purchase invoice adjustment",
+                                );
+                              }
+                            }
+                          }
+                        }}
+                      />
+                    </VoucherNoteField>
+                  </>
                 ) : null}
                 {!refControlsLocked && uiRefType === "purchase_return" ? (
                   <VoucherNoteField label="Reference Document" span={2} width="ref">
@@ -1004,29 +1223,61 @@ export default function DebitNoteFormPageClient({
               />
             ) : null}
 
+            {isReturnRefMode ? (
+              <NoteInventoryImpactBanner returnDocumentLabel="Purchase Return" />
+            ) : null}
+            {isDirectMode || isInvoiceAmountMode ? <NoteNoInventoryImpactBanner /> : null}
+
             <VoucherFormSectionCard title="Particulars" flush compact>
               <div className="cnz-items !shadow-none !border-0 !rounded-none">
-                <div className="px-3 py-2">
-                  <NoteParticularsTable
-                    particular={particular}
-                    onParticularChange={setParticular}
-                    adjustmentLedgerId={adjustmentLedgerId}
-                    onAdjustmentLedgerChange={(l) => {
-                      setAdjustmentLedgerId(l.id);
-                      setAdjustmentLedgerName(l.accountName);
-                    }}
-                    qty={particularQty}
-                    onQtyChange={setParticularQty}
-                    rate={particularRate}
-                    onRateChange={setParticularRate}
-                    gstPct={gstPct}
-                    onGstPctChange={setGstPct}
-                    gstApplicable={gstApplicable}
-                    onGstApplicableChange={setGstApplicable}
-                    interstate={false}
-                    switchId="dn-gst-applicable"
-                  />
-                </div>
+                {usesQuantityLines ? (
+                  <div className="space-y-2">
+                    <div className="px-3 pt-2 max-w-sm">
+                      <p className="text-[11px] font-medium text-muted-foreground mb-1">
+                        Adjustment Ledger <span className="text-red-500">*</span>
+                      </p>
+                      <GroupedLedgerSelect
+                        value={adjustmentLedgerId}
+                        onChange={(l) => {
+                          setAdjustmentLedgerId(l.id);
+                          setAdjustmentLedgerName(l.accountName);
+                        }}
+                        placeholder="Select adjustment ledger"
+                        required
+                        compact
+                      />
+                    </div>
+                    <NoteQuantityLinesTable
+                      lines={quantityLineViews}
+                      qtyLocked={isReturnRefMode}
+                      currentQtyLabel="Qty"
+                      onCurrentQtyChange={handleQuantityLineQtyChange}
+                      emptyMessage={quantityLinesEmptyMessage}
+                    />
+                  </div>
+                ) : (
+                  <div className="px-3 py-2">
+                    <NoteParticularsTable
+                      particular={particular}
+                      onParticularChange={setParticular}
+                      adjustmentLedgerId={adjustmentLedgerId}
+                      onAdjustmentLedgerChange={(l) => {
+                        setAdjustmentLedgerId(l.id);
+                        setAdjustmentLedgerName(l.accountName);
+                      }}
+                      qty={particularQty}
+                      onQtyChange={setParticularQty}
+                      rate={particularRate}
+                      onRateChange={setParticularRate}
+                      gstPct={gstPct}
+                      onGstPctChange={setGstPct}
+                      gstApplicable={gstApplicable}
+                      onGstApplicableChange={setGstApplicable}
+                      interstate={false}
+                      switchId="dn-gst-applicable"
+                    />
+                  </div>
+                )}
               </div>
               <VoucherGstSummaryCard
                 embedded
@@ -1063,8 +1314,9 @@ export default function DebitNoteFormPageClient({
               onRemoveAttachment={(id) =>
                 setAttachments((prev) => prev.filter((a) => a.id !== id))
               }
-              footerSlot={postingSummary}
             />
+
+            <AccountingImpactSection docKey="debit_note" compact entryPreview={postingSummary} />
           </div>
         </AccountsFormLayout>
       </div>

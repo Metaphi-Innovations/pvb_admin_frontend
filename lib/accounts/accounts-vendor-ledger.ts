@@ -136,6 +136,12 @@ export function generateAccountsVendorCode(vendorType: string): string {
   return generateVendorCodeForType(vendorType, existing);
 }
 
+export interface CreateAccountsVendorLedgerOptions {
+  openingBalance?: number;
+  balanceType?: "Debit" | "Credit";
+  billWiseAccounting?: boolean;
+}
+
 export interface CreateAccountsVendorLedgerResult {
   ledger: ChartOfAccount;
   record: AccountsVendorLedgerRecord;
@@ -148,6 +154,7 @@ export interface CreateAccountsVendorLedgerResult {
 export function createAccountsVendorLedger(
   vendor: Vendor,
   parentGroupId?: number | null,
+  options?: CreateAccountsVendorLedgerOptions,
 ): CreateAccountsVendorLedgerResult {
   const records = loadChartOfAccounts();
   const parent =
@@ -184,6 +191,13 @@ export function createAccountsVendorLedger(
     throw new Error("A ledger with this name already exists under Sundry Creditors.");
   }
 
+  const openingBalance =
+    options?.openingBalance != null && Number.isFinite(options.openingBalance)
+      ? Math.max(0, options.openingBalance)
+      : 0;
+  const balanceType = options?.balanceType === "Debit" ? "Debit" : "Credit";
+  const billWiseAccounting = options?.billWiseAccounting ?? true;
+
   const ledgerId = nextId(records);
   const ledger: ChartOfAccount = {
     id: ledgerId,
@@ -198,12 +212,12 @@ export function createAccountsVendorLedger(
     status: vendorRecord.status === "active" ? "active" : "inactive",
     usedIn: ["procurement"],
     isSystem: false,
-    openingBalance: 0,
-    balanceType: "Credit",
+    openingBalance,
+    balanceType,
     gstApplicable: vendorRecord.gstApplicable,
     tdsApplicable: vendorRecord.tdsApplicable,
     costCenterApplicable: false,
-    billWiseAccounting: true,
+    billWiseAccounting,
     bankAccountFlag: false,
     ledgerKind: "MASTER",
     masterType: "vendor",

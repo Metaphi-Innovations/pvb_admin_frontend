@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
-import { Pencil, X } from "lucide-react";
+import { X } from "lucide-react";
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
 import { resolveVoucherPartyRef } from "@/components/accounts/VoucherInlineDocumentSelect";
 import {
@@ -24,11 +24,28 @@ import { VoucherFormHeaderFields } from "@/components/accounts/voucher-form/Vouc
 import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
 import type { VoucherAttachmentFile } from "@/components/accounts/voucher-form/VoucherAttachmentSection";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
+import { VoucherDocumentActions } from "@/components/accounts/voucher-form/VoucherDocumentActions";
 import { VoucherBankReconciliationSection } from "@/components/accounts/VoucherBankReconciliationSection";
 import { VoucherDualEntryPanel } from "@/components/accounts/voucher-form/VoucherDualEntryPanel";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
+import type { AccountingImpactDocKey } from "@/lib/accounts/accounting-impact-docs";
 import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
+import {
+  VoucherInstrumentFields,
+  getInstrumentFieldKind,
+  type VoucherInstrumentValues,
+} from "@/components/accounts/voucher-form/VoucherInstrumentFields";
+import {
+  VoucherAdjustmentsSection,
+  adjustmentRowsToPreviewLines,
+  createEmptyAdjustmentRow,
+  sumAdjustmentEffect,
+  type VoucherAdjustmentRow,
+} from "@/components/accounts/voucher-form/VoucherAdjustmentsSection";
+import { VoucherSettlementSummary } from "@/components/accounts/voucher-form/VoucherSettlementSummary";
+import { stashVoucherFormToast } from "@/lib/accounts/voucher-form-toast";
 import { loadWarehouseMappingOptions } from "@/lib/accounts/bank-warehouse-mapping";
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherJournalEntryGrid } from "@/components/accounts/voucher-form/VoucherJournalEntryGrid";
@@ -46,7 +63,6 @@ import type { AccountsVoucherCategory } from "@/lib/accounts/accounts-maker-chec
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
-import { stashVoucherFormToast } from "@/lib/accounts/voucher-form-toast";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { isBankAccountLedger } from "@/lib/accounts/bank-coa-utils";
 import { ledgerHasAncestorNamed } from "@/lib/accounts/coa-hierarchy";
@@ -56,6 +72,14 @@ const VOUCHER_CATEGORY_MAP: Partial<Record<VoucherTypeCode, AccountsVoucherCateg
   journal: "journal_entry",
   receipt: "receipt_voucher",
   payment: "payment_voucher",
+  contra: "contra_voucher",
+};
+
+const VOUCHER_IMPACT_DOC_KEY: Partial<Record<VoucherTypeCode, AccountingImpactDocKey>> = {
+  payment: "payment_voucher",
+  receipt: "receipt_voucher",
+  contra: "contra_voucher",
+  journal: "journal_voucher",
 };
 
 function isCashLedger(ledger: ChartOfAccount | null | undefined, records: ChartOfAccount[]): boolean {
@@ -99,6 +123,7 @@ export function StandardVoucherForm({
     canEdit,
     partyLedger,
     handleSaveDraft,
+    handleSubmitForApproval,
     handlePost,
     resolvedVoucherId,
   } = useVoucherForm({
@@ -108,7 +133,11 @@ export function StandardVoucherForm({
     onDone,
     onSaveSuccess: (action) => {
       stashVoucherFormToast(
-        action === "draft" ? `${label} saved as draft` : `${label} posted successfully`,
+        action === "draft"
+          ? `${label} saved as draft`
+          : action === "submit"
+            ? `${label} submitted for approval`
+            : `${label} posted successfully`,
       );
     },
   });
@@ -122,6 +151,13 @@ export function StandardVoucherForm({
 
   const [deductTds, setDeductTds] = useState(false);
   const [tdsAmount, setTdsAmount] = useState("");
+  const [adjustmentRows, setAdjustmentRows] = useState<VoucherAdjustmentRow[]>([]);
+  const [instrument, setInstrument] = useState<VoucherInstrumentValues>({
+    chequeNumber: "",
+    chequeDate: "",
+    transactionReference: "",
+    transactionDate: "",
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   /** UI-only attachments — not persisted to backend in this task. */
   const [attachmentFiles, setAttachmentFiles] = useState<VoucherAttachmentFile[]>([]);
@@ -145,6 +181,14 @@ export function StandardVoucherForm({
       setTdsAmount(parsed.tdsAmount ? String(parsed.tdsAmount) : "");
       setDeductTds((parsed.tdsAmount ?? 0) > 0);
     }
+    if (voucherType === "receipt" || voucherType === "payment" || voucherType === "contra") {
+      setInstrument({
+        chequeNumber: existing.instrumentNumber ?? "",
+        chequeDate: existing.instrumentDate ?? "",
+        transactionReference: existing.transactionReference ?? "",
+        transactionDate: existing.transactionDate ?? "",
+      });
+    }
   }, [existing, isNew, voucherType, setExtras]);
 
   const partyRef = useMemo(
@@ -161,10 +205,36 @@ export function StandardVoucherForm({
   );
 
   const isJournalGrid = config.layout === "journal-grid";
+  const showPaymentReceiptExtras = voucherType === "payment" || voucherType === "receipt";
   const showTdsSection = config.showTds && (deductTds || Boolean(vendor?.tdsApplicable));
-  const numericTds = showTdsSection ? Number(tdsAmount) || 0 : 0;
-  const paymentGrossDebit = voucherType === "payment" ? roundMoney(debitEntry?.amount ?? 0) : 0;
-  const paymentNetBank = roundMoney(Math.max(0, paymentGrossDebit - numericTds));
+  const numericTdsFromAdj = roundMoney(
+    adjustmentRows
+      .filter((r) => r.adjustmentType === "TDS" || r.adjustmentType === "Customer TDS")
+      .reduce((s, r) => s + (r.amount || 0), 0),
+  );
+  const numericTds =
+    numericTdsFromAdj > 0 ? numericTdsFromAdj : showTdsSection ? Number(tdsAmount) || 0 : 0;
+  const settlementKind: "payment" | "receipt" =
+    voucherType === "receipt" ? "receipt" : "payment";
+  const grossAmount =
+    voucherType === "payment"
+      ? roundMoney(debitEntry?.amount ?? 0)
+      : voucherType === "receipt"
+        ? roundMoney(creditEntry?.amount ?? 0)
+        : roundMoney(amount);
+  const adjustmentsTotal = showPaymentReceiptExtras
+    ? sumAdjustmentEffect(adjustmentRows, settlementKind)
+    : roundMoney(numericTds);
+  const netCashBank = roundMoney(Math.max(0, grossAmount - adjustmentsTotal));
+  const allocatedAmount = roundMoney(
+    (voucherType === "payment" ? debitEntry : creditEntry)?.allocations?.reduce(
+      (s, a) => s + (a.allocatedAmount || 0),
+      0,
+    ) ?? 0,
+  );
+  const unallocatedAmount = roundMoney(Math.max(0, grossAmount - allocatedAmount));
+  const paymentGrossDebit = voucherType === "payment" ? grossAmount : 0;
+  const paymentNetBank = voucherType === "payment" ? netCashBank : 0;
 
   useEffect(() => {
     if (readOnly || voucherType !== "payment") return;
@@ -184,8 +254,72 @@ export function StandardVoucherForm({
         voucherType === "payment" && partyLedger?.accountType === "Expense"
           ? partyLedger.accountName
           : prev.expenseHeadLedgerName,
+      instrument,
+      adjustmentRows: adjustmentRows.map((r) => ({
+        id: r.id,
+        adjustmentType: r.adjustmentType,
+        ledgerId: r.ledgerId,
+        ledgerName: r.ledgerName,
+        debitOrCredit: r.debitOrCredit,
+        amount: r.amount,
+      })),
     }));
-  }, [numericTds, vendor?.tdsMasterId, partyLedger, voucherType, setExtras]);
+  }, [numericTds, vendor?.tdsMasterId, partyLedger, voucherType, setExtras, instrument, adjustmentRows]);
+
+  useEffect(() => {
+    if (readOnly || isJournalGrid) return;
+    if (voucherType !== "payment" && voucherType !== "receipt" && voucherType !== "contra") return;
+    const kind = getInstrumentFieldKind(model.transactionMode);
+    const nextInstrumentType = model.transactionMode;
+    let nextNumber = model.instrumentNumber ?? "";
+    let nextDate = model.instrumentDate ?? "";
+    let nextTxnRef = model.transactionReference ?? "";
+    let nextTxnDate = model.transactionDate ?? "";
+    let ref = model.referenceNumber;
+    if (kind === "cheque") {
+      nextNumber = instrument.chequeNumber;
+      nextDate = instrument.chequeDate;
+      nextTxnRef = "";
+      nextTxnDate = "";
+      ref = instrument.chequeNumber;
+    } else if (kind === "none") {
+      nextNumber = "";
+      nextDate = "";
+      nextTxnRef = "";
+      nextTxnDate = "";
+      ref = "";
+    } else if (kind === "transfer" || kind === "other") {
+      nextNumber = "";
+      nextDate = "";
+      nextTxnRef = instrument.transactionReference;
+      nextTxnDate = instrument.transactionDate;
+      ref = instrument.transactionReference;
+    }
+    const patch: Partial<typeof model> = {};
+    if (nextInstrumentType !== model.instrumentType) patch.instrumentType = nextInstrumentType;
+    if (nextNumber !== (model.instrumentNumber ?? "")) patch.instrumentNumber = nextNumber;
+    if (nextDate !== (model.instrumentDate ?? "")) patch.instrumentDate = nextDate;
+    if (nextTxnRef !== (model.transactionReference ?? "")) patch.transactionReference = nextTxnRef;
+    if (nextTxnDate !== (model.transactionDate ?? "")) patch.transactionDate = nextTxnDate;
+    if (ref !== model.referenceNumber) patch.referenceNumber = ref;
+    if (Object.keys(patch).length) patchModel(patch);
+  }, [
+    instrument.chequeNumber,
+    instrument.chequeDate,
+    instrument.transactionReference,
+    instrument.transactionDate,
+    model.transactionMode,
+    model.referenceNumber,
+    model.instrumentType,
+    model.instrumentNumber,
+    model.instrumentDate,
+    model.transactionReference,
+    model.transactionDate,
+    readOnly,
+    isJournalGrid,
+    voucherType,
+    patchModel,
+  ]);
 
   const pageTitle = isView ? `View ${label}` : !isNew ? `Edit ${label}` : `New ${label}`;
   const { totalDebit, totalCredit } = calcFormEntryTotals(model.entries);
@@ -198,8 +332,8 @@ export function StandardVoucherForm({
   }, [resolvedVoucherId, isNew, existing?.id]);
 
   const formSnapshot = useMemo(
-    () => ({ model, extras, deductTds, tdsAmount }),
-    [model, extras, deductTds, tdsAmount],
+    () => ({ model, extras, deductTds, tdsAmount, adjustmentRows, instrument }),
+    [model, extras, deductTds, tdsAmount, adjustmentRows, instrument],
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, {
     ready: mounted && baselineReady && (isNew || !!existing),
@@ -218,6 +352,16 @@ export function StandardVoucherForm({
       setIsSubmitting(false);
     }
   }, [isSubmitting, handleSaveDraft]);
+
+  const onSubmitForApprovalClick = useCallback(() => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      handleSubmitForApproval();
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, handleSubmitForApproval]);
 
   const onPostClick = useCallback(() => {
     if (isSubmitting) return;
@@ -281,24 +425,21 @@ export function StandardVoucherForm({
       };
     }
 
-    const debitLabel =
-      voucherType === "payment"
-        ? "Debit"
-        : voucherType === "receipt"
-          ? "Debit"
-          : voucherType === "contra"
-            ? "Debit"
-            : "Debit";
-    const creditLabel = "Credit";
+    const adjustmentPreviewLines = showPaymentReceiptExtras
+      ? adjustmentRowsToPreviewLines(adjustmentRows)
+      : [];
 
     return {
       voucherTypeLabel: label,
-      debitLedgerLabel: debitLabel,
+      debitLedgerLabel: "Debit",
       debitLedgerName: debitEntry?.accountName || undefined,
-      creditLedgerLabel: creditLabel,
+      creditLedgerLabel: "Credit",
       creditLedgerName: creditEntry?.accountName || undefined,
-      voucherAmount: amount,
-      voucherAmountLabel: "Voucher Amount",
+      voucherAmount: showPaymentReceiptExtras ? grossAmount : amount,
+      voucherAmountLabel: showPaymentReceiptExtras ? "Gross Amount" : "Voucher Amount",
+      netCashBankAmount: showPaymentReceiptExtras ? netCashBank : undefined,
+      netCashBankLabel: "Net Cash / Bank Amount",
+      adjustmentPreviewLines: showPaymentReceiptExtras ? adjustmentPreviewLines : undefined,
       visibilityItems,
     };
   }, [
@@ -307,10 +448,13 @@ export function StandardVoucherForm({
     totalDebit,
     totalCredit,
     visibilityItems,
-    voucherType,
     debitEntry?.accountName,
     creditEntry?.accountName,
     amount,
+    showPaymentReceiptExtras,
+    adjustmentRows,
+    grossAmount,
+    netCashBank,
   ]);
 
   const breadcrumb = [
@@ -341,25 +485,27 @@ export function StandardVoucherForm({
       <Button variant="outline" size="sm" className={cn(VOUCHER_BUTTON_CLASS, "gap-1")} onClick={onDone}>
         <X className="w-3.5 h-3.5" /> Back
       </Button>
-      {canEdit && onEdit && (
-        <Button
-          size="sm"
-          className={cn(VOUCHER_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white gap-1")}
-          onClick={onEdit}
-        >
-          <Pencil className="w-3.5 h-3.5" /> Edit
-        </Button>
-      )}
+      <VoucherDocumentActions
+        status={existing?.status}
+        canEdit={canEdit}
+        onEdit={onEdit}
+        showReverse
+        reverseEnabled={false}
+      />
     </div>
   ) : undefined;
 
   const stickyFooter = readOnly ? undefined : (
     <VoucherFormActionBar
-      onCancel={requestCancel}
+      onDiscard={requestCancel}
       onSaveDraft={onSaveDraftClick}
+      onSubmitForApproval={onSubmitForApprovalClick}
+      showSubmitForApproval={Boolean(VOUCHER_CATEGORY_MAP[voucherType])}
       onSaveAndPost={onPostClick}
-      cancelDisabled={isSubmitting}
+      saveAndPostLabel="Save & Post"
+      discardDisabled={isSubmitting}
       saveDraftDisabled={isSubmitting}
+      submitForApprovalDisabled={isSubmitting || !canPost}
       saveAndPostDisabled={!canPost || isSubmitting}
     />
   );
@@ -402,7 +548,7 @@ export function StandardVoucherForm({
         stickyFooter={stickyFooter}
         onBackClick={readOnly ? onDone : requestCancel}
       >
-        <div className="space-y-3 pb-24">
+        <div className="space-y-2 pb-20">
           {error && <div className={VOUCHER_ERROR_CLASS}>{error}</div>}
 
           <VoucherFormSectionCard title="Voucher Details" helper={config.pageSubtitle}>
@@ -415,9 +561,25 @@ export function StandardVoucherForm({
               showFinancialYear={showFinancialYear}
               financialYears={financialYears}
               onChange={patchModel}
+              hideReferenceNumber={!isJournalGrid && config.showTransactionMode !== false}
             />
+            {!isJournalGrid && config.showTransactionMode !== false && (
+              <div className="mt-2">
+                <VoucherInstrumentFields
+                  mode={model.transactionMode}
+                  values={instrument}
+                  onChange={(patch) => setInstrument((prev) => ({ ...prev, ...patch }))}
+                  readOnly={readOnly}
+                />
+                {getInstrumentFieldKind(model.transactionMode) === "none" && !readOnly ? (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Cash mode — no cheque or transaction reference required.
+                  </p>
+                ) : null}
+              </div>
+            )}
             {!isJournalGrid && (
-              <div className="mt-3 max-w-sm">
+              <div className="mt-2 max-w-sm">
                 <VoucherFormField label="Warehouse / Branch">
                   <Select
                     value={extras.warehouseRef ?? ""}
@@ -429,7 +591,7 @@ export function StandardVoucherForm({
                     </SelectTrigger>
                     <VoucherSelectContent>
                       {loadWarehouseMappingOptions().map((w) => (
-                        <SelectItem key={w.value} value={w.label} className="text-[13px]">
+                        <SelectItem key={w.value} value={w.value} className="text-[13px]">
                           {w.label}
                         </SelectItem>
                       ))}
@@ -439,7 +601,7 @@ export function StandardVoucherForm({
               </div>
             )}
             {isJournalGrid && !readOnly && (
-              <div className="mt-3 max-w-sm">
+              <div className="mt-2 max-w-sm">
                 <VoucherFormField label="Warehouse / Branch">
                   <Select
                     value={extras.warehouseRef ?? ""}
@@ -450,7 +612,7 @@ export function StandardVoucherForm({
                     </SelectTrigger>
                     <VoucherSelectContent>
                       {loadWarehouseMappingOptions().map((w) => (
-                        <SelectItem key={w.value} value={w.label} className="text-[13px]">
+                        <SelectItem key={w.value} value={w.value} className="text-[13px]">
                           {w.label}
                         </SelectItem>
                       ))}
@@ -486,39 +648,42 @@ export function StandardVoucherForm({
                   warehouseRef={extras.warehouseRef}
                 />
 
-                {voucherType === "payment" && showTdsSection && (deductTds || readOnly) && paymentGrossDebit > 0 && (
-                  <div className="mt-3 rounded-md border border-border/40 bg-muted/15 px-2.5 py-2 space-y-1 max-w-md">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Payment Summary
-                    </p>
-                    <div className="flex justify-between text-[12px]">
-                      <span className="text-muted-foreground">Gross Debit Amount</span>
-                      <span className="tabular-nums font-medium">{formatMoney(paymentGrossDebit)}</span>
-                    </div>
-                    {numericTds > 0 && (
-                      <div className="flex justify-between text-[12px]">
-                        <span className="text-muted-foreground">TDS Amount</span>
-                        <span className="tabular-nums font-medium">{formatMoney(numericTds)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-[12px] border-t border-border/40 pt-1">
-                      <span className="text-muted-foreground font-medium">Net Bank Credit</span>
-                      <span className="tabular-nums font-semibold">{formatMoney(paymentNetBank)}</span>
-                    </div>
-                  </div>
+                {showPaymentReceiptExtras && (
+                  <>
+                    <VoucherAdjustmentsSection
+                      voucherKind={settlementKind}
+                      rows={adjustmentRows}
+                      onChange={setAdjustmentRows}
+                      readOnly={readOnly}
+                    />
+                    <VoucherSettlementSummary
+                      variant={settlementKind}
+                      grossAmount={grossAmount}
+                      adjustmentsTotal={adjustmentsTotal}
+                      netCashBankAmount={netCashBank}
+                      allocatedAmount={allocatedAmount}
+                      unallocatedOrAdvanceAmount={unallocatedAmount}
+                    />
+                  </>
                 )}
 
-                {voucherType === "payment" && showTdsSection && !readOnly && (
-                  <div className="mt-3 rounded-md border border-border/40 bg-white p-2 space-y-2 max-w-[420px]">
+                {voucherType === "payment" && showTdsSection && !readOnly && adjustmentRows.length === 0 && (
+                  <div className="mt-2 rounded-md border border-border/40 bg-white p-2 space-y-1.5 max-w-[420px]">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <Checkbox
                         checked={deductTds}
-                        onCheckedChange={(c) => setDeductTds(Boolean(c))}
+                        onCheckedChange={(c) => {
+                          const on = Boolean(c);
+                          setDeductTds(on);
+                          if (on && adjustmentRows.length === 0) {
+                            setAdjustmentRows([createEmptyAdjustmentRow("payment", "TDS")]);
+                          }
+                        }}
                       />
                       <span className={VOUCHER_PREVIEW_TEXT_CLASS}>Deduct TDS</span>
                       {vendor?.tdsApplicable && (
                         <span className="text-[11px] text-muted-foreground">
-                          (applicable for this vendor)
+                          (applicable for this vendor — adds an Adjustments row)
                         </span>
                       )}
                     </label>
@@ -528,7 +693,17 @@ export function StandardVoucherForm({
                           compact={false}
                           className={cn(VOUCHER_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS)}
                           value={numericTds}
-                          onChange={(v) => setTdsAmount(String(v))}
+                          onChange={(v) => {
+                            setTdsAmount(String(v));
+                            setAdjustmentRows((prev) => {
+                              if (prev.some((r) => r.adjustmentType === "TDS")) {
+                                return prev.map((r) =>
+                                  r.adjustmentType === "TDS" ? { ...r, amount: v } : r,
+                                );
+                              }
+                              return [{ ...createEmptyAdjustmentRow("payment", "TDS"), amount: v }];
+                            });
+                          }}
                         />
                       </VoucherFormField>
                     )}
@@ -565,7 +740,12 @@ export function StandardVoucherForm({
             }}
           />
 
-          <VoucherAccountingPostingSummary {...postingSummaryProps} />
+          {VOUCHER_IMPACT_DOC_KEY[voucherType] ? (
+            <AccountingImpactSection
+              docKey={VOUCHER_IMPACT_DOC_KEY[voucherType]!}
+              entryPreview={<VoucherAccountingPostingSummary {...postingSummaryProps} />}
+            />
+          ) : null}
 
           {readOnly &&
             resolvedVoucherId != null &&

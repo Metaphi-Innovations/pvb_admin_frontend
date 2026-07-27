@@ -7,21 +7,24 @@ import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
 import {
   CustomerForm,
   DEFAULT_CUSTOMER_FORM,
+  customerToFormValues,
   formValuesToCustomer,
   validateCustomerForm,
   type CustomerFormValues,
 } from "@/app/(app)/masters/customers/components/CustomerForm";
-import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 import {
-  createAccountsCustomerLedger,
-  generateAccountsCustomerCode,
-  nextAccountsCustomerId,
-  loadAccountsCustomerLedgers,
+  generateCustomerCodeForType,
+  loadCustomers,
+  nextCustomerId,
+  saveCustomers,
   todayStr,
-} from "@/lib/accounts/accounts-customer-ledger";
-import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+  type Customer,
+} from "@/app/(app)/masters/customers/customer-data";
+import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
+import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 import {
   ACCOUNTS_PAGE_SUBTITLE_CLASS,
   ACCOUNTS_PAGE_TITLE_CLASS,
@@ -56,36 +59,59 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export interface AccountsSundryDebtorCustomerFormProps {
   parentGroupId: number;
+  /** When set, edit existing Customer Master (same form / save path). */
+  customerId?: number;
   onClose: () => void;
   onSaved?: (ledgerId: number, parentGroupId: number | null) => void;
 }
 
 /**
- * Exact Customer Master form (Basic Details / Branch / Bank & Commercial tabs).
- * Rendered inside Accounts Chart of Accounts main panel — sidebar stays visible.
- * Saves only to Accounts storage (never ERP Customer Master).
+ * Same Customer Master form (incl. Accounting tab) embedded in Accounts COA.
+ * Saves Customer Master once and syncs the linked Sundry Debtor ledger.
  */
 export default function AccountsSundryDebtorCustomerFormClient({
   parentGroupId,
+  customerId,
   onClose,
   onSaved,
 }: AccountsSundryDebtorCustomerFormProps) {
   const mounted = useClientMounted();
   const canCreate = useCanCoa("create");
+  const canEdit = useCanCoa("edit");
+  const { selectedFY } = useFY();
+  const isEdit = customerId != null;
 
-  const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
+  const [form, setForm] = useState<CustomerFormValues>(() => ({
+    ...DEFAULT_CUSTOMER_FORM,
+    openingBalanceDate: fyOpeningDateIso(selectedFY.id),
+  }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [customerCode, setCustomerCode] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [ready, setReady] = useState(!isEdit);
 
   useEffect(() => {
+    if (!isEdit || customerId == null) return;
+    const found = loadCustomers().find((c) => c.id === customerId);
+    if (!found) {
+      setToast({ msg: "Customer not found.", type: "error" });
+      setTimeout(() => onClose(), 1200);
+      return;
+    }
+    setForm(customerToFormValues(found));
+    setCustomerCode(found.customerCode);
+    setReady(true);
+  }, [isEdit, customerId, onClose]);
+
+  useEffect(() => {
+    if (isEdit) return;
     if (!form.customerType) {
       setCustomerCode("");
       return;
     }
-    setCustomerCode(generateAccountsCustomerCode(form.customerType));
-  }, [form.customerType]);
+    setCustomerCode(generateCustomerCodeForType(form.customerType, loadCustomers()));
+  }, [form.customerType, isEdit]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -100,12 +126,12 @@ export default function AccountsSundryDebtorCustomerFormClient({
   };
 
   const handleSave = () => {
-    if (!canCreate) {
-      showToast("You do not have permission to create ledgers.", "error");
+    if (isEdit ? !canEdit : !canCreate) {
+      showToast("You do not have permission to save this customer.", "error");
       return;
     }
 
-    const e = validateCustomerForm(form, true, {
+    const e = validateCustomerForm(form, !isEdit, {
       requireComplianceValidityDates: true,
     });
     if (!form.customerType) {
@@ -123,43 +149,82 @@ export default function AccountsSundryDebtorCustomerFormClient({
 
     setSaving(true);
     try {
+      const list = loadCustomers();
       const today = todayStr();
       const status = form.status === "draft" ? "active" : form.status;
-      const customer = formValuesToCustomer(
-        { ...form, status },
-        {
-          id: nextAccountsCustomerId(loadAccountsCustomerLedgers()),
-          customerCode,
-          createdBy: ACCOUNTS_CURRENT_USER,
-          createdDate: today,
-          lastStatusChange: today,
-          blockReason: "",
-          statusHistory: [
-            {
-              date: today,
-              from: "-",
-              to: status,
-              by: ACCOUNTS_CURRENT_USER,
-              reason: "Customer ledger created from Accounts",
-            },
-          ],
-          creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing: null }),
-        },
-      );
 
-      const { ledger } = createAccountsCustomerLedger(customer, parentGroupId);
-      showToast("Customer ledger created in Accounts.", "success");
+      let record: Customer;
+      if (isEdit && customerId != null) {
+        const existing = list.find((c) => c.id === customerId);
+        if (!existing) throw new Error("Customer not found.");
+        record = formValuesToCustomer(
+          { ...form, status },
+          {
+            ...existing,
+            creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing }),
+            lastStatusChange:
+              existing.status !== status ? today : existing.lastStatusChange,
+            statusHistory:
+              existing.status !== status
+                ? [
+                    ...existing.statusHistory,
+                    {
+                      date: today,
+                      from: existing.status,
+                      to: status,
+                      by: "Admin",
+                      reason: "Updated from Chart of Accounts",
+                    },
+                  ]
+                : existing.statusHistory,
+          },
+        );
+        saveCustomers(list.map((c) => (c.id === record.id ? record : c)));
+      } else {
+        record = formValuesToCustomer(
+          { ...form, status },
+          {
+            id: nextCustomerId(list),
+            customerCode,
+            createdBy: "Admin",
+            createdDate: today,
+            lastStatusChange: today,
+            blockReason: "",
+            statusHistory: [
+              {
+                date: today,
+                from: "-",
+                to: status,
+                by: "Admin",
+                reason: "Customer created from Chart of Accounts",
+              },
+            ],
+            creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing: null }),
+          },
+        );
+        saveCustomers([...list, record]);
+      }
+
+      const ledger = syncCustomerLedger(record, { parentGroupId });
+      if (!ledger) {
+        throw new Error("Customer saved but linked ledger could not be created.");
+      }
+
+      showToast(
+        isEdit ? "Customer and ledger updated." : "Customer created with linked ledger.",
+        "success",
+      );
       setTimeout(() => {
-        onSaved?.(ledger.id, ledger.parentAccountId);
+        onSaved?.(ledger.id, ledger.parentAccountId ?? parentGroupId);
         onClose();
       }, 500);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save customer ledger.", "error");
+      showToast(err instanceof Error ? err.message : "Failed to save customer.", "error");
       setSaving(false);
     }
   };
 
-  if (!mounted) {
+  if (!mounted || !ready) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -167,12 +232,12 @@ export default function AccountsSundryDebtorCustomerFormClient({
     );
   }
 
-  if (!canCreate) {
+  if (isEdit ? !canEdit : !canCreate) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
         <p className="text-sm font-medium text-amber-800">Access restricted</p>
         <p className="text-xs text-muted-foreground">
-          You do not have permission to create ledgers under Chart of Accounts.
+          You do not have permission to {isEdit ? "edit" : "create"} customer ledgers.
         </p>
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
           Back
@@ -183,7 +248,6 @@ export default function AccountsSundryDebtorCustomerFormClient({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-background">
-      {/* Masters-style header — sidebar remains from Accounts shell */}
       <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-border bg-white px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <Button
@@ -197,9 +261,11 @@ export default function AccountsSundryDebtorCustomerFormClient({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>Add Customer</h1>
+            <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>
+              {isEdit ? "Edit Customer" : "Add Customer"}
+            </h1>
             <p className={ACCOUNTS_PAGE_SUBTITLE_CLASS}>
-              Accounts → Chart of Accounts → Sundry Debtors → Add
+              Accounts → Chart of Accounts → Sundry Debtors → {isEdit ? "Edit" : "Add"}
               {customerCode ? (
                 <>
                   {" · "}
@@ -217,7 +283,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
             onClick={onClose}
             disabled={saving}
           >
-            Discard
+            Cancel
           </Button>
           <Button
             size="sm"
@@ -225,12 +291,11 @@ export default function AccountsSundryDebtorCustomerFormClient({
             onClick={handleSave}
             disabled={saving}
           >
-            <Save className="h-3.5 w-3.5" /> Save
+            <Save className="h-3.5 w-3.5" /> {isEdit ? "Update" : "Save"}
           </Button>
         </div>
       </div>
 
-      {/* CustomerForm includes Basic Details / Branch / Bank & Commercial tabs */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         <div className="w-full rounded-xl border border-border bg-white p-4 shadow-sm sm:p-5">
           <CustomerForm
@@ -239,7 +304,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
             errors={errors}
             onSetErrors={setErrors}
             onClearError={clearErr}
-            isAdd={true}
+            isAdd={!isEdit}
             customerCode={customerCode}
             showComplianceValidityDates
           />

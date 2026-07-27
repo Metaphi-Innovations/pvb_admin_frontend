@@ -36,6 +36,7 @@ import { ensureTdsAccountingLedgers } from "@/lib/accounts/tds-accounting";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
 import { ACCOUNTS_SECTION_SEEDED_EVENT } from "@/lib/accounts/accounts-section-seed";
+import { enrichCoaRecordsWithStatutoryTaxSections } from "@/lib/accounts/coa-statutory-tax-display";
 import { useAccountsAccordion } from "./AccountsAccordionContext";
 
 /**
@@ -64,9 +65,14 @@ function expandAncestorsOf(
   return changed ? next : prev;
 }
 
+/** Module-level: prevent Strict Mode remount from scheduling a second idle backfill. */
+let coaIdleBackfillScheduled = false;
+
 function readCoaRecords(full = false): ChartOfAccount[] {
   if (typeof window === "undefined") return [];
-  return full ? loadChartOfAccounts() : loadChartOfAccountsCore();
+  const loaded = full ? loadChartOfAccounts() : loadChartOfAccountsCore();
+  // COA UI only — project active TDS/TCS master sections under Payable parents.
+  return enrichCoaRecordsWithStatutoryTaxSections(loaded);
 }
 
 function scheduleOnIdle(fn: () => void, timeoutMs: number): void {
@@ -164,8 +170,9 @@ export function CoaNavigationProvider({
       // Load immediately — deferred rAF left the sidebar blank for multiple frames/clicks.
       showTree(false);
 
-      if (initMode === "full" && !backfillRef.current) {
+      if (initMode === "full" && !backfillRef.current && !coaIdleBackfillScheduled) {
         backfillRef.current = true;
+        coaIdleBackfillScheduled = true;
 
         scheduleOnIdle(() => {
           if (cancelled) return;
@@ -218,6 +225,28 @@ export function CoaNavigationProvider({
     if (!coaReady || !needsCoaData) return;
     return subscribeCoaChanged(refreshRecords);
   }, [coaReady, needsCoaData, refreshRecords]);
+
+  /** Re-project TDS/TCS section children when Masters change (COA does not store them). */
+  useEffect(() => {
+    if (!coaReady || !needsCoaData) return;
+    const onMasterChanged = () => refreshRecords();
+    window.addEventListener("ds_tds_master_changed", onMasterChanged);
+    window.addEventListener("ds_tcs_master_changed", onMasterChanged);
+    return () => {
+      window.removeEventListener("ds_tds_master_changed", onMasterChanged);
+      window.removeEventListener("ds_tcs_master_changed", onMasterChanged);
+    };
+  }, [coaReady, needsCoaData, refreshRecords]);
+
+  const setRecordsWithTaxProjections = useCallback(
+    (action: React.SetStateAction<ChartOfAccount[]>) => {
+      setRecords((prev) => {
+        const next = typeof action === "function" ? action(prev) : action;
+        return enrichCoaRecordsWithStatutoryTaxSections(next);
+      });
+    },
+    [],
+  );
 
   const selectedNode = useMemo(
     () => (selectedId != null ? records.find((r) => r.id === selectedId) ?? null : null),
@@ -369,7 +398,7 @@ export function CoaNavigationProvider({
   const value = useMemo(
     () => ({
       records,
-      setRecords,
+      setRecords: setRecordsWithTaxProjections,
       selectedId,
       selectedNode,
       expandedIds,
@@ -388,6 +417,7 @@ export function CoaNavigationProvider({
     }),
     [
       records,
+      setRecordsWithTaxProjections,
       selectedId,
       selectedNode,
       expandedIds,
