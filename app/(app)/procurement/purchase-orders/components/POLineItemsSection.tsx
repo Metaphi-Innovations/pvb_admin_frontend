@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Check, Package, Pencil, Plus, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,19 +162,33 @@ export function POLineItemsSection({
     [],
   );
   const gstOptions = useMemo(() => getActiveGstMasterOptions(), []);
-  const productOptions = useMemo(() => {
-    const list = (dbProducts || []).map((p) => ({
-      value: String(p.product_id),
-      label: `${p.product_name} (${p.sku || p.product_code})`,
-    }));
+  const getProductOptions = (excludeLineUid?: string | null) => {
+    const list = (dbProducts || []).map((p) => {
+      const isAlreadyAdded = form.lines.some(
+        (l) => l.uid !== excludeLineUid && String(l.productId) === String(p.product_id)
+      );
+      return {
+        value: String(p.product_id),
+        label: `${p.product_name} (${p.sku || p.product_code})`,
+        disabled: isAlreadyAdded,
+        sublabel: isAlreadyAdded ? "Already added" : undefined,
+      };
+    });
     if (list.length === 0) {
-      return masterProducts.map((p) => ({
-        value: String(p.id),
-        label: `${p.productName} (${p.sku || p.productId})`,
-      }));
+      return masterProducts.map((p) => {
+        const isAlreadyAdded = form.lines.some(
+          (l) => l.uid !== excludeLineUid && String(l.productId) === String(p.id)
+        );
+        return {
+          value: String(p.id),
+          label: `${p.productName} (${p.sku || p.productId})`,
+          disabled: isAlreadyAdded,
+          sublabel: isAlreadyAdded ? "Already added" : undefined,
+        };
+      });
     }
     return list;
-  }, [dbProducts, masterProducts]);
+  };
 
   const filledLines = form.lines.filter((l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0");
   const totalPackingQty = filledLines.reduce((sum, l) => sum + (l.orderedQtyPack || 0), 0);
@@ -216,9 +231,19 @@ export function POLineItemsSection({
     if (quickProductIds.length === 0) return;
     const packingQty = Math.max(1, Number(quickQty) || 1);
     const nextLines = [...form.lines];
+    let addedCount = 0;
 
     for (const idStr of quickProductIds) {
       const productId = idStr;
+
+      // Check if product is already added
+      const isDuplicate = form.lines.some((l) => String(l.productId) === String(productId));
+      if (isDuplicate) {
+        const info = enrichProductFromDropdown(productId, dbProducts);
+        toast.error(`"${info?.productName || "Product"}" is already added to the purchase order.`);
+        continue;
+      }
+
       const line = lineFromProduct(productId, packingQty, form.supplierId, taxSupplyType, dbProducts);
       if (!line) continue;
 
@@ -230,8 +255,12 @@ export function POLineItemsSection({
         discountFlatAmount: 0,
         remarks: quickRemarks,
       });
+      addedCount++;
     }
-    patch({ lines: nextLines });
+
+    if (addedCount > 0) {
+      patch({ lines: nextLines });
+    }
     clearQuickFields();
   };
 
@@ -261,6 +290,17 @@ export function POLineItemsSection({
       setInlineEditError("Product is required");
       return;
     }
+
+    // Check if the product is already added in another line
+    const isDuplicate = form.lines.some(
+      (l) => l.uid !== inlineEditUid && String(l.productId) === String(productId)
+    );
+    if (isDuplicate) {
+      setInlineEditError("This product is already added to the purchase order");
+      toast.error("This product is already added to the purchase order.");
+      return;
+    }
+
     const base = lineFromProduct(productId, packingQty, form.supplierId, taxSupplyType, dbProducts);
     if (!base) return;
     const taxRates = applyGstMasterToTaxRates(Number(inlineEditDraft.gstMasterId), taxSupplyType);
@@ -344,7 +384,7 @@ export function POLineItemsSection({
             <div className="space-y-1">
               <Label className="text-xs font-medium">Product</Label>
               <AutocompleteSelect
-                options={productOptions}
+                options={getProductOptions(null)}
                 value={quickProductIds}
                 onChange={(val) => setQuickProductIds(Array.isArray(val) ? val.map(String) : [])}
                 multiple
@@ -511,10 +551,18 @@ export function POLineItemsSection({
                     <td className="px-3 py-2">
                       {isEditing && draft && canChangeProduct ? (
                         <AutocompleteSelect
-                          options={productOptions}
+                          options={getProductOptions(line.uid)}
                           value={draft.productId}
                           onChange={(val) => {
                             const productId = String(val);
+                            const isDuplicate = form.lines.some(
+                              (l) => l.uid !== inlineEditUid && String(l.productId) === String(productId)
+                            );
+                            if (isDuplicate) {
+                              setInlineEditError("This product is already added to the purchase order");
+                              toast.error("This product is already added to the purchase order.");
+                              return;
+                            }
                             const gst = parseFloat(findProductRefGst(productId, dbProducts).replace(/%/g, "")) || 0;
                             const gstMasterId =
                               findGstMasterIdByTotalPct(gst) ?? getDefaultGstMasterId();
