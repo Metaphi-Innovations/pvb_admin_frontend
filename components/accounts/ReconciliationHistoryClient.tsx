@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
@@ -13,10 +13,14 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   AccountsTableEmpty,
   AccountsTableListing,
@@ -59,6 +63,75 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
+function ReconciliationHistoryTable({ toolbarRows }: { toolbarRows: ReconciliationHistoryEntry[] }) {
+  const visible = useAccountsFilteredRows<ReconciliationHistoryEntry>(toolbarRows);
+
+  return (
+    <AccountsTable minWidth={1100}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Bank Account" colKey="bankAccountName" />
+          <SortTh label="Narration" colKey="narration" className="accounts-col-wide" />
+          <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
+          <SortTh label="Category" colKey="category" />
+          <SortTh label="Ledger" colKey="ledger" />
+          <SortTh label="Journal Entry" colKey="journalEntryNumber" />
+          <SortTh label="Categorized By" colKey="categorizedBy" />
+          <SortTh label="Reconciled By" colKey="reconciledBy" />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {toolbarRows.length === 0 ? (
+          <AccountsTableEmpty colSpan={9} message="No reconciliation history. Categorized transactions will appear here." />
+        ) : visible.length === 0 ? (
+          <AccountsTableEmpty colSpan={9} message="No records match the column filters." />
+        ) : (
+          visible.map((entry) => (
+            <AccountsTableRow key={entry.transactionId}>
+              <AccountsTableCell>{entry.transactionDate}</AccountsTableCell>
+              <AccountsTableCell className="font-medium">{entry.bankAccountName}</AccountsTableCell>
+              <AccountsTableCell wrap>
+                <span className="line-clamp-1">{entry.narration}</span>
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money>{formatMoney(entry.amount)}</AccountsTableCell>
+              <AccountsTableCell>
+                <CategoryBadge category={entry.category} />
+              </AccountsTableCell>
+              <AccountsTableCell>{entry.ledgerName}</AccountsTableCell>
+              <AccountsTableCell mono>{entry.journalEntryNumber}</AccountsTableCell>
+              <AccountsTableCell wrap>
+                <div className="flex items-center gap-1">
+                  <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                  <span>{entry.categorizedBy}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(entry.categorizedAt).toLocaleString()}
+                </span>
+              </AccountsTableCell>
+              <AccountsTableCell wrap>
+                {entry.reconciledBy ? (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                      <span>{entry.reconciledBy}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(entry.reconciledAt).toLocaleString()}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </AccountsTableCell>
+            </AccountsTableRow>
+          ))
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
 export function ReconciliationHistoryClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [bankAccountId, setBankAccountId] = useState<number | undefined>();
@@ -72,6 +145,23 @@ export function ReconciliationHistoryClient() {
       endDate: dateTo || undefined,
     });
   }, [bankAccountId, dateFrom, dateTo]);
+
+  const toolbarRows = history;
+
+  const getCellValue = useCallback((row: ReconciliationHistoryEntry, key: string) => {
+    switch (key) {
+      case "date":
+        return row.transactionDate;
+      case "ledger":
+        return row.ledgerName;
+      case "category": {
+        const cat = TRANSACTION_CATEGORIES.find((c) => c.value === row.category);
+        return cat?.label ?? row.category;
+      }
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
 
   const exportToExcel = () => {
     // Simple CSV export
@@ -114,10 +204,72 @@ export function ReconciliationHistoryClient() {
   };
 
   return (
+    <AccountsColumnFilterProvider
+      rows={toolbarRows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        date: { type: "date" },
+        bankAccountName: { type: "text" },
+        narration: { type: "text" },
+        amount: { type: "amount" },
+        category: { type: "text" },
+        ledger: { type: "text" },
+        journalEntryNumber: { type: "text" },
+        categorizedBy: { type: "text" },
+        reconciledBy: { type: "text" },
+      }}
+      defaultSortKey="date"
+      defaultSortDir="desc"
+    >
+      <ReconciliationHistoryListing
+        toolbarRows={toolbarRows}
+        bankAccountId={bankAccountId}
+        setBankAccountId={setBankAccountId}
+        bankAccounts={bankAccounts}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        exportToExcel={exportToExcel}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function ReconciliationHistoryListing({
+  toolbarRows,
+  bankAccountId,
+  setBankAccountId,
+  bankAccounts,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  exportToExcel,
+}: {
+  toolbarRows: ReconciliationHistoryEntry[];
+  bankAccountId: number | undefined;
+  setBankAccountId: (id: number | undefined) => void;
+  bankAccounts: ReturnType<typeof listBankAccountSelectOptions>;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  exportToExcel: () => void;
+}) {
+  const visible = useAccountsFilteredRows<ReconciliationHistoryEntry>(toolbarRows);
+
+  return (
     <AccountsTableListing
       toolbar={
         <AccountsListingToolbar
-          actions={<AccountsExportMenu onExcel={exportToExcel} onCsv={exportToExcel} disabled={history.length === 0} />}
+          actions={<AccountsExportMenu onExcel={exportToExcel} onCsv={exportToExcel} disabled={toolbarRows.length === 0} />}
         >
           <div className="space-y-1 min-w-[140px]">
             <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Bank Account</Label>
@@ -149,73 +301,14 @@ export function ReconciliationHistoryClient() {
         </AccountsListingToolbar>
       }
       footer={
-        history.length > 0 ? (
+        visible.length > 0 ? (
           <AccountsListingCountFooter>
-            Showing <span className="font-medium text-foreground">{history.length}</span> record(s)
+            Showing <span className="font-medium text-foreground">{visible.length}</span> record(s)
           </AccountsListingCountFooter>
         ) : undefined
       }
     >
-      <AccountsTable minWidth={1100}>
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Bank Account</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase className="accounts-col-wide">Narration</AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" uppercase>Amount</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Category</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Ledger</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Journal Entry</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Categorized By</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Reconciled By</AccountsTableHeadCell>
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {history.length === 0 ? (
-            <AccountsTableEmpty colSpan={9} message="No reconciliation history. Categorized transactions will appear here." />
-          ) : (
-            history.map((entry) => (
-              <AccountsTableRow key={entry.transactionId}>
-                <AccountsTableCell>{entry.transactionDate}</AccountsTableCell>
-                <AccountsTableCell className="font-medium">{entry.bankAccountName}</AccountsTableCell>
-                <AccountsTableCell wrap>
-                  <span className="line-clamp-1">{entry.narration}</span>
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>{formatMoney(entry.amount)}</AccountsTableCell>
-                <AccountsTableCell>
-                  <CategoryBadge category={entry.category} />
-                </AccountsTableCell>
-                <AccountsTableCell>{entry.ledgerName}</AccountsTableCell>
-                <AccountsTableCell mono>{entry.journalEntryNumber}</AccountsTableCell>
-                <AccountsTableCell wrap>
-                  <div className="flex items-center gap-1">
-                    <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                    <span>{entry.categorizedBy}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(entry.categorizedAt).toLocaleString()}
-                  </span>
-                </AccountsTableCell>
-                <AccountsTableCell wrap>
-                  {entry.reconciledBy ? (
-                    <>
-                      <div className="flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                        <span>{entry.reconciledBy}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(entry.reconciledAt).toLocaleString()}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ))
-          )}
-        </AccountsTableBody>
-      </AccountsTable>
+      <ReconciliationHistoryTable toolbarRows={toolbarRows} />
     </AccountsTableListing>
   );
 }

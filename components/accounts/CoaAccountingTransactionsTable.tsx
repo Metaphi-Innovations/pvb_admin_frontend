@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
@@ -11,11 +11,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 
 export interface LedgerStatementFooter {
   totalDebit: number;
@@ -24,15 +28,15 @@ export interface LedgerStatementFooter {
   closingBalanceType: "Debit" | "Credit";
 }
 
-const LEDGER_DETAIL_COLUMNS = [
-  { key: "date", label: "Date", align: "left" as const },
-  { key: "voucherNo", label: "Voucher No.", align: "left" as const },
-  { key: "voucherType", label: "Voucher Type", align: "left" as const },
-  { key: "narration", label: "Particulars / Narration", align: "left" as const },
-  { key: "debit", label: "Debit (₹)", align: "right" as const },
-  { key: "credit", label: "Credit (₹)", align: "right" as const },
-  { key: "running", label: "Running Balance (Dr/Cr)", align: "right" as const },
-];
+const COLUMN_CONFIG = {
+  date: { type: "date" as const },
+  voucherNo: { type: "text" as const },
+  voucherType: { type: "text" as const },
+  narration: { type: "text" as const },
+  debit: { type: "amount" as const },
+  credit: { type: "amount" as const },
+  running: { type: "amount" as const },
+};
 
 function NarrationCell({ text }: { text: string }) {
   const display = text || "—";
@@ -61,6 +65,71 @@ function VoucherNoCell({ row }: { row: CoaTransactionRow }) {
   );
 }
 
+function CoaTransactionsTableBody({
+  rows,
+  showRunningBalance,
+}: {
+  rows: CoaTransactionRow[];
+  showRunningBalance: boolean;
+}) {
+  const visible = useAccountsFilteredRows<CoaTransactionRow>(rows);
+
+  return (
+    <>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Voucher No." colKey="voucherNo" />
+          <SortTh label="Voucher Type" colKey="voucherType" />
+          <SortTh label="Particulars / Narration" colKey="narration" />
+          <SortTh label="Debit (₹)" colKey="debit" filterType="amount" align="right" />
+          <SortTh label="Credit (₹)" colKey="credit" filterType="amount" align="right" />
+          {showRunningBalance && (
+            <SortTh label="Running Balance (Dr/Cr)" colKey="running" filterType="amount" align="right" />
+          )}
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {visible.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={showRunningBalance ? 7 : 6} className="accounts-table-empty">
+              No records match the column filters.
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          visible.map((r, i) => (
+            <AccountsTableRow
+              key={`${r.voucherNo}-${r.date}-${r.referenceNo}-${i}`}
+              className={cn(r.isOpeningRow && "font-medium", !showRunningBalance && "group")}
+            >
+              <AccountsTableCell className="whitespace-nowrap">{r.date || "—"}</AccountsTableCell>
+              <AccountsTableCell className="whitespace-nowrap">
+                <VoucherNoCell row={r} />
+              </AccountsTableCell>
+              <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
+              <AccountsTableCell className={showRunningBalance ? "max-w-[280px]" : "text-muted-foreground max-w-[240px] truncate"} title={r.narration}>
+                {showRunningBalance ? <NarrationCell text={r.narration} /> : r.narration}
+              </AccountsTableCell>
+              <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
+              <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
+              {showRunningBalance && (
+                <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
+                  <MoneyAmount
+                    amount={r.runningBalance}
+                    side={r.runningBalanceType}
+                    sideBadge
+                    className="text-xs justify-end"
+                  />
+                </AccountsTableCell>
+              )}
+            </AccountsTableRow>
+          ))
+        )}
+      </AccountsTableBody>
+    </>
+  );
+}
+
 export function CoaAccountingTransactionsTable({
   rows,
   emptyLabel = "No transactions yet.",
@@ -79,15 +148,10 @@ export function CoaAccountingTransactionsTable({
 }) {
   const isLedgerDetail = variant === "ledger-detail";
 
-  const compactColumns = [
-    "Date",
-    "Voucher No.",
-    "Voucher Type",
-    "Particulars / Narration",
-    "Debit (₹)",
-    "Credit (₹)",
-    ...(showRunningBalance ? ["Running Balance (Dr/Cr)"] : []),
-  ];
+  const getCellValue = useCallback((row: CoaTransactionRow, key: string) => {
+    if (key === "running") return row.runningBalance;
+    return (row as unknown as Record<string, unknown>)[key];
+  }, []);
 
   if (rows.length === 0) {
     return (
@@ -99,119 +163,59 @@ export function CoaAccountingTransactionsTable({
 
   if (isLedgerDetail) {
     return (
-      <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableScroll>
-          <AccountsTable minWidth={900}>
-            <AccountsTableHead>
-              <AccountsTableHeadRow>
-                {LEDGER_DETAIL_COLUMNS.map((col) => (
-                  <AccountsTableHeadCell key={col.key} align={col.align}>
-                    {col.label}
-                  </AccountsTableHeadCell>
-                ))}
-              </AccountsTableHeadRow>
-            </AccountsTableHead>
-            <AccountsTableBody>
-              {rows.map((r, i) => (
-                <AccountsTableRow
-                  key={`${r.voucherNo}-${r.date}-${r.referenceNo}-${i}`}
-                  className={cn(r.isOpeningRow && "font-medium")}
-                >
-                  <AccountsTableCell className="whitespace-nowrap">{r.date || "—"}</AccountsTableCell>
-                  <AccountsTableCell className="whitespace-nowrap">
-                    <VoucherNoCell row={r} />
-                  </AccountsTableCell>
-                  <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
-                  <AccountsTableCell className="max-w-[280px]">
-                    <NarrationCell text={r.narration} />
-                  </AccountsTableCell>
-                  <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
-                  <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
-                  <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-                    <MoneyAmount
-                      amount={r.runningBalance}
-                      side={r.runningBalanceType}
-                      sideBadge
-                      className="text-xs justify-end"
-                    />
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))}
-            </AccountsTableBody>
-          </AccountsTable>
-        </AccountsTableScroll>
+      <AccountsColumnFilterProvider
+        rows={rows}
+        getCellValue={getCellValue}
+        columnConfig={COLUMN_CONFIG}
+        defaultSortKey="date"
+        defaultSortDir="asc"
+      >
+        <div className="flex flex-col flex-1 min-h-0">
+          <AccountsTableScroll>
+            <AccountsTable minWidth={900}>
+              <CoaTransactionsTableBody rows={rows} showRunningBalance />
+            </AccountsTable>
+          </AccountsTableScroll>
 
-        {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 px-4 py-2.5 border-t border-border bg-muted/20 text-xs flex-shrink-0">
-            <span className="tabular-nums">
-              <span className="text-muted-foreground">Total Debit: </span>
-              <span className="font-semibold text-foreground">{formatMoney(footer.totalDebit)}</span>
-            </span>
-            <span className="tabular-nums">
-              <span className="text-muted-foreground">Total Credit: </span>
-              <span className="font-semibold text-foreground">{formatMoney(footer.totalCredit)}</span>
-            </span>
-            <span className="tabular-nums">
-              <span className="text-muted-foreground">Closing Balance: </span>
-              <MoneyAmount
-                amount={footer.closingBalance}
-                side={footer.closingBalanceType}
-                sideBadge
-                className="inline text-xs font-semibold"
-              />
-            </span>
-          </div>
-        )}
-      </div>
+          {footer && (
+            <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 px-4 py-2.5 border-t border-border bg-muted/20 text-xs flex-shrink-0">
+              <span className="tabular-nums">
+                <span className="text-muted-foreground">Total Debit: </span>
+                <span className="font-semibold text-foreground">{formatMoney(footer.totalDebit)}</span>
+              </span>
+              <span className="tabular-nums">
+                <span className="text-muted-foreground">Total Credit: </span>
+                <span className="font-semibold text-foreground">{formatMoney(footer.totalCredit)}</span>
+              </span>
+              <span className="tabular-nums">
+                <span className="text-muted-foreground">Closing Balance: </span>
+                <MoneyAmount
+                  amount={footer.closingBalance}
+                  side={footer.closingBalanceType}
+                  sideBadge
+                  className="inline text-xs font-semibold"
+                />
+              </span>
+            </div>
+          )}
+        </div>
+      </AccountsColumnFilterProvider>
     );
   }
 
   return (
-    <AccountsTableScroll className="overflow-x-auto">
-      <AccountsTable className="text-sm">
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            {compactColumns.map((h) => (
-              <AccountsTableHeadCell
-                key={h}
-                align={
-                  h.startsWith("Debit") || h.startsWith("Credit") || h.startsWith("Running")
-                    ? "right"
-                    : "left"
-                }
-              >
-                {h}
-              </AccountsTableHeadCell>
-            ))}
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {rows.map((r, i) => (
-            <AccountsTableRow key={`${r.voucherNo}-${r.date}-${i}`} className="group">
-              <AccountsTableCell className="whitespace-nowrap">{r.date}</AccountsTableCell>
-              <AccountsTableCell className="whitespace-nowrap">
-                <VoucherNoCell row={r} />
-              </AccountsTableCell>
-              <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
-              <AccountsTableCell className="text-muted-foreground max-w-[240px] truncate" title={r.narration}>
-                {r.narration}
-              </AccountsTableCell>
-              <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
-              <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
-              {showRunningBalance && (
-                <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-                  <MoneyAmount
-                    amount={r.runningBalance}
-                    side={r.runningBalanceType}
-                    sideBadge
-                    className="text-xs justify-end"
-                  />
-                </AccountsTableCell>
-              )}
-            </AccountsTableRow>
-          ))}
-        </AccountsTableBody>
-      </AccountsTable>
-    </AccountsTableScroll>
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={COLUMN_CONFIG}
+      defaultSortKey="date"
+      defaultSortDir="desc"
+    >
+      <AccountsTableScroll className="overflow-x-auto">
+        <AccountsTable className="text-sm">
+          <CoaTransactionsTableBody rows={rows} showRunningBalance={showRunningBalance} />
+        </AccountsTable>
+      </AccountsTableScroll>
+    </AccountsColumnFilterProvider>
   );
 }

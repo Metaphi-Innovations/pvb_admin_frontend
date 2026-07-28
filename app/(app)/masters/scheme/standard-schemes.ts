@@ -279,12 +279,17 @@ export function isPaymentRecord(record: SchemeRecord): boolean {
   return record.schemeType === "Payment Discount Scheme";
 }
 
+export function isSpecialRecord(record: SchemeRecord): boolean {
+  return record.schemeType === "Special Discount Scheme";
+}
+
 export function isStandardSchemeRecord(record: SchemeRecord): boolean {
   return (
     isFestiveRecord(record) ||
     isCashRecord(record) ||
     isTurnoverRecord(record) ||
-    isPaymentRecord(record)
+    isPaymentRecord(record) ||
+    isSpecialRecord(record)
   );
 }
 
@@ -1103,54 +1108,11 @@ export function copyStandardSchemeRecord(
 
 export const STANDARD_SCHEME_SEED: SchemeRecord[] = [
   {
-    id: 101,
-    schemeCode: "FST-001",
-    schemeName: "Diwali Distributor Offer",
-    schemeType: "Festive Discount Scheme",
-    festivalName: "Diwali",
-    productScope: "All",
-    stateId: "Maharashtra",
-    stateName: "Maharashtra, Gujarat",
-    customerType: "Distributor",
-    discountType: "Percentage",
-    discountValue: 5,
-    minimumOrderValue: 50000,
-    approvalStatus: "active",
-    startDate: "2026-10-01",
-    endDate: "2026-11-15",
-    status: "active",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-09-01",
-    updatedAt: "2026-10-05",
-  },
-  {
-    id: 102,
-    schemeCode: "FST-002",
-    schemeName: "Holi Specific Products Draft",
-    schemeType: "Festive Discount Scheme",
-    festivalName: "Holi",
-    productScope: "Specific",
-    selectedProductIds: ["1", "2"],
-    stateId: "Karnataka",
-    stateName: "Karnataka",
-    customerType: "Retailer",
-    discountType: "Fixed Amount",
-    discountValue: 100,
-    approvalStatus: "draft",
-    startDate: "2026-03-01",
-    endDate: "2026-03-31",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-02-15",
-    updatedAt: "2026-02-15",
-  },
-  {
     id: 103,
     schemeCode: "CSH-001",
     schemeName: "Cash Payment Instant Rebate",
     schemeType: "Cash Discount Scheme",
+    schemeCategory: "Cash Discount",
     minimumOrderValue: 25000,
     stateId: "Maharashtra",
     stateName: "Maharashtra",
@@ -1167,30 +1129,11 @@ export const STANDARD_SCHEME_SEED: SchemeRecord[] = [
     updatedAt: "2026-01-10",
   },
   {
-    id: 104,
-    schemeCode: "CSH-002",
-    schemeName: "Prepaid Order Discount Draft",
-    schemeType: "Cash Discount Scheme",
-    minimumOrderValue: 100000,
-    stateId: "Gujarat",
-    stateName: "Gujarat, Maharashtra",
-    customerType: "Wholesaler",
-    discountType: "Fixed Amount",
-    discountValue: 1500,
-    approvalStatus: "draft",
-    startDate: "2026-04-01",
-    endDate: "2026-09-30",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-03-20",
-    updatedAt: "2026-03-20",
-  },
-  {
     id: 105,
     schemeCode: "TUR-001",
     schemeName: "Q1 Turnover Slab Rebate",
     schemeType: "Turnover Discount Scheme",
+    schemeCategory: "Turnover Discount",
     turnoverPeriod: "Quarterly",
     turnoverSlabs: [
       { fromTurnover: 500000, toTurnover: 1000000, benefitPercent: 1 },
@@ -1211,35 +1154,14 @@ export const STANDARD_SCHEME_SEED: SchemeRecord[] = [
     updatedAt: "2026-01-02",
   },
   {
-    id: 106,
-    schemeCode: "TUR-002",
-    schemeName: "Custom Period Turnover Draft",
-    schemeType: "Turnover Discount Scheme",
-    turnoverPeriod: "Custom",
-    turnoverSlabs: [
-      { fromTurnover: 200000, toTurnover: 500000, benefitPercent: 1.5 },
-      { fromTurnover: 500000, toTurnover: null, benefitPercent: 2.5 },
-    ],
-    stateId: "Tamil Nadu",
-    stateName: "Tamil Nadu",
-    customerType: "All",
-    approvalStatus: "draft",
-    startDate: "2026-05-01",
-    endDate: "2026-08-31",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-04-10",
-    updatedAt: "2026-04-10",
-  },
-  {
     id: 107,
     schemeCode: "PAY-001",
     schemeName: "ABC Distributor Outstanding Settlement",
     schemeType: "Payment Discount Scheme",
+    schemeCategory: "Payment Discount",
     effectType: "POST_PAYMENT_CN_JV",
-    appliedIn: "Accounts Receivables / Payment Collection",
-    settlementMethod: "Credit Note / Journal Voucher",
+    appliedIn: "Receipt Allocation",
+    settlementMethod: "Credit Note",
     stateId: "Maharashtra",
     stateName: "Maharashtra",
     customerType: "Distributor",
@@ -1261,34 +1183,6 @@ export const STANDARD_SCHEME_SEED: SchemeRecord[] = [
     createdAt: "2026-01-08",
     updatedAt: "2026-01-15",
   },
-  {
-    id: 108,
-    schemeCode: "PAY-002",
-    schemeName: "Partial Collection Waiver Draft",
-    schemeType: "Payment Discount Scheme",
-    effectType: "POST_PAYMENT_CN_JV",
-    appliedIn: "Accounts Receivables / Payment Collection",
-    settlementMethod: "Credit Note / Journal Voucher",
-    stateId: "Delhi",
-    stateName: "Delhi",
-    customerType: "Retailer",
-    minimumOutstandingAmount: 50000,
-    outstandingAgeCondition: "More than 60 Days",
-    paymentOfferBasis: "Discount / Waiver %",
-    originalOutstandingAmount: 200000,
-    customerPayableAmount: 160000,
-    waiverAmount: 40000,
-    waiverPercent: 20,
-    isPaymentLevel: true,
-    approvalStatus: "draft",
-    startDate: "2026-06-01",
-    endDate: "2026-12-31",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-05-20",
-    updatedAt: "2026-05-20",
-  },
 ];
 
 export { loadSchemeStateOptions };
@@ -1300,6 +1194,7 @@ export function canEditStandardSchemeRecord(record: SchemeRecord): boolean {
   if (isCashRecord(record)) return canEditCashScheme(record);
   if (isTurnoverRecord(record)) return canEditTurnoverScheme(record);
   if (isPaymentRecord(record)) return canEditPaymentScheme(record);
+  if (isSpecialRecord(record)) return isSchemeEditable(record);
   return false;
 }
 
@@ -1308,6 +1203,7 @@ export function canSubmitStandardSchemeRecord(record: SchemeRecord): boolean {
   if (isCashRecord(record)) return canSubmitCashScheme(record);
   if (isTurnoverRecord(record)) return canSubmitTurnoverScheme(record);
   if (isPaymentRecord(record)) return canSubmitPaymentScheme(record);
+  if (isSpecialRecord(record)) return record.approvalStatus === "draft" || record.approvalStatus === "rejected";
   return false;
 }
 
@@ -1316,6 +1212,7 @@ export function canApproveStandardSchemeRecord(record: SchemeRecord): boolean {
   if (isCashRecord(record)) return canApproveCashScheme(record);
   if (isTurnoverRecord(record)) return canApproveTurnoverScheme(record);
   if (isPaymentRecord(record)) return canApprovePaymentScheme(record);
+  if (isSpecialRecord(record)) return PENDING_APPROVAL_STATUSES.includes(record.approvalStatus);
   return false;
 }
 
@@ -1332,6 +1229,7 @@ export function canActivateStandardSchemeRecord(record: SchemeRecord): boolean {
   if (isCashRecord(record)) return canActivateCashScheme(record);
   if (isTurnoverRecord(record)) return canActivateTurnoverScheme(record);
   if (isPaymentRecord(record)) return canActivatePaymentScheme(record);
+  if (isSpecialRecord(record)) return record.approvalStatus === "approved";
   return false;
 }
 
@@ -1340,6 +1238,9 @@ export function canDeactivateStandardSchemeRecord(record: SchemeRecord): boolean
   if (isCashRecord(record)) return canDeactivateCashScheme(record);
   if (isTurnoverRecord(record)) return canDeactivateTurnoverScheme(record);
   if (isPaymentRecord(record)) return canDeactivatePaymentScheme(record);
+  if (isSpecialRecord(record)) {
+    return record.approvalStatus === "active" || record.status === "active";
+  }
   return false;
 }
 
@@ -1348,6 +1249,7 @@ export function canCopyStandardSchemeRecord(record: SchemeRecord): boolean {
   if (isCashRecord(record)) return canCopyCashScheme(record);
   if (isTurnoverRecord(record)) return canCopyTurnoverScheme(record);
   if (isPaymentRecord(record)) return canCopyPaymentScheme(record);
+  if (isSpecialRecord(record)) return true;
   return false;
 }
 
@@ -1356,6 +1258,11 @@ export function formatStandardSchemeOperationalStatus(record: SchemeRecord): str
   if (isCashRecord(record)) return formatCashOperationalStatus(record);
   if (isTurnoverRecord(record)) return formatTurnoverOperationalStatus(record);
   if (isPaymentRecord(record)) return formatPaymentOperationalStatus(record);
+  if (isSpecialRecord(record)) {
+    if (record.approvalStatus === "active" || record.status === "active") return "Active";
+    if (PENDING_APPROVAL_STATUSES.includes(record.approvalStatus)) return "Pending";
+    return "Inactive";
+  }
   return "Inactive";
 }
 
@@ -1381,6 +1288,10 @@ export function resolveStandardSchemeScope(record: SchemeRecord): string {
         : "—";
     return `Min ${minOut}`;
   }
+  if (isSpecialRecord(record)) {
+    const slabs = record.configSlabs?.length ?? 0;
+    return slabs ? `${slabs} slab${slabs > 1 ? "s" : ""}` : record.schemeCategory ?? "Special";
+  }
   return "—";
 }
 
@@ -1389,6 +1300,13 @@ export function resolveStandardSchemeBenefit(record: SchemeRecord): string {
   if (isCashRecord(record)) return formatCashBenefit(record);
   if (isTurnoverRecord(record)) return formatTurnoverBenefit(record);
   if (isPaymentRecord(record)) return formatPaymentBenefit(record);
+  if (isSpecialRecord(record)) {
+    const first = record.configSlabs?.[0];
+    if (!first) return record.settlementBehaviour ?? "Credit Note";
+    if (first.discountType === "Percentage") return `${first.discountValue}%`;
+    if (first.discountType === "Amount Per Unit") return `₹${first.discountValue}/unit`;
+    return formatSchemeRupee(first.discountValue);
+  }
   return "—";
 }
 

@@ -1,5 +1,8 @@
 // Document Type Master Data & Storage Helpers
 
+import type { DocumentTypeListRecord } from "@/services/document-type-list.service";
+import type { DocumentTypeFormValues } from "./components/DocumentTypeForm";
+
 export interface DocumentTypeMaster {
   id: string; // e.g. "DT-001"
   documentTypeCode: string;
@@ -81,4 +84,36 @@ export function generateNextDocumentTypeCode(list: DocumentTypeMaster[]): string
 
 export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+export interface DocumentTypeRecord {
+  id: string;
+  title: string;
+  description: string;
+  status: "Active" | "Inactive";
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export function toDocumentTypeRecord(item: DocumentTypeListRecord): DocumentTypeRecord {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdAt: item.createdAt ? item.createdAt.slice(0, 10) : "",
+    updatedBy: item.updatedBy || "—",
+    updatedAt: item.updatedAt ? item.updatedAt.slice(0, 10) : "",
+  };
+}
+
+export function documentTypeToForm(record: DocumentTypeRecord): DocumentTypeFormValues {
+  return {
+    documentTypeCode: "",
+    title: record.title,
+    description: record.description || "",
+  };
 }

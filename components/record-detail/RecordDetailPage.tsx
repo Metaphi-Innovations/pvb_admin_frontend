@@ -21,5 +21,12 @@ export function RecordDetailPage({ alert, embedded, ...layoutProps }: RecordDeta
 
   if (embedded) return content;
 
-  return <AppLayout>{content}</AppLayout>;
+  return (
+    <AppLayout noPadding className="!p-0">
+      {/* Scroll below TopNavbar (56px) + AppHeader (48px) so sticky summary stays fully visible */}
+      <div className="h-[calc(100vh-104px)] overflow-y-auto">
+        {content}
+      </div>
+    </AppLayout>
+  );
 }

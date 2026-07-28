@@ -152,7 +152,7 @@ export function saveLedgerMeta(ledgerId: number, meta: LedgerExtendedMeta) {
   writeAll(all);
 }
 
-export function deleteLedgerMeta(ledgerId: number) {
+export function deleteLedgerMeta(ledgerId: import("@/app/(app)/accounts/data").CoaNodeId) {
   const all = readAll();
   delete all[String(ledgerId)];
   writeAll(all);
@@ -174,9 +174,9 @@ export function resolveParentForLedgerType(
 ): number | null {
   switch (ledgerType) {
     case "Customer":
-      return findSubGroup(records, "trade receivables")?.id ?? findSubGroup(records, "sundry debtors")?.id ?? null;
+      return findSubGroup(records, "sundry debtors")?.id ?? findSubGroup(records, "trade receivables")?.id ?? findSubGroup(records, "accounts receivable")?.id ?? null;
     case "Vendor":
-      return findSubGroup(records, "trade payables")?.id ?? findSubGroup(records, "sundry creditors")?.id ?? null;
+      return findSubGroup(records, "sundry creditors")?.id ?? findSubGroup(records, "trade payables")?.id ?? findSubGroup(records, "accounts payable")?.id ?? null;
     case "Bank":
       return findSubGroup(records, "bank accounts")?.id ?? null;
     case "Cash":

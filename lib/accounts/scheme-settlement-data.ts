@@ -219,6 +219,7 @@ export function buildSchemeSettlementJournalLines(
     null;
   const receivableLedger =
     findLedgerByNameHint(customerName) ??
+    findLedgerByNameHint("Sundry Debtors") ??
     findLedgerByNameHint("Trade Receivables") ??
     null;
 

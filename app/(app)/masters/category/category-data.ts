@@ -106,5 +106,6 @@ export function formToCategory(form: CategoryForm, id: number, existing?: Catego
 
 export function validateCategoryForm(form: CategoryForm): string | null {
   if (!form.categoryName.trim()) return "Category name is required.";
+  if (form.categoryName.trim().length < 3) return "Category name must be at least 3 characters.";
   return null;
 }

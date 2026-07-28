@@ -1,5 +1,6 @@
-import FundTransferPageClient from "./FundTransferPageClient";
+import { redirect } from "next/navigation";
 
-export default function FundTransferPage() {
-  return <FundTransferPageClient />;
+/** Fund Transfer module removed — use Contra Voucher for bank/cash transfers. */
+export default function FundTransferRedirectPage() {
+  redirect("/accounts/banking/bank-accounts");
 }

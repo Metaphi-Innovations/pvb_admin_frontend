@@ -1,0 +1,73 @@
+/* Bank Reconciliation workspace only — high-volume accounting density. */
+
+.bank-recon-dense .bank-recon-grid .accounts-table-th {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1.15;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.bank-recon-dense .bank-recon-grid .accounts-table-td {
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.bank-recon-dense .bank-recon-grid .accounts-table-td-inner {
+  min-width: 0;
+  height: 35px;
+  overflow: hidden;
+}
+
+.bank-recon-dense .bank-recon-grid .accounts-table-row {
+  height: 36px;
+}
+
+.bank-recon-dense .bank-recon-grid .accounts-table-row button,
+.bank-recon-dense .bank-recon-grid .accounts-table-row input {
+  line-height: 1;
+}
+
+.bank-recon-dense .bank-recon-grid .accounts-table-row [class*="rounded-full"] {
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+.bank-recon-dense .bank-recon-pagination > div,
+.bank-recon-dense .bank-recon-pagination .accounts-pagination-footer {
+  min-height: 27px;
+  padding: 1px 8px;
+  border-top-width: 1px;
+  gap: 4px;
+}
+
+.bank-recon-dense .bank-recon-pagination p {
+  font-size: 10px;
+}
+
+.bank-recon-dense .bank-recon-pagination button,
+.bank-recon-dense .bank-recon-pagination [role="combobox"] {
+  height: 22px;
+  min-height: 22px;
+}
+
+.bank-recon-dense .bank-recon-grid {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .bank-recon-dense {
+    overflow-y: auto;
+  }
+}

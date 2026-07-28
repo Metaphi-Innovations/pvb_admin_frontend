@@ -244,27 +244,15 @@ export type SupplierFilterField =
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
     supplierCode: "supplierCode",
     supplierName: "supplierName",
+    supplierType: "supplierTypeName",
     contactPerson: "contactPerson",
-    mobileNumber: "mobileNumber",
-    email: "email",
-    state: "state",
-    city: "city",
+    mobile: "mobileNumber",
+    gstNumber: "gstinNumber",
     status: "isActive",
+    createdBy: "createdAt",
+    updatedBy: "updatedAt",
     createdAt: "createdAt",
     updatedAt: "updatedAt",
-};
-
-const SORT_FIELD_MAP: Record<string, string> = {
-    supplierCode: "supplier_code",
-    supplierName: "supplier_name",
-    contactPerson: "contact_person",
-    mobileNumber: "mobile_number",
-    email: "email",
-    state: "state",
-    city: "city",
-    status: "status",
-    createdAt: "created_at",
-    updatedAt: "updated_at",
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {
@@ -278,9 +266,33 @@ export function sortStateToOrdering(
     direction: "asc" | "desc" | "none",
 ): string {
     if (!key || direction === "none") return "";
-    const field = SORT_FIELD_MAP[key];
+    const field = SORT_KEY_TO_ORDERING[key];
     if (!field) return "";
     return direction === "desc" ? `-${field}` : field;
+}
+
+/** Resolve stored file paths to the application backend URL (avoids hardcoded localhost). */
+export function resolveSupplierDocumentUrl(path: string): string {
+    const raw = path.trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
+        const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+        const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+        try {
+            const parsed = new URL(raw);
+            if (parsed.pathname.startsWith("/uploads/")) {
+                return `${origin}${parsed.pathname}`;
+            }
+        } catch {
+            /* keep absolute URL as-is when parsing fails */
+        }
+        return raw;
+    }
+
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+    const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+    const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+    return `${origin}${normalizedPath}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +597,7 @@ export const SupplierListService = {
         );
 
         const totalRecords = Number(payload.totalRecords ?? payload.count);
-        const total = Number.isFinite(totalRecords) ? totalRecords : items.length;
+        const total = Number.isFinite(totalRecords) ? totalRecords : 0;
 
         return { items, total };
     },
@@ -635,7 +647,7 @@ export const SupplierListService = {
         return mapFilterOptions(data, fieldName);
     },
 
-    async create(payload: SupplierCreatePayload): Promise<void> {
+    async create(payload: SupplierCreatePayload): Promise<{ supplierUuid: string; supplierCode: string }> {
         const response = await axiosInstance.post(
             API_ENDPOINTS.MASTER.SUPPLIER.CREATE,
             buildFormData(payload),
@@ -646,6 +658,11 @@ export const SupplierListService = {
         if (!body.success) {
             throw new Error(asString(body.message) || "Failed to create supplier.");
         }
+        const data = (body.data ?? {}) as Record<string, unknown>;
+        return {
+            supplierUuid: asString(data.supplier_id ?? data.supplierId),
+            supplierCode: asString(data.supplier_code ?? data.supplierCode ?? payload.supplier_code),
+        };
     },
 
     async update(id: string, payload: SupplierUpdatePayload): Promise<void> {
@@ -712,6 +729,17 @@ export const SupplierListService = {
                 supplierCode: asString(item.supplierCode ?? item.supplier_code),
             };
         });
+    },
+
+    async getSummary(): Promise<{ total: number; active: number; inactive: number }> {
+        const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SUPPLIER.SUMMARY);
+        const payload = response.data as Record<string, unknown>;
+        const data = (payload.data ?? payload) as Record<string, unknown>;
+        return {
+            total: Number(data.total_suppliers ?? data.total ?? 0),
+            active: Number(data.active_suppliers ?? data.active ?? 0),
+            inactive: Number(data.inactive_suppliers ?? data.inactive ?? 0),
+        };
     },
 
     extractErrorMessage,

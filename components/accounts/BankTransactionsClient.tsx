@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,10 +35,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   loadBankTransactions,
   filterTransactions,
@@ -389,6 +394,70 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
   );
 }
 
+function BankTransactionsTable({
+  toolbarRows,
+  onOpenCategorization,
+}: {
+  toolbarRows: BankTransaction[];
+  onOpenCategorization: (transaction: BankTransaction) => void;
+}) {
+  const visible = useAccountsFilteredRows<BankTransaction>(toolbarRows);
+
+  return (
+    <AccountsTable minWidth={960}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Narration" colKey="narration" className="accounts-col-wide" />
+          <SortTh label="Reference No" colKey="referenceNo" />
+          <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+          <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+          <SortTh label="Balance" colKey="balance" filterType="amount" align="right" />
+          <SortTh label="Ledger" colKey="ledger" />
+          <AccountsColumnHeader
+            label=""
+            colKey="_actions"
+            sortable={false}
+            filterable={false}
+            className="accounts-col-actions"
+          />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {toolbarRows.length === 0 ? (
+          <AccountsTableEmpty colSpan={8} message="No transactions found. Import a bank statement to get started." />
+        ) : visible.length === 0 ? (
+          <AccountsTableEmpty colSpan={8} message="No records match the column filters." />
+        ) : (
+          visible.map((txn) => (
+            <AccountsTableRow
+              key={txn.id}
+              className="cursor-pointer"
+              onClick={() => onOpenCategorization(txn)}
+            >
+              <AccountsTableCell>{txn.transactionDate}</AccountsTableCell>
+              <AccountsTableCell wrap>
+                <span className="font-medium line-clamp-1">{txn.narration}</span>
+                <span className="text-xs text-muted-foreground">{txn.bankAccountName}</span>
+              </AccountsTableCell>
+              <AccountsTableCell>{txn.referenceNo || "—"}</AccountsTableCell>
+              <AccountsTableCell align="right" className="text-red-600 font-medium tabular-nums">
+                {txn.debit > 0 ? formatMoney(txn.debit) : "—"}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" className="text-emerald-600 font-medium tabular-nums">
+                {txn.credit > 0 ? formatMoney(txn.credit) : "—"}
+              </AccountsTableCell>
+              <AccountsTableCell align="right" money>{formatMoney(txn.balance)}</AccountsTableCell>
+              <AccountsTableCell>{txn.ledgerName || "—"}</AccountsTableCell>
+              <AccountsTableCell />
+            </AccountsTableRow>
+          ))
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
 export function BankTransactionsClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
@@ -425,6 +494,91 @@ export function BankTransactionsClient() {
   const handleSave = () => {
     refresh();
   };
+
+  const toolbarRows = transactions;
+
+  const getCellValue = useCallback((row: BankTransaction, key: string) => {
+    switch (key) {
+      case "date":
+        return row.transactionDate;
+      case "ledger":
+        return row.ledgerName;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={toolbarRows}
+      getCellValue={getCellValue}
+      columnConfig={{
+        date: { type: "date" },
+        narration: { type: "text" },
+        referenceNo: { type: "text" },
+        debit: { type: "amount" },
+        credit: { type: "amount" },
+        balance: { type: "amount" },
+        ledger: { type: "text" },
+      }}
+      defaultSortKey="date"
+      defaultSortDir="desc"
+    >
+      <BankTransactionsListing
+        toolbarRows={toolbarRows}
+        filters={filters}
+        setFilters={setFilters}
+        bankAccounts={bankAccounts}
+        preset={preset}
+        setPreset={setPreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        onOpenCategorization={openCategorization}
+        selectedTransaction={selectedTransaction}
+        panelOpen={panelOpen}
+        onClosePanel={closeCategorization}
+        onSave={handleSave}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function BankTransactionsListing({
+  toolbarRows,
+  filters,
+  setFilters,
+  bankAccounts,
+  preset,
+  setPreset,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  onOpenCategorization,
+  selectedTransaction,
+  panelOpen,
+  onClosePanel,
+  onSave,
+}: {
+  toolbarRows: BankTransaction[];
+  filters: TransactionFilters;
+  setFilters: React.Dispatch<React.SetStateAction<TransactionFilters>>;
+  bankAccounts: ReturnType<typeof listBankAccountSelectOptions>;
+  preset: ReturnType<typeof useReportDateRange>["preset"];
+  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  onOpenCategorization: (transaction: BankTransaction) => void;
+  selectedTransaction: BankTransaction | null;
+  panelOpen: boolean;
+  onClosePanel: () => void;
+  onSave: () => void;
+}) {
+  const visible = useAccountsFilteredRows<BankTransaction>(toolbarRows);
 
   return (
     <AccountsTableListing
@@ -485,66 +639,20 @@ export function BankTransactionsClient() {
         </AccountsListingToolbar>
       }
       footer={
-        transactions.length > 0 ? (
+        visible.length > 0 ? (
           <AccountsListingCountFooter>
-            Showing <span className="font-medium text-foreground">{transactions.length}</span> transactions
+            Showing <span className="font-medium text-foreground">{visible.length}</span> transactions
           </AccountsListingCountFooter>
         ) : undefined
       }
     >
-      <AccountsTable minWidth={960}>
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase className="accounts-col-wide">Narration</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Reference No</AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" uppercase>Debit</AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" uppercase>Credit</AccountsTableHeadCell>
-            <AccountsTableHeadCell align="right" uppercase>Balance</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Ledger</AccountsTableHeadCell>
-            <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="accounts-col-actions" />
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {transactions.length === 0 ? (
-            <AccountsTableEmpty colSpan={9} message="No transactions found. Import a bank statement to get started." />
-          ) : (
-            transactions.map((txn) => (
-              <AccountsTableRow
-                key={txn.id}
-                className="cursor-pointer"
-                onClick={() => openCategorization(txn)}
-              >
-                <AccountsTableCell>{txn.transactionDate}</AccountsTableCell>
-                <AccountsTableCell wrap>
-                  <span className="font-medium line-clamp-1">{txn.narration}</span>
-                  <span className="text-xs text-muted-foreground">{txn.bankAccountName}</span>
-                </AccountsTableCell>
-                <AccountsTableCell>{txn.referenceNo || "—"}</AccountsTableCell>
-                <AccountsTableCell align="right" className="text-red-600 font-medium tabular-nums">
-                  {txn.debit > 0 ? formatMoney(txn.debit) : "—"}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" className="text-emerald-600 font-medium tabular-nums">
-                  {txn.credit > 0 ? formatMoney(txn.credit) : "—"}
-                </AccountsTableCell>
-                <AccountsTableCell align="right" money>{formatMoney(txn.balance)}</AccountsTableCell>
-                <AccountsTableCell>{txn.ledgerName || "—"}</AccountsTableCell>
-                <AccountsTableCell>
-                  <StatusBadge status={txn.status} />
-                </AccountsTableCell>
-                <AccountsTableCell />
-              </AccountsTableRow>
-            ))
-          )}
-        </AccountsTableBody>
-      </AccountsTable>
+      <BankTransactionsTable toolbarRows={toolbarRows} onOpenCategorization={onOpenCategorization} />
 
       <CategorizationPanel
         transaction={selectedTransaction}
         open={panelOpen}
-        onClose={closeCategorization}
-        onSave={handleSave}
+        onClose={onClosePanel}
+        onSave={onSave}
       />
     </AccountsTableListing>
   );

@@ -8,7 +8,6 @@ import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { listAccountsForBankGroup, loadBankAccounts } from "@/lib/accounts/bank-accounts-data";
 import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
@@ -73,7 +72,7 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
         <table className="accounts-table w-full">
           <thead className="border-b">
             <tr>
-              {["Account", "Account No.", "IFSC", "Branch", "Balance", "Recon", "Status"].map((h) => (
+              {["Account", "Account No.", "IFSC", "Branch", "Balance", "Recon"].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-muted-foreground">{h}</th>
               ))}
             </tr>
@@ -96,7 +95,6 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
                     <MoneyAmount amount={bal} side="Debit" className="text-xs" />
                   </td>
                   <td className="px-4 py-2.5 capitalize">{a.reconciliationStatus}</td>
-                  <td className="px-4 py-2.5"><StatusBadge status={a.status} /></td>
                 </tr>
               );
             })}

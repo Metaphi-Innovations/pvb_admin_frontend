@@ -26,6 +26,7 @@ import {
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { useCoaRecords } from "@/lib/accounts/use-coa-records";
+import { useAccountsToast } from "@/components/accounts/AccountsToast";
 import {
   createVoucherQuickAddLedger,
   type VoucherLedgerScope,
@@ -52,6 +53,7 @@ export function VoucherQuickAddLedgerSheet({
   onCreated,
 }: VoucherQuickAddLedgerSheetProps) {
   const records = useCoaRecords();
+  const { showLedgerCreatedSelected } = useAccountsToast();
   const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +76,7 @@ export function VoucherQuickAddLedgerSheet({
     try {
       const ledger = createVoucherQuickAddLedger(form);
       onCreated(ledger);
+      showLedgerCreatedSelected();
       reset();
       onOpenChange(false);
     } catch (e) {

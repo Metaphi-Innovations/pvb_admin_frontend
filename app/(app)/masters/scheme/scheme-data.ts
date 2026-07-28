@@ -25,33 +25,38 @@ export interface SchemeEffectConfig {
 export const SCHEME_EFFECT_MAP: Record<SchemeType, SchemeEffectConfig> = {
   "Product Discount Scheme": {
     effectType: "DIRECT_ORDER_DISCOUNT",
-    appliedIn: "Sales Order",
-    settlementMethod: "Immediate Order Discount",
+    appliedIn: "Sales Invoice",
+    settlementMethod: "Instant Invoice Discount",
   },
   "Product Near Expiry Scheme": {
     effectType: "POST_SALES_CN_JV",
-    appliedIn: "Sales Order as eligible scheme only",
-    settlementMethod: "Credit Note / Journal Voucher",
+    appliedIn: "Dispatch / Batch Allocation",
+    settlementMethod: "Credit Note",
   },
   "Cash Discount Scheme": {
     effectType: "POST_SALES_CN_JV",
-    appliedIn: "Sales Order as eligible scheme only",
-    settlementMethod: "Credit Note / Journal Voucher",
+    appliedIn: "Receipt Allocation",
+    settlementMethod: "Credit Note",
   },
   "Festive Discount Scheme": {
     effectType: "POST_SALES_CN_JV",
     appliedIn: "Sales Order as eligible scheme only",
-    settlementMethod: "Credit Note / Journal Voucher",
+    settlementMethod: "Credit Note",
   },
   "Turnover Discount Scheme": {
     effectType: "POST_SALES_CN_JV",
-    appliedIn: "Turnover review / Accounts settlement",
-    settlementMethod: "Credit Note / Journal Voucher",
+    appliedIn: "Scheme Period End",
+    settlementMethod: "Credit Note",
   },
   "Payment Discount Scheme": {
     effectType: "POST_PAYMENT_CN_JV",
-    appliedIn: "Accounts Receivables / Payment Collection",
-    settlementMethod: "Credit Note / Journal Voucher",
+    appliedIn: "Receipt Allocation",
+    settlementMethod: "Credit Note",
+  },
+  "Special Discount Scheme": {
+    effectType: "POST_SALES_CN_JV",
+    appliedIn: "Configurable trigger",
+    settlementMethod: "Credit Note",
   },
 };
 
@@ -68,9 +73,294 @@ export const SCHEME_TYPES = [
   "Festive Discount Scheme",
   "Turnover Discount Scheme",
   "Payment Discount Scheme",
+  "Special Discount Scheme",
 ] as const;
 
 export type SchemeType = (typeof SCHEME_TYPES)[number];
+
+/** Canonical categories for Scheme Master configuration (future SO / Accounts consumers). */
+export const SCHEME_CATEGORIES = [
+  "Product Discount",
+  "Near Expiry Discount",
+  "Cash Discount",
+  "Turnover Discount",
+  "Payment Discount",
+  "Special Discount",
+] as const;
+
+export type SchemeCategory = (typeof SCHEME_CATEGORIES)[number];
+
+export type SchemeCalculationBasis =
+  | "Quantity"
+  | "Product Value"
+  | "Invoice Value"
+  | "Turnover Value"
+  | "Payment Days"
+  | "Fixed Amount"
+  | "Manual Approval";
+
+export type SchemeDiscountValueType = "Percentage" | "Fixed Amount" | "Amount Per Unit";
+
+export type SchemeSlabMethod = "Highest Achieved Slab" | "Incremental Slab";
+
+export type SchemeSettlementBehaviour = "Instant Invoice Discount" | "Credit Note";
+
+export type SchemeTriggerEvent =
+  | "Sales Invoice"
+  | "Dispatch / Batch Allocation"
+  | "Receipt Allocation"
+  | "Scheme Period End"
+  | "Configurable";
+
+export type SchemeProductScopeMode = "All" | "Category" | "Specific Products";
+
+export interface SchemeConfigSlab {
+  id: string;
+  fromValue: number;
+  toValue: number | null;
+  discountType: SchemeDiscountValueType;
+  discountValue: number;
+}
+
+/** Internal condition type — never shown as enum names in the UI. */
+export type SchemeConditionType =
+  | "PRODUCT"
+  | "EXPIRY_DAYS"
+  | "PAYMENT_DAYS"
+  | "TURNOVER"
+  | "PAYMENT_STATUS"
+  | "MANUAL_SPECIAL";
+
+export type SchemeApplyDiscountOn =
+  | "Product Rate"
+  | "Product Line Amount"
+  | "Invoice Taxable Value";
+
+export type SchemeCashCalculationOn =
+  | "Invoice Taxable Value"
+  | "Invoice Total Value"
+  | "Outstanding Amount";
+
+export type SchemeTurnoverPeriodUI =
+  | "Monthly"
+  | "Quarterly"
+  | "Half-Yearly"
+  | "Yearly"
+  | "Scheme Validity Period";
+
+export type SchemeTurnoverCalculationOn =
+  | "Taxable Sales"
+  | "Net Sales After Returns";
+
+export type SchemePaymentCondition =
+  | "Full Payment"
+  | "Minimum Payment Percentage"
+  | "Payment Within Due Date";
+
+export type SchemePaymentCalculationOn =
+  | "Amount Received"
+  | "Invoice Value"
+  | "Outstanding Amount";
+
+export type SchemeBenefitThrough = "Invoice Discount" | "Credit Note";
+
+export type SchemeBenefitWhen =
+  | "During Invoice"
+  | "End of Scheme Period"
+  | "After Payment"
+  | "End of Month"
+  | "End of Quarter"
+  | "Manual Settlement";
+
+export interface SchemePaymentDaySlab {
+  id: string;
+  fromDay: number;
+  toDay: number;
+  discountPercentage: number;
+}
+
+export interface SchemeTurnoverConfigSlab {
+  id: string;
+  turnoverFrom: number;
+  /** null / omitted = Above */
+  turnoverTo: number | null;
+  discountPercentage: number;
+}
+
+/** Special Discount — achievement basis (not a direct invoice discount). */
+export type SchemeSpecialDiscountBasedOn = "SALES_AMOUNT" | "SALES_QUANTITY";
+
+export interface SchemeSpecialDiscountAmountSlab {
+  id: string;
+  eligibleSalesFrom: number;
+  /** null = Above */
+  eligibleSalesTo: number | null;
+  discountType: DiscountType;
+  discountValue: number;
+}
+
+export interface SchemeSpecialDiscountQuantitySlab {
+  id: string;
+  quantityFrom: number;
+  /** null = Above */
+  quantityTo: number | null;
+  uom: string;
+  discountType: DiscountType;
+  discountValue: number;
+}
+
+/** Generic condition payload — shape varies by conditionType / scheme category. */
+export interface SchemeConditionConfig {
+  productScope?: "ALL" | "SELECTED";
+  productIds?: string[];
+  discountType?: DiscountType;
+  discountValue?: number;
+  applyDiscountOn?: SchemeApplyDiscountOn;
+  /** Product Discount only — common vs per-product discount rules. */
+  discountMode?: "COMMON" | "PRODUCT_WISE";
+  /** Product Discount only — active when discountMode is PRODUCT_WISE. */
+  productDiscountRules?: SchemeProductDiscountRule[];
+  expiryWithinDays?: number;
+  paymentDaySlabs?: SchemePaymentDaySlab[];
+  cashCalculationOn?: SchemeCashCalculationOn;
+  turnoverPeriod?: SchemeTurnoverPeriodUI;
+  turnoverCalculationOn?: SchemeTurnoverCalculationOn;
+  turnoverSlabs?: SchemeTurnoverConfigSlab[];
+  paymentCondition?: SchemePaymentCondition;
+  requiredPaymentPercentage?: number;
+  paymentCalculationOn?: SchemePaymentCalculationOn;
+  /** Special Discount only — Sales Amount vs Sales Quantity achievement. */
+  specialDiscountBasedOn?: SchemeSpecialDiscountBasedOn;
+  /** Special Discount — amount achievement slabs (when based on Sales Amount). */
+  specialDiscountAmountSlabs?: SchemeSpecialDiscountAmountSlab[];
+  /** Special Discount — quantity achievement slabs (when based on Sales Quantity). */
+  specialDiscountQuantitySlabs?: SchemeSpecialDiscountQuantitySlab[];
+  /** Special Discount — derived UOM from selected products (quantity mode). */
+  specialDiscountUom?: string;
+}
+
+/** Product Discount — one discount rule per selected product. */
+export interface SchemeProductDiscountRule {
+  productId: string;
+  discountType: DiscountType;
+  discountValue: number;
+  applyDiscountOn: SchemeApplyDiscountOn;
+}
+
+export interface SchemeBenefitConfig {
+  benefitType?: DiscountType;
+  benefitValue?: number;
+  benefitThrough?: SchemeBenefitThrough;
+  benefitWhen?: SchemeBenefitWhen;
+}
+
+/** Display labels for Scheme Type dropdown (business language). */
+export const SCHEME_TYPE_DISPLAY_LABELS: Record<SchemeCategory, string> = {
+  "Product Discount": "Product Discount",
+  "Near Expiry Discount": "Near Expiry",
+  "Cash Discount": "Cash Discount",
+  "Turnover Discount": "Turnover Discount",
+  "Payment Discount": "Payment Discount",
+  "Special Discount": "Special Discount",
+};
+
+export const SCHEME_CONDITION_TYPE_BY_CATEGORY: Record<
+  SchemeCategory,
+  SchemeConditionType
+> = {
+  "Product Discount": "PRODUCT",
+  "Near Expiry Discount": "EXPIRY_DAYS",
+  "Cash Discount": "PAYMENT_DAYS",
+  "Turnover Discount": "TURNOVER",
+  "Payment Discount": "PAYMENT_STATUS",
+  "Special Discount": "MANUAL_SPECIAL",
+};
+
+export interface SchemeCategoryBehaviour {
+  category: SchemeCategory;
+  schemeType: SchemeType;
+  settlementBehaviour: SchemeSettlementBehaviour;
+  triggerEvent: SchemeTriggerEvent;
+  defaultCalculationBasis: SchemeCalculationBasis;
+  /** Product Discount only — instant on invoice; never on Stock Transfer / Sample Order. */
+  appliesInstantlyOnInvoice: boolean;
+}
+
+export const SCHEME_CATEGORY_BEHAVIOUR: Record<SchemeCategory, SchemeCategoryBehaviour> = {
+  "Product Discount": {
+    category: "Product Discount",
+    schemeType: "Product Discount Scheme",
+    settlementBehaviour: "Instant Invoice Discount",
+    triggerEvent: "Sales Invoice",
+    defaultCalculationBasis: "Product Value",
+    appliesInstantlyOnInvoice: true,
+  },
+  "Near Expiry Discount": {
+    category: "Near Expiry Discount",
+    schemeType: "Product Near Expiry Scheme",
+    settlementBehaviour: "Credit Note",
+    triggerEvent: "Dispatch / Batch Allocation",
+    defaultCalculationBasis: "Quantity",
+    appliesInstantlyOnInvoice: false,
+  },
+  "Cash Discount": {
+    category: "Cash Discount",
+    schemeType: "Cash Discount Scheme",
+    settlementBehaviour: "Credit Note",
+    triggerEvent: "Receipt Allocation",
+    defaultCalculationBasis: "Payment Days",
+    appliesInstantlyOnInvoice: false,
+  },
+  "Turnover Discount": {
+    category: "Turnover Discount",
+    schemeType: "Turnover Discount Scheme",
+    settlementBehaviour: "Credit Note",
+    triggerEvent: "Scheme Period End",
+    defaultCalculationBasis: "Turnover Value",
+    appliesInstantlyOnInvoice: false,
+  },
+  "Payment Discount": {
+    category: "Payment Discount",
+    schemeType: "Payment Discount Scheme",
+    settlementBehaviour: "Credit Note",
+    triggerEvent: "Receipt Allocation",
+    defaultCalculationBasis: "Payment Days",
+    appliesInstantlyOnInvoice: false,
+  },
+  "Special Discount": {
+    category: "Special Discount",
+    schemeType: "Special Discount Scheme",
+    settlementBehaviour: "Credit Note",
+    triggerEvent: "Configurable",
+    defaultCalculationBasis: "Manual Approval",
+    appliesInstantlyOnInvoice: false,
+  },
+};
+
+export function schemeTypeToCategory(type: SchemeType): SchemeCategory | null {
+  switch (type) {
+    case "Product Discount Scheme":
+      return "Product Discount";
+    case "Product Near Expiry Scheme":
+      return "Near Expiry Discount";
+    case "Cash Discount Scheme":
+      return "Cash Discount";
+    case "Turnover Discount Scheme":
+      return "Turnover Discount";
+    case "Payment Discount Scheme":
+      return "Payment Discount";
+    case "Special Discount Scheme":
+      return "Special Discount";
+    case "Festive Discount Scheme":
+      return "Special Discount";
+    default:
+      return null;
+  }
+}
+
+export function categoryToSchemeType(category: SchemeCategory): SchemeType {
+  return SCHEME_CATEGORY_BEHAVIOUR[category].schemeType;
+}
 
 export type ApprovalStatus =
   | "draft"
@@ -176,6 +466,8 @@ export interface SchemeRecord extends BaseMasterRecord {
   stateId: string;
   stateName: string;
   customerType: CustomerType;
+  /** Multi-select customer types; when set, overrides single customerType for applicability. */
+  customerTypes?: CustomerType[];
   discountType?: DiscountType | FestiveDiscountType;
   discountValue?: number;
   freeQuantity?: number;
@@ -210,6 +502,47 @@ export interface SchemeRecord extends BaseMasterRecord {
   schemeLines?: ProductDiscountSchemeLine[];
   /** Product Near Expiry Scheme line items (one row per product) */
   nearExpiryLines?: NearExpirySchemeLine[];
+
+  // ── Unified Scheme Master configuration (generic for all scheme types) ──
+  /** Canonical category; derived from schemeType when missing. */
+  schemeCategory?: SchemeCategory;
+  conditionType?: SchemeConditionType;
+  conditionConfig?: SchemeConditionConfig;
+  benefitConfig?: SchemeBenefitConfig;
+  /** @deprecated Prefer conditionConfig — retained for backward compatibility. */
+  calculationBasis?: SchemeCalculationBasis;
+  /** @deprecated Prefer conditionConfig — retained for backward compatibility. */
+  slabMethod?: SchemeSlabMethod;
+  /** @deprecated Prefer conditionConfig.paymentDaySlabs / turnoverSlabs. */
+  configSlabs?: SchemeConfigSlab[];
+  /** @deprecated Internal settlement; not shown in UI. */
+  settlementBehaviour?: SchemeSettlementBehaviour;
+  /** @deprecated Internal trigger; not shown in UI. */
+  triggerEvent?: SchemeTriggerEvent;
+  /** @deprecated Not used in new UI; preserved on existing records. */
+  configurableTriggerNote?: string;
+  productScopeMode?: SchemeProductScopeMode;
+  /** @deprecated Not shown in new UI; preserved for legacy Category-scoped records. */
+  categoryIds?: string[];
+  /** @deprecated Not shown in new UI. */
+  minimumQuantity?: number;
+  /** System rule: only Product Discount applies instantly; others settle via CN. */
+  excludeStockTransferSampleOrder?: boolean;
+  /** Exclude this scheme amount from Turnover Discount calculation. */
+  deductFromTurnoverBase?: boolean;
+  /** Exclude this scheme amount from Cash Discount calculation. */
+  deductFromCashDiscountBase?: boolean;
+  /** @deprecated Not shown in new UI; preserved for accounting integration later. */
+  accountingDiscountLedgerId?: number | null;
+  accountingDiscountLedgerName?: string;
+  accountingCreditNoteLedgerId?: number | null;
+  accountingCreditNoteLedgerName?: string;
+  accountingExpenseLedgerId?: number | null;
+  accountingExpenseLedgerName?: string;
+  accountingReasonCode?: string;
+  /** @deprecated Not shown in new UI. */
+  approvalRequired?: boolean;
+  selectionRuleNote?: string;
 }
 
 export interface SchemeBulkForm {
@@ -282,6 +615,7 @@ export const SCHEME_TYPE_PRIORITY: Record<SchemeType, number> = {
   "Cash Discount Scheme": 4,
   "Payment Discount Scheme": 5,
   "Turnover Discount Scheme": 6,
+  "Special Discount Scheme": 7,
 };
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -374,51 +708,77 @@ export function applyEffectFields(
 }
 
 export function migrateSchemeRecord(record: SchemeRecord): SchemeRecord {
-  if (record.schemeType === "Product Discount Scheme") {
-    if (record.schemeLines?.length) {
-      return record;
-    }
-    const dealerPrice = record.dealerPrice ?? 0;
-    const discountValue = record.discountValue ?? 0;
-    const isPct = record.discountType === "Percentage";
-    const discountAmount =
-      record.discountAmount ??
-      (isPct ? (dealerPrice * discountValue) / 100 : discountValue);
-    const finalSchemePrice =
-      record.finalSchemePrice ?? Math.max(0, dealerPrice - discountAmount);
-    const line: ProductDiscountSchemeLine | null =
-      record.productId && record.stateName
-        ? {
-            productId: record.productId,
-            productCode: record.productCode ?? "",
-            productName: record.productName ?? "",
-            stateNames: [record.stateName],
-            dealerPrice: dealerPrice || 0,
-            discountType: record.discountType === "Fixed Amount" ? "Fixed Amount" : "Percentage",
-            discountValue,
-            discountAmount: discountAmount || 0,
-            finalSchemePrice: finalSchemePrice || 0,
-            mrp: record.mrp ?? 0,
-          }
-        : null;
+  let next: SchemeRecord = record;
 
-    return {
+  if (record.schemeType === "Product Discount Scheme") {
+    if (!record.schemeLines?.length) {
+      const dealerPrice = record.dealerPrice ?? 0;
+      const discountValue = record.discountValue ?? 0;
+      const isPct = record.discountType === "Percentage";
+      const discountAmount =
+        record.discountAmount ??
+        (isPct ? (dealerPrice * discountValue) / 100 : discountValue);
+      const finalSchemePrice =
+        record.finalSchemePrice ?? Math.max(0, dealerPrice - discountAmount);
+      const line: ProductDiscountSchemeLine | null =
+        record.productId && record.stateName
+          ? {
+              productId: record.productId,
+              productCode: record.productCode ?? "",
+              productName: record.productName ?? "",
+              stateNames: [record.stateName],
+              dealerPrice: dealerPrice || 0,
+              discountType: record.discountType === "Fixed Amount" ? "Fixed Amount" : "Percentage",
+              discountValue,
+              discountAmount: discountAmount || 0,
+              finalSchemePrice: finalSchemePrice || 0,
+              mrp: record.mrp ?? 0,
+            }
+          : null;
+
+      next = {
+        ...record,
+        schemeLines: line ? [line] : [],
+        dealerPrice: dealerPrice || undefined,
+        discountAmount: discountAmount || undefined,
+        finalSchemePrice: finalSchemePrice || undefined,
+      };
+    }
+  } else {
+    const effect = applyEffectFields(record);
+    next = {
       ...record,
-      schemeLines: line ? [line] : [],
-      dealerPrice: dealerPrice || undefined,
-      discountAmount: discountAmount || undefined,
-      finalSchemePrice: finalSchemePrice || undefined,
+      ...effect,
+      stateSelectionMode: record.stateSelectionMode ?? "Single",
+      productSelectionMode: record.productSelectionMode,
+      batchId: record.batchId,
     };
   }
 
-  const effect = applyEffectFields(record);
-  return {
-    ...record,
-    ...effect,
-    stateSelectionMode: record.stateSelectionMode ?? "Single",
-    productSelectionMode: record.productSelectionMode,
-    batchId: record.batchId,
-  };
+  // Enrich with unified Scheme Master configuration defaults (additive).
+  const category = schemeTypeToCategory(next.schemeType);
+  if (category) {
+    const behaviour = SCHEME_CATEGORY_BEHAVIOUR[category];
+    next = {
+      ...next,
+      schemeCategory: next.schemeCategory ?? category,
+      conditionType: next.conditionType ?? SCHEME_CONDITION_TYPE_BY_CATEGORY[category],
+      calculationBasis: next.calculationBasis ?? behaviour.defaultCalculationBasis,
+      slabMethod: next.slabMethod ?? "Highest Achieved Slab",
+      settlementBehaviour: behaviour.settlementBehaviour,
+      triggerEvent: next.triggerEvent ?? behaviour.triggerEvent,
+      excludeStockTransferSampleOrder:
+        next.excludeStockTransferSampleOrder ?? behaviour.appliesInstantlyOnInvoice,
+      deductFromTurnoverBase: next.deductFromTurnoverBase ?? false,
+      deductFromCashDiscountBase: next.deductFromCashDiscountBase ?? false,
+      approvalRequired: next.approvalRequired ?? false,
+      selectionRuleNote:
+        next.selectionRuleNote ??
+        "Only one eligible scheme may be selected per Sales Order. Ineligible schemes cannot be forced.",
+    };
+  }
+
+  return next;
 }
 
 export const SCHEME_SEED: SchemeRecord[] = [
@@ -427,6 +787,7 @@ export const SCHEME_SEED: SchemeRecord[] = [
     schemeCode: "SCH-001",
     schemeName: "Kharif NPK Distributor Offer",
     schemeType: "Product Discount Scheme",
+    schemeCategory: "Product Discount",
     customerType: "Distributor",
     stateId: "Maharashtra",
     stateName: "Maharashtra, Gujarat",
@@ -455,234 +816,10 @@ export const SCHEME_SEED: SchemeRecord[] = [
   },
   {
     id: 2,
-    schemeCode: "SCH-002",
-    schemeName: "Gujarat Summer Draft Scheme",
-    schemeType: "Product Discount Scheme",
-    customerType: "All",
-    stateId: "Gujarat",
-    stateName: "Gujarat",
-    approvalStatus: "submitted",
-    startDate: "2026-04-01",
-    endDate: "2026-09-30",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-02-01",
-    updatedAt: "2026-02-01",
-    schemeLines: [
-      {
-        productId: "1",
-        productCode: "PRD-001",
-        productName: "NPK 19:19:19",
-        stateNames: ["Gujarat"],
-        dealerPrice: 1050,
-        discountType: "Fixed Amount",
-        discountValue: 50,
-        discountAmount: 50,
-        finalSchemePrice: 1000,
-        mrp: 1250,
-      },
-    ],
-  },
-  {
-    id: 4,
-    schemeCode: "SCH-004",
-    schemeName: "Winter Retailer Approved Scheme",
-    schemeType: "Product Discount Scheme",
-    customerType: "Retailer",
-    stateId: "Maharashtra",
-    stateName: "Maharashtra",
-    approvalStatus: "approved",
-    startDate: "2026-06-01",
-    endDate: "2026-12-31",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-05-15",
-    updatedAt: "2026-05-20",
-    schemeLines: [
-      {
-        productId: "1",
-        productCode: "PRD-001",
-        productName: "NPK 19:19:19",
-        stateNames: ["Maharashtra"],
-        dealerPrice: 1050,
-        discountType: "Percentage",
-        discountValue: 5,
-        discountAmount: 52.5,
-        finalSchemePrice: 997.5,
-        mrp: 1250,
-      },
-    ],
-  },
-  {
-    id: 5,
-    schemeCode: "SCH-005",
-    schemeName: "Maharashtra DAP Active Offer",
-    schemeType: "Product Discount Scheme",
-    customerType: "Distributor",
-    stateId: "Maharashtra",
-    stateName: "Maharashtra",
-    approvalStatus: "active",
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    status: "active",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-01-10",
-    updatedAt: "2026-01-10",
-    schemeLines: [
-      {
-        productId: "2",
-        productCode: "PRD-002",
-        productName: "DAP Fertilizer",
-        stateNames: ["Maharashtra"],
-        dealerPrice: 1250,
-        discountType: "Percentage",
-        discountValue: 8,
-        discountAmount: 100,
-        finalSchemePrice: 1150,
-        mrp: 1500,
-      },
-    ],
-  },
-  {
-    id: 6,
-    schemeCode: "SCH-006",
-    schemeName: "Urea Draft Scheme Maharashtra",
-    schemeType: "Product Discount Scheme",
-    customerType: "Distributor",
-    stateId: "Maharashtra",
-    stateName: "Maharashtra",
-    approvalStatus: "submitted",
-    startDate: "2026-07-01",
-    endDate: "2026-12-31",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-03-01",
-    updatedAt: "2026-03-01",
-    schemeLines: [
-      {
-        productId: "3",
-        productCode: "PRD-003",
-        productName: "Urea 46%",
-        stateNames: ["Maharashtra"],
-        dealerPrice: 820,
-        discountType: "Fixed Amount",
-        discountValue: 40,
-        discountAmount: 40,
-        finalSchemePrice: 780,
-        mrp: 950,
-      },
-    ],
-  },
-  {
-    id: 7,
-    schemeCode: "SCH-007",
-    schemeName: "NPK Pending Approval Scheme",
-    schemeType: "Product Discount Scheme",
-    customerType: "Distributor",
-    stateId: "Maharashtra",
-    stateName: "Maharashtra",
-    approvalStatus: "submitted",
-    startDate: "2026-06-01",
-    endDate: "2026-12-31",
-    status: "inactive",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-05-01",
-    updatedAt: "2026-05-01",
-    schemeLines: [
-      {
-        productId: "1",
-        productCode: "PRD-001",
-        productName: "NPK 19:19:19",
-        stateNames: ["Maharashtra"],
-        dealerPrice: 1050,
-        discountType: "Percentage",
-        discountValue: 12,
-        discountAmount: 126,
-        finalSchemePrice: 924,
-        mrp: 1250,
-      },
-    ],
-  },
-  {
-    id: 8,
-    schemeCode: "SCH-008",
-    schemeName: "NPK 10% Active — Maharashtra Only",
-    schemeType: "Product Discount Scheme",
-    customerType: "Distributor",
-    stateId: "Maharashtra",
-    stateName: "Maharashtra",
-    approvalStatus: "active",
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    status: "active",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-01-12",
-    updatedAt: "2026-06-01",
-    schemeLines: [
-      {
-        productId: "1",
-        productCode: "PRD-001",
-        productName: "NPK 19:19:19",
-        stateNames: ["Maharashtra"],
-        dealerPrice: 1050,
-        discountType: "Percentage",
-        discountValue: 10,
-        discountAmount: 105,
-        finalSchemePrice: 945,
-        mrp: 1250,
-      },
-    ],
-  },
-  {
-    id: 3,
-    schemeCode: "SCH-003",
-    schemeName: "Near Expiry NPK Offer",
-    schemeType: "Product Near Expiry Scheme",
-    stateId: "Telangana",
-    stateName: "Telangana",
-    customerType: "All",
-    discountType: "Percentage",
-    discountValue: 10,
-    expiryWithinDays: 60,
-    approvalStatus: "active",
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    status: "active",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2025-06-10",
-    updatedAt: "2026-06-20",
-    nearExpiryLines: [
-      {
-        productId: "6",
-        productCode: "FERT-000003",
-        productName: "NPK 10:26:26",
-        sku: "FERT-000003",
-        batchNumber: "B-NPK-33V",
-        expiryDate: "2026-06-30",
-        warehouseName: "South Zone Depot",
-        warehouseState: "Telangana",
-        dealerPrice: 890,
-        expiryWithinDays: 60,
-        benefitType: "Percentage",
-        benefitValue: 10,
-        benefitAmount: 89,
-        finalPrice: 801,
-        mrp: 890,
-      },
-    ],
-  },
-  {
-    id: 9,
     schemeCode: "NE-001",
     schemeName: "Near Expiry 30 Days Offer",
     schemeType: "Product Near Expiry Scheme",
+    schemeCategory: "Near Expiry Discount",
     stateId: "Maharashtra",
     stateName: "Maharashtra, Gujarat",
     customerType: "Distributor",
@@ -719,17 +856,33 @@ export const SCHEME_SEED: SchemeRecord[] = [
   },
 ];
 
-/** Sample scheme codes kept in sync with SCHEME_SEED for Sales Order testing. */
-const REFRESHABLE_SCHEME_CODES = new Set([
+/** Canonical seed codes retained in Scheme Master (one per main category). */
+const CANONICAL_SCHEME_SEED_CODES = new Set([
   "SCH-001",
+  "NE-001",
+  "CSH-001",
+  "TUR-001",
+  "PAY-001",
+]);
+
+/** Former sample / duplicate scheme codes removed from seed — pruned from local storage on load. */
+const OBSOLETE_SAMPLE_SCHEME_CODES = new Set([
   "SCH-002",
+  "SCH-003",
   "SCH-004",
   "SCH-005",
   "SCH-006",
   "SCH-007",
   "SCH-008",
-  "NE-001",
+  "FST-001",
+  "FST-002",
+  "CSH-002",
+  "TUR-002",
+  "PAY-002",
 ]);
+
+/** Sample scheme codes kept in sync with SCHEME_SEED for Sales Order testing. */
+const REFRESHABLE_SCHEME_CODES = CANONICAL_SCHEME_SEED_CODES;
 
 /** Preserve draft — schemes start as Draft and move to Submitted via explicit submit. */
 export function normalizeSchemeApprovalStatus(record: SchemeRecord): SchemeRecord {
@@ -741,7 +894,10 @@ export function mergeSchemeSeedRecords(
   stored: SchemeRecord[],
   seed: SchemeRecord[],
 ): SchemeRecord[] {
-  const merged = stored.map(normalizeSchemeApprovalStatus);
+  const pruned = stored
+    .map(normalizeSchemeApprovalStatus)
+    .filter((record) => !OBSOLETE_SAMPLE_SCHEME_CODES.has(record.schemeCode));
+  const merged = pruned;
   const indexByCode = new Map(merged.map((record, index) => [record.schemeCode, index]));
   let nextId = merged.length ? Math.max(...merged.map((record) => record.id)) + 1 : 1;
 

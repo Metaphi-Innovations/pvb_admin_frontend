@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,11 @@ import {
   customerRecordToFormValues,
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import {
+  loadPartyMasterAccounting,
+  persistPartyMasterAccounting,
+} from "@/lib/accounts/party-master-accounting-sync";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../../customer-permissions";
 import { useUpdateCustomer, useCustomer } from "@/hooks/masters";
 import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
@@ -48,7 +53,16 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function EditCustomerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { id } = useParams<{ id: string }>();
+  const returnToParam = searchParams.get("returnTo");
+  const fromCoa =
+    searchParams.get("source") === "chart-of-accounts" ||
+    searchParams.get("from") === "coa";
+  const leaveHref =
+    returnToParam ||
+    (fromCoa ? CHART_OF_ACCOUNTS_HREF : `/masters/customers/${id}`);
+
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -66,9 +80,18 @@ export default function EditCustomerPage() {
   }, []);
 
   useEffect(() => {
-    if (customer) {
-      setForm(customerRecordToFormValues(customer));
-    }
+    if (!customer) return;
+    setForm(customerRecordToFormValues(customer));
+    let cancelled = false;
+    loadPartyMasterAccounting({ kind: "customer", partyId: customer.customerUuid }).then(
+      (accounting) => {
+        if (cancelled) return;
+        setForm((prev) => (prev ? { ...prev, ...accounting } : prev));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [customer]);
 
 
@@ -95,7 +118,22 @@ export default function EditCustomerPage() {
     updateCustomer.mutate(
       { id: customer.customerUuid, payload, branches: form.branches },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "customer",
+              partyId: customer.customerUuid,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Master save succeeded; accounting sync failure is non-blocking for profile.
+          }
           if (form.status === "active") {
             const mainBranch =
               form.branches.find((b) => b.isMain) ??
@@ -126,7 +164,7 @@ export default function EditCustomerPage() {
             });
           }
           setToast({ msg: "Customer updated successfully.", type: "success" });
-          setTimeout(() => router.push(`/masters/customers/${id}`), 900);
+          setTimeout(() => router.push(leaveHref), 900);
         },
         onError: (err) => {
           setToast({
@@ -184,14 +222,18 @@ export default function EditCustomerPage() {
   return (
     <FormContainer
       title="Edit Customer"
-      description="Masters → Customer Master → Edit"
-      onBack={() => router.back()}
+      description={
+        fromCoa
+          ? "Accounts → Chart of Accounts → Sundry Debtors → Edit"
+          : "Masters → Customer Master → Edit"
+      }
+      onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customer.customerCode}
           </span>
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.push(leaveHref)}>
             Discard
           </Button>
           <Button

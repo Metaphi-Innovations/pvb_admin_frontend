@@ -1,6 +1,28 @@
+import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
+import {
+  computeCashFlowStatement,
+  type CashFlowFilters,
+  type CashFlowLineContribution,
+} from "@/lib/accounts/cash-flow-compute";
+import {
+  CASH_FLOW_FINANCING_DISPLAY_IDS,
+  CASH_FLOW_INVESTING_DISPLAY_IDS,
+  CASH_FLOW_LINE_LABELS,
+  CASH_FLOW_OPERATING_DISPLAY_IDS,
+  cashFlowLineSection,
+  type CashFlowLineId,
+} from "@/lib/accounts/cash-flow-coa-mapping";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 
-export type CashFlowRowKind = "section" | "line" | "total" | "summary";
+export type { CashFlowFilters } from "@/lib/accounts/cash-flow-compute";
+
+export type CashFlowRowKind =
+  | "title"
+  | "section"
+  | "line"
+  | "total"
+  | "divider"
+  | "summary";
 
 export type CashFlowSection = "operating" | "investing" | "financing" | "summary";
 
@@ -8,8 +30,14 @@ export interface CashFlowLineItem {
   id: string;
   particular: string;
   amount: number | null;
+  previousAmount?: number | null;
   kind: CashFlowRowKind;
   section?: CashFlowSection;
+  indent: number;
+  sortOrder: number;
+  ledgerId?: number;
+  drillDownHref?: string;
+  previousDrillDownHref?: string;
 }
 
 export interface CashFlowStatement {
@@ -21,175 +49,347 @@ export interface CashFlowStatement {
   openingBalance: number;
   closingBalance: number;
   hasData: boolean;
+  comparePreviousPeriod?: boolean;
+  currentPeriodLabel?: string;
+  previousPeriodLabel?: string;
+  previousNetOperating?: number;
+  previousNetInvesting?: number;
+  previousNetFinancing?: number;
+  previousNetChange?: number;
+  previousOpeningBalance?: number;
+  previousClosingBalance?: number;
+}
+
+export interface CashFlowBuildOptions {
+  comparePreviousPeriod?: boolean;
 }
 
 export interface CashFlowFilterParams {
   search?: string;
 }
 
+export interface CashFlowDrillDownFilters {
+  dateFrom: string;
+  dateTo: string;
+  branch?: string;
+  warehouse?: string;
+  partyId?: string;
+}
+
+/** Shift an ISO date by calendar years (e.g. 2026-04-01 → 2025-04-01). */
+export function shiftCashFlowIsoDateByYears(iso: string, years: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const nextYear = y + years;
+  return `${String(nextYear).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+export function computeCashFlowPreviousPeriod(dateFrom: string, dateTo: string): {
+  dateFrom: string;
+  dateTo: string;
+} {
+  return {
+    dateFrom: shiftCashFlowIsoDateByYears(dateFrom, -1),
+    dateTo: shiftCashFlowIsoDateByYears(dateTo, -1),
+  };
+}
+
+export function formatCashFlowPeriodDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatCashFlowPeriodLabel(dateFrom: string, dateTo: string): string {
+  return `${formatCashFlowPeriodDate(dateFrom)} to ${formatCashFlowPeriodDate(dateTo)}`;
+}
+
+function lineCarriesAmount(kind: CashFlowRowKind): boolean {
+  return kind === "line" || kind === "total" || kind === "summary";
+}
+
 /** Display signed amounts — negatives shown in brackets (Tally/Busy style). */
 export function formatSignedCashFlowAmount(amount: number | null): string {
-  if (amount == null) return "—";
+  if (amount == null) return "";
+  if (amount === 0) return formatMoney(0);
   if (amount < 0) return `(${formatMoney(Math.abs(amount))})`;
   return formatMoney(amount);
 }
 
-const DEMO_CF_LINES: Omit<CashFlowLineItem, "amount">[] = [
-  {
-    id: "sec-operating",
-    particular: "Cash Flow from Operating Activities",
-    kind: "section",
-    section: "operating",
-  },
-  { id: "cash-from-customers", particular: "Cash Received from Customers", kind: "line", section: "operating" },
-  { id: "other-operating-receipts", particular: "Other Operating Receipts", kind: "line", section: "operating" },
-  { id: "cash-paid-suppliers", particular: "Cash Paid to Suppliers", kind: "line", section: "operating" },
-  { id: "cash-paid-employees", particular: "Cash Paid to Employees", kind: "line", section: "operating" },
-  { id: "operating-expenses", particular: "Operating Expenses Paid", kind: "line", section: "operating" },
-  { id: "gst-paid", particular: "GST Paid", kind: "line", section: "operating" },
-  { id: "income-tax-paid", particular: "Income Tax Paid", kind: "line", section: "operating" },
-  {
-    id: "net-operating",
-    particular: "Net Cash from Operating Activities",
-    kind: "total",
-    section: "operating",
-  },
-
-  {
-    id: "sec-investing",
-    particular: "Cash Flow from Investing Activities",
-    kind: "section",
-    section: "investing",
-  },
-  { id: "purchase-fixed-assets", particular: "Purchase of Fixed Assets", kind: "line", section: "investing" },
-  { id: "sale-fixed-assets", particular: "Sale of Fixed Assets", kind: "line", section: "investing" },
-  { id: "purchase-investments", particular: "Purchase of Investments", kind: "line", section: "investing" },
-  {
-    id: "net-investing",
-    particular: "Net Cash from Investing Activities",
-    kind: "total",
-    section: "investing",
-  },
-
-  {
-    id: "sec-financing",
-    particular: "Cash Flow from Financing Activities",
-    kind: "section",
-    section: "financing",
-  },
-  { id: "capital-introduced", particular: "Capital Introduced", kind: "line", section: "financing" },
-  { id: "loan-received", particular: "Loan Received", kind: "line", section: "financing" },
-  { id: "loan-repaid", particular: "Loan Repaid", kind: "line", section: "financing" },
-  { id: "interest-paid", particular: "Interest Paid", kind: "line", section: "financing" },
-  {
-    id: "net-financing",
-    particular: "Net Cash from Financing Activities",
-    kind: "total",
-    section: "financing",
-  },
-
-  { id: "opening-balance", particular: "Opening Cash & Bank Balance", kind: "summary", section: "summary" },
-  { id: "net-change", particular: "Net Increase in Cash", kind: "summary", section: "summary" },
-  {
-    id: "closing-balance",
-    particular: "Closing Cash & Bank Balance",
-    kind: "summary",
-    section: "summary",
-  },
-];
-
-/** Signed demo amounts — outflows are negative. */
-const DEMO_AMOUNTS: Record<string, number> = {
-  "cash-from-customers": 1_850_000,
-  "other-operating-receipts": 45_000,
-  "cash-paid-suppliers": -1_020_000,
-  "cash-paid-employees": -185_000,
-  "operating-expenses": -110_000,
-  "gst-paid": -62_000,
-  "income-tax-paid": -38_000,
-  "purchase-fixed-assets": -240_000,
-  "sale-fixed-assets": 60_000,
-  "purchase-investments": -100_000,
-  "capital-introduced": 500_000,
-  "loan-received": 300_000,
-  "loan-repaid": -120_000,
-  "interest-paid": -45_000,
-};
-
-const OPERATING_LINE_IDS = [
-  "cash-from-customers",
-  "other-operating-receipts",
-  "cash-paid-suppliers",
-  "cash-paid-employees",
-  "operating-expenses",
-  "gst-paid",
-  "income-tax-paid",
-];
-
-const INVESTING_LINE_IDS = ["purchase-fixed-assets", "sale-fixed-assets", "purchase-investments"];
-
-const FINANCING_LINE_IDS = ["capital-introduced", "loan-received", "loan-repaid", "interest-paid"];
-
-const OPENING_BALANCE = 850_000;
-
-function sumSignedAmounts(ids: string[]): number {
-  return roundMoney(ids.reduce((sum, id) => sum + (DEMO_AMOUNTS[id] ?? 0), 0));
+let sortCounter = 0;
+function nextSortOrder(): number {
+  sortCounter += 1;
+  return sortCounter;
 }
 
-function buildDemoLines(): CashFlowLineItem[] {
-  const netOperating = sumSignedAmounts(OPERATING_LINE_IDS);
-  const netInvesting = sumSignedAmounts(INVESTING_LINE_IDS);
-  const netFinancing = sumSignedAmounts(FINANCING_LINE_IDS);
-  const netChange = roundMoney(netOperating + netInvesting + netFinancing);
-  const closingBalance = roundMoney(OPENING_BALANCE + netChange);
+function resetSortOrder(): void {
+  sortCounter = 0;
+}
 
-  const netChangeLabel =
-    netChange >= 0 ? "Net Increase in Cash" : "Net Decrease in Cash";
+function resolveDrillLedgerId(
+  lineId: CashFlowLineId,
+  dominantLedgerByLine: Partial<Record<CashFlowLineId, number>>,
+  contributions: Record<CashFlowLineId, CashFlowLineContribution[]>,
+  fallbackLedgerId: number | null,
+): number | null {
+  return (
+    dominantLedgerByLine[lineId] ??
+    contributions[lineId]?.[0]?.ledgerId ??
+    fallbackLedgerId
+  );
+}
 
-  return DEMO_CF_LINES.map((item) => {
-    if (item.kind === "section") {
-      return { ...item, amount: null };
-    }
-    if (item.id === "net-operating") {
-      return { ...item, amount: netOperating };
-    }
-    if (item.id === "net-investing") {
-      return { ...item, amount: netInvesting };
-    }
-    if (item.id === "net-financing") {
-      return { ...item, amount: netFinancing };
-    }
-    if (item.id === "opening-balance") {
-      return { ...item, amount: OPENING_BALANCE };
-    }
-    if (item.id === "net-change") {
-      return { ...item, particular: netChangeLabel, amount: netChange };
-    }
-    if (item.id === "closing-balance") {
-      return { ...item, amount: closingBalance };
-    }
-    return { ...item, amount: DEMO_AMOUNTS[item.id] ?? 0 };
+function buildSectionLines(
+  section: CashFlowSection,
+  sectionTitle: string,
+  lineIds: CashFlowLineId[],
+  amounts: Record<CashFlowLineId, number>,
+  totalId: string,
+  totalTitle: string,
+  totalAmount: number,
+  drillDownFilters: CashFlowDrillDownFilters,
+  dominantLedgerByLine: Partial<Record<CashFlowLineId, number>>,
+  contributions: Record<CashFlowLineId, CashFlowLineContribution[]>,
+  fallbackLedgerId: number | null,
+): CashFlowLineItem[] {
+  const lines: CashFlowLineItem[] = [
+    {
+      id: `sec-${section}`,
+      particular: sectionTitle,
+      amount: null,
+      kind: "section",
+      section,
+      indent: 0,
+      sortOrder: nextSortOrder(),
+    },
+  ];
+
+  for (const lineId of lineIds) {
+    const ledgerId = resolveDrillLedgerId(
+      lineId,
+      dominantLedgerByLine,
+      contributions,
+      fallbackLedgerId,
+    );
+    lines.push({
+      id: lineId,
+      particular: CASH_FLOW_LINE_LABELS[lineId],
+      amount: amounts[lineId] ?? 0,
+      kind: "line",
+      section,
+      indent: 1,
+      sortOrder: nextSortOrder(),
+      ledgerId: ledgerId ?? undefined,
+      drillDownHref: ledgerId
+        ? buildCashFlowLedgerHref(ledgerId, drillDownFilters)
+        : undefined,
+    });
+  }
+
+  lines.push({
+    id: totalId,
+    particular: totalTitle,
+    amount: totalAmount,
+    kind: "total",
+    section,
+    indent: 0,
+    sortOrder: nextSortOrder(),
   });
+
+  lines.push({
+    id: `divider-after-${section}`,
+    particular: "",
+    amount: null,
+    kind: "divider",
+    section,
+    indent: 0,
+    sortOrder: nextSortOrder(),
+  });
+
+  return lines;
 }
 
-export function buildCashFlowStatement(): CashFlowStatement {
-  const lines = buildDemoLines();
-  const netOperating = lines.find((l) => l.id === "net-operating")?.amount ?? 0;
-  const netInvesting = lines.find((l) => l.id === "net-investing")?.amount ?? 0;
-  const netFinancing = lines.find((l) => l.id === "net-financing")?.amount ?? 0;
-  const netChange = lines.find((l) => l.id === "net-change")?.amount ?? 0;
-  const openingBalance = lines.find((l) => l.id === "opening-balance")?.amount ?? 0;
-  const closingBalance = lines.find((l) => l.id === "closing-balance")?.amount ?? 0;
+export function buildCashFlowLedgerHref(
+  ledgerId: number,
+  filters: CashFlowDrillDownFilters,
+): string {
+  const params = new URLSearchParams();
+  params.set("ledger", String(ledgerId));
+  if (filters.dateFrom) params.set("from", filters.dateFrom);
+  if (filters.dateTo) params.set("to", filters.dateTo);
+  if (filters.branch && filters.branch !== "all") params.set("branch", filters.branch);
+  if (filters.warehouse && filters.warehouse !== "all") {
+    params.set("warehouse", filters.warehouse);
+  }
+  if (filters.partyId && filters.partyId !== "all") params.set("party", filters.partyId);
+  params.set("source", "cash-flow");
+  return `${GENERAL_LEDGER_HREF}?${params.toString()}`;
+}
+
+export function buildCashFlowStatement(
+  filters: CashFlowFilters,
+  options?: CashFlowBuildOptions,
+): CashFlowStatement {
+  const current = buildSinglePeriodCashFlowStatement(filters);
+  if (!options?.comparePreviousPeriod) return current;
+
+  const previousPeriod = computeCashFlowPreviousPeriod(filters.dateFrom, filters.dateTo);
+  const previousFilters: CashFlowFilters = {
+    ...filters,
+    dateFrom: previousPeriod.dateFrom,
+    dateTo: previousPeriod.dateTo,
+  };
+  const previous = buildSinglePeriodCashFlowStatement(previousFilters);
+  const previousById = new Map(previous.lines.map((line) => [line.id, line]));
+
+  const lines = current.lines.map((line) => {
+    if (!lineCarriesAmount(line.kind)) return line;
+    const previousLine = previousById.get(line.id);
+    return {
+      ...line,
+      previousAmount: previousLine?.amount ?? 0,
+      previousDrillDownHref: previousLine?.drillDownHref,
+    };
+  });
+
+  return {
+    ...current,
+    lines,
+    comparePreviousPeriod: true,
+    currentPeriodLabel: formatCashFlowPeriodLabel(filters.dateFrom, filters.dateTo),
+    previousPeriodLabel: formatCashFlowPeriodLabel(
+      previousPeriod.dateFrom,
+      previousPeriod.dateTo,
+    ),
+    previousNetOperating: previous.netOperating,
+    previousNetInvesting: previous.netInvesting,
+    previousNetFinancing: previous.netFinancing,
+    previousNetChange: previous.netChange,
+    previousOpeningBalance: previous.openingBalance,
+    previousClosingBalance: previous.closingBalance,
+  };
+}
+
+function buildSinglePeriodCashFlowStatement(filters: CashFlowFilters): CashFlowStatement {
+  resetSortOrder();
+  const computed = computeCashFlowStatement(filters);
+  const { lineAmounts, dominantLedgerByLine, lineContributions } = computed;
+
+  const drillDownFilters: CashFlowDrillDownFilters = {
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    branch: Array.isArray(filters.branch) ? filters.branch[0] : filters.branch,
+    warehouse: Array.isArray(filters.warehouse) ? filters.warehouse[0] : filters.warehouse,
+    partyId: Array.isArray(filters.partyId) ? filters.partyId[0] : filters.partyId,
+  };
+
+  const fallbackLedgerId = computed.primaryCashLedgerId;
+  const netChangeLabel =
+    computed.netChange >= 0 ? "Net Increase in Cash" : "Net Decrease in Cash";
+
+  const cashPositionHref = fallbackLedgerId
+    ? buildCashFlowLedgerHref(fallbackLedgerId, drillDownFilters)
+    : undefined;
+
+  const lines: CashFlowLineItem[] = [
+    {
+      id: "report-title",
+      particular: "Cash Flow Statement",
+      amount: null,
+      kind: "title",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+    },
+    ...buildSectionLines(
+      "operating",
+      "Cash Flow from Operating Activities",
+      CASH_FLOW_OPERATING_DISPLAY_IDS,
+      lineAmounts,
+      "net-operating",
+      "Net Cash from Operating Activities",
+      computed.netOperating,
+      drillDownFilters,
+      dominantLedgerByLine,
+      lineContributions,
+      fallbackLedgerId,
+    ),
+    ...buildSectionLines(
+      "investing",
+      "Cash Flow from Investing Activities",
+      CASH_FLOW_INVESTING_DISPLAY_IDS,
+      lineAmounts,
+      "net-investing",
+      "Net Cash from Investing Activities",
+      computed.netInvesting,
+      drillDownFilters,
+      dominantLedgerByLine,
+      lineContributions,
+      fallbackLedgerId,
+    ),
+    ...buildSectionLines(
+      "financing",
+      "Cash Flow from Financing Activities",
+      CASH_FLOW_FINANCING_DISPLAY_IDS,
+      lineAmounts,
+      "net-financing",
+      "Net Cash from Financing Activities",
+      computed.netFinancing,
+      drillDownFilters,
+      dominantLedgerByLine,
+      lineContributions,
+      fallbackLedgerId,
+    ),
+    {
+      id: "divider-before-summary",
+      particular: "",
+      amount: null,
+      kind: "divider",
+      section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+    },
+    {
+      id: "opening-balance",
+      particular: "Opening Cash & Bank Balance",
+      amount: computed.openingBalance,
+      kind: "summary",
+      section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+      drillDownHref: cashPositionHref,
+    },
+    {
+      id: "net-change",
+      particular: netChangeLabel,
+      amount: computed.netChange,
+      kind: "summary",
+      section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+    },
+    {
+      id: "closing-balance",
+      particular: "Closing Cash & Bank Balance",
+      amount: computed.closingBalance,
+      kind: "summary",
+      section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+      drillDownHref: cashPositionHref,
+    },
+  ];
 
   return {
     lines,
-    netOperating,
-    netInvesting,
-    netFinancing,
-    netChange,
-    openingBalance,
-    closingBalance,
-    hasData: lines.length > 0,
+    netOperating: computed.netOperating,
+    netInvesting: computed.netInvesting,
+    netFinancing: computed.netFinancing,
+    netChange: computed.netChange,
+    openingBalance: computed.openingBalance,
+    closingBalance: computed.closingBalance,
+    hasData: true,
   };
 }
 
@@ -203,11 +403,37 @@ function rebuildSection(
   if (matches.length === 0) return [];
 
   const total = roundMoney(matches.reduce((s, l) => s + (l.amount ?? 0), 0));
+  let order = matches[0]?.sortOrder ?? 0;
 
   return [
-    { id: `sec-${sectionId}`, particular: sectionTitle, amount: null, kind: "section", section: sectionId },
-    ...matches,
-    { id: totalId, particular: totalTitle, amount: total, kind: "total", section: sectionId },
+    {
+      id: `sec-${sectionId}`,
+      particular: sectionTitle,
+      amount: null,
+      kind: "section",
+      section: sectionId,
+      indent: 0,
+      sortOrder: order++,
+    },
+    ...matches.map((m) => ({ ...m, sortOrder: order++ })),
+    {
+      id: totalId,
+      particular: totalTitle,
+      amount: total,
+      kind: "total",
+      section: sectionId,
+      indent: 0,
+      sortOrder: order++,
+    },
+    {
+      id: `divider-after-${sectionId}`,
+      particular: "",
+      amount: null,
+      kind: "divider",
+      section: sectionId,
+      indent: 0,
+      sortOrder: order++,
+    },
   ];
 }
 
@@ -228,7 +454,9 @@ export function filterCashFlowStatement(
       currentSection = line.section ?? null;
       continue;
     }
-    if (line.kind === "total" || line.kind === "summary") continue;
+    if (line.kind === "total" || line.kind === "summary" || line.kind === "divider" || line.kind === "title") {
+      continue;
+    }
 
     const matches = line.particular.toLowerCase().includes(q);
     if (!matches) continue;
@@ -238,7 +466,16 @@ export function filterCashFlowStatement(
     else if (currentSection === "financing") financingMatches.push(line);
   }
 
+  resetSortOrder();
   const filteredLines: CashFlowLineItem[] = [
+    {
+      id: "report-title",
+      particular: "Cash Flow Statement",
+      amount: null,
+      kind: "title",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+    },
     ...rebuildSection(
       "operating",
       "Cash Flow from Operating Activities",
@@ -262,7 +499,7 @@ export function filterCashFlowStatement(
     ),
   ];
 
-  if (filteredLines.length === 0) {
+  if (filteredLines.length <= 1) {
     return {
       lines: [],
       netOperating: 0,
@@ -283,11 +520,23 @@ export function filterCashFlowStatement(
 
   filteredLines.push(
     {
+      id: "divider-before-summary",
+      particular: "",
+      amount: null,
+      kind: "divider",
+      section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+    },
+    {
       id: "opening-balance",
       particular: "Opening Cash & Bank Balance",
       amount: statement.openingBalance,
       kind: "summary",
       section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+      drillDownHref: statement.lines.find((l) => l.id === "opening-balance")?.drillDownHref,
     },
     {
       id: "net-change",
@@ -295,6 +544,8 @@ export function filterCashFlowStatement(
       amount: netChange,
       kind: "summary",
       section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
     },
     {
       id: "closing-balance",
@@ -302,6 +553,9 @@ export function filterCashFlowStatement(
       amount: roundMoney(statement.openingBalance + netChange),
       kind: "summary",
       section: "summary",
+      indent: 0,
+      sortOrder: nextSortOrder(),
+      drillDownHref: statement.lines.find((l) => l.id === "closing-balance")?.drillDownHref,
     },
   );
 
@@ -320,15 +574,31 @@ export function filterCashFlowStatement(
 export interface CashFlowExportRow {
   particular: string;
   amount: number | null;
+  previousAmount?: number | null;
   rowType: CashFlowRowKind;
   indent: number;
 }
 
 export function flattenCashFlowForExport(statement: CashFlowStatement): CashFlowExportRow[] {
-  return statement.lines.map((line) => ({
-    particular: line.particular,
-    amount: line.amount,
-    rowType: line.kind,
-    indent: line.kind === "line" ? 1 : 0,
-  }));
+  return statement.lines
+    .filter((line) => line.kind !== "divider")
+    .map((line) => ({
+      particular: line.particular,
+      amount: line.amount,
+      previousAmount: statement.comparePreviousPeriod ? (line.previousAmount ?? null) : undefined,
+      rowType: line.kind === "title" ? "section" : line.kind,
+      indent: line.indent,
+    }));
 }
+
+export {
+  getCashFlowActivePartyOptions,
+  getCashFlowBranchOptions,
+  getCashFlowLedgerGroupOptions,
+  getCashFlowLedgerOptions,
+  getCashFlowWarehouseOptions,
+  resolveFinancialYearLabel,
+  resolvePartyFilterLabel,
+} from "@/lib/accounts/cash-flow-compute";
+
+export { cashFlowLineSection };

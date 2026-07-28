@@ -5,6 +5,7 @@
 
 import type { InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import {
   findErpPartyLink,
   findErpPartyLinkByLedgerId,
@@ -26,6 +27,22 @@ export function resolveCustomerIdForLedger(
   if (ledgerName) {
     const customer = loadCustomers().find((c) => namesMatch(c.customerName, ledgerName));
     if (customer) return customer.id;
+  }
+
+  return null;
+}
+
+/** Resolve vendor master id for a payable ledger node. */
+export function resolveVendorIdForLedger(
+  ledgerId: number,
+  ledgerName?: string,
+): number | null {
+  const link = findErpPartyLinkByLedgerId(ledgerId);
+  if (link?.erpSourceModule === "vendor_master") return link.erpSourceId;
+
+  if (ledgerName) {
+    const vendor = loadVendors().find((v) => namesMatch(v.vendorName, ledgerName));
+    if (vendor) return vendor.id;
   }
 
   return null;

@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, FileDown, FileSpreadsheet, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import Link from "next/link";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -23,278 +23,652 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTableEmpty, AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
-import { SortTh } from "../../components/AccountsUI";
+import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  DayBookVoucherTypeFilter,
-  useReportDateRange,
+  ReportFinancialYearFilter,
+  ReportVoucherTypeMultiFilter,
+  ReportBranchMultiFilter,
+  ReportFilterSummary,
+  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
-  buildDayBookEntries,
-  computeDayBookSummary,
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  formatMultiSelectLabel,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import {
+  ACCOUNTS_VOUCHERS_UPDATED_EVENT,
+  scheduleAccountsSectionSeed,
+} from "@/lib/accounts/accounts-section-seed";
+import {
+  buildDayBookDisplayRows,
+  buildDayBookExportEntries,
+  buildDayBookVoucherGroups,
+  computeDayBookSummaryFromTransactions,
+  countDayBookSourceVouchers,
   DAY_BOOK_VOUCHER_TYPE_OPTIONS,
-  filterDayBookEntries,
+  defaultDayBookFyDateRange,
+  filterDayBookVoucherGroups,
+  flattenToDayBookTransactions,
   formatDayBookDate,
-  sortDayBookEntries,
-  type DayBookEntry,
-  type DayBookSortKey,
+  formatDayBookDateForTotal,
+  getDayBookBranchOptions,
+  type DayBookDisplayRow,
+  type DayBookDrillDownContext,
+  type DayBookTransactionRow,
+  type DayBookVoucherGroup,
 } from "@/lib/accounts/day-book-data";
-import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
+import { ensureDayBookDemoOnPageLoad } from "@/lib/accounts/day-book-demo-seed";
+import {
+  DAY_BOOK_DATE_RANGE_PRESET_OPTIONS,
+  resolveDateRangePreset,
+  type DateRangePresetId,
+} from "@/lib/accounts/report-date-presets";
 import {
   exportDayBookToExcel,
   exportDayBookToPdf,
 } from "@/lib/accounts/day-book-export";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { cn } from "@/lib/utils";
+import {
+  AccountsClearAllColumnFiltersButton,
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
+
+function DayBookDisplayTableRow({ row }: { row: DayBookDisplayRow }) {
+  if (row.kind === "dateTotal") {
+    return (
+      <AccountsTableRow className="bg-muted/25 font-semibold border-t border-border/80">
+        <AccountsTableCell colSpan={5} className="text-xs font-bold py-2">
+          Date Total ({formatDayBookDateForTotal(row.date)})
+        </AccountsTableCell>
+        <AccountsTableCell align="right" money className="py-2 font-bold">
+          {formatMoney(row.debit)}
+        </AccountsTableCell>
+        <AccountsTableCell align="right" money className="py-2 font-bold">
+          {formatMoney(row.credit)}
+        </AccountsTableCell>
+        <AccountsTableCell className="py-2" />
+        <AccountsTableCell className="py-2" />
+      </AccountsTableRow>
+    );
+  }
+
+  return (
+    <AccountsTableRow className={cn("group", row.isUnbalancedVoucher && "bg-red-50/40")}>
+      <AccountsTableCell className="whitespace-nowrap py-2">
+        {formatDayBookDate(row.date)}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap py-2">{row.voucherTypeLabel}</AccountsTableCell>
+      <AccountsTableCell mono className="whitespace-nowrap py-2">
+        {row.viewHref ? (
+          <Link href={row.viewHref} className="font-semibold text-brand-700 hover:underline">
+            {row.voucherNo}
+          </Link>
+        ) : (
+          <span className="font-semibold text-brand-700">{row.voucherNo}</span>
+        )}
+      </AccountsTableCell>
+      <AccountsTableCell className="max-w-[180px] truncate py-2" title={row.ledgerPartyName}>
+        {row.ledgerId && row.generalLedgerHref ? (
+          <Link href={row.generalLedgerHref} className="font-medium hover:underline text-foreground">
+            {row.ledgerPartyName}
+          </Link>
+        ) : (
+          <span className="font-medium text-foreground">{row.ledgerPartyName}</span>
+        )}
+      </AccountsTableCell>
+      <AccountsTableCell
+        className="max-w-[200px] truncate py-2 text-muted-foreground"
+        title={row.particulars}
+      >
+        {row.particulars}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" money className="whitespace-nowrap py-2">
+        {formatMoneyOrDash(row.debit)}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" money className="whitespace-nowrap py-2">
+        {formatMoneyOrDash(row.credit)}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" className="tabular-nums whitespace-nowrap py-2">
+        <MoneyAmount
+          amount={row.runningBalance}
+          side={row.runningBalanceType}
+          sideBadge
+          className="text-xs justify-end"
+        />
+      </AccountsTableCell>
+      <AccountsTableCell
+        className="max-w-[220px] truncate py-2 text-muted-foreground"
+        title={row.narration}
+      >
+        {row.narration}
+      </AccountsTableCell>
+    </AccountsTableRow>
+  );
+}
+
+const DAY_BOOK_COLUMN_CONFIG: AccountsColumnFilterConfig = {
+  date: { type: "date" },
+  voucherType: { type: "text" },
+  voucherNo: { type: "text" },
+  ledgerPartyName: { type: "text" },
+  particulars: { type: "text" },
+  debit: { type: "amount" },
+  credit: { type: "amount" },
+  narration: { type: "text" },
+};
+
+function getDayBookCellValue(row: DayBookTransactionRow, key: string): string | number | boolean | null | undefined {
+  switch (key) {
+    case "date":
+      return row.date;
+    case "voucherType":
+      return row.voucherTypeLabel;
+    case "voucherNo":
+      return row.voucherNo;
+    case "ledgerPartyName":
+      return row.ledgerPartyName;
+    case "particulars":
+      return row.particulars;
+    case "debit":
+      return row.debit;
+    case "credit":
+      return row.credit;
+    case "narration":
+      return row.narration;
+    default:
+      return (row as unknown as Record<string, unknown>)[key] as string | number | boolean | null | undefined;
+  }
+}
 
 export default function DayBookPageClient() {
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [search, setSearch] = useState("");
-  const [voucherType, setVoucherType] = useState("all");
-  const [sortKey, setSortKey] = useState<DayBookSortKey>("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const mounted = useClientMounted();
+  const [dataTick, setDataTick] = useState(0);
+  const [datesReady, setDatesReady] = useState(false);
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [exporting, setExporting] = useState(false);
 
-  const allEntries = useMemo(() => buildDayBookEntries(), []);
+  useEffect(() => {
+    ensureFinancialYearsCurrent();
+    const { from, to, fyId } = defaultDayBookFyDateRange();
+    setDateFrom(from);
+    setDateTo(to);
+    setFinancialYearId(fyId);
+    setDatesReady(true);
+  }, []);
 
-  const filtered = useMemo(
-    () =>
-      filterDayBookEntries(allEntries, {
-        search,
-        dateFrom,
-        dateTo,
-        voucherType: voucherType as DayBookEntry["voucherType"] | "all",
-        financialYearId: "all",
-      }),
-    [allEntries, search, dateFrom, dateTo, voucherType],
+  useEffect(() => {
+    if (!mounted) return;
+    scheduleAccountsSectionSeed("reports");
+    ensureDayBookDemoOnPageLoad();
+    void import("@/lib/accounts/general-ledger-demo-seed").then((m) => {
+      m.ensureGeneralLedgerDemoOnPageLoad();
+      setDataTick((t) => t + 1);
+    });
+    const onVouchersUpdated = () => setDataTick((t) => t + 1);
+    window.addEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
+    return () => window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
+  }, [mounted]);
+
+  const allGroups = useMemo(() => {
+    if (!mounted) return [];
+    void dataTick;
+    return buildDayBookVoucherGroups();
+  }, [mounted, dataTick]);
+
+  const sourceVoucherCount = useMemo(() => {
+    if (!mounted) return 0;
+    void dataTick;
+    return countDayBookSourceVouchers();
+  }, [mounted, dataTick]);
+
+  const branchOptions = useMemo(() => {
+    if (!mounted) return [...REPORT_BRANCH_OPTIONS];
+    void dataTick;
+    const fromData = getDayBookBranchOptions();
+    return fromData.length > 0 ? fromData : [...REPORT_BRANCH_OPTIONS];
+  }, [mounted, dataTick]);
+
+  const dayBookVoucherTypeOptions = useMemo(
+    () => DAY_BOOK_VOUCHER_TYPE_OPTIONS.filter((o) => o.value !== "all"),
+    [],
   );
 
-  const sorted = useMemo(
-    () => sortDayBookEntries(filtered, sortKey, sortDir),
-    [filtered, sortKey, sortDir],
+  const filteredGroups = useMemo(() => {
+    if (!datesReady) return [];
+    return filterDayBookVoucherGroups(allGroups, {
+      dateFrom,
+      dateTo,
+      voucherType: voucherTypes,
+      financialYearId,
+      branch: branches,
+    });
+  }, [allGroups, datesReady, dateFrom, dateTo, voucherTypes, financialYearId, branches]);
+
+  const drillContext = useMemo(
+    (): DayBookDrillDownContext => ({
+      dateFrom,
+      dateTo,
+      financialYearId,
+      branch: branches,
+    }),
+    [dateFrom, dateTo, financialYearId, branches],
   );
 
-  const summary = useMemo(() => computeDayBookSummary(filtered), [filtered]);
+  const orderedTransactions = useMemo(
+    () => flattenToDayBookTransactions(filteredGroups, drillContext),
+    [filteredGroups, drillContext],
+  );
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sorted.slice(start, start + pageSize);
-  }, [sorted, page, pageSize]);
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo, financialYearId, voucherTypes, branches, dataTick]);
+
+  const handleFinancialYearChange = useCallback((fyId: string) => {
+    setFinancialYearId(fyId);
+    if (fyId !== "all") {
+      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (fy) {
+        const today = new Date().toISOString().slice(0, 10);
+        setDateFrom(fy.startDate);
+        setDateTo(today < fy.endDate ? today : fy.endDate);
+        setPreset("custom");
+      }
+    }
+  }, []);
+
+  const handlePresetChange = useCallback((next: DateRangePresetId) => {
+    setPreset(next);
+    if (next !== "custom") {
+      const { from, to } = resolveDateRangePreset(next);
+      setDateFrom(from);
+      setDateTo(to);
+    }
+  }, []);
+
+  const defaultFy = useMemo(() => defaultDayBookFyDateRange(), []);
 
   const hasFilters =
-    Boolean(search.trim()) ||
-    preset !== "this_month" ||
-    voucherType !== "all";
+    datesReady &&
+    (preset !== "custom" ||
+      financialYearId !== defaultFy.fyId ||
+      dateFrom !== defaultFy.from ||
+      dateTo !== defaultFy.to ||
+      voucherTypes.length > 0 ||
+      branches.length > 0);
 
-  const voucherTypeLabel =
-    DAY_BOOK_VOUCHER_TYPE_OPTIONS.find((o) => o.value === voucherType)?.label ?? "All Types";
+  const clearFilters = useCallback(() => {
+    const { from, to, fyId } = defaultDayBookFyDateRange();
+    setPreset("custom");
+    setDateFrom(from);
+    setDateTo(to);
+    setFinancialYearId(fyId);
+    setVoucherTypes([]);
+    setBranches([]);
+  }, []);
+
+  const voucherTypeLabel = formatMultiSelectLabel(
+    voucherTypes,
+    dayBookVoucherTypeOptions,
+    "Type",
+    "All Types",
+  );
+
+  const financialYearLabel = useMemo(() => {
+    if (financialYearId === "all") return "All years";
+    return loadFinancialYears().find((f) => String(f.id) === financialYearId)?.name ?? "";
+  }, [financialYearId]);
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+    [
+      buildBranchFilterSummary(branches, () => setBranches([])),
+      buildEntityFilterSummary(
+        "voucherType",
+        "Voucher Types",
+        voucherTypes,
+        dayBookVoucherTypeOptions,
+        () => setVoucherTypes([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null),
+  [branches, voucherTypes, dayBookVoucherTypeOptions]);
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: "",
+      financialYear: financialYearLabel,
       voucherType: voucherTypeLabel,
-      search: search.trim(),
+      branch:
+        branches.length === 0
+          ? undefined
+          : branches.length === 1
+            ? branches[0]
+            : `${branches.length} selected`,
     }),
-    [dateFrom, dateTo, voucherTypeLabel, search],
+    [dateFrom, dateTo, financialYearLabel, voucherTypeLabel, branches],
   );
 
-  const handleSort = (key: DayBookSortKey) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+  return (
+    <AccountsColumnFilterProvider
+      rows={orderedTransactions}
+      getCellValue={getDayBookCellValue}
+      columnConfig={DAY_BOOK_COLUMN_CONFIG}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <DayBookPageBody
+        datesReady={datesReady}
+        sourceVoucherCount={sourceVoucherCount}
+        orderedTransactions={orderedTransactions}
+        filteredGroups={filteredGroups}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        preset={preset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        financialYearId={financialYearId}
+        voucherTypes={voucherTypes}
+        branches={branches}
+        branchOptions={branchOptions}
+        dayBookVoucherTypeOptions={dayBookVoucherTypeOptions}
+        filterSummaryItems={filterSummaryItems}
+        exportMeta={exportMeta}
+        exporting={exporting}
+        setExporting={setExporting}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        onFinancialYearChange={handleFinancialYearChange}
+        onPresetChange={handlePresetChange}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        onVoucherTypesChange={setVoucherTypes}
+        onBranchesChange={setBranches}
+      />
+    </AccountsColumnFilterProvider>
+  );
+}
+
+function DayBookPageBody({
+  datesReady,
+  sourceVoucherCount,
+  orderedTransactions,
+  filteredGroups,
+  hasFilters,
+  clearFilters,
+  preset,
+  dateFrom,
+  dateTo,
+  financialYearId,
+  voucherTypes,
+  branches,
+  branchOptions,
+  dayBookVoucherTypeOptions,
+  filterSummaryItems,
+  exportMeta,
+  exporting,
+  setExporting,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  onFinancialYearChange,
+  onPresetChange,
+  onDateFromChange,
+  onDateToChange,
+  onVoucherTypesChange,
+  onBranchesChange,
+}: {
+  datesReady: boolean;
+  sourceVoucherCount: number;
+  orderedTransactions: DayBookTransactionRow[];
+  filteredGroups: DayBookVoucherGroup[];
+  hasFilters: boolean;
+  clearFilters: () => void;
+  preset: DateRangePresetId;
+  dateFrom: string;
+  dateTo: string;
+  financialYearId: string;
+  voucherTypes: string[];
+  branches: string[];
+  branchOptions: string[];
+  dayBookVoucherTypeOptions: { value: string; label: string }[];
+  filterSummaryItems: ReportFilterSummaryItem[];
+  exportMeta: {
+    dateFrom: string;
+    dateTo: string;
+    financialYear: string;
+    voucherType: string;
+    branch?: string;
   };
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  onFinancialYearChange: (fyId: string) => void;
+  onPresetChange: (next: DateRangePresetId) => void;
+  onDateFromChange: (v: string) => void;
+  onDateToChange: (v: string) => void;
+  onVoucherTypesChange: (v: string[]) => void;
+  onBranchesChange: (v: string[]) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const columnFilteredTxns = useAccountsFilteredRows(orderedTransactions);
 
-  const onColumnSort = (key: string) => handleSort(key as DayBookSortKey);
+  const displayRows = useMemo(
+    () => buildDayBookDisplayRows(columnFilteredTxns),
+    [columnFilteredTxns],
+  );
 
-  const clearFilters = useCallback(() => {
-    setSearch("");
-    setPreset("this_month");
-    const { from, to } = resolveDateRangePreset("this_month");
-    setDateFrom(from);
-    setDateTo(to);
-    setVoucherType("all");
-    setPage(1);
-  }, [setPreset, setDateFrom, setDateTo]);
+  const summary = useMemo(
+    () => computeDayBookSummaryFromTransactions(columnFilteredTxns),
+    [columnFilteredTxns],
+  );
+
+  const exportRows = useMemo(
+    () => buildDayBookExportEntries(columnFilteredTxns, summary, filteredGroups),
+    [columnFilteredTxns, summary, filteredGroups],
+  );
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return displayRows.slice(start, start + pageSize);
+  }, [displayRows, page, pageSize]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, voucherType, pageSize]);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
 
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      await exportDayBookToExcel(sorted, exportMeta, summary);
+      await exportDayBookToExcel(exportRows, exportMeta, {
+        totalDebit: summary.totalDebit,
+        totalCredit: summary.totalCredit,
+        isBalanced: summary.isBalanced,
+        lineCount: summary.lineCount,
+        voucherCount: summary.voucherCount,
+        unbalancedVoucherCount: summary.unbalancedVoucherCount,
+      });
     } finally {
       setExporting(false);
     }
   };
 
   const handleExportPdf = () => {
-    exportDayBookToPdf(sorted, exportMeta, summary);
+    exportDayBookToPdf(exportRows, exportMeta, {
+      totalDebit: summary.totalDebit,
+      totalCredit: summary.totalCredit,
+      isBalanced: summary.isBalanced,
+      lineCount: summary.lineCount,
+      voucherCount: summary.voucherCount,
+      unbalancedVoucherCount: summary.unbalancedVoucherCount,
+    });
   };
+
+  const showColumnFilterEmpty =
+    orderedTransactions.length > 0 && columnFilteredTxns.length === 0;
 
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Day Book")}
       title="Day Book"
       description="All accounting transactions for the selected date range."
-      actions={
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" disabled={exporting}>
-              <Download className="w-4 h-4" />
-              Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              className="text-xs gap-2 cursor-pointer"
-              disabled={exporting || sorted.length === 0}
-              onClick={handleExportExcel}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Excel
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-xs gap-2 cursor-pointer"
-              disabled={sorted.length === 0}
-              onClick={handleExportPdf}
-            >
-              <FileDown className="w-4 h-4" />
-              PDF
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      }
       filters={
-        <ReportFilterRow className="items-end">
-          <ReportDateRangeFilter
-            preset={preset}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onPresetChange={setPreset}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-          />
-          <DayBookVoucherTypeFilter value={voucherType} onChange={setVoucherType} />
-          <div className="space-y-1 min-w-[180px] flex-1">
-            <Label className="text-xs font-medium uppercase text-muted-foreground">Search</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Voucher no., type, party, narration…"
-                className="h-9 text-sm font-medium pr-8"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          {hasFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-sm font-medium"
-              onClick={clearFilters}
-            >
-              Clear Filters
-            </Button>
-          )}
-        </ReportFilterRow>
+        <>
+          <ReportFilterRow
+            className="items-end"
+            end={
+              <>
+                <AccountsClearAllColumnFiltersButton />
+                <AccountsExportMenu
+                  onExcel={handleExportExcel}
+                  onPdf={handleExportPdf}
+                  disabled={exporting || columnFilteredTxns.length === 0}
+                />
+              </>
+            }
+          >
+            <ReportFinancialYearFilter
+              value={financialYearId}
+              onChange={onFinancialYearChange}
+            />
+            <ReportDateRangeFilter
+              preset={preset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onPresetChange={onPresetChange}
+              onDateFromChange={onDateFromChange}
+              onDateToChange={onDateToChange}
+              presetOptions={DAY_BOOK_DATE_RANGE_PRESET_OPTIONS}
+            />
+            <ReportBranchMultiFilter
+              values={branches}
+              onChange={onBranchesChange}
+              options={branchOptions}
+            />
+            <ReportVoucherTypeMultiFilter
+              values={voucherTypes}
+              onChange={onVoucherTypesChange}
+              options={dayBookVoucherTypeOptions}
+            />
+            {hasFilters && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "h-8 text-xs font-medium")}
+                onClick={clearFilters}
+              >
+                Clear Filters
+              </Button>
+            )}
+          </ReportFilterRow>
+          <ReportFilterSummary items={filterSummaryItems} />
+        </>
       }
       layout="split"
       className="h-full min-h-0"
     >
+      <AccountsListingTableCard className="flex-1 min-h-0">
       <div className="flex flex-col flex-1 min-h-0">
         <AccountsTableScroll>
-          <AccountsTable minWidth={960}>
+          <AccountsTable minWidth={1180} className="text-xs financial-report">
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                <SortTh label="Voucher No." colKey="voucherNo" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                <SortTh label="Voucher Type" colKey="voucherType" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                <SortTh label="Ledger / Party" colKey="partyLedger" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                <SortTh label="Narration" colKey="narration" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                <SortTh label="Debit" colKey="debit" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} align="right" />
-                <SortTh label="Credit" colKey="credit" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} align="right" />
+                <SortTh label="Date" colKey="date" filterType="date" />
+                <SortTh label="Voucher Type" colKey="voucherType" />
+                <SortTh label="Voucher No." colKey="voucherNo" />
+                <SortTh label="Ledger / Party Name" colKey="ledgerPartyName" />
+                <SortTh label="Particulars" colKey="particulars" />
+                <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+                <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+                <AccountsColumnHeader
+                  label="Running Balance"
+                  colKey="runningBalance"
+                  sortable={false}
+                  filterable={false}
+                  align="right"
+                />
+                <SortTh label="Narration" colKey="narration" />
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
-              {sorted.length === 0 ? (
+              {!datesReady ? (
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={9} className="accounts-table-empty">
+                    Loading Day Book…
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ) : sourceVoucherCount === 0 ? (
                 <AccountsTableEmpty
-                  colSpan={7}
-                  message="No Day Book entries found for the selected period."
+                  colSpan={9}
+                  message="No posted accounting transactions found."
+                />
+              ) : orderedTransactions.length === 0 ? (
+                <AccountsTableEmpty
+                  colSpan={9}
+                  message="No Day Book entries match the selected filters. Try widening the date range or clearing filters."
                   onClear={hasFilters ? clearFilters : undefined}
                 />
+              ) : showColumnFilterEmpty ? (
+                <AccountsTableEmpty
+                  colSpan={9}
+                  message="No records match the column filters."
+                  onClear={ctx?.clearAllColumnFilters}
+                />
               ) : (
-                paginated.map((row) => (
-                  <AccountsTableRow key={row.id}>
-                    <AccountsTableCell className="whitespace-nowrap">
-                      {formatDayBookDate(row.date)}
-                    </AccountsTableCell>
-                    <AccountsTableCell mono className="font-semibold text-brand-700 whitespace-nowrap">
-                      {row.voucherNo}
-                    </AccountsTableCell>
-                    <AccountsTableCell className="whitespace-nowrap">{row.voucherTypeLabel}</AccountsTableCell>
-                    <AccountsTableCell className="max-w-[160px] truncate" title={row.partyLedger}>
-                      {row.partyLedger}
-                    </AccountsTableCell>
-                    <AccountsTableCell className="max-w-[220px] truncate text-muted-foreground" title={row.narration}>
-                      {row.narration}
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right" money className="whitespace-nowrap">
-                      {formatMoneyOrDash(row.debit)}
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right" money className="whitespace-nowrap">
-                      {formatMoneyOrDash(row.credit)}
-                    </AccountsTableCell>
-                  </AccountsTableRow>
-                ))
+                paginated.map((row) => <DayBookDisplayTableRow key={row.id} row={row} />)
               )}
             </AccountsTableBody>
-            {sorted.length > 0 && (
+            {columnFilteredTxns.length > 0 && (
               <AccountsTableFoot>
-                <AccountsTableRow>
-                  <AccountsTableCell colSpan={5} className="font-semibold text-foreground text-xs">
-                    Total
+                <AccountsTableRow className="bg-brand-50/30 font-semibold border-t-2 border-foreground/20">
+                  <AccountsTableCell colSpan={5} className="text-xs font-bold py-2">
+                    Grand Total
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn("font-semibold", !summary.isBalanced && "text-red-600")}
+                    className={cn("py-2 font-bold", !summary.isBalanced && "text-red-600")}
                   >
                     {formatMoney(summary.totalDebit)}
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn("font-semibold", !summary.isBalanced && "text-red-600")}
+                    className={cn("py-2 font-bold", !summary.isBalanced && "text-red-600")}
                   >
                     {formatMoney(summary.totalCredit)}
                   </AccountsTableCell>
+                  <AccountsTableCell colSpan={2} className="py-2" />
                 </AccountsTableRow>
               </AccountsTableFoot>
             )}
           </AccountsTable>
         </AccountsTableScroll>
 
-        {sorted.length > 0 && (
+        {columnFilteredTxns.length > 0 && (
           <>
             <div
               className={cn(
@@ -307,13 +681,20 @@ export default function DayBookPageClient() {
               {summary.isBalanced ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                  Total Debit and Total Credit are balanced.
+                  Total Debit and Total Credit are balanced across {summary.lineCount} ledger lines.
                 </>
               ) : (
                 <>
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  Total Debit ({formatMoney(summary.totalDebit)}) and Total Credit ({formatMoney(summary.totalCredit)}) do not match.
-                  Difference: {formatMoney(summary.difference)}.
+                  Total Debit ({formatMoney(summary.totalDebit)}) and Total Credit (
+                  {formatMoney(summary.totalCredit)}) differ by {formatMoney(summary.difference)}.
+                  {summary.unbalancedVoucherCount > 0 && (
+                    <span>
+                      {" "}
+                      {summary.unbalancedVoucherCount} voucher
+                      {summary.unbalancedVoucherCount === 1 ? "" : "s"} highlighted as unbalanced.
+                    </span>
+                  )}
                 </>
               )}
             </div>
@@ -321,16 +702,16 @@ export default function DayBookPageClient() {
               <AccountsTablePagination
                 page={page}
                 pageSize={pageSize}
-                totalRecords={sorted.length}
+                totalRecords={displayRows.length}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
-                recordLabel="entries"
+                recordLabel="rows"
               />
             </div>
           </>
         )}
-
       </div>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

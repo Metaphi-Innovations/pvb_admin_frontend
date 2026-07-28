@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { AccountsViewAction, accountsActionColClass } from "@/components/accounts/AccountsTableActions";
@@ -9,22 +10,26 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 
-const COLUMNS = [
-  { key: "date", label: "Date", align: "left" as const },
-  { key: "voucher", label: "Voucher No.", align: "left" as const },
-  { key: "type", label: "Voucher Type", align: "left" as const },
-  { key: "particular", label: "Party / Particular", align: "left" as const },
-  { key: "debit", label: "Debit", align: "right" as const },
-  { key: "credit", label: "Credit", align: "right" as const },
-  { key: "balance", label: "Running Balance", align: "right" as const },
-  { key: "action", label: "", align: "center" as const },
-];
+const COLUMN_CONFIG = {
+  date: { type: "date" as const },
+  voucher: { type: "text" as const },
+  type: { type: "text" as const },
+  particular: { type: "text" as const },
+  debit: { type: "amount" as const },
+  credit: { type: "amount" as const },
+  balance: { type: "amount" as const },
+};
 
 function VoucherCell({
   row,
@@ -51,37 +56,45 @@ function VoucherCell({
   );
 }
 
-export function GeneralLedgerTransactionsTable({
-  rows,
-  emptyLabel = "No posted transactions for this ledger in the selected period.",
+function GeneralLedgerTransactionsTableBody({
+  toolbarRows,
   onRowClick,
 }: {
-  rows: GeneralLedgerRow[];
-  emptyLabel?: string;
+  toolbarRows: GeneralLedgerRow[];
   onRowClick?: (row: GeneralLedgerRow) => void;
 }) {
-  if (rows.length === 0) {
-    return (
-      <div className="px-4 py-6 text-center">
-        <p className="text-xs text-muted-foreground">{emptyLabel}</p>
-      </div>
-    );
-  }
+  const visible = useAccountsFilteredRows<GeneralLedgerRow>(toolbarRows);
 
   return (
-    <AccountsTableScroll className="flex-1 min-h-0 h-full">
-      <AccountsTable minWidth={820} className="text-xs">
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            {COLUMNS.map((col) => (
-              <AccountsTableHeadCell key={col.key} align={col.align} className={col.key === "action" ? accountsActionColClass("single") : undefined}>
-                {col.label}
-              </AccountsTableHeadCell>
-            ))}
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {rows.map((row, i) => (
+    <AccountsTable minWidth={820} className="text-xs">
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Voucher No." colKey="voucher" />
+          <SortTh label="Voucher Type" colKey="type" />
+          <SortTh label="Party / Particular" colKey="particular" />
+          <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+          <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+          <SortTh label="Running Balance" colKey="balance" filterType="amount" align="right" />
+          <AccountsColumnHeader
+            label=""
+            colKey="action"
+            sortable={false}
+            filterable={false}
+            align="center"
+            className={accountsActionColClass("single")}
+          />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {visible.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={8} className="accounts-table-empty">
+              No records match the column filters.
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          visible.map((row, i) => (
             <AccountsTableRow
               key={`${row.voucherNo}-${row.date}-${i}`}
               className={cn(
@@ -123,9 +136,56 @@ export function GeneralLedgerTransactionsTable({
                 )}
               </AccountsTableCell>
             </AccountsTableRow>
-          ))}
-        </AccountsTableBody>
-      </AccountsTable>
-    </AccountsTableScroll>
+          ))
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
+export function GeneralLedgerTransactionsTable({
+  rows,
+  emptyLabel = "No posted transactions for this ledger in the selected period.",
+  onRowClick,
+}: {
+  rows: GeneralLedgerRow[];
+  emptyLabel?: string;
+  onRowClick?: (row: GeneralLedgerRow) => void;
+}) {
+  const getCellValue = useCallback((row: GeneralLedgerRow, key: string) => {
+    switch (key) {
+      case "voucher":
+        return row.voucherNo;
+      case "type":
+        return row.voucherType;
+      case "particular":
+        return row.contraLedger;
+      case "balance":
+        return row.runningBalance;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  if (rows.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center">
+        <p className="text-xs text-muted-foreground">{emptyLabel}</p>
+      </div>
+    );
+  }
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={COLUMN_CONFIG}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <AccountsTableScroll className="flex-1 min-h-0 h-full">
+        <GeneralLedgerTransactionsTableBody toolbarRows={rows} onRowClick={onRowClick} />
+      </AccountsTableScroll>
+    </AccountsColumnFilterProvider>
   );
 }

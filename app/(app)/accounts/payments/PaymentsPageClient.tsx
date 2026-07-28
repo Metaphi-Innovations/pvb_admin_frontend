@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,6 @@ import {
   SOURCE_TYPE_OPTIONS,
   type CompanyPaymentRecord,
 } from "./payments-data";
-import { PaymentStatusBadge } from "./components/PaymentStatusBadge";
 import { PaymentInstallmentModal } from "./components/PaymentInstallmentModal";
 import { exportPaymentsToExcel } from "./payments-export";
 import { ThreeWayMatchStatusBadge } from "@/components/erp/ThreeWayMatchStatusBadge";
@@ -87,7 +86,7 @@ export default function PaymentsPageClient() {
   return (
     <AppLayout>
       <div className="max-w-[1680px] mx-auto space-y-3">
-        <PageHeader
+        <AccountsListingChrome
           title="Payments"
           description="Process and track outgoing payments for purchases and approved TA/DA claims."
           breadcrumbs={PAYMENTS_BREADCRUMB}
@@ -96,16 +95,16 @@ export default function PaymentsPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-sm font-medium gap-1.5"
+                className="h-8 text-xs font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-4 h-4" />
+                <FileSpreadsheet className="w-3.5 h-3.5" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Button size="sm" className="h-8 text-xs font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
                 <Link href={`${PAYMENTS_LIST_PATH}/new`}>
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   Record Payment
                 </Link>
               </Button>
@@ -180,7 +179,6 @@ export default function PaymentsPageClient() {
                     "Amount",
                     "Paid Amount",
                     "Balance",
-                    "Status",
                     "",
                   ].map((h) => (
                     <th
@@ -195,7 +193,7 @@ export default function PaymentsPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="accounts-table-empty">
+                    <td colSpan={13} className="accounts-table-empty">
                       No payments. Approved claims and purchase invoices sync here automatically.
                     </td>
                   </tr>
@@ -222,9 +220,6 @@ export default function PaymentsPageClient() {
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.approvedAmount)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.paidAmount)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.balanceAmount)}</td>
-                      <td className="px-2.5 py-2">
-                        <PaymentStatusBadge status={r.paymentStatus} />
-                      </td>
                       <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
                         <AccountsTableActionCell>
                           {getPaymentRowActions(r).includes("view") && (

@@ -9,7 +9,8 @@ export type ErpSourceModule =
   | "gst_master"
   | "bank_master"
   | "employee_master"
-  | "fixed_asset_master";
+  | "fixed_asset_master"
+  | "warehouse_master";
 
 export interface ErpPartyLedgerLink {
   ledgerId: number;

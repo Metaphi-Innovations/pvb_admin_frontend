@@ -109,25 +109,29 @@ export default function ExpenseFormPageClient({
       title={title}
       breadcrumb={[...EXPENSE_BREADCRUMB]}
       code={expenseNumber}
-      footer={
-        <>
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(EXPENSE_LIST_PATH)}>
-            Cancel
+      stickyFooter={
+        <div className="flex items-center justify-between gap-2 w-full">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => router.push(EXPENSE_LIST_PATH)}
+          >
+            Discard Form
           </Button>
-        </>
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={() => persist(false)}
+          >
+            {mode === "create" ? "Submit for Approval" : "Save & Submit"}
+          </Button>
+        </div>
       }
     >
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
       <ExpenseForm form={form} onChange={setForm} expenseNumber={expenseNumber} />
-      <div className="flex justify-end gap-2 mt-4 pb-6">
-        <Button
-          size="sm"
-          className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => persist(false)}
-        >
-          {mode === "create" ? "Submit for Approval" : "Save & Submit"}
-        </Button>
-      </div>
     </AccountsFormLayout>
   );
 }

@@ -161,6 +161,13 @@ export interface Vendor {
   documents: VendorDocument[];
   remarks: string;
   status: VendorStatus;
+  /** Linked Sundry Creditor ledger — Vendor Master is source of truth */
+  openingBalance?: number;
+  balanceType?: "Debit" | "Credit";
+  /** ISO date YYYY-MM-DD */
+  openingBalanceDate?: string;
+  billWiseAccounting?: boolean;
+  accountingDescription?: string;
   createdBy: string;
   createdDate: string;
   updatedBy: string;
@@ -718,6 +725,11 @@ export interface VendorFormValues {
   documents: VendorDocument[];
   remarks: string;
   vendorProducts: VendorProductMapping[];
+  openingBalance: string;
+  balanceType: "Debit" | "Credit";
+  openingBalanceDate: string;
+  billWiseAccounting: boolean;
+  accountingDescription: string;
 }
 
 export const DEFAULT_VENDOR_FORM: VendorFormValues = {
@@ -758,6 +770,11 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   documents: [],
   remarks: "",
   vendorProducts: [],
+  openingBalance: "0",
+  balanceType: "Credit",
+  openingBalanceDate: "",
+  billWiseAccounting: true,
+  accountingDescription: "",
 };
 
 export function vendorToForm(v: Vendor): VendorFormValues {
@@ -808,6 +825,14 @@ export function vendorToForm(v: Vendor): VendorFormValues {
       : [],
     remarks: v.remarks,
     vendorProducts: v.vendorProducts ? v.vendorProducts.map((p) => ({ ...p })) : [],
+    openingBalance:
+      v.openingBalance != null && Number.isFinite(v.openingBalance)
+        ? String(v.openingBalance)
+        : "0",
+    balanceType: v.balanceType === "Debit" ? "Debit" : "Credit",
+    openingBalanceDate: (v.openingBalanceDate || "").trim(),
+    billWiseAccounting: v.billWiseAccounting !== false,
+    accountingDescription: (v.accountingDescription || "").trim(),
   };
 }
 
@@ -881,6 +906,14 @@ export function formToVendor(
     documents: form.documents,
     remarks: form.remarks.trim(),
     vendorProducts: [],
+    openingBalance: (() => {
+      const n = Number(String(form.openingBalance).replace(/,/g, "").trim());
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    })(),
+    balanceType: form.balanceType === "Debit" ? "Debit" : "Credit",
+    openingBalanceDate: form.openingBalanceDate.trim() || undefined,
+    billWiseAccounting: form.billWiseAccounting !== false,
+    accountingDescription: form.accountingDescription.trim() || undefined,
   };
 }
 
@@ -940,8 +973,40 @@ export function collectVendorFormFieldErrors(
     errors.pincode = "Pincode is required.";
   } else if (!validateVendorPincode(form.billingAddress.pincode)) {
     errors.pincode = "Enter a valid 6-digit pincode.";
+  } else if (!form.billingAddress.state.trim()) {
+    errors.pincode = "Enter a valid pincode to auto-fill city, town, and state.";
   }
 
+  if (!form.accountHolderName.trim()) {
+    errors.accountHolderName = "Account holder name is required.";
+  }
+  if (!form.bankName.trim()) {
+    errors.bankName = "Bank name is required.";
+  }
+  if (!form.branch.trim()) {
+    errors.branch = "Branch name is required.";
+  }
+  if (!form.accountNumber.trim()) {
+    errors.accountNumber = "Account number is required.";
+  }
+  if (!form.ifscCode.trim()) {
+    errors.ifscCode = "IFSC code is required.";
+  } else if (!validateVendorIFSC(form.ifscCode)) {
+    errors.ifscCode = "Enter a valid IFSC code.";
+  }
+
+  const documentsMissingUpload = form.documents.filter(
+    (doc) => !doc.fileName?.trim() && !doc.file && !(doc.fileUrl && doc.uploaded),
+  );
+  if (form.documents.length === 0 || documentsMissingUpload.length > 0) {
+    if (form.documents.some((doc) => doc.file && !doc.fileName)) {
+      errors.documents = "Files are selected but not uploaded. Please complete the upload before saving.";
+    } else if (documentsMissingUpload.length > 0) {
+      errors.documents = "Please upload all required documents before saving.";
+    } else {
+      errors.documents = "At least one document must be uploaded.";
+    }
+  }
   if (form.mobile.trim() && !validateVendorMobile(form.mobile)) {
     errors.mobile = "Enter a valid 10-digit mobile number.";
   }
@@ -949,9 +1014,6 @@ export function collectVendorFormFieldErrors(
     errors.email = "Enter a valid email address.";
   }
 
-  if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
-    errors.ifscCode = "Enter a valid IFSC code.";
-  }
   if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
     errors.confirmAccountNumber = "Account number and confirmation do not match.";
   }

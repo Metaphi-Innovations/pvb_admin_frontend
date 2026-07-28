@@ -379,12 +379,6 @@ export function MasterModule<T extends BaseMasterRecord, F>({
     () => [
       { label: "View", icon: Eye, onClick: (r: unknown) => openView(r as T) },
       { label: "Edit", icon: Pencil, onClick: (r: unknown) => openEdit(r as T) },
-      {
-        label: "Delete",
-        icon: Trash2,
-        variant: "destructive" as const,
-        onClick: (r: unknown) => setDeleteTarget(r as T),
-      },
     ],
     [],
   );
@@ -554,24 +548,6 @@ export function MasterModule<T extends BaseMasterRecord, F>({
           </SheetContent>
         </Sheet>
 
-        <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="text-sm">Delete record?</DialogTitle>
-              <DialogDescription className="text-xs">
-                This action cannot be undone. The record will be permanently removed.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-                Cancel
-              </Button>
-              <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </PageShell>
     </AppLayout>
   );

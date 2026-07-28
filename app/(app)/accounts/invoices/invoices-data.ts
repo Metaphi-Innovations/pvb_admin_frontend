@@ -18,7 +18,16 @@ import {
 	type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
 import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
-import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
+import { findPostedSalesInvoiceVoucher, findPostedSampleOrderExpenseVoucher } from "@/lib/accounts/sales-invoice-accounting";
+import { getCostPriceBySku, isCpMissing, resolveSku } from "@/lib/accounts/inventory-accounting-data";
+import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
+import {
+	ensureDocumentWorkflow,
+	type AccountsDocumentWorkflow,
+} from "@/lib/accounts/accounts-maker-checker";
+import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
+import { ensureCustomerLedger } from "@/lib/accounts/party-ledger-sync";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
 import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
@@ -26,9 +35,17 @@ import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
-import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
-import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
-import { nextInvoiceDocumentNo } from "@/lib/accounts/invoice-type";
+import type {
+	InvoiceDocumentKind,
+	InvoiceDocumentType,
+	SalesInvoiceSourceType,
+} from "@/lib/accounts/invoice-type";
+import {
+	nextInvoiceDocumentNo,
+	nextPvbSalesOrderInvoiceNo,
+	nextSampleOrderProformaNo,
+	nextServiceInvoiceNo,
+} from "@/lib/accounts/invoice-type";
 import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
 import {
   mergeSalesInvoiceSeed,
@@ -104,6 +121,26 @@ export interface InvoiceLineItem {
 	amount: number;
 	creditedQty?: number;
 	creditedAmount?: number;
+	/** Dispatch batch snapshot (Sales Order generation). */
+	batchNo?: string;
+	manufacturingDate?: string;
+	expiryDate?: string;
+	/** Max editable qty = dispatch-ready qty from linked dispatch line. */
+	dispatchReadyQty?: number;
+	/** Available stock for the batch (when known). */
+	batchAvailableQty?: number;
+	/** Qty in case / packaging, when available from master. */
+	qtyInCase?: number | null;
+	/** Sales person from linked Sales Order. */
+	salesperson?: string;
+	/** Stock Transfer: Pricing Master Cost Price valuation. */
+	costPriceSource?: string;
+	/** Cost Price used for inventory valuation (Sample Order / STI). */
+	costPrice?: number;
+	/** When true, Cost Price is missing — block STI / Sample generation. */
+	cpMissing?: boolean;
+	/** Batch master id when known. */
+	batchId?: string;
 	/** Product Discount Scheme — carried from sales order / dispatch */
 	schemeApplied?: "Yes" | "No";
 	schemeCode?: string;
@@ -145,6 +182,7 @@ export interface InvoiceRecord {
 	id: number;
 	invoiceNo: string;
 	invoiceType?: InvoiceDocumentType;
+	documentType?: InvoiceDocumentKind;
 	invoiceDate: string;
 	dueDate: string;
 	referenceNo: string;
@@ -174,6 +212,9 @@ export interface InvoiceRecord {
 	invoiceStatus: InvoiceStatus;
 	/** Maker-checker workflow from User Management approver mapping */
 	workflow?: AccountsDocumentWorkflow;
+	/** Linked GL voucher after successful posting */
+	postedVoucherId?: number | null;
+	postedVoucherNo?: string | null;
 	paymentStatus: InvoicePaymentStatus;
 	collections: InvoiceCollectionEntry[];
 	attachments: InvoiceAttachment[];
@@ -182,10 +223,24 @@ export interface InvoiceRecord {
 	/** Future: sales order link */
 	salesOrderId?: number | null;
 	sourceDispatchId?: string;
+	/** Persisted dispatch date (survives if dispatch record is later removed). */
+	dispatchDate?: string;
+	/**
+	 * Upstream generation source — preferred by Sales Invoice listing tabs.
+	 * Optional for backward compatibility with older localStorage records.
+	 */
+	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
+	/**
+	 * Service Invoice only — optional selected Income ledger for Cr revenue.
+	 * When omitted, posting resolves the approved default "Service Income" ledger.
+	 */
+	incomeLedgerId?: number | null;
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
+	/** Bank account for payment instructions / print */
+	bankAccountId?: number | null;
 	paymentTerms?: string;
 	creditDays?: number;
 	placeOfSupply?: string;
@@ -196,6 +251,45 @@ export interface InvoiceRecord {
 	contactPerson?: string;
 	gstTreatment?: string;
 	receivableLedger?: string;
+	/** Goods invoice — transport & statutory (editable before generate). */
+	transportMode?: string;
+	transporterName?: string;
+	transporterId?: string;
+	vehicleNo?: string;
+	lrNo?: string;
+	lrDate?: string;
+	transportDocNo?: string;
+	transportDocDate?: string;
+	distanceKm?: number | null;
+	ewayBillNo?: string;
+	ewayBillExpiryDate?: string;
+	ewayBillStatus?:
+		| "not_generated"
+		| "generated"
+		| "manual"
+		| "stale"
+		| "not_applicable"
+		| "expired"
+		| "cancelled"
+		| "failed";
+	ewayBillGeneratedAt?: string;
+	ewayBillCancelledAt?: string;
+	ewayBillCancelledReason?: string;
+	eInvoiceNo?: string;
+	acknowledgementNo?: string;
+	acknowledgementDate?: string;
+	irn?: string;
+	eInvoiceStatus?:
+		| "not_applicable"
+		| "not_generated"
+		| "generated"
+		| "stale"
+		| "failed"
+		| "cancelled";
+	eInvoiceGeneratedAt?: string;
+	eInvoiceCancelledAt?: string;
+	eInvoiceCancelledReason?: string;
+	qrCodeAvailable?: boolean;
 	customerNotes?: string;
 	termsAndConditions?: string;
 	internalRemarks?: string;
@@ -211,6 +305,12 @@ export interface InvoiceRecord {
 	updatedAt: string;
 	/** Pending Near Expiry scheme settlements — informational; no impact on invoice totals. */
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
+	/**
+	 * ERP-provided Product Discount → turnover eligibility flag (display only).
+	 * When omitted, View derives Yes unless exclusion reason is present.
+	 */
+	productDiscountTurnoverEligible?: boolean;
+	productDiscountExclusionReason?: string;
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v2";
@@ -487,6 +587,184 @@ function pushActivity(
 	];
 }
 
+function buildPostedWorkflow(
+	workflow: AccountsDocumentWorkflow,
+	remarks: string,
+): AccountsDocumentWorkflow {
+	return {
+		...workflow,
+		status: "posted",
+		history: [
+			...workflow.history,
+			{
+				at: new Date().toISOString(),
+				action: "posted",
+				by: ACCOUNTS_CURRENT_USER,
+				byRole: workflow.makerRole,
+				remarks,
+			},
+		],
+	};
+}
+
+function ensureInvoiceCustomerLedgerLink(invoice: InvoiceRecord): InvoiceRecord {
+	if (invoice.customerLedgerId) return invoice;
+
+	const customer = invoice.customerId
+		? loadCustomers().find((c) => c.id === invoice.customerId)
+		: undefined;
+
+	if (customer) {
+		const ledger = syncCustomerLedger(customer);
+		if (ledger) {
+			return {
+				...invoice,
+				customerLedgerId: ledger.id,
+				receivableLedger: ledger.accountName,
+			};
+		}
+	}
+
+	const name = invoice.customerName.trim();
+	if (name) {
+		const ledger = ensureCustomerLedger(name);
+		if (ledger) {
+			return {
+				...invoice,
+				customerLedgerId: ledger.id,
+				receivableLedger: ledger.accountName,
+			};
+		}
+	}
+
+	return invoice;
+}
+
+function reconcileSalesInvoicePostingState(
+	invoices: InvoiceRecord[],
+): { invoices: InvoiceRecord[]; changed: boolean } {
+	let changed = false;
+	const next = invoices.map((inv) => {
+		if (inv.invoiceStatus !== "sent") return inv;
+		if (inv.workflow?.status === "posted" && inv.postedVoucherId) return inv;
+
+		const isSample =
+			inv.sourceType === "sample_order" || inv.invoiceType === "sample_order";
+		const voucher = isSample
+			? findPostedSampleOrderExpenseVoucher(inv.invoiceNo)
+			: findPostedSalesInvoiceVoucher(inv.invoiceNo);
+		if (!voucher) return inv;
+
+		changed = true;
+		const workflow = ensureDocumentWorkflow(inv.workflow);
+		return {
+			...inv,
+			workflow: { ...workflow, status: "posted" as const },
+			postedVoucherId: voucher.id,
+			postedVoucherNo: voucher.voucherNumber,
+		};
+	});
+	return { invoices: next, changed };
+}
+
+/**
+ * Post sales invoice to GL and mark workflow as posted.
+ * Throws when accounting posting fails — caller must roll back the invoice save.
+ */
+export function commitSalesInvoiceAccounting(
+	invoiceId: number,
+	activityDetail?: string,
+): InvoiceRecord {
+	const current = getInvoiceById(invoiceId);
+	if (!current) throw new Error("Invoice not found.");
+	if (current.invoiceStatus === "cancelled") {
+		throw new Error("Cancelled invoice cannot be posted.");
+	}
+
+	const isSampleOrder =
+		current.sourceType === "sample_order" || current.invoiceType === "sample_order";
+
+	/** Sample Order has no customer receivable — skip debtor ledger link. */
+	if (!isSampleOrder) {
+		const linked = ensureInvoiceCustomerLedgerLink(current);
+		if (linked.customerLedgerId !== current.customerLedgerId) {
+			const all = loadInvoices();
+			const idx = all.findIndex((r) => r.id === invoiceId);
+			if (idx >= 0) {
+				all[idx] = { ...all[idx], ...linked };
+				saveInvoices(all);
+			}
+		}
+	}
+
+	const inv = getInvoiceById(invoiceId);
+	if (!inv) throw new Error("Invoice not found.");
+
+	const existingVoucher = isSampleOrder
+		? findPostedSampleOrderExpenseVoucher(inv.invoiceNo)
+		: findPostedSalesInvoiceVoucher(inv.invoiceNo);
+	const result = existingVoucher
+		? {
+				success: true as const,
+				voucherId: existingVoucher.id,
+				voucherNumber: existingVoucher.voucherNumber,
+			}
+		: maybePostSalesInvoice(inv);
+
+	if (!result?.success) {
+		throw new Error(
+			result?.error ?? "Accounting posting failed. Invoice was not saved.",
+		);
+	}
+
+	const workflow = ensureDocumentWorkflow(inv.workflow);
+	const detail =
+		activityDetail ??
+		(isSampleOrder
+			? `Sample inventory posted — ${result.voucherNumber ?? inv.invoiceNo}`
+			: `Posted to ledger — ${result.voucherNumber ?? inv.invoiceNo}`);
+
+	const all = loadInvoices();
+	const idx = all.findIndex((r) => r.id === invoiceId);
+	if (idx < 0) throw new Error("Invoice not found.");
+
+	const updated: InvoiceRecord = {
+		...all[idx],
+		invoiceStatus: "sent",
+		workflow: buildPostedWorkflow(workflow, detail),
+		postedVoucherId: result.voucherId ?? existingVoucher?.id ?? null,
+		postedVoucherNo: result.voucherNumber ?? existingVoucher?.voucherNumber ?? null,
+		activity: pushActivity(all[idx], "posted", detail),
+		updatedBy: ACCOUNTS_CURRENT_USER,
+		updatedAt: new Date().toISOString(),
+	};
+
+	all[idx] = updated;
+	saveInvoices(all);
+	invalidateSalesInvoiceCaches();
+	return normalizeInvoice(updated);
+}
+
+function invalidateSalesInvoiceCaches(): void {
+	invalidateAccountsDataCache("invoices");
+	invalidateAccountsDataCache("vouchers");
+	invalidateAccountsDataCache("receivables");
+	invalidateAccountsDataCache("coa");
+}
+
+function postSentInvoiceOrRollback(
+	invoiceId: number,
+	rollback: () => void,
+	activityDetail: string,
+): InvoiceRecord {
+	try {
+		return commitSalesInvoiceAccounting(invoiceId, activityDetail);
+	} catch (e) {
+		rollback();
+		throw e;
+	}
+}
+
 const SEED: InvoiceRecord[] = buildSalesInvoiceSeed();
 
 export function loadInvoices(): InvoiceRecord[] {
@@ -501,11 +779,13 @@ export function loadInvoices(): InvoiceRecord[] {
 		const normalized = mergeNearExpiryDemoSalesInvoice(list.map(normalizeInvoice));
 		const merged = mergeSalesInvoiceSeed(normalized);
 		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(merged);
-		if (changed || version !== String(SALES_INVOICE_SEED_VERSION) || !raw) {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
+		const { invoices: reconciled, changed: postingChanged } =
+			reconcileSalesInvoicePostingState(linked);
+		if (changed || postingChanged || version !== String(SALES_INVOICE_SEED_VERSION) || !raw) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
 			localStorage.setItem(SEED_VERSION_KEY, String(SALES_INVOICE_SEED_VERSION));
 		}
-		return linked;
+		return reconciled;
 	} catch {
 		return mergeSalesInvoiceSeed(SEED).map(normalizeInvoice);
 	}
@@ -517,6 +797,7 @@ export function saveInvoices(records: InvoiceRecord[]): void {
 		STORAGE_KEY,
 		JSON.stringify(records.map(normalizeInvoice)),
 	);
+	invalidateSalesInvoiceCaches();
 }
 
 export function getInvoiceById(id: number): InvoiceRecord | undefined {
@@ -602,7 +883,16 @@ export function canEditInvoice(rec: InvoiceRecord): boolean {
 	if (ACCOUNTS_INVOICE_ADMIN) return true;
 	if (rec.invoiceStatus === "cancelled" || rec.paymentStatus === "paid")
 		return false;
-	if (rec.invoiceStatus === "sent" && findPostedSalesInvoiceVoucher(rec.invoiceNo)) return false;
+	const isSample =
+		rec.sourceType === "sample_order" || rec.invoiceType === "sample_order";
+	if (
+		rec.invoiceStatus === "sent" &&
+		(isSample
+			? findPostedSampleOrderExpenseVoucher(rec.invoiceNo)
+			: findPostedSalesInvoiceVoucher(rec.invoiceNo))
+	) {
+		return false;
+	}
 	return rec.invoiceStatus === "draft" || rec.invoiceStatus === "sent";
 }
 
@@ -649,11 +939,54 @@ export type InvoiceFormInput = {
 	salesOrderNo?: string;
 	salesOrderId?: number | null;
 	sourceDispatchId?: string;
+	dispatchDate?: string;
+	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
+	/** Service Invoice — optional Income ledger override for posting. */
+	incomeLedgerId?: number | null;
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
+	bankAccountId?: number | null;
 	salesperson?: string;
+	transportMode?: string;
+	transporterName?: string;
+	transporterId?: string;
+	vehicleNo?: string;
+	lrNo?: string;
+	lrDate?: string;
+	transportDocNo?: string;
+	transportDocDate?: string;
+	distanceKm?: number | null;
+	ewayBillNo?: string;
+	ewayBillExpiryDate?: string;
+	ewayBillStatus?:
+		| "not_generated"
+		| "generated"
+		| "manual"
+		| "stale"
+		| "not_applicable"
+		| "expired"
+		| "cancelled"
+		| "failed";
+	ewayBillGeneratedAt?: string;
+	ewayBillCancelledAt?: string;
+	ewayBillCancelledReason?: string;
+	eInvoiceNo?: string;
+	acknowledgementNo?: string;
+	acknowledgementDate?: string;
+	irn?: string;
+	eInvoiceStatus?:
+		| "not_applicable"
+		| "not_generated"
+		| "generated"
+		| "stale"
+		| "failed"
+		| "cancelled";
+	eInvoiceGeneratedAt?: string;
+	eInvoiceCancelledAt?: string;
+	eInvoiceCancelledReason?: string;
+	qrCodeAvailable?: boolean;
 	customerNotes?: string;
 	termsAndConditions?: string;
 	internalRemarks?: string;
@@ -667,12 +1000,33 @@ export type InvoiceFormInput = {
 	attachments: InvoiceAttachment[];
 	invoiceStatus: InvoiceStatus;
 	invoiceType?: InvoiceDocumentType;
+	documentType?: InvoiceDocumentKind;
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 };
+
+/** True when a non-cancelled Sales Order invoice already exists for this dispatch. */
+export function findExistingSalesOrderInvoiceForDispatch(
+	records: InvoiceRecord[],
+	opts: { sourceDispatchId?: string; dispatchNo?: string },
+): InvoiceRecord | undefined {
+	const dispatchId = opts.sourceDispatchId?.trim();
+	const dispatchNo = opts.dispatchNo?.trim();
+	if (!dispatchId && !dispatchNo) return undefined;
+	return records.find((inv) => {
+		if (inv.invoiceStatus === "cancelled") return false;
+		if (inv.sourceType && inv.sourceType !== "sales_order") return false;
+		if (dispatchId && inv.sourceDispatchId?.trim() === dispatchId) return true;
+		if (dispatchNo && inv.dispatchNo?.trim() === dispatchNo) return true;
+		return false;
+	});
+}
+
+/** True when a non-cancelled Sales Order invoice already exists for this dispatch. */
 
 export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRecord> {
 	for (const line of input.lineItems) {
 		if (!line.productId) continue;
+		if (input.sourceType === "service") continue;
 		const product = loadProducts().find((p) => p.id === line.productId);
 		if (product) {
 			const err = validateProductForSalesInvoice(product);
@@ -680,8 +1034,54 @@ export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRec
 		}
 	}
 	const all = loadInvoices();
+	if (input.sourceType === "service") {
+		if (!input.customerName?.trim()) {
+			throw new Error("Customer is required for a Service Invoice.");
+		}
+		if (!input.invoiceDate?.trim()) {
+			throw new Error("Invoice Date is required.");
+		}
+		if (input.bankAccountId == null) {
+			throw new Error("Select a Bank Account for the invoice.");
+		}
+		if (!input.lineItems.some((l) => l.productName.trim() || l.description.trim())) {
+			throw new Error("Add at least one service line.");
+		}
+	}
+	if (input.sourceType === "sales_order") {
+		const dup = findExistingSalesOrderInvoiceForDispatch(all, {
+			sourceDispatchId: input.sourceDispatchId,
+			dispatchNo: input.dispatchNo,
+		});
+		if (dup) {
+			throw new Error(
+				`Invoice already generated for this dispatch (${dup.invoiceNo}). Open the existing invoice instead.`,
+			);
+		}
+		if (!input.invoiceDate?.trim()) {
+			throw new Error("Invoice Date is required.");
+		}
+		if (input.bankAccountId == null) {
+			throw new Error("Select a Bank Account for the invoice.");
+		}
+	}
+	if (input.sourceType === "sample_order") {
+		if (!input.customerName?.trim()) {
+			throw new Error("Customer is required for a Sample Order Proforma Invoice.");
+		}
+		if (!input.invoiceDate?.trim()) {
+			throw new Error("Invoice Date is required.");
+		}
+		const hasLine = input.lineItems.some((l) => l.productName.trim() || l.productId);
+		if (!hasLine) {
+			throw new Error("Add at least one sample product line.");
+		}
+	}
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
-	const invoiceType = input.invoiceType ?? "sales";
+	const isSampleOrder = input.sourceType === "sample_order";
+	const invoiceType = isSampleOrder
+		? "sample_order"
+		: (input.invoiceType ?? "sales");
 
 	const stateForNumber =
 		input.state?.trim() || input.placeOfSupply?.trim() || "Maharashtra";
@@ -693,8 +1093,38 @@ export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRec
 		invoiceNo =
 			allocated.invoice_no || nextInvoiceNo(all, invoiceType, input.invoiceDate);
 	} catch {
-		invoiceNo = nextInvoiceNo(all, invoiceType, input.invoiceDate);
+		invoiceNo =
+			input.sourceType === "service"
+				? nextServiceInvoiceNo(all, input.invoiceDate)
+				: input.sourceType === "sales_order"
+					? nextPvbSalesOrderInvoiceNo(all, input.invoiceDate)
+					: isSampleOrder
+						? nextSampleOrderProformaNo(all, input.invoiceDate)
+						: nextInvoiceNo(all, invoiceType === "sample_order" ? "sales" : invoiceType, input.invoiceDate);
 	}
+	const zeroedLines = isSampleOrder
+		? input.lineItems.map((l) => {
+				const sku = resolveSku(l.productName, l.productCode);
+				const costPrice =
+					typeof l.costPrice === "number" && l.costPrice > 0
+						? l.costPrice
+						: getCostPriceBySku(sku, l.productName);
+				const cpMissing = l.cpMissing ?? (isCpMissing(sku, l.productName) || !(costPrice > 0));
+				return {
+					...l,
+					unitPrice: 0,
+					amount: 0,
+					dealerPrice: 0,
+					finalRate: 0,
+					costPrice,
+					cpMissing,
+					costPriceSource:
+						l.costPriceSource ||
+						(costPrice > 0 ? `Pricing Master · ${sku} · CP` : "Pricing Master (not found)"),
+					/** Keep GST % / scheme / discount for reference display only. */
+				};
+			})
+		: input.lineItems;
 
 	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
 		? input.nearExpirySchemeSettlements.map((entry) => ({
@@ -707,8 +1137,17 @@ export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRec
 	const base: InvoiceRecord = {
 		id,
 		invoiceNo,
-		invoiceType,
 		...input,
+		invoiceType,
+		documentType: isSampleOrder ? "proforma_invoice" : input.documentType,
+		lineItems: zeroedLines,
+		additionalExpenses: isSampleOrder ? [] : input.additionalExpenses,
+		shippingCharges: isSampleOrder ? 0 : input.shippingCharges,
+		otherCharges: isSampleOrder ? 0 : input.otherCharges,
+		roundOff: isSampleOrder ? 0 : input.roundOff,
+		dueDate: isSampleOrder ? input.invoiceDate : input.dueDate,
+		paymentTerms: isSampleOrder ? "N/A" : input.paymentTerms,
+		creditDays: isSampleOrder ? 0 : input.creditDays,
 		nearExpirySchemeSettlements,
 		subtotal: 0,
 		discountTotal: 0,
@@ -716,7 +1155,7 @@ export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRec
 		grandTotal: 0,
 		amountReceived: 0,
 		balanceAmount: 0,
-		paymentStatus: "unpaid",
+		paymentStatus: isSampleOrder ? "paid" : "unpaid",
 		collections: [],
 		activity: [
 			{
@@ -725,8 +1164,12 @@ export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRec
 				by: ACCOUNTS_CURRENT_USER,
 				detail:
 					input.invoiceStatus === "draft"
-						? "Invoice saved as draft"
-						: "Invoice created and sent",
+						? isSampleOrder
+							? "Sample Order Proforma saved as draft"
+							: "Invoice saved as draft"
+						: isSampleOrder
+							? "Sample Order Proforma Invoice generated (zero billing · inventory at CP)"
+							: "Invoice created and sent",
 			},
 		],
 		createdBy: ACCOUNTS_CURRENT_USER,
@@ -735,12 +1178,47 @@ export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRec
 		updatedAt: new Date().toISOString(),
 	};
 	const rec = normalizeInvoice(base);
-	saveInvoices([...all, rec]);
-	attachWorkflowOnCreate("sales_invoice", rec.id);
-	if (rec.invoiceStatus === "sent") {
-		maybePostSalesInvoice(rec);
+	/** Force zero totals for sample proforma even after normalize. */
+	const finalRec: InvoiceRecord = isSampleOrder
+		? {
+				...rec,
+				subtotal: 0,
+				discountTotal: 0,
+				taxAmount: 0,
+				grandTotal: 0,
+				balanceAmount: 0,
+				amountReceived: 0,
+				paymentStatus: "paid",
+				lineItems: rec.lineItems.map((l) => ({
+					...l,
+					unitPrice: 0,
+					amount: 0,
+					dealerPrice: 0,
+					finalRate: 0,
+				})),
+				additionalExpenses: [],
+				eInvoiceStatus: "not_applicable",
+				ewayBillStatus: "not_applicable",
+			}
+		: rec;
+	saveInvoices([...all, finalRec]);
+	attachWorkflowOnCreate("sales_invoice", finalRec.id);
+	/** Sample: no receivable/revenue/GST; post inventory expense at CP when sent. */
+	if (finalRec.invoiceStatus === "sent") {
+		if (isSampleOrder) {
+			return postSentInvoiceOrRollback(
+				finalRec.id,
+				() => saveInvoices(all),
+				"Sample Order inventory posted (Dr Sample / Promotional Expense · Cr Inventory)",
+			);
+		}
+		return postSentInvoiceOrRollback(
+			finalRec.id,
+			() => saveInvoices(all),
+			"Invoice created and posted to ledger",
+		);
 	}
-	return rec;
+	return finalRec;
 }
 
 export function updateInvoice(
@@ -761,10 +1239,15 @@ export function updateInvoice(
 		updatedBy: ACCOUNTS_CURRENT_USER,
 		updatedAt: new Date().toISOString(),
 	});
+	const priorSnapshot = [...all];
 	all[idx] = updated;
 	saveInvoices(all);
 	if (updated.invoiceStatus === "sent") {
-		maybePostSalesInvoice(updated);
+		return postSentInvoiceOrRollback(
+			id,
+			() => saveInvoices(priorSnapshot),
+			"Invoice updated and posted to ledger",
+		);
 	}
 	return updated;
 }
@@ -776,6 +1259,7 @@ export function markInvoiceSent(id: number): InvoiceRecord {
 	const cur = all[idx];
 	if (cur.invoiceStatus === "cancelled")
 		throw new Error("Cancelled invoice cannot be sent.");
+	const priorSnapshot = [...all];
 	const updated = normalizeInvoice({
 		...cur,
 		invoiceStatus: "sent",
@@ -785,8 +1269,11 @@ export function markInvoiceSent(id: number): InvoiceRecord {
 	});
 	all[idx] = updated;
 	saveInvoices(all);
-	maybePostSalesInvoice(updated);
-	return updated;
+	return postSentInvoiceOrRollback(
+		id,
+		() => saveInvoices(priorSnapshot),
+		"Invoice posted to ledger",
+	);
 }
 
 export function receiveInvoicePayment(

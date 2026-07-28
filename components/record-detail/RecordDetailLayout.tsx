@@ -98,8 +98,9 @@ export function RecordDetailLayout({
   const allMeta = [...codeMeta, ...metaItems];
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)] w-full">
-      <div className="sticky top-0 z-30 bg-white border-b border-border shadow-sm">
+    <div className="flex flex-col min-h-full w-full">
+      {/* Sticky within the page scroll area (below app chrome) — keeps full summary visible */}
+      <div className="sticky top-0 z-20 bg-white border-b border-border shadow-sm">
         <div className="px-5 pt-3 pb-1">
           <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Link
@@ -247,7 +248,8 @@ export function RecordDetailLayout({
           <main className="min-w-0 space-y-4">{children}</main>
           {showSidebar && (
             <aside className="min-w-0">
-              <div className="xl:sticky xl:top-[calc(4rem+1px)]">
+              {/* Stick below the sticky record header so sidebar summary stays fully visible */}
+              <div className="xl:sticky xl:top-[11rem]">
                 <RecordDetailSidebar {...sidebar} />
               </div>
             </aside>

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { Wallet, Banknote, FileSpreadsheet } from "lucide-react";
+import { Banknote, FileSpreadsheet } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import {
   filterPayments,
@@ -39,7 +39,6 @@ import {
   saveAccountPayments,
   type AccountPaymentRecord,
 } from "./accounts-payment-data";
-import { FinancePaymentStatusBadge } from "./components/FinancePaymentStatusBadge";
 import { FinancePaymentModal } from "./components/FinancePaymentModal";
 import { exportAccountPaymentsToExcel } from "./accounts-payment-export";
 import { EXPENSE_BREADCRUMB, EXPENSE_LIST_PATH, formatINR } from "./expense-utils";
@@ -92,10 +91,9 @@ export default function ExpensesPageClient() {
   return (
     <AppLayout>
       <div className="max-w-[1600px] mx-auto space-y-3">
-        <PageHeader
+        <AccountsListingChrome
           title="Expenses"
-          description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR â†’ TA/DA Claims."
-          icon={Wallet}
+          description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR → TA/DA Claims."
           breadcrumbs={EXPENSE_BREADCRUMB}
         />
 
@@ -150,7 +148,6 @@ export default function ExpensesPageClient() {
                     "Rejected",
                     "Paid",
                     "Pending Pay.",
-                    "Payment Status",
                     "Pay Mode",
                     "Pay Date",
                     "Pay Ref",
@@ -167,7 +164,7 @@ export default function ExpensesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={18} className="accounts-table-empty">
+                    <td colSpan={17} className="accounts-table-empty">
                       No approved expenses pending payment. Final-approved claims from HR will appear here.
                     </td>
                   </tr>
@@ -188,9 +185,6 @@ export default function ExpensesPageClient() {
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.paidAmount)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">
                         {formatINR(getPendingPaymentAmount(r))}
-                      </td>
-                      <td className="px-2.5 py-2">
-                        <FinancePaymentStatusBadge status={r.paymentStatus} />
                       </td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.paymentMode ?? "—"}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.paymentDate ?? "—"}</td>

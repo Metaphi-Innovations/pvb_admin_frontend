@@ -54,14 +54,12 @@ export default function VendorTypeDetailPage() {
     if (activeTab !== "overview") return null;
 
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecordSectionCard title="Supplier Type Info" icon={Tags} accent="blue">
-          <RecordKvRow label="Supplier Type ID" value={supplierType.supplierTypeUuid} mono />
-          <RecordKvRow label="Supplier Type Name" value={supplierType.supplierTypeName} />
-          <RecordKvRow label="Initial Code" value={supplierType.initialCode} mono copy highlight />
-          <RecordKvRow label="Description" value={supplierType.description} isLast />
-        </RecordSectionCard>
-      </div>
+      <RecordSectionCard title="Supplier Type Info" icon={Tags} accent="blue">
+        <RecordKvRow label="Supplier Type ID" value={supplierType.supplierTypeUuid} mono />
+        <RecordKvRow label="Supplier Type Name" value={supplierType.supplierTypeName} />
+        <RecordKvRow label="Initial Code" value={supplierType.initialCode} mono copy highlight />
+        <RecordKvRow label="Description" value={supplierType.description} isLast />
+      </RecordSectionCard>
     );
   };
 

@@ -39,6 +39,7 @@ export function BranchAddressFields({
 	readOnly?: boolean;
 	errors?: {
 		address?: string;
+		addressLine2?: string;
 		state?: string;
 		city?: string;
 		town?: string;
@@ -248,8 +249,10 @@ export function BranchAddressFields({
 					onChange={(e) => set("addressLine2", e.target.value)}
 					disabled={readOnly}
 					placeholder="Landmark, floor (optional)"
-					className={fieldClass}
+					maxLength={250}
+					className={cn(fieldClass, errors.addressLine2 && "border-red-400")}
 				/>
+				<FieldError msg={errors.addressLine2} />
 			</div>
 
 			<div className={cn(ERP.field, pincodeCol)}>

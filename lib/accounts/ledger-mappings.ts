@@ -20,6 +20,11 @@ import {
   isGstMappingKey,
   resolveGstLedger,
 } from "@/lib/accounts/gst-accounting";
+import {
+  isSystemControlledMappingKey,
+  resolveApprovedSystemLedger,
+  systemLedgerKeyForMapping,
+} from "@/lib/accounts/system-ledger-resolver";
 
 export type LedgerMappingKey =
   | "sales_revenue"
@@ -28,6 +33,7 @@ export type LedgerMappingKey =
   | "sales_sgst"
   | "sales_igst"
   | "sales_cogs"
+  | "sample_promotional_expense"
   | "purchase_inventory"
   | "purchase_payable"
   | "purchase_cgst"
@@ -67,30 +73,35 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   sales_receivable: {
     module: "sales",
-    subGroupName: "Trade Receivables / Sundry Debtors",
+    subGroupName: "Sundry Debtors",
     description: "Debit customer receivable on sales invoice",
   },
-  sales_cgst: { module: "sales", subGroupName: "Duties & Taxes Payable", description: "Output CGST" },
-  sales_sgst: { module: "sales", subGroupName: "Duties & Taxes Payable", description: "Output SGST" },
-  sales_igst: { module: "sales", subGroupName: "Duties & Taxes Payable", description: "Output IGST" },
+  sales_cgst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output CGST" },
+  sales_sgst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output SGST" },
+  sales_igst: { module: "sales", subGroupName: "Duties & Taxes", description: "Output IGST" },
   sales_cogs: {
     module: "sales",
     subGroupName: "Cost of Goods Sold",
     description: "Debit COGS on sales dispatch at cost price",
   },
+  sample_promotional_expense: {
+    module: "sales",
+    subGroupName: "Selling Expenses",
+    description: "Debit Sample / Promotional Expense on sample issue at cost price",
+  },
   purchase_inventory: {
     module: "procurement",
-    subGroupName: "Inventory / Stock-in-Hand",
+    subGroupName: "Inventory",
     description: "Debit inventory on purchase invoice",
   },
   purchase_payable: {
     module: "procurement",
-    subGroupName: "Trade Payables / Sundry Creditors",
+    subGroupName: "Sundry Creditors",
     description: "Credit vendor payable on purchase invoice",
   },
-  purchase_cgst: { module: "procurement", subGroupName: "GST Input Credit", description: "Input CGST (ITC)" },
-  purchase_sgst: { module: "procurement", subGroupName: "GST Input Credit", description: "Input SGST (ITC)" },
-  purchase_igst: { module: "procurement", subGroupName: "GST Input Credit", description: "Input IGST (ITC)" },
+  purchase_cgst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input CGST (ITC)" },
+  purchase_sgst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input SGST (ITC)" },
+  purchase_igst: { module: "procurement", subGroupName: "Duties & Taxes", description: "Input IGST (ITC)" },
   grn_clearing: {
     module: "procurement",
     subGroupName: "Other Current Liabilities",
@@ -123,7 +134,7 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   stock_inventory: {
     module: "journal",
-    subGroupName: "Inventory / Stock-in-Hand",
+    subGroupName: "Inventory",
     description: "Inventory asset on stock adjustment",
   },
   cash_ledger: { module: "payments", subGroupName: "Cash-in-Hand", description: "Default cash ledger" },
@@ -157,7 +168,38 @@ export function loadLedgerMappings(): LedgerMapping[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
       return seed;
     }
-    return JSON.parse(raw) as LedgerMapping[];
+    let list = JSON.parse(raw) as LedgerMapping[];
+    let changed = false;
+    const migrated = list.map((m) => {
+      if (m.mappingKey === "sales_receivable" && m.subGroupName === "Accounts Receivable") {
+        changed = true;
+        return { ...m, subGroupName: "Sundry Debtors" };
+      }
+      if (m.mappingKey === "purchase_payable" && m.subGroupName === "Accounts Payable") {
+        changed = true;
+        return { ...m, subGroupName: "Sundry Creditors" };
+      }
+      return m;
+    });
+    list = migrated;
+    const existingKeys = new Set(list.map((m) => m.mappingKey));
+    for (const key of Object.keys(DEFAULT_MAPPING_TARGETS) as LedgerMappingKey[]) {
+      if (existingKeys.has(key)) continue;
+      const t = DEFAULT_MAPPING_TARGETS[key];
+      const maxId = list.reduce((m, r) => Math.max(m, r.id), 0);
+      list.push({
+        id: maxId + 1,
+        module: t.module,
+        mappingKey: key,
+        subGroupName: t.subGroupName,
+        coaAccountId: null,
+        description: t.description,
+        isActive: true,
+      });
+      changed = true;
+    }
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return list;
   } catch {
     return buildSeed();
   }
@@ -179,8 +221,17 @@ export function resolveMappingLedger(
     erpSourceModule?: string;
     erpSourceId?: number;
     gstRatePct?: number;
+    /** Prefer this COA parent when creating (e.g. Sundry Debtors from COA Add). */
+    parentGroupId?: number;
   },
 ): ChartOfAccount | null {
+  // Product Sales / Stock in Hand — stable system identity only; never find-or-create by partyName.
+  if (isSystemControlledMappingKey(mappingKey)) {
+    const systemKey = systemLedgerKeyForMapping(mappingKey);
+    if (!systemKey) return null;
+    return resolveApprovedSystemLedger(systemKey);
+  }
+
   const mappings = loadLedgerMappings();
   const mapping = mappings.find((m) => m.mappingKey === mappingKey && m.isActive);
   if (!mapping) return null;
@@ -190,9 +241,35 @@ export function resolveMappingLedger(
     if (fixed) return fixed;
   }
 
+  // Stable source-link lookup before name match or create (idempotent backfill).
+  if (options?.erpSourceModule && options?.erpSourceId != null) {
+    const all = loadChartOfAccounts();
+    const bySource = all.find(
+      (r) =>
+        r.nodeLevel === "ledger" &&
+        r.erpSourceModule === options.erpSourceModule &&
+        r.erpSourceId === options.erpSourceId,
+    );
+    if (bySource) return bySource;
+    const byMasterId = all.find(
+      (r) =>
+        r.nodeLevel === "ledger" &&
+        r.masterId === options.erpSourceId &&
+        (r.erpSourceModule === options.erpSourceModule ||
+          (options.erpSourceModule === "customer_master" && r.masterType === "customer") ||
+          (options.erpSourceModule === "vendor_master" && r.masterType === "vendor") ||
+          (options.erpSourceModule === "bank_master" && r.masterType === "bank") ||
+          (options.erpSourceModule === "warehouse_master" && r.masterType === "warehouse")),
+    );
+    if (byMasterId) return byMasterId;
+  }
+
   if (isGstMappingKey(mappingKey)) {
     const gstLedger = resolveGstLedger(mappingKey, options?.gstRatePct);
     if (gstLedger) return gstLedger;
+    if (options?.gstRatePct != null && options.gstRatePct > 0) {
+      return null;
+    }
     const ledgerName = GST_MAPPING_LEDGER_NAMES[mappingKey];
     if (ledgerName) {
       const byName = loadChartOfAccounts().find(
@@ -210,11 +287,20 @@ export function resolveMappingLedger(
   if (!options?.createIfMissing) return candidates[0] ?? null;
 
   const records = loadChartOfAccounts();
-  const subGroup = records.find(
-    (r) =>
-      r.nodeLevel === "account_group" &&
-      r.accountName.toLowerCase() === mapping.subGroupName.toLowerCase(),
-  );
+  const preferredParent =
+    options?.parentGroupId != null
+      ? records.find(
+          (r) =>
+            r.id === options.parentGroupId && r.nodeLevel === "account_group",
+        )
+      : undefined;
+  const subGroup =
+    preferredParent ??
+    records.find(
+      (r) =>
+        r.nodeLevel === "account_group" &&
+        r.accountName.toLowerCase() === mapping.subGroupName.toLowerCase(),
+    );
   if (!subGroup) return null;
 
   const id = nextId(records);
@@ -253,4 +339,84 @@ export function resolveMappingLedger(
 export function getMappingPath(mappingKey: LedgerMappingKey): string {
   const m = DEFAULT_MAPPING_TARGETS[mappingKey];
   return m ? `${m.module} › ${m.subGroupName}` : mappingKey;
+}
+
+/** Approved default income ledger for Service Invoice posting (never Product Sales / General). */
+export const SERVICE_INCOME_LEDGER_NAME = "Service Income";
+
+export const SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR =
+  "Service Income ledger is required. Select an Income ledger on the Service Invoice, or create a ledger named \"Service Income\" under Service Revenue.";
+
+function normalizeLedgerName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function isBlockedServiceRevenueLedger(
+  ledger: ChartOfAccount,
+  productSalesId: number | null | undefined,
+): boolean {
+  const name = normalizeLedgerName(ledger.accountName);
+  if (productSalesId != null && ledger.id === productSalesId) return true;
+  if (name === "product sales") return true;
+  if (name === "general" || name === "general sales") return true;
+  return false;
+}
+
+function isActiveIncomeLedger(ledger: ChartOfAccount): boolean {
+  return (
+    ledger.nodeLevel === "ledger" &&
+    ledger.status === "active" &&
+    ledger.accountType === "Income"
+  );
+}
+
+/**
+ * Service Invoice revenue ledger — never Product Sales, never General, never auto-creates.
+ *
+ * Priority:
+ * 1. Explicitly selected Income ledger (when the form provides one)
+ * 2. Approved default ledger named "Service Income" under Service Revenue
+ * 3. Ledger named "Service Income" elsewhere under Income (non-system)
+ * 4. null → caller must fail closed
+ */
+export function resolveServiceInvoiceRevenueLedger(options?: {
+  selectedLedgerId?: number | null;
+  records?: ChartOfAccount[];
+}): ChartOfAccount | null {
+  const records = options?.records ?? loadChartOfAccounts();
+  const productSales = resolveApprovedSystemLedger("PRODUCT_SALES", records, {
+    backfillAlias: false,
+  });
+  const productSalesId = productSales?.id ?? null;
+
+  const selectedId = options?.selectedLedgerId;
+  if (selectedId != null) {
+    const selected = records.find((r) => r.id === selectedId && r.nodeLevel === "ledger");
+    if (
+      selected &&
+      isActiveIncomeLedger(selected) &&
+      !isBlockedServiceRevenueLedger(selected, productSalesId)
+    ) {
+      return selected;
+    }
+    // Invalid / blocked selection must not fall through to silent alternatives.
+    return null;
+  }
+
+  const underServiceRevenue = getLedgersUnderSubGroupName("Service Revenue", records).filter(
+    (l) => isActiveIncomeLedger(l) && !isBlockedServiceRevenueLedger(l, productSalesId),
+  );
+  const defaultUnderGroup = underServiceRevenue.find(
+    (l) => normalizeLedgerName(l.accountName) === normalizeLedgerName(SERVICE_INCOME_LEDGER_NAME),
+  );
+  if (defaultUnderGroup) return defaultUnderGroup;
+
+  const anyServiceIncome = records.find(
+    (l) =>
+      isActiveIncomeLedger(l) &&
+      !isBlockedServiceRevenueLedger(l, productSalesId) &&
+      !l.isSystem &&
+      normalizeLedgerName(l.accountName) === normalizeLedgerName(SERVICE_INCOME_LEDGER_NAME),
+  );
+  return anyServiceIncome ?? null;
 }

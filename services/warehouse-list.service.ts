@@ -268,14 +268,32 @@ function mapDocuments(value: unknown): WarehouseDocumentPayload[] {
 export function resolveWarehouseDocumentUrl(path: string): string {
     const raw = path.trim();
     if (!raw) return "";
-    if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
-        return raw;
-    }
 
     const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
     const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
-    const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
 
+    if (/^https?:\/\//i.test(raw)) {
+        try {
+            const parsed = new URL(raw);
+            // Rewrite stored localhost / wrong-host absolute URLs to the app API origin
+            if (
+                parsed.pathname.startsWith("/uploads/") ||
+                parsed.hostname === "localhost" ||
+                parsed.hostname === "127.0.0.1"
+            ) {
+                return `${origin}${parsed.pathname}${parsed.search}`;
+            }
+        } catch {
+            /* keep absolute URL as-is when parsing fails */
+        }
+        return raw;
+    }
+
+    if (raw.startsWith("data:") || raw.startsWith("blob:")) {
+        return raw;
+    }
+
+    const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
     return `${origin}${normalizedPath}`;
 }
 
@@ -310,10 +328,13 @@ export async function downloadWarehouseDocument(doc: WarehouseDocumentPayload): 
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = fileName;
+    link.rel = "noopener";
+    link.style.display = "none";
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(objectUrl);
+    // Delay revoke so the browser can start the download without UI flicker/cancel
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
 }
 
 function mapItem(
@@ -608,7 +629,7 @@ export const WarehouseListService = {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `warehouses_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `warehouses_${new Date().toISOString().slice(0, 10)}.xls`;
         document.body.appendChild(link);
         link.click();
         link.remove();

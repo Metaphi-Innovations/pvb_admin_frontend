@@ -20,7 +20,6 @@ import {
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { loadChartOfAccounts, type ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
-import { loadFundTransfers, type FundTransferRecord } from "@/lib/accounts/fund-transfer-data";
 import {
   loadReceiptAllocationRecords,
   loadCollectionFollowUps,
@@ -57,7 +56,6 @@ export type AccountsDataScope =
   | "vouchers"
   | "coa"
   | "bankAccounts"
-  | "fundTransfers"
   | "receivables"
   | "payables"
   | "pendingInvoices"
@@ -146,7 +144,6 @@ export const accountsDataService = {
     getCached(`vouchers:${type}`, () => getVouchersByType(type)),
   getChartOfAccounts: (): ChartOfAccount[] => getCached("coa", loadChartOfAccounts),
   getBankAccounts: () => getCached("bankAccounts", loadBankAccountMasters),
-  getFundTransfers: (): FundTransferRecord[] => getCached("fundTransfers", loadFundTransfers),
   getPendingInvoices: (): PendingTaxInvoiceRow[] =>
     getCached("pendingInvoices", listPendingTaxInvoices),
   getCustomerOutstanding: (): InvoiceOutstandingRow[] =>

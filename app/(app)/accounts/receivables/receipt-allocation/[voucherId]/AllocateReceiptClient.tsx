@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsSummaryCards } from "@/components/accounts/AccountsSummaryCards";
+import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
   applyReceiptAllocation,
   getReceiptAllocationByVoucherId,
@@ -13,9 +16,9 @@ import {
 } from "@/lib/accounts/receivables-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 export default function AllocateReceiptClient() {
   const params = useParams();
@@ -51,13 +54,20 @@ export default function AllocateReceiptClient() {
   if (!record) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Receivables", "Receipt Allocation", "/accounts/receivables/receipt-allocation")}
+        breadcrumbs={accountsBreadcrumb(
+          "Receivables",
+          "Receipt Allocation",
+          "/accounts/receivables/receipt-allocation",
+        )}
         title="Receipt Not Found"
         description="Unable to load receipt for allocation."
         layout="standard"
       >
-        <div className="p-8 text-center">
-          <Link href="/accounts/receivables/receipt-allocation" className="text-sm text-brand-600 hover:underline">
+        <div className="accounts-table-empty py-8">
+          <Link
+            href="/accounts/receivables/receipt-allocation"
+            className="text-xs text-brand-600 hover:underline"
+          >
             Back to Receipt Allocation
           </Link>
         </div>
@@ -77,7 +87,12 @@ export default function AllocateReceiptClient() {
     setSelected((prev) => {
       const next = { ...prev, [invoiceId]: !prev[invoiceId] };
       if (next[invoiceId] && !amounts[invoiceId]) {
-        setAmounts((a) => ({ ...a, [invoiceId]: String(Math.min(outstanding, remaining + Number(amounts[invoiceId] || 0))) }));
+        setAmounts((a) => ({
+          ...a,
+          [invoiceId]: String(
+            Math.min(outstanding, remaining + Number(amounts[invoiceId] || 0)),
+          ),
+        }));
       }
       return next;
     });
@@ -102,87 +117,137 @@ export default function AllocateReceiptClient() {
   return (
     <AccountsPageShell
       breadcrumbs={[
-        ...accountsBreadcrumb("Receivables", "Receipt Allocation", "/accounts/receivables/receipt-allocation"),
+        ...accountsBreadcrumb(
+          "Receivables",
+          "Receipt Allocation",
+          "/accounts/receivables/receipt-allocation",
+        ),
         { label: record.receiptNo },
       ]}
       title="Allocate Receipt"
       description={`Allocate ${record.receiptNo} against open invoices for ${record.customerName}.`}
       actions={
-        <Link href="/accounts/receivables/receipt-allocation">
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
-            <ArrowLeft className="w-4 h-4" /> Back
-          </Button>
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link href="/accounts/receivables/outstanding">
+            <Button variant="outline" size="sm" className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "gap-1")}>
+              <ArrowLeft className="w-3.5 h-3.5" /> Outstanding
+            </Button>
+          </Link>
+          <Link href="/accounts/receivables/receipt-allocation">
+            <Button variant="outline" size="sm" className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "gap-1")}>
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </Button>
+          </Link>
+        </div>
       }
       layout="standard"
       footer={
-        <div className="px-4 py-3 flex items-center justify-between gap-4 bg-muted/10">
-          <div className="flex gap-6 text-xs">
-            <span>Total Allocated: <strong>{formatMoney(totalAllocated)}</strong></span>
-            <span>Remaining Unallocated: <strong>{formatMoney(remaining)}</strong></span>
+        <div className="px-3 py-1.5 flex items-center justify-between gap-4 bg-muted/10">
+          <div className="flex gap-4 text-[11px]">
+            <span>
+              Total Allocated: <strong>{formatMoney(totalAllocated)}</strong>
+            </span>
+            <span>
+              Remaining Unallocated: <strong>{formatMoney(remaining)}</strong>
+            </span>
           </div>
-          <Button size="sm" onClick={saveAllocation}>Save Allocation</Button>
+          <Button
+            size="sm"
+            className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "bg-brand-600 hover:bg-brand-700 text-white")}
+            onClick={saveAllocation}
+          >
+            Save Allocation
+          </Button>
         </div>
       }
     >
-      <div className="p-4 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 rounded-lg border border-border/60 bg-muted/5 p-4 text-xs">
-          {[
-            ["Receipt No", record.receiptNo],
-            ["Receipt Date", record.receiptDate],
-            ["Customer", record.customerName],
-            ["Bank / Cash Account", record.bankAccount],
-            ["Receipt Amount", formatMoney(record.receiptAmount)],
-            ["Already Allocated", formatMoney(record.allocatedAmount)],
-            ["Balance To Allocate", formatMoney(record.unallocatedAmount)],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
-              <p className="font-medium mt-0.5">{value}</p>
-            </div>
-          ))}
-        </div>
+      <AccountsSummaryCards
+        className="border-0 border-b rounded-none"
+        items={[
+          { label: "Receipt No", value: record.receiptNo },
+          { label: "Receipt Date", value: record.receiptDate },
+          { label: "Customer", value: record.customerName },
+          { label: "Bank / Cash", value: record.bankAccount },
+          { label: "Receipt Amount", value: formatMoney(record.receiptAmount) },
+          { label: "Already Allocated", value: formatMoney(record.allocatedAmount) },
+          { label: "Balance To Allocate", value: formatMoney(record.unallocatedAmount) },
+        ]}
+      />
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="px-3 py-1.5 text-xs text-red-600">{error}</p>}
 
-        <div className="rounded-lg border border-border/60 overflow-hidden">
-          <table className="accounts-table w-full">
-            <thead className="border-b">
+      <AccountsTableScroll>
+        <table className="accounts-table w-full min-w-[960px]">
+          <thead>
+            <tr>
+              {[
+                "Select",
+                "Invoice No",
+                "Invoice Date",
+                "Due Date",
+                "Invoice Amt",
+                "Already Paid",
+                "Outstanding",
+                "Allocation",
+              ].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {openInvoices.length === 0 ? (
               <tr>
-                {["Select", "Invoice No", "Invoice Date", "Due Date", "Invoice Amt", "Already Paid", "Outstanding", "Allocation"].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase text-muted-foreground">{h}</th>
-                ))}
+                <td colSpan={8} className="accounts-table-empty">
+                  No open invoices for this customer.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {openInvoices.map((inv) => (
-                <tr key={inv.invoiceId} className="border-b border-border/40">
-                  <td className="px-3 py-2.5">
+            ) : (
+              openInvoices.map((inv) => (
+                <tr key={inv.invoiceId} className="accounts-table-row">
+                  <td>
                     <Checkbox
                       checked={!!selected[inv.invoiceId]}
                       onCheckedChange={() => toggleInvoice(inv.invoiceId, inv.outstanding)}
                     />
                   </td>
-                  <td className="px-3 py-2.5 text-xs font-mono font-semibold">{inv.invoiceNo}</td>
-                  <td className="px-3 py-2.5 text-xs">{inv.invoiceDate}</td>
-                  <td className="px-3 py-2.5 text-xs">{inv.dueDate}</td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.invoiceAmount)}</td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.paidAmount)}</td>
-                  <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.outstanding)}</td>
-                  <td className="px-3 py-2.5">
+                  <td>
+                    <span className="font-mono text-xs font-semibold text-brand-700">
+                      {inv.invoiceNo}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="text-xs tabular-nums">{inv.invoiceDate}</span>
+                  </td>
+                  <td>
+                    <span className="text-xs tabular-nums">{inv.dueDate}</span>
+                  </td>
+                  <td className="text-right">
+                    <span className="text-xs tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
+                  </td>
+                  <td className="text-right">
+                    <span className="text-xs tabular-nums">{formatMoney(inv.paidAmount)}</span>
+                  </td>
+                  <td className="text-right">
+                    <span className="text-xs tabular-nums font-semibold">
+                      {formatMoney(inv.outstanding)}
+                    </span>
+                  </td>
+                  <td>
                     <AccountsMoneyInput
-                      className="h-9 text-sm font-medium w-28"
+                      className="h-8 text-xs w-28"
                       disabled={!selected[inv.invoiceId]}
                       value={amounts[inv.invoiceId] ?? ""}
-                      onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}
+                      onChange={(v) =>
+                        setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))
+                      }
                     />
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              ))
+            )}
+          </tbody>
+        </table>
+      </AccountsTableScroll>
     </AccountsPageShell>
   );
 }

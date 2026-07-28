@@ -164,8 +164,11 @@ export function buildCoaTransactionsForDateRange(
 export function ledgerMovementMapForRange(
   from: string,
   to: string,
-): Map<number, { totalDebit: number; totalCredit: number }> {
-  const map = new Map<number, { totalDebit: number; totalCredit: number }>();
+): Map<import("@/app/(app)/accounts/data").CoaNodeId, { totalDebit: number; totalCredit: number }> {
+  const map = new Map<
+    import("@/app/(app)/accounts/data").CoaNodeId,
+    { totalDebit: number; totalCredit: number }
+  >();
 
   loadVouchers()
     .filter((v) => isLedgerMovementVoucherStatus(v.status) && v.date >= from && v.date <= to)

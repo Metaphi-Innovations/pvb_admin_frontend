@@ -1,15 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
-import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   AccountsTable,
@@ -21,23 +16,36 @@ import {
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
 import {
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  ReportFinancialYearFilter,
+  ReportBranchMultiFilter,
+  ReportLedgerGroupMultiFilter,
+  ReportLedgerMultiFilter,
+  ReportShowZeroBalanceToggle,
+  ReportMoreFilters,
+  ReportFilterSummary,
+  ReportIncludeOpeningBalanceToggle,
+  ReportFromDateFilter,
+  ReportToDateFilter,
+  ReportVoucherTypeMultiFilter,
+  REPORT_BRANCH_OPTIONS,
+} from "@/components/accounts/ReportFilters";
+import {
+  buildBranchFilterSummary,
+  buildEntityFilterSummary,
+  countActiveMoreFilters,
+  formatMultiSelectLabel,
+  isMultiFilterActive,
+  type ReportFilterSummaryItem,
+} from "@/lib/accounts/report-multi-filter-utils";
+import {
   AccountsTableListing,
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
-import {
-  ReportFilterRow,
-  ReportDateRangeFilter,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
-} from "@/components/accounts/ReportFilters";
-import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
+import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
-import {
-  balanceSideLabel,
-  formatMoney,
-  formatMoneyOrDash,
-} from "@/lib/accounts/money-format";
+import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
@@ -46,58 +54,217 @@ import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
   buildTrialBalanceDetailedGroups,
-  buildTrialBalanceDisplayRows,
-  buildTrialBalanceSummaryRows,
-  collectAllDetailedGroupKeys,
+  buildTrialBalanceLedgerHref,
+  buildTrialBalanceGroupHref,
+  collectAllPrimaryHeadKeys,
   computeTrialBalanceSummaryFromDetailedGroups,
-  computeTrialBalanceSummaryFromGroups,
-  filterTrialBalanceDetailedGroups,
-  filterTrialBalanceSummaryRows,
+  computeTrialBalanceLedgerVoucherLines,
+  findTrialBalanceExceptions,
   flattenTrialBalanceDetailedGroups,
-  sortTrialBalanceDetailedGroups,
-  sortTrialBalanceSummaryRows,
-  type TrialBalanceDetailedSortKey,
-  type TrialBalanceSummarySortKey,
+  getTrialBalanceBranchOptions,
+  getTrialBalanceLedgerGroupOptions,
+  getTrialBalanceLedgerOptions,
+  type TrialBalanceDetailedFlatRow,
+  type TrialBalanceFilters,
   type TrialBalanceTab,
+  type TrialBalanceVoucherException,
 } from "./trial-balance-data";
+import {
+  flattenTrialBalanceNormalPrimaryHeadRows,
+  TB_DETAILED_INDENT,
+  TB_NORMAL_INDENT,
+  type TrialBalanceNormalPrimaryHeadRow,
+} from "./trial-balance-display";
+import {
+  isRenderableTrialBalanceDetailedRow,
+  isRenderableTrialBalanceNormalRow,
+} from "./trial-balance-validation";
+import { formatTrialBalanceReportDate } from "./TrialBalanceReportSummary";
+import { TrialBalanceViewTabs } from "./TrialBalanceViewTabs";
+import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import {
   exportTrialBalanceDetailedToExcel,
   exportTrialBalanceDetailedToPdf,
-  exportTrialBalanceSummaryToExcel,
-  exportTrialBalanceSummaryToPdf,
+  exportTrialBalanceNormalToExcel,
+  exportTrialBalanceNormalToPdf,
 } from "./trial-balance-export";
-import { useDebouncedValue } from "./trial-balance-hooks";
 import "./trial-balance-compact.css";
+import { AccountsCoaHierarchyRowLabel } from "@/lib/accounts/accounts-coa-hierarchy-ui";
 
 const PLACEHOLDER_DATE = "2025-04-01";
+
+function mergeLedgerOptions(
+  getOptions: (ledgerGroupId: string) => { id: number; name: string }[],
+  ledgerGroupIds: string[],
+): { id: number; name: string }[] {
+  if (ledgerGroupIds.length === 0) return getOptions("all");
+  const seen = new Map<number, { id: number; name: string }>();
+  for (const groupId of ledgerGroupIds) {
+    for (const ledger of getOptions(groupId)) {
+      seen.set(ledger.id, ledger);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function defaultFyDateRange(): { from: string; to: string; fyId: string } {
+  ensureFinancialYearsCurrent();
+  const activeFyId = getActiveFinancialYearId();
+  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!fy) return { from: PLACEHOLDER_DATE, to: today, fyId: "all" };
+  return {
+    from: fy.startDate,
+    to: today < fy.endDate ? today : fy.endDate,
+    fyId: String(fy.id),
+  };
+}
+
+function rowKey(
+  row: TrialBalanceNormalPrimaryHeadRow | TrialBalanceDetailedFlatRow,
+  index: number,
+): string {
+  if (row.type === "primary") return `p-${row.primaryHeadId}`;
+  if (row.type === "group") return `g-${row.groupKey}`;
+  if (row.type === "subgroup") return `sg-${row.subgroupKey}`;
+  if (row.type === "ledger") return `l-${row.ledger.ledgerId}`;
+  if (row.type === "voucher") {
+    return `v-${row.ledgerId}-${row.voucher.voucherId}-${row.voucher.debit}-${row.voucher.credit}`;
+  }
+  return `row-${index}`;
+}
+
+function BalanceStatusBanner({
+  isBalanced,
+  openingDifference,
+  periodDifference,
+  closingDifference,
+  visible,
+}: {
+  isBalanced: boolean;
+  openingDifference: number;
+  periodDifference: number;
+  closingDifference: number;
+  visible: boolean;
+}) {
+  if (!visible) return null;
+  if (isBalanced) {
+    return (
+      <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border-t border-emerald-100 text-xs text-emerald-700">
+        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+        Trial Balance is balanced
+      </div>
+    );
+  }
+  return (
+    <div className="flex-shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 bg-red-50 border-t border-red-100 text-xs text-red-700">
+      <span className="inline-flex items-center gap-1.5 font-medium">
+        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+        Trial Balance is not balanced (total Debits ≠ total Credits)
+      </span>
+      <span title="Opening Dr minus Opening Cr">Opening Difference: {formatMoney(openingDifference)}</span>
+      <span title="Period Dr minus Period Cr">Period Difference: {formatMoney(periodDifference)}</span>
+      <span title="Closing Dr minus Closing Cr">Closing Difference: {formatMoney(closingDifference)}</span>
+    </div>
+  );
+}
+
+/** Client-approved Trial Balance amount columns: Debit | Credit (closing balances). */
+function DebitCreditCells({
+  debit,
+  credit,
+  bold,
+}: {
+  debit: number;
+  credit: number;
+  bold?: boolean;
+}) {
+  const cellClass = bold ? "font-semibold" : undefined;
+  return (
+    <>
+      <AccountsTableCell align="right" money className={cellClass}>
+        {formatMoneyOrDash(debit)}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" money className={cellClass}>
+        {formatMoneyOrDash(credit)}
+      </AccountsTableCell>
+    </>
+  );
+}
 
 export default function TrialBalancePageClient() {
   const mounted = useClientMounted();
 
-  const [activeTab, setActiveTab] = useState<TrialBalanceTab>("summary");
-  const [preset, setPreset] = useState<DateRangePresetId>("this_month");
+  const [activeTab, setActiveTab] = useState<TrialBalanceTab>("normal");
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
   const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
   const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
   const [datesReady, setDatesReady] = useState(false);
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
+  const [ledgerIds, setLedgerIds] = useState<string[]>([]);
+  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
+  const [showZeroBalance, setShowZeroBalance] = useState(false);
+  const [includeOpeningBalance, setIncludeOpeningBalance] = useState(true);
 
-  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  const [summarySortKey, setSummarySortKey] = useState<TrialBalanceSummarySortKey>("particular");
-  const [summarySortDir, setSummarySortDir] = useState<"asc" | "desc">("asc");
-  const [detailedSortKey, setDetailedSortKey] = useState<TrialBalanceDetailedSortKey>("particular");
-  const [detailedSortDir, setDetailedSortDir] = useState<"asc" | "desc">("asc");
+  const [expandedPrimaryIds, setExpandedPrimaryIds] = useState<Set<number>>(new Set());
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
+  const [expandedSubgroupIds, setExpandedSubgroupIds] = useState<Set<string>>(new Set());
 
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const [expandedLedgerIds, setExpandedLedgerIds] = useState<Set<number>>(new Set());
+
+  const effectiveBranches = branches;
+
+  // Bumped after demo voucher transactions are seeded / whenever vouchers change,
+  // so all derived trial-balance data recomputes against the freshest postings.
+  const [dataTick, setDataTick] = useState(0);
 
   useEffect(() => {
-    const { from, to } = resolveDateRangePreset("this_month");
+    const { from, to, fyId } = defaultFyDateRange();
     setDateFrom(from);
     setDateTo(to);
+    setFinancialYearId(fyId);
     setDatesReady(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/lib/accounts/general-ledger-demo-seed").then(
+      ({ ensureGeneralLedgerDemoOnPageLoad }) => {
+        ensureGeneralLedgerDemoOnPageLoad();
+        if (!cancelled) setDataTick((t) => t + 1);
+      },
+    );
+    const onVouchersUpdated = () => setDataTick((t) => t + 1);
+    window.addEventListener("ds-accounts-vouchers-updated", onVouchersUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ds-accounts-vouchers-updated", onVouchersUpdated);
+    };
+  }, []);
+
+  const handleFinancialYearChange = useCallback((fyId: string) => {
+    setFinancialYearId(fyId);
+    if (fyId !== "all") {
+      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (fy) {
+        const today = new Date().toISOString().slice(0, 10);
+        setDateFrom(fy.startDate);
+        setDateTo(today < fy.endDate ? today : fy.endDate);
+        setPreset("custom");
+      }
+    }
+  }, []);
+
+  const handleLedgerGroupChange = useCallback((values: string[]) => {
+    setLedgerGroupIds(values);
+    setLedgerIds([]);
   }, []);
 
   const handlePresetChange = useCallback((value: DateRangePresetId) => {
@@ -109,139 +276,247 @@ export default function TrialBalancePageClient() {
     }
   }, []);
 
-  const sourceLedgers = useMemo(() => {
-    if (!mounted) return [];
-    return buildTrialBalanceDisplayRows();
-  }, [mounted]);
+  const tbFilters = useMemo((): TrialBalanceFilters => ({
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branch: effectiveBranches,
+    warehouse: [],
+    ledgerGroupId: ledgerGroupIds,
+    ledgerId: ledgerIds,
+    voucherType: voucherTypes,
+    showZeroBalance,
+    search: "",
+  }), [
+    financialYearId,
+    dateFrom,
+    dateTo,
+    effectiveBranches,
+    ledgerGroupIds,
+    ledgerIds,
+    voucherTypes,
+    showZeroBalance,
+  ]);
 
-  const sourceSummaryRows = useMemo(() => {
-    if (!mounted) return [];
-    return buildTrialBalanceSummaryRows();
-  }, [mounted]);
+  const ledgerGroupOptions = useMemo(
+    () => (mounted ? getTrialBalanceLedgerGroupOptions() : []),
+    [mounted, dataTick],
+  );
+  const ledgerOptions = useMemo(
+    () => (mounted ? mergeLedgerOptions(getTrialBalanceLedgerOptions, ledgerGroupIds) : []),
+    [mounted, ledgerGroupIds, dataTick],
+  );
+  const branchOptions = useMemo(
+    () => (mounted ? getTrialBalanceBranchOptions() : REPORT_BRANCH_OPTIONS),
+    [mounted, dataTick],
+  );
+
+  const ledgerGroupSelectOptions = useMemo(
+    () => ledgerGroupOptions.map((g) => ({ value: String(g.id), label: g.name })),
+    [ledgerGroupOptions],
+  );
+  const ledgerSelectOptions = useMemo(
+    () => ledgerOptions.map((l) => ({ value: String(l.id), label: l.name })),
+    [ledgerOptions],
+  );
+
+  const moreFiltersActiveCount =
+    countActiveMoreFilters({
+      ledgerGroupId: ledgerGroupIds,
+      ledgerId: ledgerIds,
+      voucherType: voucherTypes,
+      showZeroBalance,
+    }) + (!includeOpeningBalance ? 1 : 0);
+
+  const exceptions = useMemo(
+    () => (mounted ? findTrialBalanceExceptions(tbFilters) : []),
+    [mounted, tbFilters, dataTick],
+  );
 
   const sourceDetailedGroups = useMemo(() => {
     if (!mounted) return [];
-    return buildTrialBalanceDetailedGroups();
-  }, [mounted]);
+    const groups = buildTrialBalanceDetailedGroups(tbFilters);
+    return groups;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, tbFilters, dataTick]);
+
+  const detailedExpandInitializedRef = React.useRef(false);
 
   useEffect(() => {
-    if (!mounted || sourceDetailedGroups.length === 0) return;
-    if (debouncedSearch.trim()) {
-      const filtered = filterTrialBalanceDetailedGroups(sourceDetailedGroups, {
-        search: debouncedSearch,
-      });
-      setExpandedGroupIds(collectAllDetailedGroupKeys(filtered));
+    if (activeTab !== "detailed") {
+      detailedExpandInitializedRef.current = false;
       return;
     }
-    setExpandedGroupIds(collectAllDetailedGroupKeys(sourceDetailedGroups));
-  }, [mounted, sourceDetailedGroups, debouncedSearch]);
+    if (!mounted || sourceDetailedGroups.length === 0) return;
+    if (detailedExpandInitializedRef.current) return;
+    // Detailed: expand primary heads so Account Groups are visible; groups/subgroups start collapsed.
+    setExpandedPrimaryIds(collectAllPrimaryHeadKeys(sourceDetailedGroups));
+    setExpandedGroupIds(new Set());
+    setExpandedSubgroupIds(new Set());
+    setExpandedLedgerIds(new Set());
+    detailedExpandInitializedRef.current = true;
+  }, [mounted, activeTab, sourceDetailedGroups]);
 
-  const filteredSummaryRows = useMemo(() => {
-    const filtered = filterTrialBalanceSummaryRows(sourceSummaryRows, { search: debouncedSearch }, sourceLedgers);
-    return sortTrialBalanceSummaryRows(filtered, summarySortKey, summarySortDir);
-  }, [sourceSummaryRows, sourceLedgers, debouncedSearch, summarySortKey, summarySortDir]);
+  const filteredDetailedGroups = sourceDetailedGroups;
 
-  const filteredDetailedGroups = useMemo(() => {
-    const filtered = filterTrialBalanceDetailedGroups(sourceDetailedGroups, { search: debouncedSearch });
-    return sortTrialBalanceDetailedGroups(filtered, detailedSortKey, detailedSortDir);
-  }, [sourceDetailedGroups, debouncedSearch, detailedSortKey, detailedSortDir]);
-
-  const summary = useMemo(() => {
-    if (activeTab === "summary") {
-      return computeTrialBalanceSummaryFromGroups(filteredSummaryRows, sourceLedgers);
-    }
-    return computeTrialBalanceSummaryFromDetailedGroups(filteredDetailedGroups);
-  }, [activeTab, filteredSummaryRows, sourceLedgers, filteredDetailedGroups]);
-
-  const paginatedSummaryRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredSummaryRows.slice(start, start + pageSize);
-  }, [filteredSummaryRows, page, pageSize]);
-
-  const detailedFlatRows = useMemo(
-    () => flattenTrialBalanceDetailedGroups(filteredDetailedGroups, expandedGroupIds),
-    [filteredDetailedGroups, expandedGroupIds],
+  const normalFlatRows = useMemo(
+    () =>
+      flattenTrialBalanceNormalPrimaryHeadRows(filteredDetailedGroups).filter(
+        isRenderableTrialBalanceNormalRow,
+      ),
+    [filteredDetailedGroups],
   );
 
-  const paginatedDetailedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return detailedFlatRows.slice(start, start + pageSize);
-  }, [detailedFlatRows, page, pageSize]);
+  const voucherLinesByLedgerId = useMemo(() => {
+    const map = new Map<number, ReturnType<typeof computeTrialBalanceLedgerVoucherLines>>();
+    if (activeTab !== "detailed") return map;
+    for (const ledgerId of expandedLedgerIds) {
+      map.set(ledgerId, computeTrialBalanceLedgerVoucherLines(tbFilters, ledgerId));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, expandedLedgerIds, tbFilters, dataTick]);
+
+  const detailedFlatRows = useMemo(() => {
+    if (activeTab !== "detailed") return [];
+    const rows = flattenTrialBalanceDetailedGroups(
+      filteredDetailedGroups,
+      expandedPrimaryIds,
+      expandedGroupIds,
+      expandedSubgroupIds,
+      {
+        expandedLedgerIds,
+        voucherLinesByLedgerId,
+      },
+    ).filter(isRenderableTrialBalanceDetailedRow);
+    return rows;
+  }, [
+    activeTab,
+    filteredDetailedGroups,
+    expandedPrimaryIds,
+    expandedGroupIds,
+    expandedSubgroupIds,
+    expandedLedgerIds,
+    voucherLinesByLedgerId,
+  ]);
 
   const hasFilters =
-    Boolean(search.trim()) ||
-    (datesReady && preset !== "this_month");
+    isMultiFilterActive(branches) ||
+    isMultiFilterActive(ledgerGroupIds) ||
+    isMultiFilterActive(ledgerIds) ||
+    isMultiFilterActive(voucherTypes) ||
+    showZeroBalance ||
+    !includeOpeningBalance ||
+    (datesReady && financialYearId !== defaultFyDateRange().fyId);
 
   const resetFilters = useCallback(() => {
-    setSearch("");
-    setPreset("this_month");
-    const { from, to } = resolveDateRangePreset("this_month");
+    const { from, to, fyId } = defaultFyDateRange();
+    setPreset("custom");
     setDateFrom(from);
     setDateTo(to);
+    setFinancialYearId(fyId);
+    setBranches([]);
+    setLedgerGroupIds([]);
+    setLedgerIds([]);
+    setVoucherTypes([]);
+    setShowZeroBalance(false);
+    setIncludeOpeningBalance(true);
     setPage(1);
   }, []);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, pageSize, activeTab]);
+  }, [
+    pageSize,
+    activeTab,
+    financialYearId,
+    dateFrom,
+    dateTo,
+    branches,
+    ledgerGroupIds,
+    ledgerIds,
+    voucherTypes,
+    showZeroBalance,
+    includeOpeningBalance,
+  ]);
 
-  
+  const financialYearLabel = useMemo(() => {
+    if (financialYearId === "all") return "All years";
+    return loadFinancialYears().find((f) => String(f.id) === financialYearId)?.name ?? "";
+  }, [financialYearId]);
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: "",
+      financialYear: financialYearLabel,
       view: activeTab,
+      branch:
+        effectiveBranches.length === 0
+          ? ""
+          : formatMultiSelectLabel(
+              effectiveBranches,
+              branchOptions.map((b) => ({ value: b, label: b })),
+              "Branch",
+            ),
+      includeOpeningBalance,
     }),
-    [dateFrom, dateTo, activeTab],
+    [dateFrom, dateTo, activeTab, financialYearLabel, effectiveBranches, branchOptions, includeOpeningBalance],
   );
 
-  const hasExportData =
-    activeTab === "summary"
-      ? filteredSummaryRows.length > 0
-      : filteredDetailedGroups.length > 0;
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
+      [
+        buildBranchFilterSummary(effectiveBranches, () => setBranches([])),
+        buildEntityFilterSummary(
+          "ledgerGroup",
+          "Ledger Group",
+          ledgerGroupIds,
+          ledgerGroupSelectOptions,
+          () => setLedgerGroupIds([]),
+        ),
+        buildEntityFilterSummary(
+          "ledger",
+          "Ledger",
+          ledgerIds,
+          ledgerSelectOptions,
+          () => setLedgerIds([]),
+        ),
+        showZeroBalance
+          ? {
+              id: "zeroBalance",
+              label: "Zero balance",
+              value: "Included",
+              onRemove: () => setShowZeroBalance(false),
+            }
+          : null,
+        !includeOpeningBalance
+          ? {
+              id: "openingBalance",
+              label: "Opening balance",
+              value: "Hidden",
+              onRemove: () => setIncludeOpeningBalance(true),
+            }
+          : null,
+      ].filter((item): item is ReportFilterSummaryItem => item != null),
+    [
+      effectiveBranches,
+      ledgerGroupIds,
+      ledgerGroupSelectOptions,
+      ledgerIds,
+      ledgerSelectOptions,
+      showZeroBalance,
+      includeOpeningBalance,
+    ],
+  );
 
-  const handleExportExcel = async () => {
-    setExporting(true);
-    try {
-      if (activeTab === "summary") {
-        await exportTrialBalanceSummaryToExcel(filteredSummaryRows, exportMeta, summary);
-      } else {
-        await exportTrialBalanceDetailedToExcel(filteredDetailedGroups, exportMeta, summary);
-      }
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportPdf = () => {
-    if (activeTab === "summary") {
-      exportTrialBalanceSummaryToPdf(filteredSummaryRows, exportMeta, summary);
-    } else {
-      exportTrialBalanceDetailedToPdf(filteredDetailedGroups, exportMeta, summary);
-    }
-  };
-
-  const handleSummarySort = useCallback((key: string) => {
-    const col = key as TrialBalanceSummarySortKey;
-    if (summarySortKey === col) {
-      setSummarySortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSummarySortKey(col);
-      setSummarySortDir("asc");
-    }
-  }, [summarySortKey]);
-
-  const handleDetailedSort = useCallback((key: string) => {
-    const col = key as TrialBalanceDetailedSortKey;
-    if (detailedSortKey === col) {
-      setDetailedSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setDetailedSortKey(col);
-      setDetailedSortDir("asc");
-    }
-  }, [detailedSortKey]);
+  const togglePrimary = useCallback((primaryHeadId: number) => {
+    setExpandedPrimaryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(primaryHeadId)) next.delete(primaryHeadId);
+      else next.add(primaryHeadId);
+      return next;
+    });
+  }, []);
 
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroupIds((prev) => {
@@ -252,13 +527,241 @@ export default function TrialBalancePageClient() {
     });
   }, []);
 
+  const toggleLedger = useCallback((ledgerId: number) => {
+    setExpandedLedgerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ledgerId)) next.delete(ledgerId);
+      else next.add(ledgerId);
+      return next;
+    });
+  }, []);
+
+  const toggleSubgroup = useCallback((subgroupKey: string) => {
+    setExpandedSubgroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(subgroupKey)) next.delete(subgroupKey);
+      else next.add(subgroupKey);
+      return next;
+    });
+  }, []);
+
+  return (
+      <TrialBalancePageBody
+        mounted={mounted}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        filteredDetailedGroups={filteredDetailedGroups}
+        normalFlatRows={normalFlatRows}
+        detailedFlatRows={detailedFlatRows}
+        expandedPrimaryIds={expandedPrimaryIds}
+        expandedGroupIds={expandedGroupIds}
+        expandedSubgroupIds={expandedSubgroupIds}
+        expandedLedgerIds={expandedLedgerIds}
+        togglePrimary={togglePrimary}
+        toggleGroup={toggleGroup}
+        toggleSubgroup={toggleSubgroup}
+        toggleLedger={toggleLedger}
+        financialYearLabel={financialYearLabel}
+        hasFilters={hasFilters}
+        resetFilters={resetFilters}
+        preset={preset}
+        handlePresetChange={handlePresetChange}
+        financialYearId={financialYearId}
+        onFinancialYearChange={handleFinancialYearChange}
+        branch={branches}
+        onBranchChange={setBranches}
+        ledgerGroupIds={ledgerGroupIds}
+        onLedgerGroupChange={handleLedgerGroupChange}
+        ledgerIds={ledgerIds}
+        onLedgerChange={setLedgerIds}
+        voucherTypes={voucherTypes}
+        onVoucherTypesChange={setVoucherTypes}
+        showZeroBalance={showZeroBalance}
+        onShowZeroBalanceChange={setShowZeroBalance}
+        includeOpeningBalance={includeOpeningBalance}
+        onIncludeOpeningBalanceChange={setIncludeOpeningBalance}
+        moreFiltersActiveCount={moreFiltersActiveCount}
+        filterSummaryItems={filterSummaryItems}
+        ledgerGroupOptions={ledgerGroupOptions}
+        ledgerOptions={ledgerOptions}
+        branchOptions={branchOptions}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        exporting={exporting}
+        setExporting={setExporting}
+        exportMeta={exportMeta}
+        exceptions={exceptions}
+      />
+  );
+}
+
+function TrialBalancePageBody({
+  mounted,
+  activeTab,
+  setActiveTab,
+  filteredDetailedGroups,
+  normalFlatRows,
+  detailedFlatRows,
+  expandedPrimaryIds,
+  expandedGroupIds,
+  expandedSubgroupIds,
+  expandedLedgerIds,
+  togglePrimary,
+  toggleGroup,
+  toggleSubgroup,
+  toggleLedger,
+  financialYearLabel,
+  hasFilters,
+  resetFilters,
+  preset,
+  handlePresetChange,
+  financialYearId,
+  onFinancialYearChange,
+  branch,
+  onBranchChange,
+  ledgerGroupIds,
+  onLedgerGroupChange,
+  ledgerIds,
+  onLedgerChange,
+  voucherTypes,
+  onVoucherTypesChange,
+  showZeroBalance,
+  onShowZeroBalanceChange,
+  includeOpeningBalance,
+  onIncludeOpeningBalanceChange,
+  moreFiltersActiveCount,
+  filterSummaryItems,
+  ledgerGroupOptions,
+  ledgerOptions,
+  branchOptions,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  exporting,
+  setExporting,
+  exportMeta,
+  exceptions,
+}: {
+  mounted: boolean;
+  activeTab: TrialBalanceTab;
+  setActiveTab: (v: TrialBalanceTab) => void;
+  filteredDetailedGroups: ReturnType<typeof buildTrialBalanceDetailedGroups>;
+  normalFlatRows: TrialBalanceNormalPrimaryHeadRow[];
+  detailedFlatRows: TrialBalanceDetailedFlatRow[];
+  expandedPrimaryIds: Set<number>;
+  expandedGroupIds: Set<string>;
+  expandedSubgroupIds: Set<string>;
+  expandedLedgerIds: Set<number>;
+  togglePrimary: (id: number) => void;
+  toggleGroup: (groupKey: string) => void;
+  toggleSubgroup: (subgroupKey: string) => void;
+  toggleLedger: (ledgerId: number) => void;
+  financialYearLabel: string;
+  hasFilters: boolean;
+  resetFilters: () => void;
+  preset: DateRangePresetId;
+  handlePresetChange: (value: DateRangePresetId) => void;
+  financialYearId: string;
+  onFinancialYearChange: (value: string) => void;
+  branch: string[];
+  onBranchChange: (value: string[]) => void;
+  ledgerGroupIds: string[];
+  onLedgerGroupChange: (value: string[]) => void;
+  ledgerIds: string[];
+  onLedgerChange: (value: string[]) => void;
+  voucherTypes: string[];
+  onVoucherTypesChange: (value: string[]) => void;
+  showZeroBalance: boolean;
+  onShowZeroBalanceChange: (value: boolean) => void;
+  includeOpeningBalance: boolean;
+  onIncludeOpeningBalanceChange: (value: boolean) => void;
+  moreFiltersActiveCount: number;
+  filterSummaryItems: ReportFilterSummaryItem[];
+  ledgerGroupOptions: { id: number; name: string }[];
+  ledgerOptions: { id: number; name: string }[];
+  branchOptions: string[];
+  dateFrom: string;
+  setDateFrom: (v: string) => void;
+  dateTo: string;
+  setDateTo: (v: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  exporting: boolean;
+  setExporting: (v: boolean) => void;
+  exportMeta: Parameters<typeof exportTrialBalanceNormalToExcel>[1];
+  exceptions: TrialBalanceVoucherException[];
+}) {
+  const glDrillDownFilters = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      branch,
+      warehouse: [] as string[],
+      financialYearId,
+    }),
+    [dateFrom, dateTo, branch, financialYearId],
+  );
+
+  const paginatedNormalRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return normalFlatRows.slice(start, start + pageSize);
+  }, [normalFlatRows, page, pageSize]);
+
+  const paginatedDetailedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return detailedFlatRows.slice(start, start + pageSize);
+  }, [detailedFlatRows, page, pageSize]);
+
+  const summary = useMemo(
+    () =>
+      computeTrialBalanceSummaryFromDetailedGroups(
+        filteredDetailedGroups,
+        exceptions.length > 0,
+      ),
+    [filteredDetailedGroups, exceptions.length],
+  );
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      if (activeTab === "normal") {
+        await exportTrialBalanceNormalToExcel(filteredDetailedGroups, exportMeta, summary);
+      } else {
+        await exportTrialBalanceDetailedToExcel(filteredDetailedGroups, exportMeta, summary);
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (activeTab === "normal") {
+      exportTrialBalanceNormalToPdf(filteredDetailedGroups, exportMeta, summary);
+    } else {
+      exportTrialBalanceDetailedToPdf(filteredDetailedGroups, exportMeta, summary);
+    }
+  };
+
   const totalRecords =
-    activeTab === "summary" ? filteredSummaryRows.length : detailedFlatRows.length;
-
-  const recordLabel = activeTab === "summary" ? "groups" : "rows";
-
+    activeTab === "normal" ? normalFlatRows.length : detailedFlatRows.length;
+  const recordLabel = activeTab === "normal" ? "rows" : "rows";
   const showEmpty = mounted && totalRecords === 0;
   const showTable = mounted && totalRecords > 0;
+  const hasExportData = filteredDetailedGroups.length > 0;
+  const showDetailedPagination = activeTab === "detailed" && detailedFlatRows.length > pageSize;
 
   return (
     <AccountsPageShell
@@ -268,15 +771,21 @@ export default function TrialBalancePageClient() {
       hideDescription
       layout="split"
       className="trial-balance-compact h-full min-h-0"
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !hasExportData}
-        />
-      }
+      subHeader={<TrialBalanceViewTabs value={activeTab} onChange={setActiveTab} />}
       filters={
-        <ReportFilterRow className="items-end gap-2">
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || !mounted || !hasExportData}
+            />
+          }
+        >
+          <ReportFinancialYearFilter
+            value={financialYearId}
+            onChange={onFinancialYearChange}
+          />
           <ReportDateRangeFilter
             preset={preset}
             dateFrom={dateFrom}
@@ -284,33 +793,44 @@ export default function TrialBalancePageClient() {
             onPresetChange={handlePresetChange}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
+            inlineCustomDates={false}
           />
-          <div className="space-y-0.5 min-w-[180px] flex-1">
-            <Label className={filterLabelClass}>Search Ledger / Group</Label>
-            <div className="relative">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name or code…"
-                className={cn(filterControlClass, "pr-7")}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
+          <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} />
+          <ReportToDateFilter value={dateTo} onChange={setDateTo} />
+          <ReportBranchMultiFilter
+            values={branch}
+            onChange={onBranchChange}
+            options={branchOptions.length ? branchOptions : REPORT_BRANCH_OPTIONS}
+          />
+          <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+            <ReportLedgerGroupMultiFilter
+              values={ledgerGroupIds}
+              onChange={onLedgerGroupChange}
+              groups={ledgerGroupOptions}
+            />
+            <ReportLedgerMultiFilter
+              values={ledgerIds}
+              onChange={onLedgerChange}
+              ledgers={ledgerOptions}
+            />
+            <ReportVoucherTypeMultiFilter
+              values={voucherTypes}
+              onChange={onVoucherTypesChange}
+            />
+            <ReportShowZeroBalanceToggle
+              checked={showZeroBalance}
+              onChange={onShowZeroBalanceChange}
+            />
+            <ReportIncludeOpeningBalanceToggle
+              checked={includeOpeningBalance}
+              onChange={onIncludeOpeningBalanceChange}
+            />
+          </ReportMoreFilters>
           {hasFilters && (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-sm px-2"
+              className="h-8 text-xs px-2 shrink-0"
               onClick={resetFilters}
             >
               Reset
@@ -319,314 +839,344 @@ export default function TrialBalancePageClient() {
         </ReportFilterRow>
       }
     >
-      <AccountsListingTableCard className="trial-balance-compact flex-1 min-h-0">
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => setActiveTab(v as TrialBalanceTab)}
-        className="flex flex-col flex-1 min-h-0"
-      >
-        <TabsList className="flex-shrink-0 bg-transparent border-b border-border px-1">
-          <TabsTrigger value="summary" className="text-xs px-3 pb-2">
-            Summary
-          </TabsTrigger>
-          <TabsTrigger value="detailed" className="text-xs px-3 pb-2">
-            Detailed
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="summary" className="flex flex-col flex-1 min-h-0 mt-0 data-[state=inactive]:hidden">
-          <AccountsTableListing
-            summary={
-              <AccountsSummaryBar
-                items={[
-                  { label: "Total Debit", value: formatMoney(summary.totalDebit) },
-                  { label: "Total Credit", value: formatMoney(summary.totalCredit) },
-                  {
-                    label: "Difference",
-                    value: formatMoney(summary.isBalanced ? 0 : summary.difference),
-                    warn: !summary.isBalanced,
-                  },
-                  { label: "Total Groups", value: String(summary.totalGroups) },
-                ]}
+      {mounted && exceptions.length > 0 && (
+        <TrialBalanceExceptionsPanel exceptions={exceptions} />
+      )}
+      <div className="accounts-listing-card trial-balance-compact flex flex-col flex-1 min-h-0">
+        {filterSummaryItems.length > 0 && (
+          <div className="flex-shrink-0 px-2">
+            <ReportFilterSummary items={filterSummaryItems} />
+          </div>
+        )}
+        <AccountsTableListing
+          className="flex-1 min-h-0"
+          footer={
+            <>
+              <BalanceStatusBanner
+                isBalanced={summary.isBalanced}
+                openingDifference={summary.openingDifference}
+                periodDifference={summary.periodDifference}
+                closingDifference={summary.closingDifference}
+                visible={mounted && totalRecords > 0}
               />
-            }
-            footer={
-              <>
-                {mounted && !summary.isBalanced && filteredSummaryRows.length > 0 && (
-                  <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-xs text-red-700 leading-tight">
-                    <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                    Trial Balance is not balanced.
-                  </div>
-                )}
-                {mounted && filteredSummaryRows.length > 0 && (
-                  <AccountsTablePagination
-                    page={page}
-                    pageSize={pageSize}
-                    totalRecords={filteredSummaryRows.length}
-                    onPageChange={setPage}
-                    onPageSizeChange={setPageSize}
-                    recordLabel={recordLabel}
-                  />
-                )}
-              </>
-            }
-          >
-            {!mounted ? (
-              <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-                Loading trial balance…
-              </div>
-            ) : showEmpty ? (
-              <EmptyState hasFilters={hasFilters} onClear={resetFilters} />
-            ) : showTable && activeTab === "summary" ? (
-              <AccountsTable minWidth={520}>
-                <AccountsTableHead>
-                  <AccountsTableHeadRow>
-                    <SortTh
-                      label="Particular"
-                      colKey="particular"
-                      sortKey={summarySortKey}
-                      sortDir={summarySortDir}
-                      onSort={handleSummarySort}
-                    />
-                    <SortTh
-                      label="Debit"
-                      colKey="debit"
-                      sortKey={summarySortKey}
-                      sortDir={summarySortDir}
-                      onSort={handleSummarySort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Credit"
-                      colKey="credit"
-                      sortKey={summarySortKey}
-                      sortDir={summarySortDir}
-                      onSort={handleSummarySort}
-                      align="right"
-                    />
-                  </AccountsTableHeadRow>
-                </AccountsTableHead>
-                <AccountsTableBody>
-                  {paginatedSummaryRows.map((row) => (
-                    <AccountsTableRow key={row.groupId}>
-                      <AccountsTableCell className="font-semibold text-foreground">
-                        {row.particular}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" money>
-                        {formatMoneyOrDash(row.debit)}
-                      </AccountsTableCell>
-                      <AccountsTableCell align="right" money>
-                        {formatMoneyOrDash(row.credit)}
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  ))}
-                </AccountsTableBody>
-                <AccountsTableFoot>
-                  <AccountsTableRow>
-                    <AccountsTableCell className="font-semibold text-foreground text-xs">
-                      Grand Total
+              {mounted && totalRecords > 0 && (activeTab === "normal" || showDetailedPagination) && (
+                <AccountsTablePagination
+                  page={page}
+                  pageSize={pageSize}
+                  totalRecords={totalRecords}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  recordLabel={recordLabel}
+                />
+              )}
+            </>
+          }
+        >
+          {!mounted ? (
+            <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+              Loading trial balance…
+            </div>
+          ) : showEmpty ? (
+            <EmptyState hasFilters={hasFilters} onClear={resetFilters} />
+          ) : showTable && activeTab === "normal" ? (
+            <AccountsTable minWidth={720}>
+              <AccountsTableHead>
+                <AccountsTableHeadRow>
+                  <FinancialReportHeadCell className="min-w-[280px]">Particular</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
+                </AccountsTableHeadRow>
+              </AccountsTableHead>
+              <AccountsTableBody>
+                {paginatedNormalRows.map((row, i) => (
+                  <AccountsTableRow
+                    key={rowKey(row, i)}
+                    className="group border-b border-border/80 bg-muted/20 hover:bg-muted/30 transition-colors"
+                  >
+                    <AccountsTableCell className={TB_NORMAL_INDENT.ledger}>
+                      <AccountsCoaHierarchyRowLabel
+                        level="primary_head"
+                        name={row.primaryHead}
+                      />
                     </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", !summary.isBalanced && "text-red-600")}
-                    >
-                      {formatMoney(summary.totalDebit)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", !summary.isBalanced && "text-red-600")}
-                    >
-                      {formatMoney(summary.totalCredit)}
-                    </AccountsTableCell>
+                    <DebitCreditCells debit={row.debit} credit={row.credit} bold />
                   </AccountsTableRow>
-                </AccountsTableFoot>
-              </AccountsTable>
-            ) : null}
-          </AccountsTableListing>
-        </TabsContent>
-
-        <TabsContent value="detailed" className="flex flex-col flex-1 min-h-0 mt-0 data-[state=inactive]:hidden">
-          <AccountsTableListing
-            summary={
-              <AccountsSummaryBar
-                items={[
-                  { label: "Total Debit", value: formatMoney(summary.totalDebit) },
-                  { label: "Total Credit", value: formatMoney(summary.totalCredit) },
-                  {
-                    label: "Difference",
-                    value: formatMoney(summary.isBalanced ? 0 : summary.difference),
-                    warn: !summary.isBalanced,
-                  },
-                  { label: "Total Ledgers", value: String(summary.totalLedgers) },
-                ]}
-              />
-            }
-            footer={
-              <>
-                {mounted && !summary.isBalanced && filteredDetailedGroups.length > 0 && (
-                  <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-xs text-red-700 leading-tight">
-                    <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                    Trial Balance is not balanced.
-                  </div>
-                )}
-                {mounted && filteredDetailedGroups.length > 0 && (
-                  <AccountsTablePagination
-                    page={page}
-                    pageSize={pageSize}
-                    totalRecords={detailedFlatRows.length}
-                    onPageChange={setPage}
-                    onPageSizeChange={setPageSize}
-                    recordLabel={recordLabel}
-                  />
-                )}
-              </>
-            }
-          >
-            {!mounted ? (
-              <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-                Loading trial balance…
-              </div>
-            ) : showEmpty ? (
-              <EmptyState hasFilters={hasFilters} onClear={resetFilters} />
-            ) : showTable && activeTab === "detailed" ? (
-              <AccountsTable minWidth={900}>
-                <AccountsTableHead>
-                  <AccountsTableHeadRow>
-                    <SortTh
-                      label="Particular"
-                      colKey="particular"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                    />
-                    <SortTh
-                      label="Opening Balance"
-                      colKey="opening"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Debit"
-                      colKey="debit"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Credit"
-                      colKey="credit"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Closing Balance"
-                      colKey="closing"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="right"
-                    />
-                    <SortTh
-                      label="Balance Type"
-                      colKey="balanceType"
-                      sortKey={detailedSortKey}
-                      sortDir={detailedSortDir}
-                      onSort={handleDetailedSort}
-                      align="center"
-                    />
-                  </AccountsTableHeadRow>
-                </AccountsTableHead>
-                <AccountsTableBody>
-                  {paginatedDetailedRows.map((row, i) =>
-                    row.type === "group" ? (
-                      <AccountsTableRow key={`g-${row.groupKey}`} className="bg-muted/20">
-                        <AccountsTableCell colSpan={6} className="!h-8">
+                ))}
+              </AccountsTableBody>
+              <AccountsTableFoot>
+                <AccountsTableRow className="border-t-2 border-foreground/20">
+                  <AccountsTableCell className="font-bold text-foreground text-xs">
+                    TOTAL
+                  </AccountsTableCell>
+                  <AccountsTableCell
+                    align="right"
+                    money
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
+                  >
+                    {formatMoney(summary.totalDebit)}
+                  </AccountsTableCell>
+                  <AccountsTableCell
+                    align="right"
+                    money
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
+                  >
+                    {formatMoney(summary.totalCredit)}
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              </AccountsTableFoot>
+            </AccountsTable>
+          ) : showTable && activeTab === "detailed" ? (
+            <AccountsTable minWidth={720}>
+              <AccountsTableHead>
+                <AccountsTableHeadRow>
+                  <FinancialReportHeadCell className="min-w-[280px]">Particular</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
+                  <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
+                </AccountsTableHeadRow>
+              </AccountsTableHead>
+              <AccountsTableBody>
+                {(showDetailedPagination ? paginatedDetailedRows : detailedFlatRows).map((row, i) => {
+                  if (row.type === "primary") {
+                    const expanded = expandedPrimaryIds.has(row.primaryHeadId);
+                    return (
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group border-b border-border/80 bg-muted/20 hover:bg-muted/30 transition-colors"
+                      >
+                        <AccountsTableCell className={TB_DETAILED_INDENT.primary}>
                           <button
                             type="button"
-                            onClick={() => toggleGroup(row.groupKey)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-brand-700 w-full text-left"
+                            onClick={() => togglePrimary(row.primaryHeadId)}
+                            className="w-full text-left"
                           >
-                            <ChevronRight
-                              className={cn(
-                                "w-4 h-4 flex-shrink-0 transition-transform",
-                                expandedGroupIds.has(row.groupKey) && "rotate-90",
-                              )}
+                            <AccountsCoaHierarchyRowLabel
+                              level="primary_head"
+                              name={row.primaryHead}
+                              expandable
+                              expanded={expanded}
+                              showTreeGuides
                             />
-                            {row.groupName}
-                            <span className="text-xs font-normal text-muted-foreground ml-1">
-                              ({row.ledgerCount})
-                            </span>
                           </button>
                         </AccountsTableCell>
+                        <DebitCreditCells
+                          debit={row.amounts.closingDebit}
+                          credit={row.amounts.closingCredit}
+                          bold
+                        />
                       </AccountsTableRow>
-                    ) : (
-                      <AccountsTableRow key={`l-${row.ledger.ledgerId}-${i}`}>
-                        <AccountsTableCell className="pl-8">
-                          <Link
-                            href={buildGeneralLedgerHref(row.ledger.ledgerId)}
-                            className="text-xs font-semibold text-brand-700 hover:underline"
-                          >
-                            {row.ledger.ledgerName}
-                          </Link>
+                    );
+                  }
+                  if (row.type === "group") {
+                    const expanded = expandedGroupIds.has(row.groupKey);
+                    return (
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group bg-muted/15 hover:bg-muted/30 transition-colors"
+                      >
+                        <AccountsTableCell className={TB_DETAILED_INDENT.group}>
+                          <AccountsCoaHierarchyRowLabel
+                            level="account_group"
+                            name={row.groupName}
+                            nameHref={buildTrialBalanceGroupHref(
+                              row.groupId,
+                              row.groupName,
+                              glDrillDownFilters,
+                            )}
+                            ledgerCount={row.ledgerCount}
+                            expandable={row.ledgerCount > 0}
+                            expanded={expanded}
+                            onExpandClick={() => toggleGroup(row.groupKey)}
+                            showTreeGuides
+                          />
                         </AccountsTableCell>
-                        <AccountsTableCell align="right" money>
-                          {formatMoneyOrDash(row.ledger.openingAmount)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money>
-                          {formatMoneyOrDash(row.ledger.debit)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money>
-                          {formatMoneyOrDash(row.ledger.credit)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="right" money>
-                          {formatMoneyOrDash(row.ledger.closingAmount)}
-                        </AccountsTableCell>
-                        <AccountsTableCell align="center">
-                          <span className="text-xs font-medium text-muted-foreground">
-                            {balanceSideLabel(row.ledger.closingBalanceType)}
-                          </span>
-                        </AccountsTableCell>
+                        <DebitCreditCells
+                          debit={row.amounts.closingDebit}
+                          credit={row.amounts.closingCredit}
+                          bold
+                        />
                       </AccountsTableRow>
-                    ),
-                  )}
-                </AccountsTableBody>
-                <AccountsTableFoot>
-                  <AccountsTableRow>
-                    <AccountsTableCell className="font-semibold text-foreground text-xs">
-                      Grand Total
-                    </AccountsTableCell>
-                    <AccountsTableCell />
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className="font-semibold"
+                    );
+                  }
+                  if (row.type === "subgroup") {
+                    const expanded = expandedSubgroupIds.has(row.subgroupKey);
+                    return (
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group bg-muted/10 hover:bg-muted/30 transition-colors"
+                      >
+                        <AccountsTableCell className={TB_DETAILED_INDENT.subgroup}>
+                          <AccountsCoaHierarchyRowLabel
+                            level="sub_group"
+                            name={row.subgroupName}
+                            nameHref={buildTrialBalanceGroupHref(
+                              row.subgroupId,
+                              row.subgroupName,
+                              glDrillDownFilters,
+                            )}
+                            ledgerCount={row.ledgerCount}
+                            expandable={row.ledgerCount > 0}
+                            expanded={expanded}
+                            onExpandClick={() => toggleSubgroup(row.subgroupKey)}
+                            showTreeGuides
+                          />
+                        </AccountsTableCell>
+                        <DebitCreditCells
+                          debit={row.amounts.closingDebit}
+                          credit={row.amounts.closingCredit}
+                        />
+                      </AccountsTableRow>
+                    );
+                  }
+                  if (row.type === "ledger") {
+                    return (
+                      <AccountsTableRow
+                        key={rowKey(row, i)}
+                        className="group hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => toggleLedger(row.ledger.ledgerId)}
+                      >
+                        <AccountsTableCell className={TB_DETAILED_INDENT.ledger}>
+                          <AccountsCoaHierarchyRowLabel
+                            level="ledger"
+                            name={row.ledger.ledgerName}
+                            nameHref={buildTrialBalanceLedgerHref(row.ledger.ledgerId, glDrillDownFilters)}
+                            expandable
+                            expanded={expandedLedgerIds.has(row.ledger.ledgerId)}
+                            showTreeGuides
+                          />
+                        </AccountsTableCell>
+                        <DebitCreditCells
+                          debit={row.ledger.closingDebit}
+                          credit={row.ledger.closingCredit}
+                        />
+                      </AccountsTableRow>
+                    );
+                  }
+                  return (
+                    <AccountsTableRow
+                      key={rowKey(row, i)}
+                      className="group bg-muted/10 hover:bg-muted/25 transition-colors"
                     >
-                      {formatMoney(summary.periodDebit)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className="font-semibold"
-                    >
-                      {formatMoney(summary.periodCredit)}
-                    </AccountsTableCell>
-                    <AccountsTableCell colSpan={2} />
-                  </AccountsTableRow>
-                </AccountsTableFoot>
-              </AccountsTable>
-            ) : null}
-          </AccountsTableListing>
-        </TabsContent>
-      </Tabs>
-      </AccountsListingTableCard>
+                      <AccountsTableCell className={TB_DETAILED_INDENT.voucher}>
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                            <span className="text-muted-foreground">
+                              {formatTrialBalanceReportDate(row.voucher.date)}
+                            </span>
+                            <Link
+                              href={row.voucher.viewHref}
+                              className="font-mono text-brand-700 hover:underline"
+                            >
+                              {row.voucher.voucherNo}
+                            </Link>
+                            <span className="text-muted-foreground">
+                              {row.voucher.voucherTypeLabel}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2">
+                            {row.voucher.narration}
+                          </p>
+                        </div>
+                      </AccountsTableCell>
+                      <DebitCreditCells
+                        debit={row.voucher.debit}
+                        credit={row.voucher.credit}
+                      />
+                    </AccountsTableRow>
+                  );
+                })}
+              </AccountsTableBody>
+              <AccountsTableFoot>
+                <AccountsTableRow className="border-t-2 border-foreground/20">
+                  <AccountsTableCell className="font-bold text-foreground text-xs">
+                    TOTAL
+                  </AccountsTableCell>
+                  <AccountsTableCell
+                    align="right"
+                    money
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
+                  >
+                    {formatMoney(summary.totalDebit)}
+                  </AccountsTableCell>
+                  <AccountsTableCell
+                    align="right"
+                    money
+                    className={cn(
+                      "font-bold",
+                      summary.closingDifference !== 0 && "text-red-600",
+                    )}
+                  >
+                    {formatMoney(summary.totalCredit)}
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              </AccountsTableFoot>
+            </AccountsTable>
+          ) : null}
+        </AccountsTableListing>
+      </div>
     </AccountsPageShell>
+  );
+}
+
+function TrialBalanceExceptionsPanel({
+  exceptions,
+}: {
+  exceptions: TrialBalanceVoucherException[];
+}) {
+  return (
+    <div className="flex-shrink-0 mb-2 rounded-lg border border-red-200 bg-red-50/70 overflow-hidden">
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-red-100">
+        <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
+        <span className="text-xs font-semibold text-red-700">
+          Unbalanced Vouchers ({exceptions.length})
+        </span>
+        <span className="text-[11px] text-red-600/80">
+          — these vouchers do not satisfy Total Debit = Total Credit and must be corrected at source.
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-red-100/40 text-red-700">
+              <th className="px-3 py-1.5 text-left font-semibold">Voucher No.</th>
+              <th className="px-3 py-1.5 text-left font-semibold">Date</th>
+              <th className="px-3 py-1.5 text-left font-semibold">Type</th>
+              <th className="px-3 py-1.5 text-right font-semibold">Total Debit</th>
+              <th className="px-3 py-1.5 text-right font-semibold">Total Credit</th>
+              <th className="px-3 py-1.5 text-right font-semibold">Difference</th>
+              <th className="px-3 py-1.5 text-right font-semibold">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {exceptions.map((ex) => (
+              <tr key={ex.voucherId} className="border-t border-red-100">
+                <td className="px-3 py-1.5 font-mono text-brand-700">{ex.voucherNo}</td>
+                <td className="px-3 py-1.5 text-foreground">{ex.date}</td>
+                <td className="px-3 py-1.5 text-foreground">{ex.voucherTypeLabel}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(ex.totalDebit)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(ex.totalCredit)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-red-600">
+                  {formatMoney(ex.difference)}
+                </td>
+                <td className="px-3 py-1.5 text-right">
+                  <Link href={ex.viewHref} className="text-brand-700 hover:underline font-medium">
+                    View
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

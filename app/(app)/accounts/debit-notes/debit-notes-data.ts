@@ -27,6 +27,7 @@ import {
   loadPurchaseReturns,
   type PurchaseReturn,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
   listPendingDebitNoteReturns,
   type PendingDebitNoteRow,
@@ -79,8 +80,12 @@ export interface DebitNoteLine {
   id: string;
   sourceLineId: string;
   productName: string;
+  sku?: string;
   batchNo?: string;
   hsn?: string;
+  /** Frontend display — from source PI/PR when available. */
+  mfgDate?: string;
+  expiryDate?: string;
   invoiceQty: number;
   /** Qty from purchase return document. */
   purchaseReturnQty?: number;
@@ -90,6 +95,10 @@ export interface DebitNoteLine {
   unitPrice: number;
   discountPct: number;
   taxPct: number;
+  sourceTaxPct?: number;
+  gstApplicable?: boolean;
+  adjustmentLedgerId?: number | null;
+  adjustmentLedgerName?: string;
   gstAmount: number;
   lineAmount: number;
   returnQty: number;
@@ -173,10 +182,12 @@ export interface DebitNoteRecord {
   cgstAmount: number;
   sgstAmount: number;
   igstAmount: number;
+  warehouse?: string;
+  bankAccountId?: number | null;
 }
 
 const STORAGE_KEY = "ds_accounts_debit_notes_v3";
-const SEED_VERSION_KEY = "ds_accounts_debit_notes_seed_v3";
+const SEED_VERSION_KEY = "ds_accounts_debit_notes_seed_v4";
 
 function warehouseRefsForPo(poNumber: string): { sourceGrnNo: string; sourceQcNo: string } {
   if (!poNumber) return { sourceGrnNo: "", sourceQcNo: "" };
@@ -212,6 +223,11 @@ function nextDebitNoteNo(records: DebitNoteRecord[]): string {
     return Number.isFinite(n) ? Math.max(m, n) : m;
   }, 0);
   return `DN-${String(max + 1).padStart(4, "0")}`;
+}
+
+/** Preview of the next auto DN number for create forms (assigned on save). */
+export function peekNextDebitNoteNo(): string {
+  return nextDebitNoteNo(loadDebitNotes());
 }
 
 function appendActivity(
@@ -297,7 +313,7 @@ export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferen
           (l) => l.productName.trim().toLowerCase() === item.productName.trim().toLowerCase(),
         );
       const purchaseReturnQty = item.returnQty > 0 ? item.returnQty : item.balanceRejectedQty;
-      const taxPct = item.cgstPct + item.sgstPct + item.igstPct;
+      const taxPct = item.cgstPct + item.sgstPct + item.igstPct || baseLine?.taxPct || 0;
       const lineTotal =
         item.netAmount > 0
           ? item.netAmount
@@ -306,15 +322,20 @@ export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferen
         id: baseLine?.id ?? `dnl-pr-${item.id}`,
         sourceLineId: baseLine?.sourceLineId ?? item.id,
         productName: item.productName,
+        sku: item.productCode || baseLine?.sku || "",
         batchNo: item.batchNumber,
         hsn: baseLine?.hsn ?? "",
+        mfgDate: item.mfgDate || baseLine?.mfgDate || "",
+        expiryDate: item.expDate || baseLine?.expiryDate || "",
         invoiceQty: baseLine?.invoiceQty ?? item.grnReceivedQty,
         purchaseReturnQty,
         eligibleReturnQty: purchaseReturnQty,
         uom: baseLine?.uom ?? "Unit",
         unitPrice: item.unitPrice || baseLine?.unitPrice || 0,
         discountPct: baseLine?.discountPct ?? 0,
-        taxPct: taxPct || baseLine?.taxPct || 0,
+        taxPct,
+        sourceTaxPct: taxPct,
+        gstApplicable: taxPct > 0,
         gstAmount: item.taxAmount || baseLine?.gstAmount || 0,
         lineAmount: baseLine?.lineAmount ?? lineTotal,
         returnQty: 0,
@@ -351,19 +372,32 @@ export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferen
 
 function piLineToDebitLine(l: PurchaseInvoiceLine): DebitNoteLine {
   const lineTotal = Math.round((l.lineAmount + l.taxAmount) * 100) / 100;
+  const taxPct = l.taxPct ?? 0;
+  const hsn =
+    l.directLine?.hsnSac ??
+    (l.description?.match(/HSN\/SAC:\s*(\S+)/i)?.[1] ?? "");
+  let sku = l.description?.match(/SKU:\s*(\S+)/i)?.[1] ?? "";
+  if (!sku && l.productId) {
+    sku = loadProducts().find((p) => p.id === l.productId)?.sku ?? "";
+  }
   return {
     id: `dnl-${l.id}`,
     sourceLineId: l.id,
     productName: l.productName,
+    sku,
     batchNo: l.batchNumber ?? "",
-    hsn: "",
+    hsn,
+    mfgDate: l.mfgDate ?? "",
+    expiryDate: l.expDate ?? "",
     invoiceQty: l.invoiceQty,
     purchaseReturnQty: 0,
     eligibleReturnQty: l.invoiceQty,
     uom: l.unit,
     unitPrice: l.unitPrice,
     discountPct: 0,
-    taxPct: l.taxPct,
+    taxPct,
+    sourceTaxPct: taxPct,
+    gstApplicable: taxPct > 0,
     gstAmount: l.taxAmount,
     lineAmount: lineTotal,
     returnQty: 0,
@@ -823,6 +857,8 @@ export type DebitNoteFormInput = {
   adjustmentLedgerName?: string;
   attachments: DebitNoteAttachment[];
   status: NoteWorkflowStatus;
+  warehouse?: string;
+  bankAccountId?: number | null;
   source?: DebitNoteSource;
   sourceReturnId?: string;
   sourceReturnNo?: string;
@@ -913,6 +949,8 @@ export function createDebitNote(input: DebitNoteFormInput): DebitNoteRecord {
     remarks: input.remarks,
     attachments: input.attachments,
     status: input.status,
+    warehouse: input.warehouse,
+    bankAccountId: input.bankAccountId ?? null,
     activity: [{ at: new Date().toISOString(), action: "created", by: ACCOUNTS_CURRENT_USER, detail: "Debit note created" }],
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -967,6 +1005,8 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
     remarks: input.remarks,
     attachments: input.attachments,
     status: input.status,
+    warehouse: input.warehouse ?? cur.warehouse,
+    bankAccountId: input.bankAccountId ?? cur.bankAccountId ?? null,
     activity: appendActivity(cur.activity, "updated", "Debit note updated"),
     updatedBy: ACCOUNTS_CURRENT_USER,
     updatedAt: new Date().toISOString(),

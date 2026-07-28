@@ -1,5 +1,5 @@
-import CollectionTrackingClient from "./CollectionTrackingClient";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <CollectionTrackingClient />;
+export default function CollectionTrackingRedirectPage() {
+  redirect("/accounts/receivables/outstanding?view=collection");
 }

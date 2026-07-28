@@ -13,10 +13,8 @@ import {
 } from "@/components/ui/select";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
-import { Lock } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge } from "../../components/AccountsUI";
 import { loadVoucherTypes, saveVoucherTypes, type VoucherTypeMaster } from "../masters-data";
 
 export default function VoucherTypesPageClient() {
@@ -47,23 +45,16 @@ export default function VoucherTypesPageClient() {
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prefix</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Numbering</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start No.</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                 <th className="w-20" />
               </tr>
             </thead>
             <tbody>
               {records.map((vt) => (
                 <tr key={vt.id} className="accounts-table-row group">
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <span className="inline-flex items-center gap-1.5">
-                      {vt.name}
-                      <Lock className="w-3 h-3 text-muted-foreground" aria-hidden />
-                    </span>
-                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">{vt.name}</td>
                   <td className="px-4 py-3 text-xs font-mono">{vt.prefix}</td>
                   <td className="px-4 py-3 text-xs capitalize">{vt.numberingType}</td>
                   <td className="px-4 py-3 text-xs tabular-nums">{vt.startingNumber}</td>
-                  <td className="px-4 py-3"><StatusBadge status={vt.status} /></td>
                   <td className="px-4 py-3">
                     <Button variant="ghost" size="sm" className="h-7 text-sm" onClick={() => setEdit({ ...vt })}>
                       Configure

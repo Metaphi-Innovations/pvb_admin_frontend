@@ -410,9 +410,12 @@ export default function EventTypeMasterPage() {
   const displayRecords = useMemo(() => {
     if (ordering || !sort.key || sort.direction === "none") return records;
     return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof EventTypeRecord] ?? "").toLowerCase();
-      const bVal = String(b[sort.key as keyof EventTypeRecord] ?? "").toLowerCase();
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      const aVal = String(a[sort.key as keyof EventTypeRecord] ?? "").trim();
+      const bVal = String(b[sort.key as keyof EventTypeRecord] ?? "").trim();
+      const cmp = aVal.localeCompare(bVal, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort, ordering]);

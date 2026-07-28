@@ -166,3 +166,15 @@ export function setStoredFYId(id: string): void {
     // ignore
   }
 }
+
+/** Indian FY opening date as YYYY-MM-DD from FY id (e.g. "2025-26" → "2025-04-01"). */
+export function fyOpeningDateIso(fyId: string): string {
+  const y = parseInt(String(fyId).split("-")[0], 10);
+  if (!Number.isFinite(y)) {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    return `${month >= 3 ? year : year - 1}-04-01`;
+  }
+  return `${y}-04-01`;
+}

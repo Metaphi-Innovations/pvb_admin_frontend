@@ -9,6 +9,11 @@ import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import {
+  matchesMultiFilter,
+  matchesMultiIdFilter,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
 
 export type RegisterViewMode = "invoice" | "party" | "month" | "commodity";
 
@@ -133,10 +138,16 @@ export interface RegisterFilterParams {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /** @deprecated use customerIds / vendorIds */
   partyId?: string;
-  product?: string;
-  state?: string;
-  branch?: string;
+  customerIds?: string[];
+  vendorIds?: string[];
+  product?: string | string[];
+  state?: string | string[];
+  branch?: string | string[];
+  voucherTypes?: string[];
+  statuses?: string[];
+  salespersons?: string[];
 }
 
 function productCodeLookup(
@@ -355,18 +366,17 @@ export function filterSalesRegisterRows(
   rows: SalesRegisterSourceRow[],
   filters: RegisterFilterParams,
 ): SalesRegisterSourceRow[] {
-  const customers = loadCustomers();
-
   return rows.filter((row) => {
-    if (filters.partyId && filters.partyId !== "all") {
-      const customer = customers.find((c) => String(c.id) === filters.partyId);
-      if (customer && row.party !== customer.customerName) return false;
+    const customerIds = filters.customerIds ?? normalizeMultiFilter(filters.partyId);
+    if (customerIds.length > 0) {
+      if (!matchesMultiIdFilter(customerIds, row.partyId)) return false;
     }
-    if (filters.state && filters.state !== "all" && row.state !== filters.state) return false;
-    if (filters.branch && filters.branch !== "all" && row.branch !== filters.branch) return false;
-    if (filters.product && filters.product !== "all") {
+    if (!matchesMultiFilter(filters.state, row.state)) return false;
+    if (!matchesMultiFilter(filters.branch, row.branch)) return false;
+    const products = normalizeMultiFilter(filters.product);
+    if (products.length > 0) {
       const hasProduct = row.lineItems.some(
-        (l) => l.productName === filters.product || l.productCode === filters.product,
+        (l) => products.includes(l.productName) || products.includes(l.productCode),
       );
       if (!hasProduct) return false;
     }
@@ -391,17 +401,16 @@ export function filterPurchaseRegisterRows(
   rows: PurchaseRegisterSourceRow[],
   filters: RegisterFilterParams,
 ): PurchaseRegisterSourceRow[] {
-  const vendors = loadVendors();
-
   return rows.filter((row) => {
-    if (filters.partyId && filters.partyId !== "all") {
-      const vendor = vendors.find((v) => String(v.id) === filters.partyId);
-      if (vendor && row.party !== vendor.vendorName) return false;
+    const vendorIds = filters.vendorIds ?? normalizeMultiFilter(filters.partyId);
+    if (vendorIds.length > 0) {
+      if (!matchesMultiIdFilter(vendorIds, row.partyId)) return false;
     }
-    if (filters.state && filters.state !== "all" && row.state !== filters.state) return false;
-    if (filters.product && filters.product !== "all") {
+    if (!matchesMultiFilter(filters.state, row.state)) return false;
+    const products = normalizeMultiFilter(filters.product);
+    if (products.length > 0) {
       const hasProduct = row.lineItems.some(
-        (l) => l.productName === filters.product || l.productCode === filters.product,
+        (l) => products.includes(l.productName) || products.includes(l.productCode),
       );
       if (!hasProduct) return false;
     }

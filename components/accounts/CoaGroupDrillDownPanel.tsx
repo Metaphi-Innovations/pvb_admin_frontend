@@ -296,7 +296,7 @@ export function CoaGroupDrillDownPanel({
     };
     return (
       <DashboardShell
-        title="Trade Receivables / Sundry Debtors"
+        title="Sundry Debtors"
         summary={
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <SummaryField label="Total Customers" value={context.totalCustomers} />
@@ -308,7 +308,9 @@ export function CoaGroupDrillDownPanel({
         actions={
           <>
             <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
-              <Link href="/accounts/receivables/outstanding">Customer Ledger</Link>
+              <Link href={buildGeneralLedgerHref({ ledgerType: "Customer", source: "coa" })}>
+                General Ledger
+              </Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
               <Link href="/accounts/receivables/outstanding">Outstanding Report</Link>
@@ -356,7 +358,7 @@ export function CoaGroupDrillDownPanel({
     return (
       <div className="flex flex-col flex-1 min-h-0 border-t border-border/40 overflow-auto">
         <DashboardShell
-          title="Trade Payables / Sundry Creditors"
+          title="Sundry Creditors"
           summary={
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <SummaryField label="Total Suppliers" value={context.totalVendors} />
@@ -368,7 +370,9 @@ export function CoaGroupDrillDownPanel({
           actions={
             <>
               <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
-                <Link href="/accounts/payables/outstanding">View Supplier Ledger</Link>
+                <Link href={buildGeneralLedgerHref({ ledgerType: "Vendor", source: "coa" })}>
+                  General Ledger
+                </Link>
               </Button>
               <Button asChild size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white">
                 <Link href="/masters/vendors">Open Supplier Master</Link>
@@ -607,7 +611,7 @@ export function CoaGroupDrillDownPanel({
             <SummaryField label="Net" value={formatMoney(context.netPayable)} />
           </div>
           <Button asChild size="sm" variant="outline" className="h-9 text-sm font-medium">
-            <Link href="/accounts/reports/gst">GST Summary Report</Link>
+            <Link href="/accounts/reports/gst-summary">GST Summary Report</Link>
           </Button>
         </div>
         <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">

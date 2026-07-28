@@ -1,26 +1,25 @@
 /**
- * GST Master → Chart of Accounts synchronization (Accounts module only).
- * Reads GST Master from localStorage; creates / updates / deactivates rate-specific GST ledgers.
+ * GST ledger helpers for Chart of Accounts (Accounts module).
  *
- * Ledger naming: Input CGST (GST 18%), Output SGST (GST 5%), etc.
- * The bracketed rate is the total GST Master percentage, not the component split.
+ * Statutory COA uses flat ledgers (Input CGST, Output IGST, etc.) — not one ledger per
+ * GST Master rate. GST percentages and rules live in ERP GST Master; transaction posting
+ * will target these statutory ledgers when integrated.
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import {
-  loadChartOfAccounts,
-  loadChartOfAccountsCore,
-  nextId,
-  saveChartOfAccounts,
-} from "@/app/(app)/accounts/data";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { loadGSTMasters } from "@/app/(app)/masters/gst/gst-data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
-import { loadGSTMasters, type GSTMaster } from "@/app/(app)/masters/gst/gst-data";
-import { ledgerHasVoucherPostings } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
-import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
+import {
+  GST_STATUTORY_LEDGER_BY_KIND,
+  isRateSpecificGstLedgerName,
+} from "@/app/(app)/accounts/masters/chart-of-accounts/coa-statutory-ledgers";
 
 export const GST_ERP_SOURCE = "gst_master";
-export const GST_INPUT_CREDIT_GROUP = "GST Input Credit";
-export const GST_DUTIES_SUBGROUP = "Duties & Taxes Payable";
+export const GST_INPUT_GROUP = "Duties & Taxes";
+export const GST_INPUT_CREDIT_GROUP = GST_INPUT_GROUP;
+export const GST_DUTIES_SUBGROUP = "Duties & Taxes";
 
 export type GstLedgerKind =
   | "input_cgst"
@@ -30,23 +29,9 @@ export type GstLedgerKind =
   | "output_sgst"
   | "output_igst";
 
-const GST_KINDS: GstLedgerKind[] = [
-  "input_cgst",
-  "input_sgst",
-  "input_igst",
-  "output_cgst",
-  "output_sgst",
-  "output_igst",
-];
-
 const GST_SYNC_META_KEY = "ds_gst_coa_sync_v2";
 
-export function formatGstPctLabel(pct: number): string {
-  if (Number.isInteger(pct)) return String(pct);
-  return pct.toFixed(2).replace(/\.?0+$/, "");
-}
-
-/** Generic pre-sync ledgers — deactivated when rate-specific ledgers exist (if no postings). */
+/** Generic pre-sync ledgers superseded by statutory chart */
 const LEGACY_GENERIC_GST_LEDGER_NAMES = new Set([
   "cgst payable",
   "sgst payable",
@@ -63,18 +48,25 @@ const LEGACY_GENERIC_GST_LEDGER_NAMES = new Set([
   "custom duty payable",
 ]);
 
+export { isRateSpecificGstLedgerName };
+
+export function formatGstPctLabel(pct: number): string {
+  if (Number.isInteger(pct)) return String(pct);
+  return pct.toFixed(2).replace(/\.?0+$/, "");
+}
+
 export function gstLedgerKindAlias(kind: GstLedgerKind): string {
   return `gst:${kind}`;
 }
 
-/** e.g. Input CGST (GST 18%), Output IGST (GST 5%) */
+/** @deprecated Rate-specific naming — retained for parsing legacy ledger names */
 export function formatGstLedgerName(kind: GstLedgerKind, gstRatePct: number): string {
   const prefix = kind.startsWith("input") ? "Input" : "Output";
   const component = kind.includes("cgst") ? "CGST" : kind.includes("sgst") ? "SGST" : "IGST";
   return `${prefix} ${component} (GST ${formatGstPctLabel(gstRatePct)}%)`;
 }
 
-/** Parse total GST rate from ledger name — supports new and legacy component-percent formats. */
+/** Parse total GST rate from legacy rate-specific ledger names */
 export function parseGstRateFromLedgerName(name: string): number | null {
   const bracketed = name.match(/(?:Input|Output)\s+(?:CGST|SGST|IGST)\s+\(GST\s+([\d.]+)%\)/i);
   if (bracketed) return Number(bracketed[1]);
@@ -90,10 +82,6 @@ export function parseGstRateFromLedgerName(name: string): number | null {
   return null;
 }
 
-export function isRateSpecificGstLedgerName(name: string): boolean {
-  return /^(Input|Output)\s+(CGST|SGST|IGST)\s+\(GST\s+[\d.]+%\)$/i.test(name.trim());
-}
-
 export function isGstCoaLedger(ledger: ChartOfAccount, records?: ChartOfAccount[]): boolean {
   if (ledger.erpSourceModule === GST_ERP_SOURCE) return true;
   if (ledger.nodeLevel !== "ledger") return false;
@@ -105,7 +93,11 @@ export function isGstCoaLedger(ledger: ChartOfAccount, records?: ChartOfAccount[
   const list = records ?? loadChartOfAccounts();
   const pathNames = getAncestorPath(list, ledger.id).map((p) => p.accountName);
   const underGstGroups =
-    pathNames.includes(GST_INPUT_CREDIT_GROUP) || pathNames.includes(GST_DUTIES_SUBGROUP);
+    pathNames.includes(GST_INPUT_GROUP) ||
+    pathNames.includes(GST_INPUT_CREDIT_GROUP) ||
+    pathNames.includes(GST_DUTIES_SUBGROUP) ||
+    pathNames.includes("GST Payable") ||
+    pathNames.includes("GST Input Credit");
 
   if (underGstGroups && LEGACY_GENERIC_GST_LEDGER_NAMES.has(name.toLowerCase())) {
     return true;
@@ -114,296 +106,20 @@ export function isGstCoaLedger(ledger: ChartOfAccount, records?: ChartOfAccount[
   return false;
 }
 
-function findAccountGroup(records: ChartOfAccount[], name: string): ChartOfAccount | undefined {
-  return records.find((r) => r.nodeLevel === "account_group" && r.accountName === name);
-}
-
-function findGstLedgerByMaster(
-  records: ChartOfAccount[],
-  masterId: number,
-  kind: GstLedgerKind,
-): ChartOfAccount | undefined {
-  return records.find(
-    (r) =>
-      r.nodeLevel === "ledger" &&
-      r.erpSourceModule === GST_ERP_SOURCE &&
-      r.erpSourceId === masterId &&
-      r.alias === gstLedgerKindAlias(kind),
-  );
-}
-
-function findGstLedgerByName(records: ChartOfAccount[], name: string): ChartOfAccount | undefined {
-  return records.find(
-    (r) => r.nodeLevel === "ledger" && r.accountName.toLowerCase() === name.toLowerCase(),
-  );
-}
-
-function parentGroupForKind(
-  records: ChartOfAccount[],
-  kind: GstLedgerKind,
-): ChartOfAccount | undefined {
-  if (kind.startsWith("input")) {
-    return findAccountGroup(records, GST_INPUT_CREDIT_GROUP);
-  }
-  return findAccountGroup(records, GST_DUTIES_SUBGROUP);
-}
-
-function ledgerSpecForKind(
-  master: GSTMaster,
-  kind: GstLedgerKind,
-  records: ChartOfAccount[],
-): {
-  parent: ChartOfAccount;
-  name: string;
-  accountType: ChartOfAccount["accountType"];
-  balanceType: ChartOfAccount["balanceType"];
-  gstRatePct: number;
-} | null {
-  const parent = parentGroupForKind(records, kind);
-  if (!parent) return null;
-  return {
-    parent,
-    name: formatGstLedgerName(kind, master.gstPercentage),
-    accountType: kind.startsWith("input") ? "Asset" : "Liability",
-    balanceType: kind.startsWith("input") ? "Debit" : "Credit",
-    gstRatePct: master.gstPercentage,
-  };
-}
-
-function createGstLedger(
-  records: ChartOfAccount[],
-  master: GSTMaster,
-  kind: GstLedgerKind,
-  spec: NonNullable<ReturnType<typeof ledgerSpecForKind>>,
-): ChartOfAccount[] {
-  const id = nextId(records);
-  const ledger: ChartOfAccount = {
-    id,
-    accountCode: `LED-${String(id).padStart(4, "0")}`,
-    accountName: spec.name,
-    alias: gstLedgerKindAlias(kind),
-    accountType: spec.accountType,
-    nodeLevel: "ledger",
-    parentAccountId: spec.parent.id,
-    parentAccount: spec.parent.accountName,
-    description: `GST @ ${master.gstPercentage}% — auto-synced from GST Master`,
-    status: master.status,
-    usedIn: kind.startsWith("input") ? ["procurement", "journal"] : ["sales", "journal"],
-    isSystem: false,
-    isSystemGenerated: true,
-    erpSourceModule: GST_ERP_SOURCE,
-    erpSourceId: master.id,
-    openingBalance: 0,
-    balanceType: spec.balanceType,
-    gstApplicable: true,
-    tdsApplicable: false,
-    costCenterApplicable: false,
-    bankAccountFlag: false,
-    createdBy: ACCOUNTS_CURRENT_USER,
-    updatedBy: ACCOUNTS_CURRENT_USER,
-  };
-  return [...records, ledger];
-}
-
-function patchLedger(
-  records: ChartOfAccount[],
-  ledgerId: number,
-  patch: Partial<ChartOfAccount>,
-): ChartOfAccount[] {
-  return records.map((r) =>
-    r.id === ledgerId ? { ...r, ...patch, updatedBy: ACCOUNTS_CURRENT_USER } : r,
-  );
-}
-
-function applyLedgerSpec(
-  records: ChartOfAccount[],
-  ledgerId: number,
-  spec: NonNullable<ReturnType<typeof ledgerSpecForKind>>,
-  status: ChartOfAccount["status"],
-): ChartOfAccount[] {
-  return patchLedger(records, ledgerId, {
-    accountName: spec.name,
-    parentAccountId: spec.parent.id,
-    parentAccount: spec.parent.accountName,
-    accountType: spec.accountType,
-    balanceType: spec.balanceType,
-    status,
-    isSystemGenerated: true,
-  });
-}
-
-function syncMasterLedgers(records: ChartOfAccount[], master: GSTMaster): ChartOfAccount[] {
-  let next = records;
-
-  if (master.gstPercentage <= 0) {
-    for (const kind of GST_KINDS) {
-      const existing = findGstLedgerByMaster(next, master.id, kind);
-      if (existing && existing.status === "active") {
-        next = patchLedger(next, existing.id, { status: "inactive" });
-      }
-    }
-    return next;
-  }
-
-  for (const kind of GST_KINDS) {
-    const spec = ledgerSpecForKind(master, kind, next);
-    if (!spec) continue;
-
-    let existing = findGstLedgerByMaster(next, master.id, kind);
-
-    if (!existing) {
-      const byName = findGstLedgerByName(next, spec.name);
-      if (byName) {
-        existing = byName;
-        next = patchLedger(next, byName.id, {
-          alias: gstLedgerKindAlias(kind),
-          erpSourceModule: GST_ERP_SOURCE,
-          erpSourceId: master.id,
-          isSystemGenerated: true,
-          status: master.status,
-        });
-      }
-    }
-
-    if (!existing) {
-      next = createGstLedger(next, master, kind, spec);
-      continue;
-    }
-
-    const currentRate =
-      parseGstRateFromLedgerName(existing.accountName) ?? master.gstPercentage;
-    const targetStatus = master.status;
-    const nameMatches = existing.accountName === spec.name;
-    const rateMatches = Math.abs(currentRate - master.gstPercentage) < 0.001;
-
-    if (!rateMatches || !nameMatches) {
-      if (ledgerHasVoucherPostings(existing.id)) {
-        next = patchLedger(next, existing.id, { status: "inactive" });
-        if (!findGstLedgerByName(next, spec.name)) {
-          next = createGstLedger(next, master, kind, spec);
-        } else {
-          const named = findGstLedgerByName(next, spec.name)!;
-          next = patchLedger(next, named.id, {
-            alias: gstLedgerKindAlias(kind),
-            erpSourceModule: GST_ERP_SOURCE,
-            erpSourceId: master.id,
-            isSystemGenerated: true,
-            status: targetStatus,
-          });
-        }
-      } else {
-        next = applyLedgerSpec(next, existing.id, spec, targetStatus);
-        next = patchLedger(next, existing.id, {
-          alias: gstLedgerKindAlias(kind),
-          erpSourceModule: GST_ERP_SOURCE,
-          erpSourceId: master.id,
-        });
-      }
-      continue;
-    }
-
-    if (existing.status !== targetStatus) {
-      next = patchLedger(next, existing.id, { status: targetStatus });
-    }
-
-    if (existing.parentAccountId !== spec.parent.id) {
-      next = patchLedger(next, existing.id, {
-        parentAccountId: spec.parent.id,
-        parentAccount: spec.parent.accountName,
-        accountType: spec.accountType,
-        balanceType: spec.balanceType,
-      });
-    }
-  }
-
-  return next;
-}
-
-/** Deactivate generic GST ledgers superseded by rate-specific ones (preserves ledgers with postings). */
-function deactivateLegacyGenericGstLedgers(records: ChartOfAccount[]): ChartOfAccount[] {
-  const hasRateSpecific = records.some(
-    (r) => r.nodeLevel === "ledger" && isRateSpecificGstLedgerName(r.accountName),
-  );
-  if (!hasRateSpecific) return records;
-
-  let next = records;
-
-  for (const ledger of records) {
-    if (ledger.nodeLevel !== "ledger") continue;
-    if (ledger.erpSourceModule === GST_ERP_SOURCE) continue;
-    if (ledger.status !== "active") continue;
-
-    const nameLower = ledger.accountName.trim().toLowerCase();
-    if (!LEGACY_GENERIC_GST_LEDGER_NAMES.has(nameLower)) continue;
-
-    const pathNames = getAncestorPath(records, ledger.id).map((p) => p.accountName);
-    const underGst =
-      pathNames.includes(GST_INPUT_CREDIT_GROUP) ||
-      pathNames.includes(GST_DUTIES_SUBGROUP);
-    if (!underGst) continue;
-
-    if (ledgerHasVoucherPostings(ledger.id)) continue;
-
-    next = patchLedger(next, ledger.id, {
-      status: "inactive",
-      description: ledger.description || "Superseded by rate-specific GST ledgers from GST Master",
-    });
-  }
-
-  return next;
-}
-
-function fingerprintGstLedgers(records: ChartOfAccount[]): string {
-  return JSON.stringify(
-    records
-      .filter(
-        (r) =>
-          r.nodeLevel === "ledger" &&
-          (r.erpSourceModule === GST_ERP_SOURCE || isGstCoaLedger(r, records)),
-      )
-      .map((r) => ({ id: r.id, name: r.accountName, status: r.status }))
-      .sort((a, b) => a.id - b.id),
-  );
-}
-
-function runGstCoaSync(records: ChartOfAccount[]): ChartOfAccount[] {
-  const inputGroup = findAccountGroup(records, GST_INPUT_CREDIT_GROUP);
-  const outputGroup = findAccountGroup(records, GST_DUTIES_SUBGROUP);
-  if (!inputGroup || !outputGroup) return records;
-
-  const masters = loadGSTMasters();
-  let next = records;
-
-  for (const master of masters) {
-    next = syncMasterLedgers(next, master);
-  }
-
-  return deactivateLegacyGenericGstLedgers(next);
-}
-
-/** Apply GST Master → COA sync during load; persists when ledgers change. */
+/** No-op — rate-specific GST Master → COA sync is disabled (statutory flat ledgers). */
 export function applyGstCoaSyncOnLoad(records: ChartOfAccount[]): ChartOfAccount[] {
-  if (typeof window === "undefined") return records;
-
-  const before = fingerprintGstLedgers(records);
-  const synced = runGstCoaSync(records);
-  const after = fingerprintGstLedgers(synced);
-
-  if (before === after) return synced;
-
-  saveChartOfAccounts(synced);
-  localStorage.setItem(GST_SYNC_META_KEY, new Date().toISOString());
-  return synced;
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(GST_SYNC_META_KEY);
+  }
+  return records;
 }
 
-/** Sync all GST Master rates to COA ledgers under GST Input Credit & Duties & Taxes Payable. */
+/** No-op — returns false (no ledgers created). */
 export function syncGstCoaFromMaster(): boolean {
-  if (typeof window === "undefined") return false;
-
-  const core = loadChartOfAccountsCore();
-  const before = fingerprintGstLedgers(core);
-  const synced = applyGstCoaSyncOnLoad(core);
-  return fingerprintGstLedgers(synced) !== before;
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(GST_SYNC_META_KEY);
+  }
+  return false;
 }
 
 export function mappingKeyToGstKind(mappingKey: string): GstLedgerKind | null {
@@ -425,38 +141,185 @@ export function mappingKeyToGstKind(mappingKey: string): GstLedgerKind | null {
   }
 }
 
-/** Resolve a rate-specific GST ledger for voucher posting (e.g. 18% → Output CGST (GST 18%)). */
+function gstComponentLabel(kind: GstLedgerKind): string {
+  if (kind.includes("cgst")) return "CGST";
+  if (kind.includes("sgst")) return "SGST";
+  return "IGST";
+}
+
+/** CGST/SGST use half the line GST rate; IGST uses the full line rate. */
+export function gstComponentRate(kind: GstLedgerKind, totalGstRatePct: number): number {
+  if (kind.includes("igst")) return totalGstRatePct;
+  return Math.round((totalGstRatePct / 2) * 100) / 100;
+}
+
+/** Human-readable label for configuration errors, e.g. "Input SGST 9%". */
+export function formatGstPostingLedgerDisplayName(
+  mappingKey: string,
+  totalGstRatePct: number,
+): string {
+  const kind = mappingKeyToGstKind(mappingKey);
+  if (!kind) return mappingKey;
+  const prefix = kind.startsWith("input") ? "Input" : "Output";
+  const component = gstComponentLabel(kind);
+  const pct = gstComponentRate(kind, totalGstRatePct);
+  return `${prefix} ${component} ${formatGstPctLabel(pct)}%`;
+}
+
+function ledgerMatchesKind(ledger: ChartOfAccount, kind: GstLedgerKind): boolean {
+  const name = ledger.accountName.trim();
+  const component = gstComponentLabel(kind);
+  const prefix = kind.startsWith("input") ? "Input" : "Output";
+  if (name.toLowerCase() === GST_STATUTORY_LEDGER_BY_KIND[kind].toLowerCase()) return true;
+  return new RegExp(`^${prefix}\\s+${component}\\b`, "i").test(name);
+}
+
+function ledgerNameMatchesGstRate(
+  ledgerName: string,
+  kind: GstLedgerKind,
+  totalGstRatePct: number,
+): boolean {
+  const n = ledgerName.trim();
+  const component = gstComponentLabel(kind);
+  const prefix = kind.startsWith("input") ? "Input" : "Output";
+  const expectedComponentPct = gstComponentRate(kind, totalGstRatePct);
+
+  const bareMatch = n.match(/^(Input|Output)\s+(CGST|SGST|IGST)\s+([\d.]+)%$/i);
+  if (bareMatch) {
+    const type = bareMatch[2].toUpperCase();
+    if (type !== component) return false;
+    const pct = Number(bareMatch[3]);
+    return Math.abs(pct - expectedComponentPct) < 0.001;
+  }
+
+  const parsedTotal = parseGstRateFromLedgerName(n);
+  if (parsedTotal != null) {
+    if (!new RegExp(`^${prefix}\\s+${component}`, "i").test(n)) return false;
+    return Math.abs(parsedTotal - totalGstRatePct) < 0.001;
+  }
+
+  const bracketExpected = formatGstLedgerName(kind, totalGstRatePct);
+  if (n.toLowerCase() === bracketExpected.toLowerCase()) return true;
+
+  return false;
+}
+
+function collectDescendantLedgers(parentId: number, records: ChartOfAccount[]): ChartOfAccount[] {
+  const out: ChartOfAccount[] = [];
+  const queue = [parentId];
+  while (queue.length > 0) {
+    const pid = queue.shift()!;
+    for (const r of records) {
+      if (r.nodeLevel === "ledger" && r.parentAccountId === pid) {
+        out.push(r);
+        queue.push(r.id);
+      }
+    }
+  }
+  return out;
+}
+
+function resolveFromGstMaster(
+  kind: GstLedgerKind,
+  totalGstRatePct: number,
+  records: ChartOfAccount[],
+): ChartOfAccount | null {
+  const masters = loadGSTMasters().filter(
+    (g) => g.status === "active" && Math.abs(g.gstPercentage - totalGstRatePct) < 0.001,
+  );
+
+  for (const g of masters) {
+    let ledgerId: number | null | undefined = null;
+    switch (kind) {
+      case "input_cgst":
+        ledgerId = g.inputCgstLedgerId;
+        break;
+      case "input_sgst":
+        ledgerId = g.inputSgstLedgerId;
+        break;
+      case "input_igst":
+        ledgerId = g.inputIgstLedgerId;
+        break;
+      case "output_cgst":
+        ledgerId = g.outputCgstLedgerId;
+        break;
+      case "output_sgst":
+        ledgerId = g.outputSgstLedgerId;
+        break;
+      case "output_igst":
+        ledgerId = g.outputIgstLedgerId;
+        break;
+    }
+    if (ledgerId == null) continue;
+    const ledger = records.find((r) => r.id === ledgerId);
+    if (ledger && isPostableNode(ledger, records)) return ledger;
+  }
+
+  return null;
+}
+
+function findMatchingPostableLedger(
+  candidates: ChartOfAccount[],
+  kind: GstLedgerKind,
+  totalGstRatePct: number,
+  records: ChartOfAccount[],
+): ChartOfAccount | null {
+  const matches = candidates
+    .filter(
+      (r) =>
+        r.nodeLevel === "ledger" &&
+        r.status === "active" &&
+        isPostableNode(r, records) &&
+        ledgerMatchesKind(r, kind) &&
+        ledgerNameMatchesGstRate(r.accountName, kind, totalGstRatePct),
+    )
+    .sort((a, b) => a.id - b.id);
+  return matches[0] ?? null;
+}
+
+/**
+ * Resolve an active posting leaf for a GST component and line rate.
+ * Never returns a grouping ledger that has sub-ledgers.
+ */
 export function resolveGstRateLedger(
   mappingKey: string,
   gstRatePct: number,
 ): ChartOfAccount | null {
-  if (gstRatePct <= 0) return null;
-  syncGstCoaFromMaster();
-
   const kind = mappingKeyToGstKind(mappingKey);
-  if (!kind) return null;
-
-  const masters = loadGSTMasters();
-  const master =
-    masters.find((m) => m.gstPercentage === gstRatePct) ??
-    masters.find((m) => Math.abs(m.gstPercentage - gstRatePct) < 0.001);
-  if (!master || master.status !== "active") return null;
-
-  const spec = ledgerSpecForKind(master, kind, loadChartOfAccounts());
-  if (!spec) return null;
+  if (!kind || gstRatePct <= 0) return null;
 
   const records = loadChartOfAccounts();
-  const linked = findGstLedgerByMaster(records, master.id, kind);
-  if (linked?.status === "active") return linked;
-
-  return (
-    findGstLedgerByName(records, spec.name) ??
-    records.find(
-      (r) =>
-        r.nodeLevel === "ledger" &&
-        r.accountName === spec.name &&
-        r.status === "active",
-    ) ??
-    null
+  const statutoryName = GST_STATUTORY_LEDGER_BY_KIND[kind];
+  const parent = records.find(
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.status === "active" &&
+      r.accountName.toLowerCase() === statutoryName.toLowerCase(),
   );
+
+  const fromMaster = resolveFromGstMaster(kind, gstRatePct, records);
+  if (fromMaster) return fromMaster;
+
+  if (parent) {
+    const descendants = collectDescendantLedgers(parent.id, records);
+    const underParent = findMatchingPostableLedger(descendants, kind, gstRatePct, records);
+    if (underParent) return underParent;
+
+    if (isPostableNode(parent, records)) {
+      return parent;
+    }
+  }
+
+  const globalCandidates = records.filter(
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.status === "active" &&
+      isPostableNode(r, records) &&
+      ledgerMatchesKind(r, kind) &&
+      isGstCoaLedger(r, records) &&
+      (isRateSpecificGstLedgerName(r.accountName) ||
+        /^(Input|Output)\s+(CGST|SGST|IGST)\s+[\d.]+%$/i.test(r.accountName.trim())),
+  );
+
+  return findMatchingPostableLedger(globalCandidates, kind, gstRatePct, records);
 }

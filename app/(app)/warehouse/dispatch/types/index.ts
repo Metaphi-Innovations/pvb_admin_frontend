@@ -6,7 +6,13 @@ export interface DispatchProduct {
   unitRate?: number;
   batchNo?: string;
   batchExpiryDate?: string;
-  batchAllocations?: { batchNumber: string; expiryDate: string; allocatedQty: number; returnedQtyPieces?: number; unitPerPacking?: number }[];
+  manufacturingDate?: string;
+  batchAllocations?: {
+    batchNumber: string;
+    expiryDate: string;
+    allocatedQty: number; returnedQtyPieces?: number; unitPerPacking?: number;
+    manufacturingDate?: string;
+  }[];
   nearExpirySchemeEligible?: boolean;
   returnedQtyPieces?: number;
   unitPerPacking?: number;

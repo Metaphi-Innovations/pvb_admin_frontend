@@ -92,6 +92,10 @@ export function AccountsMakerCheckerPanel({
   const checkerCanAct = reviewMode && canCurrentUserApprove(workflow);
   const isViewOnly =
     status === "pending_approval" && !reviewMode && !checkerCanAct;
+  const hasFurtherApprovers = workflow.steps.some(
+    (s, i) => i > workflow.currentApproverIndex && s.level > 0 && s.state === "waiting",
+  );
+  const approveActionLabel = hasFurtherApprovers ? "Approve" : "Approve & Post";
 
   return (
     <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
@@ -227,7 +231,7 @@ export function AccountsMakerCheckerPanel({
                 disabled={saving}
                 onClick={() => onApprove?.(remarks)}
               >
-                <CheckCircle className="w-4 h-4" /> Approve
+                <CheckCircle className="w-4 h-4" /> {approveActionLabel}
               </Button>
               <Button
                 variant="outline"

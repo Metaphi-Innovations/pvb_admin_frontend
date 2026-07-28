@@ -44,7 +44,7 @@ export function getDemoBankLedgers(): {
 export function resolveDefaultDemoBankLedger(): ChartOfAccount | null {
   const masters = loadBankAccountMasters().filter((m) => m.status === "active");
   const defaultMaster =
-    masters.find((m) => m.defaultForReceipts) ?? masters.find((m) => m.bankName.includes("HDFC")) ?? masters[0];
+    masters.find((m) => m.bankName.includes("HDFC")) ?? masters[0];
   if (!defaultMaster) return null;
   return resolveCoaLedgerForBankMaster(defaultMaster);
 }

@@ -20,7 +20,6 @@ import {
 } from "@/lib/accounts/ledger-metadata";
 import {
   findErpPartyLink,
-  findErpPartyLinkByLedgerId,
   upsertErpPartyLink,
   type ErpSourceModule,
 } from "@/lib/accounts/erp-party-links";
@@ -56,7 +55,7 @@ export interface ProductAccountingConfig {
 }
 
 const DEFAULT_PRODUCT_ACCOUNTS = {
-  inventoryAccount: "Inventory / Stock in Hand",
+  inventoryAccount: "Stock in Hand",
   salesAccount: "Sales",
   purchaseAccount: "Purchases",
   cogsAccount: "Cost of Goods Sold",
@@ -141,9 +140,20 @@ function applyVendorMeta(ledgerId: number, v: Vendor, existing?: LedgerExtendedM
 }
 
 /** Create or update customer ledger from Customer Master. */
-export function syncCustomerLedger(customer: Customer): ChartOfAccount | null {
+export function syncCustomerLedger(
+  customer: Customer,
+  options?: { parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null },
+): ChartOfAccount | null {
   const name = customer.customerName.trim();
   if (!name || customer.status === "draft") return null;
+
+  const openingBalance =
+    customer.openingBalance != null && Number.isFinite(customer.openingBalance)
+      ? Math.max(0, customer.openingBalance)
+      : 0;
+  const balanceType = customer.balanceType === "Credit" ? "Credit" : "Debit";
+  const billWiseAccounting = customer.billWiseAccounting !== false;
+  const accountingDescription = (customer.accountingDescription || "").trim();
 
   const existingLink = findErpPartyLink("customer_master", customer.id);
   let ledger: ChartOfAccount | null = null;
@@ -159,6 +169,38 @@ export function syncCustomerLedger(customer: Customer): ChartOfAccount | null {
         isSystemGenerated: true,
         erpSourceModule: "customer_master",
         erpSourceId: customer.id,
+        openingBalance,
+        balanceType,
+        billWiseAccounting,
+        description: accountingDescription || ledger.description || "",
+      });
+    }
+  }
+
+  // Prefer stable COA source metadata when party-link is missing or stale (no recreate).
+  if (!ledger) {
+    ledger =
+      loadChartOfAccounts().find(
+        (r) =>
+          r.nodeLevel === "ledger" &&
+          ((r.erpSourceModule === "customer_master" && r.erpSourceId === customer.id) ||
+            (r.masterType === "customer" && r.masterId === customer.id)),
+      ) ?? null;
+    if (ledger) {
+      ledger = updateCoaLedger(ledger.id, {
+        accountName: name,
+        gstApplicable: customer.gstApplicable,
+        status: customer.status === "active" ? "active" : "inactive",
+        updatedBy: "ERP Sync",
+        isSystemGenerated: true,
+        erpSourceModule: "customer_master",
+        erpSourceId: customer.id,
+        masterType: "customer",
+        masterId: customer.id,
+        openingBalance,
+        balanceType,
+        billWiseAccounting,
+        description: accountingDescription || ledger.description || "",
       });
     }
   }
@@ -169,7 +211,20 @@ export function syncCustomerLedger(customer: Customer): ChartOfAccount | null {
       erpSourceModule: "customer_master",
       erpSourceId: customer.id,
       isSystemGenerated: true,
+      parentGroupId: options?.parentGroupId ?? undefined,
     });
+    if (ledger) {
+      ledger = updateCoaLedger(ledger.id, {
+        openingBalance,
+        balanceType,
+        billWiseAccounting,
+        description: accountingDescription || ledger.description || "",
+        gstApplicable: customer.gstApplicable,
+        status: customer.status === "active" ? "active" : "inactive",
+        masterType: "customer",
+        masterId: customer.id,
+      });
+    }
   }
 
   if (!ledger) return null;
@@ -187,9 +242,20 @@ export function syncCustomerLedger(customer: Customer): ChartOfAccount | null {
 }
 
 /** Create or update vendor ledger from Supplier Master. */
-export function syncVendorLedger(vendor: Vendor): ChartOfAccount | null {
+export function syncVendorLedger(
+  vendor: Vendor,
+  options?: { parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null },
+): ChartOfAccount | null {
   const name = vendor.vendorName.trim();
   if (!name || vendor.status !== "active") return null;
+
+  const openingBalance =
+    vendor.openingBalance != null && Number.isFinite(vendor.openingBalance)
+      ? Math.max(0, vendor.openingBalance)
+      : 0;
+  const balanceType = vendor.balanceType === "Debit" ? "Debit" : "Credit";
+  const billWiseAccounting = vendor.billWiseAccounting !== false;
+  const accountingDescription = (vendor.accountingDescription || "").trim();
 
   const existingLink = findErpPartyLink("vendor_master", vendor.id);
   let ledger: ChartOfAccount | null = null;
@@ -205,6 +271,38 @@ export function syncVendorLedger(vendor: Vendor): ChartOfAccount | null {
         isSystemGenerated: true,
         erpSourceModule: "vendor_master",
         erpSourceId: vendor.id,
+        openingBalance,
+        balanceType,
+        billWiseAccounting,
+        description: accountingDescription || ledger.description || "",
+      });
+    }
+  }
+
+  // Prefer stable COA source metadata when party-link is missing or stale (no recreate).
+  if (!ledger) {
+    ledger =
+      loadChartOfAccounts().find(
+        (r) =>
+          r.nodeLevel === "ledger" &&
+          ((r.erpSourceModule === "vendor_master" && r.erpSourceId === vendor.id) ||
+            (r.masterType === "vendor" && r.masterId === vendor.id)),
+      ) ?? null;
+    if (ledger) {
+      ledger = updateCoaLedger(ledger.id, {
+        accountName: name,
+        gstApplicable: vendor.gstApplicable,
+        status: vendor.status === "active" ? "active" : "inactive",
+        updatedBy: "ERP Sync",
+        isSystemGenerated: true,
+        erpSourceModule: "vendor_master",
+        erpSourceId: vendor.id,
+        masterType: "vendor",
+        masterId: vendor.id,
+        openingBalance,
+        balanceType,
+        billWiseAccounting,
+        description: accountingDescription || ledger.description || "",
       });
     }
   }
@@ -215,7 +313,20 @@ export function syncVendorLedger(vendor: Vendor): ChartOfAccount | null {
       erpSourceModule: "vendor_master",
       erpSourceId: vendor.id,
       isSystemGenerated: true,
+      parentGroupId: options?.parentGroupId ?? undefined,
     });
+    if (ledger) {
+      ledger = updateCoaLedger(ledger.id, {
+        openingBalance,
+        balanceType,
+        billWiseAccounting,
+        description: accountingDescription || ledger.description || "",
+        gstApplicable: vendor.gstApplicable,
+        status: vendor.status === "active" ? "active" : "inactive",
+        masterType: "vendor",
+        masterId: vendor.id,
+      });
+    }
   }
 
   if (!ledger) return null;
@@ -300,7 +411,7 @@ export function getCustomerAccountingSummary(customer: Customer): PartyAccountin
     ledgerCode: ledger?.accountCode ?? "—",
     outstanding: outstandingRow?.outstanding ?? 0,
     coaHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
-    ledgerHref: ledger ? `/accounts/masters/ledgers/${ledger.id}` : "/accounts/masters/ledgers",
+    ledgerHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
     isSystemGenerated: ledger?.isSystemGenerated ?? false,
   };
 }
@@ -320,7 +431,7 @@ export function getVendorAccountingSummary(vendor: Vendor): PartyAccountingSumma
     ledgerCode: ledger?.accountCode ?? "—",
     outstanding: outstandingRow?.outstanding ?? 0,
     coaHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
-    ledgerHref: ledger ? `/accounts/masters/ledgers/${ledger.id}` : "/accounts/masters/ledgers",
+    ledgerHref: ledger ? coaHrefForLedger(ledger.id) : "/accounts/masters/chart-of-accounts",
     isSystemGenerated: ledger?.isSystemGenerated ?? false,
   };
 }
@@ -339,14 +450,22 @@ export function validateGstMasterForActivation(gst: GSTMaster): string | null {
   return null;
 }
 
-/** Backfill party ledgers for all active customers and vendors. */
+/** Backfill party ledgers for all active customers and vendors (idempotent). */
+let erpPartyBackfillRunning = false;
+
 export function backfillErpPartyLedgers() {
   if (typeof window === "undefined") return;
-  for (const c of loadCustomers()) {
-    if (c.status === "active") syncCustomerLedger(c);
-  }
-  for (const v of loadVendors()) {
-    if (v.status === "active") syncVendorLedger(v);
+  if (erpPartyBackfillRunning) return;
+  erpPartyBackfillRunning = true;
+  try {
+    for (const c of loadCustomers()) {
+      if (c.status === "active") syncCustomerLedger(c);
+    }
+    for (const v of loadVendors()) {
+      if (v.status === "active") syncVendorLedger(v);
+    }
+  } finally {
+    erpPartyBackfillRunning = false;
   }
 }
 

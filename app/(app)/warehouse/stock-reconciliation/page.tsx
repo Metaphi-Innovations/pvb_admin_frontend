@@ -15,6 +15,7 @@ import {
 } from "@/lib/accounts/stock-reconciliation-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Badge } from "@/components/ui/badge";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 
 export default function StockReconciliationPage() {
   const [records, setRecords] = useState(() => loadStockReconciliations());
@@ -167,6 +168,8 @@ export default function StockReconciliationPage() {
           </tbody>
         </table>
       </div>
+
+      <AccountingImpactSection docKey="inventory_adjustment" className="mt-4" />
     </ListingContainer>
   );
 }

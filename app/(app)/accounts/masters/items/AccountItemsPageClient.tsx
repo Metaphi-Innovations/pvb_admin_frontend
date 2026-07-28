@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge } from "../../components/AccountsUI";
 import { loadAccountItems } from "@/lib/accounts/account-items-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 
@@ -81,7 +80,7 @@ export default function AccountItemsPageClient() {
         <table className="accounts-table w-full min-w-[900px]">
           <thead className="border-b border-border/60">
             <tr>
-              {["Item", "SKU", "Category", "HSN", "GST", "Unit", "Opening Qty", "Opening Value", "Valuation", "Status"].map(
+              {["Item", "SKU", "Category", "HSN", "GST", "Unit", "Opening Qty", "Opening Value", "Valuation"].map(
                 (h) => (
                   <th
                     key={h}
@@ -111,9 +110,6 @@ export default function AccountItemsPageClient() {
                 <td className="px-3 py-2.5 text-right tabular-nums">{item.openingQty}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(item.openingValue)}</td>
                 <td className="px-3 py-2.5 capitalize">{item.valuationMethod.replace("_", " ")}</td>
-                <td className="px-3 py-2.5">
-                  <StatusBadge status={item.status} />
-                </td>
               </tr>
             ))}
           </tbody>

@@ -27,6 +27,10 @@ import { appendAuditTrailEntry } from "@/lib/accounts/audit-trail-data";
 import { linkCreditNoteToSalesReturn } from "@/lib/accounts/sales-return-credit-bridge";
 import { buildCreditNotesSeed } from "./credit-notes-seed";
 import {
+  markSchemeEntitlementCreditNoteGenerated,
+  syncSchemeEntitlementCreditNoteStatus,
+} from "@/lib/accounts/scheme-entitlement-demo";
+import {
   getProductReturnPieces,
   getSalesReturnById,
   getSalesReturnRecords,
@@ -38,17 +42,18 @@ export type CreditNoteSource = "sales_return" | "payment_discount_scheme" | "man
 export const CREDIT_NOTE_SOURCE_LABELS: Record<CreditNoteSource, string> = {
   sales_return: "Sales Return",
   payment_discount_scheme: "Scheme",
-  manual: "Manual",
+  manual: "Direct",
 };
 
 export const MANUAL_CREDIT_REASONS = [
-  "Commercial Discount",
-  "Rate Difference",
-  "Pricing Correction",
-  "GST Adjustment",
-  "Goodwill Discount",
-  "Billing Correction",
-  "Other Adjustment",
+  "Sales Return",
+  "Damaged Material",
+  "Quality Issue",
+  "Leakage",
+  "Expiry",
+  "Commercial Adjustment",
+  "Pricing Adjustment",
+  "Other",
 ] as const;
 
 export type CreditNoteAgainst = "sales_invoice" | "sales_order" | "general";
@@ -67,6 +72,10 @@ export interface CreditNoteLine {
   sku?: string;
   hsn?: string;
   batchNo?: string;
+  /** Frontend display — from source invoice/return when available. */
+  mfgDate?: string;
+  expiryDate?: string;
+  uom?: string;
   description: string;
   invoiceQty: number;
   /** Max creditable qty from sales return (when applicable). */
@@ -76,6 +85,13 @@ export interface CreditNoteLine {
   unitPrice: number;
   discountPct: number;
   taxPct: number;
+  /** Source GST % retained when GST Applicable is toggled off in UI. */
+  sourceTaxPct?: number;
+  /** UI: GST Applicable switch. Defaults to taxPct > 0. */
+  gstApplicable?: boolean;
+  /** Per-row adjustment ledger (frontend; note-level ledger still used on save). */
+  adjustmentLedgerId?: number | null;
+  adjustmentLedgerName?: string;
   gstAmount: number;
   lineAmount: number;
   returnQty: number;
@@ -130,6 +146,8 @@ export interface CreditNoteRecord {
   subject?: string;
   billingAddress?: string;
   shippingAddress?: string;
+  /** Customer / ship-to place of supply — drives CGST+SGST vs IGST via existing GST helpers. */
+  placeOfSupply?: string;
   customerNotes?: string;
   termsAndConditions?: string;
   originalAmount: number;
@@ -159,6 +177,12 @@ export interface CreditNoteRecord {
   sourceReturnNo?: string;
   schemeName?: string;
   discountPercent?: number;
+  /** ERP scheme entitlement link (Phase 3) — additive */
+  schemeEntitlementId?: string;
+  schemeId?: string;
+  schemeType?: string;
+  calculationReference?: string;
+  sourceInvoiceIds?: number[];
   taxableValue: number;
   cgstAmount: number;
   sgstAmount: number;
@@ -168,10 +192,12 @@ export interface CreditNoteRecord {
   adjustmentLedgerName?: string;
   referenceNo?: string;
   attachmentName?: string;
+  warehouse?: string;
+  bankAccountId?: number | null;
 }
 
 const STORAGE_KEY = "ds_accounts_credit_notes_v2";
-const SEED_VERSION_KEY = "ds_accounts_credit_notes_seed_v2";
+const SEED_VERSION_KEY = "ds_accounts_credit_notes_seed_v3";
 
 export const CREDIT_REASONS = [
   "Sales return",
@@ -192,6 +218,11 @@ function nextCreditNoteNo(records: CreditNoteRecord[]): string {
     return Number.isFinite(n) ? Math.max(m, n) : m;
   }, 0);
   return `CN-${String(max + 1).padStart(4, "0")}`;
+}
+
+/** Preview of the next auto CN number for create forms (assigned on save). */
+export function peekNextCreditNoteNo(): string {
+  return nextCreditNoteNo(loadCreditNotes());
 }
 
 function appendActivity(
@@ -351,9 +382,7 @@ export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
   const lineItems = rec.lineItems.map((l) => normalizeCreditLine(l));
   const currentCreditAmount = lineItems.reduce((s, l) => s + l.creditAmount, 0);
   const { taxAmount } = computeCreditNoteGstSplit(lineItems);
-  const interstate = inferInterstateFromPlaceOfSupply(
-    (rec as { placeOfSupply?: string }).placeOfSupply,
-  );
+  const interstate = inferInterstateFromPlaceOfSupply(rec.placeOfSupply);
   const taxBreakup = computeNoteTaxBreakup(lineItems, interstate);
   const originalAmount = rec.originalAmount > 0 ? rec.originalAmount : currentCreditAmount;
   const balanceAfterAdjustment = Math.max(
@@ -493,7 +522,7 @@ function findInvoiceForSalesReturnRecord(ret: SalesReturnRecord): InvoiceRecord 
 function matchSalesReturnProductToLine(
   ret: SalesReturnRecord,
   line: CreditNoteLine,
-): { returnQty: number; batchNo: string } | null {
+): { returnQty: number; batchNo: string; batchExpiryDate?: string; sku?: string } | null {
   const key = line.productName.trim().toLowerCase();
   const skuKey = (line.sku ?? "").trim().toLowerCase();
   const match = ret.products.find((p) => {
@@ -506,6 +535,8 @@ function matchSalesReturnProductToLine(
   return {
     returnQty: getProductReturnPieces(match),
     batchNo: match.batchNo ?? "",
+    batchExpiryDate: match.batchExpiryDate,
+    sku: match.sku,
   };
 }
 
@@ -535,6 +566,8 @@ export function buildReferenceFromSalesReturn(returnId: string): CreditReference
     return normalizeCreditLine({
       ...line,
       batchNo: matched?.batchNo ?? line.batchNo ?? "",
+      expiryDate: matched?.batchExpiryDate ?? line.expiryDate ?? "",
+      sku: matched?.sku || line.sku,
       salesReturnQty,
       eligibleReturnQty,
       returnQty: 0,
@@ -561,6 +594,7 @@ function invoiceLineToCreditLine(l: import("../invoices/invoices-data").InvoiceL
     const product = loadProducts().find((p) => p.id === l.productId);
     sku = product?.sku ?? "";
   }
+  const taxPct = l.taxPct ?? 0;
   return {
     id: `line-${l.id}`,
     sourceLineId: l.id,
@@ -568,11 +602,17 @@ function invoiceLineToCreditLine(l: import("../invoices/invoices-data").InvoiceL
     productName: l.productName,
     sku,
     hsn: l.hsn ?? "",
+    batchNo: l.batchNo ?? "",
+    mfgDate: l.manufacturingDate ?? "",
+    expiryDate: l.expiryDate ?? "",
+    uom: l.unit ?? "",
     description: l.description,
     invoiceQty: l.qty,
     unitPrice: l.unitPrice,
     discountPct: l.discountPct,
-    taxPct: l.taxPct,
+    taxPct,
+    sourceTaxPct: taxPct,
+    gstApplicable: taxPct > 0,
     gstAmount: taxAmt,
     lineAmount: l.amount,
     returnQty: 0,
@@ -717,6 +757,37 @@ function validateBasic(input: CreditNoteFormInput, options?: { requireAmount?: b
   if (input.source === "manual" && requireAmount && !input.adjustmentLedgerId && !input.adjustmentLedgerName) {
     throw new Error("Select an adjustment ledger for the credit note.");
   }
+  if (
+    input.schemeEntitlementId &&
+    requireAmount &&
+    !input.adjustmentLedgerId &&
+    !input.adjustmentLedgerName?.trim()
+  ) {
+    throw new Error(
+      "Scheme discount ledger is not mapped for this entitlement. Configure the mapped scheme ledger before posting.",
+    );
+  }
+}
+
+function linkEntitlementAfterCreditNoteWrite(note: CreditNoteRecord): void {
+  if (!note.schemeEntitlementId || note.status === "cancelled") return;
+  try {
+    markSchemeEntitlementCreditNoteGenerated(note.schemeEntitlementId, {
+      creditNoteId: note.id,
+      creditNoteNo: note.creditNoteNo,
+      creditNoteStatus: note.status,
+    });
+  } catch {
+    try {
+      syncSchemeEntitlementCreditNoteStatus(note.schemeEntitlementId, {
+        creditNoteId: note.id,
+        creditNoteNo: note.creditNoteNo,
+        creditNoteStatus: note.status,
+      });
+    } catch {
+      /* entitlement link is best-effort after CN write */
+    }
+  }
 }
 
 export type CreditNoteFormInput = {
@@ -728,6 +799,7 @@ export type CreditNoteFormInput = {
   subject?: string;
   billingAddress?: string;
   shippingAddress?: string;
+  placeOfSupply?: string;
   customerNotes?: string;
   termsAndConditions?: string;
   sourceInvoiceId: number | null;
@@ -749,10 +821,17 @@ export type CreditNoteFormInput = {
   sourceReturnNo?: string;
   schemeName?: string;
   discountPercent?: number;
+  schemeEntitlementId?: string;
+  schemeId?: string;
+  schemeType?: string;
+  calculationReference?: string;
+  sourceInvoiceIds?: number[];
   adjustmentLedgerId?: number;
   adjustmentLedgerName?: string;
   referenceNo?: string;
   attachmentName?: string;
+  warehouse?: string;
+  bankAccountId?: number | null;
 };
 
 function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
@@ -764,7 +843,13 @@ function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
 function resolveCreditNoteSource(input: CreditNoteFormInput): CreditNoteSource {
   if (input.source) return input.source;
   if (input.sourceReturnNo) return "sales_return";
-  if (input.schemeSettlementKey || input.schemeName) return "payment_discount_scheme";
+  if (
+    input.schemeEntitlementId ||
+    input.schemeSettlementKey ||
+    input.schemeName
+  ) {
+    return "payment_discount_scheme";
+  }
   return "manual";
 }
 
@@ -804,6 +889,7 @@ export function createCreditNote(
     subject: normalizedInput.subject,
     billingAddress: normalizedInput.billingAddress,
     shippingAddress: normalizedInput.shippingAddress,
+    placeOfSupply: normalizedInput.placeOfSupply,
     customerNotes: normalizedInput.customerNotes,
     termsAndConditions: normalizedInput.termsAndConditions,
     originalAmount: normalizedInput.originalAmount,
@@ -827,10 +913,17 @@ export function createCreditNote(
     schemeSettlementKey: normalizedInput.schemeSettlementKey,
     schemeCode: normalizedInput.schemeCode,
     schemeSettlementAmount: normalizedInput.schemeSettlementAmount,
+    schemeEntitlementId: normalizedInput.schemeEntitlementId,
+    schemeId: normalizedInput.schemeId,
+    schemeType: normalizedInput.schemeType,
+    calculationReference: normalizedInput.calculationReference,
+    sourceInvoiceIds: normalizedInput.sourceInvoiceIds,
     adjustmentLedgerId: normalizedInput.adjustmentLedgerId,
     adjustmentLedgerName: normalizedInput.adjustmentLedgerName,
     referenceNo: normalizedInput.referenceNo,
     attachmentName: normalizedInput.attachmentName,
+    warehouse: normalizedInput.warehouse,
+    bankAccountId: normalizedInput.bankAccountId ?? null,
     activity: [{ at: new Date().toISOString(), action: "created", by: ACCOUNTS_CURRENT_USER, detail: "Credit note created" }],
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -838,6 +931,7 @@ export function createCreditNote(
     updatedAt: new Date().toISOString(),
   });
   saveCreditNotes([...all, rec]);
+  linkEntitlementAfterCreditNoteWrite(rec);
   return rec;
 }
 
@@ -871,6 +965,7 @@ export function updateCreditNote(
     subject: normalizedInput.subject,
     billingAddress: normalizedInput.billingAddress,
     shippingAddress: normalizedInput.shippingAddress,
+    placeOfSupply: normalizedInput.placeOfSupply ?? cur.placeOfSupply,
     customerNotes: normalizedInput.customerNotes,
     termsAndConditions: normalizedInput.termsAndConditions,
     originalAmount: normalizedInput.originalAmount,
@@ -887,16 +982,26 @@ export function updateCreditNote(
     schemeSettlementKey: normalizedInput.schemeSettlementKey,
     schemeCode: normalizedInput.schemeCode,
     schemeSettlementAmount: normalizedInput.schemeSettlementAmount,
+    schemeEntitlementId:
+      normalizedInput.schemeEntitlementId ?? cur.schemeEntitlementId,
+    schemeId: normalizedInput.schemeId ?? cur.schemeId,
+    schemeType: normalizedInput.schemeType ?? cur.schemeType,
+    calculationReference:
+      normalizedInput.calculationReference ?? cur.calculationReference,
+    sourceInvoiceIds: normalizedInput.sourceInvoiceIds ?? cur.sourceInvoiceIds,
     adjustmentLedgerId: normalizedInput.adjustmentLedgerId ?? cur.adjustmentLedgerId,
     adjustmentLedgerName: normalizedInput.adjustmentLedgerName ?? cur.adjustmentLedgerName,
     referenceNo: normalizedInput.referenceNo ?? cur.referenceNo,
     attachmentName: normalizedInput.attachmentName ?? cur.attachmentName,
+    warehouse: normalizedInput.warehouse ?? cur.warehouse,
+    bankAccountId: normalizedInput.bankAccountId ?? cur.bankAccountId ?? null,
     activity: appendActivity(cur.activity, "updated", "Credit note updated"),
     updatedBy: ACCOUNTS_CURRENT_USER,
     updatedAt: new Date().toISOString(),
   });
   all[idx] = updated;
   saveCreditNotes(all);
+  linkEntitlementAfterCreditNoteWrite(updated);
   return updated;
 }
 
@@ -949,24 +1054,26 @@ function settleSchemeFromCreditNote(note: CreditNoteRecord): void {
 function recordCreditNoteAudit(
   note: CreditNoteRecord,
   activityType: "Post" | "Approve" | "Delete",
-  details: string,
+  _details: string,
 ): void {
+  const action = activityType === "Delete" ? "Deleted" : "Modified";
+
   appendAuditTrailEntry({
     dateTime: new Date().toISOString(),
-    category: activityType === "Delete" ? "edit_delete" : "voucher_approval",
+    voucherType: "Credit Note",
+    voucherTypeCode: "credit_note",
+    voucherNo: note.creditNoteNo,
     user: ACCOUNTS_CURRENT_USER,
-    role: "Accounts User",
-    module: "Credit Notes",
-    moduleCode: "credit_note",
-    reference: note.creditNoteNo,
-    activityType,
-    action: `${activityType} Credit Note`,
-    oldValue: note.status,
-    newValue: activityType === "Delete" ? "cancelled" : "approved",
-    status: activityType === "Delete" ? "deleted" : "posted",
-    details,
-    partyName: note.customerName,
-    voucherAmount: note.currentCreditAmount.toFixed(2),
+    action,
+    particular: activityType === "Delete" ? "Voucher" : "Status",
+    beforeAlteration: note.status,
+    afterAlteration:
+      activityType === "Delete"
+        ? "—"
+        : activityType === "Approve"
+          ? "Approved"
+          : "Posted",
+    status: activityType === "Delete" ? "Cancelled" : "Posted",
   });
   invalidateAccountsDataCache("auditTrail");
 }
@@ -1039,6 +1146,7 @@ export function approveCreditNote(id: number): CreditNoteRecord {
   }
 
   postCreditNoteAccounting(updated);
+  linkEntitlementAfterCreditNoteWrite(updated);
   if (updated.sourceReturnId) {
     linkCreditNoteToSalesReturn(
       updated.sourceReturnId,

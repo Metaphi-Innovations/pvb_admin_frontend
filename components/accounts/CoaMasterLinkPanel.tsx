@@ -6,7 +6,7 @@ import { ExternalLink, BookOpen, ListOrdered, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { CoaMasterLink } from "@/lib/accounts/coa-master-link";
-import { coaHrefForLedger, ledgerDetailHref } from "@/lib/accounts/coa-master-link";
+import { coaHrefForLedger } from "@/lib/accounts/coa-master-link";
 
 interface CoaMasterLinkPanelProps {
   ledgerId: number;
@@ -37,7 +37,7 @@ export function CoaMasterLinkActions({
         variant="outline"
         size="sm"
         className="h-9 text-sm font-medium gap-1"
-        onClick={() => router.push(ledgerDetailHref(ledgerId))}
+        onClick={() => router.push(coaHrefForLedger(ledgerId))}
       >
         <BookOpen className="w-4 h-4" /> View Ledger
       </Button>
@@ -99,8 +99,8 @@ export function CoaMasterLinkPanel({ ledgerId, link, compact }: CoaMasterLinkPan
           Browse all
         </Link>
         <span className="text-muted-foreground/40">·</span>
-        <Link href={ledgerDetailHref(ledgerId)} className="text-xs text-muted-foreground hover:text-foreground">
-          Ledger detail
+        <Link href={coaHrefForLedger(ledgerId)} className="text-xs text-muted-foreground hover:text-foreground">
+          View in Chart of Accounts
         </Link>
       </div>
     </div>

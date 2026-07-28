@@ -26,11 +26,13 @@ export interface AccountsPageShellProps {
   filters?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
-  /** split = full-height table/workbench; standard = form or detail card */
-  layout?: "standard" | "split";
+  /** split = full-height table/workbench; form = centered voucher/detail (no table shell); standard = listing card */
+  layout?: "standard" | "split" | "form";
   className?: string;
   /** Hide description line in compact split layout */
   hideDescription?: boolean;
+  /** Optional content below title row (e.g. report view tabs) */
+  subHeader?: React.ReactNode;
 }
 
 export function AccountsPageShell({
@@ -45,8 +47,10 @@ export function AccountsPageShell({
   layout = "standard",
   className,
   hideDescription,
+  subHeader,
 }: AccountsPageShellProps) {
   const isSplit = layout === "split";
+  const isForm = layout === "form";
   const isConstrainedHeight = isSplit || className?.includes("h-full");
   const showDescription = !hideDescription && !(isSplit && description.length > 80);
 
@@ -54,19 +58,19 @@ export function AccountsPageShell({
     <div
       className={cn(
         "flex flex-col w-full",
-        isSplit ? "h-full min-h-0 overflow-hidden gap-2" : "gap-2",
+        isSplit ? "h-full min-h-0 overflow-hidden gap-1.5" : "gap-1.5",
         isConstrainedHeight && !isSplit && "h-full min-h-0 overflow-hidden",
         className,
       )}
     >
       <nav aria-label="Breadcrumb" className="flex-shrink-0 leading-none">
-        <ol className={cn(ACCOUNTS_BREADCRUMB_CLASS, isSplit && "gap-0.5")}>
+        <ol className={cn(ACCOUNTS_BREADCRUMB_CLASS, isSplit && "gap-0.5", isForm && "text-xs")}>
           {breadcrumbs.map((crumb, i) => (
             <li key={`${crumb.label}-${i}`} className="flex items-center gap-0.5">
               {i > 0 && (
                 <ChevronRight
                   className={cn(
-                    "text-slate-400",
+                    "text-muted-foreground",
                     isSplit ? "w-2.5 h-2.5" : "w-3 h-3",
                   )}
                 />
@@ -87,8 +91,8 @@ export function AccountsPageShell({
 
       <div
         className={cn(
-          "flex-shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 min-h-0",
-          !isSplit && "items-start",
+          "flex-shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 min-h-0",
+          !isSplit && "items-center",
         )}
       >
         <div className="min-w-0 flex-1">
@@ -119,6 +123,8 @@ export function AccountsPageShell({
         )}
       </div>
 
+      {subHeader ? <div className="flex-shrink-0">{subHeader}</div> : null}
+
       {filters && <AccountsListingFilterCard>{filters}</AccountsListingFilterCard>}
 
       <div
@@ -129,6 +135,8 @@ export function AccountsPageShell({
       >
         {isSplit ? (
           children
+        ) : isForm ? (
+          <div className="w-full pb-2">{children}</div>
         ) : (
           <AccountsListingTableCard>
             {children}

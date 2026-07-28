@@ -10,7 +10,10 @@ import {
   type LedgerBalance,
 } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 import { resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
-import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
+import {
+  getLedgerMovementTotals,
+  getVoucherCacheGeneration,
+} from "@/app/(app)/accounts/vouchers/voucher-data";
 
 export interface LedgerMovement {
   debit: number;
@@ -28,6 +31,18 @@ export interface TrialBalanceRow {
   debit: number;
   credit: number;
   closing: LedgerBalance;
+}
+
+let cachedTrialBalanceRows: TrialBalanceRow[] | null = null;
+let trialBalanceCacheKey = "";
+
+function trialBalanceCacheEpoch(records: ChartOfAccount[]): string {
+  return `${records.length}:${getVoucherCacheGeneration()}`;
+}
+
+function invalidateTrialBalanceCache(): void {
+  cachedTrialBalanceRows = null;
+  trialBalanceCacheKey = "";
 }
 
 export interface LedgerReportRow {
@@ -49,32 +64,21 @@ export interface PandLRow {
   amount: LedgerBalance;
 }
 
-function postedVouchers() {
-  return loadVouchers().filter(
-    (v) => v.status === "posted" || v.status === "approved",
-  );
-}
-
 export function getVoucherMovementForLedger(ledgerId: number): LedgerMovement {
-  let debit = 0;
-  let credit = 0;
-  postedVouchers().forEach((v) => {
-    v.lines.forEach((line) => {
-      if (line.ledgerId === ledgerId) {
-        debit += Number(line.debit) || 0;
-        credit += Number(line.credit) || 0;
-      }
-    });
-  });
-  return { debit, credit };
+  return getLedgerMovementTotals(ledgerId);
 }
 
 export function computeTrialBalanceRows(
   records: ChartOfAccount[] = loadChartOfAccounts(),
 ): TrialBalanceRow[] {
-  return getCoaLedgers()
+  const epoch = trialBalanceCacheEpoch(records);
+  if (cachedTrialBalanceRows && trialBalanceCacheKey === epoch) {
+    return cachedTrialBalanceRows;
+  }
+
+  const rows = getCoaLedgers()
     .map((ledger) => {
-      const movement = getVoucherMovementForLedger(ledger.id);
+      const movement = getLedgerMovementTotals(ledger.id);
       const hierarchy = resolveHierarchyPath(records, ledger.id);
       return {
         ledgerId: ledger.id,
@@ -90,6 +94,15 @@ export function computeTrialBalanceRows(
       };
     })
     .sort((a, b) => a.ledger.localeCompare(b.ledger));
+
+  cachedTrialBalanceRows = rows;
+  trialBalanceCacheKey = epoch;
+  return rows;
+}
+
+/** Clear memoized trial balance after voucher/COA mutations. */
+export function invalidateLedgerReportCaches(): void {
+  invalidateTrialBalanceCache();
 }
 
 export function computeLedgerReportRows(
@@ -111,7 +124,7 @@ export function computeLedgerReportRows(
           amount: ledger.openingBalance,
           balanceType: ledger.balanceType,
         },
-        movement: getVoucherMovementForLedger(ledger.id),
+        movement: getLedgerMovementTotals(ledger.id),
         closing: computeLedgerCurrentBalance(ledger),
       };
     })

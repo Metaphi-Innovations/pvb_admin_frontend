@@ -138,11 +138,11 @@ export function AccountsListingCountFooter({
   return (
     <div
       className={cn(
-        "flex-shrink-0 px-4 py-2 border-t border-border bg-muted/20",
+        "accounts-pagination-footer flex-shrink-0 px-2 py-0.5 border-t border-border bg-muted/20",
         className,
       )}
     >
-      <p className="text-xs text-muted-foreground">{children}</p>
+      <p className="text-[10px] text-muted-foreground">{children}</p>
     </div>
   );
 }
@@ -174,7 +174,7 @@ export function AccountsTablePagination({
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       recordLabel={recordLabel}
-      variant="full"
+      variant="compact"
     />
   );
 }

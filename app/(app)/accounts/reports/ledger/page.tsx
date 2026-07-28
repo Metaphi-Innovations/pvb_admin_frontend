@@ -1,5 +1,5 @@
-import GeneralLedgerPageClient from "./GeneralLedgerPageClient";
+import { redirect } from "next/navigation";
 
-export default function LedgerReportPage() {
-  return <GeneralLedgerPageClient />;
+export default function LegacyGeneralLedgerPage() {
+  redirect("/accounts/reports/general-ledger");
 }

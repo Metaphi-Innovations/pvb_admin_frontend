@@ -63,12 +63,17 @@ import {
 } from "./VendorFormLayout";
 import { useDropdownSupplierTypes, useTdsDropdown, usePincode, useSupplierPreviewNumber } from "@/hooks/masters";
 import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
+import {
+	PartyMasterAccountingFields,
+} from "@/components/accounts/PartyMasterAccountingFields";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "contact", label: "Contact Information" },
 	{ id: "banking", label: "Bank & Commercial" },
 	{ id: "documents", label: "Documents & Remarks" },
+	{ id: "accounting", label: "Accounting" },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]["id"];
@@ -208,9 +213,13 @@ const FIELD_TAB_MAP: Record<string, TabId> = {
 	paymentType: "banking",
 	creditDays: "banking",
 	advancePercentage: "banking",
+	accountHolderName: "banking",
+	bankName: "banking",
+	branch: "banking",
 	accountNumber: "banking",
 	confirmAccountNumber: "banking",
 	ifscCode: "banking",
+	documents: "documents",
 };
 
 const FIELD_FOCUS_ORDER = [
@@ -228,9 +237,13 @@ const FIELD_FOCUS_ORDER = [
 	"paymentType",
 	"creditDays",
 	"advancePercentage",
+	"accountHolderName",
+	"bankName",
+	"branch",
 	"accountNumber",
 	"confirmAccountNumber",
 	"ifscCode",
+	"documents",
 ] as const;
 
 function resolveFieldTab(key: string): TabId {
@@ -269,6 +282,7 @@ export function VendorForm({
 	/** Bump after failed submit to switch tab / focus first invalid field. */
 	errorFocusToken?: number;
 }) {
+	const { selectedFY } = useFY();
 	const [tab, setTab] = useState<TabId>("basic");
 	const [fetchingGst, setFetchingGst] = useState(false);
 	const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -309,6 +323,16 @@ export function VendorForm({
 
 	const clearErr = (key: string) => onClearError?.(key);
 
+	/** Default Opening Balance Date to selected FY start when empty (new vendors). */
+	useEffect(() => {
+		if (form.openingBalanceDate?.trim()) return;
+		const iso = fyOpeningDateIso(selectedFY.id);
+		if (!iso) return;
+		onChange({ ...form, openingBalanceDate: iso });
+		// Only when date is empty / FY changes — intentionally omit form from deps.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedFY.id]);
+
 	const gstRegistered = form.gstRegistered;
 
 	const { data: supplierTypeData = [], isLoading: loadingSupplierTypes } =
@@ -345,7 +369,8 @@ export function VendorForm({
 		set("billingAddress", {
 			...form.billingAddress,
 			pincodeId: match.id,
-			// city: match.officename || form.billingAddress.city,
+			city: match.officename || form.billingAddress.city,
+			town: match.district || match.divisionname || form.billingAddress.town,
 			state: match.statename || form.billingAddress.state,
 			district: match.district || form.billingAddress.district,
 		} as typeof form.billingAddress);
@@ -376,6 +401,14 @@ export function VendorForm({
 		if (k === "accountNumber" || k === "confirmAccountNumber") {
 			clearErr("accountNumber");
 			clearErr("confirmAccountNumber");
+		}
+		if (k === "accountNumber") {
+			onChange({
+				...form,
+				accountNumber: v as VendorFormValues["accountNumber"],
+				confirmAccountNumber: v as VendorFormValues["confirmAccountNumber"],
+			});
+			return;
 		}
 		onChange({ ...form, [k]: v });
 	};
@@ -1041,35 +1074,46 @@ export function VendorForm({
 
 						<ErpFormSection title='Bank Details'>
 							<div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
-								<div className={ERP.field}>
-									<Label className={ERP.label}>Account Holder Name</Label>
+								<div className={ERP.field} data-field='accountHolderName'>
+									<Label className={ERP.label}>
+										Account Holder Name <span className='text-red-500'>*</span>
+									</Label>
 									<Input
 										disabled={readOnly}
 										value={form.accountHolderName}
 										onChange={(e) => set("accountHolderName", e.target.value)}
-										className={bankFieldClass}
+										className={errBank("accountHolderName")}
 									/>
+									<FieldError msg={errors.accountHolderName} />
 								</div>
-								<div className={ERP.field}>
-									<Label className={ERP.label}>Bank Name</Label>
+								<div className={ERP.field} data-field='bankName'>
+									<Label className={ERP.label}>
+										Bank Name <span className='text-red-500'>*</span>
+									</Label>
 									<Input
 										disabled={readOnly}
 										value={form.bankName}
 										onChange={(e) => set("bankName", e.target.value)}
-										className={bankFieldClass}
+										className={errBank("bankName")}
 									/>
+									<FieldError msg={errors.bankName} />
 								</div>
-								<div className={ERP.field}>
-									<Label className={ERP.label}>Branch Name</Label>
+								<div className={ERP.field} data-field='branch'>
+									<Label className={ERP.label}>
+										Branch Name <span className='text-red-500'>*</span>
+									</Label>
 									<Input
 										disabled={readOnly}
 										value={form.branch}
 										onChange={(e) => set("branch", e.target.value)}
-										className={bankFieldClass}
+										className={errBank("branch")}
 									/>
+									<FieldError msg={errors.branch} />
 								</div>
 								<div className={ERP.field} data-field='accountNumber'>
-									<Label className={ERP.label}>Account Number</Label>
+									<Label className={ERP.label}>
+										Account Number <span className='text-red-500'>*</span>
+									</Label>
 									<Input
 										disabled={readOnly}
 										value={form.accountNumber}
@@ -1089,7 +1133,9 @@ export function VendorForm({
 									<FieldError msg={errors.confirmAccountNumber} />
 								</div>
 								<div className={ERP.field} data-field='ifscCode'>
-									<Label className={ERP.label}>IFSC Code</Label>
+									<Label className={ERP.label}>
+										IFSC Code <span className='text-red-500'>*</span>
+									</Label>
 									<Input
 										disabled={readOnly}
 										value={form.ifscCode}
@@ -1116,9 +1162,12 @@ export function VendorForm({
 				)}
 
 				{tab === "documents" && (
-					<div className='w-full space-y-4'>
+					<div className='w-full space-y-4' data-field='documents'>
 						<section>
 							<SectionDivider title='Documents' required />
+							{errors.documents ? (
+								<p className='mb-2 text-xs text-red-500'>{errors.documents}</p>
+							) : null}
 							{!readOnly && (
 								<div className='p-3 mb-3 border rounded-lg border-border bg-muted/20'>
 									<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>
@@ -1255,6 +1304,24 @@ export function VendorForm({
 								className='min-h-[80px] text-sm resize-none rounded-lg border-border/70'
 							/>
 						</section>
+					</div>
+				)}
+
+				{tab === "accounting" && (
+					<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
+						<PartyMasterAccountingFields
+							values={{
+								openingBalance: form.openingBalance,
+								balanceType: form.balanceType,
+								openingBalanceDate: form.openingBalanceDate,
+								billWiseAccounting: form.billWiseAccounting,
+								accountingDescription: form.accountingDescription,
+							}}
+							onChange={(next) => onChange({ ...form, ...next })}
+							disabled={readOnly}
+							fyHintLabel={selectedFY.start}
+							descriptionLabel='Opening Balance Remarks'
+						/>
 					</div>
 				)}
 			</div>

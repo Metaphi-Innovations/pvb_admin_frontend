@@ -3,49 +3,68 @@
 /**
  * AppShell — persistent client-side chrome for all (app) routes.
  *
- * Renders once and persists across page navigations (via app/(app)/layout.tsx).
- * TopNavbar, AppHeader, and FYProvider are mounted exactly once, so:
- *   - Dropdown state is never destroyed mid-click
- *   - FY context is never reset on navigation
- *   - No layout flash between pages
+ * TopNavbar / AppHeader / progress / prefetch are client-only (dynamic ssr:false).
+ * Static SSR of those modules was throwing "Element type is invalid … undefined"
+ * during App Router RSC/SSR in this Next 14.2.35 setup; CSR still mounts them.
  */
 
-import React, { Suspense, useEffect } from "react";
+import React, { useEffect } from "react";
+import dynamic from "next/dynamic";
 import { FYProvider } from "@/lib/fy-store";
-import { NavRoutePrefetch } from "@/components/navigation/NavRoutePrefetch";
-import { NavigationProgress } from "./NavigationProgress";
-import { TopNavbar } from "./TopNavbar";
-import { AppHeader } from "./AppHeader";
+import { NavigationPendingProvider } from "@/components/navigation/NavigationPendingContext";
+
+const NavRoutePrefetch = dynamic(
+  () => import("@/components/navigation/NavRoutePrefetch").then((m) => m.NavRoutePrefetch),
+  { ssr: false },
+);
+
+const NavigationProgress = dynamic(
+  () => import("./NavigationProgress").then((m) => m.NavigationProgress),
+  { ssr: false },
+);
+
+const TopNavbar = dynamic(
+  () => import("./TopNavbar").then((m) => m.TopNavbar),
+  {
+    ssr: false,
+    loading: () => (
+      <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0" />
+    ),
+  },
+);
+
+const AppHeader = dynamic(
+  () => import("./AppHeader").then((m) => m.AppHeader),
+  {
+    ssr: false,
+    loading: () => <div className="h-12 border-b border-border/60 bg-white" />,
+  },
+);
 
 interface AppShellProps {
   children: React.ReactNode;
 }
 
 export function AppShell({ children }: AppShellProps) {
-  // Dev: after `dev:clean` or server restart, the browser may still reference old chunk URLs.
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
-
     const isChunkError = (reason: unknown) => {
       const msg = reason instanceof Error ? reason.message : String(reason ?? "");
       const name = reason instanceof Error ? reason.name : "";
       return name === "ChunkLoadError" || msg.includes("ChunkLoadError") || msg.includes("Loading chunk");
     };
-
     const reloadOnce = () => {
       const key = "ds_chunk_reload";
       if (sessionStorage.getItem(key)) return;
       sessionStorage.setItem(key, "1");
       window.location.reload();
     };
-
     const onRejection = (event: PromiseRejectionEvent) => {
       if (isChunkError(event.reason)) reloadOnce();
     };
     const onError = (event: ErrorEvent) => {
       if (isChunkError(event.error ?? event.message)) reloadOnce();
     };
-
     window.addEventListener("unhandledrejection", onRejection);
     window.addEventListener("error", onError);
     return () => {
@@ -56,24 +75,20 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <FYProvider>
-      <NavRoutePrefetch />
-      <NavigationProgress />
-      <div className="min-h-screen bg-background flex flex-col">
-        {/* 56px — sticky, z-50 — persists across all navigations */}
-        <Suspense
-          fallback={
-            <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0" />
-          }
-        >
+      <NavigationPendingProvider>
+        <NavRoutePrefetch />
+        <NavigationProgress />
+        <div className="min-h-screen bg-background flex flex-col">
+          {/* 56px — sticky, z-50 — persists across all navigations */}
           <TopNavbar />
-        </Suspense>
 
-        {/* 48px — sticky below navbar — does not re-render on route change */}
-        <AppHeader />
+          {/* 48px — sticky below navbar — does not re-render on route change */}
+          <AppHeader />
 
-        {/* Page content area — only this part swaps on navigation */}
-        <main className="flex-1 min-h-0 w-full bg-muted/30">{children}</main>
-      </div>
+          {/* Page content area — only this part swaps on navigation */}
+          <main className="flex-1 min-h-0 w-full bg-muted/30">{children}</main>
+        </div>
+      </NavigationPendingProvider>
     </FYProvider>
   );
 }

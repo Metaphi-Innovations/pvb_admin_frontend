@@ -6,6 +6,7 @@ import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import {
   findErpPartyLinkByLedgerId,
 } from "@/lib/accounts/erp-party-links";
+import { ensureVendorLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import {
   findLedgerById,
   getActivePostingLedgers,
@@ -134,20 +135,29 @@ export function filterCoaHierarchyTree(
   const q = query.trim().toLowerCase();
   if (!q) return nodes;
 
+  function nodeTextMatches(node: CoaHierarchyNode): boolean {
+    const code = node.accountCode?.toLowerCase() ?? "";
+    return (
+      node.label.toLowerCase().includes(q) ||
+      node.path.toLowerCase().includes(q) ||
+      code.includes(q)
+    );
+  }
+
   function walk(node: CoaHierarchyNode): CoaHierarchyNode | null {
     if (node.kind === "ledger") {
-      const code = node.accountCode?.toLowerCase() ?? "";
-      return node.label.toLowerCase().includes(q) ||
-        node.path.toLowerCase().includes(q) ||
-        code.includes(q)
-        ? node
-        : null;
+      return nodeTextMatches(node) ? node : null;
     }
+
+    // Group / path match: keep the full eligible subtree so nested ledgers stay visible
+    // even when the parent group was collapsed and child labels do not contain the query.
+    if (nodeTextMatches(node)) {
+      return node;
+    }
+
     const children = node.children.map(walk).filter((n): n is CoaHierarchyNode => n != null);
-    if (children.length > 0 || node.label.toLowerCase().includes(q)) {
-      return { ...node, children };
-    }
-    return null;
+    if (children.length === 0) return null;
+    return { ...node, children };
   }
 
   return nodes.map(walk).filter((n): n is CoaHierarchyNode => n != null);
@@ -169,12 +179,79 @@ export function collectExpandableGroupKeys(nodes: CoaHierarchyNode[]): Set<strin
 export type LedgerContactType = "customer" | "vendor" | "employee" | null;
 
 function matchesSubGroup(path: ChartOfAccount[], ...terms: string[]): boolean {
-  return path
-    .filter((n) => n.nodeLevel === "account_group")
-    .some((n) => {
-      const name = n.accountName.toLowerCase();
-      return terms.every((t) => name.includes(t.toLowerCase()));
-    });
+  const hay = path.map((n) => n.accountName.toLowerCase()).join(" ");
+  return terms.some((t) => hay.includes(t.toLowerCase()));
+}
+
+function normalizePartyKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function partyNamesLikelyMatch(ledgerName: string, masterName: string): boolean {
+  const a = normalizePartyKey(ledgerName);
+  const b = normalizePartyKey(masterName);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const prefix = a.length <= b.length ? a.slice(0, 6) : b.slice(0, 6);
+  if (prefix.length >= 6 && (a.includes(prefix) && b.includes(prefix))) return true;
+  return false;
+}
+
+function resolveVendorIdForLedger(ledger: ChartOfAccount, partyName: string): number | null {
+  const link = findErpPartyLinkByLedgerId(ledger.id);
+  if (link?.erpSourceModule === "vendor_master") return link.erpSourceId;
+
+  const vendors = loadVendors();
+  const exact = vendors.find(
+    (v) => v.vendorName.trim().toLowerCase() === partyName.trim().toLowerCase(),
+  );
+  if (exact) return exact.id;
+
+  const byLedger = vendors.find((v) => {
+    const payable = ensureVendorLedgerFromMaster(v);
+    if (!payable) return false;
+    return (
+      payable.id === ledger.id ||
+      payable.accountName.trim().toLowerCase() === partyName.trim().toLowerCase()
+    );
+  });
+  if (byLedger) return byLedger.id;
+
+  const fuzzy = vendors.find((v) => partyNamesLikelyMatch(partyName, v.vendorName));
+  return fuzzy?.id ?? null;
+}
+
+function resolveCustomerIdForPartyLedger(ledger: ChartOfAccount, partyName: string): number | null {
+  const link = findErpPartyLinkByLedgerId(ledger.id);
+  if (link?.erpSourceModule === "customer_master") return link.erpSourceId;
+
+  const customers = loadCustomers();
+  const exact = customers.find(
+    (c) => c.customerName.trim().toLowerCase() === partyName.trim().toLowerCase(),
+  );
+  if (exact) return exact.id;
+
+  const fuzzy = customers.find((c) => partyNamesLikelyMatch(partyName, c.customerName));
+  return fuzzy?.id ?? null;
+}
+
+export function isCustomerPartyLedger(
+  ledger: ChartOfAccount,
+  records?: ChartOfAccount[],
+): boolean {
+  const list = records ?? loadChartOfAccounts();
+  const { path } = resolveHierarchyPath(list, ledger.id);
+  return isCustomerReceivableLedger(ledger, path);
+}
+
+export function isVendorPartyLedger(
+  ledger: ChartOfAccount,
+  records?: ChartOfAccount[],
+): boolean {
+  const list = records ?? loadChartOfAccounts();
+  const { path } = resolveHierarchyPath(list, ledger.id);
+  return isVendorPayableLedger(ledger, path);
 }
 
 function isCustomerReceivableLedger(ledger: ChartOfAccount, path: ChartOfAccount[]): boolean {
@@ -220,24 +297,30 @@ export function resolveAutoPartyFromLedger(
   }
 
   if (ledger.erpSourceModule === "customer_master" && ledger.erpSourceId) {
-    return { contactId: ledger.erpSourceId, contactName: partyName };
+    return {
+      contactId: typeof ledger.erpSourceId === "number" ? ledger.erpSourceId : null,
+      contactName: partyName,
+    };
   }
   if (ledger.erpSourceModule === "vendor_master" && ledger.erpSourceId) {
-    return { contactId: ledger.erpSourceId, contactName: partyName };
+    return {
+      contactId: typeof ledger.erpSourceId === "number" ? ledger.erpSourceId : null,
+      contactName: partyName,
+    };
   }
 
   if (isCustomerReceivableLedger(ledger, path)) {
-    const customer = loadCustomers().find(
-      (c) => c.customerName.trim().toLowerCase() === partyName.toLowerCase(),
-    );
-    return { contactId: customer?.id ?? null, contactName: partyName };
+    return {
+      contactId: resolveCustomerIdForPartyLedger(ledger, partyName),
+      contactName: partyName,
+    };
   }
 
   if (isVendorPayableLedger(ledger, path)) {
-    const vendor = loadVendors().find(
-      (v) => v.vendorName.trim().toLowerCase() === partyName.toLowerCase(),
-    );
-    return { contactId: vendor?.id ?? null, contactName: partyName };
+    return {
+      contactId: resolveVendorIdForLedger(ledger, partyName),
+      contactName: partyName,
+    };
   }
 
   return { contactId: null, contactName: partyName };

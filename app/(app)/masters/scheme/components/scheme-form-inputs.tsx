@@ -5,7 +5,7 @@ import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 
-export const schemeCompactFieldClass = "h-8 text-xs";
+export const schemeCompactFieldClass = "h-7 text-[11px] px-2";
 
 export const schemeNoSpinnerClass =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";

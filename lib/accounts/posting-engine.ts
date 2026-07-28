@@ -23,9 +23,23 @@ import {
 } from "@/lib/accounts/ledger-mappings";
 import { loadAccountingSettings } from "@/lib/accounts/accounting-settings-data";
 import { ensureInventoryAccountingLedgers, getCostPriceBySku, resolveSku } from "@/lib/accounts/inventory-accounting-data";
-import { ensureGstAccountingLedgers, expandGstPostingLines, type GstRateBreakdown } from "@/lib/accounts/gst-accounting";
+import {
+  ensureGstAccountingLedgers,
+  expandGstPostingLines,
+  isGstMappingKey,
+  resolveGstLedger,
+  type GstRateBreakdown,
+} from "@/lib/accounts/gst-accounting";
+import { formatGstPostingLedgerDisplayName } from "@/lib/accounts/gst-coa-sync";
 import { ensureTdsAccountingLedgers, resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { notifyVoucherPosted } from "@/lib/accounts/voucher-posting-notify";
+import { applyGenericBillWiseFromPostedVoucher } from "@/lib/accounts/generic-bill-wise-store";
+import {
+  isSystemControlledMappingKey,
+  missingSystemLedgerError,
+  systemLedgerKeyForMapping,
+} from "@/lib/accounts/system-ledger-resolver";
 
 export type ErpSourceModule =
   | "procurement"
@@ -43,6 +57,12 @@ export interface PostingLineInput {
   remarks?: string;
   /** Total GST rate (e.g. 18) for rate-specific GST ledger resolution */
   gstRatePct?: number;
+  costCenterId?: number | null;
+  costCenterName?: string;
+  billWiseReferenceType?: string;
+  billWiseReferenceId?: number | null;
+  billWiseReferenceNo?: string;
+  billWiseDueDate?: string;
 }
 
 export interface ErpPostingRequest {
@@ -64,17 +84,49 @@ export interface PostingResult {
 }
 
 function resolveLineToLedgerId(line: PostingLineInput): number | null {
+  return resolveLineToLedger(line).ledgerId;
+}
+
+function resolveLineToLedger(line: PostingLineInput): { ledgerId: number | null; error?: string } {
   ensureGstAccountingLedgers();
-  if (line.ledgerId) return line.ledgerId;
+  if (line.ledgerId) return { ledgerId: line.ledgerId };
+
   if (line.mappingKey) {
-    const ledger = resolveMappingLedger(
-      line.mappingKey,
-      line.partyName ?? "General",
-      { createIfMissing: true, gstRatePct: line.gstRatePct },
-    );
-    return ledger?.id ?? null;
+    if (
+      isGstMappingKey(line.mappingKey) &&
+      line.gstRatePct != null &&
+      line.gstRatePct > 0 &&
+      (line.debit > 0 || line.credit > 0)
+    ) {
+      const ledger = resolveGstLedger(line.mappingKey, line.gstRatePct);
+      if (!ledger) {
+        const label = formatGstPostingLedgerDisplayName(line.mappingKey, line.gstRatePct);
+        return { ledgerId: null, error: `${label} posting ledger is not configured.` };
+      }
+      return { ledgerId: ledger.id };
+    }
+
+    // Product Sales / Stock in Hand — never create "General" or legacy inventory-named ledgers.
+    if (isSystemControlledMappingKey(line.mappingKey)) {
+      const systemKey = systemLedgerKeyForMapping(line.mappingKey);
+      if (!systemKey) {
+        return { ledgerId: null, error: "Required system ledger is missing or invalid." };
+      }
+      const ledger = resolveMappingLedger(line.mappingKey, "", { createIfMissing: false });
+      if (!ledger) {
+        return { ledgerId: null, error: missingSystemLedgerError(systemKey) };
+      }
+      return { ledgerId: ledger.id };
+    }
+
+    const ledger = resolveMappingLedger(line.mappingKey, line.partyName ?? "General", {
+      createIfMissing: true,
+      gstRatePct: line.gstRatePct,
+    });
+    return { ledgerId: ledger?.id ?? null };
   }
-  return null;
+
+  return { ledgerId: null };
 }
 
 function buildVoucherLines(inputs: PostingLineInput[]): VoucherLine[] {
@@ -89,6 +141,12 @@ function buildVoucherLines(inputs: PostingLineInput[]): VoucherLine[] {
       debit: line.debit,
       credit: line.credit,
       remarks: line.remarks ?? "",
+      costCenterId: line.costCenterId ?? null,
+      costCenterName: line.costCenterName ?? "",
+      billWiseReferenceType: line.billWiseReferenceType,
+      billWiseReferenceId: line.billWiseReferenceId ?? null,
+      billWiseReferenceNo: line.billWiseReferenceNo ?? "",
+      billWiseDueDate: line.billWiseDueDate ?? "",
     };
   });
 }
@@ -117,6 +175,9 @@ export function postVoucher(voucherId: number): PostingResult {
       : v,
   );
   saveVouchers(updated);
+  const posted = updated.find((v) => v.id === voucherId)!;
+  applyGenericBillWiseFromPostedVoucher(posted);
+  notifyVoucherPosted(posted);
   return {
     success: true,
     voucherId: voucher.id,
@@ -178,6 +239,11 @@ export function postFromErpSource(req: ErpPostingRequest): PostingResult {
     };
   }
 
+  for (const line of req.lines) {
+    const resolved = resolveLineToLedger(line);
+    if (resolved.error) return { success: false, error: resolved.error };
+  }
+
   const lines = buildVoucherLines(req.lines);
   const err = validateVoucherForPost({ date: req.date, narration: req.narration, lines });
   if (err) return { success: false, error: err };
@@ -222,7 +288,6 @@ export function postGrnAccepted(input: {
     lines: [
       {
         mappingKey: "purchase_inventory",
-        partyName: "Inventory / Stock-in-Hand",
         debit: inventoryValue,
         credit: 0,
         remarks: `Stock-in — ${input.grnNo}`,
@@ -262,7 +327,6 @@ export function postPurchaseInvoice(input: {
   const lines: PostingLineInput[] = [
     {
       mappingKey: "purchase_inventory",
-      partyName: "Inventory / Stock-in-Hand",
       debit: input.taxableAmount,
       credit: 0,
       remarks: `Purchase — ${input.invoiceNo}`,
@@ -332,21 +396,160 @@ export function postPurchaseInvoice(input: {
   });
 }
 
+/** Accounts: Direct Purchase Invoice → expense/asset ledgers + GST + vendor payable */
+export function postDirectPurchaseInvoice(input: {
+  invoiceId: number;
+  invoiceNo: string;
+  vendorName: string;
+  date: string;
+  expenseLines: Array<{
+    ledgerId: number;
+    ledgerName: string;
+    amount: number;
+    description: string;
+  }>;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  gstBreakdowns?: GstRateBreakdown[];
+  tdsAmount?: number;
+  tdsMasterId?: number | null;
+  tdsLedgerId?: number | null;
+  roundOff?: number;
+}): PostingResult {
+  ensureGstAccountingLedgers();
+  ensureTdsAccountingLedgers();
+  const tds = roundMoney(input.tdsAmount ?? 0);
+  const roundOff = roundMoney(input.roundOff ?? 0);
+  const expenseTotal = roundMoney(
+    input.expenseLines.reduce((s, l) => s + l.amount, 0),
+  );
+  const gstTotal = roundMoney(input.cgst + input.sgst + input.igst);
+  const payableTotal = roundMoney(expenseTotal + gstTotal - tds + roundOff);
+
+  const lines: PostingLineInput[] = input.expenseLines.map((el) => ({
+    ledgerId: el.ledgerId,
+    partyName: el.ledgerName,
+    debit: el.amount,
+    credit: 0,
+    remarks: el.description,
+  }));
+
+  if (input.gstBreakdowns?.length) {
+    lines.push(...expandGstPostingLines(input.gstBreakdowns, "purchase"));
+  } else {
+    if (input.cgst > 0) {
+      lines.push({
+        mappingKey: "purchase_cgst",
+        debit: input.cgst,
+        credit: 0,
+        remarks: "Input CGST (ITC)",
+      });
+    }
+    if (input.sgst > 0) {
+      lines.push({
+        mappingKey: "purchase_sgst",
+        debit: input.sgst,
+        credit: 0,
+        remarks: "Input SGST (ITC)",
+      });
+    }
+    if (input.igst > 0) {
+      lines.push({
+        mappingKey: "purchase_igst",
+        debit: input.igst,
+        credit: 0,
+        remarks: "Input IGST (ITC)",
+      });
+    }
+  }
+
+  if (tds > 0) {
+    const tdsLedger =
+      input.tdsLedgerId ??
+      (input.tdsMasterId != null ? resolveTdsPayableLedger(input.tdsMasterId)?.id : null);
+    if (tdsLedger) {
+      lines.push({
+        ledgerId: tdsLedger,
+        debit: 0,
+        credit: tds,
+        remarks: `TDS Payable — ${input.invoiceNo}`,
+      });
+    }
+  }
+
+  if (roundOff !== 0) {
+    const settings = loadAccountingSettings();
+    if (settings.roundOffLedgerId) {
+      lines.push({
+        ledgerId: settings.roundOffLedgerId,
+        debit: roundOff > 0 ? roundOff : 0,
+        credit: roundOff < 0 ? Math.abs(roundOff) : 0,
+        remarks: "Round off",
+      });
+    }
+  }
+
+  lines.push({
+    mappingKey: "purchase_payable",
+    partyName: input.vendorName,
+    debit: 0,
+    credit: payableTotal,
+    remarks: `Payable — ${input.vendorName}`,
+  });
+
+  return postFromErpSource({
+    sourceModule: "procurement",
+    sourceDocumentId: input.invoiceId,
+    sourceDocumentNo: input.invoiceNo,
+    voucherType: "purchase",
+    date: input.date,
+    narration: `Direct Purchase ${input.invoiceNo} — ${input.vendorName}`,
+    lines,
+  });
+}
+
 /** Sales: Sales Invoice → accounting entries */
 export function postSalesInvoice(input: {
   invoiceId: number;
   invoiceNo: string;
   customerName: string;
   date: string;
+  grandTotal?: number;
   taxableAmount: number;
   cgst: number;
   sgst: number;
   igst: number;
   gstBreakdowns?: GstRateBreakdown[];
   gstRatePct?: number;
+  /**
+   * When set, credit this ledger instead of PRODUCT_SALES (service invoices).
+   * Product sales must omit this and resolve the approved system ledger.
+   */
+  revenueLedgerId?: number | null;
 }): PostingResult {
   ensureGstAccountingLedgers();
-  const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
+  const taxTotal = roundMoney(input.cgst + input.sgst + input.igst);
+  const total =
+    input.grandTotal != null && input.grandTotal > 0
+      ? roundMoney(input.grandTotal)
+      : roundMoney(input.taxableAmount + taxTotal);
+
+  const revenueLine: PostingLineInput =
+    input.revenueLedgerId != null
+      ? {
+          ledgerId: input.revenueLedgerId,
+          debit: 0,
+          credit: input.taxableAmount,
+          remarks: `Revenue — ${input.invoiceNo}`,
+        }
+      : {
+          mappingKey: "sales_revenue",
+          debit: 0,
+          credit: input.taxableAmount,
+          remarks: `Revenue — ${input.invoiceNo}`,
+        };
+
   const lines: PostingLineInput[] = [
     {
       mappingKey: "sales_receivable",
@@ -355,12 +558,7 @@ export function postSalesInvoice(input: {
       credit: 0,
       remarks: `Receivable — ${input.customerName}`,
     },
-    {
-      mappingKey: "sales_revenue",
-      debit: 0,
-      credit: input.taxableAmount,
-      remarks: `Revenue — ${input.invoiceNo}`,
-    },
+    revenueLine,
   ];
 
   if (input.gstBreakdowns?.length) {
@@ -422,10 +620,71 @@ export function postSalesInvoiceCogs(input: {
       },
       {
         mappingKey: "stock_inventory",
-        partyName: "Inventory / Stock-in-Hand",
         debit: 0,
         credit: cogsTotal,
         remarks: `Inventory reduction — ${input.invoiceNo}`,
+      },
+    ],
+  });
+}
+
+/**
+ * Sample Order Proforma — zero billing; inventory consumption at Cost Price.
+ * Dr Sample / Promotional Expense · Cr Inventory / Stock-in-Hand
+ * No receivable, sales revenue, or output GST.
+ */
+export function postSampleOrderInventoryExpense(input: {
+  invoiceId: number;
+  invoiceNo: string;
+  date: string;
+  customerName: string;
+  lines: { productName: string; sku?: string; qty: number; costPrice?: number }[];
+}): PostingResult {
+  ensureInventoryAccountingLedgers();
+  let expenseTotal = 0;
+  for (const line of input.lines) {
+    if (line.qty <= 0) continue;
+    const sku = line.sku ?? resolveSku(line.productName);
+    const cp =
+      typeof line.costPrice === "number" && line.costPrice > 0
+        ? line.costPrice
+        : getCostPriceBySku(sku, line.productName);
+    if (!(cp > 0)) {
+      return {
+        success: false,
+        error: `Cost Price not available for "${line.productName}". Cannot post Sample Order inventory expense.`,
+      };
+    }
+    expenseTotal += line.qty * cp;
+  }
+  expenseTotal = roundMoney(expenseTotal);
+  if (expenseTotal <= 0) {
+    return {
+      success: false,
+      error: "No inventory value to post for Sample Order (Cost Price × Qty).",
+    };
+  }
+
+  return postFromErpSource({
+    sourceModule: "sales",
+    sourceDocumentId: `${input.invoiceId}-sample`,
+    sourceDocumentNo: input.invoiceNo,
+    voucherType: "journal",
+    date: input.date,
+    narration: `Sample Order issue ${input.invoiceNo} — ${input.customerName} (inventory at CP)`,
+    lines: [
+      {
+        mappingKey: "sample_promotional_expense",
+        partyName: "Sample / Promotional Expense",
+        debit: expenseTotal,
+        credit: 0,
+        remarks: `Sample / promotional expense at CP — ${input.invoiceNo}`,
+      },
+      {
+        mappingKey: "stock_inventory",
+        debit: 0,
+        credit: expenseTotal,
+        remarks: `Inventory reduction (sample issue) — ${input.invoiceNo}`,
       },
     ],
   });
@@ -621,7 +880,6 @@ export function postStockReconciliation(input: {
     ? [
         {
           mappingKey: "stock_inventory",
-          partyName: "Inventory / Stock-in-Hand",
           debit: abs,
           credit: 0,
         },
@@ -643,7 +901,6 @@ export function postStockReconciliation(input: {
         },
         {
           mappingKey: "stock_inventory",
-          partyName: "Inventory / Stock-in-Hand",
           debit: 0,
           credit: abs,
         },

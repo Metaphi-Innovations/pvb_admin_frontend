@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback } from "react";
 import { ExternalLink } from "lucide-react";
 import { MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
@@ -10,49 +11,60 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 
-const COLUMNS = [
-  { key: "date", label: "Date", align: "left" as const },
-  { key: "voucher", label: "Voucher No", align: "left" as const },
-  { key: "type", label: "Voucher Type", align: "left" as const },
-  { key: "source", label: "Source Module", align: "left" as const },
-  { key: "particulars", label: "Particulars", align: "left" as const },
-  { key: "debit", label: "Debit", align: "right" as const },
-  { key: "credit", label: "Credit", align: "right" as const },
-  { key: "balance", label: "Running Balance", align: "right" as const },
-  { key: "action", label: "Action", align: "left" as const },
-];
+const COLUMN_CONFIG = {
+  date: { type: "date" as const },
+  voucher: { type: "text" as const },
+  type: { type: "text" as const },
+  source: { type: "text" as const },
+  particulars: { type: "text" as const },
+  debit: { type: "amount" as const },
+  credit: { type: "amount" as const },
+  balance: { type: "amount" as const },
+};
 
-export function LedgerTransactionsTable({
-  rows,
-  emptyLabel = "No transactions posted to this ledger yet.",
-}: {
-  rows: StatementRow[];
-  emptyLabel?: string;
-}) {
-  if (rows.length === 0) {
-    return <p className="text-xs text-muted-foreground py-6 text-center px-4">{emptyLabel}</p>;
-  }
+function LedgerTransactionsTableBody({ toolbarRows }: { toolbarRows: StatementRow[] }) {
+  const visible = useAccountsFilteredRows<StatementRow>(toolbarRows);
 
   return (
-    <AccountsTableScroll>
-      <AccountsTable minWidth={960}>
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            {COLUMNS.map((col) => (
-              <AccountsTableHeadCell key={col.key} align={col.align} uppercase>
-                {col.label}
-              </AccountsTableHeadCell>
-            ))}
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {rows.map((row, i) => {
+    <AccountsTable minWidth={960}>
+      <AccountsTableHead>
+        <AccountsTableHeadRow>
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Voucher No" colKey="voucher" />
+          <SortTh label="Voucher Type" colKey="type" />
+          <SortTh label="Source Module" colKey="source" />
+          <SortTh label="Particulars" colKey="particulars" />
+          <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
+          <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
+          <SortTh label="Running Balance" colKey="balance" filterType="amount" align="right" />
+          <AccountsColumnHeader
+            label="Action"
+            colKey="action"
+            sortable={false}
+            filterable={false}
+          />
+        </AccountsTableHeadRow>
+      </AccountsTableHead>
+      <AccountsTableBody>
+        {visible.length === 0 ? (
+          <AccountsTableRow>
+            <AccountsTableCell colSpan={9} className="accounts-table-empty">
+              No records match the column filters.
+            </AccountsTableCell>
+          </AccountsTableRow>
+        ) : (
+          visible.map((row, i) => {
             const isOpening = row.voucherType === "Opening Balance" || row.voucherType === "Opening";
             return (
               <AccountsTableRow key={`${row.id ?? row.voucherNo}-${i}`}>
@@ -91,9 +103,50 @@ export function LedgerTransactionsTable({
                 </AccountsTableCell>
               </AccountsTableRow>
             );
-          })}
-        </AccountsTableBody>
-      </AccountsTable>
-    </AccountsTableScroll>
+          })
+        )}
+      </AccountsTableBody>
+    </AccountsTable>
+  );
+}
+
+export function LedgerTransactionsTable({
+  rows,
+  emptyLabel = "No transactions posted to this ledger yet.",
+}: {
+  rows: StatementRow[];
+  emptyLabel?: string;
+}) {
+  const getCellValue = useCallback((row: StatementRow, key: string) => {
+    switch (key) {
+      case "voucher":
+        return row.voucherNo;
+      case "type":
+        return row.voucherType;
+      case "source":
+        return row.sourceModule;
+      case "balance":
+        return row.runningBalance;
+      default:
+        return (row as unknown as Record<string, unknown>)[key];
+    }
+  }, []);
+
+  if (rows.length === 0) {
+    return <p className="text-xs text-muted-foreground py-6 text-center px-4">{emptyLabel}</p>;
+  }
+
+  return (
+    <AccountsColumnFilterProvider
+      rows={rows}
+      getCellValue={getCellValue}
+      columnConfig={COLUMN_CONFIG}
+      defaultSortKey="date"
+      defaultSortDir="asc"
+    >
+      <AccountsTableScroll>
+        <LedgerTransactionsTableBody toolbarRows={rows} />
+      </AccountsTableScroll>
+    </AccountsColumnFilterProvider>
   );
 }

@@ -22,8 +22,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { SectionTabs, StatusBadge } from "../../components/AccountsUI";
+import { SectionTabs } from "../../components/AccountsUI";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -141,7 +143,7 @@ export default function HrClaimsAccountsClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Claims", "Employee Claims")}
       title="Expense / Claims from HR"
-      description="Pending â†’ Claims Payable â†’ Payment Voucher â†’ Paid Claims."
+      description="Pending → Claims Payable → Payment Voucher → Paid Claims."
       filters={
         <ReportFilterRow>
           <ReportDateRangeFilter
@@ -157,15 +159,15 @@ export default function HrClaimsAccountsClient() {
       layout="split"
     >
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
-        <div className="flex-1 min-w-0 flex flex-col border-r border-border/60">
-          <div className="px-4 pt-3 border-b border-border/60">
+        <AccountsListingTableCard className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <div className="px-3 pt-2 border-b border-border/60">
             <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={tabCounts} />
           </div>
           <div className="overflow-auto flex-1">
             <table className="accounts-table w-full min-w-[640px]">
               <thead className="border-b">
                 <tr>
-                  {["Claim No", "Employee", "Department", "Type", "Approved", "Status"].map((h) => (
+                  {["Claim No", "Employee", "Department", "Type", "Approved"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
                   ))}
                 </tr>
@@ -173,7 +175,7 @@ export default function HrClaimsAccountsClient() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="accounts-table-empty">
+                    <td colSpan={5} className="accounts-table-empty">
                       No claims in this stage.
                     </td>
                   </tr>
@@ -192,16 +194,13 @@ export default function HrClaimsAccountsClient() {
                       <td className="px-3 py-2">{ex.department}</td>
                       <td className="px-3 py-2">{ex.categoryName}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatMoney(getApprovedAmount(ex))}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={ex.paidStatus === "paid" ? "paid" : ex.status} />
-                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+        </AccountsListingTableCard>
         {selected && (
           <div className="w-full lg:w-[340px] flex-shrink-0 p-4 space-y-4 overflow-auto bg-muted/5">
             <div className="rounded-lg border border-border/60 bg-white p-3 space-y-2 text-xs">
@@ -217,12 +216,12 @@ export default function HrClaimsAccountsClient() {
                 <span className="text-muted-foreground">Payment Mode</span><span>{selected.payment?.paymentMode ?? selected.paymentMode ?? "—"}</span>
               </div>
               <Link href={`/accounts/transactions/expenses/${selected.id}`} className="text-brand-600 hover:underline text-xs">
-                Open claim â†’
+                Open claim →
               </Link>
               {tab === "payable" && selected.paidStatus !== "paid" && (
                 <Button
                   size="sm"
-                  className="w-full h-9 text-sm font-medium mt-2 bg-brand-600 hover:bg-brand-700 text-white"
+                  className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "w-full h-8 text-xs font-medium mt-2 bg-brand-600 hover:bg-brand-700 text-white")}
                   onClick={() => {
                     setPayError(null);
                     setPaymentRef("");
