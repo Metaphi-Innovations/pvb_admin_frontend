@@ -469,6 +469,7 @@ export const API_ENDPOINTS = {
       PRIMARY_HEADS: "/accounts/chart-of-accounts/primary-heads",
       GROUPS: "/accounts/chart-of-accounts/groups",
       SUB_GROUPS: "/accounts/chart-of-accounts/sub-groups",
+      PDF: "/accounts/chart-of-accounts/pdf",
     },
     LEDGERS: {
       LIST: "/accounts/ledgers",

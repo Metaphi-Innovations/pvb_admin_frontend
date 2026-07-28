@@ -27,6 +27,7 @@ import {
 } from "@/lib/accounts/accounts-typography";
 import { useCreateCustomer, useCustomer, useUpdateCustomer } from "@/hooks/masters";
 import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
+import { CustomerListService } from "@/services/customer-list.service";
 import { useQueryClient } from "@tanstack/react-query";
 import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
 import type { CoaNodeId } from "../../../../data";
@@ -101,16 +102,58 @@ export default function AccountsSundryDebtorCustomerFormClient({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
   const [accountingLoading, setAccountingLoading] = useState(false);
+  const [customerCode, setCustomerCode] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
 
   const customerTypes = useMemo(
     () =>
       customerTypeOptions.map((ct) => ({
         id: String(ct.id),
         customerType: ct.customerType,
+        customerInitialCode: (ct as { customerInitialCode?: string }).customerInitialCode,
         documents: (ct as { documents?: unknown[] }).documents ?? [],
       })),
     [customerTypeOptions],
   );
+
+  useEffect(() => {
+    if (isEdit || !form.customerType) {
+      setCustomerCode("");
+      return;
+    }
+
+    function extractPreviewSequence(previewNumber: string): string {
+      const parts = previewNumber.split("-");
+      return parts.length > 1 ? parts[parts.length - 1] : previewNumber;
+    }
+
+    const selectedType = customerTypes.find((ct) => ct.id === form.customerType);
+
+    let cancelled = false;
+    setCodeLoading(true);
+    setCustomerCode("");
+
+    CustomerListService.previewNumber()
+      .then((code) => {
+        if (!cancelled) {
+          const sequence = extractPreviewSequence(code);
+          setCustomerCode(`${selectedType?.customerInitialCode || ""}-${sequence}`);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch customer code preview", err);
+        if (!cancelled) {
+          setCustomerCode("");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCodeLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.customerType, customerTypes, isEdit]);
 
   useEffect(() => {
     if (!isEdit || !customer) return;
@@ -385,7 +428,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
           errors={errors}
           onClearError={clearErr}
           customerTypes={customerTypes as any}
-          customerCode={customer?.customerCode ?? ""}
+          customerCode={isEdit ? (customer?.customerCode ?? "") : (customerCode || (codeLoading ? "Generating…" : ""))}
           isAdd={!isEdit}
         />
       </div>

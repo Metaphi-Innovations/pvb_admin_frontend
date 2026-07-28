@@ -17,6 +17,8 @@ import {
   type BalanceAmount,
   type ChronologicalSortable,
 } from "@/lib/accounts/running-balance";
+import { resolveOpeningSide } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+import { roundMoney } from "@/lib/accounts/money-format";
 
 type CoaMovementRow = Omit<
   CoaTransactionRow,
@@ -100,13 +102,14 @@ export function computeClosingFromPeriodOpening(
   return fromSignedBalance(signed);
 }
 
-/** Closing = ledger opening + net movement in the selected period (display only). */
+/** Closing = opening (with corrected Dr/Cr side) + net movement in the selected period. */
 export function computePeriodClosingBalance(
   ledger: ChartOfAccount,
   totalDebit: number,
   totalCredit: number,
 ): BalanceAmount {
-  const signed = openingSignedBalance(ledger) + totalDebit - totalCredit;
+  const openingSide = resolveOpeningSide(ledger);
+  const signed = toSignedBalance(roundMoney(ledger.openingBalance), openingSide) + totalDebit - totalCredit;
   return fromSignedBalance(signed);
 }
 
@@ -117,7 +120,9 @@ export function computePeriodOpeningBalance(
   from: string,
 ): BalanceAmount {
   const prior = sortChronological(allTransactions.filter((r) => r.date < from));
-  const signed = signedBalanceAfterMovements(openingSignedBalance(ledger), prior);
+  const openingSide = resolveOpeningSide(ledger);
+  const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
+  const signed = signedBalanceAfterMovements(openingSigned, prior);
   return fromSignedBalance(signed);
 }
 

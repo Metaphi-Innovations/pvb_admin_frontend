@@ -2216,33 +2216,7 @@ export function CustomerForm({
 										{/* Collapsible Details */}
 										{isExpanded && (
 											<div className='p-2.5 space-y-2 duration-200 animate-in fade-in-50'>
-												<ErpFormSection title='Branch Details'>
-													<div className={ERP.grid3}>
-														<div className={ERP.field}>
-															<Label className={ERP.label}>
-																Salesman <span className='text-red-500'>*</span>
-															</Label>
-															<SearchableSelect
-																value={branch.salesManId || ""}
-																onChange={(value) => {
-																	const updated = [...form.branches];
-																	updated[bIdx] = {
-																		...updated[bIdx],
-																		salesManId: value,
-																	};
-																	onChange({ ...form, branches: updated });
-																	onClearError?.(`branch_${bIdx}_salesManId`);
-																}}
-																options={salesOptions}
-																placeholder='Search sales person...'
-																searchPlaceholder='Name, ID, mobile...'
-																disabled={readOnly}
-																error={!!errors[`branch_${bIdx}_salesManId`]}
-															/>
-															<FieldError msg={errors[`branch_${bIdx}_salesManId`]} />
-														</div>
-													</div>
-												</ErpFormSection>
+
 
 												<ErpFormSection title='Address'>
 													{!readOnly && gstAddressSnapshot && (

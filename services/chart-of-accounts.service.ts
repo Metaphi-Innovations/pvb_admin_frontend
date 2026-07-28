@@ -36,6 +36,7 @@ export interface CoaTreeQueryParams {
   includeLedgers?: boolean;
   sourceType?: string;
   financialYearId?: string;
+  parentId?: string;
   signal?: AbortSignal;
 }
 
@@ -59,6 +60,7 @@ export const ChartOfAccountsService = {
           ...(query.status ? { status: query.status } : {}),
           ...(query.sourceType ? { sourceType: query.sourceType } : {}),
           ...(query.financialYearId ? { financialYearId: query.financialYearId } : {}),
+          ...(query.parentId ? { parentId: query.parentId } : {}),
         },
         signal,
       },
@@ -74,5 +76,18 @@ export const ChartOfAccountsService = {
     );
     const data = unwrapData(response);
     return data?.previewNumber ?? "";
+  },
+
+  async generateCoaPdf(params: {
+    htmlContent: string;
+    filename: string;
+    landscape?: boolean;
+  }): Promise<Blob> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.ACCOUNTS.CHART_OF_ACCOUNTS.PDF,
+      { htmlContent: params.htmlContent, filename: params.filename, landscape: params.landscape ?? false },
+      { responseType: "blob" },
+    );
+    return response.data as Blob;
   },
 };

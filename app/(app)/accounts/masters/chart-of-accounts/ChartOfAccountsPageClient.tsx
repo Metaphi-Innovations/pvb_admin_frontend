@@ -79,6 +79,8 @@ import {
   type LedgerDetailDto,
   type LedgerOpeningBalanceDto,
 } from "@/services/ledger.service";
+import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
+import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 
 /** Ledger statement summary from API-backed COA records (no localStorage voucher demo). */
 function resolveLedgerOpeningBalance(
@@ -416,21 +418,44 @@ export default function ChartOfAccountsPageClient() {
     return filterLedgerStatementRows(ledgerAccounting.transactions, contentSearch);
   }, [ledgerAccounting, ledgerDataReady, selectedNode, contentSearch]);
 
+  const { data: backendSearchResults } = useQuery({
+    queryKey: [
+      "accounts",
+      "chart-of-accounts",
+      "search-results",
+      selectedNode?.apiNodeId ?? selectedNode?.id ?? null,
+      contentSearch,
+    ],
+    enabled: Boolean(contentSearch.trim() && !isLedgerStatementView),
+    queryFn: async ({ signal }) => {
+      const parentId = selectedNode?.apiNodeId ?? selectedNode?.id;
+      const tree = await ChartOfAccountsService.getTree({
+        includeLedgers: true,
+        search: contentSearch,
+        ...(parentId ? { parentId: String(parentId) } : {}),
+        signal,
+      });
+      return mapCoaApiTreeToRecords(tree);
+    },
+  });
+
+  const effectiveRecords = contentSearch.trim() ? (backendSearchResults ?? []) : deferredRecords;
+
   const ledgerListingRows = useMemo(() => {
     if (!selectedNode || !isAccountingGroupLedgerListing) return [];
-    const rows = buildCoaLedgerListingRows(deferredRecords, selectedNode.id, {
+    const rows = buildCoaLedgerListingRows(effectiveRecords, selectedNode.id, {
       search: contentSearch,
     });
     return rows;
-  }, [deferredRecords, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
+  }, [effectiveRecords, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
 
   const listingRows = useMemo(() => {
     if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
-    return buildCoaListingRows(deferredRecords, tableParentId, dateFrom, dateTo, {
+    return buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
       search: contentSearch,
     });
   }, [
-    deferredRecords,
+    effectiveRecords,
     tableParentId,
     dateFrom,
     dateTo,
@@ -463,7 +488,7 @@ export default function ChartOfAccountsPageClient() {
     }
 
     return computeCoaListingSummary(
-      records,
+      effectiveRecords,
       listingRows,
       selectedNode,
       showRoot,
@@ -472,7 +497,7 @@ export default function ChartOfAccountsPageClient() {
       Boolean(contentSearch.trim()),
     );
   }, [
-    records,
+    effectiveRecords,
     listingRows,
     selectedNode,
     showRoot,
@@ -554,10 +579,10 @@ export default function ChartOfAccountsPageClient() {
     }
   };
 
-  const handlePdfExport = () => {
+  const handlePdfExport = async () => {
     if (!mounted) return;
     if (isLedgerStatementView && selectedNode && ledgerAccounting) {
-      exportCoaLedgerStatementToPdf(filteredTransactions, {
+      await exportCoaLedgerStatementToPdf(filteredTransactions, {
         ledger: selectedNode,
         parentGroup: ledgerParentGroup,
         dateFrom,
@@ -568,11 +593,11 @@ export default function ChartOfAccountsPageClient() {
         closingSide: ledgerAccounting.balanceType,
       });
     } else if (isAccountingGroupLedgerListing && ledgerListingRows.length > 0) {
-      exportCoaLedgerListingToPdf(ledgerListingRows, {
+      await exportCoaLedgerListingToPdf(ledgerListingRows, {
         groupName: selectedNode?.accountName ?? "",
       });
     } else if (listingRows.length > 0) {
-      exportCoaListingToPdf(listingRows, exportMeta);
+      await exportCoaListingToPdf(listingRows, exportMeta);
     }
   };
 

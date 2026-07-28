@@ -301,11 +301,14 @@ export default function AccountsGenericLedgerFormClient({
 
       let savedId: CoaNodeId;
 
+      const parentNode = records.find((r) => r.id === form.parentGroupId);
+      const apiParentNodeId = parentNode?.apiNodeId || String(form.parentGroupId);
+
       if (mode === "add") {
         const created = await LedgerService.create({
           ledgerName: form.ledgerName.trim(),
           aliasName: form.alias?.trim() || null,
-          accountSubGroupId: String(form.parentGroupId),
+          accountSubGroupId: apiParentNodeId,
           description: form.description?.trim() || null,
           gstApplicable: form.gstApplicable,
           tdsApplicable: form.tdsApplicable,
@@ -320,7 +323,7 @@ export default function AccountsGenericLedgerFormClient({
         await LedgerService.update(active.apiNodeId ?? String(active.id), {
           ledgerName: form.ledgerName.trim(),
           aliasName: form.alias?.trim() || null,
-          accountSubGroupId: String(form.parentGroupId),
+          accountSubGroupId: apiParentNodeId,
           description: form.description?.trim() || null,
           gstApplicable: form.gstApplicable,
           tdsApplicable: form.tdsApplicable,

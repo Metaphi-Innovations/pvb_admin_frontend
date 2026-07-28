@@ -83,8 +83,10 @@ export function signedBalanceAfterMovements(
   return movements.reduce((s, m) => applyMovement(s, m.debit, m.credit), startSigned);
 }
 
+import { resolveOpeningSide } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+
 export function openingSignedBalance(ledger: ChartOfAccount): number {
-  return toSignedBalance(ledger.openingBalance, ledger.balanceType);
+  return toSignedBalance(ledger.openingBalance, resolveOpeningSide(ledger));
 }
 
 /**
