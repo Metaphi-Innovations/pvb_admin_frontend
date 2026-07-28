@@ -263,6 +263,17 @@ export const CustomerTypeListService = {
     }
   },
 
+  async delete(id: string): Promise<void> {
+    const response = await axiosInstance.delete(
+      API_ENDPOINTS.MASTER.CUSTOMER_TYPE.DELETE(id),
+    );
+
+    const body = response.data as Record<string, unknown>;
+    if (!body.success) {
+      throw new Error(asString(body.message) || "Failed to delete customer type.");
+    }
+  },
+
   async getFilterDropdown(
     fieldName: CustomerTypeFilterField,
     signal?: AbortSignal,

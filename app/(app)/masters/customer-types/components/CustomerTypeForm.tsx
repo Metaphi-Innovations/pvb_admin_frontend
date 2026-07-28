@@ -7,7 +7,6 @@ import {
 	User,
 	ChevronsUpDown,
 	Check,
-	Plus,
 	Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -318,18 +317,6 @@ export function CustomerTypeForm({
 		triggerToast?.("Document type removed", "success");
 	};
 
-	const handleManualDocument = () => {
-		const updated = [
-			...(form.documentTypes || []),
-			{
-				id: `DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-				documentName: "",
-				documentTypeId: undefined,
-			},
-		];
-		set("documentTypes", updated);
-	};
-
 	const handleUpdateDocument = (
 		id: string,
 		patch: Partial<CustomerTypeDocument>,
@@ -576,28 +563,17 @@ export function CustomerTypeForm({
 							</tbody>
 						</table>
 					</div>
-					{!readOnly && (
+					{!readOnly && (form.documentTypes || []).length > 0 && (
 						<div className='mt-2.5 flex flex-wrap gap-2'>
 							<Button
 								type='button'
 								variant='outline'
 								size='sm'
-								className='h-8 text-xs bg-white border-dashed'
-								onClick={handleManualDocument}
+								className='h-8 text-xs text-red-600 bg-white border-red-200 hover:bg-red-50 hover:text-red-700'
+								onClick={handleClearAllDocuments}
 							>
-								<Plus className='w-3.5 h-3.5 mr-1' /> Add Manual Document
+								<Trash2 className='w-3.5 h-3.5 mr-1' /> Remove All
 							</Button>
-							{(form.documentTypes || []).length > 0 && (
-								<Button
-									type='button'
-									variant='outline'
-									size='sm'
-									className='h-8 text-xs text-red-600 bg-white border-red-200 hover:bg-red-50 hover:text-red-700'
-									onClick={handleClearAllDocuments}
-								>
-									<Trash2 className='w-3.5 h-3.5 mr-1' /> Remove All
-								</Button>
-							)}
 						</div>
 					)}
 				</div>

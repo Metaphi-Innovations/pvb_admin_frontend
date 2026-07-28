@@ -106,9 +106,6 @@ export default function EditCategoryPage() {
             <h2 className="text-sm font-semibold text-foreground leading-none">Edit Category</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Category Master → Edit</p>
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            #{record.id}
-          </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
           </Button>

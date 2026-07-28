@@ -42,7 +42,10 @@ function NewPurchaseReturnContent() {
   const [formError, setFormError] = useState<string | null>(null);
   const initializedRef = useRef(false);
   const poQuery = usePurchaseOrder(poId || null);
-  const previewQuery = usePurchaseReturnPreviewNumber(Boolean(poId));
+  const previewQuery = usePurchaseReturnPreviewNumber(
+    poQuery.data?.warehouseId != null ? String(poQuery.data.warehouseId) : null,
+    Boolean(poId),
+  );
   const eligibleItemsQuery = useEligiblePurchaseReturnItems(poId || null);
   const createMutation = useCreatePurchaseReturn();
 

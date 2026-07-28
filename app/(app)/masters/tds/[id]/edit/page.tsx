@@ -15,10 +15,10 @@ import {
   validateTdsApiForm,
   type TdsApiForm,
   DEFAULT_TDS_API_FORM,
-  mergeApplicableToSelectOptions,
+  buildActiveCategorySelectOptions,
 } from "../../tds-data";
 import { TdsRateInput } from "../../TdsRateInput";
-import { useTds, useUpdateTds, useCategoryDropdown, useTdsFilterDropdown } from "@/hooks/masters";
+import { useTds, useUpdateTds, useCategoryDropdown } from "@/hooks/masters";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 function FieldError({ msg }: { msg?: string }) {
@@ -39,19 +39,17 @@ export default function EditTDSPage() {
   const detailQuery = useTds(id);
   const updateMutation = useUpdateTds();
   const categoryQuery = useCategoryDropdown();
-  const applicableToOptionsQuery = useTdsFilterDropdown("applicable_to");
   const [form, setForm] = useState<TdsApiForm>(DEFAULT_TDS_API_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
   const applicableOptions = useMemo(
     () =>
-      mergeApplicableToSelectOptions(
+      buildActiveCategorySelectOptions(
         categoryQuery.data ?? [],
         form.applicableTo,
-        applicableToOptionsQuery.data,
       ),
-    [categoryQuery.data, form.applicableTo, applicableToOptionsQuery.data],
+    [categoryQuery.data, form.applicableTo],
   );
 
   useEffect(() => {
@@ -101,7 +99,7 @@ export default function EditTDSPage() {
         id,
         payload: {
           tds_rate: rate,
-          tds_section_name: form.sectionName.trim() || null,
+          tds_section_name: form.sectionName.trim(),
           applicable_to: form.applicableTo.trim() || null,
           description: form.description.trim() || null,
         },
@@ -177,13 +175,16 @@ export default function EditTDSPage() {
             </div>
 
             <div className="sm:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">TDS Section Name</Label>
+              <Label className="text-xs font-medium">
+                TDS Section Name <span className="text-red-500">*</span>
+              </Label>
               <Input
                 value={form.sectionName}
                 onChange={(e) => set("sectionName", e.target.value)}
-                className="h-8 text-xs"
+                className={cn("h-8 text-xs", errors.sectionName && "border-red-400")}
                 placeholder="e.g. Professional Fees"
               />
+              <FieldError msg={errors.sectionName} />
             </div>
 
             <div className="sm:col-span-2 space-y-1">

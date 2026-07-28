@@ -36,6 +36,7 @@ export function MasterListing<T = any>({
   currentFilters,
   currentSort,
   onOpenFilter,
+  onPageJumpError,
 }: MasterListingProps<T>) {
   // Sort State
   const [sortState, setSortState] = useState<SortState>({
@@ -340,6 +341,7 @@ export function MasterListing<T = any>({
           totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
+          onPageJumpError={onPageJumpError}
         />
       </div>
     </div>

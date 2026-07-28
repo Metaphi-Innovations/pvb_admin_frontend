@@ -223,7 +223,7 @@ export default function NewSupplierPage() {
           </div>
         )}
 
-        <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
+        <div className="flex-1 px-6 py-6 pb-24 overflow-y-auto bg-muted/10">
           <VendorForm
             form={form}
             onChange={handleFormChange}

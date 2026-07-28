@@ -9,7 +9,6 @@ import {
   Plus,
   Eye,
   Edit2,
-  Trash2,
   Building2,
   CheckCircle2,
   XCircle,
@@ -36,7 +35,13 @@ import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
-import { useSuppliers, useToggleSupplierStatus, useExportSuppliers, useSupplierFilterDropdown } from "@/hooks/masters";
+import {
+  useSuppliers,
+  useSupplierSummary,
+  useToggleSupplierStatus,
+  useExportSuppliers,
+  useSupplierFilterDropdown,
+} from "@/hooks/masters";
 import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { mergeListRequestFilters, MASTER_FILTER_FIELD_MAPS, resolveListStatus } from "@/lib/masters/list-api-filters";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
@@ -75,13 +80,7 @@ export default function VendorMasterPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SupplierListRecord | null>(null);
-
-  // const refresh = useCallback(() => setRecords(loadVendors()), []);
-
-  // useEffect(() => {
-  //   refresh();
-  // }, [refresh]);
+  const [statusTarget, setStatusTarget] = useState<SupplierListRecord | null>(null);
 
   const apiFilters = useMemo(
     () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.supplier),
@@ -101,6 +100,7 @@ export default function VendorMasterPage() {
   }), [page, pageSize, appliedSearch, sort, listStatus, apiFilters]);
 
   const { data } = useSuppliers(listParams);
+  const { data: summary } = useSupplierSummary();
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 
@@ -157,45 +157,29 @@ export default function VendorMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // const toggleStatus = (record: Vendor) => {
-  //   const nextStatus = record.status === "active" ? "inactive" : "active";
-  //   const updated: Vendor = {
-  //     ...record,
-  //     status: nextStatus,
-  //     updatedBy: CURRENT_USER,
-  //     updatedDate: todayStr(),
-  //   };
-  //   const updatedList = records.map((x) => (x.id === record.id ? updated : x));
-  //   saveVendors(updatedList);
-  //   setRecords(updatedList);
-  //   setToast({ msg: `Vendor status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
-  // };
-
   const toggleStatusMutation = useToggleSupplierStatus();
-  const toggleStatus = (record: SupplierListRecord) => {
-    const nextActive = record.status !== "active";
-    toggleStatusMutation.mutate(
-      { id: record.supplierUuid, isActive: nextActive },
-      {
-        onSuccess: () => setToast({ msg: `Vendor status updated to ${nextActive ? "Active" : "Inactive"}`, type: "success" }),
-        onError: (err) => setToast({ msg: SupplierListService.extractErrorMessage(err, "Failed to update status"), type: "error" }),
-      },
-    );
+
+  const requestStatusToggle = (record: SupplierListRecord) => {
+    setStatusTarget(record);
   };
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
+  const confirmStatusChange = () => {
+    if (!statusTarget) return;
+    const nextActive = statusTarget.status !== "active";
     toggleStatusMutation.mutate(
-      { id: deleteTarget.supplierUuid, isActive: false },
+      { id: statusTarget.supplierUuid, isActive: nextActive },
       {
-        onSuccess: () => {
-          setToast({ msg: `"${deleteTarget.supplierName}" marked as inactive`, type: "success" });
-          setDeleteTarget(null);
-        },
-        onError: (err) => {
-          setToast({ msg: SupplierListService.extractErrorMessage(err, "Failed to deactivate"), type: "error" });
-          setDeleteTarget(null);
-        },
+        onSuccess: () =>
+          setToast({
+            msg: `Vendor status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          }),
+        onError: (err) =>
+          setToast({
+            msg: SupplierListService.extractErrorMessage(err, "Failed to update status"),
+            type: "error",
+          }),
+        onSettled: () => setStatusTarget(null),
       },
     );
   };
@@ -204,7 +188,6 @@ export default function VendorMasterPage() {
     {
       key: "supplierCode",
       header: "Supplier Code",
-      // colKey: "supplier_code",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
@@ -235,7 +218,7 @@ export default function VendorMasterPage() {
     {
       key: "supplierType",
       header: "Supplier Type",
-      sortable: false,
+      sortable: true,
       filterable: true,
       filterType: "dropdown",
       filterOptions: supplierTypeOptions,
@@ -279,6 +262,18 @@ export default function VendorMasterPage() {
       ),
     },
     {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: statusOptions,
+      width: "110px",
+      render: (_val, row) => (
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => requestStatusToggle(row)} />
+      ),
+    },
+    {
       key: "createdBy",
       header: "Created By",
       sortable: true,
@@ -302,18 +297,6 @@ export default function VendorMasterPage() {
         <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
       ),
     },
-    {
-      key: "status",
-      header: "Status",
-      sortable: false,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: statusOptions,
-      width: "110px",
-      render: (_val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
-      ),
-    },
   ];
 
   const actions: ActionItemConfig<SupplierListRecord>[] = [
@@ -329,50 +312,7 @@ export default function VendorMasterPage() {
       icon: Edit2,
       onClick: (row) => router.push(`/masters/vendors/${row.supplierUuid}/edit`),
     },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
-    },
   ];
-
-  // const filtered = useMemo(() => {
-  //   // let result = [...records];
-
-  //   if (filters.search) {
-  //     const q = String(filters.search).trim().toLowerCase();
-  //     result = result.filter(
-  //       (v) =>
-  //         (v.supplierCode || "").toLowerCase().includes(q) ||
-  //         v.supplierName.toLowerCase().includes(q) ||
-  //         (v.vendorType || "").toLowerCase().includes(q) ||
-  //         (v.contactPerson || "").toLowerCase().includes(q) ||
-  //         v.mobile.includes(q) ||
-  //         v.email.toLowerCase().includes(q) ||
-  //         v.gstNumber.toLowerCase().includes(q)
-  //     );
-  //   }
-
-  //   result = applyFilters(result, filters);
-
-  //   if (sort.key && sort.direction !== "none") {
-  //     result.sort((a, b) => {
-  //       const av = String((a as unknown as Record<string, unknown>)[sort.key] ?? "");
-  //       const bv = String((b as unknown as Record<string, unknown>)[sort.key] ?? "");
-  //       const cmp = av.localeCompare(bv);
-  //       return sort.direction === "asc" ? cmp : -cmp;
-  //     });
-  //   }
-
-  //   return result;
-  // }, [records, filters, sort]);
-
-  // const paginated = useMemo(() => {
-  //   const startOffset = (page - 1) * pageSize;
-  //   return filtered.slice(startOffset, startOffset + pageSize);
-  // }, [filtered, page, pageSize]);
 
   const exportMutation = useExportSuppliers();
   const handleExport = () => {
@@ -395,9 +335,9 @@ export default function VendorMasterPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total Suppliers" value={total} icon={Building2} accent={true} />
-          <MiniKPICard label="Active" value={items.filter((v) => v.status === "active").length} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Inactive" value={items.filter((v) => v.status === "inactive").length} icon={XCircle} accent={false} />
+          <MiniKPICard label="Total Suppliers" value={summary?.total ?? total} icon={Building2} accent={true} />
+          <MiniKPICard label="Active" value={summary?.active ?? 0} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Inactive" value={summary?.inactive ?? 0} icon={XCircle} accent={false} />
         </div>
 
         <MasterListing
@@ -422,43 +362,53 @@ export default function VendorMasterPage() {
           currentFilters={filters}
           currentSort={sort}
           onOpenFilter={handleOpenFilter}
+          onPageJumpError={(msg) => setToast({ msg, type: "error" })}
         />
       </div>
 
-      {deleteTarget && (
-        <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                </div>
-                Deactivate Supplier?
-              </DialogTitle>
-              <DialogDescription className="pt-1 text-xs">
-                <strong className="text-foreground">{deleteTarget.supplierName}</strong> will be marked as inactive.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
-                onClick={confirmDelete}
-              >
-                Mark Inactive
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              {statusTarget?.status === "active" ? "Deactivate Supplier?" : "Activate Supplier?"}
+            </DialogTitle>
+            <DialogDescription className="pt-1 text-xs">
+              {statusTarget && (
+                <>
+                  <strong className="text-foreground">{statusTarget.supplierName}</strong> will be marked
+                  as {statusTarget.status === "active" ? "inactive" : "active"}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setStatusTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className={cn(
+                "h-8 text-xs text-white",
+                statusTarget?.status === "active"
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-emerald-600 hover:bg-emerald-700",
+              )}
+              onClick={confirmStatusChange}
+              disabled={toggleStatusMutation.isPending}
+            >
+              {statusTarget?.status === "active" ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>

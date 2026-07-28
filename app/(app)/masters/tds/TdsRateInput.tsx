@@ -20,6 +20,7 @@ export function TdsRateInput({
 		<div className="relative">
 			<Input
 				{...props}
+				inputMode="decimal"
 				value={value}
 				onChange={(e) => onChange(sanitizeTdsRateInput(e.target.value))}
 				className={cn(className, showSuffix && "pr-7")}

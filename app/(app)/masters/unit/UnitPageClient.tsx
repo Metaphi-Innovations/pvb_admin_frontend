@@ -547,12 +547,6 @@ export default function UnitMasterPage() {
                             >
                               <Edit2 className="h-3.5 w-3.5" /> Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteTarget(row)}
-                              className="flex items-center gap-2 text-red-600 cursor-pointer focus:text-red-700"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
-                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -674,25 +668,6 @@ export default function UnitMasterPage() {
           </div>
         }
       />
-
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>

@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { CustomerBranch } from "@/app/(app)/masters/customers/customer-data";
+import { createFlatDateAuditFieldMapper } from "@/lib/masters/list-api-filters";
 
 export interface CustomerBranchDocumentPayload {
     document_type_id: string;
@@ -28,7 +29,7 @@ export interface CustomerBranchPayload {
     billing_city: string;
     billing_town: string;
     billing_pincode: string;
-    billing_pincode_id: string;
+    billing_pincode_id?: string | null;
     shipping_country: string;
     shipping_address_line_1: string;
     shipping_address_line_2: string;
@@ -36,7 +37,7 @@ export interface CustomerBranchPayload {
     shipping_city: string;
     shipping_town: string;
     shipping_pincode: string;
-    shipping_pincode_id: string;
+    shipping_pincode_id?: string | null;
     documents: CustomerBranchDocumentPayload[];
 }
 
@@ -84,6 +85,8 @@ export interface CustomerCreatePayload {
     account_number?: string;
     ifsc_code?: string;
     swift_code?: string;
+
+    status?: "Active" | "Inactive";
 
     branches: CustomerBranchPayload[];
 
@@ -225,6 +228,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
     customerCode: "customer_code",
     customerName: "customer_name",
     customerType: "customer_type__customer_type_name",
+    mobile: "mobile_no",
     mobileNo: "mobile_no",
     email: "email",
     paymentType: "payment_type",
@@ -232,12 +236,27 @@ const SORT_FIELD_MAP: Record<string, string> = {
     creditDays: "credit_days",
     status: "status",
     address: "address",
+    createdBy: "created_at",
+    updatedBy: "updated_at",
 };
+
+const createdByAuditMapper = createFlatDateAuditFieldMapper({
+    userField: "created_by_user.username",
+    fromKey: "created_at_from",
+    toKey: "created_at_to",
+});
+
+const updatedByAuditMapper = createFlatDateAuditFieldMapper({
+    userField: "updated_by_user.username",
+    fromKey: "updated_at_from",
+    toKey: "updated_at_to",
+});
 
 const FILTER_FIELD_MAP: Record<string, string> = {
     customerNumber: "customer_code",
     customerCode: "customer_code",
     customerName: "customer_name",
+    mobile: "mobile_no",
     mobileNo: "mobile_no",
     email: "email",
 
@@ -281,21 +300,21 @@ function mapFilters(filters: Record<string, unknown> = {}) {
             value !== null &&
             !Array.isArray(value)
         ) {
-            const audit = value as { user?: string; fromDate?: string; toDate?: string };
-            const user = String(audit.user ?? "").trim();
-            const fromDate = String(audit.fromDate ?? "").trim();
-            const toDate = String(audit.toDate ?? "").trim();
+            const mapper = key === "createdBy" ? createdByAuditMapper : updatedByAuditMapper;
+            if (typeof mapper !== "function") {
+                continue;
+            }
+            const mappedAudit = mapper(value as { user?: string; fromDate?: string; toDate?: string });
+            if (mappedAudit) {
+                Object.assign(mapped, mappedAudit);
+            }
+            continue;
+        }
 
-            if (user) {
-                // Audit username filter is not backed by customer-level salesman anymore
-            }
-            if (key === "createdBy") {
-                if (fromDate) mapped.created_at_from = fromDate;
-                if (toDate) mapped.created_at_to = toDate;
-            } else {
-                if (fromDate) mapped.updated_at_from = fromDate;
-                if (toDate) mapped.updated_at_to = toDate;
-            }
+        if (key === "mobile" || key === "mobileNo") {
+            const raw = String(Array.isArray(value) ? value[0] : value).trim();
+            const digits = raw.replace(/^\+\d+\s*/, "").replace(/\D/g, "");
+            if (digits) mapped.mobile_no = digits;
             continue;
         }
 
@@ -455,8 +474,8 @@ function mapItem(
         createdAt: formatDate(raw.created_at),
         updatedAt: formatDate(raw.updated_at),
 
-        createdBy: toDisplayName(raw.created_by),
-        updatedBy: toDisplayName(raw.updated_by),
+        createdBy: toDisplayName(raw.created_by_user ?? raw.created_by),
+        updatedBy: toDisplayName(raw.updated_by_user ?? raw.updated_by),
     };
 }
 

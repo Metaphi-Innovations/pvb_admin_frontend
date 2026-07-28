@@ -504,8 +504,18 @@ export const PurchaseReturnService = {
     return mapDetail(assertDataObject(payload, "Unexpected purchase return details response."));
   },
 
-  async getPreviewNumber(signal?: AbortSignal): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.PROCUREMENT.PURCHASE_RETURN.PREVIEW_NUMBER, { signal });
+  async getPreviewNumber(
+    warehouseId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_RETURN.PREVIEW_NUMBER,
+      {
+        signal,
+        params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
     const payload = response.data as Record<string, unknown>;
     const data = assertDataObject(payload, "Unexpected purchase return preview response.");
     return asString(data.return_no);

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
 import { useSupplier, useSupplierPreviewNumber, useUpdateSupplier } from "@/hooks/masters/use-supplier";
-import { DEFAULT_VENDOR_FORM, VendorFormValues, validateVendorForm } from "../../vendor-data";
+import { DEFAULT_VENDOR_FORM, VendorFormValues, collectVendorFormFieldErrors } from "../../vendor-data";
 import { VendorForm } from "../../components/VendorForm";
 import {
   loadPartyMasterAccounting,
@@ -23,6 +23,7 @@ export default function EditSupplierPage() {
   const { data: supplier, isLoading, isError } = useSupplier(id);
   const [form, setForm] = useState<VendorFormValues>(DEFAULT_VENDOR_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errorFocusToken, setErrorFocusToken] = useState(0);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const { data: previewCode } = useSupplierPreviewNumber(form.vendorType, true);
 
@@ -109,7 +110,9 @@ export default function EditSupplierPage() {
       ifscCode: supplier.bankAccounts?.[0]?.ifsc_code ?? "",
       swiftCode: supplier.bankAccounts?.[0]?.swift_code ?? "",
       paymentType:
-        (supplier.bankAccounts?.[0]?.payment_type as VendorFormValues["paymentType"]) ?? "",
+        (supplier.bankAccounts?.[0]?.payment_type?.startsWith("immediate")
+          ? "immediate"
+          : supplier.bankAccounts?.[0]?.payment_type) as VendorFormValues["paymentType"] ?? "",
       creditDays: String(supplier.bankAccounts?.[0]?.credit_days ?? ""),
     });
 
@@ -156,11 +159,11 @@ export default function EditSupplierPage() {
     });
 
   const handleSave = () => {
-    const validationError = validateVendorForm(form);
-
-    if (validationError) {
-      setErrors({ form: validationError });
-      setToast({ msg: validationError, type: "error" });
+    const fieldErrors = collectVendorFormFieldErrors(form);
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrorFocusToken((t) => t + 1);
+      setToast({ msg: Object.values(fieldErrors)[0], type: "error" });
       setTimeout(() => setToast(null), 3200);
       return;
     }
@@ -277,7 +280,9 @@ export default function EditSupplierPage() {
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none text-foreground">Edit Supplier</h2>
+            <h2 className="text-sm font-semibold leading-none text-foreground">
+              Edit Supplier — {supplier.supplierName}
+            </h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Supplier Master → Edit</p>
           </div>
           <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
@@ -297,11 +302,13 @@ export default function EditSupplierPage() {
         </div>
 
         {/* Form Content */}
-        <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
+        <div className="flex-1 px-6 py-6 pb-24 overflow-y-auto bg-muted/10">
           <VendorForm
             form={form}
             onChange={setForm}
             vendorCode={supplier.supplierCode}
+            errors={errors}
+            errorFocusToken={errorFocusToken}
           />
         </div>
       </div>

@@ -49,7 +49,7 @@ export default function AddVendorTypePage() {
       {
         onSuccess: () => {
           setToast({ msg: "Supplier type added successfully.", type: "success" });
-          setTimeout(() => router.push("/masters/vendor-type"), 900);
+          router.push("/masters/vendor-type");
         },
         onError: (err) => {
           const msg =

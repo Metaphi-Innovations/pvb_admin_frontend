@@ -31,6 +31,7 @@ import {
   formatTdsRateDisplay,
   formatApplicableToLabel,
   mergeApplicableToSelectOptions,
+  buildActiveCategorySelectOptions,
 } from "./tds-data";
 import { TdsRateInput } from "./TdsRateInput";
 import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
@@ -143,7 +144,7 @@ function buildApiPayload(form: TdsApiForm) {
   const rate = Number(form.tdsRate.trim().replace(/%$/, ""));
   return {
     tds_rate: rate,
-    tds_section_name: form.sectionName.trim() || null,
+    tds_section_name: form.sectionName.trim(),
     applicable_to: form.applicableTo.trim() || null,
     description: form.description.trim() || null,
   };
@@ -237,12 +238,11 @@ export default function TdsPageClient() {
   );
   const applicableOptions = useMemo(
     () =>
-      mergeApplicableToSelectOptions(
+      buildActiveCategorySelectOptions(
         categoryQuery.data ?? [],
         form.applicableTo,
-        applicableToOptionsQuery.data,
       ),
-    [categoryQuery.data, form.applicableTo, applicableToOptionsQuery.data],
+    [categoryQuery.data, form.applicableTo],
   );
 
   const applicableToFilterOptions = useMemo(
@@ -302,11 +302,6 @@ export default function TdsPageClient() {
   useEffect(() => {
     setPage(1);
   }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
-
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(totalRecords / pageSize));
-    if (page > maxPage) setPage(maxPage);
-  }, [totalRecords, pageSize, page]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -675,6 +670,7 @@ export default function TdsPageClient() {
         currentFilters={filters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
+        onPageJumpError={(msg) => setToast({ msg, type: "error" })}
       />
 
       <MasterListingSheets
@@ -687,13 +683,14 @@ export default function TdsPageClient() {
         icon={Percent}
         formError={formError ?? undefined}
         saving={saving}
+        hideFormDescription
         viewDrawer={viewDrawer}
         formContent={
           sheetMode !== "view" ? (
             <MasterFormGrid>
               <MasterField label="TDS Rate %" required error={errors.tdsRate}>
                 <TdsRateInput
-                  className={compactInput()}
+                  className={cn(compactInput(), errors.tdsRate && "border-red-400")}
                   value={form.tdsRate}
                   onChange={(value) => setForm((prev) => ({ ...prev, tdsRate: value }))}
                   placeholder="e.g. 10"
@@ -702,6 +699,8 @@ export default function TdsPageClient() {
 
               <MasterField
                 label="TDS Section Name"
+                required
+                error={errors.sectionName}
                 className="sm:col-span-2"
               >
                 <Input

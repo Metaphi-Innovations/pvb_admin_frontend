@@ -214,7 +214,7 @@ export function POLineItemsSection({
 
   const quickAdd = () => {
     if (quickProductIds.length === 0) return;
-    const packingQty = Number(quickQty) || 1;
+    const packingQty = Math.max(1, Number(quickQty) || 1);
     const nextLines = [...form.lines];
 
     for (const idStr of quickProductIds) {
@@ -359,7 +359,12 @@ export function POLineItemsSection({
                 type="number"
                 min={1}
                 value={quickQty}
-                onChange={(e) => setQuickQty(e.target.value)}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val > 0 || e.target.value === "") {
+                    setQuickQty(e.target.value);
+                  }
+                }}
                 className={inputCls}
               />
             </div>
@@ -557,9 +562,12 @@ export function POLineItemsSection({
                             min={1}
                             value={draft.packingQty}
                             onChange={(e) => {
-                              setInlineEditDraft((prev) =>
-                                prev ? { ...prev, packingQty: e.target.value } : prev,
-                              );
+                              const val = Number(e.target.value);
+                              if (val > 0 || e.target.value === "") {
+                                setInlineEditDraft((prev) =>
+                                  prev ? { ...prev, packingQty: e.target.value } : prev,
+                                );
+                              }
                               setInlineEditError(null);
                             }}
                             className={cn(inputCls, "w-16 ml-auto text-right", inlineEditError && "border-red-400")}
