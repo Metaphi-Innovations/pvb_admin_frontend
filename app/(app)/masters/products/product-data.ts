@@ -1441,6 +1441,7 @@ export const PRODUCT_API_FIELD_MAP: Record<string, string> = {
   net_weight: "netWeightPerPackagingUnit",
   gross_weight: "grossWeight",
   mrp: "mrp",
+  cost_price: "costPrice",
   status: "status",
   is_active: "status",
 };

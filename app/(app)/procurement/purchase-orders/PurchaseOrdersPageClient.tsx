@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Scissors,
   MessageSquare,
+  FileText,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { Toast } from "../components/ProcurementUI";
@@ -142,6 +143,7 @@ export default function PurchaseOrdersPageClient() {
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
   const [modalFollowups, setModalFollowups] = useState<POFollowUpEntry[]>([]);
+  const [downloadingPoId, setDownloadingPoId] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
@@ -425,6 +427,30 @@ export default function PurchaseOrdersPageClient() {
     );
   };
 
+  const handleDownloadPdf = async (row: PurchaseOrderListItem) => {
+    const popup = PurchaseOrderService.openPdfWindow();
+    if (!popup) {
+      setToast({
+        msg: "Popup blocked. Please allow popups and try again.",
+        type: "error",
+      });
+      return;
+    }
+    try {
+      setDownloadingPoId(row.id);
+      await PurchaseOrderService.downloadPdfById(row.id, { openedWindow: popup });
+      setToast({ msg: "PO PDF ready. Use browser save as PDF.", type: "success" });
+    } catch (error) {
+      popup.close();
+      setToast({
+        msg: getErrorMessage(error, "Failed to generate PO PDF."),
+        type: "error",
+      });
+    } finally {
+      setDownloadingPoId(null);
+    }
+  };
+
   const columns: ColumnConfig<PurchaseOrderListItem>[] = [
     {
       key: "poNumber",
@@ -573,6 +599,15 @@ export default function PurchaseOrdersPageClient() {
               className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
             >
               <Eye className="w-3.5 h-3.5" /> View
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownloadPdf(row)}
+              disabled={downloadingPoId === row.id}
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {downloadingPoId === row.id ? "Generating PDF..." : "Download PDF"}
             </button>
             {(["draft", "rejected"] as POListStatus[]).includes(row.status) && (
               <button

@@ -131,7 +131,7 @@ export function AutocompleteSelect({
           disabled={disabled}
           className={cn(
             "flex w-full cursor-pointer items-center justify-between border border-border bg-white px-3 py-2 text-left shadow-sm",
-            "transition-colors select-none text-left focus:outline-none",
+            "transition-colors select-none text-left focus:outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-200",
             !className?.includes("h-") && "h-9",
             !className?.includes("text-") && "text-xs",
             !className?.includes("rounded-") && "rounded-lg",
@@ -145,7 +145,7 @@ export function AutocompleteSelect({
             className
           )}
         >
-          <span className={cn("truncate flex-1", (multiple ? (Array.isArray(value) && value.length > 0) : value) ? "text-foreground" : "text-muted-foreground")}>
+          <span className={cn("truncate flex-1", (multiple ? (Array.isArray(value) && value.length > 0) : value) ? "text-foreground" : "text-slate-500")}>
             {getSelectedLabel()}
           </span>
           <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-2" />
