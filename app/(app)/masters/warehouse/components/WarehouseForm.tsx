@@ -391,6 +391,63 @@ export function validateWarehouseForm(
 	return e;
 }
 
+export const WAREHOUSE_FORM_STEPS = [
+	{ id: "basic", label: "Basic Details" },
+	{ id: "contact", label: "Contact Details" },
+	{ id: "address", label: "Address" },
+	{ id: "gst", label: "GST & Tax" },
+	{ id: "bank", label: "Bank Details" },
+	{ id: "documents", label: "Documents" },
+] as const;
+
+export type WarehouseFormStepId = (typeof WAREHOUSE_FORM_STEPS)[number]["id"];
+
+export function validateWarehouseFormStep(
+	form: WarehouseFormValues,
+	stepId: WarehouseFormStepId,
+): Record<string, string> {
+	const all = validateWarehouseForm(form);
+	const e: Record<string, string> = {};
+
+	if (stepId === "basic") {
+		if (all.warehouseName) e.warehouseName = all.warehouseName;
+		if (all.customerType) e.customerType = all.customerType;
+		return e;
+	}
+	if (stepId === "contact") {
+		Object.keys(all).forEach((key) => {
+			if (
+				key === "contacts" ||
+				key.startsWith("contactPerson_") ||
+				key.startsWith("mobileNumber_") ||
+				key.startsWith("emailAddress_")
+			) {
+				e[key] = all[key];
+			}
+		});
+		return e;
+	}
+	if (stepId === "address") {
+		(["address", "pincode", "state", "city", "town", "district"] as const).forEach((key) => {
+			if (all[key]) e[key] = all[key];
+		});
+		return e;
+	}
+	if (stepId === "gst") {
+		(["gstRegistrationType", "gstin"] as const).forEach((key) => {
+			if (all[key]) e[key] = all[key];
+		});
+		return e;
+	}
+	if (stepId === "bank") {
+		(["confirmAccountNumber", "ifscCode"] as const).forEach((key) => {
+			if (all[key]) e[key] = all[key];
+		});
+		return e;
+	}
+	return {};
+}
+
 // ── Autocomplete (matches EmployeeForm AC) ────────────────────────────────────
 interface ACOption {
 	label: string;
@@ -826,11 +883,14 @@ export function WarehouseForm({
 	onChange,
 	errors,
 	onClearError,
+	activeStep,
 }: {
 	form: WarehouseFormValues;
 	onChange: (f: WarehouseFormValues) => void;
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
+	/** When set, only the matching section is rendered (Add wizard). */
+	activeStep?: WarehouseFormStepId;
 }) {
 	const [toast, setToast] = useState<{
 		msg: string;
@@ -1212,9 +1272,12 @@ export function WarehouseForm({
 		);
 
 
+	const show = (stepId: WarehouseFormStepId) => !activeStep || activeStep === stepId;
+
 	return (
 		<div className='w-full space-y-3'>
 			{/* ── Section 1: Basic Details ─────────────────────────── */}
+			{show("basic") && (
 			<div>
 				<SectionHead
 					label='Warehouse Basic Details'
@@ -1273,8 +1336,10 @@ export function WarehouseForm({
 					)}
 				</div>
 			</div>
+			)}
 
 			{/* ── Section 2: Contact Details ────────────────────────── */}
+			{show("contact") && (
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Contact Details'
@@ -1341,19 +1406,26 @@ export function WarehouseForm({
 											/>
 											<Input
 												value={contact.mobileNumber}
-												onChange={(e) =>
-													updateContact(
-														index,
-														"mobileNumber",
-														e.target.value.replace(/\D/g, "").slice(0, 10),
-													)
-												}
+												onChange={(e) => {
+													const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+													updateContact(index, "mobileNumber", digits);
+												}}
+												onBeforeInput={(e) => {
+													const input = e.nativeEvent as InputEvent;
+													const data = input.data ?? "";
+													if (!data) return;
+													const el = e.currentTarget;
+													const selected = (el.selectionEnd ?? 0) - (el.selectionStart ?? 0);
+													const nextLen = el.value.length - selected + data.replace(/\D/g, "").length;
+													if (nextLen > 10) e.preventDefault();
+												}}
 												placeholder='10-digit mobile'
 												className={cn(
 													"flex-1 h-8 text-xs",
 													mobErr && "border-red-400 focus-visible:ring-red-300",
 												)}
 												inputMode='numeric'
+												maxLength={10}
 											/>
 										</div>
 										<FieldError msg={mobErr} />
@@ -1382,16 +1454,23 @@ export function WarehouseForm({
 										<Label className='text-xs font-medium'>Alternate Contact</Label>
 										<Input
 											value={contact.alternateContact || ""}
-											onChange={(e) =>
-												updateContact(
-													index,
-													"alternateContact",
-													e.target.value.replace(/\D/g, "").slice(0, 10),
-												)
-											}
+											onChange={(e) => {
+												const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+												updateContact(index, "alternateContact", digits);
+											}}
+											onBeforeInput={(e) => {
+												const input = e.nativeEvent as InputEvent;
+												const data = input.data ?? "";
+												if (!data) return;
+												const el = e.currentTarget;
+												const selected = (el.selectionEnd ?? 0) - (el.selectionStart ?? 0);
+												const nextLen = el.value.length - selected + data.replace(/\D/g, "").length;
+												if (nextLen > 10) e.preventDefault();
+											}}
 											placeholder='10-digit mobile'
 											className='h-8 text-xs'
 											inputMode='numeric'
+											maxLength={10}
 										/>
 									</div>
 
@@ -1438,6 +1517,7 @@ export function WarehouseForm({
 					</Button>
 				</div>
 			</div>
+			)}
 
 			{/* Toast */}
 			{toast && (
@@ -1458,6 +1538,7 @@ export function WarehouseForm({
 			)}
 
 			{/* ── Section 3: Address Details ────────────────────────── */}
+			{show("address") && (
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Address & Location Details'
@@ -1479,8 +1560,10 @@ export function WarehouseForm({
 					}}
 				/>
 			</div>
+			)}
 
 			{/* ── Section 4: GST & Tax Details ──────────────────────── */}
+			{show("gst") && (
 			<div className='pt-3 border-t border-border/60'>
 				<ErpFormSection
 					title='GST & Tax Details'
@@ -1533,8 +1616,10 @@ export function WarehouseForm({
 					/>
 				</ErpFormSection>
 			</div>
+			)}
 
 			{/* ── Section 5: Bank Details ─────────────────────────── */}
+			{show("bank") && (
 			<div className='pt-3 border-t border-border/60'>
 				<ErpFormSection title='Bank Details'>
 					<BankDetailsFields
@@ -1558,8 +1643,10 @@ export function WarehouseForm({
 					/>
 				</ErpFormSection>
 			</div>
+			)}
 
 			{/* ── Section 6: Documents ─────────────────────────────── */}
+			{show("documents") && (
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Warehouse Documents'
@@ -1688,6 +1775,7 @@ export function WarehouseForm({
 					)}
 				</div>
 			</div>
+			)}
 		</div>
 	);
 }

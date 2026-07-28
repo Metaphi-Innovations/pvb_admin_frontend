@@ -32,7 +32,7 @@ export interface TdsListResult {
 
 export interface TdsCreatePayload {
   tds_rate: number;
-  tds_section_name?: string | null;
+  tds_section_name: string;
   applicable_to?: string | null;
   description?: string | null;
 }
@@ -78,6 +78,8 @@ const SORT_KEY_TO_ORDERING: Record<string, string> = {
   applicableTo: "applicableTo",
   description: "description",
   status: "isActive",
+  createdBy: "createdAt",
+  updatedBy: "updatedAt",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 };
@@ -232,7 +234,7 @@ export const TdsListService = {
     );
 
     const totalRecords = Number(payload.totalRecords ?? payload.count);
-    const total = Number.isFinite(totalRecords) ? totalRecords : items.length;
+    const total = Number.isFinite(totalRecords) ? totalRecords : 0;
 
     return { items, total };
   },

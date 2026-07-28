@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -60,8 +60,8 @@ function WarehouseDocumentsSection({
   documents: WarehouseDocumentPayload[];
 }) {
   const [previewDoc, setPreviewDoc] = useState<WarehouseDocumentPayload | null>(null);
-  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadInFlight = useRef<Set<string>>(new Set());
 
   const fileDocuments = documents.filter((doc) => !isWarehouseDocumentLink(doc));
   const linkDocuments = documents.filter((doc) => isWarehouseDocumentLink(doc));
@@ -71,25 +71,39 @@ function WarehouseDocumentsSection({
 
   const handleDownload = async (doc: WarehouseDocumentPayload) => {
     const docKey = getDocumentKey(doc);
+    if (downloadInFlight.current.has(docKey)) return;
+    downloadInFlight.current.add(docKey);
     setDownloadError(null);
-    setDownloadingKey(docKey);
     try {
       await downloadWarehouseDocument(doc);
     } catch {
       setDownloadError("Failed to download document. Please try again.");
     } finally {
-      setDownloadingKey(null);
+      downloadInFlight.current.delete(docKey);
     }
   };
 
   const openDocument = (doc: WarehouseDocumentPayload) => {
     const url = getWarehouseDocumentPreviewUrl(doc);
-    if (!url) return;
+    if (!url) {
+      setDownloadError("Document URL is missing or invalid.");
+      return;
+    }
     if (isWarehouseImageDocument(doc)) {
       setPreviewDoc(doc);
       return;
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      // Popup blocked — fall back to same-tab navigation via temporary anchor
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
   };
 
   return (
@@ -117,7 +131,6 @@ function WarehouseDocumentsSection({
                     const previewUrl = getWarehouseDocumentPreviewUrl(doc);
                     const isImage = isWarehouseImageDocument(doc);
                     const docKey = getDocumentKey(doc);
-                    const isDownloading = downloadingKey === docKey;
 
                     return (
                       <tr
@@ -148,11 +161,10 @@ function WarehouseDocumentsSection({
                                   variant="ghost"
                                   size="sm"
                                   className="h-7 px-2 text-[10px] font-medium text-brand-700 hover:text-brand-800"
-                                  disabled={isDownloading}
                                   onClick={() => handleDownload(doc)}
                                 >
                                   <Download className="mr-1 w-3 h-3" />
-                                  {isDownloading ? "Downloading..." : "Download"}
+                                  Download
                                 </Button>
                               </>
                             ) : (

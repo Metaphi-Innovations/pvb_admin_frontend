@@ -56,8 +56,8 @@ const SORT_KEY_TO_ORDERING: Record<string, string> = {
   hsnDescription: "hsnDescription",
   gstRate: "gst__gstPercentage",
   status: "is_active",
-  createdBy: "created_by_user__username",
-  updatedBy: "updated_by_user__username",
+  createdBy: "created_at",
+  updatedBy: "updated_at",
   createdDate: "created_at",
   updatedDate: "updated_at",
 };

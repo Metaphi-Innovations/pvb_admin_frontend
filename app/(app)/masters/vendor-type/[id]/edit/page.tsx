@@ -66,7 +66,7 @@ export default function EditVendorTypePage() {
       {
         onSuccess: () => {
           setToast({ msg: "Supplier type updated successfully.", type: "success" });
-          setTimeout(() => router.push(`/masters/vendor-type/${id}`), 900);
+          router.push("/masters/vendor-type");
         },
         onError: (err) => {
           const msg =

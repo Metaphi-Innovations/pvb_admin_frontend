@@ -21,10 +21,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { loadCustomerTypes, saveCustomerTypes, type CustomerTypeRecord } from "./customer-type-data";
+import { type CustomerTypeRecord } from "./customer-type-data";
 import {
   useCustomerTypes,
   useToggleCustomerTypeStatus,
+  useDeleteCustomerType,
   useExportCustomerTypes,
   useCustomerTypeFilterDropdown,
 } from "@/hooks/masters";
@@ -140,6 +141,7 @@ export default function CustomerTypesPage() {
 
   const listQuery = useCustomerTypes(listParams);
   const toggleStatusMutation = useToggleCustomerTypeStatus();
+  const deleteMutation = useDeleteCustomerType();
   const exportMutation = useExportCustomerTypes();
 
   const customerTypeOptionsQuery = useCustomerTypeFilterDropdown("customer_type_name", {
@@ -174,11 +176,18 @@ export default function CustomerTypesPage() {
     [descriptionOptionsQuery.data],
   );
   const statusOptions = useMemo(() => {
-    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
-    return [
+    const defaults = [
       { label: "Active", value: "active" },
       { label: "Inactive", value: "inactive" },
     ];
+    const fromApi = statusOptionsQuery.data ?? [];
+    const merged = [...defaults];
+    for (const opt of fromApi) {
+      if (!merged.some((item) => item.value === opt.value)) {
+        merged.push(opt);
+      }
+    }
+    return merged;
   }, [statusOptionsQuery.data]);
   const createdByOptions = useMemo(
     () => createdByOptionsQuery.data ?? [],
@@ -268,6 +277,21 @@ export default function CustomerTypesPage() {
       render: (val, row) => row.description || "—",
     },
     {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: statusOptions,
+      width: "120px",
+      render: (val, row) => (
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleStatus(row)}
+        />
+      ),
+    },
+    {
       key: "createdBy",
       header: "Created By",
       sortable: true,
@@ -291,21 +315,6 @@ export default function CustomerTypesPage() {
         <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
       ),
     },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: statusOptions,
-      width: "120px",
-      render: (val, row) => (
-        <ListingStatusToggle
-          active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
-        />
-      ),
-    },
   ];
 
   const actions: ActionItemConfig<CustomerTypeRecord>[] = [
@@ -320,13 +329,6 @@ export default function CustomerTypesPage() {
       action: "edit",
       icon: Edit2,
       onClick: (row) => router.push(`/masters/customer-types/${routeId(row)}/edit`),
-    },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
     },
   ];
 
@@ -345,11 +347,20 @@ export default function CustomerTypesPage() {
   }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = loadCustomerTypes().filter((r) => r.id !== deleteTarget.id);
-    saveCustomerTypes(list);
-    setDeleteTarget(null);
-    setToast({ msg: "Customer Type deleted successfully", type: "success" });
+    const customerTypeId = deleteTarget ? routeId(deleteTarget) : "";
+    if (!deleteTarget || !customerTypeId) return;
+    deleteMutation.mutate(customerTypeId, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        setToast({ msg: "Customer Type deleted successfully", type: "success" });
+      },
+      onError: (error) => {
+        setToast({
+          msg: getErrorMessage(error, "Failed to delete customer type."),
+          type: "error",
+        });
+      },
+    });
   };
 
   const handleExport = () => {
@@ -412,25 +423,6 @@ export default function CustomerTypesPage() {
           onOpenFilter={handleOpenFilter}
         />
       </div>
-
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>

@@ -18,6 +18,7 @@ import {
   generateGSTCode,
   normalizeGst,
 } from "./gst-data";
+import { sortStateToOrdering } from "@/services/gst-list.service";
 import {
   useGstList,
   useGst,
@@ -107,12 +108,16 @@ export default function GSTPage() {
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<GSTMaster | null>(null);
   const [form, setForm] = useState({
-    gstPercentage: 0,
+    gstPercentage: "",
     remarks: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
+  const ordering = useMemo(
+    () => sortStateToOrdering(sort.key, sort.direction),
+    [sort.key, sort.direction],
+  );
   const apiFilters = useMemo(
     () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.gst),
     [appliedFilters],
@@ -129,9 +134,9 @@ export default function GSTPage() {
       search: appliedSearch,
       status: listStatus,
       apiFilters,
-      ordering: "",
+      ordering,
     }),
-    [page, pageSize, appliedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, ordering],
   );
 
   const listQuery = useGstList(listParams);
@@ -162,11 +167,19 @@ export default function GSTPage() {
     [remarkOptionsQuery.data],
   );
   const statusOptions = useMemo(() => {
-    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
-    return [
+    const defaults = [
+      { label: "All", value: "all" },
       { label: "Active", value: "active" },
       { label: "Inactive", value: "inactive" },
     ];
+    const fromApi = statusOptionsQuery.data ?? [];
+    const merged = [...defaults];
+    for (const opt of fromApi) {
+      if (!merged.some((item) => item.value === opt.value)) {
+        merged.push(opt);
+      }
+    }
+    return merged;
   }, [statusOptionsQuery.data]);
   const createdByOptions = useMemo(
     () => createdByOptionsQuery.data ?? [],
@@ -240,7 +253,7 @@ export default function GSTPage() {
   );
 
   const openAdd = () => {
-    setForm({ gstPercentage: 0, remarks: "" });
+    setForm({ gstPercentage: "", remarks: "" });
     setErrors({});
     setFormError(null);
     setActive(null);
@@ -249,7 +262,7 @@ export default function GSTPage() {
 
   const openEdit = (row: GSTMaster) => {
     setForm({
-      gstPercentage: row.gstPercentage,
+      gstPercentage: String(row.gstPercentage),
       remarks: row.remarks || "",
     });
     setErrors({});
@@ -342,9 +355,17 @@ export default function GSTPage() {
   const displayRecords = useMemo(() => {
     if (!sort.key || sort.direction === "none") return records;
     return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof GSTMaster] ?? "").toLowerCase();
-      const bVal = String(b[sort.key as keyof GSTMaster] ?? "").toLowerCase();
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      let cmp = 0;
+      if (sort.key === "gstPercentage") {
+        cmp = Number(a.gstPercentage) - Number(b.gstPercentage);
+      } else {
+        const aVal = String(a[sort.key as keyof GSTMaster] ?? "").trim();
+        const bVal = String(b[sort.key as keyof GSTMaster] ?? "").trim();
+        cmp = aVal.localeCompare(bVal, undefined, {
+          sensitivity: "base",
+          numeric: true,
+        });
+      }
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort]);
@@ -378,9 +399,11 @@ export default function GSTPage() {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (form.gstPercentage === undefined || form.gstPercentage === null || form.gstPercentage < 0) {
+    const percentageRaw = form.gstPercentage.trim();
+    const percentage = Number(percentageRaw);
+    if (percentageRaw === "" || !Number.isFinite(percentage) || percentage < 0) {
       e.gstPercentage = "GST Percentage is required and must be non-negative";
-    } else if (form.gstPercentage > 100) {
+    } else if (percentage > 100) {
       e.gstPercentage = "GST Percentage cannot exceed 100";
     }
     setErrors(e);
@@ -389,12 +412,13 @@ export default function GSTPage() {
 
   const persist = () => {
     if (!validate()) return;
+    const gstPercentage = Number(form.gstPercentage.trim());
 
     if (sheetMode === "add") {
       setFormError(null);
       createMutation.mutate(
         {
-          gstPercentage: form.gstPercentage,
+          gstPercentage,
           remark: form.remarks,
         },
         {
@@ -421,7 +445,7 @@ export default function GSTPage() {
       {
         id: active.gstUuid,
         payload: {
-          gstPercentage: form.gstPercentage,
+          gstPercentage,
           remark: form.remarks,
         },
       },
@@ -520,9 +544,9 @@ export default function GSTPage() {
                 getRecordCode: (r) => `${r.gstPercentage}%`,
                 basicInfo: (r) => [
                   { label: "GST Percentage", value: `${r.gstPercentage}%` },
+                  { label: "Remarks", value: r.remarks?.trim() ? r.remarks : "—" },
                 ],
-                description: (r) => r.remarks,
-                showDescription: true,
+                showDescription: false,
               })(active)
             : { title: "GST", basicInfo: [] }
         }
@@ -536,7 +560,7 @@ export default function GSTPage() {
                 <Input
                   type="number"
                   value={form.gstPercentage}
-                  onChange={(e) => setFormField("gstPercentage", parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setFormField("gstPercentage", e.target.value)}
                   onWheel={(e) => e.currentTarget.blur()}
                   placeholder="e.g., 18.0"
                   step="0.01"

@@ -263,14 +263,6 @@ export default function CustomersPage() {
 		() => toOptions(records.map((r) => r.stateName)),
 		[records],
 	);
-	const districtOptions = useMemo(
-		() => toOptions(records.map((r) => r.districtName)),
-		[records],
-	);
-	const territoryOptions = useMemo(
-		() => toOptions(records.map((r) => r.territoryName)),
-		[records],
-	);
 	const creditLimitOptions = useMemo(
 		() => toOptions(records.map((r) => formatCreditLimit(r.creditLimit ?? 0))),
 		[records],
@@ -396,26 +388,6 @@ export default function CustomersPage() {
 			filterOptions: stateOptions,
 			width: "130px",
 			render: (val, row) => row.stateName || "—",
-		},
-		{
-			key: "districtName",
-			header: "District",
-			sortable: true,
-			filterable: true,
-			filterType: "dropdown",
-			filterOptions: districtOptions,
-			width: "130px",
-			render: (val, row) => row.districtName || "—",
-		},
-		{
-			key: "territoryName",
-			header: "Territory",
-			sortable: true,
-			filterable: true,
-			filterType: "dropdown",
-			filterOptions: territoryOptions,
-			width: "130px",
-			render: (val, row) => row.territoryName || "—",
 		},
 		{
 			key: "creditLimit",

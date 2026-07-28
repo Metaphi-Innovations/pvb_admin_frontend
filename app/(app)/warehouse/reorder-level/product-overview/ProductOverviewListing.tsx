@@ -179,7 +179,6 @@ export function ProductOverviewListing() {
   const actions: ActionItemConfig<ReorderLevel>[] = [
     { label: "View", action: "view", icon: Eye, onClick: (row) => router.push(`/warehouse/reorder-level/view/${row.id}`) },
     { label: "Edit", action: "edit", icon: Pencil, onClick: (row) => router.push(`/warehouse/reorder-level/edit/${row.id}`) },
-    { label: "Delete", action: "delete", icon: Trash2, onClick: (row) => setDeleteTarget(row) },
   ];
 
   const handleDeleteConfirm = () => {

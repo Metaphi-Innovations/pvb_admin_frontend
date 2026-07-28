@@ -910,6 +910,17 @@ interface ProductCatalogItem {
 // 	);
 // }
 
+export const CUSTOMER_FORM_STEPS = [
+	{ id: "basic", label: "Basic Details" },
+	{ id: "branch", label: "Branch" },
+	{ id: "commercial", label: "Bank & Commercial" },
+	{ id: "accounting", label: "Accounting" },
+] as const;
+
+export type CustomerFormStepId = (typeof CUSTOMER_FORM_STEPS)[number]["id"];
+
+const ADDRESS_LINE_2_MAX = 250;
+
 interface CustomerFormProps {
 	form: CustomerFormValues;
 	onChange: (form: CustomerFormValues) => void;
@@ -927,6 +938,7 @@ interface CustomerFormProps {
 	}[];
 	/** Accounts COA customer ledger — show license validity dates on compliance rows. */
 	showComplianceValidityDates?: boolean;
+	activeStep?: CustomerFormStepId;
 }
 
 function branchDocumentsToPayload(
@@ -960,7 +972,7 @@ function branchToPayload(
 			billing_city: branch.billingAddress.city,
 			billing_town: branch.billingAddress.town || "",
 			billing_pincode: branch.billingAddress.pincode,
-			billing_pincode_id: branch.billingAddress.pincodeId || "",
+			billing_pincode_id: branch.billingAddress.pincodeId || null,
 
 			shipping_country: branch.shippingAddress.country || "India",
 			shipping_address_line_1: branch.shippingAddress.address,
@@ -969,7 +981,7 @@ function branchToPayload(
 			shipping_city: branch.shippingAddress.city,
 			shipping_town: branch.shippingAddress.town || "",
 			shipping_pincode: branch.shippingAddress.pincode,
-			shipping_pincode_id: branch.shippingAddress.pincodeId || "",
+			shipping_pincode_id: branch.shippingAddress.pincodeId || null,
 
 			documents: branchDocumentsToPayload(branch.documents, idx),
 
@@ -988,7 +1000,9 @@ export function CustomerForm({
 	customerCode,
 	customerTypes,
 	showComplianceValidityDates = false,
+	activeStep,
 }: CustomerFormProps) {
+	const show = (stepId: CustomerFormStepId) => !activeStep || activeStep === stepId;
 	const { data: gstDropdownItems = [] } = useGstDropdown();
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
 	const { data: salesmanData = [] } = useSalesmenDropdown();
@@ -1553,22 +1567,28 @@ export function CustomerForm({
 
 	return (
 		<div className='w-full'>
-			<Tabs defaultValue='basic' className='w-full'>
-				<TabsList className='w-full mb-2 h-8'>
-					<TabsTrigger value='basic' className='text-xs'>
-						Basic Details
-					</TabsTrigger>
-					<TabsTrigger value='branch' className='text-xs'>
-						Branch
-					</TabsTrigger>
-					<TabsTrigger value='commercial' className='text-xs'>
-						Bank & Commercial
-					</TabsTrigger>
+			<Tabs
+				{...(activeStep ? { value: activeStep } : { defaultValue: "basic" })}
+				className='w-full'
+			>
+				{!activeStep && (
+					<TabsList className='w-full mb-2 h-8'>
+						<TabsTrigger value='basic' className='text-xs'>
+							Basic Details
+						</TabsTrigger>
+						<TabsTrigger value='branch' className='text-xs'>
+							Branch
+						</TabsTrigger>
+						<TabsTrigger value='commercial' className='text-xs'>
+							Bank & Commercial
+						</TabsTrigger>
 					<TabsTrigger value='accounting' className='text-xs'>
 						Accounting
 					</TabsTrigger>
-				</TabsList>
+					</TabsList>
+				)}
 
+				{show("basic") && (
 				<TabsContent value='basic' className='mt-0'>
 					<div className={ERP.sectionGap}>
 						<ErpFormSection title='Basic Information'>
@@ -1803,8 +1823,10 @@ export function CustomerForm({
 						</ErpFormSection>
 					</div>
 				</TabsContent>
+				)}
 
 				{/* ── TAB 3: BANK & COMMERCIAL ── */}
+				{show("commercial") && (
 				<TabsContent value='commercial' className='mt-0'>
 					<div className={ERP.sectionGap}>
 						{isDistributorConvertedForm(form) ? (
@@ -1970,8 +1992,10 @@ export function CustomerForm({
 						</ErpFormSection>
 					</div>
 				</TabsContent>
+				)}
 
 				{/* ── TAB: BRANCH MAPPING & DOCUMENTS ── */}
+				{show("branch") && (
 				<TabsContent value='branch' className='mt-0 space-y-3'>
 					<div>
 						<div className='flex items-center justify-between mb-3'>
@@ -2250,16 +2274,17 @@ export function CustomerForm({
 														}
 														readOnly={readOnly}
 														stateOptions={stateOptions}
-														errors={
-															isMain
+														errors={{
+															...(isMain
 																? {
 																	address: errors.mainBranchBillingAddress,
 																	state: errors.mainBranchBillingState,
 																	city: errors.mainBranchBillingCity,
 																	pincode: errors.mainBranchBillingPincode,
 																}
-																: undefined
-														}
+																: {}),
+															addressLine2: errors[`branch_${bIdx}_billingAddressLine2`],
+														}}
 													/>
 												</ErpFormSection>
 
@@ -2297,6 +2322,9 @@ export function CustomerForm({
 														}
 														readOnly={readOnly}
 														stateOptions={stateOptions}
+														errors={{
+															addressLine2: errors[`branch_${bIdx}_shippingAddressLine2`],
+														}}
 													/>
 												</ErpFormSection>
 
@@ -2552,24 +2580,29 @@ export function CustomerForm({
 						</div>
 					</div>
 				</TabsContent>
+				)}
 
-				{/* ── TAB 4: ACCOUNTING ── */}
-				<TabsContent value='accounting' className='mt-0'>
-					<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
-						<PartyMasterAccountingFields
-							values={{
-								openingBalance: form.openingBalance,
-								balanceType: form.balanceType,
-								openingBalanceDate: form.openingBalanceDate,
-								billWiseAccounting: form.billWiseAccounting,
-								accountingDescription: form.accountingDescription,
-							}}
-							onChange={(next) => onChange({ ...form, ...next })}
-							disabled={readOnly}
-							fyHintLabel={selectedFY.start}
-						/>
-					</div>
-				</TabsContent>
+				{show("accounting") && (
+					<>
+						{/* ── TAB 4: ACCOUNTING ── */}
+						<TabsContent value='accounting' className='mt-0'>
+							<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
+								<PartyMasterAccountingFields
+									values={{
+										openingBalance: form.openingBalance,
+										balanceType: form.balanceType,
+										openingBalanceDate: form.openingBalanceDate,
+										billWiseAccounting: form.billWiseAccounting,
+										accountingDescription: form.accountingDescription,
+									}}
+									onChange={(next) => onChange({ ...form, ...next })}
+									disabled={readOnly}
+									fyHintLabel={selectedFY.start}
+								/>
+							</div>
+						</TabsContent>
+					</>
+				)}
 			</Tabs>
 
 			{/* Hidden File Input */}
@@ -2922,6 +2955,19 @@ export function validateCustomerForm(
 		}
 	}
 
+	form.branches.forEach((branch, bIdx) => {
+		const billingLine2 = branch.billingAddress.addressLine2 ?? "";
+		if (billingLine2.length > ADDRESS_LINE_2_MAX) {
+			e[`branch_${bIdx}_billingAddressLine2`] =
+				`Address Line 2 must not exceed ${ADDRESS_LINE_2_MAX} characters (${billingLine2.length}/${ADDRESS_LINE_2_MAX})`;
+		}
+		const shippingLine2 = branch.shippingAddress.addressLine2 ?? "";
+		if (shippingLine2.length > ADDRESS_LINE_2_MAX) {
+			e[`branch_${bIdx}_shippingAddressLine2`] =
+				`Address Line 2 must not exceed ${ADDRESS_LINE_2_MAX} characters (${shippingLine2.length}/${ADDRESS_LINE_2_MAX})`;
+		}
+	});
+
 	// Validate branch-wise salesman + document uploads
 	form.branches.forEach((branch, bIdx) => {
 		if (!branch.salesManId?.trim()) {
@@ -2968,6 +3014,72 @@ export function validateCustomerForm(
 		e.ifscCode = "Invalid IFSC format";
 	if (form.status === "blocked" && !form.blockReason.trim())
 		e.blockReason = "Block reason is required when status is Blocked";
+
+	return e;
+}
+
+export function validateCustomerFormStep(
+	form: CustomerFormValues,
+	stepId: CustomerFormStepId,
+	isAdd?: boolean,
+): Record<string, string> {
+	const all = validateCustomerForm(form, isAdd);
+	const e: Record<string, string> = {};
+
+	if (stepId === "basic") {
+		const basicKeys = new Set([
+			"customerName",
+			"customerType",
+			"mobile",
+			"email",
+			"gstin",
+			"gstMasterId",
+			"pan",
+			"msmeNumber",
+			"tdsMasterId",
+			"blockReason",
+			"requiredDocuments",
+		]);
+		for (const [key, message] of Object.entries(all)) {
+			if (basicKeys.has(key) || key.includes("Registered") || key.includes("Regn")) {
+				e[key] = message;
+			}
+		}
+		return e;
+	}
+
+	if (stepId === "branch") {
+		for (const [key, message] of Object.entries(all)) {
+			if (
+				key === "branches" ||
+				key.startsWith("branch_") ||
+				key.startsWith("mainBranch")
+			) {
+				e[key] = message;
+			}
+		}
+		return e;
+	}
+
+	if (stepId === "commercial") {
+		for (const [key, message] of Object.entries(all)) {
+			if (
+				[
+					"creditLimit",
+					"paymentType",
+					"creditDays",
+					"advancePercentage",
+					"confirmAccountNumber",
+					"ifscCode",
+					"blockReason",
+				].includes(key) ||
+				key.startsWith("credit") ||
+				key.startsWith("distributor")
+			) {
+				e[key] = message;
+			}
+		}
+	}
 
 	return e;
 }
@@ -3143,6 +3255,8 @@ export function formValuesToCreatePayload(
 		account_number: form.accountNumber.trim(),
 		ifsc_code: form.ifscCode.trim().toUpperCase(),
 		swift_code: form.swiftCode.trim(),
+
+		status: form.status === "inactive" ? "Inactive" : "Active",
 
 		branches: form.branches.map((branch, idx) => branchToPayload(branch, idx).payload),
 	};

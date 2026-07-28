@@ -1,21 +1,43 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Edit2,
   Eye,
   FileText,
   X,
 } from "lucide-react";
 import {
-  DocumentTypeMaster,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
+import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
+import {
+  documentTypeToForm,
+  toDocumentTypeRecord,
+  type DocumentTypeRecord,
 } from "./document-type-data";
+import {
+  DocumentTypeForm,
+  DEFAULT_DOCUMENT_TYPE_FORM,
+  type DocumentTypeFormValues,
+  validateDocumentTypeForm,
+} from "./components/DocumentTypeForm";
 import {
   useDocumentTypes,
   useDocumentType,
+  useCreateDocumentType,
+  useUpdateDocumentType,
   useToggleDocumentTypeStatus,
   useExportDocumentTypes,
   useDocumentTypeFilterDropdown,
@@ -33,35 +55,37 @@ import {
 } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
+import {
+  ListingAuditCell,
+  AuditUserRow,
+  ListingStatusToggle,
+  isActiveStatus,
+} from "@/components/listing";
 
-function toDocumentTypeRow(item: {
-  id: string;
-  title: string;
-  description: string;
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-  createdBy: string;
-  updatedBy: string;
-}): DocumentTypeMaster {
-  return {
-    id: item.id,
-    documentTypeCode: "",
-    title: item.title,
-    description: item.description,
-    status: item.status,
-    createdBy: item.createdBy || "—",
-    createdDate: item.createdAt ? item.createdAt.slice(0, 10) : "",
-    updatedBy: item.updatedBy || "—",
-    updatedDate: item.updatedAt ? item.updatedAt.slice(0, 10) : "",
-  };
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
+  return (
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 export default function DocumentTypesPage() {
-  const router = useRouter();
   const {
     draftFilters: filters,
     setDraftFilters: setFilters,
@@ -73,10 +97,15 @@ export default function DocumentTypesPage() {
   const [sort, setSort] = useState<SortState>({ key: "title", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [viewTarget, setViewTarget] = useState<DocumentTypeMaster | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
+
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [active, setActive] = useState<DocumentTypeRecord | null>(null);
+  const [form, setForm] = useState<DocumentTypeFormValues>(DEFAULT_DOCUMENT_TYPE_FORM);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<DocumentTypeRecord | null>(null);
 
   const apiFilters = useMemo(
     () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.documentType),
@@ -100,6 +129,8 @@ export default function DocumentTypesPage() {
 
   const listQuery = useDocumentTypes(listParams);
   const detailQuery = useDocumentType(viewId);
+  const createMutation = useCreateDocumentType();
+  const updateMutation = useUpdateDocumentType();
   const toggleStatusMutation = useToggleDocumentTypeStatus();
   const exportMutation = useExportDocumentTypes();
 
@@ -139,7 +170,7 @@ export default function DocumentTypesPage() {
   );
 
   const records = useMemo(
-    () => (listQuery.data?.items ?? []).map(toDocumentTypeRow),
+    () => (listQuery.data?.items ?? []).map(toDocumentTypeRecord),
     [listQuery.data],
   );
   const totalRecords = listQuery.data?.total ?? 0;
@@ -148,12 +179,17 @@ export default function DocumentTypesPage() {
     ? getMasterListErrorMessage(listQuery.error, { resource: "document types" })
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -166,35 +202,61 @@ export default function DocumentTypesPage() {
       return;
     }
     if (detailQuery.data) {
-      setViewTarget(toDocumentTypeRow(detailQuery.data));
+      setActive(toDocumentTypeRecord(detailQuery.data));
+      setSheetMode("view");
     }
   }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
 
-  const toggleStatus = useCallback(
-    (record: DocumentTypeMaster) => {
-      if (!record.id) {
-        setToast({ msg: "Document type id missing. Unable to update status.", type: "error" });
-        return;
-      }
-      toggleStatusMutation.mutate(record.id, {
-        onSuccess: () => {
-          setToast({
-            msg: `Document type status updated to ${record.status === "Active" ? "Inactive" : "Active"}`,
-            type: "success",
-          });
-        },
-        onError: (error) => {
-          setToast({
-            msg: getErrorMessage(error, "Failed to update document type status."),
-            type: "error",
-          });
-        },
-      });
-    },
-    [toggleStatusMutation],
-  );
+  const requestStatusToggle = (record: DocumentTypeRecord) => {
+    setStatusTarget(record);
+  };
 
-  const openView = useCallback((row: DocumentTypeMaster) => {
+  const confirmStatusChange = () => {
+    const id = statusTarget?.id;
+    if (!statusTarget || !id) {
+      setToast({ msg: "Document type id missing. Unable to update status.", type: "error" });
+      setStatusTarget(null);
+      return;
+    }
+
+    const nextActive = !isActiveStatus(statusTarget.status);
+
+    toggleStatusMutation.mutate(id, {
+      onSuccess: () => {
+        setToast({
+          msg: `Document type status updated to ${nextActive ? "Active" : "Inactive"}`,
+          type: "success",
+        });
+      },
+      onError: (error) => {
+        setToast({
+          msg: getErrorMessage(error, "Failed to update document type status."),
+          type: "error",
+        });
+      },
+      onSettled: () => {
+        setStatusTarget(null);
+      },
+    });
+  };
+
+  const openAdd = () => {
+    setForm({ ...DEFAULT_DOCUMENT_TYPE_FORM });
+    setErrors({});
+    setFormError(null);
+    setActive(null);
+    setSheetMode("add");
+  };
+
+  const openEdit = (row: DocumentTypeRecord) => {
+    setForm(documentTypeToForm(row));
+    setErrors({});
+    setFormError(null);
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = useCallback((row: DocumentTypeRecord) => {
     if (!row.id) {
       setToast({ msg: "Document type id missing. Unable to load details.", type: "error" });
       return;
@@ -202,7 +264,15 @@ export default function DocumentTypesPage() {
     setViewId(row.id);
   }, []);
 
-  const columns: ColumnConfig<DocumentTypeMaster>[] = [
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setViewId(null);
+    setErrors({});
+    setFormError(null);
+  };
+
+  const columns: ColumnConfig<DocumentTypeRecord>[] = [
     {
       key: "title",
       header: "Title",
@@ -211,10 +281,14 @@ export default function DocumentTypesPage() {
       filterType: "dropdown",
       filterOptions: titleOptions,
       width: "280px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">
+      render: (_val, row) => (
+        <button
+          type="button"
+          onClick={() => openView(row)}
+          className="text-xs font-semibold text-brand-700 hover:underline text-left"
+        >
           {row.title}
-        </span>
+        </button>
       ),
     },
     {
@@ -235,10 +309,10 @@ export default function DocumentTypesPage() {
       filterType: "dropdown",
       filterOptions: statusOptions,
       width: "160px",
-      render: (val, row) => (
+      render: (_val, row) => (
         <ListingStatusToggle
           active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
+          onChange={() => requestStatusToggle(row)}
         />
       ),
     },
@@ -250,7 +324,9 @@ export default function DocumentTypesPage() {
       filterType: "audit",
       auditUserOptions: createdByOptions,
       width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
+      render: (_val, row) => (
+        <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
+      ),
     },
     {
       key: "updatedBy",
@@ -260,11 +336,13 @@ export default function DocumentTypesPage() {
       filterType: "audit",
       auditUserOptions: updatedByOptions,
       width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
+      render: (_val, row) => (
+        <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
+      ),
     },
   ];
 
-  const actions: ActionItemConfig<DocumentTypeMaster>[] = [
+  const actions: ActionItemConfig<DocumentTypeRecord>[] = [
     {
       label: "View",
       action: "view",
@@ -276,23 +354,71 @@ export default function DocumentTypesPage() {
       label: "Edit",
       action: "edit",
       icon: Edit2,
-      onClick: (row) => router.push(`/masters/document-types/${row.id}/edit`),
+      onClick: (row) => openEdit(row),
     },
   ];
 
   const displayRecords = useMemo(() => {
     if (!sort.key || sort.direction === "none") return records;
     return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof DocumentTypeMaster] || "").toLowerCase();
-      const bVal = String(b[sort.key as keyof DocumentTypeMaster] || "").toLowerCase();
+      const aVal = String(a[sort.key as keyof DocumentTypeRecord] || "").toLowerCase();
+      const bVal = String(b[sort.key as keyof DocumentTypeRecord] || "").toLowerCase();
       const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort]);
 
-    useEffect(() => {
-    setPage(1);
-  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
+  const persist = () => {
+    const fieldErrors = validateDocumentTypeForm(form);
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
+
+    if (sheetMode === "add") {
+      setFormError(null);
+      createMutation.mutate(
+        {
+          title: form.title,
+          description: form.description,
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "Document type added successfully", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create document type."));
+          },
+        },
+      );
+      return;
+    }
+
+    if (!active?.id) {
+      setFormError("Document type id missing. Unable to update.");
+      return;
+    }
+
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.id,
+        payload: {
+          title: form.title,
+          description: form.description,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Document type updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update document type."));
+        },
+      },
+    );
+  };
 
   const handleExport = () => {
     exportMutation.mutate(
@@ -315,6 +441,48 @@ export default function DocumentTypesPage() {
     );
   };
 
+  const sheetTitle =
+    sheetMode === "add"
+      ? "Add Document Type"
+      : sheetMode === "edit"
+        ? "Edit Document Type"
+        : "View Document Type";
+
+  const viewDrawer = active
+    ? {
+        title: active.title,
+        subtitle: "Read-only document type details",
+        status: active.status,
+        basicInfo: [
+          {
+            label: "Description",
+            value: active.description?.trim() ? active.description : "—",
+          },
+        ],
+        showDescription: false,
+        children: (
+          <MasterDrawerSection title="Audit Information">
+            <div className="space-y-4">
+              <AuditUserRow label="Created By" name={active.createdBy} />
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Created Date</p>
+                <p className="text-sm font-medium text-foreground font-mono">
+                  {active.createdAt}
+                </p>
+              </div>
+              <AuditUserRow label="Updated By" name={active.updatedBy} />
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Updated Date</p>
+                <p className="text-sm font-medium text-foreground font-mono">
+                  {active.updatedAt}
+                </p>
+              </div>
+            </div>
+          </MasterDrawerSection>
+        ),
+      }
+    : { title: "Document Type", basicInfo: [] };
+
   return (
     <AppLayout>
       <div className="space-y-5">
@@ -327,7 +495,7 @@ export default function DocumentTypesPage() {
 
         {listError ? <p className="text-xs text-red-600">{listError}</p> : null}
 
-        <MasterListing<DocumentTypeMaster>
+        <MasterListing<DocumentTypeRecord>
           columns={columns}
           data={displayRecords}
           loading={loading}
@@ -338,11 +506,11 @@ export default function DocumentTypesPage() {
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
           onFilterChange={(next) => {
-          setFilters(next);
-          applyFilters(next);
-        }}
+            setFilters(next);
+            applyFilters(next);
+          }}
           actions={actions}
-          onAdd={() => router.push("/masters/document-types/add")}
+          onAdd={openAdd}
           onExport={handleExport}
           addLabel="Add Document Type"
           emptyMessage="document types"
@@ -353,53 +521,76 @@ export default function DocumentTypesPage() {
         />
       </div>
 
-      {viewTarget && (
-        <MasterRecordDrawer
-          open={!!viewTarget}
-          onOpenChange={(o) => {
-            if (!o) {
-              setViewTarget(null);
-              setViewId(null);
-            }
-          }}
-          onClose={() => {
-            setViewTarget(null);
-            setViewId(null);
-          }}
-          onEdit={() => {
-            router.push(`/masters/document-types/${viewTarget.id}/edit`);
-            setViewTarget(null);
-            setViewId(null);
-          }}
-          title="Document Type"
-          icon={FileText}
-          status={viewTarget.status}
-          basicInfo={[{ label: "Title", value: viewTarget.title }]}
-          description={viewTarget.description}
-          showDescription
-          auditInfo={masterAuditFromRecord({
-            createdBy: viewTarget.createdBy,
-            createdDate: viewTarget.createdDate,
-            updatedBy: viewTarget.updatedBy,
-            updatedDate: viewTarget.updatedDate,
-          })}
-        />
-      )}
+      <MasterListingSheets
+        sheetMode={sheetMode}
+        active={active}
+        onClose={closeSheet}
+        onEdit={() => active && openEdit(active)}
+        onSave={persist}
+        sheetTitle={sheetTitle}
+        icon={FileText}
+        formError={formError ?? undefined}
+        saving={saving}
+        viewDrawer={viewDrawer}
+        formContent={
+          sheetMode !== "view" ? (
+            <DocumentTypeForm
+              form={form}
+              onChange={setForm}
+              errors={errors}
+              onClearError={(key: string) =>
+                setErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                })
+              }
+            />
+          ) : null
+        }
+      />
 
-      {toast && (
-        <div
-          className={cn(
-            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            "animate-in slide-in-from-top-2 fade-in-0 duration-300",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
-          )}
-        >
-          {toast.msg}
-          <button onClick={() => setToast(null)} className="flex-shrink-0 ml-1 opacity-70 hover:opacity-100">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              {statusTarget && isActiveStatus(statusTarget.status)
+                ? "Deactivate Document Type?"
+                : "Activate Document Type?"}
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1 text-foreground">
+              {statusTarget && (
+                <>
+                  <strong>{statusTarget.title}</strong> will be marked as{" "}
+                  {isActiveStatus(statusTarget.status) ? "inactive" : "active"}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setStatusTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }

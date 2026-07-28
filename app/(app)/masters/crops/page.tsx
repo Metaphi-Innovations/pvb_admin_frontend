@@ -340,7 +340,8 @@ export default function CropMasterPage() {
           <button
             type="button"
             onClick={() => openView(row)}
-            className="text-xs font-semibold text-brand-700 hover:underline text-left"
+            className="text-xs font-semibold text-brand-700 hover:underline text-left truncate max-w-[220px] block"
+            title={row.cropName}
           >
             {row.cropName}
           </button>
@@ -452,13 +453,16 @@ export default function CropMasterPage() {
       let aVal = "";
       let bVal = "";
       if (sort.key === "season") {
-        aVal = a.season.join(", ").toLowerCase();
-        bVal = b.season.join(", ").toLowerCase();
+        aVal = a.season.join(", ").trim();
+        bVal = b.season.join(", ").trim();
       } else {
-        aVal = String(a[sort.key as keyof CropRecord] ?? "").toLowerCase();
-        bVal = String(b[sort.key as keyof CropRecord] ?? "").toLowerCase();
+        aVal = String(a[sort.key as keyof CropRecord] ?? "").trim();
+        bVal = String(b[sort.key as keyof CropRecord] ?? "").trim();
       }
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      const cmp = aVal.localeCompare(bVal, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort, ordering]);
@@ -562,10 +566,6 @@ export default function CropMasterPage() {
           label: "Season / Period",
           value: active.season.length > 0 ? active.season.join(", ") : "—",
         },
-        {
-          label: "Description",
-          value: active.description?.trim() ? active.description : "—",
-        },
       ],
       showDescription: false,
       children: (
@@ -667,11 +667,11 @@ export default function CropMasterPage() {
               </div>
               {statusTarget?.status === "active" ? "Deactivate Crop?" : "Activate Crop?"}
             </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
+            <DialogDescription className="text-xs pt-1 text-foreground">
               {statusTarget && (
                 <>
-                  <strong className="text-foreground">{statusTarget.cropName}</strong> will be
-                  marked as {statusTarget.status === "active" ? "inactive" : "active"}.
+                  <strong>{statusTarget.cropName}</strong> will be marked as{" "}
+                  {statusTarget.status === "active" ? "inactive" : "active"}.
                 </>
               )}
             </DialogDescription>

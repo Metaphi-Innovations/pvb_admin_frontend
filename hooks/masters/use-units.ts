@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   UnitListService,
   type UnitCreatePayload,
@@ -27,6 +27,7 @@ export function useUnits(params: MasterListKeyParams) {
   return useQuery({
     queryKey: masterKeys.units.list(params),
     queryFn: ({ signal }) => UnitListService.list({ ...toListParams(params), signal }),
+    placeholderData: keepPreviousData,
   });
 }
 

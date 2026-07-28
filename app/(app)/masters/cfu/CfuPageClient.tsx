@@ -332,7 +332,8 @@ export default function CfuMasterPage() {
           <button
             type="button"
             onClick={() => openView(row)}
-            className="text-xs font-semibold text-brand-700 hover:underline text-left"
+            className="text-xs font-semibold text-brand-700 hover:underline text-left truncate max-w-[220px] block"
+            title={row.cfuName}
           >
             {row.cfuName}
           </button>
@@ -346,9 +347,17 @@ export default function CfuMasterPage() {
         filterType: "dropdown",
         filterOptions: descriptionOptions,
         width: "350px",
-        render: (val) => (
-          <span className="text-xs text-muted-foreground">{val ? String(val) : "—"}</span>
-        ),
+        render: (val) => {
+          const text = val ? String(val) : "—";
+          return (
+            <span
+              className="text-xs text-muted-foreground truncate max-w-[350px] block"
+              title={val ? String(val) : undefined}
+            >
+              {text}
+            </span>
+          );
+        },
       },
       {
         key: "status",

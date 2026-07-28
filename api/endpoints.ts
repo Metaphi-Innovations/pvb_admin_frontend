@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
       CREATE: "/master/category/create",
       UPDATE: (id: string) => `/master/category/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/category/update-status/${id}`,
+      DELETE: (id: string) => `/master/category/delete/${id}`,
       EXPORT: "/master/category/export",
       VIEW: (id: string) => `/master/category/${id}`,
       DROPDOWN: "/master/category/dropdown",
@@ -41,6 +42,7 @@ export const API_ENDPOINTS = {
       CREATE: "/master/customer-type/create",
       UPDATE: (id: string) => `/master/customer-type/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/customer-type/update-status/${id}`,
+      DELETE: (id: string) => `/master/customer-type/delete/${id}`,
       VIEW: (id: string) => `/master/customer-type/${id}`,
       EXPORT: "/master/customer-type/export",
       DROPDOWN: "/master/customer-type/dropdown",
@@ -196,6 +198,7 @@ export const API_ENDPOINTS = {
     },
     SUPPLIER: {
       LIST: "/master/supplier/list",
+      SUMMARY: "/master/supplier/summary",
       CREATE: "/master/supplier/create",
       UPDATE: (id: string) => `/master/supplier/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/supplier/toggle-status/${id}`,
@@ -463,3 +466,4 @@ export const API_ENDPOINTS = {
     },
   },
 };
+

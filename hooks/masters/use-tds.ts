@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   TdsListService,
   type TdsCreatePayload,
@@ -27,6 +27,7 @@ export function useTdsList(params: MasterListKeyParams) {
   return useQuery({
     queryKey: masterKeys.tds.list(params),
     queryFn: ({ signal }) => TdsListService.list({ ...toListParams(params), signal }),
+    placeholderData: keepPreviousData,
   });
 }
 

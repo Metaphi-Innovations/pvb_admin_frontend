@@ -5,7 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle, ShieldAlert } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  X,
+  XCircle,
+  ShieldAlert,
+} from "lucide-react";
 import {
   todayStr,
 } from "../customer-data";
@@ -13,14 +21,15 @@ import {
   CustomerForm,
   DEFAULT_CUSTOMER_FORM,
   validateCustomerForm,
-  formValuesToCustomer,
+  validateCustomerFormStep,
+  CUSTOMER_FORM_STEPS,
   type CustomerFormValues,
+  type CustomerFormStepId,
   formValuesToCreatePayload,
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../customer-permissions";
-import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 import {
   buildCustomerPrefillFromDistributor,
   CONVERT_DISTRIBUTOR_STORAGE_KEY,
@@ -92,12 +101,17 @@ export default function NewCustomerPage() {
   const [distributorAssessmentLabel, setDistributorAssessmentLabel] = useState<string | null>(
     null,
   );
+  const [stepIndex, setStepIndex] = useState(0);
 
   const createCustomer = useCreateCustomer();
   const {
     data: customerTypes = [],
     isLoading: customerTypesLoading,
   } = useCustomerTypeDropdown();
+
+  const currentStep = CUSTOMER_FORM_STEPS[stepIndex];
+  const isFirstStep = stepIndex === 0;
+  const isLastStep = stepIndex === CUSTOMER_FORM_STEPS.length - 1;
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
@@ -185,6 +199,47 @@ export default function NewCustomerPage() {
       return next;
     });
 
+  const showValidationToast = (stepErrors: Record<string, string>) => {
+    const addressLine2Error = Object.values(stepErrors).find((msg) =>
+      msg.includes("Address Line 2"),
+    );
+    const msg =
+      addressLine2Error ||
+      stepErrors.requiredDocuments ||
+      Object.values(stepErrors)[0] ||
+      "Please fix the errors before continuing.";
+    setToast({ msg, type: "error" });
+    setTimeout(() => setToast(null), 3200);
+  };
+
+  const handleNext = () => {
+    const stepErrors = validateCustomerFormStep(
+      form,
+      currentStep.id as CustomerFormStepId,
+      true,
+    );
+    if (!form.customerType && currentStep.id === "basic") {
+      stepErrors.customerType = "Customer type is required";
+    }
+    if (!customerCode && currentStep.id === "basic") {
+      setToast({ msg: "Select a customer type to generate customer code.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+      return;
+    }
+    setErrors(stepErrors);
+    if (Object.keys(stepErrors).length > 0) {
+      showValidationToast(stepErrors);
+      return;
+    }
+    setErrors({});
+    setStepIndex((i) => Math.min(i + 1, CUSTOMER_FORM_STEPS.length - 1));
+  };
+
+  const handleBack = () => {
+    setErrors({});
+    setStepIndex((i) => Math.max(i - 1, 0));
+  };
+
   const persist = async (asDraft: boolean) => {
     const e = validateCustomerForm(form, true);
     if (!form.customerType) {
@@ -197,9 +252,12 @@ export default function NewCustomerPage() {
     }
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      const msg = e.requiredDocuments || "Please fix the errors before saving.";
-      setToast({ msg, type: "error" });
-      setTimeout(() => setToast(null), 3200);
+      const firstStepWithError = CUSTOMER_FORM_STEPS.findIndex((step) => {
+        const stepErrors = validateCustomerFormStep(form, step.id, true);
+        return Object.keys(stepErrors).length > 0;
+      });
+      if (firstStepWithError >= 0) setStepIndex(firstStepWithError);
+      showValidationToast(e);
       return;
     }
 
@@ -215,10 +273,19 @@ export default function NewCustomerPage() {
 
     try {
       const created = await createCustomer.mutateAsync({ payload, branches: form.branches });
-      const newId = (created as any)?.id;
-      const finalCode = (created as any)?.customerCode ?? customerCode;
+      const createdRecord = created as Record<string, unknown> | undefined;
+      const parseCustomerId = (value: unknown): number | null => {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") {
+          const parsed = Number.parseInt(value, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      };
+      const newId = parseCustomerId(createdRecord?.id) ?? parseCustomerId(createdRecord?.sr_no);
+      const finalCode = String(createdRecord?.customer_code ?? createdRecord?.customerCode ?? customerCode);
 
-      if (sourceDistributorId !== null) {
+      if (sourceDistributorId !== null && newId !== null) {
         updateDistributorConversion(
           sourceDistributorId,
           newId,
@@ -235,9 +302,13 @@ export default function NewCustomerPage() {
           form.branches.find((b) => b.branchName === "Main Branch") ??
           form.branches[0];
 
+        if (newId === null) {
+          throw new Error("Customer created, but no numeric id returned by API.");
+        }
+
         ensureCustomerLedgerFromMaster({
           id: newId,
-          customerUuid: (created as any)?.customerUuid,
+          customerUuid: String(createdRecord?.customer_id ?? ""),
           customerName: form.customerName,
           customerCode: finalCode,
           status,
@@ -258,7 +329,7 @@ export default function NewCustomerPage() {
           stateName: mainBranch?.billingAddress?.state ?? "",
           pincode: mainBranch?.billingAddress?.pincode ?? "",
           branches: form.branches,
-          salesManName: "", // resolve from getActiveSalesEmployees() if needed, see below
+          salesManName: "",
           mobile: form.mobile,
           countryCode: form.countryCode,
           email: form.email,
@@ -316,7 +387,7 @@ export default function NewCustomerPage() {
   return (
     <FormContainer
       title="Add Customer"
-      description="Masters → Customer Master → Add"
+      description={`Masters → Customer Master → Add · Step ${stepIndex + 1} of ${CUSTOMER_FORM_STEPS.length}: ${currentStep.label}`}
       onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
@@ -326,18 +397,65 @@ export default function NewCustomerPage() {
           <Button variant="ghost" size="sm" onClick={() => router.push(leaveHref)}>
             Discard
           </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => persist(false)}
-            disabled={createCustomer.isPending}
-          >
-            <Save className="w-4 h-4" />
-            {createCustomer.isPending ? "Saving…" : "Save"}
-          </Button>
+          {!isFirstStep && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={handleBack}
+            >
+              <ChevronLeft className="w-4 h-4" /> Back
+            </Button>
+          )}
+          {!isLastStep ? (
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleNext}
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => persist(false)}
+              disabled={createCustomer.isPending}
+              className="gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              {createCustomer.isPending ? "Saving…" : "Save"}
+            </Button>
+          )}
         </div>
       }
     >
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {CUSTOMER_FORM_STEPS.map((step, idx) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => {
+              if (idx <= stepIndex) {
+                setErrors({});
+                setStepIndex(idx);
+              }
+            }}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-colors",
+              idx === stepIndex
+                ? "bg-brand-600 text-white border-brand-600"
+                : idx < stepIndex
+                  ? "bg-brand-50 text-brand-700 border-brand-200 cursor-pointer"
+                  : "bg-muted/40 text-muted-foreground border-border cursor-default",
+            )}
+          >
+            {idx + 1}. {step.label}
+          </button>
+        ))}
+      </div>
+
       {distributorAssessmentLabel && (
         <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5">
           <p className="text-xs font-semibold text-brand-800">
@@ -359,6 +477,7 @@ export default function NewCustomerPage() {
         isAdd={true}
         customerCode={customerCode}
         customerTypes={customerTypes}
+        activeStep={currentStep.id}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
