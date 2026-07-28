@@ -27,8 +27,6 @@ import {
 	Ban,
 	UserCheck,
 	UserX,
-	CircleDashed,
-	Ban as BanIcon,
 } from "lucide-react";
 import {
 	useCustomers,
@@ -189,9 +187,6 @@ export default function CustomersPage() {
 	// };
 
 	const toggleStatus = useToggleCustomerStatus();
-	const markDraft = () => {
-		showToast("Draft status is not implemented yet", "error");
-	};
 
 	const {
 		data,
@@ -453,22 +448,6 @@ export default function CustomersPage() {
 								<UserCheck className='w-3.5 h-3.5' /> Activate
 							</DropdownMenuItem>
 						) : null}
-						{row.status !== "draft" && row.status !== "blocked" && (
-							<DropdownMenuItem
-								className='gap-2 text-xs cursor-pointer'
-								onClick={() => showToast("Blocked status is not implemented yet", "error")}
-							>
-								<BanIcon className='w-3.5 h-3.5' /> Block Customer
-							</DropdownMenuItem>
-						)}
-						{row.status !== "blocked" && (
-							<DropdownMenuItem
-								className='gap-2 text-xs cursor-pointer'
-								onClick={() => markDraft()}
-							>
-								<CircleDashed className='w-3.5 h-3.5' /> Mark as Draft
-							</DropdownMenuItem>
-						)}
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),

@@ -29,7 +29,7 @@ import {
 } from "@/lib/accounts/coa-add-ledger-policy";
 import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
 import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
-import { LedgerService } from "@/services/ledger.service";
+import { LedgerService, type LedgerDetailDto } from "@/services/ledger.service";
 import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -73,6 +73,19 @@ function normalizeAmount(raw: string): string {
   const n = Number(String(raw).replace(/,/g, "").trim());
   if (!Number.isFinite(n) || n < 0) return "0.00";
   return n.toFixed(2);
+}
+
+function resolveLedgerOpeningBalance(
+  detail: LedgerDetailDto,
+  financialYearId?: string,
+) {
+  if (financialYearId) {
+    const match = detail.openingBalances?.find(
+      (row) => row.financialYearId === financialYearId,
+    );
+    if (match) return match;
+  }
+  return detail.openingBalance ?? detail.openingBalances?.[0] ?? null;
 }
 
 export interface AccountsGenericLedgerFormClientProps {
@@ -150,7 +163,14 @@ export default function AccountsGenericLedgerFormClient({
         }
 
         try {
-          const detail = await LedgerService.view(row.apiNodeId ?? String(row.id));
+          const [detail, currentFy] = await Promise.all([
+            LedgerService.view(row.apiNodeId ?? String(row.id)),
+            LedgerService.getCurrentFinancialYear(),
+          ]);
+          const openingBalanceRow = resolveLedgerOpeningBalance(
+            detail,
+            currentFy?.financialYearId,
+          );
           if (cancelled) return;
           setActive(row);
           setForm({
@@ -158,9 +178,10 @@ export default function AccountsGenericLedgerFormClient({
             ledgerName: detail.ledgerName || row.accountName,
             alias: detail.aliasName ?? row.alias ?? "",
             description: detail.description ?? row.description ?? "",
-            openingBalance: detail.openingBalance?.amount ?? String(row.openingBalance ?? "0"),
+            openingBalance:
+              openingBalanceRow?.amount ?? String(row.openingBalance ?? "0"),
             balanceType:
-              String(detail.openingBalance?.balanceType ?? "").toUpperCase() === "CREDIT"
+              String(openingBalanceRow?.balanceType ?? "").toUpperCase() === "CREDIT"
                 ? "Credit"
                 : row.balanceType === "Credit"
                   ? "Credit"

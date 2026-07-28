@@ -10,8 +10,11 @@ import { ArrowLeft, Save, X, CheckCircle2, XCircle, ShieldAlert } from "lucide-r
 import {
   CustomerForm,
   validateCustomerForm,
+  validateCustomerFormStep,
+  CUSTOMER_FORM_STEPS,
   formValuesToUpdatePayload,
   type CustomerFormValues,
+  type CustomerFormStepId,
   customerRecordToFormValues,
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
@@ -27,6 +30,94 @@ import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
 interface ToastState {
   msg: string;
   type: "success" | "error";
+}
+
+type ApiValidationError = { path?: string; message?: string };
+
+function mapApiPathToFieldKey(path: string): string {
+  const normalized = path.trim();
+  if (!normalized) return "";
+
+  const directMap: Record<string, string> = {
+    email: "email",
+    mobile_no: "mobile",
+    customer_name: "customerName",
+    customer_type_id: "customerType",
+    gstin_no: "gstin",
+    pan_no: "pan",
+    tds_section_id: "tdsMasterId",
+    account_number: "accountNumber",
+    ifsc_code: "ifscCode",
+    branch_name: "branch",
+    payment_type: "paymentType",
+    credit_days: "creditDays",
+    advance: "advancePercentage",
+    credit_limit: "creditLimit",
+    branches: "branches",
+  };
+
+  if (directMap[normalized]) return directMap[normalized];
+
+  const branchMatch =
+    normalized.match(/^branches\[(\d+)\]\.(.+)$/) ??
+    normalized.match(/^branches\.(\d+)\.(.+)$/);
+  if (!branchMatch) return normalized;
+
+  const branchIdx = Number.parseInt(branchMatch[1], 10);
+  const field = branchMatch[2];
+
+  if (field === "billing_address_line_1") return `branch_${branchIdx}_billingAddressLine1`;
+  if (field === "billing_address_line_2") return `branch_${branchIdx}_billingAddressLine2`;
+  if (field === "billing_city") return `branch_${branchIdx}_billingCity`;
+  if (field === "billing_state") return `branch_${branchIdx}_billingState`;
+  if (field === "billing_town") return `branch_${branchIdx}_billingTown`;
+  if (field === "billing_pincode") return `branch_${branchIdx}_billingPincode`;
+  if (field === "shipping_address_line_1") return `branch_${branchIdx}_shippingAddressLine1`;
+  if (field === "shipping_address_line_2") return `branch_${branchIdx}_shippingAddressLine2`;
+  if (field === "shipping_city") return `branch_${branchIdx}_shippingCity`;
+  if (field === "shipping_state") return `branch_${branchIdx}_shippingState`;
+  if (field === "shipping_town") return `branch_${branchIdx}_shippingTown`;
+  if (field === "shipping_pincode") return `branch_${branchIdx}_shippingPincode`;
+  if (field === "sales_man_id") return `branch_${branchIdx}_salesManId`;
+  return `branch_${branchIdx}_${field}`;
+}
+
+function extractApiValidation(err: unknown): {
+  toastMessage: string;
+  fieldErrors: Record<string, string>;
+} {
+  const fallback = "Failed to update customer.";
+  const e = err as {
+    message?: string;
+    response?: {
+      data?: {
+        message?: string;
+        error?: string;
+        validation_errors?: ApiValidationError[];
+      };
+    };
+  };
+
+  const payload = e.response?.data;
+  const validationErrors = Array.isArray(payload?.validation_errors)
+    ? payload.validation_errors
+    : [];
+
+  const fieldErrors: Record<string, string> = {};
+  validationErrors.forEach((item) => {
+    const key = mapApiPathToFieldKey(String(item.path ?? ""));
+    const msg = String(item.message ?? "").trim();
+    if (key && msg) fieldErrors[key] = msg;
+  });
+
+  const toastMessage =
+    validationErrors[0]?.message?.trim() ||
+    payload?.message ||
+    payload?.error ||
+    e.message ||
+    fallback;
+
+  return { toastMessage, fieldErrors };
 }
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
@@ -67,6 +158,7 @@ export default function EditCustomerPage() {
   const [form, setForm] = useState<CustomerFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
 
   const { data: customer, isLoading, isError } = useCustomer(id);
   const updateCustomer = useUpdateCustomer();
@@ -74,6 +166,31 @@ export default function EditCustomerPage() {
     data: customerTypes = [],
     isLoading: customerTypesLoading,
   } = useCustomerTypeDropdown();
+  const currentStep = CUSTOMER_FORM_STEPS[stepIndex];
+
+  const focusFirstInvalidField = () => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        "input.border-red-400, textarea.border-red-400, button.border-red-400, [role='combobox'].border-red-400",
+      );
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if ("focus" in target) target.focus({ preventScroll: true });
+    });
+  };
+
+  const findStepIndexForErrors = (fieldErrors: Record<string, string>): number => {
+    const hasBranchError = Object.keys(fieldErrors).some(
+      (key) => key === "branches" || key.startsWith("branch_") || key.startsWith("mainBranch"),
+    );
+    const hasCommercialError = Object.keys(fieldErrors).some((key) =>
+      ["creditLimit", "paymentType", "creditDays", "advancePercentage", "ifscCode", "accountNumber", "branch"].includes(key),
+    );
+    if (hasBranchError) return 1;
+    if (hasCommercialError) return 2;
+    return 0;
+  };
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("edit"));
@@ -107,9 +224,15 @@ export default function EditCustomerPage() {
     const e = validateCustomerForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
+      const firstStepWithError = CUSTOMER_FORM_STEPS.findIndex((step) => {
+        const stepErrors = validateCustomerFormStep(form, step.id);
+        return Object.keys(stepErrors).length > 0;
+      });
+      if (firstStepWithError >= 0) setStepIndex(firstStepWithError);
       const msg = e.requiredDocuments || "Please fix the errors before saving.";
       setToast({ msg, type: "error" });
       setTimeout(() => setToast(null), 3200);
+      focusFirstInvalidField();
       return;
     }
 
@@ -167,8 +290,14 @@ export default function EditCustomerPage() {
           setTimeout(() => router.push(leaveHref), 900);
         },
         onError: (err) => {
+          const { toastMessage, fieldErrors } = extractApiValidation(err);
+          if (Object.keys(fieldErrors).length > 0) {
+            setErrors((prev) => ({ ...prev, ...fieldErrors }));
+            setStepIndex(findStepIndexForErrors(fieldErrors));
+            focusFirstInvalidField();
+          }
           setToast({
-            msg: err instanceof Error ? err.message : "Failed to update customer.",
+            msg: toastMessage,
             type: "error",
           });
           setTimeout(() => setToast(null), 3200);
@@ -225,7 +354,7 @@ export default function EditCustomerPage() {
       description={
         fromCoa
           ? "Accounts → Chart of Accounts → Sundry Debtors → Edit"
-          : "Masters → Customer Master → Edit"
+          : `Masters → Customer Master → Edit · ${currentStep.label}`
       }
       onBack={() => router.push(leaveHref)}
       actions={
@@ -256,6 +385,11 @@ export default function EditCustomerPage() {
         onClearError={clearErr}
         customerCode={customer.customerCode}
         customerTypes={customerTypes}
+        activeStep={currentStep.id}
+        onStepChange={(step: CustomerFormStepId) => {
+          const targetIdx = CUSTOMER_FORM_STEPS.findIndex((s) => s.id === step);
+          if (targetIdx >= 0) setStepIndex(targetIdx);
+        }}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
