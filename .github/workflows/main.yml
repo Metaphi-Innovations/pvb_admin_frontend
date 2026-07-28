@@ -1,5 +1,4 @@
 name: Frontend Deploy - pvb.dev.metaphi.in
-
 on:
   push:
     branches:
@@ -8,82 +7,26 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted
-
     env:
       PATH: /root/.nvm/versions/node/v20.19.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       PM2_HOME: /root/.pm2
-
     steps:
-      - name: Clean GitHub workspace
-        run: |
-          rm -rf "$GITHUB_WORKSPACE"/*
-          rm -rf "$GITHUB_WORKSPACE"/.[!.]* || true
-          rm -rf "$GITHUB_WORKSPACE"/..?* || true
-
-      - name: Checkout source code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          clean: true
-          fetch-depth: 1
-
-      - name: Verify Node.js environment
+      - name: Verify node, npm and pm2
         run: |
-          echo "Working Directory:"
-          pwd
-
-          echo "Node Version:"
           node -v
-
-          echo "NPM Version:"
           npm -v
-
-          echo "PM2 Version:"
           pm2 -v
-
-      - name: Clean old build files
+      - name: Copy files to deployment directory
         run: |
-          rm -rf node_modules
-          rm -rf .next
-          npm cache clean --force
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Next.js application
-        run: npm run build
-
-      - name: Copy application
-        run: |
-          set -x
-      
-          whoami
-          pwd
-      
-          ls -ld /var/www/pvb.dev1.metaphi.in
-      
           rsync -av --delete \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='.env' \
-            ./ /var/www/pvb.dev1.metaphi.in/
-
-      - name: Install production dependencies on server
+                    --exclude='.git' \
+                    --exclude='.env' \
+                    ./ /var/www/pvb.dev1.metaphi.in/            
+      - name: Install dependencies on pvb.dev1.metaphi.in
         working-directory: /var/www/pvb.dev1.metaphi.in
-        run: |
-          rm -rf node_modules
-          
-      - name: Restart PM2
-        run: |
-          pm2 restart pvb.dev1.metaphi.in
-          pm2 save
+        run: rm -rf .next node_modules && npm i && npm run build
 
-      - name: Debug information (runs only if workflow fails)
-        if: failure()
-        run: |
-          echo "===== Debug Info ====="
-          pwd
-          ls -la
-          echo "===== .next/server ====="
-          find .next/server -type f | sort || true
-          echo "===== Deployment Directory ====="
-          ls -la /var/www/pvb.dev1.metaphi.in || true
+      - name: pm2 restart
+        run: pm2 restart pvb.dev1.metaphi.in
