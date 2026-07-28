@@ -874,7 +874,10 @@ export const CUSTOMER_FORM_STEPS = [
 
 export type CustomerFormStepId = (typeof CUSTOMER_FORM_STEPS)[number]["id"];
 
-const ADDRESS_LINE_2_MAX = 250;
+const ADDRESS_LINE_1_MAX = 255;
+const ADDRESS_LINE_2_MAX = 255;
+const ADDRESS_GEO_MAX = 100;
+const ADDRESS_PINCODE_MAX = 20;
 
 interface CustomerFormProps {
 	form: CustomerFormValues;
@@ -892,6 +895,7 @@ interface CustomerFormProps {
 		documents: CustomerTypeDocument[];
 	}[];
 	activeStep?: CustomerFormStepId;
+	onStepChange?: (step: CustomerFormStepId) => void;
 }
 
 function branchDocumentsToPayload(
@@ -953,6 +957,7 @@ export function CustomerForm({
 	customerCode,
 	customerTypes,
 	activeStep,
+	onStepChange,
 }: CustomerFormProps) {
 	const show = (stepId: CustomerFormStepId) => !activeStep || activeStep === stepId;
 	const { data: gstDropdownItems = [] } = useGstDropdown();
@@ -1477,21 +1482,25 @@ export function CustomerForm({
 		<div className='w-full'>
 			<Tabs
 				{...(activeStep ? { value: activeStep } : { defaultValue: "basic" })}
+				onValueChange={(value) => {
+					if (!onStepChange) return;
+					if (value === "basic" || value === "branch" || value === "commercial") {
+						onStepChange(value);
+					}
+				}}
 				className='w-full'
 			>
-				{!activeStep && (
-					<TabsList className='w-full mb-2 h-8'>
-						<TabsTrigger value='basic' className='text-xs'>
-							Basic Details
-						</TabsTrigger>
-						<TabsTrigger value='branch' className='text-xs'>
-							Branch
-						</TabsTrigger>
-						<TabsTrigger value='commercial' className='text-xs'>
-							Bank & Commercial
-						</TabsTrigger>
-					</TabsList>
-				)}
+				<TabsList className='w-full mb-2 h-8'>
+					<TabsTrigger value='basic' className='text-xs'>
+						Basic Details
+					</TabsTrigger>
+					<TabsTrigger value='branch' className='text-xs'>
+						Branch
+					</TabsTrigger>
+					<TabsTrigger value='commercial' className='text-xs'>
+						Bank & Commercial
+					</TabsTrigger>
+				</TabsList>
 
 				{show("basic") && (
 				<TabsContent value='basic' className='mt-0'>
@@ -2142,7 +2151,12 @@ export function CustomerForm({
 																	pincode: errors.mainBranchBillingPincode,
 																}
 																: {}),
+															address: errors[`branch_${bIdx}_billingAddressLine1`] || (isMain ? errors.mainBranchBillingAddress : undefined),
 															addressLine2: errors[`branch_${bIdx}_billingAddressLine2`],
+															state: errors[`branch_${bIdx}_billingState`] || (isMain ? errors.mainBranchBillingState : undefined),
+															city: errors[`branch_${bIdx}_billingCity`] || (isMain ? errors.mainBranchBillingCity : undefined),
+															town: errors[`branch_${bIdx}_billingTown`],
+															pincode: errors[`branch_${bIdx}_billingPincode`] || (isMain ? errors.mainBranchBillingPincode : undefined),
 														}}
 													/>
 												</ErpFormSection>
@@ -2182,7 +2196,12 @@ export function CustomerForm({
 														readOnly={readOnly}
 														stateOptions={stateOptions}
 														errors={{
+															address: errors[`branch_${bIdx}_shippingAddressLine1`],
 															addressLine2: errors[`branch_${bIdx}_shippingAddressLine2`],
+															state: errors[`branch_${bIdx}_shippingState`],
+															city: errors[`branch_${bIdx}_shippingCity`],
+															town: errors[`branch_${bIdx}_shippingTown`],
+															pincode: errors[`branch_${bIdx}_shippingPincode`],
 														}}
 													/>
 												</ErpFormSection>
@@ -2767,15 +2786,66 @@ export function validateCustomerForm(
 	}
 
 	form.branches.forEach((branch, bIdx) => {
+		const billingLine1 = branch.billingAddress.address ?? "";
+		if (billingLine1.length > ADDRESS_LINE_1_MAX) {
+			e[`branch_${bIdx}_billingAddressLine1`] =
+				`Address Line 1 cannot exceed ${ADDRESS_LINE_1_MAX} characters.`;
+		}
 		const billingLine2 = branch.billingAddress.addressLine2 ?? "";
 		if (billingLine2.length > ADDRESS_LINE_2_MAX) {
 			e[`branch_${bIdx}_billingAddressLine2`] =
-				`Address Line 2 must not exceed ${ADDRESS_LINE_2_MAX} characters (${billingLine2.length}/${ADDRESS_LINE_2_MAX})`;
+				`Address Line 2 cannot exceed ${ADDRESS_LINE_2_MAX} characters.`;
+		}
+		const billingCity = branch.billingAddress.city ?? "";
+		if (billingCity.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingCity`] =
+				`City cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingState = branch.billingAddress.state ?? "";
+		if (billingState.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingState`] =
+				`State cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingTown = branch.billingAddress.town ?? "";
+		if (billingTown.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingTown`] =
+				`Town cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingPincode = branch.billingAddress.pincode ?? "";
+		if (billingPincode.length > ADDRESS_PINCODE_MAX) {
+			e[`branch_${bIdx}_billingPincode`] =
+				`Pincode cannot exceed ${ADDRESS_PINCODE_MAX} characters.`;
+		}
+
+		const shippingLine1 = branch.shippingAddress.address ?? "";
+		if (shippingLine1.length > ADDRESS_LINE_1_MAX) {
+			e[`branch_${bIdx}_shippingAddressLine1`] =
+				`Address Line 1 cannot exceed ${ADDRESS_LINE_1_MAX} characters.`;
 		}
 		const shippingLine2 = branch.shippingAddress.addressLine2 ?? "";
 		if (shippingLine2.length > ADDRESS_LINE_2_MAX) {
 			e[`branch_${bIdx}_shippingAddressLine2`] =
-				`Address Line 2 must not exceed ${ADDRESS_LINE_2_MAX} characters (${shippingLine2.length}/${ADDRESS_LINE_2_MAX})`;
+				`Address Line 2 cannot exceed ${ADDRESS_LINE_2_MAX} characters.`;
+		}
+		const shippingCity = branch.shippingAddress.city ?? "";
+		if (shippingCity.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingCity`] =
+				`City cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingState = branch.shippingAddress.state ?? "";
+		if (shippingState.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingState`] =
+				`State cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingTown = branch.shippingAddress.town ?? "";
+		if (shippingTown.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingTown`] =
+				`Town cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingPincode = branch.shippingAddress.pincode ?? "";
+		if (shippingPincode.length > ADDRESS_PINCODE_MAX) {
+			e[`branch_${bIdx}_shippingPincode`] =
+				`Pincode cannot exceed ${ADDRESS_PINCODE_MAX} characters.`;
 		}
 	});
 

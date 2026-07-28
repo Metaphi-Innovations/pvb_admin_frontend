@@ -51,6 +51,94 @@ interface ToastState {
   type: "success" | "error";
 }
 
+type ApiValidationError = { path?: string; message?: string };
+
+function mapApiPathToFieldKey(path: string): string {
+  const normalized = path.trim();
+  if (!normalized) return "";
+
+  const directMap: Record<string, string> = {
+    email: "email",
+    mobile_no: "mobile",
+    customer_name: "customerName",
+    customer_type_id: "customerType",
+    gstin_no: "gstin",
+    pan_no: "pan",
+    tds_section_id: "tdsMasterId",
+    account_number: "accountNumber",
+    ifsc_code: "ifscCode",
+    branch_name: "branch",
+    payment_type: "paymentType",
+    credit_days: "creditDays",
+    advance: "advancePercentage",
+    credit_limit: "creditLimit",
+    branches: "branches",
+  };
+
+  if (directMap[normalized]) return directMap[normalized];
+
+  const branchMatch =
+    normalized.match(/^branches\[(\d+)\]\.(.+)$/) ??
+    normalized.match(/^branches\.(\d+)\.(.+)$/);
+  if (!branchMatch) return normalized;
+
+  const branchIdx = Number.parseInt(branchMatch[1], 10);
+  const field = branchMatch[2];
+
+  if (field === "billing_address_line_1") return `branch_${branchIdx}_billingAddressLine1`;
+  if (field === "billing_address_line_2") return `branch_${branchIdx}_billingAddressLine2`;
+  if (field === "billing_city") return `branch_${branchIdx}_billingCity`;
+  if (field === "billing_state") return `branch_${branchIdx}_billingState`;
+  if (field === "billing_town") return `branch_${branchIdx}_billingTown`;
+  if (field === "billing_pincode") return `branch_${branchIdx}_billingPincode`;
+  if (field === "shipping_address_line_1") return `branch_${branchIdx}_shippingAddressLine1`;
+  if (field === "shipping_address_line_2") return `branch_${branchIdx}_shippingAddressLine2`;
+  if (field === "shipping_city") return `branch_${branchIdx}_shippingCity`;
+  if (field === "shipping_state") return `branch_${branchIdx}_shippingState`;
+  if (field === "shipping_town") return `branch_${branchIdx}_shippingTown`;
+  if (field === "shipping_pincode") return `branch_${branchIdx}_shippingPincode`;
+  if (field === "sales_man_id") return `branch_${branchIdx}_salesManId`;
+  return `branch_${branchIdx}_${field}`;
+}
+
+function extractApiValidation(err: unknown): {
+  toastMessage: string;
+  fieldErrors: Record<string, string>;
+} {
+  const fallback = "Failed to save customer.";
+  const e = err as {
+    message?: string;
+    response?: {
+      data?: {
+        message?: string;
+        error?: string;
+        validation_errors?: ApiValidationError[];
+      };
+    };
+  };
+
+  const payload = e.response?.data;
+  const validationErrors = Array.isArray(payload?.validation_errors)
+    ? payload.validation_errors
+    : [];
+
+  const fieldErrors: Record<string, string> = {};
+  validationErrors.forEach((item) => {
+    const key = mapApiPathToFieldKey(String(item.path ?? ""));
+    const msg = String(item.message ?? "").trim();
+    if (key && msg) fieldErrors[key] = msg;
+  });
+
+  const toastMessage =
+    validationErrors[0]?.message?.trim() ||
+    payload?.message ||
+    payload?.error ||
+    e.message ||
+    fallback;
+
+  return { toastMessage, fieldErrors };
+}
+
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
     <div
@@ -97,6 +185,30 @@ export default function NewCustomerPage() {
   const currentStep = CUSTOMER_FORM_STEPS[stepIndex];
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === CUSTOMER_FORM_STEPS.length - 1;
+
+  const focusFirstInvalidField = () => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        "input.border-red-400, textarea.border-red-400, button.border-red-400, [role='combobox'].border-red-400",
+      );
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if ("focus" in target) target.focus({ preventScroll: true });
+    });
+  };
+
+  const findStepIndexForErrors = (fieldErrors: Record<string, string>): number => {
+    const hasBranchError = Object.keys(fieldErrors).some(
+      (key) => key === "branches" || key.startsWith("branch_") || key.startsWith("mainBranch"),
+    );
+    const hasCommercialError = Object.keys(fieldErrors).some((key) =>
+      ["creditLimit", "paymentType", "creditDays", "advancePercentage", "ifscCode", "accountNumber", "branch"].includes(key),
+    );
+    if (hasBranchError) return 1;
+    if (hasCommercialError) return 2;
+    return 0;
+  };
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
@@ -213,7 +325,9 @@ export default function NewCustomerPage() {
     }
     setErrors(stepErrors);
     if (Object.keys(stepErrors).length > 0) {
+      setStepIndex(findStepIndexForErrors(stepErrors));
       showValidationToast(stepErrors);
+      focusFirstInvalidField();
       return;
     }
     setErrors({});
@@ -243,6 +357,7 @@ export default function NewCustomerPage() {
       });
       if (firstStepWithError >= 0) setStepIndex(firstStepWithError);
       showValidationToast(e);
+      focusFirstInvalidField();
       return;
     }
 
@@ -328,8 +443,14 @@ export default function NewCustomerPage() {
       setTimeout(() => router.push("/masters/customers"), 1000);
     } catch (err) {
       console.error(err);
+      const { toastMessage, fieldErrors } = extractApiValidation(err);
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors((prev) => ({ ...prev, ...fieldErrors }));
+        setStepIndex(findStepIndexForErrors(fieldErrors));
+        focusFirstInvalidField();
+      }
       setToast({
-        msg: err instanceof Error ? err.message : "Failed to save customer.",
+        msg: toastMessage,
         type: "error",
       });
       setTimeout(() => setToast(null), 3200);
@@ -457,6 +578,12 @@ export default function NewCustomerPage() {
         customerCode={customerCode}
         customerTypes={customerTypes}
         activeStep={currentStep.id}
+        onStepChange={(step) => {
+          const targetIdx = CUSTOMER_FORM_STEPS.findIndex((s) => s.id === step);
+          if (targetIdx >= 0) {
+            setStepIndex(targetIdx);
+          }
+        }}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
