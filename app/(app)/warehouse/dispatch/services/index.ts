@@ -64,20 +64,52 @@ export async function revertDispatch(id: string) {
 }
 
 export async function downloadDeliveryChallan(id: string): Promise<void> {
-  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id), {
-    responseType: "blob",
-  });
-  const blob = response.data as Blob;
+  const { blob, fileName } = await fetchDeliveryChallanPdf(id);
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  const disposition = response.headers?.["content-disposition"] as string | undefined;
-  const matched = disposition?.match(/filename="?([^"]+)"?/i);
-  link.download = matched?.[1] || `delivery-challan-${id}.pdf`;
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+export async function fetchDeliveryChallanPdf(
+  id: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id), {
+    responseType: "blob",
+  });
+  const blob = response.data as Blob;
+  const disposition = response.headers?.["content-disposition"] as string | undefined;
+  const matched = disposition?.match(/filename="?([^"]+)"?/i);
+  return {
+    blob,
+    fileName: matched?.[1] || `delivery-challan-${id}.pdf`,
+  };
+}
+
+/** Open official server PDF in a new tab for printing. */
+export async function printDeliveryChallan(id: string): Promise<void> {
+  const { blob } = await fetchDeliveryChallanPdf(id);
+  const url = window.URL.createObjectURL(blob);
+  const popup = window.open(url, "_blank");
+  if (!popup) {
+    window.URL.revokeObjectURL(url);
+    throw new Error("Popup blocked. Allow popups to print the delivery challan.");
+  }
+  const revoke = () => window.URL.revokeObjectURL(url);
+  popup.addEventListener("load", () => {
+    try {
+      popup.focus();
+      popup.print();
+    } finally {
+      setTimeout(revoke, 60_000);
+    }
+  });
+  // Fallback revoke
+  setTimeout(revoke, 120_000);
 }
 
 export async function getFilterDropdown(fieldName: string, sourceType?: string) {

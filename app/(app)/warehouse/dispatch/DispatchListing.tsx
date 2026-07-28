@@ -4,8 +4,8 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
-  Truck, Package, Eye, Pencil, RotateCcw, FileText, CheckCircle2,
-  Clock, XCircle, Download, Printer, X
+  Eye, Pencil, RotateCcw, FileText, CheckCircle2,
+  Download, Printer, X
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,7 +23,12 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, downloadDeliveryChallan, getDispatchById } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, downloadDeliveryChallan, printDeliveryChallan, getDispatchById } from "./services";
+import {
+  mapDispatchToDeliveryChallan,
+  openDeliveryChallanPrintWindow,
+} from "./dc-pdf/deliveryChallanPdf";
+import { DeliveryChallanPreview } from "./dc-pdf/DeliveryChallanPreview";
 import {
   DELIVERY_STATUS_BADGE_CONFIG,
   TRANSPORTER_OPTIONS,
@@ -60,7 +65,9 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
   const [challanTarget, setChallanTarget] = useState<any>(null);
+  const [challanLoading, setChallanLoading] = useState(false);
   const [challanDownloading, setChallanDownloading] = useState(false);
+  const [challanPrinting, setChallanPrinting] = useState(false);
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
   const [closeTarget, setCloseTarget] = useState<any>(null);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
@@ -382,7 +389,18 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       label: "Download Challan",
       action: "challan",
       icon: FileText,
-      onClick: (row) => setChallanTarget(row),
+      onClick: async (row) => {
+        setChallanTarget(row);
+        setChallanLoading(true);
+        try {
+          const detail = await getDispatchById(row.id);
+          setChallanTarget(detail || row);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setChallanLoading(false);
+        }
+      },
       hide: (row) =>
         resolveWarehouseOrderType({
           sourceDocumentType: row.sourceDocumentType,
@@ -525,91 +543,60 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
 
       {/* ── CHALLAN PREVIEW DIALOG ── */}
       <Dialog open={!!challanTarget} onOpenChange={() => setChallanTarget(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-center">
                 <FileText className="w-4 h-4 text-brand-600" />
               </div>
-              Delivery Challan Preview
+              Delivery Challan
             </DialogTitle>
           </DialogHeader>
-          {challanTarget && (
-            <div className="space-y-5">
-              {/* Challan Header */}
-              <div className="border border-border rounded-xl overflow-hidden">
-                <div className="bg-brand-600 px-5 py-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-bold text-sm">DELIVERY CHALLAN</p>
-                    <p className="text-brand-100 text-xs">
-                      {challanTarget.challan_number ||
-                        challanTarget.challanNumber ||
-                        "Assigned on download"}
-                    </p>
-                    <p className="text-brand-200/80 text-[10px] mt-0.5">
-                      Dispatch:{" "}
-                      {challanTarget.dispatch_number ||
-                        challanTarget.dispatch_no ||
-                        challanTarget.dispatchNumber}
-                    </p>
-                  </div>
-                  <Truck className="w-8 h-8 text-brand-200" />
-                </div>
-                <div className="p-4 grid grid-cols-2 gap-4 text-xs">
-                  <div className="space-y-2.5">
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Sales Order No</p><p className="font-bold">{challanTarget.source_document_no || challanTarget.packing_done?.packing_done_no || "—"}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Customer</p><p className="font-bold">{((challanTarget as any).customer)?.customer_name || challanTarget.customer_name || "--"}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Dispatch Date</p><p className="font-bold">{challanTarget.dispatch_date ? new Date(challanTarget.dispatch_date).toLocaleDateString() : new Date(challanTarget.created_at).toLocaleDateString()}</p></div>
-                  </div>
-                  <div className="space-y-2.5">
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Vehicle No</p><p className="font-mono font-bold">{challanTarget.vehicle_number || "—"}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Driver Name</p><p className="font-bold">{challanTarget.driver_name || "—"}</p></div>
-                    <div><p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Transporter</p><p className="font-bold">{challanTarget.transporter || "—"}</p></div>
-                  </div>
-                </div>
-              </div>
-              {/* Product Table */}
-              <div className="border border-border rounded-xl overflow-hidden">
-                <div className="bg-slate-50 px-4 py-2 border-b border-border">
-                  <p className="text-xs font-bold text-foreground">Product Details</p>
-                </div>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="py-2 px-4 text-left text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Product</th>
-                      <th className="py-2 px-4 text-left text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">SKU</th>
-                      <th className="py-2 px-4 text-center text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(challanTarget.items || challanTarget.products || []).map((p: any, i: number) => {
-                      const packSize = Number(p.product?.unit_per_packing || p.product?.conversion_rate || 1);
-                      const baseQty = Number(p.dispatched_base_qty || p.dispatchQty || 0);
-                      const cases = Math.floor(baseQty / packSize);
-                      return (
-                        <tr key={i} className="border-b border-border/50 last:border-0">
-                          <td className="py-2.5 px-4 font-bold">{p.product?.product_name || p.product || "—"}</td>
-                          <td className="py-2.5 px-4 font-mono text-brand-700">{p.product?.product_code || p.sku || "—"}</td>
-                          <td className="py-2.5 px-4 text-center font-bold">{cases > 0 ? cases : baseQty} {cases > 0 && packSize > 1 ? "Cases" : "Units"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+          {challanLoading ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              Loading challan details…
             </div>
-          )}
+          ) : challanTarget ? (
+            <DeliveryChallanPreview
+              data={mapDispatchToDeliveryChallan(challanTarget)}
+            />
+          ) : null}
           <DialogFooter className="flex gap-2 justify-end pt-2 border-t">
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => setChallanTarget(null)}>
               <X className="w-3 h-3" /> Close
             </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-              <Printer className="w-3 h-3" /> Print
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1"
+              disabled={challanPrinting || challanLoading || !challanTarget?.id}
+              onClick={async () => {
+                if (!challanTarget?.id) return;
+                setChallanPrinting(true);
+                try {
+                  // Prefer official PDF (issues DC number). Fallback to HTML print.
+                  try {
+                    await printDeliveryChallan(challanTarget.id);
+                    const refreshed = await getDispatchById(challanTarget.id).catch(() => null);
+                    if (refreshed) setChallanTarget(refreshed);
+                    fetchData();
+                  } catch {
+                    openDeliveryChallanPrintWindow(
+                      mapDispatchToDeliveryChallan(challanTarget),
+                    );
+                  }
+                } finally {
+                  setChallanPrinting(false);
+                }
+              }}
+            >
+              <Printer className="w-3 h-3" />
+              {challanPrinting ? "Preparing…" : "Print"}
             </Button>
             <Button
               size="sm"
               className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
-              disabled={challanDownloading || !challanTarget?.id}
+              disabled={challanDownloading || challanLoading || !challanTarget?.id}
               onClick={async () => {
                 if (!challanTarget?.id) return;
                 setChallanDownloading(true);
