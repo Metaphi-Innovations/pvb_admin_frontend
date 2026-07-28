@@ -52,8 +52,15 @@ jobs:
       - name: Build Next.js application
         run: npm run build
 
-      - name: Copy application to deployment directory
+      - name: Copy application
         run: |
+          set -x
+      
+          whoami
+          pwd
+      
+          ls -ld /var/www/pvb.dev1.metaphi.in
+      
           rsync -av --delete \
             --exclude='.git' \
             --exclude='.github' \
