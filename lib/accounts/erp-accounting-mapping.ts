@@ -142,7 +142,7 @@ function applyVendorMeta(ledgerId: number, v: Vendor, existing?: LedgerExtendedM
 /** Create or update customer ledger from Customer Master. */
 export function syncCustomerLedger(
   customer: Customer,
-  options?: { parentGroupId?: number | null },
+  options?: { parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null },
 ): ChartOfAccount | null {
   const name = customer.customerName.trim();
   if (!name || customer.status === "draft") return null;
@@ -244,7 +244,7 @@ export function syncCustomerLedger(
 /** Create or update vendor ledger from Supplier Master. */
 export function syncVendorLedger(
   vendor: Vendor,
-  options?: { parentGroupId?: number | null },
+  options?: { parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null },
 ): ChartOfAccount | null {
   const name = vendor.vendorName.trim();
   if (!name || vendor.status !== "active") return null;

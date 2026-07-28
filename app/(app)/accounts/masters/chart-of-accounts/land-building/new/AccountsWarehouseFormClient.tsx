@@ -30,9 +30,12 @@ interface ToastState {
 }
 
 export interface AccountsWarehouseFormProps {
-  parentGroupId: number;
+  parentGroupId: import("../../../../data").CoaNodeId;
   onClose: () => void;
-  onSaved?: (ledgerId: number, parentGroupId: number | null) => void;
+  onSaved?: (
+    ledgerId: import("../../../../data").CoaNodeId,
+    parentGroupId: import("../../../../data").CoaNodeId | null,
+  ) => void;
 }
 
 /**

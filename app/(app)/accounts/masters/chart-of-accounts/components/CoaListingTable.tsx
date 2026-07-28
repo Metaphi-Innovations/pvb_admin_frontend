@@ -51,11 +51,11 @@ interface CoaHierarchyListingTableProps {
   ledgerRows?: never;
   records: ChartOfAccount[];
   canCreate: boolean;
-  highlightedLedgerId?: number | null;
+  highlightedLedgerId?: import("../../../data").CoaNodeId | null;
   isSearchMode?: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   canEdit?: boolean;
   emptyMessage?: string;
 }
@@ -66,10 +66,10 @@ interface CoaLedgerListingTableProps {
   rows?: never;
   records?: ChartOfAccount[];
   canCreate?: boolean;
-  highlightedLedgerId?: number | null;
+  highlightedLedgerId?: import("../../../data").CoaNodeId | null;
   isSearchMode?: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   emptyMessage?: string;
 }
 
@@ -140,11 +140,11 @@ function CoaHierarchyListingTable({
   records: ChartOfAccount[];
   canCreate: boolean;
   canEdit?: boolean;
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   isSearchMode: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
 }) {
   const getCellValue = useCallback((row: CoaListingRow, key: string) => {
     switch (key) {
@@ -222,11 +222,11 @@ function CoaHierarchyTableContent({
   records: ChartOfAccount[];
   canCreate: boolean;
   canEdit?: boolean;
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   isSearchMode: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   minWidth: number;
 }) {
   const visible = useAccountsFilteredRows<CoaListingRow>([]);
@@ -366,7 +366,7 @@ function CoaLedgerListingTableBody({
   emptyMessage,
 }: {
   ledgerRows: CoaLedgerListingRow[];
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   isSearchMode: boolean;
   onSelectLedger: (ledger: ChartOfAccount) => void;
   emptyMessage: string;
@@ -399,7 +399,7 @@ function CoaLedgerListingTableInner({
   onSelectLedger,
 }: {
   ledgerRows: CoaLedgerListingRow[];
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   onSelectLedger: (ledger: ChartOfAccount) => void;
 }) {
   const getCellValue = useCallback((row: CoaLedgerListingRow, key: string) => {
@@ -450,7 +450,7 @@ function CoaLedgerTableContent({
   highlightedLedgerId,
   onSelectLedger,
 }: {
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   onSelectLedger: (ledger: ChartOfAccount) => void;
 }) {
   const visible = useAccountsFilteredRows<CoaLedgerListingRow>([]);

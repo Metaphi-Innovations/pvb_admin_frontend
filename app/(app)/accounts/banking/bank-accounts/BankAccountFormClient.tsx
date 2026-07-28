@@ -70,9 +70,12 @@ export default function BankAccountFormClient({
   onSaved,
 }: {
   accountId?: number;
-  presetGroupId?: number;
+  presetGroupId?: import("@/app/(app)/accounts/data").CoaNodeId;
   onClose?: () => void;
-  onSaved?: (ledgerId: number, parentGroupId: number) => void;
+  onSaved?: (
+    ledgerId: import("@/app/(app)/accounts/data").CoaNodeId,
+    parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId,
+  ) => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -85,8 +88,10 @@ export default function BankAccountFormClient({
     onSaved != null;
   const presetGroupId =
     presetGroupIdProp ??
-    (presetGroupIdParam && Number.isFinite(Number(presetGroupIdParam))
-      ? Number(presetGroupIdParam)
+    (presetGroupIdParam
+      ? Number.isFinite(Number(presetGroupIdParam))
+        ? Number(presetGroupIdParam)
+        : presetGroupIdParam
       : null);
   const isEdit = accountId != null;
   const bankingListHref = "/accounts/banking/bank-accounts";
@@ -190,12 +195,15 @@ export default function BankAccountFormClient({
       } else {
         const created = createBankAccountWithLedger({
           ...savePayload,
-          bankGroupCoaId: presetGroupId,
+          bankGroupCoaId: typeof presetGroupId === "number" ? presetGroupId : null,
           openingBalanceDate: new Date().toISOString().slice(0, 10),
         });
         if (onSaved) {
           // Prefer the COA node the user clicked (Bank Accounts) for return navigation.
-          onSaved(created.coaLedgerId, presetGroupId ?? created.bankGroupCoaId);
+          onSaved(
+            created.coaLedgerId,
+            presetGroupId ?? created.bankGroupCoaId,
+          );
           return;
         }
       }

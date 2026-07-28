@@ -8,8 +8,12 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
 import { useSupplier, useSupplierPreviewNumber, useUpdateSupplier } from "@/hooks/masters/use-supplier";
-import { DEFAULT_VENDOR_FORM, VendorFormValues, validateVendorForm, VendorStatus } from "../../vendor-data";
+import { DEFAULT_VENDOR_FORM, VendorFormValues, validateVendorForm } from "../../vendor-data";
 import { VendorForm } from "../../components/VendorForm";
+import {
+  loadPartyMasterAccounting,
+  persistPartyMasterAccounting,
+} from "@/lib/accounts/party-master-accounting-sync";
 
 export default function EditSupplierPage() {
   const params = useParams();
@@ -101,12 +105,24 @@ export default function EditSupplierPage() {
       bankName: supplier.bankAccounts?.[0]?.bank_name ?? "",
       branch: supplier.bankAccounts?.[0]?.branch_name ?? "",
       accountNumber: supplier.bankAccounts?.[0]?.account_number ?? "",
+      confirmAccountNumber: supplier.bankAccounts?.[0]?.account_number ?? "",
       ifscCode: supplier.bankAccounts?.[0]?.ifsc_code ?? "",
       swiftCode: supplier.bankAccounts?.[0]?.swift_code ?? "",
       paymentType:
         (supplier.bankAccounts?.[0]?.payment_type as VendorFormValues["paymentType"]) ?? "",
       creditDays: String(supplier.bankAccounts?.[0]?.credit_days ?? ""),
     });
+
+    let cancelled = false;
+    loadPartyMasterAccounting({ kind: "supplier", partyId: supplier.supplierUuid }).then(
+      (accounting) => {
+        if (cancelled) return;
+        setForm((prev) => ({ ...prev, ...accounting }));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [supplier]);
 
   if (isLoading) {
@@ -219,7 +235,22 @@ export default function EditSupplierPage() {
     updateMutation.mutate(
       { id, payload },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "supplier",
+              partyId: id,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Debit" ? "Debit" : "Credit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Profile saved; accounting sync is best-effort.
+          }
           setToast({ msg: "Supplier updated successfully.", type: "success" });
           setTimeout(() => router.push("/masters/vendors"), 900);
         },

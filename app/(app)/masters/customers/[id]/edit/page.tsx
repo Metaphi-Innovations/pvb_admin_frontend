@@ -15,6 +15,10 @@ import {
   customerRecordToFormValues,
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import {
+  loadPartyMasterAccounting,
+  persistPartyMasterAccounting,
+} from "@/lib/accounts/party-master-accounting-sync";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../../customer-permissions";
 import { useUpdateCustomer, useCustomer } from "@/hooks/masters";
@@ -76,9 +80,18 @@ export default function EditCustomerPage() {
   }, []);
 
   useEffect(() => {
-    if (customer) {
-      setForm(customerRecordToFormValues(customer));
-    }
+    if (!customer) return;
+    setForm(customerRecordToFormValues(customer));
+    let cancelled = false;
+    loadPartyMasterAccounting({ kind: "customer", partyId: customer.customerUuid }).then(
+      (accounting) => {
+        if (cancelled) return;
+        setForm((prev) => (prev ? { ...prev, ...accounting } : prev));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [customer]);
 
 
@@ -105,7 +118,22 @@ export default function EditCustomerPage() {
     updateCustomer.mutate(
       { id: customer.customerUuid, payload, branches: form.branches },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "customer",
+              partyId: customer.customerUuid,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Master save succeeded; accounting sync failure is non-blocking for profile.
+          }
           if (form.status === "active") {
             const mainBranch =
               form.branches.find((b) => b.isMain) ??

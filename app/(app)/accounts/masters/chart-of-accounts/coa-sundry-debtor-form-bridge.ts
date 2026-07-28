@@ -1,8 +1,11 @@
 /** Opens the Customer form inside Chart of Accounts (keeps Accounts sidebar). */
 
+import type { CoaNodeId } from "../../data";
+
 export type SundryDebtorFormOpenArgs = {
-  parentGroupId: number;
-  customerId?: number;
+  parentGroupId: CoaNodeId;
+  /** Customer master UUID (API) or legacy numeric id */
+  customerId?: string | number;
 };
 
 type OpenHandler = ((args: SundryDebtorFormOpenArgs) => void) | null;
@@ -14,8 +17,8 @@ export function registerSundryDebtorCustomerFormHandler(handler: OpenHandler): v
 }
 
 export function requestSundryDebtorCustomerForm(
-  parentGroupId: number,
-  customerId?: number,
+  parentGroupId: CoaNodeId,
+  customerId?: string | number,
 ): boolean {
   if (openHandler) {
     openHandler({ parentGroupId, customerId });

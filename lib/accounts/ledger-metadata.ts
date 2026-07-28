@@ -152,7 +152,7 @@ export function saveLedgerMeta(ledgerId: number, meta: LedgerExtendedMeta) {
   writeAll(all);
 }
 
-export function deleteLedgerMeta(ledgerId: number) {
+export function deleteLedgerMeta(ledgerId: import("@/app/(app)/accounts/data").CoaNodeId) {
   const all = readAll();
   delete all[String(ledgerId)];
   writeAll(all);

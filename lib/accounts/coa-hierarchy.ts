@@ -8,7 +8,7 @@
  * Primary heads are system-defined and locked. No node may be created below Level 5.
  */
 
-import type { ChartOfAccount, CoaNodeLevel } from "@/app/(app)/accounts/data";
+import type { ChartOfAccount, CoaNodeId, CoaNodeLevel } from "@/app/(app)/accounts/data";
 import { getPostableCoaAccounts, loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 
@@ -73,7 +73,7 @@ export function isStructuralNode(node: Pick<ChartOfAccount, "nodeLevel">): boole
   return !isLedgerNode(node);
 }
 
-export function ledgerHasChildLedgers(ledgerId: number, records: ChartOfAccount[]): boolean {
+export function ledgerHasChildLedgers(ledgerId: CoaNodeId, records: ChartOfAccount[]): boolean {
   return records.some(
     (r) => r.nodeLevel === "ledger" && r.parentAccountId === ledgerId,
   );
@@ -151,7 +151,7 @@ export interface HierarchyPath {
 
 export function resolveHierarchyPath(
   records: ChartOfAccount[],
-  nodeId: number,
+  nodeId: CoaNodeId,
 ): HierarchyPath {
   const path = getAncestorPath(records, nodeId);
   const accountGroups = path.filter((n) => n.nodeLevel === "account_group");
@@ -164,13 +164,13 @@ export function resolveHierarchyPath(
   };
 }
 
-export function hierarchyBreadcrumb(records: ChartOfAccount[], nodeId: number): string {
+export function hierarchyBreadcrumb(records: ChartOfAccount[], nodeId: CoaNodeId): string {
   return resolveHierarchyPath(records, nodeId).path.map((n) => n.accountName).join(" › ");
 }
 
 /** Remove duplicate posting ledgers — first occurrence wins by ID, then by account code. */
 export function dedupeLedgersByIdAndCode(ledgers: ChartOfAccount[]): ChartOfAccount[] {
-  const seenIds = new Set<number>();
+  const seenIds = new Set<CoaNodeId>();
   const seenCodes = new Set<string>();
   const out: ChartOfAccount[] = [];
   for (const ledger of ledgers) {

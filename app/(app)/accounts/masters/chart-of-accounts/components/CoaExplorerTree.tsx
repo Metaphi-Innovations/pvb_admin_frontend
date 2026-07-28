@@ -3,7 +3,7 @@
 import React, { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
-import type { ChartOfAccount } from "../../../data";
+import type { ChartOfAccount, CoaNodeId } from "../../../data";
 import {
   canAddLedgerUnder,
   canAddSubGroupUnder,
@@ -72,20 +72,20 @@ interface TreeNodeProps {
   depth: number;
   isFirstRoot?: boolean;
   records: ChartOfAccount[];
-  expandedIds: Set<number>;
-  selectedId: number | null;
-  visibleIds: Set<number> | null;
+  expandedIds: Set<CoaNodeId>;
+  selectedId: CoaNodeId | null;
+  visibleIds: Set<CoaNodeId> | null;
   searchQuery: string;
   variant: "panel" | "sidebar";
   canCreate?: boolean;
   canEdit?: boolean;
-  highlightedLedgerId?: number | null;
-  onToggle: (id: number) => void;
+  highlightedLedgerId?: CoaNodeId | null;
+  onToggle: (id: CoaNodeId) => void;
   onSelect: (node: ChartOfAccount) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
-  onDeleteLedger?: (ledgerId: number) => void;
+  onAddLedger?: (parentGroupId: CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: CoaNodeId) => void;
+  onDeleteLedger?: (ledgerId: CoaNodeId) => void;
 }
 
 const TreeNode = memo(function TreeNodeComponent({
@@ -331,17 +331,20 @@ const TreeNode = memo(function TreeNodeComponent({
 interface CoaExplorerTreeProps {
   variant?: "panel" | "sidebar";
   records: ChartOfAccount[];
-  selectedId: number | null;
-  expandedIds: Set<number>;
+  selectedId: CoaNodeId | null;
+  expandedIds: Set<CoaNodeId>;
+  /** Client-side visibility filter. Leave empty when the tree is already server-filtered. */
   search: string;
+  /** Optional highlight term (e.g. API search query) when `search` is empty. */
+  highlightQuery?: string;
   canCreate?: boolean;
   canEdit?: boolean;
-  highlightedLedgerId?: number | null;
+  highlightedLedgerId?: CoaNodeId | null;
   onSelect: (node: ChartOfAccount) => void;
-  onToggle: (id: number) => void;
+  onToggle: (id: CoaNodeId) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: CoaNodeId) => void;
   onRecordsChange?: (records: ChartOfAccount[]) => void;
 }
 
@@ -351,6 +354,7 @@ export function CoaExplorerTree({
   selectedId,
   expandedIds,
   search,
+  highlightQuery = "",
   canCreate = false,
   canEdit = false,
   highlightedLedgerId = null,
@@ -365,7 +369,7 @@ export function CoaExplorerTree({
   const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(null);
   const isSidebar = variant === "sidebar";
 
-  const handleDeleteLedger = (ledgerId: number) => {
+  const handleDeleteLedger = (ledgerId: CoaNodeId) => {
     const ledger = records.find((r) => r.id === ledgerId);
     if (!ledger || !canCoaSidebarDeleteNode(ledger, records)) return;
     const block = getLedgerDeleteBlockReason(ledger, records);
@@ -388,6 +392,12 @@ export function CoaExplorerTree({
     const block = getLedgerDeleteBlockReason(deleteTarget, records);
     if (block) {
       setDeleteBlockReason(block);
+      return;
+    }
+
+    // API-backed UUID ledgers are not deleted via localStorage — skip until ledger DELETE API is wired.
+    if (typeof deleteTarget.id === "string") {
+      closeDeleteDialog();
       return;
     }
 
@@ -455,7 +465,7 @@ export function CoaExplorerTree({
                 expandedIds={expandedIds}
                 selectedId={selectedId}
                 visibleIds={visibleIds}
-                searchQuery={search}
+                searchQuery={highlightQuery.trim() || search}
                 variant={variant}
                 canCreate={canCreate}
                 canEdit={canEdit}

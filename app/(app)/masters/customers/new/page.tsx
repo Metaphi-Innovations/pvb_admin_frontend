@@ -18,6 +18,7 @@ import {
   formValuesToCreatePayload,
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import { persistPartyMasterAccounting } from "@/lib/accounts/party-master-accounting-sync";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../customer-permissions";
 import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
@@ -235,9 +236,28 @@ export default function NewCustomerPage() {
           form.branches.find((b) => b.branchName === "Main Branch") ??
           form.branches[0];
 
+        const uuid = created?.customerUuid ?? "";
+        if (uuid) {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "customer",
+              partyId: uuid,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Master created; accounting sync best-effort.
+          }
+        }
+
         ensureCustomerLedgerFromMaster({
           id: newId,
-          customerUuid: (created as any)?.customerUuid,
+          customerUuid: uuid,
           customerName: form.customerName,
           customerCode: finalCode,
           status,

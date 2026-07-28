@@ -26,7 +26,6 @@ import {
   resolveCoaPartyMasterKindById,
 } from "@/lib/accounts/coa-party-master-routes";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { requestSundryDebtorCustomerForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-sundry-debtor-form-bridge";
 import { requestSundryCreditorVendorForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-sundry-creditor-form-bridge";
 import { requestCoaBankForm } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-bank-form-bridge";
@@ -42,7 +41,10 @@ import {
 } from "@/components/ui/dialog";
 
 /** Prefer in-COA embed (Accounts sidebar stays). Fall back to Masters only if COA page handlers are absent. */
-function openPartyLedgerCreateInCoa(parentGroupId: number, list: ChartOfAccount[]): boolean {
+function openPartyLedgerCreateInCoa(
+  parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId,
+  list: ChartOfAccount[],
+): boolean {
   const kind = resolveCoaPartyMasterKindById(parentGroupId, list);
   if (kind === "customer") return requestSundryDebtorCustomerForm(parentGroupId);
   if (kind === "vendor") return requestSundryCreditorVendorForm(parentGroupId);
@@ -52,7 +54,7 @@ function openPartyLedgerCreateInCoa(parentGroupId: number, list: ChartOfAccount[
 /** Bank Accounts group → existing Bank Account master form (never Generic Ledger).
  * Cash-in-Hand (kind "cash") is intentionally excluded — it uses Generic Ledger. */
 function openBankAccountCreate(
-  parentGroupId: number,
+  parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId,
   list: ChartOfAccount[],
   router: ReturnType<typeof useRouter>,
 ): boolean {
@@ -68,12 +70,16 @@ function openBankAccountCreate(
   return true;
 }
 
-function genericLedgerNewHref(parentGroupId?: number | null): string {
+function genericLedgerNewHref(
+  parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null,
+): string {
   const base = `${CHART_OF_ACCOUNTS_HREF}/ledgers/new`;
   return parentGroupId != null ? `${base}?parent=${parentGroupId}` : base;
 }
 
-function genericLedgerEditHref(ledgerId: number): string {
+function genericLedgerEditHref(
+  ledgerId: import("@/app/(app)/accounts/data").CoaNodeId,
+): string {
   return `${CHART_OF_ACCOUNTS_HREF}/ledgers/${ledgerId}/edit`;
 }
 
@@ -92,12 +98,12 @@ export function CoaAddLedgerHost() {
   const selectedIdRef = useRef(selectedId);
 
   const openGlobalAdd = useCallback(
-    (preferredParentId?: number | null) => {
+    (preferredParentId?: import("@/app/(app)/accounts/data").CoaNodeId | null) => {
       if (!canCreate) {
         setBlockMessage("You do not have permission to create ledgers.");
         return;
       }
-      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const list = records;
       const parent =
         preferredParentId != null
           ? list.find((r) => r.id === preferredParentId)
@@ -142,12 +148,12 @@ export function CoaAddLedgerHost() {
   );
 
   const openAddUnderParent = useCallback(
-    (parentGroupId: number) => {
+    (parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId) => {
       if (!canCreate) {
         setBlockMessage("You do not have permission to create ledgers.");
         return;
       }
-      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const list = records;
       const parent = list.find((r) => r.id === parentGroupId);
       if (parent && isAddLedgerBlocked(parent, list)) {
         setBlockMessage(
@@ -178,12 +184,12 @@ export function CoaAddLedgerHost() {
   );
 
   const openEdit = useCallback(
-    (ledgerId: number) => {
+    (ledgerId: import("@/app/(app)/accounts/data").CoaNodeId) => {
       if (!canEdit) {
         setBlockMessage("You do not have permission to edit ledgers.");
         return;
       }
-      const list = records.length > 0 ? records : loadChartOfAccounts();
+      const list = records.length > 0 ? records : [];
       const row = list.find((r) => r.id === ledgerId);
       if (!row || !canEditLedger(row, list)) {
         setBlockMessage("This ledger cannot be edited.");
@@ -218,7 +224,9 @@ export function CoaAddLedgerHost() {
       }
       if (link?.category === "bank") {
         const parentId = row.parentAccountId;
-        if (parentId != null && requestCoaBankForm(parentId, link.sourceId)) {
+        const bankId =
+          typeof link.sourceId === "number" ? link.sourceId : Number(link.sourceId);
+        if (parentId != null && Number.isFinite(bankId) && requestCoaBankForm(parentId, bankId)) {
           return;
         }
         const returnTo =

@@ -6,7 +6,7 @@
  * Does not alter stored COA data or dropdown / voucher picker trees.
  */
 
-import type { ChartOfAccount, CoaSpecializedGroupType } from "@/app/(app)/accounts/data";
+import type { ChartOfAccount, CoaNodeId, CoaSpecializedGroupType } from "@/app/(app)/accounts/data";
 import {
   canDeleteLedger,
   canEditLedger,
@@ -92,12 +92,12 @@ export function isCoaSidebarLevel2AccountGroup(
 /** Collect L3 subgroups shown under an L2 (or intermediate) account group. */
 function collectSidebarLevel3Subgroups(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): ChartOfAccount[] {
   const result: ChartOfAccount[] = [];
-  const seen = new Set<number>();
+  const seen = new Set<CoaNodeId>();
 
-  const walk = (id: number) => {
+  const walk = (id: CoaNodeId) => {
     for (const child of getChildGroups(records, id)) {
       if (isCoaSidebarContainerSubgroup(child, records)) continue;
       if (isCoaSidebarLevel3Subgroup(child, records)) {
@@ -120,10 +120,10 @@ function collectSidebarLevel3Subgroups(
 /** Flatten nested ledgers and container subgroups to a single L4 list. */
 function collectSidebarLedgers(
   records: ChartOfAccount[],
-  subgroupId: number,
+  subgroupId: CoaNodeId,
 ): ChartOfAccount[] {
   const result: ChartOfAccount[] = [];
-  const seen = new Set<number>();
+  const seen = new Set<CoaNodeId>();
 
   const addLedger = (ledger: ChartOfAccount) => {
     if (seen.has(ledger.id)) return;
@@ -131,7 +131,7 @@ function collectSidebarLedgers(
     result.push(ledger);
   };
 
-  const walk = (parentId: number) => {
+  const walk = (parentId: CoaNodeId) => {
     for (const child of getDirectChildren(records, parentId)) {
       if (isBankGroupNode(child)) continue;
 
@@ -175,7 +175,7 @@ function collectSidebarLedgers(
 /** Sidebar tree children — enforces the 4-level hierarchy for display only. */
 export function getCoaSidebarTreeChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): ChartOfAccount[] {
   const parent = records.find((r) => r.id === parentId);
   if (!parent) return [];
@@ -213,7 +213,7 @@ export function getCoaSidebarTreeChildren(
 
 export function coaSidebarNodeHasChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): boolean {
   return getCoaSidebarTreeChildren(records, parentId).length > 0;
 }
@@ -266,7 +266,7 @@ export function resolveCoaSidebarVisualLevel(
   return "account_group";
 }
 
-export function getCoaSidebarExpandableIds(records: ChartOfAccount[]): number[] {
+export function getCoaSidebarExpandableIds(records: ChartOfAccount[]): CoaNodeId[] {
   return records
     .filter(
       (r) =>
@@ -281,8 +281,8 @@ export function getCoaSidebarExpandableIds(records: ChartOfAccount[]): number[] 
 export function getCoaSidebarSearchVisibleIds(
   records: ChartOfAccount[],
   query: string,
-): Set<number> {
-  const visible = new Set<number>();
+): Set<CoaNodeId> {
+  const visible = new Set<CoaNodeId>();
   if (!query.trim()) return visible;
 
   const matching = getSearchMatchingNodes(records, query);
@@ -291,7 +291,7 @@ export function getCoaSidebarSearchVisibleIds(
       if (!a.bankGroupFlag) visible.add(a.id);
     });
 
-    const collectDesc = (id: number) => {
+    const collectDesc = (id: CoaNodeId) => {
       getCoaSidebarTreeChildren(records, id).forEach((c) => {
         visible.add(c.id);
         if (c.nodeLevel !== "ledger") collectDesc(c.id);

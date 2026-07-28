@@ -127,7 +127,7 @@ function ledgerListingMatchesSearch(
 /** Flat ledger rows for a Level-3 accounting group (all descendant ledgers). */
 export function buildCoaLedgerListingRows(
   records: ChartOfAccount[],
-  accountingGroupId: number,
+  accountingGroupId: import("../../data").CoaNodeId,
   options: { search?: string } = {},
 ): CoaLedgerListingRow[] {
   const search = options.search?.trim() ?? "";
@@ -207,7 +207,7 @@ export function computeCoaLedgerListingSummary(
 function coaListingMovementMapForRange(
   from: string,
   to: string,
-): Map<number, { totalDebit: number; totalCredit: number }> {
+): Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }> {
   return ledgerMovementMapForRange(from, to);
 }
 
@@ -237,11 +237,11 @@ function collectDescendantPostingLedgers(
 
   records: ChartOfAccount[],
 
-  nodeId: number,
+  nodeId: import("../../data").CoaNodeId,
 
 ): ChartOfAccount[] {
 
-  const ids = new Set<number>();
+  const ids = new Set<import("../../data").CoaNodeId>();
 
   const queue = [nodeId];
 
@@ -315,7 +315,7 @@ function aggregateSigned(
 
   ledgers: ChartOfAccount[],
 
-  movementMap: Map<number, { totalDebit: number; totalCredit: number }>,
+  movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
 
 ) {
 
@@ -377,7 +377,7 @@ function balancesForNode(
 
   node: ChartOfAccount,
 
-  movementMap: Map<number, { totalDebit: number; totalCredit: number }>,
+  movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
 
 ) {
 
@@ -462,7 +462,7 @@ export interface CoaGroupDetailSummary {
 /** Metadata and aggregated balance for an account group drill-down header. */
 export function computeCoaGroupDetailSummary(
   records: ChartOfAccount[],
-  groupId: number,
+  groupId: import("../../data").CoaNodeId,
   dateFrom: string,
   dateTo: string,
 ): CoaGroupDetailSummary | null {
@@ -507,7 +507,7 @@ function listingMetaForNode(
 
 export function buildCoaListingRows(
   records: ChartOfAccount[],
-  parentNodeId: number | null,
+  parentNodeId: import("../../data").CoaNodeId | null,
   dateFrom: string,
   dateTo: string,
   options: { search?: string } = {},

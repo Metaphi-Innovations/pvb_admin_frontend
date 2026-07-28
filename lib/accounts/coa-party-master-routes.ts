@@ -3,7 +3,7 @@
  * Prefer specializedGroupType + stable account codes over display labels.
  */
 
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
+import type { ChartOfAccount, CoaNodeId } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
@@ -11,16 +11,18 @@ import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 const SUNDRY_DEBTORS_CODES = new Set(["1212"]);
 const SUNDRY_CREDITORS_CODES = new Set(["2310"]);
 
-function ancestorPath(records: ChartOfAccount[], nodeId: number): ChartOfAccount[] {
-  const byId = new Map(records.map((r) => [r.id, r]));
+function ancestorPath(records: ChartOfAccount[], nodeId: CoaNodeId): ChartOfAccount[] {
+  const byId = new Map(records.map((r) => [String(r.id), r]));
   const path: ChartOfAccount[] = [];
-  const visited = new Set<number>();
-  let current = byId.get(nodeId);
-  while (current && !visited.has(current.id)) {
-    visited.add(current.id);
+  const visited = new Set<string>();
+  let current = byId.get(String(nodeId));
+  while (current && !visited.has(String(current.id))) {
+    visited.add(String(current.id));
     path.unshift(current);
     current =
-      current.parentAccountId == null ? undefined : byId.get(current.parentAccountId);
+      current.parentAccountId == null
+        ? undefined
+        : byId.get(String(current.parentAccountId));
   }
   return path;
 }
@@ -68,7 +70,7 @@ export function resolveCoaPartyMasterKind(
 }
 
 export function resolveCoaPartyMasterKindById(
-  parentGroupId: number,
+  parentGroupId: CoaNodeId,
   records?: ChartOfAccount[],
 ): "customer" | "vendor" | null {
   const list = records ?? loadChartOfAccounts();
@@ -79,7 +81,7 @@ export function resolveCoaPartyMasterKindById(
 
 /** Create-form href for Sundry Debtors / Creditors; null for generic groups. */
 export function coaPartyMasterCreateHref(
-  parentGroupId: number,
+  parentGroupId: CoaNodeId,
   records?: ChartOfAccount[],
 ): string | null {
   const kind = resolveCoaPartyMasterKindById(parentGroupId, records);
@@ -94,7 +96,7 @@ export function coaPartyMasterCreateHref(
 
 export function coaPartyMasterEditHref(
   category: "customer" | "vendor",
-  sourceId: number,
+  sourceId: number | string,
 ): string {
   if (category === "customer") return `/masters/customers/${sourceId}/edit`;
   return `/masters/vendors/${sourceId}/edit`;

@@ -11,15 +11,11 @@ import {
   canEditLedger,
   defaultBalanceTypeForParent,
   describeInvalidLedgerParentMessage,
-  formToLedger,
-  generateLedgerCode,
   ledgerToForm,
-  loadChartOfAccounts,
-  saveChartOfAccounts,
   validateLedgerForm,
   type LedgerFormValues,
 } from "../chart-of-accounts-data";
-import { nextId, type ChartOfAccount } from "../../../data";
+import type { ChartOfAccount, CoaNodeId } from "../../../data";
 import { GenericLedgerForm } from "../components/GenericLedgerForm";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -32,7 +28,10 @@ import {
   STATUTORY_NO_MANUAL_LEDGER_REASON,
 } from "@/lib/accounts/coa-add-ledger-policy";
 import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
-import { getBankAccountByLedgerId } from "@/lib/accounts/bank-accounts-data";
+import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
+import { LedgerService } from "@/services/ledger.service";
+import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ToastState {
   msg: string;
@@ -61,15 +60,25 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
-function coaReturnHref(nodeId?: number | null): string {
+function coaReturnHref(nodeId?: CoaNodeId | null): string {
   if (nodeId != null) return `${CHART_OF_ACCOUNTS_HREF}?node=${nodeId}`;
   return CHART_OF_ACCOUNTS_HREF;
 }
 
+function toApiBalanceType(side: string): "DEBIT" | "CREDIT" {
+  return side === "Credit" ? "CREDIT" : "DEBIT";
+}
+
+function normalizeAmount(raw: string): string {
+  const n = Number(String(raw).replace(/,/g, "").trim());
+  if (!Number.isFinite(n) || n < 0) return "0.00";
+  return n.toFixed(2);
+}
+
 export interface AccountsGenericLedgerFormClientProps {
   mode: "add" | "edit";
-  ledgerId?: number;
-  parentGroupId?: number | null;
+  ledgerId?: CoaNodeId;
+  parentGroupId?: CoaNodeId | null;
 }
 
 export default function AccountsGenericLedgerFormClient({
@@ -82,8 +91,10 @@ export default function AccountsGenericLedgerFormClient({
   const canCreate = useCanCoa("create");
   const canEditPerm = useCanCoa("edit");
   const allowed = mode === "add" ? canCreate : canEditPerm;
+  const { records: apiRecords, refreshRecords } = useCoaNavigation();
+  const queryClient = useQueryClient();
 
-  const [records, setRecords] = useState<ChartOfAccount[]>([]);
+  const records = apiRecords;
   const [active, setActive] = useState<ChartOfAccount | null>(null);
   const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
   const [formError, setFormError] = useState<string | null>(null);
@@ -93,6 +104,7 @@ export default function AccountsGenericLedgerFormClient({
   const [ready, setReady] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [statutoryBlocked, setStatutoryBlocked] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -102,91 +114,126 @@ export default function AccountsGenericLedgerFormClient({
 
   useEffect(() => {
     if (!mounted) return;
-    const list = loadChartOfAccounts();
-    setRecords(list);
+    let cancelled = false;
 
-    if (mode === "edit") {
-      const row = list.find((r) => r.id === ledgerId && r.nodeLevel === "ledger");
-      if (!row) {
-        setNotFound(true);
+    const bootstrap = async () => {
+      if (mode === "edit") {
+        const row = records.find((r) => r.id === ledgerId && r.nodeLevel === "ledger");
+        if (!row) {
+          if (records.length === 0) return;
+          setNotFound(true);
+          setReady(true);
+          return;
+        }
+
+        const masterLink = resolveCoaMasterLink(row, records);
+        if (masterLink?.category === "bank") {
+          const parentId = row.parentAccountId;
+          const returnTo =
+            parentId != null
+              ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}`
+              : CHART_OF_ACCOUNTS_HREF;
+          router.replace(
+            `/accounts/banking/bank-accounts/${masterLink.sourceId}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
+          );
+          return;
+        }
+
+        if (!canEditLedger(row, records)) {
+          setNotFound(true);
+          setReady(true);
+          return;
+        }
+
+        try {
+          const detail = await LedgerService.view(String(row.id));
+          if (cancelled) return;
+          setActive(row);
+          setForm({
+            ...ledgerToForm(row),
+            ledgerName: detail.ledgerName || row.accountName,
+            alias: detail.aliasName ?? row.alias ?? "",
+            description: detail.description ?? row.description ?? "",
+            openingBalance: detail.openingBalance?.amount ?? String(row.openingBalance ?? "0"),
+            balanceType:
+              String(detail.openingBalance?.balanceType ?? "").toUpperCase() === "CREDIT"
+                ? "Credit"
+                : row.balanceType === "Credit"
+                  ? "Credit"
+                  : "Debit",
+            billWiseAccounting: Boolean(detail.billWiseOutstanding),
+            gstApplicable: Boolean(detail.gstApplicable),
+            tdsApplicable: Boolean(detail.tdsApplicable),
+            defaultTdsSection: detail.tdsSectionId ?? "",
+            costCenterApplicable: Boolean(detail.costCenterApplicable),
+          });
+          setPreviewCode(detail.ledgerCode || row.accountCode);
+          setParentGroupLocked(true);
+          setReady(true);
+        } catch {
+          if (cancelled) return;
+          setActive(row);
+          setForm(ledgerToForm(row));
+          setPreviewCode(row.accountCode);
+          setParentGroupLocked(true);
+          setReady(true);
+        }
+        return;
+      }
+
+      const parent =
+        parentGroupId != null ? records.find((r) => r.id === parentGroupId) : undefined;
+
+      if (parent && isAddLedgerBlocked(parent, records)) {
+        setStatutoryBlocked(true);
+        setFormError(STATUTORY_NO_MANUAL_LEDGER_REASON);
         setReady(true);
+        router.replace(coaReturnHref(parent.id));
         return;
       }
 
-      // Bank-linked ledgers are owned by Bank Account Form — never Generic.
-      const masterLink = resolveCoaMasterLink(row, list);
-      const bankAccountId =
-        masterLink?.category === "bank"
-          ? masterLink.sourceId
-          : getBankAccountByLedgerId(row.id)?.id;
-      if (bankAccountId != null) {
-        const parentId = row.parentAccountId;
-        const returnTo =
-          parentId != null
-            ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}`
-            : CHART_OF_ACCOUNTS_HREF;
-        router.replace(
-          `/accounts/banking/bank-accounts/${bankAccountId}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
-        );
-        return;
+      const lockedParent =
+        parent && canAddLedgerUnder(parent, records) && !isAddLedgerBlocked(parent, records)
+          ? parentGroupId!
+          : null;
+      const cashParent =
+        parent != null &&
+        lockedParent != null &&
+        resolveCoaLedgerBehavior(parent, records).kind === "cash";
+
+      setForm({
+        ...DEFAULT_LEDGER_FORM,
+        ...(lockedParent != null
+          ? {
+              parentGroupId: lockedParent,
+              balanceType: cashParent
+                ? "Debit"
+                : defaultBalanceTypeForParent(records, lockedParent),
+              billWiseAccounting: cashParent
+                ? false
+                : DEFAULT_LEDGER_FORM.billWiseAccounting,
+            }
+          : {}),
+      });
+      setParentGroupLocked(lockedParent != null);
+      if (parent && lockedParent == null) {
+        setFormError(describeInvalidLedgerParentMessage(parent, records));
       }
 
-      if (!canEditLedger(row, list)) {
-        setNotFound(true);
-        setReady(true);
-        return;
+      try {
+        const code = await LedgerService.previewNumber();
+        if (!cancelled) setPreviewCode(code || "LED-······");
+      } catch {
+        if (!cancelled) setPreviewCode("LED-······");
       }
-      setActive(row);
-      setForm(ledgerToForm(row));
-      setPreviewCode(row.accountCode);
-      setParentGroupLocked(true);
-      setReady(true);
-      return;
-    }
+      if (!cancelled) setReady(true);
+    };
 
-    const parent =
-      parentGroupId != null ? list.find((r) => r.id === parentGroupId) : undefined;
-
-    // Direct URL / deep-link with a statutory parent — do not render a usable form.
-    if (parent && isAddLedgerBlocked(parent, list)) {
-      setStatutoryBlocked(true);
-      setFormError(STATUTORY_NO_MANUAL_LEDGER_REASON);
-      setReady(true);
-      router.replace(coaReturnHref(parent.id));
-      return;
-    }
-
-    const lockedParent =
-      parent && canAddLedgerUnder(parent, list) && !isAddLedgerBlocked(parent, list)
-        ? parentGroupId!
-        : null;
-    const cashParent =
-      parent != null &&
-      lockedParent != null &&
-      resolveCoaLedgerBehavior(parent, list).kind === "cash";
-
-    setForm({
-      ...DEFAULT_LEDGER_FORM,
-      ...(lockedParent != null
-        ? {
-            parentGroupId: lockedParent,
-            // Cash-in-Hand is an Asset group — default Dr; bill-wise stays No.
-            balanceType: cashParent
-              ? "Debit"
-              : defaultBalanceTypeForParent(list, lockedParent),
-            billWiseAccounting: cashParent
-              ? false
-              : DEFAULT_LEDGER_FORM.billWiseAccounting,
-          }
-        : {}),
-    });
-    setPreviewCode(generateLedgerCode(list));
-    setParentGroupLocked(lockedParent != null);
-    if (parent && lockedParent == null) {
-      setFormError(describeInvalidLedgerParentMessage(parent, list));
-    }
-    setReady(true);
-  }, [mounted, mode, ledgerId, parentGroupId, router]);
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, mode, ledgerId, parentGroupId, router, records]);
 
   const goBack = () => {
     const nodeId =
@@ -196,63 +243,128 @@ export default function AccountsGenericLedgerFormClient({
     router.push(coaReturnHref(nodeId ?? null));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!allowed) {
       setToast({ msg: "You do not have permission to save this ledger.", type: "error" });
       return;
     }
-    const list = loadChartOfAccounts();
-    const err = validateLedgerForm(form, list, active?.id);
+    const err = validateLedgerForm(form, records, active?.id);
     if (err) {
       setFormError(err);
       setToast({ msg: err, type: "error" });
       return;
     }
-
-    let savedId: number;
-    const next = [...list];
-
-    if (mode === "add") {
-      const code = generateLedgerCode(next);
-      const row = formToLedger(form, nextId(next), code, next);
-      next.push(row);
-      savedId = row.id;
-    } else if (active) {
-      const idx = next.findIndex((r) => r.id === active.id);
-      if (idx < 0) return;
-      next[idx] = formToLedger(form, active.id, active.accountCode, next, active);
-      savedId = active.id;
-    } else {
+    if (!form.parentGroupId) {
+      setFormError("Please select a Parent Group.");
       return;
     }
 
-    saveChartOfAccounts(next);
-    setRecords(next);
-    dispatchAccountsDataChanged("ledgers", {
-      operation: mode === "add" ? "create" : "update",
-      recordId: savedId,
-    });
-    dispatchCoaChanged();
+    setSaving(true);
+    try {
+      const amount = normalizeAmount(form.openingBalance);
+      const fy = await LedgerService.getCurrentFinancialYear();
+      const openingBalance =
+        fy?.financialYearId && Number(amount) > 0
+          ? {
+              financialYearId: fy.financialYearId,
+              amount,
+              balanceType: toApiBalanceType(form.balanceType),
+              effectiveDate: new Date().toISOString().slice(0, 10),
+              narration: form.description?.trim() || null,
+            }
+          : undefined;
 
-    setToast({
-      msg:
-        mode === "add"
-          ? "Generic ledger created successfully."
-          : "Generic ledger updated successfully.",
-      type: "success",
-    });
-    setTimeout(() => {
-      // Cash-in-Hand: return to the group listing (keep Cash-in-Hand selected).
-      // Other generic adds still open the new ledger node.
-      const parentId = form.parentGroupId ?? parentGroupId;
-      const parentNode =
-        parentId != null ? list.find((r) => r.id === parentId) : undefined;
-      const returnToCashGroup =
-        mode === "add" &&
-        parentNode != null &&
-        resolveCoaLedgerBehavior(parentNode, list).kind === "cash";
-      router.push(coaReturnHref(returnToCashGroup ? parentId! : savedId));
-    }, 700);
+      let savedId: CoaNodeId;
+
+      if (mode === "add") {
+        const created = await LedgerService.create({
+          ledgerName: form.ledgerName.trim(),
+          aliasName: form.alias?.trim() || null,
+          accountSubGroupId: String(form.parentGroupId),
+          description: form.description?.trim() || null,
+          gstApplicable: form.gstApplicable,
+          tdsApplicable: form.tdsApplicable,
+          tdsSectionId: form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
+          costCenterApplicable: form.costCenterApplicable,
+          billWiseOutstanding: form.billWiseAccounting,
+          openingBalance,
+        });
+        savedId = created.ledgerId;
+        setPreviewCode(created.ledgerCode);
+      } else if (active) {
+        await LedgerService.update(String(active.id), {
+          ledgerName: form.ledgerName.trim(),
+          aliasName: form.alias?.trim() || null,
+          accountSubGroupId: String(form.parentGroupId),
+          description: form.description?.trim() || null,
+          gstApplicable: form.gstApplicable,
+          tdsApplicable: form.tdsApplicable,
+          tdsSectionId: form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
+          costCenterApplicable: form.costCenterApplicable,
+          billWiseOutstanding: form.billWiseAccounting,
+        });
+        if (fy?.financialYearId) {
+          const latest = await LedgerService.view(String(active.id));
+          const existing = latest.openingBalance ?? latest.openingBalances?.[0];
+          if (existing?.openingBalanceId) {
+            await LedgerService.updateOpeningBalance(
+              String(active.id),
+              existing.openingBalanceId,
+              {
+                amount,
+                balanceType: toApiBalanceType(form.balanceType),
+                effectiveDate: new Date().toISOString().slice(0, 10),
+                narration: form.description?.trim() || null,
+              },
+            );
+          } else if (Number(amount) > 0) {
+            await LedgerService.createOpeningBalance(String(active.id), {
+              financialYearId: fy.financialYearId,
+              amount,
+              balanceType: toApiBalanceType(form.balanceType),
+              effectiveDate: new Date().toISOString().slice(0, 10),
+              narration: form.description?.trim() || null,
+            });
+          }
+        }
+        savedId = active.id;
+      } else {
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+      refreshRecords();
+      dispatchAccountsDataChanged("ledgers", {
+        operation: mode === "add" ? "create" : "update",
+        recordId: savedId,
+      });
+      dispatchCoaChanged();
+
+      setToast({
+        msg:
+          mode === "add"
+            ? "Generic ledger created successfully."
+            : "Generic ledger updated successfully.",
+        type: "success",
+      });
+      setTimeout(() => {
+        const parentId = form.parentGroupId ?? parentGroupId;
+        const parentNode =
+          parentId != null ? records.find((r) => r.id === parentId) : undefined;
+        const returnToCashGroup =
+          mode === "add" &&
+          parentNode != null &&
+          resolveCoaLedgerBehavior(parentNode, records).kind === "cash";
+        router.push(coaReturnHref(returnToCashGroup ? parentId! : savedId));
+      }, 700);
+    } catch (saveErr) {
+      setToast({
+        msg: saveErr instanceof Error ? saveErr.message : "Failed to save ledger.",
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const title = mode === "add" ? "Add Generic Ledger" : "Edit Generic Ledger";
@@ -262,7 +374,7 @@ export default function AccountsGenericLedgerFormClient({
       : "Accounts → Chart of Accounts → Edit Generic Ledger";
 
   const codeBadge = useMemo(() => {
-    if (mode === "edit" && active) return active.accountCode;
+    if (mode === "edit" && active) return previewCode || active.accountCode;
     return previewCode;
   }, [mode, active, previewCode]);
 
@@ -343,15 +455,17 @@ export default function AccountsGenericLedgerFormClient({
               variant="outline"
               className="h-9 text-xs font-semibold rounded-lg"
               onClick={goBack}
+              disabled={saving}
             >
               Cancel
             </Button>
             <Button
               className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
-              onClick={handleSave}
+              onClick={() => void handleSave()}
+              disabled={saving}
             >
               <Save className="w-4 h-4" />
-              {mode === "add" ? "Save" : "Update"}
+              {saving ? "Saving…" : mode === "add" ? "Save" : "Update"}
             </Button>
           </div>
         </div>
