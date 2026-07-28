@@ -16,6 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PurchaseOrder } from "../po-data";
+import {
+  preventInvalidNumberKeys,
+  sanitizeDecimalInput,
+} from "./number-input-guards";
 
 export function UploadVendorInvoiceDialog({
   open,
@@ -64,26 +68,27 @@ export function UploadVendorInvoiceDialog({
   }, [open]);
 
   const onAmountChange = (field: "invoice" | "tax" | "total", val: string) => {
+    const nextValue = sanitizeDecimalInput(val);
     if (field === "invoice") {
-      setInvoiceAmount(val);
+      setInvoiceAmount(nextValue);
       if (fieldErrors.invoiceAmount) {
         setFieldErrors((prev) => ({ ...prev, invoiceAmount: false }));
       }
     }
     if (field === "tax") {
-      setTaxAmount(val);
+      setTaxAmount(nextValue);
       if (fieldErrors.taxAmount) {
         setFieldErrors((prev) => ({ ...prev, taxAmount: false }));
       }
     }
     if (field === "total") {
-      setTotalAmount(val);
+      setTotalAmount(nextValue);
       if (fieldErrors.totalAmount) {
         setFieldErrors((prev) => ({ ...prev, totalAmount: false }));
       }
     }
-    const inv = field === "invoice" ? parseFloat(val) : parseFloat(invoiceAmount);
-    const tax = field === "tax" ? parseFloat(val) : parseFloat(taxAmount);
+    const inv = field === "invoice" ? parseFloat(nextValue) : parseFloat(invoiceAmount);
+    const tax = field === "tax" ? parseFloat(nextValue) : parseFloat(taxAmount);
     if (field !== "total" && Number.isFinite(inv) && Number.isFinite(tax)) {
       setTotalAmount(String(Math.round((inv + tax) * 100) / 100));
       if (fieldErrors.totalAmount) {
@@ -180,30 +185,36 @@ export function UploadVendorInvoiceDialog({
             <Label className="text-xs">Invoice Amount *</Label>
             <Input
               id="inv-field-invoiceAmount"
-              type="number"
+              type="text"
+              inputMode="decimal"
               className={cn("h-8 text-xs", fieldErrors.invoiceAmount && "border-red-500 focus-visible:ring-red-500")}
               value={invoiceAmount}
               onChange={(e) => onAmountChange("invoice", e.target.value)}
+              onKeyDown={preventInvalidNumberKeys}
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">GST Amount *</Label>
             <Input
               id="inv-field-taxAmount"
-              type="number"
+              type="text"
+              inputMode="decimal"
               className={cn("h-8 text-xs", fieldErrors.taxAmount && "border-red-500 focus-visible:ring-red-500")}
               value={taxAmount}
               onChange={(e) => onAmountChange("tax", e.target.value)}
+              onKeyDown={preventInvalidNumberKeys}
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Total Invoice Amount *</Label>
             <Input
               id="inv-field-totalAmount"
-              type="number"
+              type="text"
+              inputMode="decimal"
               className={cn("h-8 text-xs", fieldErrors.totalAmount && "border-red-500 focus-visible:ring-red-500")}
               value={totalAmount}
               onChange={(e) => onAmountChange("total", e.target.value)}
+              onKeyDown={preventInvalidNumberKeys}
             />
           </div>
           <div className="space-y-1 col-span-2">

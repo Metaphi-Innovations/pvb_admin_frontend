@@ -29,6 +29,10 @@ import type { POLineItem } from "../po-data";
 import type { POFormValues } from "./PurchaseOrderForm";
 import { emptyPOLine } from "./PurchaseOrderForm";
 import type { ProductDropdownItem } from "@/services/product-dropdown.service";
+import {
+  preventInvalidNumberKeys,
+  sanitizeIntegerInput,
+} from "./number-input-guards";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -396,15 +400,17 @@ export function POLineItemsSection({
             <div className="space-y-1">
               <Label className="text-xs font-medium">Quantity</Label>
               <Input
-                type="number"
-                min={1}
+                type="text"
+                inputMode="numeric"
                 value={quickQty}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  if (val > 0 || e.target.value === "") {
-                    setQuickQty(e.target.value);
+                  const cleaned = sanitizeIntegerInput(e.target.value);
+                  const val = Number(cleaned);
+                  if (val > 0 || cleaned === "") {
+                    setQuickQty(cleaned);
                   }
                 }}
+                onKeyDown={preventInvalidNumberKeys}
                 className={inputCls}
               />
             </div>
@@ -606,18 +612,20 @@ export function POLineItemsSection({
                       {isEditing && draft ? (
                         <div className="space-y-0.5">
                           <Input
-                            type="number"
-                            min={1}
+                            type="text"
+                            inputMode="numeric"
                             value={draft.packingQty}
                             onChange={(e) => {
-                              const val = Number(e.target.value);
-                              if (val > 0 || e.target.value === "") {
+                              const cleaned = sanitizeIntegerInput(e.target.value);
+                              const val = Number(cleaned);
+                              if (val > 0 || cleaned === "") {
                                 setInlineEditDraft((prev) =>
-                                  prev ? { ...prev, packingQty: e.target.value } : prev,
+                                  prev ? { ...prev, packingQty: cleaned } : prev,
                                 );
                               }
                               setInlineEditError(null);
                             }}
+                            onKeyDown={preventInvalidNumberKeys}
                             className={cn(inputCls, "w-16 ml-auto text-right", inlineEditError && "border-red-400")}
                           />
                           {inlineEditError && (

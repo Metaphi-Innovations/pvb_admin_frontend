@@ -39,6 +39,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
+import {
+	preventInvalidNumberKeys,
+	sanitizeIntegerInput,
+} from "./number-input-guards";
 
 const INDIAN_STATES = [
 	"Maharashtra",
@@ -967,15 +971,16 @@ export function PurchaseOrderForm({
 								<ReadOnlyField value={String(form.creditDays ?? "")} />
 							) : (
 								<Input
-									type="number"
-									min={0}
-									value={form.paymentType === "Credit" ? form.creditDays : 0}
+									type="text"
+									inputMode="numeric"
+									value={form.paymentType === "Credit" ? String(form.creditDays ?? "") : "0"}
 									disabled={form.paymentType !== "Credit"}
 									onChange={(e) =>
 										patch({
-											creditDays: Number(e.target.value),
+											creditDays: Number(sanitizeIntegerInput(e.target.value) || 0),
 										})
 									}
+									onKeyDown={preventInvalidNumberKeys}
 									className={cn(inputCls, form.paymentType !== "Credit" && "bg-muted/30 text-muted-foreground")}
 									placeholder="Enter Credit Days"
 								/>
