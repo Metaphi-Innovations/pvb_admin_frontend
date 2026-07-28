@@ -144,7 +144,7 @@ function LeftPanel() {
         {/* Hero */}
         <div className="flex-1 flex flex-col justify-center">
           <h1 className="text-white text-[42px] font-extrabold leading-[1.1] tracking-tight mb-4">
-            Grow smarter.<br />Farm better.
+            Grow Metaphi.<br />Farm better.
           </h1>
           <p className="text-white/70 text-base leading-relaxed max-w-sm mb-8">
             The complete ERP platform for agri-input distribution — connecting farmers,
