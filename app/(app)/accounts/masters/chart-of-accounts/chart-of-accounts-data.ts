@@ -156,7 +156,7 @@ export function resolveParentName(
   records: ChartOfAccount[],
   parentId: CoaNodeId | null,
 ): string {
-  if (parentId == null || parentId === "") return "";
+  if (parentId == null) return "";
   return records.find((r) => r.id === parentId)?.accountName ?? "";
 }
 

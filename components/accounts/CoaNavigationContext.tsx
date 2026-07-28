@@ -87,7 +87,7 @@ function resolveNodeIdParam(
     if (byNumber) return byNumber.id;
     return asNumber;
   }
-  return param;
+  return null;
 }
 
 interface CoaNavigationContextValue {

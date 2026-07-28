@@ -72,6 +72,19 @@ function mapErpSourceModule(sourceType: string | null | undefined): string | und
   return sourceType ?? undefined;
 }
 
+function stableCoaNodeId(raw: string | null | undefined): CoaNodeId {
+  const value = String(raw ?? "").trim();
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber) && asNumber > 0) return asNumber;
+
+  // Deterministic positive 31-bit hash for UUID/string API ids.
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) || 1;
+}
+
 function toChartOfAccount(
   node: CoaApiTreeNode,
   parent: ChartOfAccount | null,
@@ -83,13 +96,18 @@ function toChartOfAccount(
   const sourceEntityId = node.sourceEntityId ?? null;
 
   return {
-    id: node.id as CoaNodeId,
+    id: stableCoaNodeId(node.id),
+    apiNodeId: node.id,
     accountCode: node.code,
     accountName: node.name,
     alias: "",
     accountType,
     nodeLevel: mapNodeLevel(node.type),
-    parentAccountId: (node.parentId ?? parent?.id ?? null) as CoaNodeId | null,
+    parentAccountId:
+      node.parentId != null
+        ? stableCoaNodeId(node.parentId)
+        : parent?.id ?? null,
+    apiParentNodeId: node.parentId ?? parent?.apiNodeId ?? null,
     parentAccount: parent?.accountName ?? "",
     description: "",
     status: mapStatus(node.status),

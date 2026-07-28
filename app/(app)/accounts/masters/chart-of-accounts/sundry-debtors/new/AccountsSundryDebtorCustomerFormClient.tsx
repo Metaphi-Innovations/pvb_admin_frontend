@@ -217,7 +217,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
                 });
               }
               await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
-              onSaved?.(ledgerId ?? customer.customerUuid, parentGroupId);
+              onSaved?.(parentGroupId, parentGroupId);
               setToast({ msg: "Customer and ledger updated.", type: "success" });
               setTimeout(() => onClose(), 700);
             } catch (err) {
@@ -292,7 +292,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
               });
             }
             await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
-            onSaved?.(ledgerId ?? String(uuid || parentGroupId), parentGroupId);
+            onSaved?.(parentGroupId, parentGroupId);
             setToast({ msg: "Customer created with linked ledger.", type: "success" });
             setTimeout(() => onClose(), 700);
           } catch (err) {

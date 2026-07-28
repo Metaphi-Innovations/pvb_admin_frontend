@@ -334,7 +334,7 @@ export default function AccountsSundryCreditorVendorFormClient({
           },
         });
         await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
-        onSaved?.(ledgerId ?? supplier.supplierUuid, parentGroupId);
+        onSaved?.(parentGroupId, parentGroupId);
         showToast("Vendor and ledger updated.", "success");
         setTimeout(() => onClose(), 700);
         return;
@@ -358,7 +358,7 @@ export default function AccountsSundryCreditorVendorFormClient({
           })
         : null;
       await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
-      onSaved?.(ledgerId ?? String(uuid || parentGroupId), parentGroupId);
+      onSaved?.(parentGroupId, parentGroupId);
       showToast("Vendor created with linked ledger.", "success");
       setTimeout(() => onClose(), 700);
     } catch (err) {

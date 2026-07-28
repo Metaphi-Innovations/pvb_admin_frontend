@@ -77,10 +77,12 @@ function genericLedgerNewHref(
   return parentGroupId != null ? `${base}?parent=${parentGroupId}` : base;
 }
 
-function genericLedgerEditHref(
-  ledgerId: import("@/app/(app)/accounts/data").CoaNodeId,
-): string {
+function genericLedgerEditHref(ledgerId: string | number): string {
   return `${CHART_OF_ACCOUNTS_HREF}/ledgers/${ledgerId}/edit`;
+}
+
+function ledgerEditRouteId(row: ChartOfAccount): string | number {
+  return row.apiNodeId ?? row.id;
 }
 
 /**
@@ -362,7 +364,7 @@ export function CoaAddLedgerHost() {
               className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
               onClick={() => {
                 if (!editConfirmTarget) return;
-                const id = editConfirmTarget.id;
+                const id = ledgerEditRouteId(editConfirmTarget);
                 setEditConfirmTarget(null);
                 router.push(genericLedgerEditHref(id));
               }}

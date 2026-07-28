@@ -21,8 +21,8 @@ export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity
 
 export type CoaNodeLevel = "primary_head" | "account_group" | "ledger";
 
-/** COA node id — numeric for legacy localStorage seeds; UUID string from Accounts API. */
-export type CoaNodeId = string | number;
+/** Internal COA node id used across the legacy frontend state graph. */
+export type CoaNodeId = number;
 
 /** Stable specialization for group-to-form routing and TDS/GST inheritance. */
 export type CoaSpecializedGroupType =
@@ -56,12 +56,15 @@ export type CoaLedgerKind = "SYSTEM" | "MASTER" | "GENERIC";
 
 export interface ChartOfAccount {
   id: CoaNodeId;
+  /** Raw backend UUID/string id for Accounts API records. */
+  apiNodeId?: string;
   accountCode: string;
   accountName: string;
   alias: string;
   accountType: AccountType;
   nodeLevel: CoaNodeLevel;
   parentAccountId: CoaNodeId | null;
+  apiParentNodeId?: string | null;
   parentAccount: string;
   description: string;
   status: "active" | "inactive";

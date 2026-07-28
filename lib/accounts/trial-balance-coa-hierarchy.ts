@@ -45,7 +45,8 @@ export function resolveTrialBalanceLedgerCoaPlacement(
     const visited = new Set<import("@/app/(app)/accounts/data").CoaNodeId>();
     while (current && !visited.has(current.id)) {
       visited.add(current.id);
-      const parentId = current.parentAccountId;
+      const parentId: import("@/app/(app)/accounts/data").CoaNodeId | null =
+        current.parentAccountId;
       if (parentId == null) break;
       const parent: ChartOfAccount | undefined = list.find((r) => r.id === parentId);
       if (!parent) break;

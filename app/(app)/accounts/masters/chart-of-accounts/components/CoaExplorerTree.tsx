@@ -395,15 +395,17 @@ export function CoaExplorerTree({
       return;
     }
 
-    // API-backed UUID ledgers are not deleted via localStorage — skip until ledger DELETE API is wired.
-    if (typeof deleteTarget.id === "string") {
+    // API-backed ledgers are not deleted via localStorage — skip until ledger DELETE API is wired.
+    if (deleteTarget.apiNodeId) {
       closeDeleteDialog();
       return;
     }
 
     const link = resolveCoaMasterLink(deleteTarget, records);
     if (link && (link.category === "customer" || link.category === "vendor")) {
-      removeErpPartyLink(link.sourceModule, link.sourceId);
+      if (typeof link.sourceId === "number") {
+        removeErpPartyLink(link.sourceModule, link.sourceId);
+      }
     }
     deleteLedgerMeta(deleteTarget.id);
 

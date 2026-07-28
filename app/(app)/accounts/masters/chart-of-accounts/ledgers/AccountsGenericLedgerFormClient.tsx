@@ -77,7 +77,7 @@ function normalizeAmount(raw: string): string {
 
 export interface AccountsGenericLedgerFormClientProps {
   mode: "add" | "edit";
-  ledgerId?: CoaNodeId;
+  ledgerId?: CoaNodeId | string;
   parentGroupId?: CoaNodeId | null;
 }
 
@@ -118,7 +118,11 @@ export default function AccountsGenericLedgerFormClient({
 
     const bootstrap = async () => {
       if (mode === "edit") {
-        const row = records.find((r) => r.id === ledgerId && r.nodeLevel === "ledger");
+        const row = records.find(
+          (r) =>
+            r.nodeLevel === "ledger" &&
+            (r.id === ledgerId || (typeof ledgerId === "string" && r.apiNodeId === ledgerId)),
+        );
         if (!row) {
           if (records.length === 0) return;
           setNotFound(true);
@@ -146,7 +150,7 @@ export default function AccountsGenericLedgerFormClient({
         }
 
         try {
-          const detail = await LedgerService.view(String(row.id));
+          const detail = await LedgerService.view(row.apiNodeId ?? String(row.id));
           if (cancelled) return;
           setActive(row);
           setForm({
@@ -289,10 +293,10 @@ export default function AccountsGenericLedgerFormClient({
           billWiseOutstanding: form.billWiseAccounting,
           openingBalance,
         });
-        savedId = created.ledgerId;
+        savedId = form.parentGroupId ?? 0;
         setPreviewCode(created.ledgerCode);
       } else if (active) {
-        await LedgerService.update(String(active.id), {
+        await LedgerService.update(active.apiNodeId ?? String(active.id), {
           ledgerName: form.ledgerName.trim(),
           aliasName: form.alias?.trim() || null,
           accountSubGroupId: String(form.parentGroupId),
@@ -304,11 +308,11 @@ export default function AccountsGenericLedgerFormClient({
           billWiseOutstanding: form.billWiseAccounting,
         });
         if (fy?.financialYearId) {
-          const latest = await LedgerService.view(String(active.id));
+          const latest = await LedgerService.view(active.apiNodeId ?? String(active.id));
           const existing = latest.openingBalance ?? latest.openingBalances?.[0];
           if (existing?.openingBalanceId) {
             await LedgerService.updateOpeningBalance(
-              String(active.id),
+              active.apiNodeId ?? String(active.id),
               existing.openingBalanceId,
               {
                 amount,
@@ -318,7 +322,7 @@ export default function AccountsGenericLedgerFormClient({
               },
             );
           } else if (Number(amount) > 0) {
-            await LedgerService.createOpeningBalance(String(active.id), {
+            await LedgerService.createOpeningBalance(active.apiNodeId ?? String(active.id), {
               financialYearId: fy.financialYearId,
               amount,
               balanceType: toApiBalanceType(form.balanceType),

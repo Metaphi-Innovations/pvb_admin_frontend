@@ -188,7 +188,7 @@ export default function BankAccountFormClient({
         if (onSaved) {
           onSaved(
             updated.coaLedgerId,
-            presetGroupId ?? updated.bankGroupCoaId,
+            typeof presetGroupId === "number" ? presetGroupId : updated.bankGroupCoaId,
           );
           return;
         }
@@ -202,7 +202,7 @@ export default function BankAccountFormClient({
           // Prefer the COA node the user clicked (Bank Accounts) for return navigation.
           onSaved(
             created.coaLedgerId,
-            presetGroupId ?? created.bankGroupCoaId,
+            typeof presetGroupId === "number" ? presetGroupId : created.bankGroupCoaId,
           );
           return;
         }

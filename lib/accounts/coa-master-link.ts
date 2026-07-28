@@ -489,7 +489,7 @@ export function backfillCoaMasterLinks(): void {
       upsertErpPartyLink({
         ledgerId: ledger.id,
         erpSourceModule: link.sourceModule,
-        erpSourceId: link.sourceId,
+        erpSourceId: typeof link.sourceId === "number" ? link.sourceId : -1,
         partyCode: link.sourceCode || String(link.sourceId),
         partyName: link.sourceName,
       });
