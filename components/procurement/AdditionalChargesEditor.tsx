@@ -172,6 +172,7 @@ export function AdditionalChargesEditor({
     );
     if (byPct) return byPct.value;
     return (
+      gstOptions.find((o) => o.gstPercentage === 0)?.value ??
       gstOptions.find((o) => o.gstPercentage === 18)?.value ??
       gstOptions[0]?.value ??
       ""
