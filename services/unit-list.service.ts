@@ -80,6 +80,8 @@ const SORT_KEY_TO_ORDERING: Record<string, string> = {
   conversionFactor: "conversionFactor",
   parentUomName: "uomUnitName",
   status: "isActive",
+  createdBy: "createdAt",
+  updatedBy: "updatedAt",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 };
@@ -227,7 +229,7 @@ export const UnitListService = {
     );
 
     const totalRecords = Number(payload.totalRecords ?? payload.count);
-    const total = Number.isFinite(totalRecords) ? totalRecords : items.length;
+    const total = Number.isFinite(totalRecords) ? totalRecords : 0;
 
     return { items, total };
   },

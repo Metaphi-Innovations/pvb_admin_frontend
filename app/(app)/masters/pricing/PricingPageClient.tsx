@@ -545,13 +545,6 @@ export default function PricingMasterPage() {
       disabled: () => viewLoading,
     },
     { label: "Edit", action: "edit", icon: Edit2, onClick: (row) => openEdit(row) },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
-    },
   ];
 
   const openEdit = (row: PricingListRecord) => {
@@ -841,45 +834,6 @@ export default function PricingMasterPage() {
           ) : null
         }
       />
-
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-              </div>
-              Deactivate Pricing?
-            </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              {deleteTarget && (
-                <>
-                  <strong className="text-foreground">{deleteTarget.productName}</strong> will be
-                  marked as inactive.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
-              onClick={confirmDelete}
-              disabled={toggleStatusMutation.isPending}
-            >
-              Mark Inactive
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </ListingContainer>

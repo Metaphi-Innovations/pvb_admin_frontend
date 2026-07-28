@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     SupplierListService,
     type SupplierCreatePayload,
@@ -28,6 +28,24 @@ export function useSuppliers(params: MasterListKeyParams) {
     return useQuery({
         queryKey: masterKeys.suppliers.list(params),
         queryFn: ({ signal }: { signal: AbortSignal }) => SupplierListService.list({ ...toListParams(params), signal }),
+        placeholderData: keepPreviousData,
+    });
+}
+
+export interface SupplierSummary {
+    total: number;
+    active: number;
+    inactive: number;
+}
+
+export function useSupplierSummary() {
+    return useQuery({
+        queryKey: masterKeys.suppliers.summary(),
+        queryFn: async (): Promise<SupplierSummary> => {
+            const response = await SupplierListService.getSummary();
+            return response;
+        },
+        staleTime: 30_000,
     });
 }
 

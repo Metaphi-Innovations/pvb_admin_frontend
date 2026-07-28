@@ -940,8 +940,40 @@ export function collectVendorFormFieldErrors(
     errors.pincode = "Pincode is required.";
   } else if (!validateVendorPincode(form.billingAddress.pincode)) {
     errors.pincode = "Enter a valid 6-digit pincode.";
+  } else if (!form.billingAddress.state.trim()) {
+    errors.pincode = "Enter a valid pincode to auto-fill city, town, and state.";
   }
 
+  if (!form.accountHolderName.trim()) {
+    errors.accountHolderName = "Account holder name is required.";
+  }
+  if (!form.bankName.trim()) {
+    errors.bankName = "Bank name is required.";
+  }
+  if (!form.branch.trim()) {
+    errors.branch = "Branch name is required.";
+  }
+  if (!form.accountNumber.trim()) {
+    errors.accountNumber = "Account number is required.";
+  }
+  if (!form.ifscCode.trim()) {
+    errors.ifscCode = "IFSC code is required.";
+  } else if (!validateVendorIFSC(form.ifscCode)) {
+    errors.ifscCode = "Enter a valid IFSC code.";
+  }
+
+  const documentsMissingUpload = form.documents.filter(
+    (doc) => !doc.fileName?.trim() && !doc.file && !(doc.fileUrl && doc.uploaded),
+  );
+  if (form.documents.length === 0 || documentsMissingUpload.length > 0) {
+    if (form.documents.some((doc) => doc.file && !doc.fileName)) {
+      errors.documents = "Files are selected but not uploaded. Please complete the upload before saving.";
+    } else if (documentsMissingUpload.length > 0) {
+      errors.documents = "Please upload all required documents before saving.";
+    } else {
+      errors.documents = "At least one document must be uploaded.";
+    }
+  }
   if (form.mobile.trim() && !validateVendorMobile(form.mobile)) {
     errors.mobile = "Enter a valid 10-digit mobile number.";
   }
@@ -949,9 +981,6 @@ export function collectVendorFormFieldErrors(
     errors.email = "Enter a valid email address.";
   }
 
-  if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
-    errors.ifscCode = "Enter a valid IFSC code.";
-  }
   if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
     errors.confirmAccountNumber = "Account number and confirmation do not match.";
   }

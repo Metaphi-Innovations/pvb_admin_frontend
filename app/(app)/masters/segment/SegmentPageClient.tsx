@@ -540,10 +540,9 @@ export default function SegmentMasterPage() {
   const viewDrawer = active
     ? {
         title: active.segmentName,
-        subtitle: active.segmentCode || "Read-only segment details",
+        subtitle: "Read-only segment details",
         status: active.status,
         basicInfo: [
-          { label: "Segment Code", value: active.segmentCode || "—", mono: true },
           {
             label: "Description",
             value: active.description?.trim() ? active.description : "—",

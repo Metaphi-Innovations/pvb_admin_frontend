@@ -64,10 +64,16 @@ export function usePurchaseReturn(id: string | null | undefined) {
   });
 }
 
-export function usePurchaseReturnPreviewNumber(enabled = true) {
+export function usePurchaseReturnPreviewNumber(
+  warehouseId?: string | null,
+  enabled = true,
+) {
+  const id =
+    warehouseId != null && warehouseId !== "" ? String(warehouseId) : null;
   return useQuery({
-    queryKey: purchaseReturnKeys.preview(),
-    queryFn: ({ signal }) => PurchaseReturnService.getPreviewNumber(signal),
+    queryKey: purchaseReturnKeys.preview(id),
+    queryFn: ({ signal }) =>
+      PurchaseReturnService.getPreviewNumber(id, signal),
     enabled,
   });
 }

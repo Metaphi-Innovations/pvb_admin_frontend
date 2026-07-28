@@ -12,7 +12,8 @@ export const purchaseReturnKeys = {
   list: (params: PurchaseReturnListKeyParams) => [...purchaseReturnKeys.lists(), params] as const,
   details: () => [...purchaseReturnKeys.all, "detail"] as const,
   detail: (id: string) => [...purchaseReturnKeys.details(), id] as const,
-  preview: () => [...purchaseReturnKeys.all, "preview-number"] as const,
+  preview: (warehouseId?: string | null) =>
+    [...purchaseReturnKeys.all, "preview-number", warehouseId ?? ""] as const,
   filterDropdowns: () => [...purchaseReturnKeys.all, "filter-dropdown"] as const,
   filterDropdown: (fieldName: string) =>
     [...purchaseReturnKeys.filterDropdowns(), fieldName] as const,

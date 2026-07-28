@@ -21,6 +21,7 @@ import {
   User,
 } from "lucide-react";
 import { useSupplier } from "@/hooks/masters/use-supplier";
+import { resolveSupplierDocumentUrl } from "@/services/supplier-list.service";
 import { getGstCategoryLabel, deriveGstRegistered } from "@/lib/masters/gst-compliance";
 import { getActiveTDSMasters, formatTdsSummary } from "../../tds/tds-data";
 import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
@@ -138,13 +139,6 @@ export default function ViewVendorPage() {
       ]}
       onEdit={() => router.push(`/masters/vendors/${id}/edit`)}
       sidebar={{
-        quickActions: [
-          {
-            label: "Edit Supplier",
-            onClick: () => router.push(`/masters/vendors/${id}/edit`),
-            variant: "primary",
-          },
-        ],
         summary: [
           { label: "Supplier Code", value: vendor.supplierCode || "—", highlight: true },
           { label: "Supplier Type", value: vendor.supplierType?.supplier_type_name || "—" },
@@ -202,6 +196,12 @@ export default function ViewVendorPage() {
             )}
             <RecordKvRow label="PAN Number" value={vendor.panNumber || "—"} mono copy />
             <RecordKvRow label="TAN Number" value={vendor.tanNumber || "—"} mono copy />
+            <RecordKvRow
+              label="MSME No. (UDYAM)"
+              value={vendor.msmeRegistered ? vendor.msmeRegNo || "—" : "—"}
+              mono
+              copy={!!vendor.msmeRegNo}
+            />
             <RecordKvRow label="TDS Applicable" value={vendor.tdsApplicable ? "Yes" : "No"} />
             {vendor.tdsApplicable ? (
               <RecordKvRow
@@ -212,6 +212,38 @@ export default function ViewVendorPage() {
               />
             ) : (
               <RecordKvRow label="TDS Section" value="—" isLast />
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Contact Information" icon={User} accent="blue">
+            {(vendor.contacts?.length ?? 0) > 0 ? (
+              <div className="space-y-0">
+                {vendor.contacts?.map((contact, idx) => (
+                  <div
+                    key={contact.supplier_contact_id}
+                    className={
+                      idx < (vendor.contacts?.length ?? 0) - 1
+                        ? "border-b border-border/60 pb-2 mb-2"
+                        : undefined
+                    }
+                  >
+                    <RecordKvRow label="Name" value={contact.contact_name} highlight />
+                    <RecordKvRow label="Designation" value={contact.designation || "—"} />
+                    <RecordKvRow
+                      label="Mobile"
+                      value={formatMobile(contact.mobile_country_code ?? "+91", contact.mobile_number)}
+                      mono
+                    />
+                    <RecordKvRow
+                      label="Email"
+                      value={contact.email || "—"}
+                      isLast={idx === (vendor.contacts?.length ?? 0) - 1}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <RecordKvRow label="Contacts" value="—" isLast />
             )}
           </RecordSectionCard>
 
@@ -336,7 +368,7 @@ export default function ViewVendorPage() {
 
                           <td className="px-3 py-2">
                             <a
-                              href={doc.file_url}
+                              href={resolveSupplierDocumentUrl(doc.file_url)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-brand-700 hover:underline"

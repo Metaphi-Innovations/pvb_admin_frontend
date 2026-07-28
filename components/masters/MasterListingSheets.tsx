@@ -38,6 +38,7 @@ export function MasterListingSheets({
   formContent,
   formError,
   saving = false,
+  hideFormDescription = false,
   statusActive,
   onStatusChange,
 }: {
@@ -55,6 +56,7 @@ export function MasterListingSheets({
   formContent: React.ReactNode;
   formError?: string;
   saving?: boolean;
+  hideFormDescription?: boolean;
   statusActive?: boolean;
   onStatusChange?: (active: boolean) => void;
 }) {
@@ -78,7 +80,9 @@ export function MasterListingSheets({
               </div>
               <div>
                 <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                <SheetDescription className="text-xs">Compact master form</SheetDescription>
+                {!hideFormDescription ? (
+                  <SheetDescription className="text-xs">Compact master form</SheetDescription>
+                ) : null}
               </div>
             </div>
           </SheetHeader>

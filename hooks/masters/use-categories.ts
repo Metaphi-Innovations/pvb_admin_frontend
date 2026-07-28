@@ -77,6 +77,19 @@ export function useUpdateCategory() {
   });
 }
 
+
+export function useDeleteCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => CategoryListService.delete(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: masterKeys.categories.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.categories.dropdown() }),
+      ]);
+    },
+  });
+}
 export function useToggleCategoryStatus() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -117,3 +130,4 @@ export function useCategoryFilterDropdown(
     enabled: options?.enabled ?? true,
   });
 }
+

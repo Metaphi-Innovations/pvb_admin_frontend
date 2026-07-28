@@ -183,9 +183,6 @@ export function validateVendorTypeForm(
   } else if (!/^[A-Z]{2,5}$/.test(code)) {
     errors.initialCode = "Use uppercase letters only (2–5 characters)";
   }
-  if (code && !form.vendorTypeCode.trim()) {
-    errors.vendorTypeCode = "Supplier type code could not be generated";
-  }
   return errors;
 }
 

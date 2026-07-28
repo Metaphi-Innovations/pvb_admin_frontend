@@ -72,4 +72,5 @@ export interface MasterListingProps<T = any> {
   currentFilters?: FilterState;
   currentSort?: SortState;
   onOpenFilter?: (columnKey: string) => void;
+  onPageJumpError?: (message: string) => void;
 }

@@ -344,26 +344,6 @@ export default function DistributorPage() {
           router.push(`/masters/customers/new?fromDistributor=${distributor.id}`);
         },
       },
-      {
-        label: "Delete",
-        action: "delete",
-        icon: Trash2,
-        variant: "destructive",
-        onClick: (distributor) => {
-          if (
-            typeof window !== "undefined" &&
-            !window.confirm(`Delete distributor "${distributor.firmName}" from this listing?`)
-          ) {
-            return;
-          }
-          setDistributors((current) => {
-            const updated = current.filter((item) => item.id !== distributor.id);
-            saveDistributors(updated);
-            return updated;
-          });
-          showToast("Distributor removed from the current listing.");
-        },
-      },
     ],
     [router],
   );

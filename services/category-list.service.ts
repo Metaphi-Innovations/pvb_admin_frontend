@@ -13,7 +13,6 @@ export interface CategoryListParams {
 export interface CategoryListRecord {
   id: number;
   categoryId: string;
-  code: string;
   name: string;
   remark: string;
   status: "active" | "inactive";
@@ -26,12 +25,6 @@ export interface CategoryListRecord {
 export interface CategoryListResult {
   items: CategoryListRecord[];
   total: number;
-}
-
-export interface CategoryDropdownItem {
-  id: string;
-  categoryName: string;
-  categoryCode: string;
 }
 
 export interface CategoryFilterOption {
@@ -100,7 +93,6 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): CategoryL
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     categoryId: asString(raw.category_id ?? raw.id),
-    code: asString(raw.category_code),
     name: asString(raw.category_name ?? raw.categoryName),
     remark: asString(raw.remark ?? raw.description),
     status: toStatus(raw.is_active),
@@ -118,7 +110,6 @@ function mapDetail(raw: Record<string, unknown>): CategoryListRecord {
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
     categoryId: asString(raw.id ?? raw.category_id),
-    code: asString(raw.category_code),
     name: asString(raw.categoryName ?? raw.category_name),
     remark: asString(raw.description ?? raw.remark),
     status: toStatus(raw.is_active),
@@ -250,6 +241,17 @@ export const CategoryListService = {
     }
   },
 
+
+  async delete(categoryId: string): Promise<void> {
+    const response = await axiosInstance.delete(
+      API_ENDPOINTS.MASTER.CATEGORY.DELETE(categoryId),
+    );
+
+    const body = response.data as Record<string, unknown>;
+    if (!body.success) {
+      throw new Error(asString(body.message) || "Failed to delete category.");
+    }
+  },
   async updateStatus(categoryId: string): Promise<void> {
     const response = await axiosInstance.patch(
       API_ENDPOINTS.MASTER.CATEGORY.STATUS_UPDATE(categoryId),
@@ -275,7 +277,6 @@ export const CategoryListService = {
       return {
         id: asString(item.id ?? item.category_id),
         categoryName: asString(item.categoryName ?? item.category_name),
-        categoryCode: asString(item.category_code ?? item.categoryCode),
       };
     });
   },
@@ -316,3 +317,4 @@ export const CategoryListService = {
     window.URL.revokeObjectURL(url);
   },
 };
+
