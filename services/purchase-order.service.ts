@@ -195,6 +195,10 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     asString(snapshotHsn.code) ||
     "";
 
+  // const snapshot = asRecord(raw.product_snapshot);
+  // const hsnObj = asRecord(snapshot.hsn);
+  // const hsnCode = asString(raw.hsn_code || raw.hsnCode || hsnObj.hsnCode || hsnObj.hsn_code || (snapshot as any).hsnCode || (snapshot as any).hsn_code || "");
+
   return {
     uid: asString(raw.purchase_order_product_id) || `pl-${index}`,
     purchaseOrderProductId: toUuidOrNull(raw.purchase_order_product_id) ?? undefined,

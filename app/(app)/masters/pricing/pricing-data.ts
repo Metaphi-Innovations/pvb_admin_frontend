@@ -1384,16 +1384,21 @@ export function findActivePricingForStock(
   productName: string,
 ): PricingRecord | undefined {
   const records = loadPricingRecords().filter((r) => r.status === "active");
-  const norm = (s: string) => s.trim().toLowerCase();
+  const norm = (s: string | null | undefined) => String(s ?? "").trim().toLowerCase();
+  const skuKey = String(sku ?? "").trim();
 
-  const bySku = records.find((r) => r.sku === sku);
+  const bySku = skuKey
+    ? records.find((r) => String(r.sku ?? "").trim() === skuKey)
+    : undefined;
   if (bySku) return bySku;
 
   const byName = records.find((r) => norm(r.productName) === norm(productName));
   if (byName) return byName;
 
   const product = loadProducts().find(
-    (p) => p.sku === sku || norm(p.productName) === norm(productName),
+    (p) =>
+      (skuKey && String(p.sku ?? "").trim() === skuKey) ||
+      (norm(productName) && norm(p.productName) === norm(productName)),
   );
   if (product) {
     return records.find((r) => r.productId === product.id);

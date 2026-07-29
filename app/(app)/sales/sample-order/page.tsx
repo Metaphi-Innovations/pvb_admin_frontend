@@ -43,7 +43,7 @@ import ApproveOrderDialog from "./components/ApproveOrderDialog";
 import RejectOrderDialog from "./components/RejectOrderDialog";
 import { SampleReturnTab } from "./components/SampleReturnTab";
 import { useSampleReturns } from "@/hooks/sales/use-return-documents";
-import { downloadProformaInvoice } from "./pi-document";
+import { downloadProformaInvoicePdf } from "./proforma-pdf/proformaInvoicePdf";
 import {
   type SalesOrder,
   type OrderStatus,
@@ -322,20 +322,12 @@ export default function SalesOrdersPage() {
 
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
-  const handleDownloadNote = async (id: string | number, soNumber: string) => {
+  const handleDownloadProforma = async (id: string | number) => {
     try {
-      setToast({ msg: "Downloading sample note...", type: "success" });
-      const blob = await SampleOrderService.downloadNote(String(id));
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `sample-note-${soNumber.replace(/\//g, "-")}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      setToast({ msg: "Opening Proforma Invoice...", type: "success" });
+      await downloadProformaInvoicePdf(id);
     } catch {
-      setToast({ msg: "Failed to download note.", type: "error" });
+      setToast({ msg: "Failed to open Proforma Invoice.", type: "error" });
     }
   };
 
@@ -567,7 +559,7 @@ export default function SalesOrdersPage() {
                 <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 z-[200]">
+            <DropdownMenuContent align="end" className="w-56 z-[200]">
               <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
                 Actions
               </DropdownMenuLabel>
@@ -575,43 +567,43 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 onClick={() => router.push(`/sales/sample-order/${row.id}`)}
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm whitespace-nowrap"
               >
-                <Eye className="w-3.5 h-3.5 mr-2" /> View
+                <Eye className="w-3.5 h-3.5 mr-2 shrink-0" /> View
               </button>
               <button
                 type="button"
                 disabled={!editable}
                 onClick={() => router.push(`/sales/sample-order/${row.id}/edit`)}
                 className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm whitespace-nowrap",
                   !editable ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
                 )}
               >
-                <Edit className="w-3.5 h-3.5 mr-2" /> Edit
+                <Edit className="w-3.5 h-3.5 mr-2 shrink-0" /> Edit
               </button>
 
               <button
                 type="button"
                 disabled={!piAllowed}
-                onClick={() => handleDownloadNote(hydrated.id, hydrated.soNumber)}
+                onClick={() => handleDownloadProforma(hydrated.id)}
                 className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm whitespace-nowrap",
                   !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
                 )}
               >
-                <FileText className="w-3.5 h-3.5 mr-2" /> Sample Issue Note
+                <FileText className="w-3.5 h-3.5 mr-2 shrink-0" /> Download Proforma Invoice
               </button>
               <button
                 type="button"
                 disabled={!packingAllowed}
                 onClick={() => router.push(`/sales/sample-order/${hydrated.id}/packing-list/new`)}
                 className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm whitespace-nowrap",
                   !packingAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
                 )}
               >
-                <Package className="w-3.5 h-3.5 mr-2" /> Generate Packing List
+                <Package className="w-3.5 h-3.5 mr-2 shrink-0" /> Generate Packing List
               </button>
               <DropdownMenuSeparator />
               <button
@@ -619,11 +611,11 @@ export default function SalesOrdersPage() {
                 disabled={!cancellable}
                 onClick={() => setCancelOrder(hydrated)}
                 className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm text-red-600 hover:bg-red-50",
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm text-red-600 hover:bg-red-50 whitespace-nowrap",
                   !cancellable && "text-muted-foreground/50 cursor-not-allowed hover:bg-transparent"
                 )}
               >
-                <Trash2 className="w-3.5 h-3.5 mr-2" /> Cancel Order
+                <Trash2 className="w-3.5 h-3.5 mr-2 shrink-0" /> Cancel Order
               </button>
             </DropdownMenuContent>
           </DropdownMenu>

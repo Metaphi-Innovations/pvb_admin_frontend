@@ -17,6 +17,7 @@ import {
   IndianRupee,
   ListOrdered,
   Activity,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +31,10 @@ import CancelOrderDialog from "../components/CancelOrderDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
 import { downloadProformaInvoice } from "../pi-document";
+import {
+  openPackingListPdfWindow,
+  downloadPackingListPdfForSalesOrder,
+} from "../pl-pdf/packingListPdfGenerator";
 import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-data";
 import {
   type SalesOrder,
@@ -162,6 +167,24 @@ export default function ViewSalesOrderPage() {
       label: "Generate Packing List",
       icon: Package,
       onClick: () => router.push(`/sales/orders/${order.id}/packing-list/new`),
+    });
+  }
+  if (!approvalMode) {
+    quickActions.push({
+      label: "Download Packing List",
+      icon: Download,
+      onClick: async () => {
+        try {
+          await downloadPackingListPdfForSalesOrder(String(order.id));
+        } catch (e: unknown) {
+          console.error("Packing List download error", e);
+          const message =
+            e instanceof Error && e.message
+              ? e.message
+              : "Failed to download Packing List.";
+          window.alert(message);
+        }
+      },
     });
   }
   if (!approvalMode && splittable) {
