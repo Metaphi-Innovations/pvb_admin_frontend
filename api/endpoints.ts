@@ -493,5 +493,8 @@ export const API_ENDPOINTS = {
         `/accounts/integrations/suppliers/${supplierId}/sync-ledger`,
     },
   },
+  INVOICE_EXTRACTION: {
+    EXTRACT: "/invoice-extraction/extract",
+  },
 };
 

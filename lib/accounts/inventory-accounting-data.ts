@@ -147,13 +147,16 @@ export interface InventoryDashboardMetrics {
 
 export function resolveSku(productName: string, skuHint?: string): string {
   if (skuHint?.trim()) return skuHint.trim();
+  const normalizedProductName = productName.trim().toLowerCase();
   const match = findProductByName(productName);
   if (match?.sku) return match.sku;
   const products = loadProducts();
-  const exact = products.find((p) => p.productName.toLowerCase() === productName.trim().toLowerCase());
+  const exact = products.find(
+    (p) => p.productName?.trim().toLowerCase() === normalizedProductName,
+  );
   if (exact) return exact.sku;
   const pricing = loadPricingRecords().find(
-    (r) => r.productName.toLowerCase() === productName.trim().toLowerCase(),
+    (r) => r.productName?.trim().toLowerCase() === normalizedProductName,
   );
   return pricing?.sku ?? productName;
 }
