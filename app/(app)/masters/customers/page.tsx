@@ -27,8 +27,6 @@ import {
 	Ban,
 	UserCheck,
 	UserX,
-	CircleDashed,
-	Ban as BanIcon,
 } from "lucide-react";
 import {
 	useCustomers,
@@ -189,9 +187,6 @@ export default function CustomersPage() {
 	// };
 
 	const toggleStatus = useToggleCustomerStatus();
-	const markDraft = () => {
-		showToast("Draft status is not implemented yet", "error");
-	};
 
 	const {
 		data,
@@ -261,14 +256,6 @@ export default function CustomersPage() {
 	);
 	const stateOptions = useMemo(
 		() => toOptions(records.map((r) => r.stateName)),
-		[records],
-	);
-	const districtOptions = useMemo(
-		() => toOptions(records.map((r) => r.districtName)),
-		[records],
-	);
-	const territoryOptions = useMemo(
-		() => toOptions(records.map((r) => r.territoryName)),
 		[records],
 	);
 	const creditLimitOptions = useMemo(
@@ -398,26 +385,6 @@ export default function CustomersPage() {
 			render: (val, row) => row.stateName || "—",
 		},
 		{
-			key: "districtName",
-			header: "District",
-			sortable: true,
-			filterable: true,
-			filterType: "dropdown",
-			filterOptions: districtOptions,
-			width: "130px",
-			render: (val, row) => row.districtName || "—",
-		},
-		{
-			key: "territoryName",
-			header: "Territory",
-			sortable: true,
-			filterable: true,
-			filterType: "dropdown",
-			filterOptions: territoryOptions,
-			width: "130px",
-			render: (val, row) => row.territoryName || "—",
-		},
-		{
 			key: "creditLimit",
 			header: "Credit Limit",
 			sortable: true,
@@ -481,22 +448,6 @@ export default function CustomersPage() {
 								<UserCheck className='w-3.5 h-3.5' /> Activate
 							</DropdownMenuItem>
 						) : null}
-						{row.status !== "draft" && row.status !== "blocked" && (
-							<DropdownMenuItem
-								className='gap-2 text-xs cursor-pointer'
-								onClick={() => showToast("Blocked status is not implemented yet", "error")}
-							>
-								<BanIcon className='w-3.5 h-3.5' /> Block Customer
-							</DropdownMenuItem>
-						)}
-						{row.status !== "blocked" && (
-							<DropdownMenuItem
-								className='gap-2 text-xs cursor-pointer'
-								onClick={() => markDraft()}
-							>
-								<CircleDashed className='w-3.5 h-3.5' /> Mark as Draft
-							</DropdownMenuItem>
-						)}
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),

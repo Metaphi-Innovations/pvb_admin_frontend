@@ -1,7 +1,9 @@
 /** Opens the Bank Account form inside Chart of Accounts (keeps Accounts sidebar). */
 
+import type { CoaNodeId } from "../../data";
+
 export type CoaBankFormOpenArgs = {
-  parentGroupId: number;
+  parentGroupId: CoaNodeId;
   /** When set, edit the existing Bank Account master (same form / save path). */
   accountId?: number;
 };
@@ -15,7 +17,7 @@ export function registerCoaBankFormHandler(handler: OpenHandler): void {
 }
 
 export function requestCoaBankForm(
-  parentGroupId: number,
+  parentGroupId: CoaNodeId,
   accountId?: number,
 ): boolean {
   if (openHandler) {

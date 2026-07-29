@@ -42,8 +42,8 @@ function ParentOptionList({
 }: {
   filtered: LedgerParentOption[];
   search: string;
-  value: number | null;
-  onSelect: (id: number) => void;
+  value: import("../../../data").CoaNodeId | null;
+  onSelect: (id: import("../../../data").CoaNodeId) => void;
 }) {
   if (filtered.length === 0) {
     return (
@@ -59,19 +59,19 @@ function ParentOptionList({
     <>
       {filtered.map((opt) => (
         <button
-          key={opt.id}
+          key={String(opt.id)}
           type="button"
           onClick={() => onSelect(opt.id)}
           className={cn(
             "w-full flex items-start gap-2 px-3 py-2.5 text-left transition-colors outline-none",
             "hover:bg-brand-50/60 focus-visible:bg-brand-50/60",
-            value === opt.id && "bg-brand-50/80",
+            String(value) === String(opt.id) && "bg-brand-50/80",
           )}
         >
           <div className="flex-1 min-w-0">
             <PathResult path={opt.path} />
           </div>
-          {value === opt.id && (
+          {String(value) === String(opt.id) && (
             <Check className="w-4 h-4 text-brand-600 flex-shrink-0 mt-0.5" />
           )}
         </button>
@@ -87,8 +87,8 @@ function ParentOptionList({
 
 interface CoaParentGroupSelectorProps {
   records: ChartOfAccount[];
-  value: number | null;
-  onChange: (parentGroupId: number) => void;
+  value: import("../../../data").CoaNodeId | null;
+  onChange: (parentGroupId: import("../../../data").CoaNodeId) => void;
   disabled?: boolean;
   parentFilter?: (node: ChartOfAccount) => boolean;
   /** inline = always-visible list; popover = search input trigger; dropdown = compact select trigger */
@@ -137,7 +137,7 @@ export function CoaParentGroupSelector({
     if (!next) setSearch("");
   };
 
-  const handleSelect = (id: number) => {
+  const handleSelect = (id: import("../../../data").CoaNodeId) => {
     onChange(id);
     setOpen(false);
     setSearch("");

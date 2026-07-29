@@ -14,8 +14,8 @@ import { CoaParentGroupTreeList } from "./CoaParentGroupTreeList";
 
 interface CoaAddLedgerParentSelectProps {
   records: ChartOfAccount[];
-  value: number | null;
-  onChange: (parentGroupId: number) => void;
+  value: import("../../../data").CoaNodeId | null;
+  onChange: (parentGroupId: import("../../../data").CoaNodeId) => void;
   disabled?: boolean;
   placeholder?: string;
   error?: string | null;
@@ -58,7 +58,7 @@ export function CoaAddLedgerParentSelect({
     selected?.scrollIntoView({ block: "nearest" });
   }, [open, value, search]);
 
-  const handleSelect = (id: number) => {
+  const handleSelect = (id: import("../../../data").CoaNodeId) => {
     onChange(id);
     setOpen(false);
     setSearch("");

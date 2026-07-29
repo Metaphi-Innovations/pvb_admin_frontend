@@ -1,10 +1,12 @@
 /** Lets the COA tree open the add/edit sub-group drawer owned by CoaAddGroupHost. */
 
+import type { CoaNodeId } from "../../data";
+
 type CoaAddGroupHandlers = {
-  addUnderParent: ((parentGroupId: number) => void) | null;
-  openGlobal: ((preferredParentId?: number | null) => void) | null;
-  editGroup: ((groupId: number) => void) | null;
-  deleteGroup: ((groupId: number) => void) | null;
+  addUnderParent: ((parentGroupId: CoaNodeId) => void) | null;
+  openGlobal: ((preferredParentId?: CoaNodeId | null) => void) | null;
+  editGroup: ((groupId: CoaNodeId) => void) | null;
+  deleteGroup: ((groupId: CoaNodeId) => void) | null;
 };
 
 let handlers: CoaAddGroupHandlers = {
@@ -18,28 +20,28 @@ export function registerCoaAddGroupHandlers(next: CoaAddGroupHandlers): void {
   handlers = next;
 }
 
-export function requestCoaAddSubGroup(parentGroupId: number): void {
+export function requestCoaAddSubGroup(parentGroupId: CoaNodeId): void {
   if (handlers.addUnderParent) {
     handlers.addUnderParent(parentGroupId);
     return;
   }
 }
 
-export function requestCoaGlobalAddSubGroup(preferredParentId?: number | null): void {
+export function requestCoaGlobalAddSubGroup(preferredParentId?: CoaNodeId | null): void {
   if (handlers.openGlobal) {
     handlers.openGlobal(preferredParentId);
     return;
   }
 }
 
-export function requestCoaEditGroup(groupId: number): void {
+export function requestCoaEditGroup(groupId: CoaNodeId): void {
   if (handlers.editGroup) {
     handlers.editGroup(groupId);
     return;
   }
 }
 
-export function requestCoaDeleteGroup(groupId: number): void {
+export function requestCoaDeleteGroup(groupId: CoaNodeId): void {
   if (handlers.deleteGroup) {
     handlers.deleteGroup(groupId);
     return;

@@ -344,7 +344,8 @@ export default function BrandMasterPage() {
           <button
             type="button"
             onClick={() => openView(row)}
-            className="text-xs font-semibold text-brand-700 hover:underline text-left"
+            className="text-xs font-semibold text-brand-700 hover:underline text-left truncate max-w-[250px] block"
+            title={row.brandName}
           >
             {row.brandName}
           </button>
@@ -367,9 +368,17 @@ export default function BrandMasterPage() {
         filterType: "dropdown",
         filterOptions: remarkOptions,
         width: "320px",
-        render: (val) => (
-          <span className="text-xs text-muted-foreground">{val ? String(val) : "—"}</span>
-        ),
+        render: (val) => {
+          const text = val ? String(val) : "—";
+          return (
+            <span
+              className="text-xs text-muted-foreground truncate max-w-[320px] block"
+              title={val ? String(val) : undefined}
+            >
+              {text}
+            </span>
+          );
+        },
       },
       {
         key: "status",
@@ -441,9 +450,12 @@ export default function BrandMasterPage() {
   const displayRecords = useMemo(() => {
     if (ordering || !sort.key || sort.direction === "none") return records;
     return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof BrandRecord] ?? "").toLowerCase();
-      const bVal = String(b[sort.key as keyof BrandRecord] ?? "").toLowerCase();
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      const aVal = String(a[sort.key as keyof BrandRecord] ?? "").trim();
+      const bVal = String(b[sort.key as keyof BrandRecord] ?? "").trim();
+      const cmp = aVal.localeCompare(bVal, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort, ordering]);

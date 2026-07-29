@@ -79,6 +79,9 @@ export function CategoryForm({
 export function validateCategoryForm(form: CategoryFormValues) {
   const errors: Record<string, string> = {};
   if (!form.categoryName.trim()) errors.categoryName = "Category name is required";
+  else if (form.categoryName.trim().length < 3) {
+    errors.categoryName = "Category name must be at least 3 characters";
+  }
   return errors;
 }
 

@@ -57,11 +57,13 @@ export function migrateAdditionalCharge(charge: ProcurementAdditionalCharge): Re
     (charge.cgstPct ?? 0) + (charge.sgstPct ?? 0) + (charge.igstPct ?? 0);
   const gstMasterId =
     charge.gstMasterId ??
-    findGstMasterIdByTotalPct(totalGst || DEFAULT_CHARGE_GST_PCT) ??
+    (charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null
+      ? findGstMasterIdByTotalPct(totalGst)
+      : undefined) ??
+    findGstMasterIdByTotalPct(0) ??
     getDefaultGstMasterId();
   const hasRates =
-    totalGst > 0 &&
-    (charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null);
+    charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null;
   if (hasRates) {
     return {
       ...charge,
@@ -142,7 +144,8 @@ export function newAdditionalCharge(
   partial?: Partial<ProcurementAdditionalCharge>,
   taxSupplyType: TaxSupplyType = "intra",
 ): ProcurementAdditionalCharge {
-  const gstMasterId = partial?.gstMasterId ?? getDefaultGstMasterId();
+  const defaultGstId = findGstMasterIdByTotalPct(0) ?? getDefaultGstMasterId();
+  const gstMasterId = partial?.gstMasterId ?? defaultGstId;
   const rates = applyGstMasterToTaxRates(gstMasterId, taxSupplyType);
   return {
     uid: `chg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -234,7 +237,7 @@ export function enrichProductFromDropdown(
       conversionQty: Number(dbProd.unit_per_packing) || 1,
       segment: dbProd.segment?.segment_name || "",
       category: dbProd.category?.categoryName || "",
-      hsnCode: dbProd.hsn?.hsnDescription || "",
+      hsnCode: (dbProd.hsn as any)?.hsnCode || (dbProd.hsn as any)?.hsn_code || dbProd.hsn?.hsnDescription || "",
       mrp: 0,
       ratePerSku: 0,
       description: dbProd.scientific_name || "",

@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
       CREATE: "/master/category/create",
       UPDATE: (id: string) => `/master/category/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/category/update-status/${id}`,
+      DELETE: (id: string) => `/master/category/delete/${id}`,
       EXPORT: "/master/category/export",
       VIEW: (id: string) => `/master/category/${id}`,
       DROPDOWN: "/master/category/dropdown",
@@ -41,6 +42,7 @@ export const API_ENDPOINTS = {
       CREATE: "/master/customer-type/create",
       UPDATE: (id: string) => `/master/customer-type/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/customer-type/update-status/${id}`,
+      DELETE: (id: string) => `/master/customer-type/delete/${id}`,
       VIEW: (id: string) => `/master/customer-type/${id}`,
       EXPORT: "/master/customer-type/export",
       DROPDOWN: "/master/customer-type/dropdown",
@@ -196,6 +198,7 @@ export const API_ENDPOINTS = {
     },
     SUPPLIER: {
       LIST: "/master/supplier/list",
+      SUMMARY: "/master/supplier/summary",
       CREATE: "/master/supplier/create",
       UPDATE: (id: string) => `/master/supplier/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/supplier/toggle-status/${id}`,
@@ -461,6 +464,38 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
     },
+    CHART_OF_ACCOUNTS: {
+      TREE: "/accounts/chart-of-accounts/tree",
+      PRIMARY_HEADS: "/accounts/chart-of-accounts/primary-heads",
+      GROUPS: "/accounts/chart-of-accounts/groups",
+      SUB_GROUPS: "/accounts/chart-of-accounts/sub-groups",
+      PDF: "/accounts/chart-of-accounts/pdf",
+    },
+    LEDGERS: {
+      LIST: "/accounts/ledgers",
+      CREATE: "/accounts/ledgers",
+      VIEW: (id: string) => `/accounts/ledgers/${id}`,
+      UPDATE: (id: string) => `/accounts/ledgers/${id}`,
+      EXPORT: "/accounts/ledgers/export",
+      PREVIEW_NUMBER: "/accounts/ledgers/preview-number",
+      OPENING_BALANCES: (ledgerId: string) =>
+        `/accounts/ledgers/${ledgerId}/opening-balances`,
+      OPENING_BALANCE: (ledgerId: string, openingBalanceId: string) =>
+        `/accounts/ledgers/${ledgerId}/opening-balances/${openingBalanceId}`,
+    },
+    FINANCIAL_YEARS: {
+      CURRENT: "/accounts/financial-years/current",
+      LIST: "/accounts/financial-years",
+    },
+    INTEGRATIONS: {
+      SYNC_CUSTOMER_LEDGER: (customerId: string) =>
+        `/accounts/integrations/customers/${customerId}/sync-ledger`,
+      SYNC_SUPPLIER_LEDGER: (supplierId: string) =>
+        `/accounts/integrations/suppliers/${supplierId}/sync-ledger`,
+    },
+  },
+  INVOICE_EXTRACTION: {
+    EXTRACT: "/invoice-extraction/extract",
     BANKING: {
       BANK_ACCOUNTS: {
         LIST: "/accounts/banking/bank-accounts",
@@ -473,3 +508,4 @@ export const API_ENDPOINTS = {
     },
   },
 };
+

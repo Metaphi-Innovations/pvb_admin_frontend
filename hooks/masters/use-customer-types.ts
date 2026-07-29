@@ -80,6 +80,19 @@ export function useToggleCustomerTypeStatus() {
   });
 }
 
+export function useDeleteCustomerType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => CustomerTypeListService.delete(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: masterKeys.customerTypes.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.customerTypes.all() }),
+      ]);
+    },
+  });
+}
+
 export function useExportCustomerTypes() {
   return useMutation({
     mutationFn: (params: CustomerTypeExportParams) =>

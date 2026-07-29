@@ -118,7 +118,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload, CustomerBranchDocument, buildFileKey } from "@/services/customer-list.service";
-import { useGstDropdown, usePincode, useTdsDropdown } from "@/hooks/masters";
+import { usePincode, useTdsDropdown } from "@/hooks/masters";
 import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
 import { CustomerTypeDocument } from "@/services/customer-type-list.service";
 import { PincodeService } from "@/services/pincode.service";
@@ -910,6 +910,20 @@ interface ProductCatalogItem {
 // 	);
 // }
 
+export const CUSTOMER_FORM_STEPS = [
+	{ id: "basic", label: "Basic Details" },
+	{ id: "branch", label: "Branch" },
+	{ id: "commercial", label: "Bank & Commercial" },
+	{ id: "accounting", label: "Accounting" },
+] as const;
+
+export type CustomerFormStepId = (typeof CUSTOMER_FORM_STEPS)[number]["id"];
+
+const ADDRESS_LINE_1_MAX = 255;
+const ADDRESS_LINE_2_MAX = 255;
+const ADDRESS_GEO_MAX = 100;
+const ADDRESS_PINCODE_MAX = 20;
+
 interface CustomerFormProps {
 	form: CustomerFormValues;
 	onChange: (form: CustomerFormValues) => void;
@@ -927,6 +941,8 @@ interface CustomerFormProps {
 	}[];
 	/** Accounts COA customer ledger — show license validity dates on compliance rows. */
 	showComplianceValidityDates?: boolean;
+	activeStep?: CustomerFormStepId;
+	onStepChange?: (step: CustomerFormStepId) => void;
 }
 
 function branchDocumentsToPayload(
@@ -960,7 +976,7 @@ function branchToPayload(
 			billing_city: branch.billingAddress.city,
 			billing_town: branch.billingAddress.town || "",
 			billing_pincode: branch.billingAddress.pincode,
-			billing_pincode_id: branch.billingAddress.pincodeId || "",
+			billing_pincode_id: branch.billingAddress.pincodeId || null,
 
 			shipping_country: branch.shippingAddress.country || "India",
 			shipping_address_line_1: branch.shippingAddress.address,
@@ -969,7 +985,7 @@ function branchToPayload(
 			shipping_city: branch.shippingAddress.city,
 			shipping_town: branch.shippingAddress.town || "",
 			shipping_pincode: branch.shippingAddress.pincode,
-			shipping_pincode_id: branch.shippingAddress.pincodeId || "",
+			shipping_pincode_id: branch.shippingAddress.pincodeId || null,
 
 			documents: branchDocumentsToPayload(branch.documents, idx),
 
@@ -988,8 +1004,10 @@ export function CustomerForm({
 	customerCode,
 	customerTypes,
 	showComplianceValidityDates = false,
+	activeStep,
+	onStepChange,
 }: CustomerFormProps) {
-	const { data: gstDropdownItems = [] } = useGstDropdown();
+	const show = (stepId: CustomerFormStepId) => !activeStep || activeStep === stepId;
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
 	const { data: salesmanData = [] } = useSalesmenDropdown();
 
@@ -1529,46 +1547,44 @@ export function CustomerForm({
 					</div>
 				</div>
 			</div>
-			{gstRegistered && (
-				<div className={ERP.field}>
-					<Label className={ERP.label}>GST Code</Label>
-					<SearchableSelect
-						value={form.gstMasterId}
-						onChange={(value) => set("gstMasterId", value)}
-						options={gstDropdownItems.map((gst) => ({
-							value: gst.id,
-							label: `${gst.gstPercentage}%`,
-							sublabel: gst.remark,
-						}))}
-						placeholder="Select from GST Master..."
-						searchPlaceholder="Search GST code..."
-						disabled={readOnly}
-						error={!!errors.gstMasterId}
-					/>
-					<FieldError msg={errors.gstMasterId} />
-				</div>
-			)}
 		</div>
 	);
 
 	return (
 		<div className='w-full'>
-			<Tabs defaultValue='basic' className='w-full'>
-				<TabsList className='w-full mb-2 h-8'>
-					<TabsTrigger value='basic' className='text-xs'>
-						Basic Details
-					</TabsTrigger>
-					<TabsTrigger value='branch' className='text-xs'>
-						Branch
-					</TabsTrigger>
-					<TabsTrigger value='commercial' className='text-xs'>
-						Bank & Commercial
-					</TabsTrigger>
+			<Tabs
+				{...(activeStep ? { value: activeStep } : { defaultValue: "basic" })}
+				onValueChange={(value) => {
+					if (!onStepChange) return;
+					if (
+						value === "basic" ||
+						value === "branch" ||
+						value === "commercial" ||
+						value === "accounting"
+					) {
+						onStepChange(value);
+					}
+				}}
+				className='w-full'
+			>
+				{!activeStep && (
+					<TabsList className='w-full mb-2 h-8'>
+						<TabsTrigger value='basic' className='text-xs'>
+							Basic Details
+						</TabsTrigger>
+						<TabsTrigger value='branch' className='text-xs'>
+							Branch
+						</TabsTrigger>
+						<TabsTrigger value='commercial' className='text-xs'>
+							Bank & Commercial
+						</TabsTrigger>
 					<TabsTrigger value='accounting' className='text-xs'>
 						Accounting
 					</TabsTrigger>
-				</TabsList>
+					</TabsList>
+				)}
 
+				{show("basic") && (
 				<TabsContent value='basic' className='mt-0'>
 					<div className={ERP.sectionGap}>
 						<ErpFormSection title='Basic Information'>
@@ -1803,8 +1819,10 @@ export function CustomerForm({
 						</ErpFormSection>
 					</div>
 				</TabsContent>
+				)}
 
 				{/* ── TAB 3: BANK & COMMERCIAL ── */}
+				{show("commercial") && (
 				<TabsContent value='commercial' className='mt-0'>
 					<div className={ERP.sectionGap}>
 						{isDistributorConvertedForm(form) ? (
@@ -1970,8 +1988,10 @@ export function CustomerForm({
 						</ErpFormSection>
 					</div>
 				</TabsContent>
+				)}
 
 				{/* ── TAB: BRANCH MAPPING & DOCUMENTS ── */}
+				{show("branch") && (
 				<TabsContent value='branch' className='mt-0 space-y-3'>
 					<div>
 						<div className='flex items-center justify-between mb-3'>
@@ -2201,33 +2221,7 @@ export function CustomerForm({
 										{/* Collapsible Details */}
 										{isExpanded && (
 											<div className='p-2.5 space-y-2 duration-200 animate-in fade-in-50'>
-												<ErpFormSection title='Branch Details'>
-													<div className={ERP.grid3}>
-														<div className={ERP.field}>
-															<Label className={ERP.label}>
-																Salesman <span className='text-red-500'>*</span>
-															</Label>
-															<SearchableSelect
-																value={branch.salesManId || ""}
-																onChange={(value) => {
-																	const updated = [...form.branches];
-																	updated[bIdx] = {
-																		...updated[bIdx],
-																		salesManId: value,
-																	};
-																	onChange({ ...form, branches: updated });
-																	onClearError?.(`branch_${bIdx}_salesManId`);
-																}}
-																options={salesOptions}
-																placeholder='Search sales person...'
-																searchPlaceholder='Name, ID, mobile...'
-																disabled={readOnly}
-																error={!!errors[`branch_${bIdx}_salesManId`]}
-															/>
-															<FieldError msg={errors[`branch_${bIdx}_salesManId`]} />
-														</div>
-													</div>
-												</ErpFormSection>
+
 
 												<ErpFormSection title='Address'>
 													{!readOnly && gstAddressSnapshot && (
@@ -2250,16 +2244,22 @@ export function CustomerForm({
 														}
 														readOnly={readOnly}
 														stateOptions={stateOptions}
-														errors={
-															isMain
+														errors={{
+															...(isMain
 																? {
 																	address: errors.mainBranchBillingAddress,
 																	state: errors.mainBranchBillingState,
 																	city: errors.mainBranchBillingCity,
 																	pincode: errors.mainBranchBillingPincode,
 																}
-																: undefined
-														}
+																: {}),
+															address: errors[`branch_${bIdx}_billingAddressLine1`] || (isMain ? errors.mainBranchBillingAddress : undefined),
+															addressLine2: errors[`branch_${bIdx}_billingAddressLine2`],
+															state: errors[`branch_${bIdx}_billingState`] || (isMain ? errors.mainBranchBillingState : undefined),
+															city: errors[`branch_${bIdx}_billingCity`] || (isMain ? errors.mainBranchBillingCity : undefined),
+															town: errors[`branch_${bIdx}_billingTown`],
+															pincode: errors[`branch_${bIdx}_billingPincode`] || (isMain ? errors.mainBranchBillingPincode : undefined),
+														}}
 													/>
 												</ErpFormSection>
 
@@ -2297,6 +2297,14 @@ export function CustomerForm({
 														}
 														readOnly={readOnly}
 														stateOptions={stateOptions}
+														errors={{
+															address: errors[`branch_${bIdx}_shippingAddressLine1`],
+															addressLine2: errors[`branch_${bIdx}_shippingAddressLine2`],
+															state: errors[`branch_${bIdx}_shippingState`],
+															city: errors[`branch_${bIdx}_shippingCity`],
+															town: errors[`branch_${bIdx}_shippingTown`],
+															pincode: errors[`branch_${bIdx}_shippingPincode`],
+														}}
 													/>
 												</ErpFormSection>
 
@@ -2552,24 +2560,29 @@ export function CustomerForm({
 						</div>
 					</div>
 				</TabsContent>
+				)}
 
-				{/* ── TAB 4: ACCOUNTING ── */}
-				<TabsContent value='accounting' className='mt-0'>
-					<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
-						<PartyMasterAccountingFields
-							values={{
-								openingBalance: form.openingBalance,
-								balanceType: form.balanceType,
-								openingBalanceDate: form.openingBalanceDate,
-								billWiseAccounting: form.billWiseAccounting,
-								accountingDescription: form.accountingDescription,
-							}}
-							onChange={(next) => onChange({ ...form, ...next })}
-							disabled={readOnly}
-							fyHintLabel={selectedFY.start}
-						/>
-					</div>
-				</TabsContent>
+				{show("accounting") && (
+					<>
+						{/* ── TAB 4: ACCOUNTING ── */}
+						<TabsContent value='accounting' className='mt-0'>
+							<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
+								<PartyMasterAccountingFields
+									values={{
+										openingBalance: form.openingBalance,
+										balanceType: form.balanceType,
+										openingBalanceDate: form.openingBalanceDate,
+										billWiseAccounting: form.billWiseAccounting,
+										accountingDescription: form.accountingDescription,
+									}}
+									onChange={(next) => onChange({ ...form, ...next })}
+									disabled={readOnly}
+									fyHintLabel={selectedFY.start}
+								/>
+							</div>
+						</TabsContent>
+					</>
+				)}
 			</Tabs>
 
 			{/* Hidden File Input */}
@@ -2864,8 +2877,6 @@ export function validateCustomerForm(
 		if (!form.gstin.trim())
 			e.gstin = "GSTIN is required when GST registered";
 		else if (!validateGSTIN(form.gstin)) e.gstin = "Invalid GSTIN format";
-		if (!isAdd && !form.gstMasterId)
-			e.gstMasterId = "Select GST code from master";
 	}
 	form.branches.forEach((branch, bIdx) => {
 		if (!branch.salesManId?.trim()) {
@@ -2922,6 +2933,70 @@ export function validateCustomerForm(
 		}
 	}
 
+	form.branches.forEach((branch, bIdx) => {
+		const billingLine1 = branch.billingAddress.address ?? "";
+		if (billingLine1.length > ADDRESS_LINE_1_MAX) {
+			e[`branch_${bIdx}_billingAddressLine1`] =
+				`Address Line 1 cannot exceed ${ADDRESS_LINE_1_MAX} characters.`;
+		}
+		const billingLine2 = branch.billingAddress.addressLine2 ?? "";
+		if (billingLine2.length > ADDRESS_LINE_2_MAX) {
+			e[`branch_${bIdx}_billingAddressLine2`] =
+				`Address Line 2 cannot exceed ${ADDRESS_LINE_2_MAX} characters.`;
+		}
+		const billingCity = branch.billingAddress.city ?? "";
+		if (billingCity.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingCity`] =
+				`City cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingState = branch.billingAddress.state ?? "";
+		if (billingState.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingState`] =
+				`State cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingTown = branch.billingAddress.town ?? "";
+		if (billingTown.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingTown`] =
+				`Town cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingPincode = branch.billingAddress.pincode ?? "";
+		if (billingPincode.length > ADDRESS_PINCODE_MAX) {
+			e[`branch_${bIdx}_billingPincode`] =
+				`Pincode cannot exceed ${ADDRESS_PINCODE_MAX} characters.`;
+		}
+
+		const shippingLine1 = branch.shippingAddress.address ?? "";
+		if (shippingLine1.length > ADDRESS_LINE_1_MAX) {
+			e[`branch_${bIdx}_shippingAddressLine1`] =
+				`Address Line 1 cannot exceed ${ADDRESS_LINE_1_MAX} characters.`;
+		}
+		const shippingLine2 = branch.shippingAddress.addressLine2 ?? "";
+		if (shippingLine2.length > ADDRESS_LINE_2_MAX) {
+			e[`branch_${bIdx}_shippingAddressLine2`] =
+				`Address Line 2 cannot exceed ${ADDRESS_LINE_2_MAX} characters.`;
+		}
+		const shippingCity = branch.shippingAddress.city ?? "";
+		if (shippingCity.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingCity`] =
+				`City cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingState = branch.shippingAddress.state ?? "";
+		if (shippingState.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingState`] =
+				`State cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingTown = branch.shippingAddress.town ?? "";
+		if (shippingTown.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingTown`] =
+				`Town cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingPincode = branch.shippingAddress.pincode ?? "";
+		if (shippingPincode.length > ADDRESS_PINCODE_MAX) {
+			e[`branch_${bIdx}_shippingPincode`] =
+				`Pincode cannot exceed ${ADDRESS_PINCODE_MAX} characters.`;
+		}
+	});
+
 	// Validate branch-wise salesman + document uploads
 	form.branches.forEach((branch, bIdx) => {
 		if (!branch.salesManId?.trim()) {
@@ -2968,6 +3043,72 @@ export function validateCustomerForm(
 		e.ifscCode = "Invalid IFSC format";
 	if (form.status === "blocked" && !form.blockReason.trim())
 		e.blockReason = "Block reason is required when status is Blocked";
+
+	return e;
+}
+
+export function validateCustomerFormStep(
+	form: CustomerFormValues,
+	stepId: CustomerFormStepId,
+	isAdd?: boolean,
+): Record<string, string> {
+	const all = validateCustomerForm(form, isAdd);
+	const e: Record<string, string> = {};
+
+	if (stepId === "basic") {
+		const basicKeys = new Set([
+			"customerName",
+			"customerType",
+			"mobile",
+			"email",
+			"gstin",
+			"gstMasterId",
+			"pan",
+			"msmeNumber",
+			"tdsMasterId",
+			"blockReason",
+			"requiredDocuments",
+		]);
+		for (const [key, message] of Object.entries(all)) {
+			if (basicKeys.has(key) || key.includes("Registered") || key.includes("Regn")) {
+				e[key] = message;
+			}
+		}
+		return e;
+	}
+
+	if (stepId === "branch") {
+		for (const [key, message] of Object.entries(all)) {
+			if (
+				key === "branches" ||
+				key.startsWith("branch_") ||
+				key.startsWith("mainBranch")
+			) {
+				e[key] = message;
+			}
+		}
+		return e;
+	}
+
+	if (stepId === "commercial") {
+		for (const [key, message] of Object.entries(all)) {
+			if (
+				[
+					"creditLimit",
+					"paymentType",
+					"creditDays",
+					"advancePercentage",
+					"confirmAccountNumber",
+					"ifscCode",
+					"blockReason",
+				].includes(key) ||
+				key.startsWith("credit") ||
+				key.startsWith("distributor")
+			) {
+				e[key] = message;
+			}
+		}
+	}
 
 	return e;
 }
@@ -3143,6 +3284,8 @@ export function formValuesToCreatePayload(
 		account_number: form.accountNumber.trim(),
 		ifsc_code: form.ifscCode.trim().toUpperCase(),
 		swift_code: form.swiftCode.trim(),
+
+		status: form.status === "inactive" ? "Inactive" : "Active",
 
 		branches: form.branches.map((branch, idx) => branchToPayload(branch, idx).payload),
 	};

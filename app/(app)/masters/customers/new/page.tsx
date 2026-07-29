@@ -5,7 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle, ShieldAlert } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  X,
+  XCircle,
+  ShieldAlert,
+} from "lucide-react";
 import {
   todayStr,
 } from "../customer-data";
@@ -13,14 +21,16 @@ import {
   CustomerForm,
   DEFAULT_CUSTOMER_FORM,
   validateCustomerForm,
-  formValuesToCustomer,
+  validateCustomerFormStep,
+  CUSTOMER_FORM_STEPS,
   type CustomerFormValues,
+  type CustomerFormStepId,
   formValuesToCreatePayload,
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import { persistPartyMasterAccounting } from "@/lib/accounts/party-master-accounting-sync";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../customer-permissions";
-import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 import {
   buildCustomerPrefillFromDistributor,
   CONVERT_DISTRIBUTOR_STORAGE_KEY,
@@ -41,6 +51,94 @@ import { CustomerListService } from "@/services/customer-list.service";
 interface ToastState {
   msg: string;
   type: "success" | "error";
+}
+
+type ApiValidationError = { path?: string; message?: string };
+
+function mapApiPathToFieldKey(path: string): string {
+  const normalized = path.trim();
+  if (!normalized) return "";
+
+  const directMap: Record<string, string> = {
+    email: "email",
+    mobile_no: "mobile",
+    customer_name: "customerName",
+    customer_type_id: "customerType",
+    gstin_no: "gstin",
+    pan_no: "pan",
+    tds_section_id: "tdsMasterId",
+    account_number: "accountNumber",
+    ifsc_code: "ifscCode",
+    branch_name: "branch",
+    payment_type: "paymentType",
+    credit_days: "creditDays",
+    advance: "advancePercentage",
+    credit_limit: "creditLimit",
+    branches: "branches",
+  };
+
+  if (directMap[normalized]) return directMap[normalized];
+
+  const branchMatch =
+    normalized.match(/^branches\[(\d+)\]\.(.+)$/) ??
+    normalized.match(/^branches\.(\d+)\.(.+)$/);
+  if (!branchMatch) return normalized;
+
+  const branchIdx = Number.parseInt(branchMatch[1], 10);
+  const field = branchMatch[2];
+
+  if (field === "billing_address_line_1") return `branch_${branchIdx}_billingAddressLine1`;
+  if (field === "billing_address_line_2") return `branch_${branchIdx}_billingAddressLine2`;
+  if (field === "billing_city") return `branch_${branchIdx}_billingCity`;
+  if (field === "billing_state") return `branch_${branchIdx}_billingState`;
+  if (field === "billing_town") return `branch_${branchIdx}_billingTown`;
+  if (field === "billing_pincode") return `branch_${branchIdx}_billingPincode`;
+  if (field === "shipping_address_line_1") return `branch_${branchIdx}_shippingAddressLine1`;
+  if (field === "shipping_address_line_2") return `branch_${branchIdx}_shippingAddressLine2`;
+  if (field === "shipping_city") return `branch_${branchIdx}_shippingCity`;
+  if (field === "shipping_state") return `branch_${branchIdx}_shippingState`;
+  if (field === "shipping_town") return `branch_${branchIdx}_shippingTown`;
+  if (field === "shipping_pincode") return `branch_${branchIdx}_shippingPincode`;
+  if (field === "sales_man_id") return `branch_${branchIdx}_salesManId`;
+  return `branch_${branchIdx}_${field}`;
+}
+
+function extractApiValidation(err: unknown): {
+  toastMessage: string;
+  fieldErrors: Record<string, string>;
+} {
+  const fallback = "Failed to save customer.";
+  const e = err as {
+    message?: string;
+    response?: {
+      data?: {
+        message?: string;
+        error?: string;
+        validation_errors?: ApiValidationError[];
+      };
+    };
+  };
+
+  const payload = e.response?.data;
+  const validationErrors = Array.isArray(payload?.validation_errors)
+    ? payload.validation_errors
+    : [];
+
+  const fieldErrors: Record<string, string> = {};
+  validationErrors.forEach((item) => {
+    const key = mapApiPathToFieldKey(String(item.path ?? ""));
+    const msg = String(item.message ?? "").trim();
+    if (key && msg) fieldErrors[key] = msg;
+  });
+
+  const toastMessage =
+    validationErrors[0]?.message?.trim() ||
+    payload?.message ||
+    payload?.error ||
+    e.message ||
+    fallback;
+
+  return { toastMessage, fieldErrors };
 }
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
@@ -92,12 +190,41 @@ export default function NewCustomerPage() {
   const [distributorAssessmentLabel, setDistributorAssessmentLabel] = useState<string | null>(
     null,
   );
+  const [stepIndex, setStepIndex] = useState(0);
 
   const createCustomer = useCreateCustomer();
   const {
     data: customerTypes = [],
     isLoading: customerTypesLoading,
   } = useCustomerTypeDropdown();
+
+  const currentStep = CUSTOMER_FORM_STEPS[stepIndex];
+  const isFirstStep = stepIndex === 0;
+  const isLastStep = stepIndex === CUSTOMER_FORM_STEPS.length - 1;
+
+  const focusFirstInvalidField = () => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        "input.border-red-400, textarea.border-red-400, button.border-red-400, [role='combobox'].border-red-400",
+      );
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if ("focus" in target) target.focus({ preventScroll: true });
+    });
+  };
+
+  const findStepIndexForErrors = (fieldErrors: Record<string, string>): number => {
+    const hasBranchError = Object.keys(fieldErrors).some(
+      (key) => key === "branches" || key.startsWith("branch_") || key.startsWith("mainBranch"),
+    );
+    const hasCommercialError = Object.keys(fieldErrors).some((key) =>
+      ["creditLimit", "paymentType", "creditDays", "advancePercentage", "ifscCode", "accountNumber", "branch"].includes(key),
+    );
+    if (hasBranchError) return 1;
+    if (hasCommercialError) return 2;
+    return 0;
+  };
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
@@ -185,6 +312,49 @@ export default function NewCustomerPage() {
       return next;
     });
 
+  const showValidationToast = (stepErrors: Record<string, string>) => {
+    const addressLine2Error = Object.values(stepErrors).find((msg) =>
+      msg.includes("Address Line 2"),
+    );
+    const msg =
+      addressLine2Error ||
+      stepErrors.requiredDocuments ||
+      Object.values(stepErrors)[0] ||
+      "Please fix the errors before continuing.";
+    setToast({ msg, type: "error" });
+    setTimeout(() => setToast(null), 3200);
+  };
+
+  const handleNext = () => {
+    const stepErrors = validateCustomerFormStep(
+      form,
+      currentStep.id as CustomerFormStepId,
+      true,
+    );
+    if (!form.customerType && currentStep.id === "basic") {
+      stepErrors.customerType = "Customer type is required";
+    }
+    if (!customerCode && currentStep.id === "basic") {
+      setToast({ msg: "Select a customer type to generate customer code.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+      return;
+    }
+    setErrors(stepErrors);
+    if (Object.keys(stepErrors).length > 0) {
+      setStepIndex(findStepIndexForErrors(stepErrors));
+      showValidationToast(stepErrors);
+      focusFirstInvalidField();
+      return;
+    }
+    setErrors({});
+    setStepIndex((i) => Math.min(i + 1, CUSTOMER_FORM_STEPS.length - 1));
+  };
+
+  const handleBack = () => {
+    setErrors({});
+    setStepIndex((i) => Math.max(i - 1, 0));
+  };
+
   const persist = async (asDraft: boolean) => {
     const e = validateCustomerForm(form, true);
     if (!form.customerType) {
@@ -197,9 +367,13 @@ export default function NewCustomerPage() {
     }
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      const msg = e.requiredDocuments || "Please fix the errors before saving.";
-      setToast({ msg, type: "error" });
-      setTimeout(() => setToast(null), 3200);
+      const firstStepWithError = CUSTOMER_FORM_STEPS.findIndex((step) => {
+        const stepErrors = validateCustomerFormStep(form, step.id, true);
+        return Object.keys(stepErrors).length > 0;
+      });
+      if (firstStepWithError >= 0) setStepIndex(firstStepWithError);
+      showValidationToast(e);
+      focusFirstInvalidField();
       return;
     }
 
@@ -215,10 +389,19 @@ export default function NewCustomerPage() {
 
     try {
       const created = await createCustomer.mutateAsync({ payload, branches: form.branches });
-      const newId = (created as any)?.id;
-      const finalCode = (created as any)?.customerCode ?? customerCode;
+      const createdRecord = created as Record<string, unknown> | undefined;
+      const parseCustomerId = (value: unknown): number | null => {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") {
+          const parsed = Number.parseInt(value, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      };
+      const newId = parseCustomerId(createdRecord?.id) ?? parseCustomerId(createdRecord?.sr_no);
+      const finalCode = String(createdRecord?.customer_code ?? createdRecord?.customerCode ?? customerCode);
 
-      if (sourceDistributorId !== null) {
+      if (sourceDistributorId !== null && newId !== null) {
         updateDistributorConversion(
           sourceDistributorId,
           newId,
@@ -235,9 +418,32 @@ export default function NewCustomerPage() {
           form.branches.find((b) => b.branchName === "Main Branch") ??
           form.branches[0];
 
+        const uuid = created?.customerUuid ?? "";
+        if (uuid) {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "customer",
+              partyId: uuid,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Master created; accounting sync best-effort.
+          }
+        }
+
+        if (newId === null) {
+          throw new Error("Customer created, but no numeric id returned by API.");
+        }
+
         ensureCustomerLedgerFromMaster({
           id: newId,
-          customerUuid: (created as any)?.customerUuid,
+          customerUuid: String(createdRecord?.customer_id ?? ""),
           customerName: form.customerName,
           customerCode: finalCode,
           status,
@@ -258,7 +464,7 @@ export default function NewCustomerPage() {
           stateName: mainBranch?.billingAddress?.state ?? "",
           pincode: mainBranch?.billingAddress?.pincode ?? "",
           branches: form.branches,
-          salesManName: "", // resolve from getActiveSalesEmployees() if needed, see below
+          salesManName: "",
           mobile: form.mobile,
           countryCode: form.countryCode,
           email: form.email,
@@ -278,8 +484,14 @@ export default function NewCustomerPage() {
       setTimeout(() => router.push(leaveHref), 1000);
     } catch (err) {
       console.error(err);
+      const { toastMessage, fieldErrors } = extractApiValidation(err);
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors((prev) => ({ ...prev, ...fieldErrors }));
+        setStepIndex(findStepIndexForErrors(fieldErrors));
+        focusFirstInvalidField();
+      }
       setToast({
-        msg: err instanceof Error ? err.message : "Failed to save customer.",
+        msg: toastMessage,
         type: "error",
       });
       setTimeout(() => setToast(null), 3200);
@@ -316,7 +528,7 @@ export default function NewCustomerPage() {
   return (
     <FormContainer
       title="Add Customer"
-      description="Masters → Customer Master → Add"
+      description={`Masters → Customer Master → Add · Step ${stepIndex + 1} of ${CUSTOMER_FORM_STEPS.length}: ${currentStep.label}`}
       onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
@@ -326,18 +538,65 @@ export default function NewCustomerPage() {
           <Button variant="ghost" size="sm" onClick={() => router.push(leaveHref)}>
             Discard
           </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => persist(false)}
-            disabled={createCustomer.isPending}
-          >
-            <Save className="w-4 h-4" />
-            {createCustomer.isPending ? "Saving…" : "Save"}
-          </Button>
+          {!isFirstStep && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={handleBack}
+            >
+              <ChevronLeft className="w-4 h-4" /> Back
+            </Button>
+          )}
+          {!isLastStep ? (
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleNext}
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => persist(false)}
+              disabled={createCustomer.isPending}
+              className="gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              {createCustomer.isPending ? "Saving…" : "Save"}
+            </Button>
+          )}
         </div>
       }
     >
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {CUSTOMER_FORM_STEPS.map((step, idx) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => {
+              if (idx <= stepIndex) {
+                setErrors({});
+                setStepIndex(idx);
+              }
+            }}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-colors",
+              idx === stepIndex
+                ? "bg-brand-600 text-white border-brand-600"
+                : idx < stepIndex
+                  ? "bg-brand-50 text-brand-700 border-brand-200 cursor-pointer"
+                  : "bg-muted/40 text-muted-foreground border-border cursor-default",
+            )}
+          >
+            {idx + 1}. {step.label}
+          </button>
+        ))}
+      </div>
+
       {distributorAssessmentLabel && (
         <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5">
           <p className="text-xs font-semibold text-brand-800">
@@ -359,6 +618,13 @@ export default function NewCustomerPage() {
         isAdd={true}
         customerCode={customerCode}
         customerTypes={customerTypes}
+        activeStep={currentStep.id}
+        onStepChange={(step) => {
+          const targetIdx = CUSTOMER_FORM_STEPS.findIndex((s) => s.id === step);
+          if (targetIdx >= 0) {
+            setStepIndex(targetIdx);
+          }
+        }}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

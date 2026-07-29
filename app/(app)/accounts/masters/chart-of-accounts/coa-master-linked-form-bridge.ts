@@ -1,4 +1,5 @@
 import type { CoaLedgerFormKind } from "@/lib/accounts/coa-ledger-behavior";
+import type { CoaNodeId } from "../../data";
 
 export type CoaMasterLinkedFormKind = Extract<
   CoaLedgerFormKind,
@@ -6,7 +7,7 @@ export type CoaMasterLinkedFormKind = Extract<
 >;
 
 type OpenHandler =
-  | ((kind: CoaMasterLinkedFormKind, parentGroupId: number) => void)
+  | ((kind: CoaMasterLinkedFormKind, parentGroupId: CoaNodeId) => void)
   | null;
 
 let openHandler: OpenHandler = null;
@@ -17,7 +18,7 @@ export function registerCoaMasterLinkedFormHandler(handler: OpenHandler): void {
 
 export function requestCoaMasterLinkedForm(
   kind: CoaMasterLinkedFormKind,
-  parentGroupId: number,
+  parentGroupId: CoaNodeId,
 ): boolean {
   if (!openHandler) return false;
   openHandler(kind, parentGroupId);

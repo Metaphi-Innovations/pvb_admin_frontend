@@ -288,11 +288,6 @@ export default function UomPageClient() {
   }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
-    if (page > totalPages) setPage(totalPages);
-  }, [page, pageSize, totalRecords]);
-
-  useEffect(() => {
     if (!viewId) return;
     if (detailQuery.isError) {
       setToast({
@@ -500,10 +495,14 @@ export default function UomPageClient() {
 
   const displayRecords = useMemo(() => {
     if (ordering || !sort.key || sort.direction === "none") return records;
+    if (sort.key !== "unitName" && sort.key !== "shortName") return records;
     return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof UnitRecord] ?? "").toLowerCase();
-      const bVal = String(b[sort.key as keyof UnitRecord] ?? "").toLowerCase();
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      const aVal = String(a[sort.key as "unitName" | "shortName"] ?? "").trim();
+      const bVal = String(b[sort.key as "unitName" | "shortName"] ?? "").trim();
+      const cmp = aVal.localeCompare(bVal, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort, ordering]);
@@ -639,6 +638,7 @@ export default function UomPageClient() {
         currentFilters={filters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
+        onPageJumpError={(msg) => setToast({ msg, type: "error" })}
         rowKey={(row) => row.unitUuid ?? String(row.id)}
       />
 

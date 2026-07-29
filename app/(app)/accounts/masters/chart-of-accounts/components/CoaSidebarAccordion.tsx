@@ -23,17 +23,17 @@ const CHEVRON_BTN = cn(
   COA_TREE_CHEVRON_WIDTH_CLASS,
 );
 
-function hasChildren(records: ChartOfAccount[], nodeId: number): boolean {
+function hasChildren(records: ChartOfAccount[], nodeId: import("../../../data").CoaNodeId): boolean {
   return getDirectChildren(records, nodeId).length > 0;
 }
 
 interface NavRowProps {
   node: ChartOfAccount;
   records: ChartOfAccount[];
-  selectedId: number | null;
+  selectedId: import("../../../data").CoaNodeId | null;
   depth: number;
   onSelect: (node: ChartOfAccount) => void;
-  onToggle?: (id: number) => void;
+  onToggle?: (id: import("../../../data").CoaNodeId) => void;
   expanded?: boolean;
   showChevron?: boolean;
 }
@@ -121,14 +121,14 @@ function TreeChildren({
   onSelect,
   onToggle,
 }: {
-  parentId: number;
+  parentId: import("../../../data").CoaNodeId;
   records: ChartOfAccount[];
-  selectedId: number | null;
-  expandedIds: Set<number>;
-  visibleIds: Set<number> | null;
+  selectedId: import("../../../data").CoaNodeId | null;
+  expandedIds: Set<import("../../../data").CoaNodeId>;
+  visibleIds: Set<import("../../../data").CoaNodeId> | null;
   depth: number;
   onSelect: (node: ChartOfAccount) => void;
-  onToggle: (id: number) => void;
+  onToggle: (id: import("../../../data").CoaNodeId) => void;
 }) {
   const children = getDirectChildren(records, parentId).filter(
     (c) => !visibleIds || visibleIds.has(c.id),
@@ -174,11 +174,11 @@ function TreeChildren({
 
 interface CoaSidebarAccordionProps {
   records: ChartOfAccount[];
-  selectedId: number | null;
-  expandedIds: Set<number>;
+  selectedId: import("../../../data").CoaNodeId | null;
+  expandedIds: Set<import("../../../data").CoaNodeId>;
   search: string;
   onSelect: (node: ChartOfAccount) => void;
-  onToggle: (id: number) => void;
+  onToggle: (id: import("../../../data").CoaNodeId) => void;
 }
 
 export function CoaSidebarAccordion({

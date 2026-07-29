@@ -452,9 +452,12 @@ export default function FormulationMasterPage() {
   const displayRecords = useMemo(() => {
     if (ordering || !sort.key || sort.direction === "none") return records;
     return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof FormulationRecord] ?? "").toLowerCase();
-      const bVal = String(b[sort.key as keyof FormulationRecord] ?? "").toLowerCase();
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      const aVal = String(a[sort.key as keyof FormulationRecord] ?? "").trim();
+      const bVal = String(b[sort.key as keyof FormulationRecord] ?? "").trim();
+      const cmp = aVal.localeCompare(bVal, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       return sort.direction === "asc" ? cmp : -cmp;
     });
   }, [records, sort, ordering]);
@@ -537,10 +540,9 @@ export default function FormulationMasterPage() {
   const viewDrawer = active
     ? {
         title: active.formulationName,
-        subtitle: active.formulationCode || "Read-only form details",
+        subtitle: "Read-only form details",
         status: active.status,
         basicInfo: [
-          { label: "Form Code", value: active.formulationCode || "—", mono: true },
           {
             label: "Description",
             value: active.description?.trim() ? active.description : "—",

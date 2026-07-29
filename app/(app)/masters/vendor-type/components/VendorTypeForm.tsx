@@ -1,19 +1,13 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import { AlertCircle, Tags } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import {
-	normalizeInitialCode,
-} from "@/lib/masters/code-generation";
-import {
-	loadVendorTypes,
-	resolveVendorTypeCode,
-	type VendorTypeFormValues,
-} from "../vendor-type-data";
+import { normalizeInitialCode } from "@/lib/masters/code-generation";
+import { type VendorTypeFormValues } from "../vendor-type-data";
 import { ListingStatusToggle } from "@/components/listing";
 
 function SectionHead({
@@ -58,8 +52,6 @@ export function VendorTypeForm({
 	errors,
 	onClearError,
 	readOnly,
-	recordId,
-	originalInitialCode,
 }: {
 	form: VendorTypeFormValues;
 	onChange: React.Dispatch<React.SetStateAction<VendorTypeFormValues>>;
@@ -69,27 +61,6 @@ export function VendorTypeForm({
 	recordId?: number;
 	originalInitialCode?: string;
 }) {
-	useEffect(() => {
-		const normalized = normalizeInitialCode(form.initialCode);
-		if (!normalized) {
-			onChange((prev) =>
-				prev.vendorTypeCode ? { ...prev, vendorTypeCode: "" } : prev,
-			);
-			return;
-		}
-
-		const records = loadVendorTypes();
-		const nextCode = resolveVendorTypeCode(form.initialCode, records, {
-			recordId,
-			existingCode: form.vendorTypeCode,
-			originalInitialCode,
-		});
-
-		if (nextCode !== form.vendorTypeCode) {
-			onChange((prev) => ({ ...prev, vendorTypeCode: nextCode }));
-		}
-	}, [form.initialCode, form.vendorTypeCode, recordId, originalInitialCode]);
-
 	const set = <K extends keyof VendorTypeFormValues>(
 		key: K,
 		value: VendorTypeFormValues[K],

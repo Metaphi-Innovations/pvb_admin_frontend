@@ -19,6 +19,10 @@ function FieldError({ msg }: { msg?: string }) {
 	return <p className="text-[11px] text-red-500 leading-tight">{msg}</p>;
 }
 
+const ADDRESS_LINE_MAX = 255;
+const ADDRESS_LINE_2_MAX = 255;
+const GEO_FIELD_MAX = 100;
+
 /** Branch address field order: Line 1 + Line 2 → Pincode → City → Town → State */
 export function BranchAddressFields({
 	address,
@@ -39,6 +43,7 @@ export function BranchAddressFields({
 	readOnly?: boolean;
 	errors?: {
 		address?: string;
+		addressLine2?: string;
 		state?: string;
 		city?: string;
 		town?: string;
@@ -236,6 +241,7 @@ export function BranchAddressFields({
 					onChange={(e) => set("address", e.target.value)}
 					disabled={readOnly}
 					placeholder="Building, street, area"
+					maxLength={ADDRESS_LINE_MAX}
 					className={cn(fieldClass, errors.address && "border-red-400")}
 				/>
 				<FieldError msg={errors.address} />
@@ -248,8 +254,10 @@ export function BranchAddressFields({
 					onChange={(e) => set("addressLine2", e.target.value)}
 					disabled={readOnly}
 					placeholder="Landmark, floor (optional)"
-					className={fieldClass}
+					maxLength={ADDRESS_LINE_2_MAX}
+					className={cn(fieldClass, errors.addressLine2 && "border-red-400")}
 				/>
+				<FieldError msg={errors.addressLine2} />
 			</div>
 
 			<div className={cn(ERP.field, pincodeCol)}>
@@ -275,6 +283,7 @@ export function BranchAddressFields({
 						disabled={readOnly || (geographyLocked && isIndia)}
 						value={address.district ?? ""}
 						onChange={(e) => set("district", e.target.value)}
+						maxLength={GEO_FIELD_MAX}
 						className={cn(fieldClass, errors.district && "border-red-400")}
 						placeholder={
 							address.pincode.length === 6 && !postalReady
@@ -296,6 +305,7 @@ export function BranchAddressFields({
 					disabled={readOnly || (geographyLocked && isIndia)}
 					value={address.city}
 					onChange={(e) => set("city", e.target.value)}
+					maxLength={GEO_FIELD_MAX}
 					className={cn(fieldClass, errors.city && "border-red-400")}
 					placeholder={
 						address.pincode.length === 6 && !postalReady
@@ -334,6 +344,7 @@ export function BranchAddressFields({
 							}
 							value={address.town ?? ""}
 							onChange={(e) => handleTownChange(e.target.value)}
+							maxLength={GEO_FIELD_MAX}
 							className={cn(fieldClass, errors.town && "border-red-400")}
 							placeholder={
 								address.pincode.length === 6 && !postalReady
@@ -372,6 +383,7 @@ export function BranchAddressFields({
 						disabled={readOnly || geographyLocked}
 						value={address.state}
 						onChange={(e) => set("state", e.target.value)}
+						maxLength={GEO_FIELD_MAX}
 						className={cn(fieldClass, errors.state && "border-red-400")}
 						placeholder="State"
 					/>

@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { loadCategories, saveCategories, type Category, type CategoryStatus } from "./category-data";
+import { type Category, type CategoryStatus } from "./category-data";
 import {
   useCategories,
   useCategory,
@@ -49,6 +49,7 @@ import {
   useToggleCategoryStatus,
   useExportCategories,
   useCategoryFilterDropdown,
+  useDeleteCategory,
 } from "@/hooks/masters";
 import { CategoryForm, DEFAULT_CATEGORY_FORM, type CategoryFormValues, validateCategoryForm } from "./components/CategoryForm";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
@@ -165,6 +166,7 @@ export default function CategoryMasterPage() {
   const updateMutation = useUpdateCategory();
   const toggleStatusMutation = useToggleCategoryStatus();
   const exportMutation = useExportCategories();
+  const deleteMutation = useDeleteCategory();
 
   const categoryNameOptionsQuery = useCategoryFilterDropdown("categoryName", {
     enabled: isFilterOpen("categoryName"),
@@ -274,7 +276,7 @@ export default function CategoryMasterPage() {
       filterOptions: categoryNameOptions,
       width: "220px",
       render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.categoryName}</span>
+        <span className="text-xs font-semibold text-foreground truncate max-w-[210px] block" title={row.categoryName}>{row.categoryName}</span>
       ),
     },
     {
@@ -285,6 +287,9 @@ export default function CategoryMasterPage() {
       filterType: "dropdown",
       filterOptions: descriptionOptions,
       width: "320px",
+      render: (val, row) => (
+        <span className="text-xs text-foreground truncate max-w-[280px] block" title={row.description || ""}>{row.description || "—"}</span>
+      ),
     },
     {
       key: "status",
@@ -336,13 +341,6 @@ export default function CategoryMasterPage() {
       action: "edit",
       icon: Edit2,
       onClick: (row) => openEdit(row),
-    },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
     },
   ];
 
@@ -456,11 +454,19 @@ export default function CategoryMasterPage() {
   };
 
   const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = loadCategories().filter((r) => r.id !== deleteTarget.id);
-    saveCategories(list);
-    setDeleteTarget(null);
-    setToast({ msg: "Category deleted successfully", type: "success" });
+    if (!deleteTarget?.categoryId) return;
+    deleteMutation.mutate(deleteTarget.categoryId, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        setToast({ msg: "Category deleted successfully", type: "success" });
+      },
+      onError: (error) => {
+        setToast({
+          msg: getErrorMessage(error, "Failed to delete category."),
+          type: "error",
+        });
+      },
+    });
   };
 
   const handleExport = () => {
@@ -545,7 +551,7 @@ export default function CategoryMasterPage() {
           active
             ? buildSimpleMasterViewDrawer<Category>({
                 drawerTitle: "Category",
-                getRecordCode: (r) => String(r.id),
+                getRecordCode: () => "",
                 basicInfo: (r) => [
                   { label: "Category Name", value: r.categoryName },
                 ],
@@ -578,26 +584,8 @@ export default function CategoryMasterPage() {
         }
       />
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }
+

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CoaExplorerTree } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree";
 import { requestCoaAddLedger } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
@@ -82,12 +82,16 @@ export function CoaSidebarNavTree({
     expandedIds,
     treeSearchTerm,
     setTreeSearchTerm,
+    treeSearchQuery,
+    isTreeSearching,
     selectNode,
     toggleExpand,
     expandAll,
     collapseAll,
     setRecords,
+    refreshRecords,
     coaReady,
+    coaError,
     highlightedLedgerId,
   } = useCoaNavigation();
 
@@ -95,6 +99,7 @@ export function CoaSidebarNavTree({
   const canEdit = useCanCoa("edit");
 
   const { setCollapsed, toggleCollapsed } = useAccountsSidebar();
+  const hasActiveSearch = Boolean(treeSearchQuery);
 
   if (collapsed) {
     return (
@@ -156,6 +161,9 @@ export function CoaSidebarNavTree({
             value={treeSearchTerm}
             onChange={(e) => setTreeSearchTerm(e.target.value)}
           />
+          {isTreeSearching ? (
+            <RefreshCw className="w-3.5 h-3.5 absolute right-[1.35rem] top-1/2 -translate-y-1/2 text-muted-foreground/70 animate-spin pointer-events-none" />
+          ) : null}
         </div>
         <div className="flex items-center gap-2 px-3 pb-2">
           <button
@@ -173,6 +181,14 @@ export function CoaSidebarNavTree({
           >
             Collapse All
           </button>
+          <button
+            type="button"
+            onClick={refreshRecords}
+            aria-label="Refresh chart of accounts"
+            className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
           <CoaHierarchyLegend />
         </div>
       </div>
@@ -188,15 +204,31 @@ export function CoaSidebarNavTree({
               />
             ))}
           </div>
+        ) : coaError ? (
+          <div className="px-3 py-3 space-y-2">
+            <p className="text-xs text-destructive">{coaError}</p>
+            <button
+              type="button"
+              onClick={refreshRecords}
+              className="text-[11px] font-medium text-brand-600 hover:underline"
+            >
+              Retry
+            </button>
+          </div>
         ) : records.length === 0 ? (
-          <p className="px-3 py-3 text-xs text-muted-foreground">Loading chart of accounts…</p>
+          <p className="px-3 py-3 text-xs text-muted-foreground">
+            {hasActiveSearch
+              ? `No accounts match "${treeSearchQuery}".`
+              : "No chart of accounts found."}
+          </p>
         ) : (
           <CoaExplorerTree
             variant="sidebar"
             records={records}
             selectedId={selectedId}
             expandedIds={expandedIds}
-            search={treeSearchTerm}
+            search=""
+            highlightQuery={treeSearchQuery}
             canCreate={canCreate}
             canEdit={canEdit}
             highlightedLedgerId={highlightedLedgerId}

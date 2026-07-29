@@ -39,6 +39,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
+import {
+	preventInvalidNumberKeys,
+	sanitizeIntegerInput,
+} from "./number-input-guards";
 
 const INDIAN_STATES = [
 	"Maharashtra",
@@ -59,7 +63,7 @@ const INDIAN_STATES = [
 ];
 
 export type POFormErrors = Partial<
-	Record<"supplierId" | "warehouseId" | "poDate" | "state" | "lines", string>
+	Record<"supplierId" | "warehouseId" | "poDate" | "expectedDeliveryDate" | "state" | "lines", string>
 >;
 
 function isSupplierSelected(supplierId: POFormValues["supplierId"]): boolean {
@@ -88,6 +92,9 @@ export function validatePOForm(form: POFormValues): POFormErrors {
 	if (!form.poDate?.trim()) {
 		e.poDate = "PO date is required";
 	}
+	if (!form.expectedDeliveryDate?.trim()) {
+		e.expectedDeliveryDate = "Delivery date is required";
+	}
 	const validLines = getValidPOLines(form.lines);
 	if (validLines.length === 0) {
 		e.lines = "At least one product is required";
@@ -100,6 +107,7 @@ export function validatePOForm(form: POFormValues): POFormErrors {
 const PO_ERROR_FIELD_ORDER = [
 	"supplierId",
 	"poDate",
+	"expectedDeliveryDate",
 	"state",
 	"warehouseId",
 	"lines",
@@ -309,9 +317,9 @@ function ReadOnlyField({ value }: { value: string }) {
 }
 
 function formatDisplayDate(iso: string): string {
-	if (!iso) return "—";
+	if (!iso) return "";
 	const [y, m, d] = iso.split("-");
-	if (!y || !m || !d) return iso;
+	if (!y || !m || !d) return "";
 	return `${d}-${m}-${y}`;
 }
 
@@ -919,8 +927,10 @@ export function PurchaseOrderForm({
 								<p className="text-[11px] text-red-500">{errors.poDate}</p>
 							)}
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Delivery Date</Label>
+						<div id="po-field-expectedDeliveryDate" className="space-y-1">
+							<Label className="text-xs font-medium">
+								Delivery Date <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
 								<ReadOnlyField value={formatDisplayDate(form.expectedDeliveryDate)} />
 							) : (
@@ -928,8 +938,11 @@ export function PurchaseOrderForm({
 									type="date"
 									value={form.expectedDeliveryDate}
 									onChange={(e) => patch({ expectedDeliveryDate: e.target.value })}
-									className={inputCls}
+									className={cn(inputCls, errors.expectedDeliveryDate && "border-red-400")}
 								/>
+							)}
+							{errors.expectedDeliveryDate && (
+								<p className="text-[11px] text-red-500">{errors.expectedDeliveryDate}</p>
 							)}
 						</div>
 						
@@ -958,15 +971,17 @@ export function PurchaseOrderForm({
 								<ReadOnlyField value={String(form.creditDays ?? "")} />
 							) : (
 								<Input
-									type="number"
-									min={0}
-									value={form.creditDays}
+									type="text"
+									inputMode="numeric"
+									value={form.paymentType === "Credit" ? String(form.creditDays ?? "") : "0"}
+									disabled={form.paymentType !== "Credit"}
 									onChange={(e) =>
 										patch({
-											creditDays: Number(e.target.value),
+											creditDays: Number(sanitizeIntegerInput(e.target.value) || 0),
 										})
 									}
-									className={inputCls}
+									onKeyDown={preventInvalidNumberKeys}
+									className={cn(inputCls, form.paymentType !== "Credit" && "bg-muted/30 text-muted-foreground")}
 									placeholder="Enter Credit Days"
 								/>
 							)}

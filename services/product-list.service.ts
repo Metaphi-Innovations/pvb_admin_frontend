@@ -62,6 +62,8 @@ export interface ProductListRecord {
   /** UUID of the supplier (for dropdown re-selection on edit) */
   supplierId?: string;
   hsnCode: string;
+  /** HSN description/name from master */
+  hsnDescription?: string;
   /** UUID of the HSN record */
   hsnUuid?: string;
   category: string;
@@ -297,7 +299,11 @@ function mapItem(
     supplierCode: asString(raw.supplier_code),
     supplier: readNestedName(supplierObj?.supplier_name ?? supplierObj, raw.supplier_name),
     supplierId: readNestedId(supplierObj, raw.supplier_id),
-    hsnCode: asString(raw.hsn_code) || asString(hsnObj?.hsnCode),
+    hsnCode: asString(raw.hsn_code) || asString(hsnObj?.hsnCode) || asString(hsnObj?.hsn_code),
+    hsnDescription:
+      asString(hsnObj?.hsnDescription) ||
+      asString(hsnObj?.hsn_description) ||
+      asString(raw.hsn_description),
     hsnUuid: readNestedId(hsnObj, raw.hsn_id),
     category: readNestedName(categoryObj?.categoryName ?? categoryObj, raw.category_name),
     categoryId: readNestedId(categoryObj, raw.category_id),

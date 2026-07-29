@@ -37,7 +37,8 @@ export interface CoaMasterLink {
   category: CoaMasterLinkCategory;
   categoryLabel: string;
   sourceModule: ErpSourceModule;
-  sourceId: number;
+  /** Legacy numeric master id or API UUID */
+  sourceId: number | string;
   sourceName: string;
   sourceCode: string;
   masterHref: string;
@@ -138,7 +139,7 @@ function matchProductForInventoryLedger(name: string) {
 function buildLink(
   category: CoaMasterLinkCategory,
   sourceModule: ErpSourceModule,
-  sourceId: number,
+  sourceId: number | string,
   sourceName: string,
   sourceCode: string,
   masterHref: string,
@@ -180,7 +181,7 @@ export function resolveCoaMasterLink(
     }
   }
 
-  if (ledger.erpSourceModule && ledger.erpSourceId) {
+  if (ledger.erpSourceModule && ledger.erpSourceId != null && ledger.erpSourceId !== "") {
     const category = moduleToCategory(ledger.erpSourceModule as ErpSourceModule);
     if (category) {
       return buildLink(
@@ -188,10 +189,32 @@ export function resolveCoaMasterLink(
         ledger.erpSourceModule as ErpSourceModule,
         ledger.erpSourceId,
         ledger.accountName,
-        "",
+        ledger.accountCode ?? "",
         hrefForModule(ledger.erpSourceModule as ErpSourceModule, ledger.erpSourceId, ledger.id),
       );
     }
+  }
+
+  // API CUSTOMER/SUPPLIER ledgers may only expose masterType + masterId
+  if (ledger.masterType === "customer" && ledger.masterId != null && ledger.masterId !== "") {
+    return buildLink(
+      "customer",
+      "customer_master",
+      ledger.masterId,
+      ledger.accountName,
+      ledger.accountCode ?? "",
+      `/masters/customers/${ledger.masterId}`,
+    );
+  }
+  if (ledger.masterType === "vendor" && ledger.masterId != null && ledger.masterId !== "") {
+    return buildLink(
+      "vendor",
+      "vendor_master",
+      ledger.masterId,
+      ledger.accountName,
+      ledger.accountCode ?? "",
+      `/masters/vendors/${ledger.masterId}`,
+    );
   }
 
   const category = inferCategory(ledger, coa);
@@ -321,7 +344,11 @@ function moduleToCategory(module: ErpSourceModule): CoaMasterLinkCategory | null
   }
 }
 
-function hrefForModule(module: ErpSourceModule, sourceId: number, ledgerId: number): string {
+function hrefForModule(
+  module: ErpSourceModule,
+  sourceId: number | string,
+  ledgerId: number | string,
+): string {
   switch (module) {
     case "bank_master":
       return `/accounts/banking/bank-accounts/${sourceId}`;
@@ -462,7 +489,7 @@ export function backfillCoaMasterLinks(): void {
       upsertErpPartyLink({
         ledgerId: ledger.id,
         erpSourceModule: link.sourceModule,
-        erpSourceId: link.sourceId,
+        erpSourceId: typeof link.sourceId === "number" ? link.sourceId : -1,
         partyCode: link.sourceCode || String(link.sourceId),
         partyName: link.sourceName,
       });
