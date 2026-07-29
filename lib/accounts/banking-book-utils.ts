@@ -15,6 +15,7 @@ import {
   openingSignedBalance,
   sortChronological,
 } from "@/lib/accounts/running-balance";
+import { matchesMultiFilter, matchesVoucherTypeFilter } from "@/lib/accounts/report-multi-filter-utils";
 
 export const BANK_BOOK_VOUCHER_TYPES = [
   "Receipt Voucher",
@@ -58,9 +59,9 @@ export interface BookFilterParams {
   ledgerIds?: number[];
   dateFrom?: string;
   dateTo?: string;
-  voucherTypeLabel?: string;
+  voucherTypeLabel?: string | string[];
   search?: string;
-  branch?: string;
+  branch?: string | string[];
 }
 
 function signedMovement(debit: number, credit: number): number {
@@ -122,7 +123,7 @@ export function buildBookEntries(
       if (filters.dateTo && v.date > filters.dateTo) return;
 
       const label = resolveBankBookVoucherTypeLabel(v);
-      if (filters.voucherTypeLabel && label !== filters.voucherTypeLabel) return;
+      if (!matchesVoucherTypeFilter(filters.voucherTypeLabel, label)) return;
 
       v.lines.forEach((line, lineOrder) => {
         if (!line.ledgerId || !allowedIds.has(line.ledgerId)) return;
@@ -134,7 +135,7 @@ export function buildBookEntries(
         if (!ledger) return;
 
         const branch = ledgerBranch(ledger);
-        if (filters.branch && filters.branch !== "all" && branch !== filters.branch) return;
+        if (!matchesMultiFilter(filters.branch, branch)) return;
 
         const debit = Number(line.debit) || 0;
         const credit = Number(line.credit) || 0;

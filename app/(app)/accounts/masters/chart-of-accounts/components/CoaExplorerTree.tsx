@@ -1,91 +1,97 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
-import type { ChartOfAccount } from "../../../data";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import type { ChartOfAccount, CoaNodeId } from "../../../data";
 import {
   canAddLedgerUnder,
+  canAddSubGroupUnder,
+  canDeleteGroup,
+  canEditGroup,
   countLedgersUnder,
+  getLedgerDeleteBlockReason,
   getSearchVisibleIds,
   nodeMatchesSearch,
+  saveChartOfAccounts,
 } from "../chart-of-accounts-data";
-import { getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
-import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
+import {
+  isCustomerOrSupplierLinkedLedger,
+  resolveCoaMasterLink,
+} from "@/lib/accounts/coa-master-link";
+import { removeErpPartyLink } from "@/lib/accounts/erp-party-links";
+import { deleteLedgerMeta } from "@/lib/accounts/ledger-metadata";
+import { coaTreeNodeHasChildren, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
+import {
+  canCoaSidebarAddLedgerUnder,
+  canCoaSidebarDeleteNode,
+  canCoaSidebarEditNode,
+  coaSidebarNodeHasChildren,
+  coaSidebarNodeShowsExpandChevron,
+  getCoaSidebarSearchVisibleIds,
+  getCoaSidebarTreeChildren,
+  resolveCoaSidebarVisualLevel,
+} from "@/lib/accounts/coa-sidebar-tree";
 import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
+import { requestCoaAddSubGroup, requestCoaDeleteGroup, requestCoaEditGroup } from "../coa-add-group-bridge";
+import { requestCoaEditLedger } from "../coa-edit-ledger-bridge";
+import { CoaNodeHoverActions } from "./CoaNodeHoverActions";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
-  COA_TREE_ICON_SIZE_CLASS,
-  GUIDE_WIDTH_PX,
+  CoaSystemManagedLock,
+  isSystemManagedStatutoryNode,
+} from "./CoaSystemManagedLock";
+import {
   LEVEL_SELECTED_ROW_CLASS,
-  VISUAL_ICON,
-  VISUAL_ROW_CLASS,
+  COA_TREE_CHEVRON_WIDTH_CLASS,
+  coaNodeAccessibleLabel,
   coaNodeShowsExpandChevron,
+  coaSidebarIconSizeClass,
   coaSidebarIndentPx,
-  coaTreeIconClass,
+  coaSidebarNodeIconClass,
+  coaSidebarRowClass,
+  coaSidebarShowsNodeIcon,
+  coaVisualRowClass,
+  resolveCoaSidebarIcon,
   resolveCoaVisualLevel,
 } from "./coa-tree-visual";
-
-/** Vertical guides + branch elbow for tree connectors */
-function TreeGuides({
-  depth,
-  ancestorHasNext,
-  isLastSibling,
-}: {
-  depth: number;
-  ancestorHasNext: boolean[];
-  isLastSibling: boolean;
-}) {
-  if (depth === 0) return null;
-
-  return (
-    <div className="flex flex-shrink-0 self-stretch" aria-hidden>
-      {ancestorHasNext.map((hasNext, i) => (
-        <div
-          key={i}
-          className="relative flex-shrink-0"
-          style={{ width: GUIDE_WIDTH_PX }}
-        >
-          {hasNext && (
-            <div className="absolute left-[7px] top-0 bottom-0 w-px bg-border/80" />
-          )}
-        </div>
-      ))}
-      <div className="relative flex-shrink-0" style={{ width: GUIDE_WIDTH_PX }}>
-        <div className="absolute left-[7px] top-0 h-1/2 w-px bg-border/80" />
-        <div className="absolute left-[7px] top-1/2 w-[9px] h-px bg-border/80" />
-        {!isLastSibling && (
-          <div className="absolute left-[7px] top-1/2 bottom-0 w-px bg-border/80" />
-        )}
-      </div>
-    </div>
-  );
-}
+import { CoaTreeNodeLabel } from "./CoaTreeNodeLabel";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 
 interface TreeNodeProps {
   node: ChartOfAccount;
   depth: number;
-  isLastSibling: boolean;
-  ancestorHasNext: boolean[];
+  isFirstRoot?: boolean;
   records: ChartOfAccount[];
-  expandedIds: Set<number>;
-  selectedId: number | null;
-  visibleIds: Set<number> | null;
+  expandedIds: Set<CoaNodeId>;
+  selectedId: CoaNodeId | null;
+  visibleIds: Set<CoaNodeId> | null;
   searchQuery: string;
   variant: "panel" | "sidebar";
   canCreate?: boolean;
-  highlightedLedgerId?: number | null;
-  onToggle: (id: number) => void;
+  canEdit?: boolean;
+  highlightedLedgerId?: CoaNodeId | null;
+  onToggle: (id: CoaNodeId) => void;
   onSelect: (node: ChartOfAccount) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: CoaNodeId) => void;
+  onDeleteLedger?: (ledgerId: CoaNodeId) => void;
 }
 
-function TreeNode({
+const TreeNode = memo(function TreeNodeComponent({
   node,
   depth,
-  isLastSibling,
-  ancestorHasNext,
+  isFirstRoot = false,
   records,
   expandedIds,
   selectedId,
@@ -93,80 +99,103 @@ function TreeNode({
   searchQuery,
   variant,
   canCreate = false,
+  canEdit = false,
   highlightedLedgerId = null,
   onToggle,
   onSelect,
   onLedgerOpen,
   onAddLedger,
+  onAddSubGroup,
+  onDeleteLedger,
 }: TreeNodeProps) {
   const isSidebar = variant === "sidebar";
-  const children = getCoaTreeChildren(records, node.id);
-  const hasChildren = children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
-  const visualLevel = resolveCoaVisualLevel(node, records);
-  const Icon = VISUAL_ICON[visualLevel];
+  const visualLevel = isSidebar
+    ? resolveCoaSidebarVisualLevel(node, records)
+    : resolveCoaVisualLevel(node, records);
+  const Icon = resolveCoaSidebarIcon(node, visualLevel, records);
   const isLedger = node.nodeLevel === "ledger";
-  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
-  const ledgerCount = !isLedger ? countLedgersUnder(records, node.id) : 0;
   const isPrimaryHead = node.nodeLevel === "primary_head";
-  const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
-  const allowAdd =
+  const isStatutoryManaged = isSystemManagedStatutoryNode(node);
+  const hasChildren = isSidebar
+    ? coaSidebarNodeHasChildren(records, node.id)
+    : coaTreeNodeHasChildren(records, node.id);
+  const children = useMemo(
+    () =>
+      isExpanded && hasChildren
+        ? isSidebar
+          ? getCoaSidebarTreeChildren(records, node.id)
+          : getCoaTreeChildren(records, node.id)
+        : [],
+    [isExpanded, hasChildren, isSidebar, records, node.id],
+  );
+  const ledgerCount = !isSidebar && !isLedger ? countLedgersUnder(records, node.id) : 0;
+  const showExpandChevron = isSidebar
+    ? coaSidebarNodeShowsExpandChevron(node, records)
+    : coaNodeShowsExpandChevron(node, records, hasChildren);
+  const allowAddSubGroup =
+    !isSidebar &&
     canCreate &&
-    onAddLedger != null &&
-    canAddLedgerUnder(node, records) &&
-    !isAddLedgerBlocked(node, records);
+    onAddSubGroup != null &&
+    canAddSubGroupUnder(node, records);
+  const allowAddLedger = isSidebar
+    ? canCreate && onAddLedger != null && canCoaSidebarAddLedgerUnder(node, records)
+    : canCreate &&
+      onAddLedger != null &&
+      canAddLedgerUnder(node, records) &&
+      !isAddLedgerBlocked(node, records);
+  const allowEdit = isSidebar
+    ? canEdit && canCoaSidebarEditNode(node, records)
+    : canEdit && canEditGroup(node);
+  const allowDelete = isSidebar
+    ? canEdit && canCoaSidebarDeleteNode(node, records)
+    : canEdit && canDeleteGroup(node, records);
   const isHighlighted = highlightedLedgerId === node.id;
   const isSearchMatch =
     Boolean(searchQuery.trim()) && nodeMatchesSearch(records, node, searchQuery);
+  const sidebarShowsIcon = isSidebar && coaSidebarShowsNodeIcon(visualLevel);
+  const showRowIcon = isSidebar ? sidebarShowsIcon : true;
 
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
   const handleClick = () => {
+    if (isLedger && onLedgerOpen) {
+      onLedgerOpen(node);
+      return;
+    }
     onSelect(node);
-    if (isLedger && onLedgerOpen) onLedgerOpen(node);
   };
 
   return (
     <div>
       <div
+        data-coa-tree-row
         className={cn(
-          "group flex items-stretch rounded-md transition-all duration-150",
-          isSidebar ? "mx-0.5" : "pr-2 mx-1",
+          "group flex w-full min-w-0 items-stretch transition-colors duration-100",
+          isSidebar ? "mx-0 rounded-sm" : "rounded-md mx-1",
+          isSidebar &&
+            isPrimaryHead &&
+            depth === 0 &&
+            !isFirstRoot &&
+            "border-t border-border/50 mt-1.5 pt-0.5",
           isSelected
-            ? cn(
-                isSidebar
-                  ? "bg-brand-50/90 border-l-2 border-brand-500"
-                  : "bg-brand-50/90 ring-1 ring-brand-200/90",
-                !isSidebar && isPrimaryHead && "border-l-2 border-orange-500",
-                !isSidebar && !isPrimaryHead && isLedger && "border-l-2 border-emerald-500",
-                !isSidebar && !isPrimaryHead && !isLedger && "border-l-2 border-brand-600",
-              )
-            : cn(
-                "border-l-2 border-transparent",
-                isSidebar ? "hover:bg-muted/30" : "hover:bg-slate-50/90",
-                !isSidebar && isPrimaryHead && "hover:border-l-orange-300",
-              ),
-          isHighlighted && "bg-brand-50/80 ring-1 ring-brand-300/70",
-          isSearchMatch && !isSelected && "bg-brand-50/60",
+            ? cn(isSidebar ? "bg-brand-50" : "bg-brand-50/90 ring-1 ring-brand-200/90")
+            : cn(isSidebar ? "hover:bg-muted/40" : "hover:bg-muted/30"),
+          isHighlighted && !isSidebar && "bg-brand-50/80 ring-1 ring-brand-300/70",
+          isSearchMatch && !isSelected && "bg-brand-50/50",
         )}
-        style={{
-          minHeight: isSidebar ? 28 : undefined,
-          paddingLeft: isSidebar ? coaSidebarIndentPx(depth) : undefined,
-        }}
+        style={{ minHeight: isSidebar ? 30 : 32 }}
       >
-        {!isSidebar && (
-          <TreeGuides
-            depth={depth}
-            ancestorHasNext={ancestorHasNext}
-            isLastSibling={isLastSibling}
-          />
-        )}
-
+        <div
+          className="shrink-0"
+          style={{ width: coaSidebarIndentPx(depth) }}
+          aria-hidden
+        />
         <div
           className={cn(
-            "flex gap-0.5 flex-1 min-w-0",
-            isSidebar ? "items-center pl-0" : "items-start pl-1",
+            "flex flex-1 min-w-0 items-center gap-0.5",
+            isSidebar ? "pr-0.5" : "pr-2",
           )}
         >
           <button
@@ -176,84 +205,106 @@ function TreeNode({
               if (showExpandChevron) onToggle(node.id);
             }}
             className={cn(
-              "flex items-center justify-center flex-shrink-0 rounded transition-colors",
-              isSidebar ? "w-4 h-4" : "w-6 h-6",
+              "flex items-center justify-center rounded transition-colors h-5",
+              COA_TREE_CHEVRON_WIDTH_CLASS,
               showExpandChevron
-                ? "text-muted-foreground hover:text-brand-700"
-                : "w-4 opacity-0 pointer-events-none",
+                ? "text-muted-foreground/70 hover:text-foreground"
+                : "opacity-0 pointer-events-none",
             )}
             tabIndex={showExpandChevron ? 0 : -1}
             aria-label={showExpandChevron ? (isExpanded ? "Collapse" : "Expand") : undefined}
           >
             {showExpandChevron &&
               (isExpanded ? (
-                <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
+                <ChevronDown className="w-3.5 h-3.5" strokeWidth={2} />
               ) : (
-                <ChevronRight className="w-4 h-4" strokeWidth={1.75} />
+                <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
               ))}
           </button>
 
           <button
             type="button"
             onClick={handleClick}
+            aria-label={coaNodeAccessibleLabel(node, records)}
             className={cn(
-              "flex flex-1 min-w-0 text-left items-center",
-              isSidebar ? "gap-1.5 py-0.5 pr-1" : "items-start gap-2 py-1.5 pr-2",
+              "flex flex-1 min-w-0 text-left items-center gap-1",
+              isSidebar ? "py-1 pr-1" : "py-1.5 pr-1",
             )}
           >
-            <Icon
-              className={cn(
-                "flex-shrink-0",
-                COA_TREE_ICON_SIZE_CLASS,
-                !isSidebar && "mt-0.5",
-                coaTreeIconClass(visualLevel, isSelected),
-              )}
-              strokeWidth={1.75}
-            />
-            <span
-              className={cn(
-                "flex-1 min-w-0 whitespace-normal break-words",
-                isSidebar ? "text-xs leading-[1.35]" : "leading-snug",
-                isSelected
-                  ? cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel], visualLevel === "sub_group" && "text-xs")
-                  : VISUAL_ROW_CLASS[visualLevel],
-                isSidebar && isSelected && "font-semibold text-brand-800",
-                isSidebar && !isSelected && isPrimaryHead && "font-semibold text-foreground",
-              )}
-            >
-              {node.accountName}
-              {isSystemLocked && (
-                <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
-              )}
-              {!isLedger && ledgerCount > 0 && !isSidebar && (
-                <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums whitespace-nowrap">
-                  ({ledgerCount})
-                </span>
-              )}
-            </span>
+            {showRowIcon && (
+              <Icon
+                className={cn(
+                  "shrink-0",
+                  coaSidebarIconSizeClass(node, records),
+                  coaSidebarNodeIconClass(node, visualLevel, isSelected, records),
+                )}
+                strokeWidth={visualLevel === "primary_head" ? 2 : 1.75}
+              />
+            )}
+            {isSidebar ? (
+              <CoaTreeNodeLabel
+                name={node.accountName}
+                className={cn(
+                  isSelected
+                    ? "font-semibold text-brand-800"
+                    : coaSidebarRowClass(visualLevel),
+                )}
+              />
+            ) : (
+              <span
+                className={cn(
+                  "flex-1 min-w-0 whitespace-normal break-words leading-snug",
+                  isSelected
+                    ? cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel])
+                    : coaVisualRowClass(visualLevel),
+                )}
+              >
+                {node.accountName}
+                {!isLedger && ledgerCount > 0 && (
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums whitespace-nowrap">
+                    ({ledgerCount})
+                  </span>
+                )}
+              </span>
+            )}
+            {isStatutoryManaged && (
+              <CoaSystemManagedLock className="mx-0.5 shrink-0" />
+            )}
             {!isSidebar && (
-              <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0 mt-0.5" />
+              <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0" />
             )}
           </button>
 
-          {allowAdd && (
-            <CoaAddLedgerHoverAction
-              onClick={() => onAddLedger!(node.id)}
-              className={cn("mr-1", isSidebar ? "self-center" : "mt-1.5")}
-            />
-          )}
+          <CoaNodeHoverActions
+            compact={isSidebar}
+            showAddSubGroup={allowAddSubGroup}
+            showAddLedger={allowAddLedger}
+            showEdit={allowEdit}
+            showDelete={allowDelete}
+            onAddSubGroup={() => (onAddSubGroup ?? requestCoaAddSubGroup)(node.id)}
+            onAddLedger={() => onAddLedger!(node.id)}
+            onEdit={() =>
+              isSidebar && isLedger
+                ? requestCoaEditLedger(node.id)
+                : requestCoaEditGroup(node.id)
+            }
+            onDelete={() =>
+              isSidebar && isLedger
+                ? onDeleteLedger?.(node.id)
+                : requestCoaDeleteGroup(node.id)
+            }
+            className={isSidebar ? "mr-0.5 shrink-0" : "mr-0.5 shrink-0"}
+          />
         </div>
       </div>
 
-      {hasChildren && isExpanded && (
+      {hasChildren && isExpanded && children.length > 0 && (
         <div>
-          {children.map((child, idx) => (
+          {children.map((child) => (
             <TreeNode
               key={child.id}
               node={child}
               depth={depth + 1}
-              isLastSibling={idx === children.length - 1}
-              ancestorHasNext={[...ancestorHasNext, !isLastSibling]}
               records={records}
               expandedIds={expandedIds}
               selectedId={selectedId}
@@ -261,31 +312,40 @@ function TreeNode({
               searchQuery={searchQuery}
               variant={variant}
               canCreate={canCreate}
+              canEdit={canEdit}
               highlightedLedgerId={highlightedLedgerId}
               onToggle={onToggle}
               onSelect={onSelect}
               onLedgerOpen={onLedgerOpen}
               onAddLedger={onAddLedger}
+              onAddSubGroup={onAddSubGroup}
+              onDeleteLedger={onDeleteLedger}
             />
           ))}
         </div>
       )}
     </div>
   );
-}
+});
 
 interface CoaExplorerTreeProps {
   variant?: "panel" | "sidebar";
   records: ChartOfAccount[];
-  selectedId: number | null;
-  expandedIds: Set<number>;
+  selectedId: CoaNodeId | null;
+  expandedIds: Set<CoaNodeId>;
+  /** Client-side visibility filter. Leave empty when the tree is already server-filtered. */
   search: string;
+  /** Optional highlight term (e.g. API search query) when `search` is empty. */
+  highlightQuery?: string;
   canCreate?: boolean;
-  highlightedLedgerId?: number | null;
+  canEdit?: boolean;
+  highlightedLedgerId?: CoaNodeId | null;
   onSelect: (node: ChartOfAccount) => void;
-  onToggle: (id: number) => void;
+  onToggle: (id: CoaNodeId) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: CoaNodeId) => void;
+  onRecordsChange?: (records: ChartOfAccount[]) => void;
 }
 
 export function CoaExplorerTree({
@@ -294,13 +354,71 @@ export function CoaExplorerTree({
   selectedId,
   expandedIds,
   search,
+  highlightQuery = "",
   canCreate = false,
+  canEdit = false,
   highlightedLedgerId = null,
   onSelect,
   onToggle,
   onLedgerOpen,
   onAddLedger,
+  onAddSubGroup,
+  onRecordsChange,
 }: CoaExplorerTreeProps) {
+  const [deleteTarget, setDeleteTarget] = useState<ChartOfAccount | null>(null);
+  const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(null);
+  const isSidebar = variant === "sidebar";
+
+  const handleDeleteLedger = (ledgerId: CoaNodeId) => {
+    const ledger = records.find((r) => r.id === ledgerId);
+    if (!ledger || !canCoaSidebarDeleteNode(ledger, records)) return;
+    const block = getLedgerDeleteBlockReason(ledger, records);
+    if (block) {
+      setDeleteBlockReason(block);
+      setDeleteTarget(ledger);
+      return;
+    }
+    setDeleteBlockReason(null);
+    setDeleteTarget(ledger);
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteTarget(null);
+    setDeleteBlockReason(null);
+  };
+
+  const confirmDeleteLedger = () => {
+    if (!deleteTarget) return;
+    const block = getLedgerDeleteBlockReason(deleteTarget, records);
+    if (block) {
+      setDeleteBlockReason(block);
+      return;
+    }
+
+    // API-backed ledgers are not deleted via localStorage — skip until ledger DELETE API is wired.
+    if (deleteTarget.apiNodeId) {
+      closeDeleteDialog();
+      return;
+    }
+
+    const link = resolveCoaMasterLink(deleteTarget, records);
+    if (link && (link.category === "customer" || link.category === "vendor")) {
+      if (typeof link.sourceId === "number") {
+        removeErpPartyLink(link.sourceModule, link.sourceId);
+      }
+    }
+    deleteLedgerMeta(deleteTarget.id);
+
+    const next = records.filter((r) => r.id !== deleteTarget.id);
+    saveChartOfAccounts(next);
+    onRecordsChange?.(next);
+    dispatchAccountsDataChanged("ledgers", {
+      operation: "delete",
+      recordId: deleteTarget.id,
+    });
+    closeDeleteDialog();
+  };
+
   const roots = useMemo(
     () =>
       records
@@ -310,50 +428,127 @@ export function CoaExplorerTree({
   );
 
   const visibleIds = useMemo(
-    () => (search.trim() ? getSearchVisibleIds(records, search) : null),
-    [records, search],
+    () =>
+      search.trim()
+        ? isSidebar
+          ? getCoaSidebarSearchVisibleIds(records, search)
+          : getSearchVisibleIds(records, search)
+        : null,
+    [records, search, isSidebar],
   );
 
+  const onDeleteLedger = isSidebar ? handleDeleteLedger : undefined;
+
   return (
-    <div
-      className={cn(
-        "flex flex-col min-h-0",
-        variant === "sidebar" ? "bg-transparent" : "h-full bg-white",
-      )}
-    >
+    <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          "flex-1 min-h-0",
-          variant === "sidebar" ? "py-0.5" : "py-2 px-1",
-          variant === "panel" && "min-w-[260px]",
+          "flex flex-col min-h-0",
+          variant === "sidebar" ? "bg-transparent" : "h-full bg-white",
         )}
       >
-        {roots.length === 0 ? (
-          <p className="px-4 text-sm text-muted-foreground">Loading chart…</p>
-        ) : (
-          roots.map((root, idx) => (
-            <TreeNode
-              key={root.id}
-              node={root}
-              depth={0}
-              isLastSibling={idx === roots.length - 1}
-              ancestorHasNext={[]}
-              records={records}
-              expandedIds={expandedIds}
-              selectedId={selectedId}
-              visibleIds={visibleIds}
-              searchQuery={search}
-              variant={variant}
-              canCreate={canCreate}
-              highlightedLedgerId={highlightedLedgerId}
-              onToggle={onToggle}
-              onSelect={onSelect}
-              onLedgerOpen={onLedgerOpen}
-              onAddLedger={onAddLedger}
-            />
-          ))
-        )}
+        <div
+          className={cn(
+            "flex-1 min-h-0",
+            variant === "sidebar" ? "py-1 px-0.5 accounts-coa-tree" : "py-2 px-1",
+            variant === "panel" && "min-w-[260px]",
+          )}
+        >
+          {roots.length === 0 ? (
+            <p className="px-4 text-sm text-muted-foreground">Loading chart…</p>
+          ) : (
+            roots.map((root, idx) => (
+              <TreeNode
+                key={root.id}
+                node={root}
+                depth={0}
+                isFirstRoot={idx === 0}
+                records={records}
+                expandedIds={expandedIds}
+                selectedId={selectedId}
+                visibleIds={visibleIds}
+                searchQuery={highlightQuery.trim() || search}
+                variant={variant}
+                canCreate={canCreate}
+                canEdit={canEdit}
+                highlightedLedgerId={highlightedLedgerId}
+                onToggle={onToggle}
+                onSelect={onSelect}
+                onLedgerOpen={onLedgerOpen}
+                onAddLedger={onAddLedger}
+                onAddSubGroup={onAddSubGroup}
+                onDeleteLedger={onDeleteLedger}
+              />
+            ))
+          )}
+        </div>
       </div>
-    </div>
+
+      {isSidebar && (
+        <Dialog open={deleteTarget != null} onOpenChange={() => closeDeleteDialog()}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border",
+                    deleteBlockReason
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-red-50 border-red-200",
+                  )}
+                >
+                  <AlertTriangle
+                    className={cn(
+                      "w-4 h-4",
+                      deleteBlockReason ? "text-amber-500" : "text-red-500",
+                    )}
+                  />
+                </div>
+                {deleteBlockReason ? "Cannot delete ledger" : "Delete ledger?"}
+              </DialogTitle>
+              <DialogDescription className="pt-1">
+                {deleteBlockReason
+                  ? deleteBlockReason
+                  : deleteTarget
+                    ? isCustomerOrSupplierLinkedLedger(deleteTarget, records)
+                      ? `"${deleteTarget.accountName}" is linked to a customer/supplier master. Removing it from the chart of accounts cannot be undone.`
+                      : `"${deleteTarget.accountName}" will be removed from the chart of accounts. This cannot be undone.`
+                    : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              {deleteBlockReason ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={closeDeleteDialog}
+                >
+                  Close
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={closeDeleteDialog}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    onClick={confirmDeleteLedger}
+                  >
+                    Delete
+                  </Button>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </TooltipProvider>
   );
 }

@@ -144,7 +144,6 @@ export function ExpenseCategoriesDialog({
                 <tr className="border-b border-border text-xs uppercase text-muted-foreground">
                   <th className="text-left py-2 px-2">Category</th>
                   <th className="text-left py-2 px-2">Description</th>
-                  <th className="text-left py-2 px-2">Status</th>
                   <th className="text-right py-2 px-2 w-28">Actions</th>
                 </tr>
               </thead>
@@ -153,9 +152,6 @@ export function ExpenseCategoriesDialog({
                   <tr key={c.id} className="accounts-table-row group">
                     <td className="py-2 px-2 font-medium">{c.name}</td>
                     <td className="py-2 px-2 text-muted-foreground max-w-[200px] truncate">{c.description}</td>
-                    <td className="py-2 px-2">
-                      <StatusBadge status={c.status === "active" ? "active" : "inactive"} size="sm" />
-                    </td>
                     <td className="py-2 px-2 text-right">
                       <div className="flex justify-end gap-1">
                         <button type="button" className="p-1.5 rounded hover:bg-muted" onClick={() => openView(c)}>

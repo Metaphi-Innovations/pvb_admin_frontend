@@ -200,8 +200,11 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans:    ["Plus Jakarta Sans", "Inter", "Manrope", "system-ui", "sans-serif"],
-        display: ["Plus Jakarta Sans", "Inter", "sans-serif"],
+        // Use next/font CSS variables from app/layout.tsx so Tailwind Preflight
+        // and `font-sans` resolve to the loaded faces. Inner fallbacks prevent
+        // an empty/missing var() from invalidating the whole stack (→ Times).
+        sans:    ["var(--font-plus-jakarta, ui-sans-serif)", "var(--font-inter, ui-sans-serif)", "system-ui", "sans-serif"],
+        display: ["var(--font-plus-jakarta, ui-sans-serif)", "var(--font-inter, ui-sans-serif)", "sans-serif"],
         mono:    ["JetBrains Mono", "Fira Code", "monospace"],
       },
       fontSize: {

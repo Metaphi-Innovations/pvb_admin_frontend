@@ -1,6 +1,12 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { BankTransactionsClient } from "@/components/accounts/BankTransactionsClient";
+
+const BankTransactionsClient = lazyAccountsPage(() =>
+  import("@/components/accounts/BankTransactionsClient").then((m) => ({
+    default: m.BankTransactionsClient,
+  })),
+);
 
 export default function BankTransactionsPage() {
   return (

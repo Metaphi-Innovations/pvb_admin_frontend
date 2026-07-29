@@ -5,12 +5,17 @@ import {
   getDirectChildren,
   getSearchMatchingNodes,
   resolveParentName,
+  countChildGroups,
+  countLedgersUnder,
+  getAncestorPath,
 } from "./chart-of-accounts-data";
 
 import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
 import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
-import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
+import { isTdsCoaLedger, tdsLedgerKindAlias } from "@/lib/accounts/tds-coa-sync";
+import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
+import { loadTDSMasters, formatTdsRateDisplay, formatApplicableToLabels, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 
 import {
   computePeriodClosingBalance,
@@ -19,8 +24,10 @@ import {
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
 import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
-import { buildBundledCoaDemoLedgers } from "./coa-demo-bundle";
-import { getBundledDemoTransactions } from "./coa-demo-transactions";
+import {
+  isStockInHandLedger,
+  resolveStockInHandDisplayBalance,
+} from "@/lib/accounts/coa-stock-in-hand";
 
 export type CoaLedgerSourceLabel =
   | "Manual"
@@ -40,6 +47,42 @@ export interface CoaLedgerListingRow {
   openingSide: "Debit" | "Credit";
   currentAmount: number;
   currentSide: "Debit" | "Credit";
+  /** Populated for TDS section ledgers */
+  tdsSection?: string;
+  tdsRate?: string;
+  tdsKind?: "Payable" | "Receivable";
+  tdsDeductee?: string;
+}
+
+export interface TdsLedgerUsageInfo {
+  section: string;
+  rate: string;
+  kind: "Payable" | "Receivable";
+  deductee: string;
+  linkedMaster: string;
+}
+
+export function resolveTdsLedgerUsageInfo(ledger: ChartOfAccount): TdsLedgerUsageInfo | null {
+  if (!isTdsCoaLedger(ledger)) return null;
+
+  const master =
+    ledger.erpSourceId != null
+      ? loadTDSMasters().find((m) => m.id === ledger.erpSourceId)
+      : undefined;
+  const section =
+    master != null
+      ? getTdsSectionCode(master)
+      : parseTdsSectionCode(ledger.accountName) ?? "—";
+  const kind: "Payable" | "Receivable" =
+    ledger.alias === tdsLedgerKindAlias("receivable") ? "Receivable" : "Payable";
+
+  return {
+    section,
+    rate: master ? formatTdsRateDisplay(master.tdsRate) : "—",
+    kind,
+    deductee: master ? formatApplicableToLabels(master.applicableTo) : "—",
+    linkedMaster: master ? `${getTdsSectionCode(master)} — ${master.sectionName}` : "TDS Master",
+  };
 }
 
 /** Resolve user-facing source label for a COA ledger row. */
@@ -76,14 +119,15 @@ function ledgerListingMatchesSearch(
     row.ledger.accountName.toLowerCase().includes(q) ||
     row.ledger.accountCode.toLowerCase().includes(q) ||
     row.parentGroupName.toLowerCase().includes(q) ||
-    row.source.toLowerCase().includes(q)
+    row.source.toLowerCase().includes(q) ||
+    (row.tdsSection?.toLowerCase().includes(q) ?? false)
   );
 }
 
 /** Flat ledger rows for a Level-3 accounting group (all descendant ledgers). */
 export function buildCoaLedgerListingRows(
   records: ChartOfAccount[],
-  accountingGroupId: number,
+  accountingGroupId: import("../../data").CoaNodeId,
   options: { search?: string } = {},
 ): CoaLedgerListingRow[] {
   const search = options.search?.trim() ?? "";
@@ -92,7 +136,10 @@ export function buildCoaLedgerListingRows(
     .sort((a, b) => a.accountName.localeCompare(b.accountName));
 
   let rows = ledgers.map((ledger) => {
-    const current = computeLedgerCurrentBalance(ledger);
+    const current = isStockInHandLedger(ledger)
+      ? resolveStockInHandDisplayBalance()
+      : computeLedgerCurrentBalance(ledger);
+    const tds = resolveTdsLedgerUsageInfo(ledger);
     return {
       ledger,
       parentGroupName: ledger.parentAccountId
@@ -103,6 +150,14 @@ export function buildCoaLedgerListingRows(
       openingSide: ledger.balanceType,
       currentAmount: current.amount,
       currentSide: current.balanceType,
+      ...(tds
+        ? {
+            tdsSection: tds.section,
+            tdsRate: tds.rate,
+            tdsKind: tds.kind,
+            tdsDeductee: tds.deductee,
+          }
+        : {}),
     };
   });
 
@@ -152,27 +207,8 @@ export function computeCoaLedgerListingSummary(
 function coaListingMovementMapForRange(
   from: string,
   to: string,
-): Map<number, { totalDebit: number; totalCredit: number }> {
-  const map = ledgerMovementMapForRange(from, to);
-
-  for (const ledger of buildBundledCoaDemoLedgers()) {
-    const rows = getBundledDemoTransactions(ledger.id);
-    let totalDebit = 0;
-    let totalCredit = 0;
-    for (const row of rows) {
-      if (row.date < from || row.date > to) continue;
-      totalDebit += row.debit;
-      totalCredit += row.credit;
-    }
-    if (totalDebit === 0 && totalCredit === 0) continue;
-    const cur = map.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
-    map.set(ledger.id, {
-      totalDebit: cur.totalDebit + totalDebit,
-      totalCredit: cur.totalCredit + totalCredit,
-    });
-  }
-
-  return map;
+): Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }> {
+  return ledgerMovementMapForRange(from, to);
 }
 
 export interface CoaListingRow {
@@ -201,11 +237,11 @@ function collectDescendantPostingLedgers(
 
   records: ChartOfAccount[],
 
-  nodeId: number,
+  nodeId: import("../../data").CoaNodeId,
 
 ): ChartOfAccount[] {
 
-  const ids = new Set<number>();
+  const ids = new Set<import("../../data").CoaNodeId>();
 
   const queue = [nodeId];
 
@@ -238,43 +274,39 @@ function collectDescendantPostingLedgers(
 
 
 function ledgerPeriodBalances(
-
   ledger: ChartOfAccount,
-
   movement: { totalDebit: number; totalCredit: number },
-
 ) {
+  /** Stock in Hand current/closing balance = ERP total inventory value (COA display). */
+  if (isStockInHandLedger(ledger)) {
+    const display = resolveStockInHandDisplayBalance();
+    const openingSigned = openingSignedBalance(ledger);
+    const opening = fromSignedBalance(openingSigned);
+    return {
+      openingAmount: opening.amount,
+      openingSide: opening.balanceType,
+      periodDebit: movement.totalDebit,
+      periodCredit: movement.totalCredit,
+      closingAmount: display.amount,
+      closingSide: display.balanceType,
+    };
+  }
 
   const openingSigned = openingSignedBalance(ledger);
-
   const opening = fromSignedBalance(openingSigned);
-
   const closing = computePeriodClosingBalance(
-
     ledger,
-
     movement.totalDebit,
-
     movement.totalCredit,
-
   );
-
   return {
-
     openingAmount: opening.amount,
-
     openingSide: opening.balanceType,
-
     periodDebit: movement.totalDebit,
-
     periodCredit: movement.totalCredit,
-
     closingAmount: closing.amount,
-
     closingSide: closing.balanceType,
-
   };
-
 }
 
 
@@ -283,7 +315,7 @@ function aggregateSigned(
 
   ledgers: ChartOfAccount[],
 
-  movementMap: Map<number, { totalDebit: number; totalCredit: number }>,
+  movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
 
 ) {
 
@@ -345,7 +377,7 @@ function balancesForNode(
 
   node: ChartOfAccount,
 
-  movementMap: Map<number, { totalDebit: number; totalCredit: number }>,
+  movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
 
 ) {
 
@@ -418,6 +450,40 @@ export function computeCoaListingSummary(
   };
 }
 
+export interface CoaGroupDetailSummary {
+  group: ChartOfAccount;
+  parentGroupName: string;
+  childGroupCount: number;
+  ledgerCount: number;
+  closingAmount: number;
+  closingSide: "Debit" | "Credit";
+}
+
+/** Metadata and aggregated balance for an account group drill-down header. */
+export function computeCoaGroupDetailSummary(
+  records: ChartOfAccount[],
+  groupId: import("../../data").CoaNodeId,
+  dateFrom: string,
+  dateTo: string,
+): CoaGroupDetailSummary | null {
+  const group = records.find((r) => r.id === groupId);
+  if (!group || group.nodeLevel !== "account_group") return null;
+
+  const path = getAncestorPath(records, groupId);
+  const parent = path.length >= 2 ? path[path.length - 2] : null;
+  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
+  const balances = balancesForNode(records, group, movementMap);
+
+  return {
+    group,
+    parentGroupName: parent?.accountName ?? "—",
+    childGroupCount: countChildGroups(records, groupId),
+    ledgerCount: countLedgersUnder(records, groupId),
+    closingAmount: balances.closingAmount,
+    closingSide: balances.closingSide,
+  };
+}
+
 /**
 
  * Build flat listing rows for immediate children of the given parent.
@@ -441,7 +507,7 @@ function listingMetaForNode(
 
 export function buildCoaListingRows(
   records: ChartOfAccount[],
-  parentNodeId: number | null,
+  parentNodeId: import("../../data").CoaNodeId | null,
   dateFrom: string,
   dateTo: string,
   options: { search?: string } = {},

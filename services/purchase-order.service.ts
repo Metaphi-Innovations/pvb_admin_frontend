@@ -195,6 +195,10 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     asString(snapshotHsn.code) ||
     "";
 
+  const snapshot = asRecord(raw.product_snapshot);
+  const hsnObj = asRecord(snapshot.hsn);
+  const hsnCode = asString(raw.hsn_code || raw.hsnCode || hsnObj.hsnCode || hsnObj.hsn_code || (snapshot as any).hsnCode || (snapshot as any).hsn_code || "");
+
   return {
     uid: asString(raw.purchase_order_product_id) || `pl-${index}`,
     purchaseOrderProductId: toUuidOrNull(raw.purchase_order_product_id) ?? undefined,
@@ -203,11 +207,15 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     productName: asString(raw.product_name),
     description: "",
     sku: asString(raw.product_code),
+<<<<<<< HEAD
     category: asString(
       asRecord(snapshot.category).category_name ??
         asRecord(snapshot.category).name ??
         snapshot.category_name,
     ),
+=======
+    category: "",
+>>>>>>> d99f8b48998085c02283482f8cd1c993199528ff
     hsnCode,
     baseUnit: asString(raw.base_unit) || "Unit",
     packagingUnit: asString(raw.packing_unit) || "Box",
@@ -493,8 +501,8 @@ function buildWriteBody(
     po_no: options.poNumber?.trim() || null,
     purchase_requisition_id: toUuidOrNull(form.sourcePrId),
     supplier_id: toUuidOrNull(form.supplierId),
-    po_date: form.poDate || null,
-    delivery_date: form.expectedDeliveryDate || null,
+    po_date: form.poDate ? form.poDate : undefined,
+    delivery_date: form.expectedDeliveryDate ? form.expectedDeliveryDate : undefined,
     remarks: form.notes || null,
     po_status: backendStatus,
     payment_type: form.paymentType || null,

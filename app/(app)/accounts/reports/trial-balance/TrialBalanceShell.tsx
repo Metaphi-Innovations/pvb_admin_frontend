@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BreadcrumbItem } from "@/lib/accounts/accounts-nav";
+import { ACCOUNTS_PAGE_TITLE_CLASS } from "@/lib/accounts/accounts-typography";
 
 /** Accounts viewport minus main content padding (py-3 Ã— 2) */
 const TRIAL_BALANCE_VIEWPORT_HEIGHT = "calc(100vh - 128px)";
@@ -51,7 +52,7 @@ export function TrialBalanceShell({
       </nav>
 
       <div className="flex-shrink-0 flex items-center justify-between gap-2 min-h-0">
-        <h1 className="text-xl font-bold text-navy-700 leading-tight">{title}</h1>
+        <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "text-navy-700")}>{title}</h1>
         {actions && <div className="flex items-center gap-1.5 flex-shrink-0">{actions}</div>}
       </div>
 

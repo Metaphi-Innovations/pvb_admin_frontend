@@ -11,13 +11,15 @@ import {
   getVendorPayablesMeta,
   getVendorPaymentHistory,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
 import { formatCreditPeriod } from "@/app/(app)/masters/vendors/vendor-data";
 import { cn } from "@/lib/utils";
+import { PartyCrossNavButtons } from "@/components/accounts/PartyCrossNavButtons";
+import { buildPayablesDetailCrossNavLinks } from "@/lib/accounts/party-cross-nav";
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
@@ -43,10 +45,11 @@ export default function VendorOutstandingDetailClient() {
   const [asOnDate] = useState(defaultAsOnDate());
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const detail = useMemo(
     () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, asOnDate) : null),
@@ -86,6 +89,10 @@ export default function VendorOutstandingDetailClient() {
   const { vendor, bills } = detail;
   const meta = getVendorPayablesMeta(vendor.id);
   const openBills = bills.filter((b) => b.outstanding > 0.009);
+  const crossNav = buildPayablesDetailCrossNavLinks({
+    vendorId: vendor.id,
+    ledgerId: detail.ledgerId,
+  });
 
   return (
     <AccountsPageShell
@@ -127,6 +134,7 @@ export default function VendorOutstandingDetailClient() {
             <InfoBlock label="Purchase Manager" value={meta?.purchaseManager ?? "Purchase Desk"} />
             <InfoBlock label="Mobile" value={vendor.mobile} />
           </div>
+          <PartyCrossNavButtons items={crossNav} label="Go to" />
         </section>
 
         {highlightedBill && (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -10,10 +11,12 @@ import {
   VOUCHER_TYPE_LABELS,
 } from "../voucher-data";
 import { voucherTypeToUrl } from "../voucher-routes";
+import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { VoucherEntryClient } from "./VoucherEntryClient";
 import { ReceiptVoucherForm } from "./ReceiptVoucherForm";
 import { PaymentVoucherForm } from "./PaymentVoucherForm";
 import { ContraVoucherForm } from "./ContraVoucherForm";
+import { ensureManualDemoDisplayVouchers } from "@/lib/accounts/bank-recon-display";
 
 interface VoucherViewClientProps {
   voucherId: number;
@@ -21,6 +24,16 @@ interface VoucherViewClientProps {
 
 export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
   const router = useRouter();
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (voucherId >= 920_000 && voucherId < 923_000) {
+      ensureManualDemoDisplayVouchers();
+      setTick((t) => t + 1);
+    }
+  }, [voucherId]);
+
+  void tick;
   const voucher = getVoucherById(voucherId);
   const listHref = voucher
     ? `/accounts/vouchers?tab=${voucherTypeToUrl(voucher.voucherType)}`
@@ -50,48 +63,60 @@ export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
 
   if (voucher.voucherType === "receipt") {
     return (
-      <ReceiptVoucherForm
-        voucherId={voucherId}
-        readOnly
-        onDone={handleBack}
-        onEdit={editAction}
-      />
+      <>
+        <ReceiptVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
     );
   }
 
   if (voucher.voucherType === "payment") {
     return (
-      <PaymentVoucherForm
-        voucherId={voucherId}
-        readOnly
-        onDone={handleBack}
-        onEdit={editAction}
-      />
+      <>
+        <PaymentVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
     );
   }
 
   if (voucher.voucherType === "contra") {
     return (
-      <ContraVoucherForm
-        voucherId={voucherId}
-        readOnly
-        onDone={handleBack}
-        onEdit={editAction}
-      />
+      <>
+        <ContraVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
     );
   }
 
   const label = VOUCHER_TYPE_LABELS[voucher.voucherType];
 
   return (
-    <VoucherEntryClient
-      voucherType={voucher.voucherType}
-      voucherId={voucherId}
-      readOnly
-      titleOverride={`View ${label}`}
-      cancelHref={listHref}
-      onDone={handleBack}
-      onEdit={editAction}
-    />
+    <>
+      <VoucherEntryClient
+        voucherType={voucher.voucherType}
+        voucherId={voucherId}
+        readOnly
+        titleOverride={`View ${label}`}
+        cancelHref={listHref}
+        onDone={handleBack}
+        onEdit={editAction}
+      />
+      <VoucherFormToastHost />
+    </>
   );
 }

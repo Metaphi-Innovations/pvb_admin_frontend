@@ -23,6 +23,20 @@ import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import {
+  matchesMultiFilter,
+  matchesMultiIdFilter,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
+import {
+  DEFAULT_AGEING_BREAKPOINTS,
+  classifyAgeingBucketIndex,
+  effectiveOverdueDays,
+  emptyAgeingBuckets,
+  generateAgeingBucketsFromBreakpoints,
+  type AgeingBreakpoints,
+  type GeneratedAgeingBucket,
+} from "@/lib/accounts/ageing-breakpoints";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,8 +74,14 @@ export interface InvoiceOutstandingRow {
 }
 
 export interface InvoiceOutstandingFilters {
+  /** @deprecated use customerIds */
   customerId?: number;
+  customerIds?: string | string[];
+  branch?: string | string[];
+  salespersons?: string | string[];
+  /** @deprecated use statuses */
   status?: ReceivableStatus | "all";
+  statuses?: string | string[];
   dateFrom?: string;
   dateTo?: string;
   financialYearId?: number;
@@ -97,6 +117,26 @@ export interface CustomerReceiptAllocationSummary {
   unallocatedReceipts: ReceiptAllocationRecord[];
 }
 
+export interface CustomerOutstandingFilters {
+  customerIds?: string | string[];
+  branch?: string | string[];
+  salespersons?: string | string[];
+  statuses?: string | string[];
+}
+
+export function filterCustomerOutstandingRows(
+  rows: CustomerOutstandingRow[],
+  filters: CustomerOutstandingFilters = {},
+): CustomerOutstandingRow[] {
+  return rows.filter((row) => {
+    if (!matchesMultiIdFilter(filters.customerIds, row.customerId)) return false;
+    if (!matchesMultiFilter(filters.branch, row.branch)) return false;
+    if (!matchesMultiFilter(filters.salespersons, row.salesExecutive)) return false;
+    if (!matchesMultiFilter(filters.statuses, row.status)) return false;
+    return true;
+  });
+}
+
 export interface CustomerOutstandingRow {
   customerName: string;
   ledgerId: number;
@@ -109,6 +149,7 @@ export interface CustomerOutstandingRow {
   customerCode: string;
   territory: string;
   branch: string;
+  salesExecutive: string;
   totalInvoiceAmount: number;
   totalTaxableValue: number;
   totalGstAmount: number;
@@ -118,6 +159,8 @@ export interface CustomerOutstandingRow {
   notDueAmount: number;
   lastInvoiceDate: string;
   lastReceiptDate: string;
+  /** Earliest due date among open invoices; "—" when none open. */
+  oldestDueDate: string;
   status: ReceivableStatus;
 }
 
@@ -156,17 +199,22 @@ export interface AgeingBucket {
   amount: number;
 }
 
+
+/** Breakpoint values that define ageing bucket boundaries. First value must be 0. */
+export type CustomerAgeingBreakpoints = AgeingBreakpoints;
+
+export const DEFAULT_CUSTOMER_AGEING_BREAKPOINTS = DEFAULT_AGEING_BREAKPOINTS;
+
+export type { GeneratedAgeingBucket };
+
 export interface CustomerAgeingRow {
   customerId: number;
   customerName: string;
   customerCode: string;
   territory: string;
   salesExecutive: string;
-  bucket0_30: number;
-  bucket31_60: number;
-  bucket61_90: number;
-  bucket91_120: number;
-  bucketAbove120: number;
+  /** Bucket amounts aligned with generated ageing columns (same order as breakpoints). */
+  buckets: number[];
   totalOutstanding: number;
   oldestInvoiceDate: string;
 }
@@ -184,6 +232,15 @@ export interface ReceiptAllocationLine {
   invoiceId: number;
   invoiceNo: string;
   amount: number;
+  /** Phase 1 — scheme eligibility support fields (derived at allocation time). */
+  invoiceDate?: string;
+  dueDate?: string;
+  originalInvoiceAmount?: number;
+  outstandingAmountBefore?: number;
+  paymentTermsDays?: number;
+  actualPaymentDays?: number;
+  paymentStatus?: "full" | "partial";
+  allocationStatus?: "allocated";
 }
 
 export interface ReceiptAllocationRecord {
@@ -252,6 +309,45 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Receipt Date minus Invoice Date — used for payment-based scheme eligibility. */
+export function computeActualPaymentDays(
+  invoiceDate: string,
+  receiptDate: string,
+): number | undefined {
+  if (!invoiceDate || !receiptDate) return undefined;
+  const a = new Date(invoiceDate);
+  const b = new Date(receiptDate);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return undefined;
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function computePaymentTermsDays(invoiceDate: string, dueDate: string): number | undefined {
+  return computeActualPaymentDays(invoiceDate, dueDate);
+}
+
+function buildEnrichedAllocationLine(
+  inv: InvoiceRecord,
+  allocAmount: number,
+  receiptDate: string,
+): ReceiptAllocationLine {
+  const outstandingBefore = getInvoiceOutstanding(inv);
+  const projectedReceived = round2(inv.amountReceived + allocAmount);
+  const fullPayment = projectedReceived >= inv.grandTotal - 0.009;
+  return {
+    invoiceId: inv.id,
+    invoiceNo: inv.invoiceNo,
+    amount: round2(allocAmount),
+    invoiceDate: inv.invoiceDate,
+    dueDate: inv.dueDate,
+    originalInvoiceAmount: inv.grandTotal,
+    outstandingAmountBefore: outstandingBefore,
+    paymentTermsDays: computePaymentTermsDays(inv.invoiceDate, inv.dueDate),
+    actualPaymentDays: computeActualPaymentDays(inv.invoiceDate, receiptDate),
+    paymentStatus: fullPayment ? "full" : "partial",
+    allocationStatus: "allocated",
+  };
+}
+
 function daysBetween(from: string, to: string): number {
   const a = new Date(from);
   const b = new Date(to);
@@ -308,20 +404,14 @@ export function getAgeingBucketLabel(daysOverdue: number, asOfDate: string, dueD
   return "Above 120 Days";
 }
 
-function bucketKey(
-  daysOverdue: number,
-  asOfDate: string,
-  dueDate: string,
-): keyof Pick<
-  CustomerAgeingRow,
-  "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
-> {
-  if (daysBetween(dueDate, asOfDate) <= 0 || daysOverdue <= 30) return "bucket0_30";
-  if (daysOverdue <= 60) return "bucket31_60";
-  if (daysOverdue <= 90) return "bucket61_90";
-  if (daysOverdue <= 120) return "bucket91_120";
-  return "bucketAbove120";
-}
+export {
+  generateAgeingBucketsFromBreakpoints,
+  getAgeingBucketLabels as getCustomerAgeingBucketLabels,
+  validateAgeingBreakpoints as validateCustomerAgeingBreakpoints,
+  classifyAgeingBucketIndex as classifyCustomerAgeingBucketIndex,
+  ageingBucketColumnKey as customerAgeingBucketColumnKey,
+  getVisibleAgeingBucketIndices as getVisibleCustomerAgeingBucketIndices,
+} from "@/lib/accounts/ageing-breakpoints";
 
 function invoiceMatchesFinancialYear(invoiceDate: string, fyId?: number): boolean {
   if (!fyId) return true;
@@ -407,13 +497,24 @@ export function computeInvoiceOutstanding(
     const customer = customers.find((c) => c.id === inv.customerId);
     if (!customer) continue;
 
-    if (filters.customerId && inv.customerId !== filters.customerId) continue;
+    const customerIds = filters.customerIds ?? (filters.customerId != null ? [String(filters.customerId)] : []);
+    if (!matchesMultiIdFilter(customerIds, inv.customerId)) continue;
+
+    const customerBranch = customer.branch?.trim() || customer.stateName?.trim() || "—";
+    if (!matchesMultiFilter(filters.branch, customerBranch)) continue;
+
+    const salesExecutive = customer.salesManName?.trim() || inv.salesperson?.trim() || "";
+    if (!matchesMultiFilter(filters.salespersons, salesExecutive)) continue;
+
     if (filters.dateFrom && inv.invoiceDate < filters.dateFrom) continue;
     if (filters.dateTo && inv.invoiceDate > filters.dateTo) continue;
     if (!invoiceMatchesFinancialYear(inv.invoiceDate, filters.financialYearId)) continue;
 
     const invoiceRow = buildInvoiceRow(inv, asOfDate);
-    if (filters.status && filters.status !== "all" && invoiceRow.status !== filters.status) continue;
+    const statusValues = normalizeMultiFilter(
+      filters.statuses ?? (filters.status && filters.status !== "all" ? [filters.status] : []),
+    );
+    if (statusValues.length > 0 && !statusValues.includes(invoiceRow.status)) continue;
 
     if (q) {
       const hay = [
@@ -542,17 +643,24 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
 
     let overdueAmount = 0;
     let notDueAmount = 0;
+    let oldestDueDate = "";
     for (const inv of custInvoices) {
       const out = getInvoiceOutstanding(inv);
       if (out <= 0.009) continue;
       if (daysBetween(inv.dueDate, asOfDate) > 0) overdueAmount += out;
       else notDueAmount += out;
+      if (!oldestDueDate || inv.dueDate < oldestDueDate) oldestDueDate = inv.dueDate;
     }
     overdueAmount = round2(overdueAmount);
     notDueAmount = round2(notDueAmount);
 
     const lastInvoiceDate =
       custInvoices.sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate))[0]?.invoiceDate ?? "—";
+
+    const salesExecutive =
+      customer.salesManName?.trim() ||
+      custInvoices.map((i) => i.salesperson?.trim()).find(Boolean) ||
+      "—";
 
     const ledgerId = resolveCustomerLedgerId(customer);
 
@@ -568,6 +676,7 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
       customerCode: customer.customerCode,
       territory: customer.territoryName || customer.districtName || "—",
       branch: customer.branch || customer.stateName || "—",
+      salesExecutive,
       totalInvoiceAmount,
       totalTaxableValue,
       totalGstAmount,
@@ -577,6 +686,7 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
       notDueAmount,
       lastInvoiceDate,
       lastReceiptDate: lastReceiptDateForCustomer(customerId, customer.customerName),
+      oldestDueDate: oldestDueDate || "—",
       status: customerStatusFromInvoices(custInvoices, asOfDate),
     });
   }
@@ -636,26 +746,32 @@ export function getCustomerOutstandingDetail(
 
 // ── Ageing ───────────────────────────────────────────────────────────────────
 
-export function computeCustomerAgeing(asOfDate = TODAY()): AgeingBucket[] {
-  const summary = computeAgeingSummary(asOfDate);
-  return [
-    { label: "0–30 Days", daysMin: 0, daysMax: 30, amount: summary.bucket0_30 },
-    { label: "31–60 Days", daysMin: 31, daysMax: 60, amount: summary.bucket31_60 },
-    { label: "61–90 Days", daysMin: 61, daysMax: 90, amount: summary.bucket61_90 },
-    { label: "91–120 Days", daysMin: 91, daysMax: 120, amount: summary.bucket91_120 },
-    { label: "Above 120 Days", daysMin: 121, daysMax: null, amount: summary.bucketAbove120 },
-  ];
+export function computeCustomerAgeing(
+  asOfDate = TODAY(),
+  breakpoints: CustomerAgeingBreakpoints = DEFAULT_CUSTOMER_AGEING_BREAKPOINTS,
+): AgeingBucket[] {
+  const summary = computeAgeingSummary(asOfDate, breakpoints);
+  const generated = generateAgeingBucketsFromBreakpoints(breakpoints);
+  return generated.map((bucket, i) => ({
+    label: bucket.label,
+    daysMin: bucket.from,
+    daysMax: bucket.to,
+    amount: summary.buckets[i] ?? 0,
+  }));
 }
 
-export function computeAgeingSummary(asOfDate = TODAY()) {
-  const rows = computeCustomerAgeingRows(asOfDate);
+export function computeAgeingSummary(
+  asOfDate = TODAY(),
+  breakpoints: CustomerAgeingBreakpoints = DEFAULT_CUSTOMER_AGEING_BREAKPOINTS,
+) {
+  const rows = computeCustomerAgeingRows(asOfDate, {}, breakpoints);
+  const bucketCount = breakpoints.length;
+  const buckets = Array.from({ length: bucketCount }, (_, i) =>
+    round2(rows.reduce((s, r) => s + (r.buckets[i] ?? 0), 0)),
+  );
   return {
     totalOutstanding: round2(rows.reduce((s, r) => s + r.totalOutstanding, 0)),
-    bucket0_30: round2(rows.reduce((s, r) => s + r.bucket0_30, 0)),
-    bucket31_60: round2(rows.reduce((s, r) => s + r.bucket31_60, 0)),
-    bucket61_90: round2(rows.reduce((s, r) => s + r.bucket61_90, 0)),
-    bucket91_120: round2(rows.reduce((s, r) => s + r.bucket91_120, 0)),
-    bucketAbove120: round2(rows.reduce((s, r) => s + r.bucketAbove120, 0)),
+    buckets,
   };
 }
 
@@ -669,10 +785,12 @@ export interface AgeingFilters {
 export function computeCustomerAgeingRows(
   asOfDate = TODAY(),
   filters: AgeingFilters = {},
+  breakpoints: CustomerAgeingBreakpoints = DEFAULT_CUSTOMER_AGEING_BREAKPOINTS,
 ): CustomerAgeingRow[] {
   const customers = loadCustomers();
   const invoices = getPostedSalesInvoices().filter((i) => getInvoiceOutstanding(i) > 0.009);
   const map = new Map<number, CustomerAgeingRow>();
+  const bucketCount = breakpoints.length;
 
   for (const inv of invoices) {
     if (!inv.customerId) continue;
@@ -682,11 +800,15 @@ export function computeCustomerAgeingRows(
     if (filters.customerId && customer.id !== filters.customerId) continue;
     if (filters.branch && (customer.branch || customer.stateName || "—") !== filters.branch) continue;
     if (filters.territory && customer.territoryName !== filters.territory) continue;
-    if (filters.salesExecutive && customer.salesManName !== filters.salesExecutive) continue;
+    if (filters.salesExecutive) {
+      const exec = customer.salesManName?.trim() || inv.salesperson?.trim() || "";
+      if (exec !== filters.salesExecutive) continue;
+    }
 
     const outstanding = getInvoiceOutstanding(inv);
     const daysOverdue = Math.max(0, daysBetween(inv.dueDate, asOfDate));
-    const key = bucketKey(daysOverdue, asOfDate, inv.dueDate);
+    const effectiveDays = effectiveOverdueDays(daysOverdue, asOfDate, inv.dueDate);
+    const bucketIndex = classifyAgeingBucketIndex(effectiveDays, breakpoints);
 
     const row =
       map.get(customer.id) ??
@@ -695,17 +817,13 @@ export function computeCustomerAgeingRows(
         customerName: customer.customerName,
         customerCode: customer.customerCode,
         territory: customer.territoryName || customer.districtName || "—",
-        salesExecutive: customer.salesManName || inv.salesperson || "—",
-        bucket0_30: 0,
-        bucket31_60: 0,
-        bucket61_90: 0,
-        bucket91_120: 0,
-        bucketAbove120: 0,
+        salesExecutive: customer.salesManName?.trim() || inv.salesperson?.trim() || "—",
+        buckets: emptyAgeingBuckets(bucketCount),
         totalOutstanding: 0,
         oldestInvoiceDate: inv.invoiceDate,
       } satisfies CustomerAgeingRow);
 
-    row[key] = round2(row[key] + outstanding);
+    row.buckets[bucketIndex] = round2(row.buckets[bucketIndex] + outstanding);
     row.totalOutstanding = round2(row.totalOutstanding + outstanding);
     if (inv.invoiceDate < row.oldestInvoiceDate) row.oldestInvoiceDate = inv.invoiceDate;
     map.set(customer.id, row);
@@ -764,6 +882,30 @@ function resolveCustomerFromReceipt(v: AccountingVoucher): Customer | undefined 
   );
 }
 
+function buildReceiptAllocationRecord(v: AccountingVoucher): ReceiptAllocationRecord | null {
+  if (v.voucherType !== "receipt") return null;
+  if (v.status !== "posted" && v.status !== "approved") return null;
+  const customer = resolveCustomerFromReceipt(v);
+  const entry = loadAllocationStore().find((e) => e.voucherId === v.id);
+  const lines = entry?.lines ?? [];
+  const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
+  const receiptAmount = round2(v.totalDebit || v.totalCredit);
+  return {
+    voucherId: v.id,
+    receiptNo: v.voucherNumber,
+    receiptDate: v.date,
+    customerId: customer?.id ?? 0,
+    customerName: customer?.customerName ?? receiptCustomerLine(v)?.name ?? "—",
+    receiptAmount,
+    allocatedAmount,
+    unallocatedAmount: round2(Math.max(0, receiptAmount - allocatedAmount)),
+    bankAccount: bankLineName(v),
+    referenceNo: v.referenceNo || "—",
+    status: allocationStatus(receiptAmount, allocatedAmount),
+    lines,
+  };
+}
+
 function allocationStatus(receiptAmount: number, allocated: number): ReceiptAllocationStatus {
   if (allocated <= 0.009) return "unallocated";
   if (allocated >= receiptAmount - 0.009) return "fully_allocated";
@@ -771,34 +913,14 @@ function allocationStatus(receiptAmount: number, allocated: number): ReceiptAllo
 }
 
 export function loadReceiptAllocationRecords(): ReceiptAllocationRecord[] {
-  const store = loadAllocationStore();
   const vouchers = loadVouchers().filter(
     (v) =>
       v.voucherType === "receipt" && (v.status === "posted" || v.status === "approved"),
   );
 
   return vouchers
-    .map((v) => {
-      const customer = resolveCustomerFromReceipt(v);
-      const entry = store.find((e) => e.voucherId === v.id);
-      const lines = entry?.lines ?? [];
-      const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
-      const receiptAmount = round2(v.totalDebit || v.totalCredit);
-      return {
-        voucherId: v.id,
-        receiptNo: v.voucherNumber,
-        receiptDate: v.date,
-        customerId: customer?.id ?? 0,
-        customerName: customer?.customerName ?? receiptCustomerLine(v)?.name ?? "—",
-        receiptAmount,
-        allocatedAmount,
-        unallocatedAmount: round2(Math.max(0, receiptAmount - allocatedAmount)),
-        bankAccount: bankLineName(v),
-        referenceNo: v.referenceNo || "—",
-        status: allocationStatus(receiptAmount, allocatedAmount),
-        lines,
-      } satisfies ReceiptAllocationRecord;
-    })
+    .map((v) => buildReceiptAllocationRecord(v))
+    .filter((r): r is ReceiptAllocationRecord => r != null)
     .sort((a, b) => b.receiptDate.localeCompare(a.receiptDate));
 }
 
@@ -808,11 +930,14 @@ export function getReceiptAllocationByVoucherId(voucherId: number): ReceiptAlloc
 
 export function computeReceiptAllocationSummary() {
   const rows = loadReceiptAllocationRecords();
+  const pending = rows.filter((r) => r.unallocatedAmount > 0.009);
   return {
     unallocatedReceipts: rows.filter((r) => r.status === "unallocated").length,
     partiallyAllocated: rows.filter((r) => r.status === "partially_allocated").length,
     fullyAllocated: rows.filter((r) => r.status === "fully_allocated").length,
-    totalUnallocatedAmount: round2(rows.reduce((s, r) => s + r.unallocatedAmount, 0)),
+    /** Receipts with any remaining unallocated balance (includes partial). */
+    pendingAllocationCount: pending.length,
+    totalUnallocatedAmount: round2(pending.reduce((s, r) => s + r.unallocatedAmount, 0)),
   };
 }
 
@@ -826,7 +951,11 @@ export function applyReceiptAllocation(
   voucherId: number,
   allocations: Array<{ invoiceId: number; amount: number }>,
 ): string | null {
-  const record = getReceiptAllocationByVoucherId(voucherId);
+  let record = getReceiptAllocationByVoucherId(voucherId);
+  if (!record) {
+    const voucher = loadVouchers().find((v) => v.id === voucherId);
+    record = voucher ? buildReceiptAllocationRecord(voucher) ?? undefined : undefined;
+  }
   if (!record) return "Receipt voucher not found.";
   if (!record.customerId) return "Customer could not be resolved for this receipt.";
 
@@ -866,7 +995,9 @@ export function applyReceiptAllocation(
     if (alloc.amount > outstanding + 0.009) {
       return `Allocation for ${inv.invoiceNo} exceeds invoice outstanding (${formatMoney(outstanding)}).`;
     }
-    lines.push({ invoiceId: inv.id, invoiceNo: inv.invoiceNo, amount: round2(alloc.amount) });
+    lines.push(
+      buildEnrichedAllocationLine(inv, alloc.amount, record.receiptDate),
+    );
   }
 
   const nextStore = store.filter((e) => e.voucherId !== voucherId);

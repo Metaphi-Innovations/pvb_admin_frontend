@@ -82,8 +82,8 @@ export function Pagination({
   return (
     <div
       className={cn(
-        "flex-shrink-0 border-t border-border bg-muted/20 flex items-center flex-wrap gap-x-2 gap-y-1",
-        isCompact ? "px-4 py-2.5 justify-between" : "px-4 py-2.5 justify-between",
+        "accounts-pagination-footer flex-shrink-0 border-t border-border bg-muted/20 flex items-center flex-wrap gap-x-2 gap-y-1",
+        isCompact ? "px-2 py-1 justify-between" : "px-4 py-2.5 justify-between",
       )}
     >
       <div className={cn("flex items-center flex-wrap", isCompact ? "gap-2" : "gap-3")}>

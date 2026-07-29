@@ -1,5 +1,5 @@
-import GstSummaryPageClient from "./GstSummaryPageClient";
+import { redirect } from "next/navigation";
 
-export default function GstSummaryPage() {
-  return <GstSummaryPageClient />;
+export default function LegacyGstSummaryRedirectPage() {
+  redirect("/accounts/reports/gst-summary");
 }

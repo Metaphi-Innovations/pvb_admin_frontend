@@ -42,18 +42,20 @@ export function SearchableSelect({
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div className="space-y-1">
-      <Label className="text-xs font-medium">
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </Label>
+    <div className={label ? "space-y-1" : undefined}>
+      {label ? (
+        <Label className="text-xs font-medium">
+          {label}
+          {required && <span className="text-red-500 ml-0.5">*</span>}
+        </Label>
+      ) : null}
       <Popover open={open && !disabled} onOpenChange={(v) => { if (!disabled) { setOpen(v); if (!v) setQ(""); } }}>
         <PopoverTrigger asChild>
           <button
             type="button"
             disabled={disabled}
             className={cn(
-              "w-full h-8 px-2.5 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between",
+              "w-full h-7 px-2 text-xs text-left border border-border rounded-md bg-background flex items-center justify-between",
               disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
             )}
           >

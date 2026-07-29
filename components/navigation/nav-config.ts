@@ -27,6 +27,8 @@ export interface NavChild {
 export interface NavGroup {
   label: string;
   id?: string;
+  /** Section landing route — clicking the group header opens this page directly. */
+  href?: string;
   description?: string;
   icon?: LucideIcon;
   children: NavChild[];
@@ -111,6 +113,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Sales Orders", href: "/sales/orders" },
       { label: "Sample Orders", href: "/sales/sample-order" },
       { label: "Stock Transfer", href: "/sales/stock-transfer" },
+      { label: "Scheme Progress", href: "/sales/scheme-progress" },
       // { label: "Invoices", href: "/sales/invoices" },
       // { label: "Dispatch", href: "/sales/dispatch" },
       // { label: "Collections", href: "/sales/collections" },
@@ -201,7 +204,10 @@ export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {
   for (const item of items) {
     if (item.href) hrefs.add(item.href);
     item.children?.forEach((c) => hrefs.add(c.href));
-    item.groupedChildren?.forEach((g) => g.children.forEach((c) => hrefs.add(c.href)));
+    item.groupedChildren?.forEach((g) => {
+      if (g.href) hrefs.add(g.href);
+      g.children.forEach((c) => hrefs.add(c.href));
+    });
   }
   return Array.from(hrefs);
 }

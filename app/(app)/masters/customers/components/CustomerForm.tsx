@@ -38,6 +38,12 @@ import {
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./SearchableSelect";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import {
+	PartyMasterAccountingFields,
+	DEFAULT_PARTY_MASTER_ACCOUNTING,
+	partyAccountingFromMaster,
+} from "@/components/accounts/PartyMasterAccountingFields";
+import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 import {
@@ -143,6 +149,7 @@ export interface CustomerBranch {
 	branchName: string;
 	isMain?: boolean;
 	salesManId?: string;
+	salesManName?: string;
 	billingAddress: BranchAddress;
 	shippingAddress: BranchAddress;
 	documents: BranchDocument[];
@@ -194,12 +201,16 @@ export interface CustomerFormValues {
 	pan: string;
 	msmeRegistered: boolean;
 	msmeNumber: string;
+	msmeValidityDate: string;
 	fssaiRegistered: boolean;
 	cibRegistered: boolean;
 	fcoRegistered: boolean;
 	cibRegn: string;
 	fcoRegn: string;
 	fssai: string;
+	fssaiValidityDate: string;
+	cibValidityDate: string;
+	fcoValidityDate: string;
 	address: string;
 	stateId: string;
 	districtId: string;
@@ -230,6 +241,12 @@ export interface CustomerFormValues {
 	accountNumber: string;
 	confirmAccountNumber: string;
 	swiftCode: string;
+	/** Linked Sundry Debtor ledger accounting (source of truth on Customer Master) */
+	openingBalance: string;
+	balanceType: "Debit" | "Credit";
+	openingBalanceDate: string;
+	billWiseAccounting: boolean;
+	accountingDescription: string;
 	requiredDocuments: {
 		documentTypeId: string;
 		documentName: string;
@@ -272,12 +289,16 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	pan: "",
 	msmeRegistered: false,
 	msmeNumber: "",
+	msmeValidityDate: "",
 	fssaiRegistered: false,
 	cibRegistered: false,
 	fcoRegistered: false,
 	cibRegn: "",
 	fcoRegn: "",
 	fssai: "",
+	fssaiValidityDate: "",
+	cibValidityDate: "",
+	fcoValidityDate: "",
 	address: "",
 	stateId: "",
 	districtId: "",
@@ -306,6 +327,11 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	accountNumber: "",
 	confirmAccountNumber: "",
 	swiftCode: "",
+	openingBalance: DEFAULT_PARTY_MASTER_ACCOUNTING.openingBalance,
+	balanceType: DEFAULT_PARTY_MASTER_ACCOUNTING.balanceType,
+	openingBalanceDate: DEFAULT_PARTY_MASTER_ACCOUNTING.openingBalanceDate,
+	billWiseAccounting: DEFAULT_PARTY_MASTER_ACCOUNTING.billWiseAccounting,
+	accountingDescription: DEFAULT_PARTY_MASTER_ACCOUNTING.accountingDescription,
 	requiredDocuments: [],
 	additionalDocuments: [],
 
@@ -370,12 +396,16 @@ export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWit
 		pan: c.pan ?? "",
 		msmeRegistered: c.msmeRegistered ?? false,
 		msmeNumber: c.msmeNumber ?? "",
+		msmeValidityDate: c.msmeValidityDate ?? "",
 		fssaiRegistered: c.fssaiRegistered ?? !!c.fssai?.trim(),
 		cibRegistered: c.cibRegistered ?? !!c.cibRegn?.trim(),
 		fcoRegistered: c.fcoRegistered ?? !!c.fcoRegn?.trim(),
 		cibRegn: c.cibRegn,
 		fcoRegn: c.fcoRegn,
 		fssai: c.fssai,
+		fssaiValidityDate: c.fssaiValidityDate ?? "",
+		cibValidityDate: c.cibValidityDate ?? "",
+		fcoValidityDate: c.fcoValidityDate ?? "",
 		address: c.address || "",
 		stateId: c.stateId != null ? String(c.stateId) : "",
 		districtId: c.districtId != null ? String(c.districtId) : "",
@@ -412,6 +442,13 @@ export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWit
 		accountNumber: c.bankAccountNo || "",
 		confirmAccountNumber: c.bankAccountNo || "",
 		swiftCode: c.swiftCode || "",
+		...partyAccountingFromMaster({
+			openingBalance: c.openingBalance,
+			balanceType: c.balanceType,
+			openingBalanceDate: c.openingBalanceDate,
+			billWiseAccounting: c.billWiseAccounting,
+			accountingDescription: c.accountingDescription,
+		}),
 		requiredDocuments: c.documents?.requiredDocuments || [],
 		additionalDocuments: c.documents?.additionalDocuments || [],
 
@@ -422,6 +459,7 @@ export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWit
 				{
 					branchName: "Main Branch",
 					isMain: true,
+					salesManId: c.salesManId != null ? String(c.salesManId) : "",
 					billingAddress: {
 						address: c.address || "",
 						city: c.districtName || "",
@@ -454,6 +492,12 @@ export function customerToFormValues(c: Customer, customerTypes: CustomerTypeWit
 			return {
 				...b,
 				isMain: isThisMain,
+				salesManId:
+					b.salesManId != null
+						? String(b.salesManId)
+						: isThisMain && c.salesManId != null
+							? String(c.salesManId)
+							: "",
 			};
 		}),
 	};
@@ -870,6 +914,7 @@ export const CUSTOMER_FORM_STEPS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "branch", label: "Branch" },
 	{ id: "commercial", label: "Bank & Commercial" },
+	{ id: "accounting", label: "Accounting" },
 ] as const;
 
 export type CustomerFormStepId = (typeof CUSTOMER_FORM_STEPS)[number]["id"];
@@ -894,6 +939,8 @@ interface CustomerFormProps {
 		customerType: string;
 		documents: CustomerTypeDocument[];
 	}[];
+	/** Accounts COA customer ledger — show license validity dates on compliance rows. */
+	showComplianceValidityDates?: boolean;
 	activeStep?: CustomerFormStepId;
 	onStepChange?: (step: CustomerFormStepId) => void;
 }
@@ -956,6 +1003,7 @@ export function CustomerForm({
 	isAdd,
 	customerCode,
 	customerTypes,
+	showComplianceValidityDates = false,
 	activeStep,
 	onStepChange,
 }: CustomerFormProps) {
@@ -964,6 +1012,7 @@ export function CustomerForm({
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
 	const { data: salesmanData = [] } = useSalesmenDropdown();
 
+	const { selectedFY } = useFY();
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
 	);
@@ -972,6 +1021,16 @@ export function CustomerForm({
 		() => getStateSelectOptions(geoNodes),
 		[geoNodes],
 	);
+
+	/** Default Opening Balance Date to selected FY start when empty (new customers). */
+	useEffect(() => {
+		if (form.openingBalanceDate?.trim()) return;
+		const iso = fyOpeningDateIso(selectedFY.id);
+		if (!iso) return;
+		onChange({ ...form, openingBalanceDate: iso });
+		// Only when date is empty / FY changes — intentionally omit form from deps.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedFY.id]);
 
 	const [expandedBranches, setExpandedBranches] = useState<
 		Record<number, boolean>
@@ -1381,6 +1440,39 @@ export function CustomerForm({
 					delete next.fssai;
 				}
 			}
+			if (showComplianceValidityDates) {
+				const validityChecks: { enabled: boolean; value: string; key: string }[] = [
+					{
+						enabled: form.msmeRegistered,
+						value: form.msmeValidityDate,
+						key: "msmeValidityDate",
+					},
+					{
+						enabled: form.fssaiRegistered,
+						value: form.fssaiValidityDate,
+						key: "fssaiValidityDate",
+					},
+					{
+						enabled: form.cibRegistered,
+						value: form.cibValidityDate,
+						key: "cibValidityDate",
+					},
+					{
+						enabled: form.fcoRegistered,
+						value: form.fcoValidityDate,
+						key: "fcoValidityDate",
+					},
+				];
+				for (const check of validityChecks) {
+					if (fieldKey === check.key && check.enabled) {
+						if (!check.value.trim()) {
+							next[check.key] = "License validity date is required";
+						} else {
+							delete next[check.key];
+						}
+					}
+				}
+			}
 			return next;
 		});
 	};
@@ -1484,23 +1576,33 @@ export function CustomerForm({
 				{...(activeStep ? { value: activeStep } : { defaultValue: "basic" })}
 				onValueChange={(value) => {
 					if (!onStepChange) return;
-					if (value === "basic" || value === "branch" || value === "commercial") {
+					if (
+						value === "basic" ||
+						value === "branch" ||
+						value === "commercial" ||
+						value === "accounting"
+					) {
 						onStepChange(value);
 					}
 				}}
 				className='w-full'
 			>
-				<TabsList className='w-full mb-2 h-8'>
-					<TabsTrigger value='basic' className='text-xs'>
-						Basic Details
+				{!activeStep && (
+					<TabsList className='w-full mb-2 h-8'>
+						<TabsTrigger value='basic' className='text-xs'>
+							Basic Details
+						</TabsTrigger>
+						<TabsTrigger value='branch' className='text-xs'>
+							Branch
+						</TabsTrigger>
+						<TabsTrigger value='commercial' className='text-xs'>
+							Bank & Commercial
+						</TabsTrigger>
+					<TabsTrigger value='accounting' className='text-xs'>
+						Accounting
 					</TabsTrigger>
-					<TabsTrigger value='branch' className='text-xs'>
-						Branch
-					</TabsTrigger>
-					<TabsTrigger value='commercial' className='text-xs'>
-						Bank & Commercial
-					</TabsTrigger>
-				</TabsList>
+					</TabsList>
+				)}
 
 				{show("basic") && (
 				<TabsContent value='basic' className='mt-0'>
@@ -1712,12 +1814,16 @@ export function CustomerForm({
 								values={{
 									msmeRegistered: form.msmeRegistered,
 									msmeNumber: form.msmeNumber,
+									msmeValidityDate: form.msmeValidityDate,
 									fssaiRegistered: form.fssaiRegistered,
 									fssai: form.fssai,
+									fssaiValidityDate: form.fssaiValidityDate,
 									cibRegistered: form.cibRegistered,
 									cibRegn: form.cibRegn,
+									cibValidityDate: form.cibValidityDate,
 									fcoRegistered: form.fcoRegistered,
 									fcoRegn: form.fcoRegn,
+									fcoValidityDate: form.fcoValidityDate,
 								}}
 								onChange={(compliance) =>
 									onChange({
@@ -1728,6 +1834,7 @@ export function CustomerForm({
 								errors={errors}
 								readOnly={readOnly}
 								onFieldBlur={validateComplianceField}
+								showValidityDates={showComplianceValidityDates}
 							/>
 						</ErpFormSection>
 					</div>
@@ -1987,53 +2094,94 @@ export function CustomerForm({
 												}));
 											}}
 											className={cn(
-												"flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-muted/10 transition-colors select-none",
+												"flex items-start justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-muted/10 transition-colors select-none",
 												isExpanded ? "border-b border-border bg-muted/5" : "",
 											)}
 										>
-											<div className='flex items-center flex-1 min-w-0 gap-3'>
-												<span className='text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-lg shrink-0'>
+											<div className='flex flex-1 min-w-0 gap-3'>
+												<span className='mt-1.5 text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-lg shrink-0 h-fit'>
 													#{bIdx + 1}
 												</span>
 
-												{readOnly ? (
-													<span className='text-xs font-semibold truncate text-foreground'>
-														{branch.branchName}
-													</span>
-												) : (
-													<div className='flex items-center flex-1 max-w-sm gap-2'>
-														<Input
-															value={branch.branchName}
-															onChange={(e) => {
-																const updated = [...form.branches];
-																updated[bIdx] = {
-																	...updated[bIdx],
-																	branchName: e.target.value,
-																};
-																onChange({ ...form, branches: updated });
-															}}
-															readOnly={readOnly}
-															placeholder='e.g. Warehouse, Office, Retail Outlet...'
-															className={cn(
-																"h-8 text-xs font-semibold w-full bg-background",
-																readOnly && "cursor-default",
-															)}
-															onClick={(e) => {
-																setExpandedBranches((prev) => ({
-																	...prev,
-																	[bIdx]: true,
-																}));
-																e.stopPropagation();
-															}}
-														/>
-													</div>
-												)}
+												<div className='flex flex-1 min-w-0 flex-wrap items-start gap-2'>
+													{readOnly ? (
+														<span className='mt-1 text-xs font-semibold truncate text-foreground'>
+															{branch.branchName}
+														</span>
+													) : (
+														<div
+															className='min-w-[140px] flex-1 max-w-sm'
+															onClick={(e) => e.stopPropagation()}
+														>
+															<Input
+																value={branch.branchName}
+																onChange={(e) => {
+																	const updated = [...form.branches];
+																	updated[bIdx] = {
+																		...updated[bIdx],
+																		branchName: e.target.value,
+																	};
+																	onChange({ ...form, branches: updated });
+																}}
+																readOnly={readOnly}
+																placeholder='e.g. Warehouse, Office, Retail Outlet...'
+																className={cn(
+																	"h-8 text-xs font-semibold w-full bg-background",
+																	readOnly && "cursor-default",
+																)}
+																onClick={(e) => {
+																	setExpandedBranches((prev) => ({
+																		...prev,
+																		[bIdx]: true,
+																	}));
+																	e.stopPropagation();
+																}}
+															/>
+														</div>
+													)}
 
-												{isMain && (
-													<span className='text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-md shrink-0'>
-														Main Branch
-													</span>
-												)}
+													<div
+														className='min-w-[200px] flex-1 max-w-md'
+														onClick={(e) => e.stopPropagation()}
+													>
+														{readOnly ? (
+															<p className='mt-1 text-xs text-foreground'>
+																{salesOptions.find(
+																	(o) => o.value === branch.salesManId,
+																)?.label || "—"}
+															</p>
+														) : (
+															<>
+																<SearchableSelect
+																	value={branch.salesManId ?? ""}
+																	onChange={(value) => {
+																		const updated = [...form.branches];
+																		updated[bIdx] = {
+																			...updated[bIdx],
+																			salesManId: value,
+																		};
+																		onChange({ ...form, branches: updated });
+																		onClearError(`branch_${bIdx}_salesManId`);
+																	}}
+																	options={salesOptions}
+																	placeholder='Sales person *'
+																	searchPlaceholder='Name, ID, mobile...'
+																	disabled={readOnly}
+																	error={!!errors[`branch_${bIdx}_salesManId`]}
+																/>
+																<FieldError
+																	msg={errors[`branch_${bIdx}_salesManId`]}
+																/>
+															</>
+														)}
+													</div>
+
+													{isMain && (
+														<span className='mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-md shrink-0 h-fit'>
+															Main Branch
+														</span>
+													)}
+												</div>
 											</div>
 
 											<div
@@ -2459,6 +2607,28 @@ export function CustomerForm({
 					</div>
 				</TabsContent>
 				)}
+
+				{show("accounting") && (
+					<>
+						{/* ── TAB 4: ACCOUNTING ── */}
+						<TabsContent value='accounting' className='mt-0'>
+							<div className='rounded-xl border border-border bg-white p-4 shadow-sm'>
+								<PartyMasterAccountingFields
+									values={{
+										openingBalance: form.openingBalance,
+										balanceType: form.balanceType,
+										openingBalanceDate: form.openingBalanceDate,
+										billWiseAccounting: form.billWiseAccounting,
+										accountingDescription: form.accountingDescription,
+									}}
+									onChange={(next) => onChange({ ...form, ...next })}
+									disabled={readOnly}
+									fyHintLabel={selectedFY.start}
+								/>
+							</div>
+						</TabsContent>
+					</>
+				)}
 			</Tabs>
 
 			{/* Hidden File Input */}
@@ -2732,9 +2902,14 @@ export function customerApiRecordToFormValues(
 	};
 }
 
+export interface ValidateCustomerFormOptions {
+	requireComplianceValidityDates?: boolean;
+}
+
 export function validateCustomerForm(
 	form: CustomerFormValues,
 	isAdd?: boolean,
+	options?: ValidateCustomerFormOptions,
 ): Record<string, string> {
 	const e: Record<string, string> = {};
 	if (!form.customerName.trim()) e.customerName = "Customer name is required";
@@ -2751,6 +2926,12 @@ export function validateCustomerForm(
 		if (!isAdd && !form.gstMasterId)
 			e.gstMasterId = "Select GST code from master";
 	}
+	form.branches.forEach((branch, bIdx) => {
+		if (!branch.salesManId?.trim()) {
+			e[`branch_${bIdx}_salesManId`] =
+				`Sales person is required for ${branch.branchName || `Branch #${bIdx + 1}`}`;
+		}
+	});
 	if (form.pan.trim() && !validatePAN(form.pan))
 		e.pan = "Enter a valid PAN number (e.g. ABCDE1234F)";
 	if (form.msmeRegistered) {
@@ -2761,6 +2942,21 @@ export function validateCustomerForm(
 	if (!form.tdsMasterId)
 		e.tdsMasterId = "Select TDS section from master";
 	Object.assign(e, validateComplianceRegistration(form));
+
+	if (options?.requireComplianceValidityDates) {
+		if (form.msmeRegistered && !form.msmeValidityDate.trim()) {
+			e.msmeValidityDate = "License validity date is required";
+		}
+		if (form.fssaiRegistered && !form.fssaiValidityDate.trim()) {
+			e.fssaiValidityDate = "License validity date is required";
+		}
+		if (form.cibRegistered && !form.cibValidityDate.trim()) {
+			e.cibValidityDate = "License validity date is required";
+		}
+		if (form.fcoRegistered && !form.fcoValidityDate.trim()) {
+			e.fcoValidityDate = "License validity date is required";
+		}
+	}
 
 	// Validate Main Branch
 	const mainBranch =
@@ -3151,25 +3347,37 @@ export function formValuesToCustomer(
 ): Customer {
 	const nodes = geoNodes ?? loadGeoNodes();
 	const staff = employees ?? getActiveSalesEmployees();
-	const mainBranchSalesManId = (
-		form.branches.find((b) => b.isMain) ||
-		form.branches.find((b) => b.branchName === "Main Branch") ||
-		form.branches[0]
-	)?.salesManId;
-	const sales = staff.find((e) => String(e.id) === String(mainBranchSalesManId));
+	const resolveSalesEmployee = (id: string | number | undefined | null) => {
+		if (!id) return undefined;
+		return staff.find((e) => String(e.id) === String(id));
+	};
+
+	const employeeDisplayName = (emp: any) => {
+		if (!emp) return "";
+		return emp.fullName ?? `${emp.firstName ?? ""} ${emp.lastName ?? ""}`.trim();
+	};
 
 	const mainBranch =
 		form.branches.find((b) => b.isMain) ||
 		form.branches.find((b) => b.branchName === "Main Branch") ||
 		form.branches[0];
 
+	const mainBranchSalesManId = mainBranch?.salesManId;
+	const effectiveSalesManId = mainBranchSalesManId || "";
+	const sales = resolveSalesEmployee(effectiveSalesManId);
+
 	// Clean custom documents for storage
-	const cleanBranches = form.branches.map((b) => ({
-		...b,
-		documents: b.documents.filter(
-			(d) => d.required || d.documentName.trim() || d.fileName,
-		),
-	}));
+	const cleanBranches = form.branches.map((b) => {
+		const branchSales = resolveSalesEmployee(b.salesManId);
+		return {
+			...b,
+			salesManId: b.salesManId ? Number(b.salesManId) : null,
+			salesManName: employeeDisplayName(branchSales) || b.salesManName || "",
+			documents: b.documents.filter(
+				(d) => d.required || d.documentName.trim() || d.fileName,
+			),
+		};
+	});
 
 	const cleanMainBranch =
 		cleanBranches.find((b) => b.isMain) ||
@@ -3208,6 +3416,7 @@ export function formValuesToCustomer(
 		tan: "",
 		msmeRegistered: form.msmeRegistered,
 		msmeNumber: form.msmeRegistered ? form.msmeNumber.trim() : "",
+		msmeValidityDate: form.msmeRegistered ? form.msmeValidityDate : "",
 		...complianceRegistrationToStored({
 			fssaiRegistered: form.fssaiRegistered,
 			fssai: form.fssai,
@@ -3216,6 +3425,9 @@ export function formValuesToCustomer(
 			fcoRegistered: form.fcoRegistered,
 			fcoRegn: form.fcoRegn,
 		}),
+		fssaiValidityDate: form.fssaiRegistered ? form.fssaiValidityDate : "",
+		cibValidityDate: form.cibRegistered ? form.cibValidityDate : "",
+		fcoValidityDate: form.fcoRegistered ? form.fcoValidityDate : "",
 
 		// For backwards compatibility and listing/view pages:
 		address: cleanMainBranch?.billingAddress?.address?.trim() || "",
@@ -3284,6 +3496,15 @@ export function formValuesToCustomer(
 		accountHolderName: form.accountHolderName.trim(),
 		branch: form.branch.trim(),
 		swiftCode: form.swiftCode.trim(),
+
+		openingBalance: (() => {
+			const n = Number(String(form.openingBalance).replace(/,/g, "").trim());
+			return Number.isFinite(n) && n >= 0 ? n : 0;
+		})(),
+		balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+		openingBalanceDate: form.openingBalanceDate.trim() || undefined,
+		billWiseAccounting: form.billWiseAccounting !== false,
+		accountingDescription: form.accountingDescription.trim() || undefined,
 
 		createdBy: base.createdBy ?? "Admin",
 		createdDate: base.createdDate ?? todayStr(),

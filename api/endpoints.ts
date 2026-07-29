@@ -464,6 +464,34 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
     },
+    CHART_OF_ACCOUNTS: {
+      TREE: "/accounts/chart-of-accounts/tree",
+      PRIMARY_HEADS: "/accounts/chart-of-accounts/primary-heads",
+      GROUPS: "/accounts/chart-of-accounts/groups",
+      SUB_GROUPS: "/accounts/chart-of-accounts/sub-groups",
+    },
+    LEDGERS: {
+      LIST: "/accounts/ledgers",
+      CREATE: "/accounts/ledgers",
+      VIEW: (id: string) => `/accounts/ledgers/${id}`,
+      UPDATE: (id: string) => `/accounts/ledgers/${id}`,
+      EXPORT: "/accounts/ledgers/export",
+      PREVIEW_NUMBER: "/accounts/ledgers/preview-number",
+      OPENING_BALANCES: (ledgerId: string) =>
+        `/accounts/ledgers/${ledgerId}/opening-balances`,
+      OPENING_BALANCE: (ledgerId: string, openingBalanceId: string) =>
+        `/accounts/ledgers/${ledgerId}/opening-balances/${openingBalanceId}`,
+    },
+    FINANCIAL_YEARS: {
+      CURRENT: "/accounts/financial-years/current",
+      LIST: "/accounts/financial-years",
+    },
+    INTEGRATIONS: {
+      SYNC_CUSTOMER_LEDGER: (customerId: string) =>
+        `/accounts/integrations/customers/${customerId}/sync-ledger`,
+      SYNC_SUPPLIER_LEDGER: (supplierId: string) =>
+        `/accounts/integrations/suppliers/${supplierId}/sync-ledger`,
+    },
   },
 };
 

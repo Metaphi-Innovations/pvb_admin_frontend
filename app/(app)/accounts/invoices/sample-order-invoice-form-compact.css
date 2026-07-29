@@ -1,0 +1,69 @@
+/* Sample Order Proforma Invoice generation — page-scoped (reuses SO compact tokens). */
+
+.sample-order-invoice-form-compact {
+  --so-ctrl-h: 32px;
+  --so-label-gap: 4px;
+  --so-helper-h: 14px;
+  --so-field-gap: 0.75rem;
+  --so-fs-page: 18px;
+  --so-fs-section: 14px;
+  --so-fs-label: 11px;
+  --so-fs-control: 12px;
+  --so-fs-body: 12px;
+  --so-fs-th: 10px;
+  --so-fs-secondary: 10px;
+  --so-fs-summary: 12px;
+  --so-fs-grand: 15px;
+  --so-fs-btn: 12px;
+  --so-fs-code: 11px;
+  --so-fw-regular: 400;
+  --so-fw-medium: 500;
+  --so-fw-semibold: 600;
+  font-family: inherit;
+}
+
+.sample-order-invoice-form-compact .so-w-customer { width: 240px; max-width: 100%; }
+.sample-order-invoice-form-compact .so-w-gstin { width: 180px; max-width: 100%; }
+.sample-order-invoice-form-compact .so-w-inv-no { width: 210px; max-width: 100%; }
+.sample-order-invoice-form-compact .so-w-date { width: 160px; max-width: 100%; }
+.sample-order-invoice-form-compact .so-w-so { width: 180px; max-width: 100%; }
+.sample-order-invoice-form-compact .so-w-dispatch { width: 180px; max-width: 100%; }
+.sample-order-invoice-form-compact .so-w-bank { width: 320px; max-width: 100%; }
+
+.sample-order-invoice-form-compact textarea.so-goods-narration {
+  min-height: 56px !important;
+  max-height: 72px !important;
+  height: 64px !important;
+  font-size: var(--so-fs-control) !important;
+}
+
+.sample-order-invoice-form-compact .so-goods-product-table .so-sku-value,
+.sample-order-invoice-form-compact .so-goods-product-table .so-batch-value {
+  font-family: inherit !important;
+  font-size: var(--so-fs-body, 12px) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.sample-order-invoice-form-compact .so-goods-product-table .so-hsn-value {
+  font-family: inherit !important;
+  font-size: var(--so-fs-body, 12px) !important;
+  font-weight: 400 !important;
+  color: hsl(var(--foreground)) !important;
+  text-align: left;
+}
+
+.sample-order-invoice-form-compact .so-zero-billing {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.4);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}

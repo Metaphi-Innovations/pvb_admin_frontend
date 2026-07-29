@@ -11,10 +11,12 @@ import { getApprovedAmount } from "@/app/(app)/accounts/expenses/expense-data";
 import {
   postCreditNote,
   postDebitNote,
+  postDirectPurchaseInvoice,
   postEmployeeClaim,
   postPurchaseInvoice,
   postSalesInvoice,
   postSalesInvoiceCogs,
+  postSampleOrderInventoryExpense,
   type PostingResult,
 } from "@/lib/accounts/posting-engine";
 import {
@@ -23,6 +25,10 @@ import {
   inferInterstateFromPlaceOfSupply,
   normalizeGstAmounts,
 } from "@/lib/accounts/gst-accounting";
+import {
+  resolveServiceInvoiceRevenueLedger,
+  SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
+} from "@/lib/accounts/ledger-mappings";
 
 function taxableFromGrand(inv: {
   subtotal: number;
@@ -36,6 +42,30 @@ function taxableFromGrand(inv: {
 export function maybePostSalesInvoice(invoice: InvoiceRecord): PostingResult | null {
   if (invoice.invoiceStatus === "cancelled") return null;
 
+  const isSampleOrder =
+    invoice.sourceType === "sample_order" || invoice.invoiceType === "sample_order";
+
+  /** Sample Order Proforma — zero billing; post inventory consumption at CP only. */
+  if (isSampleOrder) {
+    return postSampleOrderInventoryExpense({
+      invoiceId: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      date: invoice.invoiceDate,
+      customerName: invoice.customerName,
+      lines: invoice.lineItems.map((l) => ({
+        productName: l.productName,
+        sku: l.productCode,
+        qty: l.qty,
+        costPrice: l.costPrice,
+      })),
+    });
+  }
+
+  /** Other proforma documents — no debtor / revenue posting. */
+  if (invoice.documentType === "proforma_invoice") {
+    return { success: true };
+  }
+
   const interstate = inferInterstateFromPlaceOfSupply(invoice.placeOfSupply);
   const lineInputs = invoice.lineItems.map((l) => ({
     qty: l.qty,
@@ -46,32 +76,99 @@ export function maybePostSalesInvoice(invoice: InvoiceRecord): PostingResult | n
   const gstBreakdowns = aggregateLineGstByRate(lineInputs, interstate);
   const tax = aggregateLineGst(lineInputs, interstate);
 
+  // Service invoices credit selected Income / Service Income — never Product Sales or General.
+  const isServiceInvoice = invoice.sourceType === "service";
+  const serviceRevenueLedger = isServiceInvoice
+    ? resolveServiceInvoiceRevenueLedger({ selectedLedgerId: invoice.incomeLedgerId })
+    : null;
+  if (isServiceInvoice && !serviceRevenueLedger) {
+    return {
+      success: false,
+      error: SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
+    };
+  }
+
   const revenueResult = postSalesInvoice({
     invoiceId: invoice.id,
     invoiceNo: invoice.invoiceNo,
     customerName: invoice.customerName,
     date: invoice.invoiceDate,
+    grandTotal: invoice.grandTotal,
     taxableAmount: taxableFromGrand(invoice),
     ...tax,
     gstBreakdowns,
+    revenueLedgerId: serviceRevenueLedger?.id ?? null,
   });
 
   if (!revenueResult.success) return revenueResult;
 
-  postSalesInvoiceCogs({
-    invoiceId: invoice.id,
-    invoiceNo: invoice.invoiceNo,
-    date: invoice.invoiceDate,
-    lines: invoice.lineItems.map((l) => ({
-      productName: l.productName,
-      qty: l.qty,
-    })),
-  });
+  // Inventory COGS only for product sales — not service invoices.
+  if (!isServiceInvoice) {
+    postSalesInvoiceCogs({
+      invoiceId: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      date: invoice.invoiceDate,
+      lines: invoice.lineItems.map((l) => ({
+        productName: l.productName,
+        qty: l.qty,
+      })),
+    });
+  }
 
   return revenueResult;
 }
 
+function isDirectPurchaseRecord(invoice: PurchaseInvoiceRecord): boolean {
+  if (invoice.sourceType === "direct_purchase") return true;
+  return Boolean(invoice.directLines?.length) && !invoice.grnId?.trim();
+}
+
+function maybePostDirectPurchaseInvoice(invoice: PurchaseInvoiceRecord): PostingResult | null {
+  const directLines = invoice.directLines ?? [];
+  if (!directLines.length) return null;
+
+  const cgst = invoice.cgstTotal ?? 0;
+  const sgst = invoice.sgstTotal ?? 0;
+  const igst = invoice.igstTotal ?? 0;
+  const interstate = igst > 0 && cgst === 0 && sgst === 0;
+
+  const lineInputs = directLines.map((dl) => ({
+    qty: dl.quantity,
+    unitPrice: dl.rate,
+    discountPct: dl.grossAmount > 0 ? (dl.discount / dl.grossAmount) * 100 : 0,
+    taxPct: dl.gstRate,
+  }));
+  const gstBreakdowns = aggregateLineGstByRate(lineInputs, interstate);
+
+  return postDirectPurchaseInvoice({
+    invoiceId: invoice.id,
+    invoiceNo: invoice.invoiceNo,
+    vendorName: invoice.vendorName,
+    date: invoice.postingDate ?? invoice.invoiceDate,
+    expenseLines: directLines
+      .filter((dl): dl is typeof dl & { expenseLedgerId: number } => dl.expenseLedgerId != null)
+      .map((dl) => ({
+        ledgerId: dl.expenseLedgerId,
+        ledgerName: dl.expenseLedgerName,
+        amount: dl.taxableAmount,
+        description: dl.description,
+      })),
+    cgst,
+    sgst,
+    igst,
+    gstBreakdowns,
+    tdsAmount: invoice.tdsDeduction ?? 0,
+    tdsMasterId: invoice.tdsSectionMasterId,
+    tdsLedgerId: invoice.tdsLedgerId,
+    roundOff: invoice.roundingAdjustment ?? 0,
+  });
+}
+
 export function maybePostPurchaseInvoice(invoice: PurchaseInvoiceRecord): PostingResult | null {
+  if (isDirectPurchaseRecord(invoice)) {
+    return maybePostDirectPurchaseInvoice(invoice);
+  }
+
   const interstate = false;
   const lineInputs = invoice.lineItems.map((l) => ({
     qty: l.invoiceQty,

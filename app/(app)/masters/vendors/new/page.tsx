@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ import {
   mapSupplierApiErrorsToVendorFormFields,
 } from "../vendor-data";
 import { SupplierCreatePayload } from "@/services/supplier-list.service";
+import { persistPartyMasterAccounting } from "@/lib/accounts/party-master-accounting-sync";
 
 export default function NewSupplierPage() {
   const router = useRouter();
@@ -145,7 +146,25 @@ export default function NewSupplierPage() {
     };
 
     createMutation.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: async (created) => {
+        const uuid = created?.supplierUuid ?? "";
+        if (uuid) {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "supplier",
+              partyId: uuid,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Debit" ? "Debit" : "Credit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Profile created; accounting sync best-effort.
+          }
+        }
         setToast({ msg: "Supplier created successfully.", type: "success" });
         setTimeout(() => router.push("/masters/vendors"), 900);
       },

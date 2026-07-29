@@ -1,5 +1,6 @@
-import FundTransferFormClient from "../FundTransferFormClient";
+import { redirect } from "next/navigation";
 
-export default function NewFundTransferPage() {
-  return <FundTransferFormClient />;
+/** New fund transfers are recorded via Contra Voucher. */
+export default function NewFundTransferRedirectPage() {
+  redirect("/accounts/vouchers?tab=contra");
 }

@@ -1,0 +1,32 @@
+.purchase-register-report .accounts-table-scroll {
+  max-height: calc(100vh - 280px);
+}
+
+.purchase-register-report .pr-freeze {
+  position: sticky;
+  z-index: 2;
+  background: hsl(var(--background));
+}
+
+.purchase-register-report thead .pr-freeze {
+  z-index: 4;
+  background: hsl(var(--muted) / 0.95);
+}
+
+.purchase-register-report tbody tr:nth-child(even) .pr-freeze {
+  background: hsl(var(--muted) / 0.35);
+}
+
+.purchase-register-report tbody tr:hover .pr-freeze {
+  background: hsl(var(--muted) / 0.55);
+}
+
+.purchase-register-report .pr-freeze-0 {
+  left: 0;
+}
+.purchase-register-report .pr-freeze-1 {
+  left: 96px;
+}
+.purchase-register-report .pr-freeze-2 {
+  left: 210px;
+}

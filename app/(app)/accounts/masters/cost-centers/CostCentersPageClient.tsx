@@ -8,7 +8,6 @@ import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { addCostCenter, loadCostCenters } from "@/lib/accounts/cost-centers-data";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 
 export default function CostCentersPageClient() {
   const [records, setRecords] = useState(loadCostCenters());
@@ -51,7 +50,6 @@ export default function CostCentersPageClient() {
             <tr>
               <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Code</th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -59,7 +57,6 @@ export default function CostCentersPageClient() {
               <tr key={r.id} className="accounts-table-row group">
                 <td className="px-4 py-2.5 text-xs font-mono font-semibold">{r.code}</td>
                 <td className="px-4 py-2.5 text-xs">{r.name}</td>
-                <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
               </tr>
             ))}
           </tbody>

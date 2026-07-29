@@ -647,7 +647,7 @@ export const SupplierListService = {
         return mapFilterOptions(data, fieldName);
     },
 
-    async create(payload: SupplierCreatePayload): Promise<void> {
+    async create(payload: SupplierCreatePayload): Promise<{ supplierUuid: string; supplierCode: string }> {
         const response = await axiosInstance.post(
             API_ENDPOINTS.MASTER.SUPPLIER.CREATE,
             buildFormData(payload),
@@ -658,6 +658,11 @@ export const SupplierListService = {
         if (!body.success) {
             throw new Error(asString(body.message) || "Failed to create supplier.");
         }
+        const data = (body.data ?? {}) as Record<string, unknown>;
+        return {
+            supplierUuid: asString(data.supplier_id ?? data.supplierId),
+            supplierCode: asString(data.supplier_code ?? data.supplierCode ?? payload.supplier_code),
+        };
     },
 
     async update(id: string, payload: SupplierUpdatePayload): Promise<void> {

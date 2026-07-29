@@ -49,6 +49,9 @@ export function ensureVendorLedger(vendorName: string): ChartOfAccount | null {
 }
 
 /** Full vendor → ledger sync with metadata and stable ERP link */
-export function ensureVendorLedgerFromMaster(vendor: Vendor): ChartOfAccount | null {
-  return syncVendorLedger(vendor);
+export function ensureVendorLedgerFromMaster(
+  vendor: Vendor,
+  options?: { parentGroupId?: number | null },
+): ChartOfAccount | null {
+  return syncVendorLedger(vendor, options);
 }

@@ -103,3 +103,11 @@ export function mergeApplicableToSelectOptions(
 
   return options.sort((a, b) => a.label.localeCompare(b.label));
 }
+
+export function getActiveTCSMasters(): TcsApiRecord[] {
+  return [];
+}
+
+export function getTcsSectionCode(record: TcsApiRecord): string {
+  return record.sectionName || "";
+}

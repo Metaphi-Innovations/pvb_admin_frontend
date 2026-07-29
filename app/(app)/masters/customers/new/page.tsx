@@ -28,6 +28,8 @@ import {
   formValuesToCreatePayload,
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
+import { persistPartyMasterAccounting } from "@/lib/accounts/party-master-accounting-sync";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../customer-permissions";
 import {
   buildCustomerPrefillFromDistributor,
@@ -164,6 +166,20 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 export default function NewCustomerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const returnToParam = searchParams.get("returnTo");
+  const fromCoa =
+    searchParams.get("source") === "chart-of-accounts" ||
+    searchParams.get("from") === "coa";
+  const parentNodeId =
+    searchParams.get("parentNodeId") || searchParams.get("coaParent");
+  const leaveHref =
+    returnToParam ||
+    (fromCoa
+      ? parentNodeId
+        ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentNodeId}`
+        : CHART_OF_ACCOUNTS_HREF
+      : "/masters/customers");
+
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -402,6 +418,25 @@ export default function NewCustomerPage() {
           form.branches.find((b) => b.branchName === "Main Branch") ??
           form.branches[0];
 
+        const uuid = created?.customerUuid ?? "";
+        if (uuid) {
+          try {
+            await persistPartyMasterAccounting({
+              kind: "customer",
+              partyId: uuid,
+              accounting: {
+                openingBalance: form.openingBalance,
+                balanceType: form.balanceType === "Credit" ? "Credit" : "Debit",
+                openingBalanceDate: form.openingBalanceDate,
+                billWiseAccounting: form.billWiseAccounting !== false,
+                accountingDescription: form.accountingDescription,
+              },
+            });
+          } catch {
+            // Master created; accounting sync best-effort.
+          }
+        }
+
         if (newId === null) {
           throw new Error("Customer created, but no numeric id returned by API.");
         }
@@ -434,13 +469,19 @@ export default function NewCustomerPage() {
           countryCode: form.countryCode,
           email: form.email,
         });
-      }
+        setToast({
+        msg: "Customer created successfully.",
+        type: "success",
+      });
+      setTimeout(() => router.push(leaveHref), 1000);
+      return;
+    }
 
       setToast({
         msg: asDraft ? "Draft saved successfully." : "Customer created successfully.",
         type: "success",
       });
-      setTimeout(() => router.push("/masters/customers"), 1000);
+      setTimeout(() => router.push(leaveHref), 1000);
     } catch (err) {
       console.error(err);
       const { toastMessage, fieldErrors } = extractApiValidation(err);
@@ -472,7 +513,7 @@ export default function NewCustomerPage() {
           variant="outline"
           size="sm"
           className="h-7 mt-2 text-[11px] px-3"
-          onClick={() => router.push("/masters/customers")}
+          onClick={() => router.push(leaveHref)}
         >
           Back to listing
         </Button>
@@ -488,13 +529,13 @@ export default function NewCustomerPage() {
     <FormContainer
       title="Add Customer"
       description={`Masters → Customer Master → Add · Step ${stepIndex + 1} of ${CUSTOMER_FORM_STEPS.length}: ${currentStep.label}`}
-      onBack={() => router.back()}
+      onBack={() => router.push(leaveHref)}
       actions={
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {codeLoading ? "Generating…" : customerCode || "—"}
           </span>
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.push(leaveHref)}>
             Discard
           </Button>
           {!isFirstStep && (

@@ -9,7 +9,6 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
@@ -18,20 +17,9 @@ import {
   formatStockLedgerDate,
   STOCK_LEDGER_TRANSACTION_TYPE_LABELS,
   type StockLedgerRow,
-  type StockLedgerSortKey,
 } from "./stock-ledger-data";
 
-export function StockLedgerTable({
-  rows,
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  rows: StockLedgerRow[];
-  sortKey: StockLedgerSortKey;
-  sortDir: "asc" | "desc";
-  onSort: (key: string) => void;
-}) {
+export function StockLedgerTable({ rows }: { rows: StockLedgerRow[] }) {
   const router = useRouter();
 
   const handleRowClick = (row: StockLedgerRow) => {
@@ -42,70 +30,25 @@ export function StockLedgerTable({
     <AccountsTable minWidth={1800} className="text-xs">
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-          <SortTh
-            label="Document No."
-            colKey="documentNo"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-          />
-          <SortTh
-            label="Transaction Type"
-            colKey="transactionType"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-          />
-          <SortTh
-            label="Product Name"
-            colKey="productName"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-          />
-          <AccountsTableHeadCell>Product Code</AccountsTableHeadCell>
-          <SortTh
-            label="Warehouse"
-            colKey="warehouse"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-          />
-          <AccountsTableHeadCell>Batch No.</AccountsTableHeadCell>
-          <AccountsTableHeadCell>Mfg Date</AccountsTableHeadCell>
-          <AccountsTableHeadCell>Expiry Date</AccountsTableHeadCell>
-          <AccountsTableHeadCell align="right">Opening Qty</AccountsTableHeadCell>
-          <SortTh
-            label="In Qty"
-            colKey="inQty"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-            align="right"
-          />
-          <SortTh
-            label="Out Qty"
-            colKey="outQty"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-            align="right"
-          />
-          <SortTh
-            label="Closing Qty"
-            colKey="closingQty"
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={onSort}
-            align="right"
-          />
-          <AccountsTableHeadCell>Unit</AccountsTableHeadCell>
-          <AccountsTableHeadCell align="right">Rate</AccountsTableHeadCell>
-          <AccountsTableHeadCell align="right">Value</AccountsTableHeadCell>
-          <AccountsTableHeadCell>Reference Module</AccountsTableHeadCell>
-          <AccountsTableHeadCell>Created By</AccountsTableHeadCell>
-          <AccountsTableHeadCell>Remarks</AccountsTableHeadCell>
+          <SortTh label="Date" colKey="date" filterType="date" />
+          <SortTh label="Document No." colKey="documentNo" />
+          <SortTh label="Transaction Type" colKey="transactionType" />
+          <SortTh label="Product Name" colKey="productName" />
+          <SortTh label="Product Code" colKey="productCode" />
+          <SortTh label="Warehouse" colKey="warehouse" />
+          <SortTh label="Batch No." colKey="batchNo" />
+          <SortTh label="Mfg Date" colKey="mfgDate" filterType="date" />
+          <SortTh label="Expiry Date" colKey="expiryDate" filterType="date" />
+          <SortTh label="Opening Qty" colKey="openingQty" filterType="amount" align="right" />
+          <SortTh label="In Qty" colKey="inQty" filterType="amount" align="right" />
+          <SortTh label="Out Qty" colKey="outQty" filterType="amount" align="right" />
+          <SortTh label="Closing Qty" colKey="closingQty" filterType="amount" align="right" />
+          <SortTh label="Unit" colKey="unit" />
+          <SortTh label="Rate" colKey="rate" filterType="amount" align="right" />
+          <SortTh label="Value" colKey="value" filterType="amount" align="right" />
+          <SortTh label="Reference Module" colKey="referenceModule" />
+          <SortTh label="Created By" colKey="createdBy" />
+          <SortTh label="Remarks" colKey="remarks" />
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>

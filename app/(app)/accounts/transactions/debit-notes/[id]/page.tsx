@@ -1,4 +1,6 @@
-import DebitNoteViewPageClient from "../../../debit-notes/DebitNoteViewPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const DebitNoteViewPageClient = lazyAccountsPage(() => import("../../../debit-notes/DebitNoteViewPageClient"));
 
 type PageProps = { params: { id: string } };
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import {
@@ -394,7 +394,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
   return (
     <AppLayout>
       <div className="max-w-[1680px] mx-auto space-y-3">
-        <PageHeader
+        <AccountsListingChrome
           title="Bank Reconciliation"
           description="Upload month-wise bank statements and manually match entries to payments, purchases, sales, and ledgers."
           breadcrumbs={RECONCILIATION_BREADCRUMB}

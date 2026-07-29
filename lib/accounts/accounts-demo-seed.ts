@@ -65,8 +65,11 @@ import { createLedgerQuick } from "@/app/(app)/accounts/bank-reconciliation/bank
 import { seedAccountsDemoBankReconciliation } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-demo";
 import { CREDIT_LIMIT_DEMO_INVOICE_SPECS } from "@/lib/sales/credit-limit-demo-seed";
 import {
+  ensureCoaPostingLedgerTransactionsOnPageLoad,
+  seedCoaPostingLedgerTransactions,
+} from "@/lib/accounts/coa-ledger-transactions-seed";
+import {
   assignDemoOpeningBalances,
-  seedDemoAccountingVouchers,
   seedInventoryLedgersFromBatchRegister,
 } from "@/lib/accounts/ledger-balance-seed";
 import { seedReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
@@ -85,7 +88,7 @@ import {
   demoTimestamp,
 } from "@/lib/accounts/demo-date-utils";
 
-export const ACCOUNTS_DEMO_SEED_VERSION = "relative-dates-v4";
+export const ACCOUNTS_DEMO_SEED_VERSION = "clean-coa-v7";
 const VERSION_KEY = "ds_accounts_demo_seed_version";
 
 // ── Demo master specs (5 each) ───────────────────────────────────────────────
@@ -117,86 +120,14 @@ const DEMO_CUSTOMERS: Array<{
   {
     id: 2,
     customerCode: "CUST-0002",
-    customerName: "Krishna Retail Store",
+    customerName: "XYZ Traders",
     mobile: "9812345678",
-    email: "billing@krishnaretail.in",
-    gstin: "27AABCK1234R1Z5",
-    address: "Shop 4, Market Yard, Nagpur, Maharashtra 440001",
-    creditLimit: 200000,
-    openingBalance: 18500,
-    customerType: "retailer",
-  },
-  {
-    id: 3,
-    customerCode: "CUST-0003",
-    customerName: "Yavatmal Cotton FPO",
-    mobile: "9823456789",
-    email: "office@yavatmalcottonfpo.org",
-    gstin: "27AABCY5678C1Z3",
-    address: "FPO Bhawan, Cotton Market, Yavatmal, Maharashtra 445001",
-    creditLimit: 350000,
-    openingBalance: 32000,
-    customerType: "fpo",
-  },
-  {
-    id: 4,
-    customerCode: "CUST-0004",
-    customerName: "Green Harvest Agro",
-    mobile: "9834567890",
-    email: "purchase@greenharvest.in",
-    gstin: "27AABCG9012H1Z7",
-    address: "Warehouse 7, Hinjewadi, Pune, Maharashtra 411057",
-    creditLimit: 750000,
-    openingBalance: 56000,
-    customerType: "distributor",
-  },
-  {
-    id: 5,
-    customerCode: "CUST-0005",
-    customerName: "Shree Ganesh Seeds",
-    mobile: "9845678901",
-    email: "accounts@shreeganeshseeds.in",
-    gstin: "27AABCS3456G1Z9",
-    address: "Seed Godown, Jalna Road, Aurangabad, Maharashtra 431001",
+    email: "billing@xyztraders.in",
+    gstin: "27AABCX1234R1Z5",
+    address: "Shop 18, Market Yard, Nagpur, Maharashtra 440001",
     creditLimit: 300000,
-    openingBalance: 12800,
-    customerType: "retailer",
-  },
-  {
-    id: 6,
-    customerCode: "CUST-0006",
-    customerName: "Konkan Fertilizer Depot",
-    mobile: "9856789012",
-    email: "billing@konkanfert.in",
-    gstin: "27AABCK6789D1Z2",
-    address: "Shop 2, Ratnagiri Market, Ratnagiri, Maharashtra 415612",
-    creditLimit: 50000,
-    openingBalance: 0,
-    customerType: "dealer",
-  },
-  {
-    id: 7,
-    customerCode: "CUST-0007",
-    customerName: "Vidarbha Agro Mart",
-    mobile: "9867890123",
-    email: "accounts@vidarbhaagro.in",
-    gstin: "27AABCV2345E1Z4",
-    address: "Agro Complex, Wardha Road, Nagpur, Maharashtra 440015",
-    creditLimit: 250000,
-    openingBalance: 15000,
+    openingBalance: 47650,
     customerType: "distributor",
-  },
-  {
-    id: 8,
-    customerCode: "CUST-0008",
-    customerName: "Bharat Krishi Kendra",
-    mobile: "9878901234",
-    email: "office@bharatkrishi.in",
-    gstin: "27AABCB5678F1Z6",
-    address: "Krishi Kendra, Amravati Road, Nagpur, Maharashtra 440023",
-    creditLimit: 180000,
-    openingBalance: 8500,
-    customerType: "retailer",
   },
 ];
 
@@ -336,7 +267,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 4,
     invoiceNo: "INV-2026-004",
-    customerId: 4,
+    customerId: 2,
     invoiceDate: "2026-03-15",
     dueDate: "2026-04-14",
     subtotal: 84746,
@@ -348,7 +279,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 5,
     invoiceNo: "INV-2026-005",
-    customerId: 4,
+    customerId: 2,
     invoiceDate: "2026-05-08",
     dueDate: "2026-07-07",
     subtotal: 67797,
@@ -372,7 +303,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 7,
     invoiceNo: "INV-2026-007",
-    customerId: 3,
+    customerId: 1,
     invoiceDate: "2026-04-18",
     dueDate: "2026-06-02",
     subtotal: 122881,
@@ -384,7 +315,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 8,
     invoiceNo: "INV-2026-008",
-    customerId: 3,
+    customerId: 1,
     invoiceDate: "2026-05-12",
     dueDate: "2026-06-26",
     subtotal: 80508,
@@ -396,7 +327,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 9,
     invoiceNo: "INV-2026-009",
-    customerId: 6,
+    customerId: 1,
     invoiceDate: "2026-05-25",
     dueDate: "2026-06-09",
     subtotal: 4271,
@@ -408,7 +339,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 10,
     invoiceNo: "INV-2026-010",
-    customerId: 5,
+    customerId: 2,
     invoiceDate: "2026-05-20",
     dueDate: "2026-06-19",
     subtotal: 60000,
@@ -420,7 +351,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 11,
     invoiceNo: "INV-2026-011",
-    customerId: 7,
+    customerId: 2,
     invoiceDate: "2026-05-15",
     dueDate: "2026-06-14",
     subtotal: 72034,
@@ -432,7 +363,7 @@ const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 12,
     invoiceNo: "INV-2026-012",
-    customerId: 8,
+    customerId: 1,
     invoiceDate: "2026-05-28",
     dueDate: "2026-07-27",
     subtotal: 52542,
@@ -1095,32 +1026,8 @@ function seedVendorPayment(
   }
 }
 
-function postAllTransactions(invoices: InvoiceRecord[]): void {
-  saveVouchers([]);
-  for (const inv of invoices) {
-    maybePostSalesInvoice(inv);
-  }
-
-  const receiptSpecs = [
-    { customer: "ABC Agro Distributor", amount: 80000, invoiceId: 1, ref: "NEFT-ABC-001", rvSeq: 1 },
-    { customer: "ABC Agro Distributor", amount: 45000, invoiceId: 2, ref: "NEFT-ABC-002", rvSeq: 2 },
-    { customer: "Krishna Retail Store", amount: 118000, invoiceId: 6, ref: "NEFT-KRS-001", rvSeq: 3 },
-    { customer: "Green Harvest Agro", amount: 90000, invoiceId: 4, ref: "NEFT-GHA-001", rvSeq: 4 },
-    { customer: "Yavatmal Cotton FPO", amount: 50000, invoiceId: 8, ref: "NEFT-YCF-001", rvSeq: 5 },
-    { customer: "Vidarbha Agro Mart", amount: 60000, invoiceId: 11, ref: "NEFT-VAM-001", rvSeq: 6 },
-  ];
-  for (const spec of receiptSpecs) {
-    const inv = invoices.find((i) => i.id === spec.invoiceId);
-    if (!inv) continue;
-    seedCustomerReceipt(
-      spec.customer,
-      spec.amount,
-      inv.invoiceDate,
-      spec.ref,
-      inv.invoiceNo,
-      demoDocNo("RV", spec.rvSeq),
-    );
-  }
+function postAllTransactions(_invoices: InvoiceRecord[]): void {
+  // Posted vouchers are seeded once via seedCoaPostingLedgerTransactions (exactly 2 per COA ledger).
 }
 
 function ensureAutoPostingEnabled(): void {
@@ -1136,52 +1043,123 @@ function ensureAutoPostingEnabled(): void {
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
+const CORE_SEED_KEY = "ds_accounts_core_seed";
+const CORE_SEED_VERSION = "relative-dates-v4";
+const COA_SECTION_KEY = "ds_accounts_coa_section_seed";
+const TX_SECTION_KEY = "ds_accounts_transactions_section_seed";
+const REPORTS_SECTION_KEY = "ds_accounts_reports_section_seed";
+
+/** Shared masters, FY, and COA demo ledgers — idempotent across sections. */
+export function ensureAccountsCoreDemoData(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(CORE_SEED_KEY) === CORE_SEED_VERSION) return;
+  try {
+    ensureFinancialYearsCurrent();
+    ensureAutoPostingEnabled();
+    seedDemoMasters();
+    localStorage.setItem(CORE_SEED_KEY, CORE_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] core demo seed failed:", err);
+  }
+}
+
+/** Chart of Accounts section — masters, openings, and 2 demo transactions per posting ledger. */
+export function seedCoaSectionDemoData(): void {
+  if (typeof window === "undefined") return;
+  try {
+    ensureAccountsCoreDemoData();
+    const sectionDone = localStorage.getItem(COA_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION;
+    if (!sectionDone) {
+      assignDemoOpeningBalances();
+      seedInventoryLedgersFromBatchRegister();
+      localStorage.setItem(COA_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    }
+    ensureCoaPostingLedgerTransactionsOnPageLoad();
+  } catch (err) {
+    console.error("[accounts] COA section seed failed:", err);
+  }
+}
+
+function seedTransactionsDemoRecords(): InvoiceRecord[] {
+  ensureAccountsCoreDemoData();
+
+  const customers = loadCustomers();
+  const allDemoInvoiceSpecs: DemoSalesInvoiceSpec[] = [
+    ...getDemoSalesInvoices(),
+    ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
+  ];
+  const demoInvoiceIds = new Set<number>(allDemoInvoiceSpecs.map((spec) => spec.id));
+  const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
+
+  const invoices = allDemoInvoiceSpecs.map((spec) => {
+    const customer = customers.find((c) => c.id === spec.customerId);
+    const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
+    return buildSalesInvoice(
+      spec,
+      customer?.customerName ?? "Customer",
+      link?.ledgerId ?? null,
+    );
+  });
+
+  saveInvoices([...invoices, ...preservedInvoices]);
+  const creditNotes = buildCreditNotesSeed();
+  saveCreditNotes(creditNotes);
+  saveDebitNotes(buildDebitNotesSeed());
+  saveExpenses(getExpensesSeedData());
+
+  postAllTransactions(invoices);
+
+  for (const cn of creditNotes) {
+    maybePostCreditNote(cn);
+  }
+
+  return invoices;
+}
+
+/** Transactions section — sales/purchase docs, credit/debit notes, expenses, vouchers. */
+export function seedTransactionsSectionDemoData(): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(TX_SECTION_KEY) !== ACCOUNTS_DEMO_SEED_VERSION) {
+      seedTransactionsDemoRecords();
+      localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    }
+    void import("./voucher-listing-demo-seed").then((m) => m.seedVoucherListingDemoData());
+  } catch (err) {
+    console.error("[accounts] transactions section seed failed:", err);
+  }
+}
+
+/** Reports section — opening balances, inventory ledgers, COA demo transactions. */
+export function seedReportsSectionDemoData(): void {
+  if (typeof window === "undefined") return;
+  try {
+    ensureAccountsCoreDemoData();
+    const sectionDone = localStorage.getItem(REPORTS_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION;
+    if (!sectionDone) {
+      assignDemoOpeningBalances();
+      seedInventoryLedgersFromBatchRegister();
+      localStorage.setItem(REPORTS_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    }
+    ensureCoaPostingLedgerTransactionsOnPageLoad();
+    void import("./voucher-listing-demo-seed").then((m) => m.seedVoucherListingDemoData());
+  } catch (err) {
+    console.error("[accounts] reports section seed failed:", err);
+  }
+}
+
 export function isAccountsDemoSeedCurrent(): boolean {
   if (typeof window === "undefined") return true;
   return localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION;
 }
 
-/** Idempotent demo bootstrap — 5 masters + 5 sales + 5 purchase invoices (all posted). */
+/** Full demo bootstrap — used by reset and cross-module callers (e.g. Sales Order form). */
 export function seedAccountsDemoData(force = false): void {
   if (typeof window === "undefined") return;
   if (!force && localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
 
   try {
-    ensureFinancialYearsCurrent();
-    ensureAutoPostingEnabled();
-    seedDemoMasters();
-
-    const customers = loadCustomers();
-    const allDemoInvoiceSpecs: DemoSalesInvoiceSpec[] = [
-      ...getDemoSalesInvoices(),
-      ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
-    ];
-    const demoInvoiceIds = new Set<number>(
-      allDemoInvoiceSpecs.map((spec) => spec.id),
-    );
-    const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
-
-    const invoices = allDemoInvoiceSpecs.map((spec) => {
-      const customer = customers.find((c) => c.id === spec.customerId);
-      const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
-      return buildSalesInvoice(
-        spec,
-        customer?.customerName ?? "Customer",
-        link?.ledgerId ?? null,
-      );
-    });
-
-    saveInvoices([...invoices, ...preservedInvoices]);
-    const creditNotes = buildCreditNotesSeed();
-    saveCreditNotes(creditNotes);
-    saveDebitNotes(buildDebitNotesSeed());
-    saveExpenses(getExpensesSeedData());
-
-    postAllTransactions(invoices);
-
-    for (const cn of creditNotes) {
-      maybePostCreditNote(cn);
-    }
+    const invoices = seedTransactionsDemoRecords();
 
     seedPayablesDemoData(
       (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
@@ -1193,11 +1171,18 @@ export function seedAccountsDemoData(force = false): void {
     );
     assignDemoOpeningBalances();
     seedInventoryLedgersFromBatchRegister();
-    seedDemoAccountingVouchers();
     seedBankingDemoData(true);
     seedAccountsDemoBankReconciliation(true);
 
+    saveVouchers([]);
+    seedCoaPostingLedgerTransactions(true);
+
+    void import("./voucher-listing-demo-seed").then((m) => m.seedVoucherListingDemoData(true));
+
     localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(COA_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(REPORTS_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
   } catch (err) {
     console.error("[accounts] demo seed failed:", err);
   }
@@ -1206,5 +1191,12 @@ export function seedAccountsDemoData(force = false): void {
 export function resetAccountsDemoData(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(VERSION_KEY);
+  localStorage.removeItem(CORE_SEED_KEY);
+  localStorage.removeItem(COA_SECTION_KEY);
+  localStorage.removeItem(TX_SECTION_KEY);
+  localStorage.removeItem(REPORTS_SECTION_KEY);
+  localStorage.removeItem("ds_coa_ledger_txn_seed_version");
+  localStorage.removeItem("ds_voucher_listing_demo_seed_version");
+  void import("./accounts-section-seed").then((m) => m.resetAccountsSectionBootstrapCache());
   seedAccountsDemoData(true);
 }

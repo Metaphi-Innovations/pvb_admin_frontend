@@ -8,11 +8,38 @@ import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo
 import { stripMisplacedGstLedgers } from "./masters/chart-of-accounts/coa-gst-duplicate-cleanup";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
-export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
+export type RecordStatus =
+  | "draft"
+  | "pending_approval"
+  | "sent_back"
+  | "approved"
+  | "rejected"
+  | "posted"
+  | "cancelled";
 
 export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity";
 
 export type CoaNodeLevel = "primary_head" | "account_group" | "ledger";
+
+/** Internal COA node id used across the legacy frontend state graph. */
+export type CoaNodeId = number;
+
+/** Stable specialization for group-to-form routing and TDS/GST inheritance. */
+export type CoaSpecializedGroupType =
+  | "tds_payable"
+  | "tds_receivable"
+  | "gst_input"
+  | "gst_output"
+  | "gst_payable"
+  | "gst_receivable"
+  | "gst_duties"
+  | "sundry_debtors"
+  | "sundry_creditors"
+  | "bank_accounts"
+  | "cash_in_hand"
+  | "inventory"
+  | "warehouse"
+  | "employee_payable";
 
 export type ErpUsageModule =
   | "procurement"
@@ -21,14 +48,23 @@ export type ErpUsageModule =
   | "payments"
   | "journal";
 
+/**
+ * Ledger origin for COA architecture:
+ * SYSTEM — statutory / seed ledgers; MASTER — linked to an ERP master; GENERIC — accounting-only.
+ */
+export type CoaLedgerKind = "SYSTEM" | "MASTER" | "GENERIC";
+
 export interface ChartOfAccount {
-  id: number;
+  id: CoaNodeId;
+  /** Raw backend UUID/string id for Accounts API records. */
+  apiNodeId?: string;
   accountCode: string;
   accountName: string;
   alias: string;
   accountType: AccountType;
   nodeLevel: CoaNodeLevel;
-  parentAccountId: number | null;
+  parentAccountId: CoaNodeId | null;
+  apiParentNodeId?: string | null;
   parentAccount: string;
   description: string;
   status: "active" | "inactive";
@@ -39,13 +75,37 @@ export interface ChartOfAccount {
   gstApplicable: boolean;
   tdsApplicable: boolean;
   costCenterApplicable: boolean;
+  /** Bill-wise / party bill tracking for this ledger */
+  billWiseAccounting?: boolean;
+  /** Generic ledger tax defaults (accounting config only — not legal entity data) */
+  tcsApplicable?: boolean;
+  defaultGstRate?: string;
+  defaultHsnSac?: string;
+  /** Generic ledger GST registration details (same shape as party masters). */
+  gstRegistrationType?: string;
+  gstin?: string;
+  registeredLegalName?: string;
+  registeredGstAddress?: string;
+  /** TDS master section id or section code */
+  defaultTdsSection?: string;
+  /** TCS section code / label */
+  defaultTcsSection?: string;
   bankAccountFlag: boolean;
   /** Bank name container under Bank Accounts — grouping only, not postable */
   bankGroupFlag?: boolean;
+  /** SYSTEM | MASTER | GENERIC — only meaningful for nodeLevel === "ledger" */
+  ledgerKind?: CoaLedgerKind;
+  /** When ledgerKind is MASTER: customer | vendor | bank | product | warehouse | employee | gst | tds | … */
+  masterType?: string | null;
+  /** When ledgerKind is MASTER: foreign key into the source master (numeric legacy or UUID) */
+  masterId?: number | string | null;
   /** ERP auto-created ledger — edit via source master only */
   isSystemGenerated?: boolean;
   erpSourceModule?: string;
-  erpSourceId?: number;
+  /** Legacy numeric id or backend UUID of the linked master entity */
+  erpSourceId?: number | string;
+  /** Inherited specialization for TDS/GST/party groups — sub-groups inherit from ancestors. */
+  specializedGroupType?: CoaSpecializedGroupType;
   createdBy: string;
   updatedBy: string;
 }
@@ -97,6 +157,21 @@ const COA_META_KEY = "ds_accounts_coa_meta";
 const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
 
+let coaCache: ChartOfAccount[] | null = null;
+let coaCoreCache: ChartOfAccount[] | null = null;
+
+function clearCoaCache(): void {
+  coaCache = null;
+  coaCoreCache = null;
+  try {
+    const { invalidateCoaPathCache } =
+      require("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data") as typeof import("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data");
+    invalidateCoaPathCache();
+  } catch {
+    // optional during module init
+  }
+}
+
 const LEGACY_COA_KEYS = [
   "ds_accounts_coa",
   "ds_accounts_coa_v5",
@@ -105,6 +180,8 @@ const LEGACY_COA_KEYS = [
   "ds_accounts_coa_v8",
   "ds_accounts_coa_v9",
 ];
+
+const LEGACY_COA_META_KEYS = ["ds_gst_coa_sync_v2"];
 
 const COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 
@@ -132,45 +209,60 @@ const REMOVED_SEED_LEDGER_NAMES = new Set([
   "marketing expense",
   "professional fees",
   "bank charges",
+  // v17 — Sundry Debtors/Creditors are L3 groups; remove former control ledgers
+  "sundry debtors control",
+  "sundry creditors control",
 ]);
 
+function inferLedgerKind(r: ChartOfAccount): CoaLedgerKind | undefined {
+  if (r.nodeLevel !== "ledger") return undefined;
+  if (r.ledgerKind) return r.ledgerKind;
+  if (r.isSystem) return "SYSTEM";
+  if (r.isSystemGenerated || r.erpSourceModule) return "MASTER";
+  return "GENERIC";
+}
+
 function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
+  const ledgerKind = inferLedgerKind(r);
   return {
     ...r,
     alias: r.alias ?? "",
     costCenterApplicable: r.costCenterApplicable ?? false,
+    billWiseAccounting: r.billWiseAccounting ?? false,
     bankAccountFlag: r.bankAccountFlag ?? false,
     bankGroupFlag: r.bankGroupFlag ?? false,
     openingBalance: r.openingBalance ?? 0,
     balanceType: r.balanceType ?? "Debit",
     gstApplicable: r.gstApplicable ?? false,
     tdsApplicable: r.tdsApplicable ?? false,
+    tcsApplicable: r.tcsApplicable ?? false,
+    defaultGstRate: r.defaultGstRate ?? "",
+    defaultHsnSac: r.defaultHsnSac ?? "",
+    defaultTdsSection: r.defaultTdsSection ?? "",
+    defaultTcsSection: r.defaultTcsSection ?? "",
+    ledgerKind,
+    masterType: r.masterType ?? r.erpSourceModule ?? null,
+    masterId: r.masterId ?? r.erpSourceId ?? null,
   };
+}
+
+/** True when the ledger has stable master/ERP ownership that must never be treated as obsolete seed. */
+function hasStableMasterOrErpLink(record: ChartOfAccount): boolean {
+  return Boolean(
+    record.isSystemGenerated ||
+      record.erpSourceModule ||
+      record.masterId != null ||
+      record.erpSourceId != null ||
+      record.ledgerKind === "MASTER",
+  );
 }
 
 function isRemovedSeedLedger(record: ChartOfAccount): boolean {
   if (record.nodeLevel !== "ledger") return false;
-  if (REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
+  // Master-linked / ERP-sourced ledgers are never obsolete seeds — preserve by ownership, not name.
+  if (hasStableMasterOrErpLink(record)) return false;
+  if (typeof record.id === "number" && REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
   return REMOVED_SEED_LEDGER_NAMES.has(record.accountName.trim().toLowerCase());
-}
-
-function hasChildAccountGroups(nodes: ChartOfAccount[], parentId: number): boolean {
-  return nodes.some((r) => r.parentAccountId === parentId && r.nodeLevel === "account_group");
-}
-
-function hasChildLedgers(nodes: ChartOfAccount[], parentId: number): boolean {
-  return nodes.some((r) => r.parentAccountId === parentId && r.nodeLevel === "ledger");
-}
-
-/** Leaf standard group or grouping ledger — valid parent for user-created ledgers */
-function canParentHoldLedger(parent: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (parent.nodeLevel === "account_group") {
-    return !hasChildAccountGroups(allNodes, parent.id);
-  }
-  if (parent.nodeLevel === "ledger") {
-    return hasChildLedgers(allNodes, parent.id);
-  }
-  return false;
 }
 
 function migrateLegacyNodeLevel(level: string): CoaNodeLevel {
@@ -188,30 +280,53 @@ function normalizeStructuralNode(
     alias: r.alias ?? "",
     parentAccountId: parent.id,
     parentAccount: parent.accountName,
+    accountType: parent.accountType,
+    specializedGroupType: parent.specializedGroupType,
     openingBalance: 0,
     balanceType: parent.balanceType ?? "Debit",
     gstApplicable: false,
     tdsApplicable: false,
     costCenterApplicable: false,
+    billWiseAccounting: false,
     bankAccountFlag: false,
     isSystem: false,
   };
 }
 
-function isManualSubGroupLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (record.nodeLevel !== "ledger") return false;
-  if (record.isSystemGenerated || record.erpSourceModule) return false;
-  return allNodes.some(
-    (c) => c.parentAccountId === record.id && c.nodeLevel === "ledger",
+/**
+ * Non-system ledgers retained across structure enforcement on normal COA load/save.
+ *
+ * Master-linked / ERP-sourced / system-generated flags indicate stronger ownership and
+ * must increase preservation — never trigger deletion. Demo-marked rows are also kept;
+ * demo cleanup is a separate, explicit process (merge remains disabled).
+ *
+ * System hierarchy copies are excluded here because they are rebuilt from SYSTEM_COA_NODES.
+ */
+function shouldKeepUserLedger(record: ChartOfAccount, _allNodes: ChartOfAccount[]): boolean {
+  if (record.isSystem) return false;
+  return true;
+}
+
+const LEGACY_STATUTORY_GROUP_NAMES = new Set([
+  "gst input",
+  "gst input credit",
+  "gst output",
+  "gst payable",
+  "tds receivable",
+  "tds payable",
+  "duties & taxes",
+  "duties & taxes payable",
+]);
+
+function isLegacyStatutoryGroup(record: ChartOfAccount): boolean {
+  return (
+    record.nodeLevel === "account_group" &&
+    LEGACY_STATUTORY_GROUP_NAMES.has(record.accountName.trim().toLowerCase())
   );
 }
 
-function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
-  if (record.isSystemGenerated || record.erpSourceModule) return true;
-  return !isManualSubGroupLedger(record, allNodes);
-}
-
-function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
+/** Merge stored COA with system seed. Non-destructive for valid user/master-linked ledgers. */
+export function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   const mergedSystem = SYSTEM_COA_NODES.map((sys) => ({
     ...sys,
     status: "active" as const,
@@ -227,6 +342,10 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     nodeLevel: migrateLegacyNodeLevel(r.nodeLevel),
   }));
 
+  const rawUserGroups = migratedStored.filter(
+    (r) => r.nodeLevel === "account_group" && !r.isSystem && !isLegacyStatutoryGroup(r),
+  );
+
   const rawUserLedgers = migratedStored.filter(
     (r) =>
       r.nodeLevel === "ledger" &&
@@ -235,19 +354,72 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
       shouldKeepUserLedger(r, migratedStored),
   );
 
+  const userGroups: ChartOfAccount[] = [];
+  const groupById = new Map<CoaNodeId, ChartOfAccount>();
+  let remainingGroups = [...rawUserGroups];
+
+  function resolveStructuralParent(r: ChartOfAccount): ChartOfAccount | undefined {
+    if (r.parentAccountId == null) return undefined;
+    const fromSystem = systemById.get(r.parentAccountId);
+    if (fromSystem) return fromSystem;
+    const fromGroup = groupById.get(r.parentAccountId);
+    if (fromGroup) return fromGroup;
+    const oldParent = migratedStored.find((s) => s.id === r.parentAccountId);
+    if (!oldParent) return undefined;
+    return systemByCode.get(oldParent.accountCode) ?? groupById.get(oldParent.id);
+  }
+
+  while (remainingGroups.length > 0) {
+    const next: ChartOfAccount[] = [];
+    for (const r of remainingGroups) {
+      const parent = resolveStructuralParent(r);
+      if (!parent) {
+        next.push(r);
+        continue;
+      }
+      if (parent.nodeLevel !== "primary_head" && parent.nodeLevel !== "account_group") {
+        next.push(r);
+        continue;
+      }
+      const normalized = normalizeStructuralNode(r, parent);
+      userGroups.push(normalized);
+      groupById.set(normalized.id, normalized);
+    }
+    if (next.length === remainingGroups.length) break;
+    remainingGroups = next;
+  }
+
+  // Keep unresolved user groups — do not drop them during normal load (parent may be repaired later).
+  for (const r of remainingGroups) {
+    if (groupById.has(r.id)) continue;
+    userGroups.push({
+      ...r,
+      alias: r.alias ?? "",
+      isSystem: false,
+      openingBalance: 0,
+    });
+    groupById.set(r.id, r);
+  }
+
   const userLedgers: ChartOfAccount[] = [];
-  const ledgerById = new Map<number, ChartOfAccount>();
+  const ledgerById = new Map<CoaNodeId, ChartOfAccount>();
   let remaining = [...rawUserLedgers];
 
   function resolveParent(r: ChartOfAccount): ChartOfAccount | undefined {
     if (r.parentAccountId == null) return undefined;
     const fromSystem = systemById.get(r.parentAccountId);
     if (fromSystem) return fromSystem;
+    const fromGroup = groupById.get(r.parentAccountId);
+    if (fromGroup) return fromGroup;
     const fromLedger = ledgerById.get(r.parentAccountId);
     if (fromLedger) return fromLedger;
     const oldParent = migratedStored.find((s) => s.id === r.parentAccountId);
     if (!oldParent) return undefined;
-    return systemByCode.get(oldParent.accountCode) ?? ledgerById.get(oldParent.id);
+    return (
+      systemByCode.get(oldParent.accountCode) ??
+      groupById.get(oldParent.id) ??
+      ledgerById.get(oldParent.id)
+    );
   }
 
   while (remaining.length > 0) {
@@ -255,10 +427,6 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     for (const r of remaining) {
       const parent = resolveParent(r);
       if (!parent) {
-        next.push(r);
-        continue;
-      }
-      if (parent.nodeLevel === "account_group" && hasChildAccountGroups(mergedSystem, parent.id)) {
         next.push(r);
         continue;
       }
@@ -281,9 +449,23 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     remaining = next;
   }
 
-  return stripMisplacedGstLedgers(
-    mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]),
+  // Keep unresolved ledgers (including master-linked) — never drop on normal load due to parent gaps.
+  for (const r of remaining) {
+    if (ledgerById.has(r.id)) continue;
+    const normalized = normalizeLedger({
+      ...r,
+      nodeLevel: "ledger",
+      openingBalance: r.openingBalance ?? 0,
+      isSystem: false,
+    });
+    userLedgers.push(normalized);
+    ledgerById.set(normalized.id, normalized);
+  }
+
+  const combined = stripMisplacedGstLedgers(
+    mergeBundledCoaDemoLedgers([...mergedSystem, ...userGroups, ...userLedgers]),
   );
+  return combined;
 }
 
 function readCoaMeta(): { revision: number } | null {
@@ -306,14 +488,17 @@ function purgeLegacyCoaStorage() {
   for (const key of LEGACY_COA_KEYS) {
     localStorage.removeItem(key);
   }
+  for (const key of LEGACY_COA_META_KEYS) {
+    localStorage.removeItem(key);
+  }
 }
 
 function coaStorageNeedsReset(stored: ChartOfAccount[]): boolean {
   const meta = readCoaMeta();
   if (!meta || meta.revision !== COA_SYSTEM_REVISION) return true;
-  const systemCount = stored.filter((r) => r.nodeLevel !== "ledger").length;
+  const systemCount = stored.filter((r) => r.isSystem).length;
   if (systemCount !== EXPECTED_SYSTEM_NODE_COUNT) return true;
-  if (stored.some((r) => r.nodeLevel === "ledger" && (r.isSystem || isRemovedSeedLedger(r)))) {
+  if (stored.some((r) => r.nodeLevel === "ledger" && isRemovedSeedLedger(r))) {
     return true;
   }
   return false;
@@ -321,7 +506,7 @@ function coaStorageNeedsReset(stored: ChartOfAccount[]): boolean {
 
 const LEDGER_SEED: Ledger[] = [
   { id: 1, ledgerName: "Main Cash", ledgerCode: "LED-001", accountType: "Asset", linkedAccount: "Cash in Hand", openingBalance: 250000, balanceType: "Debit", currentBalance: 250000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 2, ledgerName: "Trade Creditors", ledgerCode: "LED-002", accountType: "Liability", linkedAccount: "Accounts Payable", openingBalance: 180000, balanceType: "Credit", currentBalance: 180000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
+  { id: 2, ledgerName: "Trade Creditors", ledgerCode: "LED-002", accountType: "Liability", linkedAccount: "Sundry Creditors", openingBalance: 180000, balanceType: "Credit", currentBalance: 180000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
 ];
 
 const TXN_SEED: AccountTxn[] = [
@@ -351,6 +536,8 @@ function save<T>(key: string, list: T[]) {
 
 /** Load COA from storage without GST Master sync (used internally to avoid sync loops). */
 export function loadChartOfAccountsCore(): ChartOfAccount[] {
+  if (coaCoreCache) return coaCoreCache;
+
   if (typeof window !== "undefined") {
     purgeLegacyCoaStorage();
   }
@@ -358,33 +545,47 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
   const raw = getOrSeed(COA_KEY, COA_SEED);
   const stripped = stripMisplacedGstLedgers(raw);
   const needsReset = coaStorageNeedsReset(stripped);
-  const source = needsReset ? [] : stripped;
-  const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
+  // A system revision replaces protected system nodes but must retain user groups
+  // and ledgers. ensureCoaSystemStructure performs that merge by stable IDs/codes.
+  const merged = ensureCoaSystemStructure(stripped.length ? stripped : COA_SEED);
+
+  coaCoreCache = merged;
 
   if (
     typeof window !== "undefined" &&
     (needsReset || merged.length !== raw.length || stripped.length !== raw.length)
   ) {
-    save(COA_KEY, merged);
-    writeCoaMeta();
+    const persist = () => {
+      save(COA_KEY, merged);
+      writeCoaMeta();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(persist, { timeout: 2500 });
+    } else {
+      window.setTimeout(persist, 0);
+    }
   }
 
   return merged;
 }
 
 export const loadChartOfAccounts = (): ChartOfAccount[] => {
-  const core = loadChartOfAccountsCore();
-  if (typeof window === "undefined") return core;
-
-  // Lazy require avoids circular init with gst-coa-sync (which imports this module).
-  const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
-  return applyGstCoaSyncOnLoad(core);
+  if (coaCache) return coaCache;
+  coaCache = loadChartOfAccountsCore();
+  return coaCache;
 };
 
 export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
   const cleaned = ensureCoaSystemStructure(list);
   save(COA_KEY, cleaned);
   writeCoaMeta();
+  clearCoaCache();
+  try {
+    const { invalidateLedgerReportCaches } = require("@/lib/accounts/ledger-reports") as typeof import("@/lib/accounts/ledger-reports");
+    invalidateLedgerReportCaches();
+  } catch {
+    // optional — avoid circular init issues during module load
+  }
   dispatchCoaChanged();
 };
 export const getSystemCoaNodes = () => SYSTEM_COA_NODES;
@@ -393,17 +594,20 @@ export function getCoaLedgers(): ChartOfAccount[] {
   return loadChartOfAccounts().filter((r) => r.nodeLevel === "ledger");
 }
 
-/** Posting ledgers: active ledgers with no child ledgers (grouping ledgers are excluded) */
+/** Posting ledgers: active leaf ledgers only (no groups or parent grouping ledgers). */
 export function getPostableCoaAccounts(records?: ChartOfAccount[]): ChartOfAccount[] {
   const list = records ?? loadChartOfAccounts();
-  const groupingLedgerIds = new Set<number>();
+  const groupingLedgerIds = new Set<CoaNodeId>();
   for (const r of list) {
     if (r.nodeLevel === "ledger" && r.parentAccountId != null) {
       groupingLedgerIds.add(r.parentAccountId);
     }
   }
   return list.filter(
-    (r) => r.nodeLevel === "ledger" && r.status === "active" && !groupingLedgerIds.has(r.id),
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      r.status === "active" &&
+      !groupingLedgerIds.has(r.id),
   );
 }
 
@@ -414,8 +618,11 @@ export const saveLedgers = (list: Ledger[]) => save(LEDGER_KEY, list);
 export const loadAccountTxns = () => getOrSeed(TXN_KEY, TXN_SEED);
 export const saveAccountTxns = (list: AccountTxn[]) => save(TXN_KEY, list);
 
-export function nextId<T extends { id: number }>(list: T[]) {
-  return list.length ? Math.max(...list.map((x) => x.id)) + 1 : 1;
+export function nextId<T extends { id: CoaNodeId }>(list: T[]) {
+  const nums = list
+    .map((item) => item.id)
+    .filter((id): id is number => typeof id === "number" && Number.isFinite(id));
+  return nums.length ? Math.max(...nums) + 1 : 1;
 }
 
 export function postEntryAfterApproval(input: {

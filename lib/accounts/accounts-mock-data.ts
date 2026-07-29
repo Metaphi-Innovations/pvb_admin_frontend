@@ -1,11 +1,6 @@
 import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /** UI-only mock data for Accounts screens (localStorage supplements where available). */
 
-export {
-  loadFundTransfers,
-  type FundTransferRecord,
-} from "@/lib/accounts/fund-transfer-data";
-
 export interface ReceiptAllocationRecord {
   id: number;
   receiptNo: string;

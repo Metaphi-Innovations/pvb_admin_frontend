@@ -101,8 +101,8 @@ export function SalesInvoiceAccountingPanel({
             <LedgerImpactPreview title="Ledger Impact Preview" lines={state.previewLines} className="border-0 p-0 shadow-none" />
             <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
               <li>This will update Customer Outstanding</li>
-              <li>This will update COA â†’ Income â†’ Sales (taxable amount only)</li>
-              <li>This will update COA â†’ Current Liabilities â†’ Duties &amp; Taxes Payable (CGST / SGST / IGST Payable)</li>
+              <li>This will update COA → Income → Sales (taxable amount only)</li>
+              <li>This will update COA → Current Liabilities → Duties &amp; Taxes Payable (CGST / SGST / IGST Payable)</li>
               <li>This will update Trial Balance and Profit &amp; Loss (sales revenue only — GST excluded)</li>
             </ul>
           </>

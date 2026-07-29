@@ -1,5 +1,5 @@
-import VendorAgeingClient from "./VendorAgeingClient";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <VendorAgeingClient />;
+export default function VendorAgeingRedirectPage() {
+  redirect("/accounts/payables/outstanding?view=ageing");
 }

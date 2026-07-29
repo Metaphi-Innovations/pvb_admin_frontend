@@ -19,7 +19,7 @@ import {
   saveInvoices,
   type InvoiceRecord,
 } from "@/app/(app)/accounts/invoices/invoices-data";
-import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
+import { maybePostPurchaseInvoice, maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import {
   getPurchaseInvoiceById,
   loadPurchaseInvoices,
@@ -68,6 +68,10 @@ function afterPosted(category: AccountsVoucherCategory, documentId: number): voi
     const note = getCreditNoteById(documentId);
     if (note) postCreditNoteAccounting(note);
   }
+  if (category === "purchase_invoice") {
+    const inv = getPurchaseInvoiceById(documentId);
+    if (inv) maybePostPurchaseInvoice(inv);
+  }
 }
 
 function saveInvoiceWorkflow(id: number, workflow: AccountsDocumentWorkflow): void {
@@ -97,6 +101,7 @@ function savePurchaseInvoiceWorkflow(id: number, workflow: AccountsDocumentWorkf
     updatedAt: new Date().toISOString(),
   };
   savePurchaseInvoices(all);
+  if (workflow.status === "posted") afterPosted("purchase_invoice", id);
 }
 
 function saveCreditNoteWorkflow(id: number, workflow: AccountsDocumentWorkflow): void {
@@ -140,7 +145,9 @@ function saveVoucherWorkflow(id: number, workflow: AccountsDocumentWorkflow): vo
       ? "journal_entry"
       : all[idx].voucherType === "receipt"
         ? "receipt_voucher"
-        : "payment_voucher",
+        : all[idx].voucherType === "contra"
+          ? "contra_voucher"
+          : "payment_voucher",
     workflow,
   );
   all[idx] = {
@@ -168,6 +175,7 @@ export function getDocumentWorkflow(
     case "journal_entry":
     case "receipt_voucher":
     case "payment_voucher":
+    case "contra_voucher":
       return getVoucherById(documentId)?.workflow;
     default:
       return undefined;
@@ -207,6 +215,7 @@ export function persistDocumentWorkflow(
     case "journal_entry":
     case "receipt_voucher":
     case "payment_voucher":
+    case "contra_voucher":
       saveVoucherWorkflow(documentId, workflow);
       break;
     default:

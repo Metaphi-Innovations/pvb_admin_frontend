@@ -1,4 +1,6 @@
-import AccountItemFormClient from "../../AccountItemFormClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const AccountItemFormClient = lazyAccountsPage(() => import("../../AccountItemFormClient"));
 
 type PageProps = { params: { id: string } };
 

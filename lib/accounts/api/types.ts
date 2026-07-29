@@ -17,11 +17,11 @@ export interface ApiResponse<T> {
 
 // ── Chart of Accounts ─────────────────────────────────────────────────────────
 export interface CoaAccountDto {
-  id: number;
+  id: string;
   accountCode: string;
   accountName: string;
   nodeLevel: string;
-  parentId: number | null;
+  parentId: string | null;
   accountType: string;
   status: string;
   isSystem: boolean;
@@ -86,13 +86,16 @@ export interface ErpPostDto {
   lines: { mappingKey: string; partyName?: string; debit: number; credit: number }[];
 }
 
-/** Endpoint map */
+/** Endpoint map — prefer `API_ENDPOINTS.ACCOUNTS` in services for live backend routes. */
 export const ACCOUNTS_ENDPOINTS = {
   coa: {
-    list: `${ACCOUNTS_API_BASE}/coa`,
-    ledger: `${ACCOUNTS_API_BASE}/coa/ledgers`,
-    subLedger: `${ACCOUNTS_API_BASE}/coa/sub-ledgers`,
-    byId: (id: number) => `${ACCOUNTS_API_BASE}/coa/${id}`,
+    list: `${ACCOUNTS_API_BASE}/chart-of-accounts/tree`,
+    tree: `${ACCOUNTS_API_BASE}/chart-of-accounts/tree`,
+    primaryHeads: `${ACCOUNTS_API_BASE}/chart-of-accounts/primary-heads`,
+    groups: `${ACCOUNTS_API_BASE}/chart-of-accounts/groups`,
+    subGroups: `${ACCOUNTS_API_BASE}/chart-of-accounts/sub-groups`,
+    ledger: `${ACCOUNTS_API_BASE}/ledgers`,
+    byId: (id: string) => `${ACCOUNTS_API_BASE}/ledgers/${id}`,
   },
   vouchers: {
     list: `${ACCOUNTS_API_BASE}/vouchers`,

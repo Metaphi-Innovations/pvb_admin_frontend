@@ -1,10 +1,6 @@
-import FundTransferDetailClient from "../FundTransferDetailClient";
+import { redirect } from "next/navigation";
 
-export default function FundTransferViewPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const id = Number(params.id);
-  return <FundTransferDetailClient transferId={id} />;
+/** Fund Transfer detail removed — redirect to Contra Voucher listing. */
+export default function FundTransferDetailRedirectPage() {
+  redirect("/accounts/vouchers?tab=contra");
 }

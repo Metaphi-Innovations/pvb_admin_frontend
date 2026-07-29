@@ -235,11 +235,18 @@ export function TransactionDetailsDrawer({
           )}
         </SheetBody>
 
-        <SheetFooter className="flex-row gap-2 justify-end">
+        <SheetFooter className="flex-row gap-2 justify-end flex-wrap">
           <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" onClick={handlePrint}>
             <Printer className="w-4 h-4" />
             Print
           </Button>
+          {detail.editHref && (
+            <Button size="sm" className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Link href={detail.editHref} onClick={onClose}>
+                Edit
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" asChild>
             <Link href={detail.sourceHref} onClick={onClose}>
               <ExternalLink className="w-4 h-4" />

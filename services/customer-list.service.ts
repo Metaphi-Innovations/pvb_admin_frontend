@@ -558,7 +558,10 @@ export const CustomerListService = {
         return asString(data?.previewNumber ?? payload?.previewNumber);
     },
 
-    async create(payload: CustomerCreatePayload, branches: CustomerBranch[]): Promise<Record<string, unknown>> {
+    async create(
+        payload: CustomerCreatePayload,
+        branches: CustomerBranch[],
+    ): Promise<{ customerUuid: string; customerCode: string; id?: number }> {
         const formData = new FormData();
         Object.entries(payload).forEach(([key, value]) => {
             if (key === "branches") return;
@@ -584,11 +587,12 @@ export const CustomerListService = {
         if (!body.success) {
             throw new Error(asString(body.message) || "Failed to create customer.");
         }
-
-        const data = body.data;
-        return data && typeof data === "object" && !Array.isArray(data)
-            ? (data as Record<string, unknown>)
-            : {};
+        const data = (body.data ?? {}) as Record<string, unknown>;
+        return {
+            customerUuid: asString(data.customer_id ?? data.customerId),
+            customerCode: asString(data.customer_code ?? data.customerCode),
+            id: Number(data.sr_no) > 0 ? Number(data.sr_no) : undefined,
+        };
     },
 
     // async update(id: string, payload: CustomerUpdatePayload): Promise<void> {

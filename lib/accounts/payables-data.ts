@@ -21,6 +21,18 @@ import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
+import {
+  DEFAULT_AGEING_BREAKPOINTS,
+  classifyAgeingBucketIndex,
+  effectiveOverdueDays,
+  emptyAgeingBuckets,
+  type AgeingBreakpoints,
+} from "@/lib/accounts/ageing-breakpoints";
+import {
+  matchesMultiFilter,
+  matchesMultiIdFilter,
+  normalizeMultiFilter,
+} from "@/lib/accounts/report-multi-filter-utils";
 
 const VENDOR_META_KEY = "ds_accounts_payables_vendor_meta_v1";
 
@@ -72,6 +84,8 @@ export interface VendorOutstandingRow {
   notDueAmount: number;
   lastPurchaseDate: string;
   lastPaymentDate: string;
+  /** Earliest due date among open bills; "—" when none open. */
+  oldestDueDate: string;
   status: PayableStatus;
 }
 
@@ -112,20 +126,32 @@ export interface SupplierInvoiceOutstandingRow {
   dueDate: string;
   billAmount: number;
   paidAmount: number;
+  debitNoteAdjusted: number;
   outstanding: number;
   overdueDays: number;
   status: PayableStatus;
 }
 
+export type VendorAgeingBreakpoints = AgeingBreakpoints;
+
+export const DEFAULT_VENDOR_AGEING_BREAKPOINTS = DEFAULT_AGEING_BREAKPOINTS;
+
+export type { GeneratedAgeingBucket } from "@/lib/accounts/ageing-breakpoints";
+export {
+  generateAgeingBucketsFromBreakpoints,
+  getAgeingBucketLabels as getVendorAgeingBucketLabels,
+  validateAgeingBreakpoints as validateVendorAgeingBreakpoints,
+  classifyAgeingBucketIndex as classifyVendorAgeingBucketIndex,
+  ageingBucketColumnKey as vendorAgeingBucketColumnKey,
+  getVisibleAgeingBucketIndices as getVisibleVendorAgeingBucketIndices,
+} from "@/lib/accounts/ageing-breakpoints";
+
 export interface VendorAgeingRow {
   vendorId: number;
   vendorName: string;
   vendorCode: string;
-  bucket0_30: number;
-  bucket31_60: number;
-  bucket61_90: number;
-  bucket91_120: number;
-  bucketAbove120: number;
+  /** Bucket amounts aligned with generated ageing columns (same order as breakpoints). */
+  buckets: number[];
   totalOutstanding: number;
 }
 
@@ -300,19 +326,6 @@ export function getAgeingBucketLabel(daysOverdue: number, asOfDate: string, dueD
   return "90+ Days";
 }
 
-function bucketKey(
-  daysOverdue: number,
-): keyof Pick<
-  VendorAgeingRow,
-  "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
-> {
-  if (daysOverdue <= 30) return "bucket0_30";
-  if (daysOverdue <= 60) return "bucket31_60";
-  if (daysOverdue <= 90) return "bucket61_90";
-  if (daysOverdue <= 120) return "bucket91_120";
-  return "bucketAbove120";
-}
-
 function vendorStatusFromBills(
   bills: PurchaseInvoiceRecord[],
   vendor: Vendor,
@@ -421,12 +434,14 @@ export function computeVendorOutstanding(
 
     let overdueAmount = 0;
     let notDueAmount = 0;
+    let oldestDueDate = "";
     for (const bill of filteredBills) {
       const out = getBillOutstanding(bill);
       if (out <= 0.009) continue;
       const dueDate = getPurchaseDueDate(bill.invoiceDate, vendor);
       if (daysBetween(dueDate, asOfDate) > 0) overdueAmount += out;
       else notDueAmount += out;
+      if (!oldestDueDate || dueDate < oldestDueDate) oldestDueDate = dueDate;
     }
     overdueAmount = round2(overdueAmount);
     notDueAmount = round2(notDueAmount + vendorCreditNotes);
@@ -461,6 +476,7 @@ export function computeVendorOutstanding(
       notDueAmount,
       lastPurchaseDate,
       lastPaymentDate: lastPaymentDateForVendor(vendorId, vendor.vendorName),
+      oldestDueDate: oldestDueDate || "—",
       status,
     });
   }
@@ -529,25 +545,30 @@ export interface PayablesAgeingFilters {
   branch?: string;
 }
 
-export function computeVendorAgeingSummary(asOfDate = TODAY()) {
-  const rows = computeVendorAgeingRows(asOfDate);
+export function computeVendorAgeingSummary(
+  asOfDate = TODAY(),
+  breakpoints: VendorAgeingBreakpoints = DEFAULT_VENDOR_AGEING_BREAKPOINTS,
+) {
+  const rows = computeVendorAgeingRows(asOfDate, {}, breakpoints);
+  const bucketCount = breakpoints.length;
+  const buckets = Array.from({ length: bucketCount }, (_, i) =>
+    round2(rows.reduce((s, r) => s + (r.buckets[i] ?? 0), 0)),
+  );
   return {
     totalPayables: round2(rows.reduce((s, r) => s + r.totalOutstanding, 0)),
-    bucket0_30: round2(rows.reduce((s, r) => s + r.bucket0_30, 0)),
-    bucket31_60: round2(rows.reduce((s, r) => s + r.bucket31_60, 0)),
-    bucket61_90: round2(rows.reduce((s, r) => s + r.bucket61_90, 0)),
-    bucket91_120: round2(rows.reduce((s, r) => s + r.bucket91_120, 0)),
-    bucketAbove120: round2(rows.reduce((s, r) => s + r.bucketAbove120, 0)),
+    buckets,
   };
 }
 
 export function computeVendorAgeingRows(
   asOfDate = TODAY(),
   filters: PayablesAgeingFilters = {},
+  breakpoints: VendorAgeingBreakpoints = DEFAULT_VENDOR_AGEING_BREAKPOINTS,
 ): VendorAgeingRow[] {
   const vendors = loadVendors();
   const bills = getPostedPurchaseInvoices().filter((b) => getBillOutstanding(b) > 0.009);
   const map = new Map<number, VendorAgeingRow>();
+  const bucketCount = breakpoints.length;
 
   for (const bill of bills) {
     if (!bill.vendorId) continue;
@@ -563,7 +584,8 @@ export function computeVendorAgeingRows(
     const outstanding = getBillOutstanding(bill);
     const dueDate = getPurchaseDueDate(bill.invoiceDate, vendor);
     const daysOverdue = Math.max(0, daysBetween(dueDate, asOfDate));
-    const key = bucketKey(daysOverdue);
+    const effectiveDays = effectiveOverdueDays(daysOverdue, asOfDate, dueDate);
+    const bucketIndex = classifyAgeingBucketIndex(effectiveDays, breakpoints);
 
     const row =
       map.get(vendor.id) ??
@@ -571,20 +593,15 @@ export function computeVendorAgeingRows(
         vendorId: vendor.id,
         vendorName: vendor.vendorName,
         vendorCode: vendor.vendorCode,
-        bucket0_30: 0,
-        bucket31_60: 0,
-        bucket61_90: 0,
-        bucket91_120: 0,
-        bucketAbove120: 0,
+        buckets: emptyAgeingBuckets(bucketCount),
         totalOutstanding: 0,
       } satisfies VendorAgeingRow);
 
-    row[key] = round2(row[key] + outstanding);
+    row.buckets[bucketIndex] = round2(row.buckets[bucketIndex] + outstanding);
     row.totalOutstanding = round2(row.totalOutstanding + outstanding);
     map.set(vendor.id, row);
   }
 
-  // Supplier credit notes in 0–30 bucket
   for (const note of loadVendorCreditNotes().filter((n) => n.status === "approved")) {
     const vendor = vendors.find((v) => v.id === note.vendorId);
     if (!vendor) continue;
@@ -593,21 +610,19 @@ export function computeVendorAgeingRows(
     if (filters.territory && territory !== filters.territory) continue;
     if (filters.branch && vendorBranch(vendor) !== filters.branch) continue;
 
+    const bucketIndex = 0;
+
     const row =
       map.get(vendor.id) ??
       ({
         vendorId: vendor.id,
         vendorName: vendor.vendorName,
         vendorCode: vendor.vendorCode,
-        bucket0_30: 0,
-        bucket31_60: 0,
-        bucket61_90: 0,
-        bucket91_120: 0,
-        bucketAbove120: 0,
+        buckets: emptyAgeingBuckets(bucketCount),
         totalOutstanding: 0,
       } satisfies VendorAgeingRow);
 
-    row.bucket0_30 = round2(row.bucket0_30 + note.amount);
+    row.buckets[bucketIndex] = round2(row.buckets[bucketIndex] + note.amount);
     row.totalOutstanding = round2(row.totalOutstanding + note.amount);
     map.set(vendor.id, row);
   }
@@ -673,34 +688,38 @@ function allocationStatus(paymentAmount: number, allocated: number): PaymentAllo
   return "partially_allocated";
 }
 
+function buildPaymentAllocationRecord(v: AccountingVoucher): PaymentAllocationRecord | null {
+  if (v.voucherType !== "payment") return null;
+  if (v.status !== "posted" && v.status !== "approved") return null;
+  const vendor = resolveVendorFromPayment(v);
+  const entry = loadPaymentAllocationStore().find((e) => e.voucherId === v.id);
+  const lines = entry?.lines ?? [];
+  const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
+  const paymentAmount = round2(v.totalDebit || v.totalCredit);
+  return {
+    voucherId: v.id,
+    paymentNo: v.voucherNumber,
+    paymentDate: v.date,
+    vendorId: vendor?.id ?? 0,
+    vendorName: vendor?.vendorName ?? paymentVendorLine(v)?.name ?? "—",
+    paymentAmount,
+    allocatedAmount,
+    unallocatedAmount: round2(Math.max(0, paymentAmount - allocatedAmount)),
+    bankAccount: bankLineName(v),
+    referenceNo: v.referenceNo || "—",
+    status: allocationStatus(paymentAmount, allocatedAmount),
+    lines,
+  };
+}
+
 export function loadPaymentAllocationRecords(): PaymentAllocationRecord[] {
-  const store = loadPaymentAllocationStore();
   const vouchers = loadVouchers().filter(
     (v) => v.voucherType === "payment" && (v.status === "posted" || v.status === "approved"),
   );
 
   return vouchers
-    .map((v) => {
-      const vendor = resolveVendorFromPayment(v);
-      const entry = store.find((e) => e.voucherId === v.id);
-      const lines = entry?.lines ?? [];
-      const allocatedAmount = round2(lines.reduce((s, l) => s + l.amount, 0));
-      const paymentAmount = round2(v.totalDebit || v.totalCredit);
-      return {
-        voucherId: v.id,
-        paymentNo: v.voucherNumber,
-        paymentDate: v.date,
-        vendorId: vendor?.id ?? 0,
-        vendorName: vendor?.vendorName ?? paymentVendorLine(v)?.name ?? "—",
-        paymentAmount,
-        allocatedAmount,
-        unallocatedAmount: round2(Math.max(0, paymentAmount - allocatedAmount)),
-        bankAccount: bankLineName(v),
-        referenceNo: v.referenceNo || "—",
-        status: allocationStatus(paymentAmount, allocatedAmount),
-        lines,
-      } satisfies PaymentAllocationRecord;
-    })
+    .map((v) => buildPaymentAllocationRecord(v))
+    .filter((r): r is PaymentAllocationRecord => r != null)
     .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
 }
 
@@ -712,11 +731,85 @@ export function getPaymentAllocationByVoucherId(voucherId: number): PaymentAlloc
   return loadPaymentAllocationRecords().find((r) => r.voucherId === voucherId);
 }
 
+export function computePaymentAllocationSummary() {
+  const rows = loadPaymentAllocationRecords();
+  const pending = rows.filter((r) => r.unallocatedAmount > 0.009);
+  return {
+    unallocatedPayments: rows.filter((r) => r.status === "unallocated").length,
+    partiallyAllocated: rows.filter((r) => r.status === "partially_allocated").length,
+    fullyAllocated: rows.filter((r) => r.status === "fully_allocated").length,
+    pendingAllocationCount: pending.length,
+    totalUnallocatedAmount: round2(pending.reduce((s, r) => s + r.unallocatedAmount, 0)),
+  };
+}
+
+/** Allocate a single posted payment voucher against supplier bills (mirrors receipt allocation). */
+export function applyPaymentAllocation(
+  voucherId: number,
+  allocations: Array<{ billId: number; amount: number }>,
+): string | null {
+  let record = getPaymentAllocationByVoucherId(voucherId);
+  if (!record) {
+    const voucher = loadVouchers().find((v) => v.id === voucherId);
+    record = voucher ? buildPaymentAllocationRecord(voucher) ?? undefined : undefined;
+  }
+  if (!record) return "Payment voucher not found.";
+  if (!record.vendorId) return "Supplier could not be resolved for this payment.";
+
+  const totalNew = round2(allocations.reduce((s, a) => s + a.amount, 0));
+  if (totalNew > record.paymentAmount + 0.009) {
+    return "Total allocation cannot exceed payment amount.";
+  }
+
+  const bills = loadPurchaseInvoices();
+  const store = loadPaymentAllocationStore();
+  const previous = store.find((e) => e.voucherId === voucherId);
+
+  if (previous) {
+    for (const line of previous.lines) {
+      const bill = bills.find((b) => b.id === line.billId);
+      if (bill) {
+        recordPurchaseInvoicePayment(line.billId, -line.amount);
+      }
+    }
+  }
+
+  const lines: PaymentAllocationLine[] = [];
+
+  for (const alloc of allocations) {
+    if (alloc.amount <= 0) continue;
+    const bill = bills.find((b) => b.id === alloc.billId);
+    if (!bill || bill.vendorId !== record.vendorId) {
+      return "Invalid purchase invoice selected for allocation.";
+    }
+    const outstanding = getBillOutstanding(bill);
+    if (alloc.amount > outstanding + 0.009) {
+      return `Allocation for ${bill.invoiceNo} exceeds outstanding (${formatMoney(outstanding)}).`;
+    }
+    lines.push({ billId: bill.id, billNo: bill.invoiceNo, amount: round2(alloc.amount) });
+  }
+
+  const nextStore = store.filter((e) => e.voucherId !== voucherId);
+  nextStore.push({ voucherId, lines });
+  savePaymentAllocationStore(nextStore);
+
+  for (const line of lines) {
+    if (line.amount > 0.009) recordPurchaseInvoicePayment(line.billId, line.amount);
+  }
+
+  return null;
+}
+
 // ── Supplier invoice outstanding (bill-level) ─────────────────────────────────
 
 export interface SupplierInvoiceOutstandingFilters {
+  /** @deprecated use vendorIds */
   vendorId?: number;
+  vendorIds?: string | string[];
+  branch?: string | string[];
+  /** @deprecated use statuses */
   status?: PayableStatus | "all";
+  statuses?: string | string[];
   dateFrom?: string;
   dateTo?: string;
   financialYearId?: number;
@@ -745,13 +838,18 @@ export function computeSupplierInvoiceOutstanding(
     const vendor = vendors.find((v) => v.id === bill.vendorId);
     if (!vendor) continue;
 
-    if (filters.vendorId && bill.vendorId !== filters.vendorId) continue;
+    const vendorIds = filters.vendorIds ?? (filters.vendorId != null ? [String(filters.vendorId)] : []);
+    if (!matchesMultiIdFilter(vendorIds, bill.vendorId)) continue;
+    if (!matchesMultiFilter(filters.branch, vendorBranch(vendor))) continue;
     if (filters.dateFrom && bill.invoiceDate < filters.dateFrom) continue;
     if (filters.dateTo && bill.invoiceDate > filters.dateTo) continue;
     if (!invoiceMatchesFinancialYear(bill.invoiceDate, filters.financialYearId)) continue;
 
     const billRow = buildBillRow(bill, vendor, asOfDate);
-    if (filters.status && filters.status !== "all" && billRow.status !== filters.status) continue;
+    const statusValues = normalizeMultiFilter(
+      filters.statuses ?? (filters.status && filters.status !== "all" ? [filters.status] : []),
+    );
+    if (statusValues.length > 0 && !statusValues.includes(billRow.status)) continue;
 
     if (q) {
       const hay = [
@@ -777,6 +875,7 @@ export function computeSupplierInvoiceOutstanding(
       dueDate: billRow.dueDate,
       billAmount: bill.grandTotal,
       paidAmount: bill.amountPaid,
+      debitNoteAdjusted: bill.amountDebited,
       outstanding: billRow.outstanding,
       overdueDays: billRow.daysOverdue,
       status: billRow.status,
@@ -1029,9 +1128,11 @@ export function formatPayable(amount: number): string {
 // ── Legacy payables helpers (due payments, employee claims) ───────────────────
 
 function payableLedgerIds(): Set<number> {
-  return new Set(
-    getLedgersUnderSubGroupName("Trade Payables / Sundry Creditors").map((l) => l.id),
-  );
+  return new Set([
+    ...getLedgersUnderSubGroupName("Sundry Creditors").map((l) => l.id),
+    ...getLedgersUnderSubGroupName("Trade Payables / Sundry Creditors").map((l) => l.id),
+    ...getLedgersUnderSubGroupName("Accounts Payable").map((l) => l.id),
+  ]);
 }
 
 function expensesPayableLedgerIds(): Set<number> {

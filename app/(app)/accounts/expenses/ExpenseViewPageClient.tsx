@@ -194,7 +194,7 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
 
         <div className="bg-white rounded-lg border border-border/60 p-4">
           <h2 className="text-sm font-semibold mb-3">Approval History</h2>
-          <p className="text-xs text-muted-foreground mb-2">Managed in HR â†’ TA/DA Claims</p>
+          <p className="text-xs text-muted-foreground mb-2">Managed in HR → TA/DA Claims</p>
           <div className="space-y-3">
             {record.approvalTrail.length === 0 ? (
               <p className="text-xs text-muted-foreground">No trail recorded.</p>

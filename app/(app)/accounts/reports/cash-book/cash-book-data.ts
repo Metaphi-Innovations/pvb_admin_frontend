@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
+import { matchesVoucherTypeFilter } from "@/lib/accounts/report-multi-filter-utils";
 import {
   applyMovement,
   fromSignedBalance,
@@ -61,7 +62,10 @@ export interface CashBookRawTransaction {
   voucherTypeCode: VoucherTypeCode;
   voucherType: string;
   particular: string;
+  particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   lineOrder: number;
@@ -75,7 +79,10 @@ export interface CashBookDisplayRow {
   voucherType: string;
   voucherTypeCode: VoucherTypeCode | "opening";
   particular: string;
+  particularLedgerId: number | null;
   narration: string;
+  reference: string;
+  status: string;
   receipt: number;
   payment: number;
   runningBalance: number;
@@ -105,17 +112,25 @@ export interface CashBookStatement {
 export interface CashBookFilters {
   dateFrom: string;
   dateTo: string;
-  voucherType: string;
+  voucherType: string | string[];
   search: string;
 }
 
 export function getCashBookLedgers(): CashBookLedgerOption[] {
-  return getLedgersUnderSubGroupName("Cash-in-Hand").map((l) => ({
-    id: String(l.id),
-    ledgerId: l.id,
-    ledgerName: l.accountName,
-    ledgerCode: l.accountCode,
-  }));
+  return getLedgersUnderSubGroupName("Cash-in-Hand")
+    .map((l) => ({
+      id: String(l.id),
+      ledgerId: l.id,
+      ledgerName: l.accountName,
+      ledgerCode: l.accountCode,
+    }))
+    .sort((a, b) => {
+      const aPetty = a.ledgerName.toLowerCase().includes("office petty");
+      const bPetty = b.ledgerName.toLowerCase().includes("office petty");
+      if (aPetty && !bPetty) return -1;
+      if (!aPetty && bPetty) return 1;
+      return a.ledgerName.localeCompare(b.ledgerName);
+    });
 }
 
 export function getCashBookLedgerById(ledgerId: string): CashBookLedgerOption | null {
@@ -133,6 +148,15 @@ function resolveParticular(v: AccountingVoucher, cashLedgerId: number, cashLineI
   const cashLine = v.lines[cashLineIndex];
   if (cashLine?.remarks?.trim()) return cashLine.remarks.trim();
   return "—";
+}
+
+function resolveParticularLedgerId(
+  v: AccountingVoucher,
+  cashLedgerId: number,
+  cashLineIndex: number,
+): number | null {
+  const other = v.lines.find((line, idx) => idx !== cashLineIndex && line.ledgerId !== cashLedgerId);
+  return other?.ledgerId ?? null;
 }
 
 function extractCashTransactions(ledgerId: number): CashBookRawTransaction[] {
@@ -158,7 +182,10 @@ function extractCashTransactions(ledgerId: number): CashBookRawTransaction[] {
           voucherTypeCode: v.voucherType,
           voucherType: resolveVoucherTypeLabel(v.voucherType),
           particular: resolveParticular(v, ledgerId, lineOrder),
+          particularLedgerId: resolveParticularLedgerId(v, ledgerId, lineOrder),
           narration: v.narration?.trim() || "—",
+          reference: v.referenceNo || "—",
+          status: v.status === "posted" ? "Posted" : v.status,
           receipt: debit,
           payment: credit,
           lineOrder,
@@ -241,7 +268,7 @@ export function buildCashBookStatement(
   );
 
   const filteredTransactions = periodTransactions.filter((t) => {
-    if (filters.voucherType !== "all" && t.voucherTypeCode !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, t.voucherTypeCode)) return false;
     return matchesSearch(t, filters.search);
   });
 
@@ -257,7 +284,10 @@ export function buildCashBookStatement(
       voucherType: t.voucherType,
       voucherTypeCode: t.voucherTypeCode,
       particular: t.particular,
+      particularLedgerId: t.particularLedgerId,
       narration: t.narration,
+      reference: t.reference,
+      status: t.status,
       receipt: t.receipt,
       payment: t.payment,
       runningBalance: bal.amount,
@@ -267,7 +297,7 @@ export function buildCashBookStatement(
   });
 
   const movementForTotals = periodTransactions.filter((t) => {
-    if (filters.voucherType !== "all" && t.voucherTypeCode !== filters.voucherType) return false;
+    if (!matchesVoucherTypeFilter(filters.voucherType, t.voucherTypeCode)) return false;
     return matchesSearch(t, filters.search);
   });
 
@@ -288,7 +318,10 @@ export function buildCashBookStatement(
     voucherType: "Opening Balance",
     voucherTypeCode: "opening",
     particular: "Opening Cash Balance",
+    particularLedgerId: null,
     narration: "Balance brought forward",
+    reference: "—",
+    status: "—",
     receipt: 0,
     payment: 0,
     runningBalance: periodOpening.amount,

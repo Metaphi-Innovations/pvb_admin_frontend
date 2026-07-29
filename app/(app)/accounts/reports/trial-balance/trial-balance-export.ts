@@ -1,17 +1,27 @@
-import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { formatMoney } from "@/lib/accounts/money-format";
 import {
-  balanceSideLabel,
-  formatMoney,
-  formatMoneyOrDash,
-} from "@/lib/accounts/money-format";
+  buildGrandTotalRowHtml,
+  buildHierarchyTabularBodyHtml,
+  buildTabularReportBodyHtml,
+  exportAccountsReportToExcel,
+  exportAccountsReportToPdf,
+  mapCoaLevelToRowType,
+  type HierarchyTabularRow,
+  type ReportColumnHeader,
+  type ReportHeaderOptions,
+} from "@/lib/accounts/report-export-engine";
+import {
+  buildReportDocumentHtml,
+  escapeHtml,
+  openReportPrintWindow,
+} from "@/lib/accounts/report-export-presentation";
 import type {
   TrialBalanceDetailedGroup,
   TrialBalanceSummary,
-  TrialBalanceSummaryGroupRow,
   TrialBalanceTab,
 } from "./trial-balance-data";
+import { flattenTrialBalanceNormalPrimaryHeadRows } from "./trial-balance-display";
 
-const COMPANY_NAME = "Dharitri Sutra Agri Solutions Pvt Ltd";
 const REPORT_NAME = "Trial Balance";
 
 export interface TrialBalanceExportMeta {
@@ -19,65 +29,145 @@ export interface TrialBalanceExportMeta {
   dateTo: string;
   financialYear: string;
   view: TrialBalanceTab;
+  branch?: string;
+  warehouse?: string;
+  includeOpeningBalance?: boolean;
 }
 
-function generatedOnLabel(): string {
-  return new Date().toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
+const NORMAL_COLUMNS: ReportColumnHeader[] = [
+  { label: "Particular" },
+  { label: "Debit (₹)", align: "right", className: "num" },
+  { label: "Credit (₹)", align: "right", className: "num" },
+];
+
+const DETAILED_COLUMNS: ReportColumnHeader[] = [
+  { label: "Particular" },
+  { label: "Debit (₹)", align: "right", className: "num" },
+  { label: "Credit (₹)", align: "right", className: "num" },
+];
+
+function viewLabel(view: TrialBalanceTab): string {
+  return view === "normal" ? "Normal" : "Detailed";
+}
+
+function buildHeaderOptions(meta: TrialBalanceExportMeta): ReportHeaderOptions {
+  return {
+    reportTitle: `${REPORT_NAME} — ${viewLabel(meta.view)}`,
+    financialYear: meta.financialYear,
+    dateFrom: meta.dateFrom,
+    dateTo: meta.dateTo,
+    filters: [
+      ...(meta.branch ? [{ label: "Branch", value: meta.branch }] : []),
+      ...(meta.warehouse ? [{ label: "Warehouse", value: meta.warehouse }] : []),
+    ],
+  };
+}
+
+function buildNormalBodyHtml(groups: TrialBalanceDetailedGroup[]): string {
+  const flatRows = flattenTrialBalanceNormalPrimaryHeadRows(groups);
+  const rows: HierarchyTabularRow[] = flatRows.map((row) => ({
+    rowType: mapCoaLevelToRowType("primary"),
+    label: row.primaryHead,
+    amounts: [row.debit, row.credit],
+    dashWhenZero: true,
+  }));
+  return buildHierarchyTabularBodyHtml(rows);
+}
+
+function buildDetailedBodyHtml(groups: TrialBalanceDetailedGroup[]): string {
+  const rows: HierarchyTabularRow[] = [];
+
+  const sections = new Map<number, TrialBalanceDetailedGroup[]>();
+  for (const group of groups) {
+    const list = sections.get(group.primaryHeadId) ?? [];
+    list.push(group);
+    sections.set(group.primaryHeadId, list);
+  }
+
+  for (const [, sectionGroups] of [...sections.entries()].sort(
+    (a, b) => (a[1][0]?.primaryHeadSort ?? 0) - (b[1][0]?.primaryHeadSort ?? 0),
+  )) {
+    const primaryHead = sectionGroups[0]?.primaryHead ?? "";
+    const primaryClosing = sectionGroups.reduce(
+      (acc, g) => ({
+        closingDebit: acc.closingDebit + g.closingDebit,
+        closingCredit: acc.closingCredit + g.closingCredit,
+      }),
+      { closingDebit: 0, closingCredit: 0 },
+    );
+
+    rows.push({
+      rowType: mapCoaLevelToRowType("primary"),
+      label: primaryHead,
+      amounts: [primaryClosing.closingDebit, primaryClosing.closingCredit],
+      dashWhenZero: true,
+    });
+
+    for (const group of sectionGroups) {
+      rows.push({
+        rowType: mapCoaLevelToRowType("group"),
+        label: group.groupName,
+        amounts: [group.closingDebit, group.closingCredit],
+        dashWhenZero: true,
+      });
+
+      for (const subgroup of group.subgroups) {
+        rows.push({
+          rowType: mapCoaLevelToRowType("subgroup"),
+          label: subgroup.subgroupName,
+          amounts: [subgroup.closingDebit, subgroup.closingCredit],
+          dashWhenZero: true,
+        });
+
+        for (const ledger of subgroup.ledgers) {
+          rows.push({
+            rowType: mapCoaLevelToRowType("ledger"),
+            label: ledger.ledgerName,
+            amounts: [ledger.closingDebit, ledger.closingCredit],
+            dashWhenZero: true,
+          });
+        }
+      }
+    }
+  }
+
+  return buildHierarchyTabularBodyHtml(rows);
+}
+
+function balanceNoteHtml(summary: TrialBalanceSummary): string {
+  if (summary.isBalanced) {
+    return `<p class="balance-msg balanced">Trial Balance is balanced</p>`;
+  }
+  return `<p class="balance-msg unbalanced">Trial Balance is not balanced — Opening Difference: ${escapeHtml(formatMoney(summary.openingDifference))}; Period Difference: ${escapeHtml(formatMoney(summary.periodDifference))}; Closing Difference: ${escapeHtml(formatMoney(summary.closingDifference))}</p>`;
+}
+
+function totalFooterHtml(summary: TrialBalanceSummary): string {
+  return buildGrandTotalRowHtml({
+    label: "TOTAL",
+    amounts: [summary.totalDebit, summary.totalCredit],
+    dashWhenZero: true,
   });
 }
 
-function viewLabel(view: TrialBalanceTab): string {
-  return view === "summary" ? "Summary" : "Detailed";
-}
-
-function summaryRows(meta: TrialBalanceExportMeta, summary: TrialBalanceSummary) {
-  return [
-    ["Company Name", COMPANY_NAME],
-    ["Report Name", REPORT_NAME],
-    ["View", viewLabel(meta.view)],
-    ["Date Range", `${meta.dateFrom} to ${meta.dateTo}`],
-    ["Financial Year", meta.financialYear],
-    ["Generated By", ACCOUNTS_CURRENT_USER],
-    ["Generated On", generatedOnLabel()],
-    [],
-    ["Total Debit", summary.totalDebit],
-    ["Total Credit", summary.totalCredit],
-    ["Difference", summary.difference],
-  ];
-}
-
-export async function exportTrialBalanceSummaryToExcel(
-  rows: TrialBalanceSummaryGroupRow[],
+export async function exportTrialBalanceNormalToExcel(
+  groups: TrialBalanceDetailedGroup[],
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
 ): Promise<void> {
-  const XLSX = await import("xlsx");
+  const tableHtml =
+    buildTabularReportBodyHtml({
+      columns: NORMAL_COLUMNS,
+      bodyHtml: buildNormalBodyHtml(groups),
+      footerHtml: totalFooterHtml(summary),
+    }) + balanceNoteHtml(summary);
 
-  const dataRows = rows.map((r) => ({
-    Particular: r.particular,
-    "Debit (₹)": r.debit || "",
-    "Credit (₹)": r.credit || "",
-  }));
-
-  const sheet = XLSX.utils.json_to_sheet(dataRows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet, "Trial Balance Summary");
-
-  const info = XLSX.utils.aoa_to_sheet([
-    ...summaryRows(meta, summary).filter((row) => row.length > 0),
-  ]);
-  XLSX.utils.book_append_sheet(wb, info, "Report Info");
-
-  const footer = XLSX.utils.aoa_to_sheet([
-    ["Grand Total", summary.totalDebit, summary.totalCredit],
-    ["Difference", summary.difference, ""],
-  ]);
-  XLSX.utils.book_append_sheet(wb, footer, "Totals");
-
-  const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `Trial_Balance_Summary_${date}.xlsx`);
+  exportAccountsReportToExcel({
+    title: REPORT_NAME,
+    filename: `Trial_Balance_Normal_${meta.view}`,
+    header: buildHeaderOptions(meta),
+    bodyHtml: tableHtml,
+    landscape: true,
+  });
 }
 
 export async function exportTrialBalanceDetailedToExcel(
@@ -85,92 +175,48 @@ export async function exportTrialBalanceDetailedToExcel(
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
 ): Promise<void> {
-  const XLSX = await import("xlsx");
+  const tableHtml =
+    buildTabularReportBodyHtml({
+      columns: DETAILED_COLUMNS,
+      bodyHtml: buildDetailedBodyHtml(groups),
+      footerHtml: totalFooterHtml(summary),
+    }) + balanceNoteHtml(summary);
 
-  const dataRows: Record<string, string | number>[] = [];
-  for (const group of groups) {
-    dataRows.push({
-      Particular: group.groupName,
-      "Opening Balance (₹)": "",
-      "Debit (₹)": "",
-      "Credit (₹)": "",
-      "Closing Balance (₹)": "",
-      "Balance Type": "",
-    });
-    for (const l of group.ledgers) {
-      dataRows.push({
-        Particular: `  ${l.ledgerName}`,
-        "Opening Balance (₹)": l.openingAmount || "",
-        "Debit (₹)": l.debit || "",
-        "Credit (₹)": l.credit || "",
-        "Closing Balance (₹)": l.closingAmount || "",
-        "Balance Type": balanceSideLabel(l.closingBalanceType),
-      });
-    }
-  }
-
-  const sheet = XLSX.utils.json_to_sheet(dataRows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet, "Trial Balance Detailed");
-
-  const info = XLSX.utils.aoa_to_sheet([
-    ...summaryRows(meta, summary).filter((row) => row.length > 0),
-  ]);
-  XLSX.utils.book_append_sheet(wb, info, "Report Info");
-
-  const footer = XLSX.utils.aoa_to_sheet([
-    [
-      "Grand Total",
-      "",
-      summary.periodDebit,
-      summary.periodCredit,
-      "",
-      "",
-    ],
-    ["Closing Difference", "", summary.difference, "", "", ""],
-  ]);
-  XLSX.utils.book_append_sheet(wb, footer, "Totals");
-
-  const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `Trial_Balance_Detailed_${date}.xlsx`);
+  exportAccountsReportToExcel({
+    title: REPORT_NAME,
+    filename: `Trial_Balance_Detailed_${meta.view}`,
+    header: buildHeaderOptions(meta),
+    bodyHtml: tableHtml,
+    landscape: true,
+  });
 }
 
-export function exportTrialBalanceSummaryToPdf(
-  rows: TrialBalanceSummaryGroupRow[],
+/** @deprecated Use exportTrialBalanceNormalToExcel */
+export async function exportTrialBalanceSummaryToExcel(
+  groups: TrialBalanceDetailedGroup[],
+  meta: TrialBalanceExportMeta,
+  summary: TrialBalanceSummary,
+): Promise<void> {
+  return exportTrialBalanceNormalToExcel(groups, meta, summary);
+}
+
+export function exportTrialBalanceNormalToPdf(
+  groups: TrialBalanceDetailedGroup[],
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
 ): void {
-  const tableRows = rows
-    .map(
-      (r) => `
-    <tr>
-      <td>${r.particular}</td>
-      <td class="num">${formatMoneyOrDash(r.debit)}</td>
-      <td class="num">${formatMoneyOrDash(r.credit)}</td>
-    </tr>`,
-    )
-    .join("");
-
-  openTrialBalancePdf(
-    meta,
-    summary,
-    `
-    <thead>
-      <tr>
-        <th>Particular</th>
-        <th>Debit (₹)</th>
-        <th>Credit (₹)</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows}</tbody>
-    <tfoot>
-      <tr>
-        <td><strong>Grand Total</strong></td>
-        <td class="num${summary.isBalanced ? "" : " warn"}">${formatMoney(summary.totalDebit)}</td>
-        <td class="num${summary.isBalanced ? "" : " warn"}">${formatMoney(summary.totalCredit)}</td>
-      </tr>
-    </tfoot>`,
-  );
+  exportAccountsReportToPdf({
+    title: REPORT_NAME,
+    filename: "Trial_Balance_Normal",
+    header: buildHeaderOptions(meta),
+    columns: NORMAL_COLUMNS,
+    bodyHtml: buildNormalBodyHtml(groups),
+    footerHtml: totalFooterHtml(summary),
+    footerNote: summary.isBalanced
+      ? "Trial Balance is balanced"
+      : `Trial Balance is not balanced — Opening Difference: ${formatMoney(summary.openingDifference)}; Period Difference: ${formatMoney(summary.periodDifference)}; Closing Difference: ${formatMoney(summary.closingDifference)}`,
+    landscape: true,
+  });
 }
 
 export function exportTrialBalanceDetailedToPdf(
@@ -178,112 +224,27 @@ export function exportTrialBalanceDetailedToPdf(
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
 ): void {
-  const tableRows = groups
-    .flatMap((group) => {
-      const header = `
-    <tr class="group">
-      <td><strong>${group.groupName}</strong></td>
-      <td></td><td></td><td></td><td></td>
-    </tr>`;
-      const ledgers = group.ledgers
-        .map(
-          (l) => `
-    <tr>
-      <td class="indent">${l.ledgerName}</td>
-      <td class="num">${formatMoneyOrDash(l.openingAmount)}</td>
-      <td class="num">${formatMoneyOrDash(l.debit)}</td>
-      <td class="num">${formatMoneyOrDash(l.credit)}</td>
-      <td class="num">${formatMoneyOrDash(l.closingAmount)}</td>
-      <td class="center">${balanceSideLabel(l.closingBalanceType)}</td>
-    </tr>`,
-        )
-        .join("");
-      return header + ledgers;
-    })
-    .join("");
+  const tableHtml =
+    buildTabularReportBodyHtml({
+      columns: DETAILED_COLUMNS,
+      bodyHtml: buildDetailedBodyHtml(groups),
+      footerHtml: totalFooterHtml(summary),
+    }) + balanceNoteHtml(summary);
 
-  openTrialBalancePdf(
-    meta,
-    summary,
-    `
-    <thead>
-      <tr>
-        <th>Particular</th>
-        <th>Opening Balance (₹)</th>
-        <th>Debit (₹)</th>
-        <th>Credit (₹)</th>
-        <th>Closing Balance (₹)</th>
-        <th>Balance Type</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows}</tbody>
-    <tfoot>
-      <tr>
-        <td colspan="2"><strong>Grand Total</strong></td>
-        <td class="num">${formatMoney(summary.periodDebit)}</td>
-        <td class="num">${formatMoney(summary.periodCredit)}</td>
-        <td colspan="2"></td>
-      </tr>
-    </tfoot>`,
-  );
+  const html = buildReportDocumentHtml({
+    title: REPORT_NAME,
+    header: buildHeaderOptions(meta),
+    bodyHtml: tableHtml,
+    landscape: true,
+  });
+  openReportPrintWindow(html);
 }
 
-function openTrialBalancePdf(
+/** @deprecated Use exportTrialBalanceNormalToPdf */
+export function exportTrialBalanceSummaryToPdf(
+  groups: TrialBalanceDetailedGroup[],
   meta: TrialBalanceExportMeta,
   summary: TrialBalanceSummary,
-  tableInner: string,
 ): void {
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${REPORT_NAME} — ${viewLabel(meta.view)}</title>
-  <style>
-    @media print { @page { margin: 16mm; } .page-num::after { content: counter(page); } }
-    body { font-family: system-ui, sans-serif; font-size: 11px; padding: 24px; color: #111; }
-    .header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-    .logo { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #F47920, #D96A10); color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    h1 { font-size: 16px; margin: 0 0 2px; color: #1A3A96; }
-    .company { font-size: 12px; font-weight: 600; margin: 0 0 4px; }
-    .meta { color: #555; font-size: 10px; line-height: 1.5; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-    th { background: #f5f5f5; font-size: 10px; text-transform: uppercase; }
-    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .center { text-align: center; }
-    .indent { padding-left: 20px; }
-    tr.group td { background: #fafafa; }
-    tfoot td { font-weight: 600; background: #fafafa; }
-    tfoot td.warn, td.warn { color: #dc2626; }
-    .warning { color: #dc2626; font-size: 10px; font-weight: 600; margin-top: 8px; }
-    .footer-meta { margin-top: 16px; font-size: 9px; color: #666; display: flex; justify-content: space-between; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="logo">DS</div>
-    <div>
-      <p class="company">${COMPANY_NAME}</p>
-      <h1>${REPORT_NAME} — ${viewLabel(meta.view)}</h1>
-      <p class="meta">
-        Date Range: ${meta.dateFrom} to ${meta.dateTo}<br />
-        Financial Year: ${meta.financialYear}<br />
-        Generated By: ${ACCOUNTS_CURRENT_USER} · Generated On: ${generatedOnLabel()}
-      </p>
-    </div>
-  </div>
-  <table>${tableInner}</table>
-  ${summary.isBalanced ? "" : '<p class="warning">Trial Balance is not balanced.</p>'}
-  <div class="footer-meta">
-    <span>${COMPANY_NAME}</span>
-    <span>Page <span class="page-num"></span></span>
-  </div>
-  <script>window.onload = function() { window.print(); }</script>
-</body>
-</html>`;
-
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
+  exportTrialBalanceNormalToPdf(groups, meta, summary);
 }
