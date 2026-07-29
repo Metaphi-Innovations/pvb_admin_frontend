@@ -569,8 +569,8 @@ export function isProductDiscountViewOnly(record: SchemeRecord): boolean {
   return isProductDiscountRecord(record) && isProductDiscountSchemeExpired(record);
 }
 
-export function mapCustomerMasterTypeToSchemeType(customerType: string): CustomerType {
-  const normalized = customerType.trim().toLowerCase();
+export function mapCustomerMasterTypeToSchemeType(customerType?: string | null): CustomerType {
+  const normalized = (customerType ?? "").trim().toLowerCase();
   if (normalized === "retailer" || normalized === "farmer") return "Retailer";
   if (normalized === "fpo") return "Institutional";
   if (normalized === "dealer") return "Wholesaler";

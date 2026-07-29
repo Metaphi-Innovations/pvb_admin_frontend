@@ -131,38 +131,39 @@ function normalizeMatchText(value: string | null | undefined): string {
   return (value || "").trim().toLowerCase();
 }
 
+function normalizeSkuMatchText(value: string | null | undefined): string {
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function getPoLineId(line: POLineItem): string {
+  return line.purchaseOrderProductId || line.uid || "";
+}
+
+/** Prefer real SKU; fall back to product code only if SKU is missing. */
+function getPoLineSku(line: POLineItem): string {
+  return normalizeSkuMatchText(line.sku || line.productCode);
+}
+
+/**
+ * Match extracted invoice item → PO line by SKU only (order-independent).
+ * Invoice SKU is compared against PO line.sku (from product master).
+ */
 function matchExtractedItemToPoLine(
   item: InvoiceExtractionItem,
   lines: POLineItem[],
 ): POLineItem | null {
-  const sku = normalizeMatchText(item.sku);
-  const name = normalizeMatchText(item.product_name);
+  const sku = normalizeSkuMatchText(item.sku);
+  if (!sku) return null;
 
-  if (sku) {
-    const bySku = lines.find((line) => {
-      const code = normalizeMatchText(line.productCode || line.sku);
-      return code && code === sku;
-    });
-    if (bySku) return bySku;
-  }
-
-  if (name) {
-    const exact = lines.find(
-      (line) => normalizeMatchText(line.productName) === name,
-    );
-    if (exact) return exact;
-
-    const partial = lines.find((line) => {
-      const productName = normalizeMatchText(line.productName);
-      return (
-        productName.includes(name) ||
-        name.includes(productName)
-      );
-    });
-    if (partial) return partial;
-  }
-
-  return null;
+  return (
+    lines.find((line) => {
+      const code = getPoLineSku(line);
+      return code.length > 0 && code === sku;
+    }) ?? null
+  );
 }
 
 function calcAmounts(qty: number, unitPrice: number, gstPct: number) {
@@ -246,7 +247,7 @@ function buildItemsFromPoLines(
         sourceItemId,
         productId: String(line.productId || ""),
         productName: line.productName,
-        productCode: line.productCode || line.sku,
+        productCode: line.sku || line.productCode,
         orderedQty: line.orderedQty,
         alreadyReceivedQty,
         pendingQty,
@@ -496,11 +497,15 @@ export function PurchaseCreate({
 
   const productOptions = useMemo(
     () =>
-      poLines.map((line) => ({
-        value: line.purchaseOrderProductId || line.uid,
-        label: line.productName,
-        sublabel: line.productCode || line.sku || undefined,
-      })),
+      poLines.map((line) => {
+        const sku = line.sku || line.productCode || "";
+        return {
+          value: line.purchaseOrderProductId || line.uid,
+          label: sku ? `${line.productName} (${sku})` : line.productName,
+          sublabel: sku || undefined,
+          searchText: `${line.productName} ${sku} ${line.productCode || ""}`.trim(),
+        };
+      }),
     [poLines],
   );
 
@@ -794,7 +799,7 @@ export function PurchaseCreate({
       sourceItemId: lineId,
       productId: String(line.productId || ""),
       productName: line.productName,
-      productCode: line.productCode || line.sku,
+      productCode: line.sku || line.productCode,
       unit:
         qtyMeta.quantityType === "CASE"
           ? line.packagingUnit || "Case"
@@ -881,12 +886,23 @@ export function PurchaseCreate({
     (result: InvoiceExtractionResult): ManualInvoiceRow[] => {
       const sourceItems =
         result.items.length > 0 ? result.items : [null];
+      const usedLineIds = new Set<string>();
 
-      return sourceItems.map((item) => {
-        const matched = item ? matchExtractedItemToPoLine(item, poLines) : null;
-        const lineId = matched
-          ? matched.purchaseOrderProductId || matched.uid
-          : "";
+      // Match each extracted item to a PO line by SKU only (never by row order).
+      const matchedLineIds: Array<string | null> = sourceItems.map((item) => {
+        if (!item) return null;
+        const availableLines = poLines.filter((line) => {
+          const id = getPoLineId(line);
+          return id ? !usedLineIds.has(id) : true;
+        });
+        const matched = matchExtractedItemToPoLine(item, availableLines);
+        const lineId = matched ? getPoLineId(matched) : "";
+        if (lineId) usedLineIds.add(lineId);
+        return lineId || null;
+      });
+
+      return sourceItems.map((item, index) => {
+        const lineId = matchedLineIds[index] || "";
 
         const baseRow = createEmptyRow();
         const withProduct = lineId
@@ -897,25 +913,58 @@ export function PurchaseCreate({
               productCode: item?.sku || "",
             };
 
+        // Invoice gives us both numbers directly — trust them instead of deriving
+        // via packing-size conversion which may not match the invoice exactly.
+        //
+        // displayQty (Cases/Qty input) = bag_case_quantity if present, else total_quantity
+        // quantity   (Base Qty)        = total_quantity if present, else derive from displayQty
         const displayQtyRaw =
           item?.bag_case_quantity ?? item?.total_quantity ?? withProduct.displayQty;
         const displayQty = Math.max(0, Number(displayQtyRaw) || 0);
-        const quantity = lineId
-          ? toInvoiceBaseQty(lineId, displayQty)
-          : displayQty;
 
+        const quantity =
+          item?.total_quantity != null && Number.isFinite(item.total_quantity)
+            ? Math.max(0, item.total_quantity)
+            : lineId
+              ? toInvoiceBaseQty(lineId, displayQty)
+              : displayQty;
+
+        const extractedTaxable =
+          item?.amount != null && Number.isFinite(item.amount)
+            ? Math.max(0, item.amount)
+            : null;
+        const derivedUnitPrice =
+          extractedTaxable != null &&
+          quantity > 0 &&
+          Number.isFinite(quantity)
+            ? round2(extractedTaxable / quantity)
+            : null;
         const unitPrice =
-          item?.price != null && Number.isFinite(item.price)
-            ? item.price
-            : withProduct.unitPrice;
+          derivedUnitPrice != null
+            ? derivedUnitPrice
+            : item?.price != null && Number.isFinite(item.price)
+              ? item.price
+              : withProduct.unitPrice;
         const gstPct =
           item?.gst_percentage != null && Number.isFinite(item.gst_percentage)
             ? item.gst_percentage
             : withProduct.gstPct;
-        const amounts = calcAmounts(quantity, unitPrice, gstPct);
+        const amounts =
+          extractedTaxable != null
+            ? {
+                gstAmount: round2((extractedTaxable * gstPct) / 100),
+                totalAmount: round2(
+                  extractedTaxable + (extractedTaxable * gstPct) / 100,
+                ),
+              }
+            : calcAmounts(quantity, unitPrice, gstPct);
 
         return {
           ...withProduct,
+          // Prefer PO SKU after match; otherwise keep extracted invoice SKU.
+          productCode: lineId
+            ? withProduct.productCode || item?.sku || ""
+            : item?.sku || withProduct.productCode,
           batchNumber: item?.batch_number || "",
           mfgDate: normalizeExtractionDate(item?.mfg_date),
           expDate: normalizeExtractionDate(item?.exp_date),
@@ -1392,7 +1441,7 @@ export function PurchaseCreate({
                   <tr className="bg-muted/40 border-b border-border">
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-32">PO No.</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product Name</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">SKU / Code</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-40 min-w-[160px]">SKU</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Ordered</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Prev. Received</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Pending</th>
@@ -1439,7 +1488,7 @@ export function PurchaseCreate({
                       <tr key={`${key}-${idx}`} className="border-b border-border/50">
                         <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700 align-middle">{it.poNumber}</td>
                         <td className="px-3 py-2 text-xs font-semibold text-foreground align-middle">{it.productName}</td>
-                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground align-middle">{it.productCode || "—"}</td>
+                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground align-middle min-w-[160px]">{it.productCode || "—"}</td>
                         <td className="px-3 py-2 text-xs text-center font-medium align-middle tabular-nums">{displayOrdered}</td>
                         <td className="px-3 py-2 text-xs text-center text-muted-foreground align-middle tabular-nums">{displayPrevReceived}</td>
                         <td className="px-3 py-2 text-xs text-center font-medium text-amber-700 align-middle tabular-nums">{displayPending}</td>
@@ -1653,7 +1702,7 @@ export function PurchaseCreate({
                 <thead>
                   <tr className="bg-muted/40 border-b border-border">
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[160px]">Product</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-24">SKU</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-40 min-w-[160px]">SKU</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">Batch No.</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">MFG Date</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">Expiry Date</th>
@@ -1706,6 +1755,11 @@ export function PurchaseCreate({
                             placeholder="Select product…"
                             searchPlaceholder="Search product…"
                             disabled={productOptions.length === 0}
+                            renderTriggerLabel={(selected) =>
+                              Array.isArray(selected) ? null : (
+                                <span className="truncate">{selected.label}</span>
+                              )
+                            }
                             className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
                           />
                           {row.sourceItemId && (
@@ -1718,12 +1772,12 @@ export function PurchaseCreate({
                             </p>
                           )}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 min-w-[160px]">
                           <Input
                             readOnly
                             value={row.productCode}
                             placeholder="—"
-                            className="h-9 text-xs font-mono bg-muted"
+                            className="h-9 text-xs font-mono bg-muted min-w-[160px]"
                           />
                         </td>
                         <td className="px-3 py-2">

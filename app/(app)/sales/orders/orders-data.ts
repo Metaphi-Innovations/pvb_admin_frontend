@@ -504,15 +504,15 @@ export interface LineTaxBreakdown {
   gstAmount: number;
 }
 
-export function normalizeStateName(state: string): string {
-  return state.trim().toLowerCase();
+export function normalizeStateName(state?: string | null): string {
+  return (state ?? "").trim().toLowerCase();
 }
 
 export function resolveTaxSupplyType(
-  sourceState: string,
-  destinationState: string,
+  sourceState?: string | null,
+  destinationState?: string | null,
 ): TaxSupplyType {
-  if (!sourceState.trim() || !destinationState.trim()) return "intra";
+  if (!(sourceState ?? "").trim() || !(destinationState ?? "").trim()) return "intra";
   return normalizeStateName(sourceState) === normalizeStateName(destinationState)
     ? "intra"
     : "inter";

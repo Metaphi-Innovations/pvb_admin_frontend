@@ -956,9 +956,33 @@ export function setDynamicPricingRecords(records: PricingRecord[] | null) {
   dynamicPricingRecords = records;
 }
 
+export function mapProductPricingDropdownItem(pr: Record<string, unknown>): Partial<PricingRecord> {
+  const product = (pr.product ?? {}) as Record<string, unknown>;
+  const customerType = (pr.customer_type ?? {}) as Record<string, unknown>;
+  return {
+    id: typeof pr.id === "number" ? pr.id : Number(pr.id) || 0,
+    productId: typeof pr.product_id === "number" ? pr.product_id : Number(pr.product_id) || 0,
+    productCode: String(product.product_code ?? ""),
+    sku: String(product.product_code ?? product.sku ?? ""),
+    productName: String(product.product_name ?? ""),
+    state: String(pr.state_name ?? ""),
+    customerType: (String(customerType.customer_type_name ?? "") || "Distributor") as PricingCustomerType,
+    status: pr.is_active ? "active" : "inactive",
+    dealerPrice: Number(pr.dealer_price ?? 0),
+    costPrice: Number(pr.cost_price ?? product.cost_price ?? 0),
+    distributorPrice: Number(pr.dealer_price ?? 0),
+  };
+}
+
+export function mapProductPricingDropdownRecords(
+  records: Record<string, unknown>[],
+): PricingRecord[] {
+  return records.map((record) => migratePricingRecord(mapProductPricingDropdownItem(record)));
+}
+
 export function loadPricingRecords(): PricingRecord[] {
   if (dynamicPricingRecords) {
-    return dynamicPricingRecords;
+    return dynamicPricingRecords.map((r) => migratePricingRecord(r));
   }
   ensurePricingDemoSeed();
   const records = loadMasterRecords<PricingRecord>(PRICING_STORAGE_KEY, PRICING_SEED);
@@ -1381,19 +1405,27 @@ export function findDuplicateActivePricing(
 
 export function findActivePricingForStock(
   sku: string,
-  productName: string,
+  productName?: string | null,
 ): PricingRecord | undefined {
   const records = loadPricingRecords().filter((r) => r.status === "active");
-  const norm = (s: string) => s.trim().toLowerCase();
+  const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+  const normalizedSku = norm(sku);
+  const normalizedName = norm(productName);
 
-  const bySku = records.find((r) => r.sku === sku);
-  if (bySku) return bySku;
+  if (normalizedSku) {
+    const bySku = records.find((r) => norm(r.sku) === normalizedSku);
+    if (bySku) return bySku;
+  }
 
-  const byName = records.find((r) => norm(r.productName) === norm(productName));
-  if (byName) return byName;
+  if (normalizedName) {
+    const byName = records.find((r) => norm(r.productName) === normalizedName);
+    if (byName) return byName;
+  }
 
   const product = loadProducts().find(
-    (p) => p.sku === sku || norm(p.productName) === norm(productName),
+    (p) =>
+      (normalizedSku && norm(p.sku) === normalizedSku) ||
+      (normalizedName && norm(p.productName) === normalizedName),
   );
   if (product) {
     return records.find((r) => r.productId === product.id);
