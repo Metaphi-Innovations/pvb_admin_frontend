@@ -186,11 +186,24 @@ export default function ProductDetailPage() {
 
 	const product = useMemo<Product | null>(() => {
 		if (!apiProduct) return null;
+		const hsnCode = apiProduct.hsnCode?.trim() || "";
+		const hsnDescription = apiProduct.hsnDescription?.trim() || "";
+		const looksLikeUuid =
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+				hsnCode,
+			);
+		const displayHsnCode = looksLikeUuid ? "" : hsnCode;
+		const hsnDisplay =
+			displayHsnCode && hsnDescription
+				? `${displayHsnCode} — ${hsnDescription}`
+				: displayHsnCode || hsnDescription || "";
+
 		return {
 			id: apiProduct.id,
 			productId: apiProduct.productUuid,
 			productCode: apiProduct.productCode,
 			productName: apiProduct.productName,
+			scientificName: apiProduct.scientificName || undefined,
 			sku: apiProduct.sku,
 			supplier: apiProduct.supplier || undefined,
 			supplierCode: apiProduct.supplierCode || undefined,
@@ -200,7 +213,7 @@ export default function ProductDetailPage() {
 			form: apiProduct.form || "",
 			cfu: apiProduct.cfu || undefined,
 			authority: apiProduct.authority || undefined,
-			hsnCode: apiProduct.hsnCode,
+			hsnCode: hsnDisplay,
 			hsnId: apiProduct.hsnId || undefined,
 			gstRate: apiProduct.gstRate || "",
 			gstId: apiProduct.gstId || undefined,
@@ -292,7 +305,12 @@ export default function ProductDetailPage() {
 						</RecordSectionCard>
 
 						<RecordSectionCard title='Tax & Compliance' icon={IndianRupee} accent='orange'>
-							<RecordKvRow label='HSN Code' value={product.hsnCode} mono copy />
+							<RecordKvRow
+								label='HSN Name/Code'
+								value={product.hsnCode}
+								mono
+								copy
+							/>
 							<RecordKvRow
 								label='GST %'
 								value={

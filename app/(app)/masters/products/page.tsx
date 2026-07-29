@@ -381,9 +381,17 @@ export default function ProductsPage() {
       filterType: "dropdown",
       filterOptions: hsnCodeOptions,
       width: "90px",
-      render: (_val, row) => (
-        <span className="font-mono text-xs">{row.hsnCode || "—"}</span>
-      ),
+      render: (_val, row) => {
+        const looksLikeUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            row.hsnCode || "",
+          );
+        return (
+          <span className="font-mono text-xs">
+            {looksLikeUuid ? "—" : row.hsnCode || "—"}
+          </span>
+        );
+      },
     },
     {
       key: "category",

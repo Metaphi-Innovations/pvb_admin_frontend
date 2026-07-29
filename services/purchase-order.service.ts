@@ -20,6 +20,10 @@ import type {
 import type { POFormValues } from "@/app/(app)/procurement/purchase-orders/components/PurchaseOrderForm";
 import { recalcPO } from "@/app/(app)/procurement/purchase-orders/po-data";
 import type { POFollowUpEntry } from "@/app/(app)/procurement/purchase-orders/po-followup-data";
+import {
+  generateAndPrintPurchaseOrderPdf,
+  openPurchaseOrderPdfWindow,
+} from "@/app/(app)/procurement/purchase-orders/po-pdf/poPdfGenerator";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -179,6 +183,17 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
   const productId = toUuidOrNull(raw.product_id) ?? asString(raw.product_id) ?? 0;
   const receivedBaseQty = asNumber(raw.received_base_qty);
   const shortClosedBaseQty = asNumber(raw.short_closed_base_qty);
+  const snapshot = asRecord(raw.product_snapshot);
+  const snapshotHsn = asRecord(snapshot.hsn);
+  const hsnCode =
+    asString(raw.hsn_code) ||
+    asString(raw.hsnCode) ||
+    asString(snapshot.hsn_code) ||
+    asString(snapshot.hsnCode) ||
+    asString(snapshotHsn.hsnCode) ||
+    asString(snapshotHsn.hsn_code) ||
+    asString(snapshotHsn.code) ||
+    "";
 
   const snapshot = asRecord(raw.product_snapshot);
   const hsnObj = asRecord(snapshot.hsn);
@@ -192,7 +207,15 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     productName: asString(raw.product_name),
     description: "",
     sku: asString(raw.product_code),
+<<<<<<< HEAD
+    category: asString(
+      asRecord(snapshot.category).category_name ??
+        asRecord(snapshot.category).name ??
+        snapshot.category_name,
+    ),
+=======
     category: "",
+>>>>>>> d99f8b48998085c02283482f8cd1c993199528ff
     hsnCode,
     baseUnit: asString(raw.base_unit) || "Unit",
     packagingUnit: asString(raw.packing_unit) || "Box",
@@ -573,6 +596,10 @@ export interface PurchaseOrderWarehouseDropdownOption {
 }
 
 export const PurchaseOrderService = {
+  openPdfWindow() {
+    return openPurchaseOrderPdfWindow();
+  },
+
   async getSupplierDropdown(
     signal?: AbortSignal,
   ): Promise<PurchaseOrderSupplierDropdownOption[]> {
@@ -671,6 +698,17 @@ export const PurchaseOrderService = {
       throw new Error("Unexpected response shape: 'data' must be an object.");
     }
     return data as Record<string, unknown>;
+  },
+
+  async downloadPdfById(
+    id: string,
+    options?: { signal?: AbortSignal; openedWindow?: Window | null },
+  ): Promise<void> {
+    const [po, raw] = await Promise.all([
+      this.getById(id, options?.signal),
+      this.getRawById(id, options?.signal),
+    ]);
+    await generateAndPrintPurchaseOrderPdf(po, raw, options?.openedWindow);
   },
 
   async getPreviewNumber(

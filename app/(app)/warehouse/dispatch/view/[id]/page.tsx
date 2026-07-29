@@ -2,17 +2,17 @@
 
 import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { Truck, Package, Building, User, Calendar, CheckCircle2 } from "lucide-react";
-import { useRouter, useParams } from "next/navigation";
-import { getDispatchById } from "../../services";
+import { Truck, Package, Building, User, Calendar, FileText, Download } from "lucide-react";
+import { useParams } from "next/navigation";
+import { getDispatchById, downloadDeliveryChallan } from "../../services";
 
 export default function ViewDispatchPage() {
-  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
 
   const [record, setRecord] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [downloadingChallan, setDownloadingChallan] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -47,6 +47,24 @@ export default function ViewDispatchPage() {
     record.status === "DISPATCHED" ? "active" :
     record.status === "DRAFT" ? "draft" : "neutral";
 
+  const isSample =
+    String(record.source_type || "").toLowerCase() === "sample_order" ||
+    String(record.source_type || "").toLowerCase() === "sample";
+
+  const handleDownloadChallan = async () => {
+    setDownloadingChallan(true);
+    try {
+      await downloadDeliveryChallan(record.id);
+      const refreshed = await getDispatchById(record.id).catch(() => null);
+      if (refreshed) setRecord(refreshed);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download delivery challan");
+    } finally {
+      setDownloadingChallan(false);
+    }
+  };
+
   return (
     <RecordDetailPage
       listHref="/warehouse/dispatch"
@@ -62,12 +80,21 @@ export default function ViewDispatchPage() {
       ]}
       sidebar={{
         summary: [
+          { label: "Challan No", value: record.challan_number || "Assigned on download", highlight: true },
           { label: "Vehicle", value: record.vehicle_number, highlight: true },
           { label: "Driver", value: record.driver_name },
           { label: "Transporter", value: record.transporter || "—" },
           { label: "Products", value: record.items?.length || 0 },
         ],
-        quickActions: [] // Edit removed for simplicity in real API unless supported
+        quickActions: isSample
+          ? []
+          : [
+              {
+                label: downloadingChallan ? "Downloading…" : "Download Challan",
+                icon: downloadingChallan ? Download : FileText,
+                onClick: handleDownloadChallan,
+              },
+            ],
       }}
     >
       <div className="space-y-6">

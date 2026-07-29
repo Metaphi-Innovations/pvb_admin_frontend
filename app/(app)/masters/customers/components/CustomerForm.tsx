@@ -1556,7 +1556,12 @@ export function CustomerForm({
 				{...(activeStep ? { value: activeStep } : { defaultValue: "basic" })}
 				onValueChange={(value) => {
 					if (!onStepChange) return;
-					if (value === "basic" || value === "branch" || value === "commercial") {
+					if (
+						value === "basic" ||
+						value === "branch" ||
+						value === "commercial" ||
+						value === "accounting"
+					) {
 						onStepChange(value);
 					}
 				}}

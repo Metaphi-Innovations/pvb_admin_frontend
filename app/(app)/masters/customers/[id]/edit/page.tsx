@@ -353,7 +353,7 @@ export default function EditCustomerPage() {
       title="Edit Customer"
       description={
         fromCoa
-          ? "Accounts → Chart of Accounts → Sundry Debtors → Edit"
+          ? `Accounts → Chart of Accounts → Sundry Debtors → Edit · ${currentStep.label}`
           : `Masters → Customer Master → Edit · ${currentStep.label}`
       }
       onBack={() => router.push(leaveHref)}
@@ -377,6 +377,27 @@ export default function EditCustomerPage() {
         </div>
       }
     >
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {CUSTOMER_FORM_STEPS.map((step, idx) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => {
+              setErrors({});
+              setStepIndex(idx);
+            }}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-colors cursor-pointer",
+              idx === stepIndex
+                ? "bg-brand-600 text-white border-brand-600"
+                : "bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100",
+            )}
+          >
+            {idx + 1}. {step.label}
+          </button>
+        ))}
+      </div>
+
       <CustomerForm
         form={form}
         onChange={setForm}
