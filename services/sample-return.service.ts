@@ -65,6 +65,8 @@ export interface SampleReturnLineItem {
   expDate: string;
   /** Returned quantity converted to base units (pieces). */
   returnedBaseQty: number;
+  /** Cumulative GRN received qty in base units. */
+  receivedBaseQty: number;
   /** From backend; missing → UI defaults to CASE. */
   quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
@@ -154,6 +156,7 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
     mfgDate: asDateOnly(inventoryBatch.manufactureDate) || asDateOnly(inventoryBatch.manufacture_date) || "",
     expDate: asDateOnly(inventoryBatch.expiryDate) || asDateOnly(inventoryBatch.expiry_date) || "",
     returnedBaseQty,
+    receivedBaseQty: asNumber(raw.received_base_qty),
     quantityType: normalizeGrnQuantityType(
       asString(raw.quantity_type) ||
       asString(raw.quantityType) ||
