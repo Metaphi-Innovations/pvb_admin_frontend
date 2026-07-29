@@ -27,6 +27,15 @@ import {
 import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
 import { ProductListService } from "@/services/product-list.service";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function toUuidOrNull(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw || !UUID_RE.test(raw)) return null;
+  return raw;
+}
+
 export default function NewProductPage() {
   const router = useRouter();
   const [form, setForm] = useState<ProductFormValues>(DEFAULT_PRODUCT_FORM);
@@ -75,14 +84,14 @@ export default function NewProductPage() {
       product_name: resolvedForm.productName,
       scientific_name: resolvedForm.scientificName || null,
       sku: resolvedForm.sku,
-      supplier_id: resolvedForm.supplier || null,
+      supplier_id: toUuidOrNull(resolvedForm.supplier),
       supplier_code: resolvedForm.supplierCode || null,
-      hsn_id: resolvedForm.hsnId || resolvedForm.hsnCode || null,
-      gst_rate_id: resolvedForm.gstId || null,
-      category_id: resolvedForm.categoryId || resolvedForm.category,
-      segment_id: resolvedForm.segmentId || resolvedForm.segment,
-      formulation_id: resolvedForm.formId || resolvedForm.form,
-      cfu_id: resolvedForm.cfuId || resolvedForm.cfu || null,
+      hsn_id: toUuidOrNull(resolvedForm.hsnId || resolvedForm.hsnCode),
+      gst_rate_id: toUuidOrNull(resolvedForm.gstId),
+      category_id: toUuidOrNull(resolvedForm.categoryId),
+      segment_id: toUuidOrNull(resolvedForm.segmentId),
+      formulation_id: toUuidOrNull(resolvedForm.formId),
+      cfu_id: toUuidOrNull(resolvedForm.cfuId),
       authority: resolvedForm.authority || null,
       pack_size: parseNum(resolvedForm.packSize),
       base_unit: resolvedForm.baseUnit,

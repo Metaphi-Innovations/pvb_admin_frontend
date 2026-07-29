@@ -118,7 +118,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload, CustomerBranchDocument, buildFileKey } from "@/services/customer-list.service";
-import { useGstDropdown, usePincode, useTdsDropdown } from "@/hooks/masters";
+import { usePincode, useTdsDropdown } from "@/hooks/masters";
 import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
 import { CustomerTypeDocument } from "@/services/customer-type-list.service";
 import { PincodeService } from "@/services/pincode.service";
@@ -919,7 +919,10 @@ export const CUSTOMER_FORM_STEPS = [
 
 export type CustomerFormStepId = (typeof CUSTOMER_FORM_STEPS)[number]["id"];
 
-const ADDRESS_LINE_2_MAX = 250;
+const ADDRESS_LINE_1_MAX = 255;
+const ADDRESS_LINE_2_MAX = 255;
+const ADDRESS_GEO_MAX = 100;
+const ADDRESS_PINCODE_MAX = 20;
 
 interface CustomerFormProps {
 	form: CustomerFormValues;
@@ -939,6 +942,7 @@ interface CustomerFormProps {
 	/** Accounts COA customer ledger — show license validity dates on compliance rows. */
 	showComplianceValidityDates?: boolean;
 	activeStep?: CustomerFormStepId;
+	onStepChange?: (step: CustomerFormStepId) => void;
 }
 
 function branchDocumentsToPayload(
@@ -1001,9 +1005,9 @@ export function CustomerForm({
 	customerTypes,
 	showComplianceValidityDates = false,
 	activeStep,
+	onStepChange,
 }: CustomerFormProps) {
 	const show = (stepId: CustomerFormStepId) => !activeStep || activeStep === stepId;
-	const { data: gstDropdownItems = [] } = useGstDropdown();
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
 	const { data: salesmanData = [] } = useSalesmenDropdown();
 
@@ -1543,25 +1547,6 @@ export function CustomerForm({
 					</div>
 				</div>
 			</div>
-			{gstRegistered && (
-				<div className={ERP.field}>
-					<Label className={ERP.label}>GST Code</Label>
-					<SearchableSelect
-						value={form.gstMasterId}
-						onChange={(value) => set("gstMasterId", value)}
-						options={gstDropdownItems.map((gst) => ({
-							value: gst.id,
-							label: `${gst.gstPercentage}%`,
-							sublabel: gst.remark,
-						}))}
-						placeholder="Select from GST Master..."
-						searchPlaceholder="Search GST code..."
-						disabled={readOnly}
-						error={!!errors.gstMasterId}
-					/>
-					<FieldError msg={errors.gstMasterId} />
-				</div>
-			)}
 		</div>
 	);
 
@@ -1569,6 +1554,17 @@ export function CustomerForm({
 		<div className='w-full'>
 			<Tabs
 				{...(activeStep ? { value: activeStep } : { defaultValue: "basic" })}
+				onValueChange={(value) => {
+					if (!onStepChange) return;
+					if (
+						value === "basic" ||
+						value === "branch" ||
+						value === "commercial" ||
+						value === "accounting"
+					) {
+						onStepChange(value);
+					}
+				}}
 				className='w-full'
 			>
 				{!activeStep && (
@@ -2225,33 +2221,7 @@ export function CustomerForm({
 										{/* Collapsible Details */}
 										{isExpanded && (
 											<div className='p-2.5 space-y-2 duration-200 animate-in fade-in-50'>
-												<ErpFormSection title='Branch Details'>
-													<div className={ERP.grid3}>
-														<div className={ERP.field}>
-															<Label className={ERP.label}>
-																Salesman <span className='text-red-500'>*</span>
-															</Label>
-															<SearchableSelect
-																value={branch.salesManId || ""}
-																onChange={(value) => {
-																	const updated = [...form.branches];
-																	updated[bIdx] = {
-																		...updated[bIdx],
-																		salesManId: value,
-																	};
-																	onChange({ ...form, branches: updated });
-																	onClearError?.(`branch_${bIdx}_salesManId`);
-																}}
-																options={salesOptions}
-																placeholder='Search sales person...'
-																searchPlaceholder='Name, ID, mobile...'
-																disabled={readOnly}
-																error={!!errors[`branch_${bIdx}_salesManId`]}
-															/>
-															<FieldError msg={errors[`branch_${bIdx}_salesManId`]} />
-														</div>
-													</div>
-												</ErpFormSection>
+
 
 												<ErpFormSection title='Address'>
 													{!readOnly && gstAddressSnapshot && (
@@ -2283,7 +2253,12 @@ export function CustomerForm({
 																	pincode: errors.mainBranchBillingPincode,
 																}
 																: {}),
+															address: errors[`branch_${bIdx}_billingAddressLine1`] || (isMain ? errors.mainBranchBillingAddress : undefined),
 															addressLine2: errors[`branch_${bIdx}_billingAddressLine2`],
+															state: errors[`branch_${bIdx}_billingState`] || (isMain ? errors.mainBranchBillingState : undefined),
+															city: errors[`branch_${bIdx}_billingCity`] || (isMain ? errors.mainBranchBillingCity : undefined),
+															town: errors[`branch_${bIdx}_billingTown`],
+															pincode: errors[`branch_${bIdx}_billingPincode`] || (isMain ? errors.mainBranchBillingPincode : undefined),
 														}}
 													/>
 												</ErpFormSection>
@@ -2323,7 +2298,12 @@ export function CustomerForm({
 														readOnly={readOnly}
 														stateOptions={stateOptions}
 														errors={{
+															address: errors[`branch_${bIdx}_shippingAddressLine1`],
 															addressLine2: errors[`branch_${bIdx}_shippingAddressLine2`],
+															state: errors[`branch_${bIdx}_shippingState`],
+															city: errors[`branch_${bIdx}_shippingCity`],
+															town: errors[`branch_${bIdx}_shippingTown`],
+															pincode: errors[`branch_${bIdx}_shippingPincode`],
 														}}
 													/>
 												</ErpFormSection>
@@ -2897,8 +2877,6 @@ export function validateCustomerForm(
 		if (!form.gstin.trim())
 			e.gstin = "GSTIN is required when GST registered";
 		else if (!validateGSTIN(form.gstin)) e.gstin = "Invalid GSTIN format";
-		if (!isAdd && !form.gstMasterId)
-			e.gstMasterId = "Select GST code from master";
 	}
 	form.branches.forEach((branch, bIdx) => {
 		if (!branch.salesManId?.trim()) {
@@ -2956,15 +2934,66 @@ export function validateCustomerForm(
 	}
 
 	form.branches.forEach((branch, bIdx) => {
+		const billingLine1 = branch.billingAddress.address ?? "";
+		if (billingLine1.length > ADDRESS_LINE_1_MAX) {
+			e[`branch_${bIdx}_billingAddressLine1`] =
+				`Address Line 1 cannot exceed ${ADDRESS_LINE_1_MAX} characters.`;
+		}
 		const billingLine2 = branch.billingAddress.addressLine2 ?? "";
 		if (billingLine2.length > ADDRESS_LINE_2_MAX) {
 			e[`branch_${bIdx}_billingAddressLine2`] =
-				`Address Line 2 must not exceed ${ADDRESS_LINE_2_MAX} characters (${billingLine2.length}/${ADDRESS_LINE_2_MAX})`;
+				`Address Line 2 cannot exceed ${ADDRESS_LINE_2_MAX} characters.`;
+		}
+		const billingCity = branch.billingAddress.city ?? "";
+		if (billingCity.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingCity`] =
+				`City cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingState = branch.billingAddress.state ?? "";
+		if (billingState.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingState`] =
+				`State cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingTown = branch.billingAddress.town ?? "";
+		if (billingTown.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_billingTown`] =
+				`Town cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const billingPincode = branch.billingAddress.pincode ?? "";
+		if (billingPincode.length > ADDRESS_PINCODE_MAX) {
+			e[`branch_${bIdx}_billingPincode`] =
+				`Pincode cannot exceed ${ADDRESS_PINCODE_MAX} characters.`;
+		}
+
+		const shippingLine1 = branch.shippingAddress.address ?? "";
+		if (shippingLine1.length > ADDRESS_LINE_1_MAX) {
+			e[`branch_${bIdx}_shippingAddressLine1`] =
+				`Address Line 1 cannot exceed ${ADDRESS_LINE_1_MAX} characters.`;
 		}
 		const shippingLine2 = branch.shippingAddress.addressLine2 ?? "";
 		if (shippingLine2.length > ADDRESS_LINE_2_MAX) {
 			e[`branch_${bIdx}_shippingAddressLine2`] =
-				`Address Line 2 must not exceed ${ADDRESS_LINE_2_MAX} characters (${shippingLine2.length}/${ADDRESS_LINE_2_MAX})`;
+				`Address Line 2 cannot exceed ${ADDRESS_LINE_2_MAX} characters.`;
+		}
+		const shippingCity = branch.shippingAddress.city ?? "";
+		if (shippingCity.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingCity`] =
+				`City cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingState = branch.shippingAddress.state ?? "";
+		if (shippingState.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingState`] =
+				`State cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingTown = branch.shippingAddress.town ?? "";
+		if (shippingTown.length > ADDRESS_GEO_MAX) {
+			e[`branch_${bIdx}_shippingTown`] =
+				`Town cannot exceed ${ADDRESS_GEO_MAX} characters.`;
+		}
+		const shippingPincode = branch.shippingAddress.pincode ?? "";
+		if (shippingPincode.length > ADDRESS_PINCODE_MAX) {
+			e[`branch_${bIdx}_shippingPincode`] =
+				`Pincode cannot exceed ${ADDRESS_PINCODE_MAX} characters.`;
 		}
 	});
 

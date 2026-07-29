@@ -73,15 +73,49 @@ import { CoaDrillDownEmptyState } from "./components/CoaDrillDownEmptyState";
 import { CoaMaxHierarchyNotice } from "./components/CoaMaxHierarchyNotice";
 import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { useQuery } from "@tanstack/react-query";
+import {
+  LedgerService,
+  type LedgerDetailDto,
+  type LedgerOpeningBalanceDto,
+} from "@/services/ledger.service";
+import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
+import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 
 /** Ledger statement summary from API-backed COA records (no localStorage voucher demo). */
-function buildApiLedgerDetailSummary(ledger: ChartOfAccount) {
+function resolveLedgerOpeningBalance(
+  detail: LedgerDetailDto,
+  financialYearId?: string,
+): LedgerOpeningBalanceDto | null {
+  if (financialYearId) {
+    const match = detail.openingBalances?.find(
+      (row) => row.financialYearId === financialYearId,
+    );
+    if (match) return match;
+  }
+  return detail.openingBalance ?? detail.openingBalances?.[0] ?? null;
+}
+
+function buildApiLedgerDetailSummary(
+  ledger: ChartOfAccount,
+  openingBalance?: LedgerOpeningBalanceDto | null,
+) {
+  const parsedOpeningAmount =
+    openingBalance?.amount != null
+      ? Number(openingBalance.amount)
+      : ledger.openingBalance ?? 0;
+  const openingAmount = Number.isFinite(parsedOpeningAmount) ? parsedOpeningAmount : 0;
+  const openingSide =
+    String(openingBalance?.balanceType ?? ledger.balanceType ?? "DEBIT").toUpperCase() ===
+    "CREDIT"
+      ? ("Credit" as const)
+      : ("Debit" as const);
   return {
     ledgerId: ledger.id,
-    openingBalance: ledger.openingBalance ?? 0,
-    openingBalanceType: ledger.balanceType ?? ("Debit" as const),
-    currentBalance: ledger.openingBalance ?? 0,
-    balanceType: ledger.balanceType ?? ("Debit" as const),
+    openingBalance: openingAmount,
+    openingBalanceType: openingSide,
+    currentBalance: openingAmount,
+    balanceType: openingSide,
     totalDebit: 0,
     totalCredit: 0,
     transactions: [] as CoaLedgerDetailRow[],
@@ -146,6 +180,30 @@ export default function ChartOfAccountsPageClient() {
     "contra-vouchers",
     "journal-vouchers",
   ]);
+  const { data: selectedLedgerDetail } = useQuery({
+    queryKey: [
+      "accounts",
+      "chart-of-accounts",
+      "selected-ledger-detail",
+      selectedNode?.apiNodeId ?? selectedNode?.id ?? null,
+      ledgerDataTick,
+    ],
+    enabled: Boolean(selectedNode && isCoaLedgerDetailView(selectedNode, records)),
+    queryFn: async () => {
+      if (!selectedNode) return null;
+      const [detail, currentFy] = await Promise.all([
+        LedgerService.view(selectedNode.apiNodeId ?? String(selectedNode.id)),
+        LedgerService.getCurrentFinancialYear(),
+      ]);
+      return {
+        detail,
+        openingBalance: resolveLedgerOpeningBalance(
+          detail,
+          currentFy?.financialYearId,
+        ),
+      };
+    },
+  });
 
   const [showRoot, setShowRoot] = useState(false);
   const [contentSearch, setContentSearch] = useState("");
@@ -338,11 +396,15 @@ export default function ChartOfAccountsPageClient() {
   const ledgerAccounting = useMemo(() => {
     if (!isLedgerStatementView || !selectedNode || !datesReady) return null;
     // Opening/closing from API COA tree only — do not mix localStorage voucher demos.
-    return buildApiLedgerDetailSummary(selectedNode);
+    return buildApiLedgerDetailSummary(
+      selectedNode,
+      selectedLedgerDetail?.openingBalance,
+    );
   }, [
     isLedgerStatementView,
     selectedNode,
     datesReady,
+    selectedLedgerDetail,
   ]);
 
   const ledgerDataReady =
@@ -356,21 +418,44 @@ export default function ChartOfAccountsPageClient() {
     return filterLedgerStatementRows(ledgerAccounting.transactions, contentSearch);
   }, [ledgerAccounting, ledgerDataReady, selectedNode, contentSearch]);
 
+  const { data: backendSearchResults } = useQuery({
+    queryKey: [
+      "accounts",
+      "chart-of-accounts",
+      "search-results",
+      selectedNode?.apiNodeId ?? selectedNode?.id ?? null,
+      contentSearch,
+    ],
+    enabled: Boolean(contentSearch.trim() && !isLedgerStatementView),
+    queryFn: async ({ signal }) => {
+      const parentId = selectedNode?.apiNodeId ?? selectedNode?.id;
+      const tree = await ChartOfAccountsService.getTree({
+        includeLedgers: true,
+        search: contentSearch,
+        ...(parentId ? { parentId: String(parentId) } : {}),
+        signal,
+      });
+      return mapCoaApiTreeToRecords(tree);
+    },
+  });
+
+  const effectiveRecords = contentSearch.trim() ? (backendSearchResults ?? []) : deferredRecords;
+
   const ledgerListingRows = useMemo(() => {
     if (!selectedNode || !isAccountingGroupLedgerListing) return [];
-    const rows = buildCoaLedgerListingRows(deferredRecords, selectedNode.id, {
+    const rows = buildCoaLedgerListingRows(effectiveRecords, selectedNode.id, {
       search: contentSearch,
     });
     return rows;
-  }, [deferredRecords, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
+  }, [effectiveRecords, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
 
   const listingRows = useMemo(() => {
     if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
-    return buildCoaListingRows(deferredRecords, tableParentId, dateFrom, dateTo, {
+    return buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
       search: contentSearch,
     });
   }, [
-    deferredRecords,
+    effectiveRecords,
     tableParentId,
     dateFrom,
     dateTo,
@@ -403,7 +488,7 @@ export default function ChartOfAccountsPageClient() {
     }
 
     return computeCoaListingSummary(
-      records,
+      effectiveRecords,
       listingRows,
       selectedNode,
       showRoot,
@@ -412,7 +497,7 @@ export default function ChartOfAccountsPageClient() {
       Boolean(contentSearch.trim()),
     );
   }, [
-    records,
+    effectiveRecords,
     listingRows,
     selectedNode,
     showRoot,
@@ -494,10 +579,10 @@ export default function ChartOfAccountsPageClient() {
     }
   };
 
-  const handlePdfExport = () => {
+  const handlePdfExport = async () => {
     if (!mounted) return;
     if (isLedgerStatementView && selectedNode && ledgerAccounting) {
-      exportCoaLedgerStatementToPdf(filteredTransactions, {
+      await exportCoaLedgerStatementToPdf(filteredTransactions, {
         ledger: selectedNode,
         parentGroup: ledgerParentGroup,
         dateFrom,
@@ -508,11 +593,11 @@ export default function ChartOfAccountsPageClient() {
         closingSide: ledgerAccounting.balanceType,
       });
     } else if (isAccountingGroupLedgerListing && ledgerListingRows.length > 0) {
-      exportCoaLedgerListingToPdf(ledgerListingRows, {
+      await exportCoaLedgerListingToPdf(ledgerListingRows, {
         groupName: selectedNode?.accountName ?? "",
       });
     } else if (listingRows.length > 0) {
-      exportCoaListingToPdf(listingRows, exportMeta);
+      await exportCoaListingToPdf(listingRows, exportMeta);
     }
   };
 

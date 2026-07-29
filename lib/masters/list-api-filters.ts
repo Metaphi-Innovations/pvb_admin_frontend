@@ -482,7 +482,16 @@ export const MASTER_FILTER_FIELD_MAPS = {
     category: "category.categoryName",
     packSize: "pack_size",
     baseUnit: "unit",
-    mrp: "mrp",
+    mrp: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw ?? "").replace(/[₹,\s]/g, "").trim());
+      return Number.isFinite(num) ? { mrp: num } : null;
+    },
+    costPrice: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw ?? "").replace(/[₹,\s]/g, "").trim());
+      return Number.isFinite(num) ? { cost_price: num } : null;
+    },
     status: (value) => {
       const token = normalizeStatusToken(value);
       if (token === "active") return { status: "Active" };

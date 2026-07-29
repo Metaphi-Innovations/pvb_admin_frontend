@@ -23,7 +23,8 @@ import {
 } from "@/lib/accounts/ledger-transaction-date-filter";
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
-import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
+import { computeLedgerCurrentBalance, resolveOpeningSide } from "../ledgers/ledgers-utils";
+import { roundMoney } from "@/lib/accounts/money-format";
 import {
   isStockInHandLedger,
   resolveStockInHandDisplayBalance,
@@ -140,6 +141,8 @@ export function buildCoaLedgerListingRows(
       ? resolveStockInHandDisplayBalance()
       : computeLedgerCurrentBalance(ledger);
     const tds = resolveTdsLedgerUsageInfo(ledger);
+    // Use the accounting-nature-aware side so opening/current always agree
+    const openingSide = resolveOpeningSide(ledger);
     return {
       ledger,
       parentGroupName: ledger.parentAccountId
@@ -147,7 +150,7 @@ export function buildCoaLedgerListingRows(
         : "",
       source: resolveCoaLedgerSource(ledger, records),
       openingAmount: ledger.openingBalance,
-      openingSide: ledger.balanceType,
+      openingSide,
       currentAmount: current.amount,
       currentSide: current.balanceType,
       ...(tds
@@ -280,7 +283,9 @@ function ledgerPeriodBalances(
   /** Stock in Hand current/closing balance = ERP total inventory value (COA display). */
   if (isStockInHandLedger(ledger)) {
     const display = resolveStockInHandDisplayBalance();
-    const openingSigned = openingSignedBalance(ledger);
+    // Use corrected opening side (same as computeLedgerCurrentBalance)
+    const openingSide = resolveOpeningSide(ledger);
+    const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
     const opening = fromSignedBalance(openingSigned);
     return {
       openingAmount: opening.amount,
@@ -292,7 +297,9 @@ function ledgerPeriodBalances(
     };
   }
 
-  const openingSigned = openingSignedBalance(ledger);
+  // Use resolveOpeningSide so the sign convention matches computeLedgerCurrentBalance
+  const openingSide = resolveOpeningSide(ledger);
+  const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
   const opening = fromSignedBalance(openingSigned);
   const closing = computePeriodClosingBalance(
     ledger,

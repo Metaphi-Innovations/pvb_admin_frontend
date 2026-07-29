@@ -56,6 +56,43 @@ import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { ListingStatusToggle } from "@/components/listing";
 import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown, useCfuDropdown, useFormulationDropdown } from "@/hooks/masters";
 
+/** Matches Prisma Decimal(18, 4) for mrp / pack_size / unit_per_packing. */
+const DECIMAL_18_4_MAX = 99_999_999_999_999.9999;
+/** Matches Prisma Decimal(12, 2) for cost_price. */
+const COST_PRICE_MAX = 9_999_999_999.99;
+const PACK_SIZE_MAX = DECIMAL_18_4_MAX;
+const UNIT_PER_CASE_MAX = DECIMAL_18_4_MAX;
+const MRP_MAX = DECIMAL_18_4_MAX;
+const QTY_FRACTION_DIGITS = 4;
+
+function clampNumber(value: number, max: number): number {
+	if (!Number.isFinite(value)) return 0;
+	if (value < 0) return 0;
+	if (value > max) return max;
+	return value;
+}
+
+function limitDecimalInput(
+	raw: string,
+	max: number,
+	fractionDigits: number,
+): string {
+	let next = raw.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1");
+	if (!next) return "";
+
+	const hasDot = next.includes(".");
+	const [intPartRaw = "", fracPartRaw = ""] = next.split(".");
+	const intPart = intPartRaw.replace(/^0+(?=\d)/, "") || (hasDot ? "0" : intPartRaw);
+	const fracPart = fracPartRaw.slice(0, fractionDigits);
+	next = hasDot ? `${intPart}.${fracPart}` : intPart;
+
+	const numeric = Number(next);
+	if (Number.isFinite(numeric) && numeric > max) {
+		return String(max);
+	}
+	return next;
+}
+
 export interface ProductFormValues {
 	productCode: string;
 	supplier: string;
@@ -409,7 +446,13 @@ export function ProductForm({
 
 	const hsnOptions = useMemo(() => {
 		if (!hsnData) return [];
-		return hsnData.map((h) => ({ value: h.id, label: h.hsnDescription }));
+		return hsnData.map((h) => ({
+			value: h.id,
+			label: h.hsnCode
+				? `${h.hsnCode}${h.hsnDescription ? ` — ${h.hsnDescription}` : ""}`
+				: h.hsnDescription || h.id,
+			searchText: `${h.hsnCode} ${h.hsnDescription}`,
+		}));
 	}, [hsnData]);
 
 	const unitOptions = useMemo(() => [...PRODUCT_UNIT_OPTIONS], []);
@@ -459,19 +502,30 @@ export function ProductForm({
 
 	const inputCls = (key: string) =>
 		cn(
-			"h-8 text-xs",
+			"h-8 text-xs placeholder:text-slate-500 focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-200",
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
 
 	const formGrid = "grid grid-cols-2 md:grid-cols-4 gap-3";
 
-	const decimalInput = (key: keyof ProductFormValues, value: string) =>
-		set(
-			key,
-			value
-				.replace(/[^0-9.]/g, "")
-				.replace(/(\..*)\./g, "$1") as ProductFormValues[keyof ProductFormValues],
-		);
+	const decimalInput = (
+		key: "packSize" | "unitPerCase" | "grossWeight",
+		value: string,
+	) => {
+		const max =
+			key === "packSize"
+				? PACK_SIZE_MAX
+				: key === "unitPerCase"
+					? UNIT_PER_CASE_MAX
+					: DECIMAL_18_4_MAX;
+		set(key, limitDecimalInput(value, max, QTY_FRACTION_DIGITS));
+	};
+
+	const moneyInput = (key: "mrp" | "costPrice", value: number) => {
+		const max = key === "mrp" ? MRP_MAX : COST_PRICE_MAX;
+		const clamped = clampNumber(value, max);
+		set(key, clamped > 0 ? String(clamped) : "");
+	};
 
 	const imageInputRef = useRef<HTMLInputElement | null>(null);
 	const [linkUrl, setLinkUrl] = useState("");
@@ -479,6 +533,16 @@ export function ProductForm({
 	const [urlDialogOpen, setUrlDialogOpen] = useState(false);
 	const [previewImage, setPreviewImage] = useState<ProductImage | null>(null);
 	const [uploadingImages, setUploadingImages] = useState(false);
+	const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+
+	const handleStatusChange = (nextActive: boolean) => {
+		if (readOnly) return;
+		if (!nextActive && form.status === "active") {
+			setDeactivateConfirmOpen(true);
+			return;
+		}
+		set("status", nextActive ? "active" : "inactive");
+	};
 
 	const handleImageFiles = async (files: File[]) => {
 		const valid = files.filter(isAllowedProductImageFile);
@@ -514,7 +578,7 @@ export function ProductForm({
 			<div>
 				<SectionHead label='Product Information' />
 				<div className={formGrid}>
-					<div className='space-y-1 md:col-span-1'>
+					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>
 							Product Code <span className='text-red-500'>*</span>
 						</Label>
@@ -541,10 +605,9 @@ export function ProductForm({
 						placeholder='Select supplier…'
 						disabled={readOnly}
 						error={errors.supplier}
-						className='md:col-span-2'
 					/>
 
-					<div className='space-y-1 md:col-span-1'>
+					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>Supplier Code</Label>
 						<Input
 							value={form.supplierCode}
@@ -557,21 +620,21 @@ export function ProductForm({
 						/>
 					</div>
 
-					<div className='space-y-1 md:col-span-2'>
+					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>
 							Product Name <span className='text-red-500'>*</span>
 						</Label>
 						<Input
 							value={form.productName}
 							onChange={(e) => set("productName", e.target.value)}
-							placeholder='e.g. NutriGrow WS 19:19:19'
-							className={inputCls("productName")}
+							placeholder='Enter product name'
+							className={cn(inputCls("productName"), "bg-white")}
 							disabled={readOnly}
 						/>
 						<FieldError msg={errors.productName} />
 					</div>
 
-					<div className='space-y-1 md:col-span-1'>
+					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>Scientific Name</Label>
 						<Input
 							value={form.scientificName}
@@ -582,7 +645,7 @@ export function ProductForm({
 						/>
 					</div>
 
-					<div className='space-y-1 md:col-span-1'>
+					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>
 							SKU <span className='text-red-500'>*</span>
 						</Label>
@@ -814,7 +877,8 @@ export function ProductForm({
 							value={
 								form.mrp && !isNaN(Number(form.mrp)) ? Number(form.mrp) : 0
 							}
-							onChange={(v) => set("mrp", v > 0 ? String(v) : "")}
+							onChange={(v) => moneyInput("mrp", v)}
+							max={MRP_MAX}
 							disabled={readOnly}
 							className={cn(
 								inputCls("mrp"),
@@ -835,7 +899,8 @@ export function ProductForm({
 									? Number(form.costPrice)
 									: 0
 							}
-							onChange={(v) => set("costPrice", v > 0 ? String(v) : "")}
+							onChange={(v) => moneyInput("costPrice", v)}
+							max={COST_PRICE_MAX}
 							disabled={readOnly}
 							className={cn(
 								inputCls("costPrice"),
@@ -855,15 +920,19 @@ export function ProductForm({
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead label='Status' />
 				<div className='flex items-center gap-3'>
+					<Label className='text-xs font-medium min-w-[52px]'>Status</Label>
 					<ListingStatusToggle
 						active={form.status === "active"}
-						onChange={(val) =>
-							!readOnly &&
-							set("status", val ? "active" : "inactive")
-						}
+						onChange={handleStatusChange}
+						disabled={readOnly}
 					/>
-					<span className='text-xs text-muted-foreground'>
-						{form.status === "active" ? "Active" : "Inactive"}
+					<span
+						className={cn(
+							"text-xs font-semibold",
+							form.status === "active" ? "text-emerald-700" : "text-slate-600",
+						)}
+					>
+						{form.status === "active" ? "ON" : "OFF"}
 					</span>
 				</div>
 			</div>
@@ -1085,7 +1154,7 @@ export function ProductForm({
 								if (linkUrlError) setLinkUrlError("");
 							}}
 							placeholder='https://…'
-							className={cn("h-8 text-xs", linkUrlError && "border-red-400")}
+							className={cn("h-8 text-xs placeholder:text-slate-500", linkUrlError && "border-red-400")}
 						/>
 						{linkUrlError && <FieldError msg={linkUrlError} />}
 						<div className='flex justify-end gap-2'>
@@ -1104,6 +1173,39 @@ export function ProductForm({
 					</div>
 				</DialogContent>
 			</Dialog>
+
+			<Dialog open={deactivateConfirmOpen} onOpenChange={setDeactivateConfirmOpen}>
+				<DialogContent className='max-w-md p-4'>
+					<DialogHeader>
+						<DialogTitle className='text-sm'>Deactivate product?</DialogTitle>
+					</DialogHeader>
+					<p className='text-xs text-muted-foreground leading-relaxed'>
+						This product will be marked inactive and hidden from active selections.
+						You can reactivate it later from Edit Product.
+					</p>
+					<div className='flex justify-end gap-2 pt-2'>
+						<Button
+							type='button'
+							variant='outline'
+							size='sm'
+							onClick={() => setDeactivateConfirmOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button
+							type='button'
+							size='sm'
+							className='bg-red-600 hover:bg-red-700 text-white'
+							onClick={() => {
+								set("status", "inactive");
+								setDeactivateConfirmOpen(false);
+							}}
+						>
+							Deactivate
+						</Button>
+					</div>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
@@ -1114,43 +1216,89 @@ export function validateProductForm(
 	const errors: Record<string, string> = {};
 	const productCode = resolveProductCodeForSave(form.category, form.productCode);
 
-	if (!form.productName.trim()) errors.productName = "Product name is required";
-	if (!form.segmentId) errors.segment = "Segment is required";
-	if (!form.categoryId) errors.category = "Category is required";
-	if (!form.formId) errors.form = "Form is required";
+	const requirePositiveNumber = (
+		value: string,
+		field: string,
+		label: string,
+		required = false,
+		max?: number,
+	) => {
+		const trimmed = value.trim();
+		if (!trimmed) {
+			if (required) errors[field] = `${label} is required.`;
+			return;
+		}
+		const num = Number(trimmed);
+		if (!Number.isFinite(num)) {
+			errors[field] = `${label} must be a valid number.`;
+			return;
+		}
+		if (num <= 0) {
+			errors[field] = `${label} must be greater than 0.`;
+			return;
+		}
+		if (max !== undefined && num > max) {
+			errors[field] = `${label} cannot exceed ${max.toLocaleString("en-IN")}.`;
+		}
+	};
+
+	const requireNonNegativeNumber = (
+		value: string,
+		field: string,
+		label: string,
+		max?: number,
+	) => {
+		const trimmed = value.trim();
+		if (!trimmed) return;
+		const num = Number(trimmed);
+		if (!Number.isFinite(num)) {
+			errors[field] = `${label} must be a valid number.`;
+			return;
+		}
+		if (num < 0) {
+			errors[field] = `${label} cannot be negative.`;
+			return;
+		}
+		if (max !== undefined && num > max) {
+			errors[field] = `${label} cannot exceed ${max.toLocaleString("en-IN")}.`;
+		}
+	};
+
+	if (!form.productName.trim()) errors.productName = "Product name is required.";
+	if (!form.segmentId) errors.segment = "Segment is required.";
+	if (!form.categoryId) errors.category = "Category is required.";
+	if (!form.formId) errors.form = "Form is required.";
 	if (!productCode) {
-		errors.productCode = "Product code is required";
+		errors.productCode = "Product code is required.";
 	}
-	if (!form.sku.trim()) errors.sku = "SKU is required";
-	if (!form.hsnCode.trim()) errors.hsnCode = "HSN code is required";
-	else if (!form.gstRate?.trim()) {
+	if (!form.sku.trim()) errors.sku = "SKU is required.";
+	if (!form.hsnCode.trim() && !form.hsnId.trim()) {
+		errors.hsnCode = "HSN code is required.";
+	} else if (!form.gstRate?.trim()) {
 		errors.gstRate =
 			"Selected HSN does not have a GST rate mapped. Choose another HSN code.";
 	}
-	if (!form.packSize) {
-		errors.packSize = "Pack size is required";
-	} else if (isNaN(Number(form.packSize)) || Number(form.packSize) <= 0) {
-		errors.packSize = "Must be a positive number";
-	}
-	if (!form.baseUnit) errors.baseUnit = "Unit is required";
-	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
-	if (!form.unitPerCase) {
-		errors.unitPerCase = "Unit per case is required";
-	} else if (isNaN(Number(form.unitPerCase)) || Number(form.unitPerCase) <= 0) {
-		errors.unitPerCase = "Must be a positive number";
-	}
-	if (
-		form.grossWeight &&
-		(isNaN(Number(form.grossWeight)) || Number(form.grossWeight) <= 0)
-	) {
-		errors.grossWeight = "Must be a positive number";
-	}
-	if (form.mrp && (isNaN(Number(form.mrp)) || Number(form.mrp) < 0)) {
-		errors.mrp = "MRP must be a valid amount";
-	}
-	if (form.costPrice && (isNaN(Number(form.costPrice)) || Number(form.costPrice) < 0)) {
-		errors.costPrice = "Cost price must be a valid amount";
-	}
+	if (!form.baseUnit) errors.baseUnit = "Unit is required.";
+	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required.";
+
+	requirePositiveNumber(form.packSize, "packSize", "Pack size", true, PACK_SIZE_MAX);
+	requirePositiveNumber(
+		form.unitPerCase,
+		"unitPerCase",
+		"Unit per case",
+		true,
+		UNIT_PER_CASE_MAX,
+	);
+	requirePositiveNumber(form.grossWeight, "grossWeight", "Gross weight", false, DECIMAL_18_4_MAX);
+	requireNonNegativeNumber(form.mrp, "mrp", "MRP", MRP_MAX);
+	requireNonNegativeNumber(form.costPrice, "costPrice", "Cost price", COST_PRICE_MAX);
+	requireNonNegativeNumber(
+		form.netWeightPerPackagingUnit,
+		"netWeightPerPackagingUnit",
+		"Net weight",
+		DECIMAL_18_4_MAX,
+	);
+
 	return errors;
 }
 

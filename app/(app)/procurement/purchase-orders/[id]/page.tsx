@@ -110,6 +110,7 @@ export default function PODetailPage() {
     null,
   );
   const [rawLoading, setRawLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -242,8 +243,38 @@ export default function PODetailPage() {
           Cancel
         </Button>
       )}
-      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-        <FileText className="w-3.5 h-3.5" /> PDF
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-xs gap-1.5"
+        disabled={pdfLoading}
+        onClick={async () => {
+          const popup = PurchaseOrderService.openPdfWindow();
+          if (!popup) {
+            setToast({
+              msg: "Popup blocked. Please allow popups and try again.",
+              type: "error",
+            });
+            return;
+          }
+          try {
+            setPdfLoading(true);
+            await PurchaseOrderService.downloadPdfById(po.id, {
+              openedWindow: popup,
+            });
+            setToast({ msg: "PO PDF ready. Use browser save as PDF.", type: "success" });
+          } catch (error) {
+            popup.close();
+            setToast({
+              msg: getErrorMessage(error, "Failed to generate PO PDF."),
+              type: "error",
+            });
+          } finally {
+            setPdfLoading(false);
+          }
+        }}
+      >
+        <FileText className="w-3.5 h-3.5" /> {pdfLoading ? "Generating..." : "Download PDF"}
       </Button>
     </>
   );

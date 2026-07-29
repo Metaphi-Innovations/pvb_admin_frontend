@@ -16,6 +16,9 @@ import {
   Product,
   type ProductImage,
   type ProductUrl,
+  getProductApiValidationToastMessage,
+  isProductApiValidationError,
+  mapProductApiErrorsToFormFields,
 } from "../../product-data";
 import {
   ProductForm,
@@ -24,6 +27,16 @@ import {
   validateProductForm,
 } from "../../components/ProductForm";
 import { useProduct, useUpdateProduct, useProductPreviewNumber } from "@/hooks/masters";
+import { ProductListService } from "@/services/product-list.service";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function toUuidOrNull(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw || !UUID_RE.test(raw)) return null;
+  return raw;
+}
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -58,7 +71,7 @@ export default function EditProductPage() {
       cfuId: apiProduct.cfuId,
       authority: apiProduct.authority || undefined,
       hsnCode: apiProduct.hsnUuid || apiProduct.hsnCode,
-      hsnId: apiProduct.hsnId ? String(apiProduct.hsnId) : "",
+      hsnId: apiProduct.hsnUuid || (apiProduct.hsnId ? String(apiProduct.hsnId) : ""),
       gstRate: apiProduct.gstRate || "",
       gstId: apiProduct.gstUuid || (apiProduct.gstId ? String(apiProduct.gstId) : ""),
       packSize: apiProduct.packSize ?? undefined,
@@ -126,14 +139,14 @@ export default function EditProductPage() {
       product_name: form.productName,
       scientific_name: form.scientificName || null,
       sku: form.sku,
-      supplier_id: form.supplier || null,
+      supplier_id: toUuidOrNull(form.supplier),
       supplier_code: form.supplierCode || null,
-      hsn_id: form.hsnId || form.hsnCode || null,
-      gst_rate_id: form.gstId || null,
-      category_id: form.categoryId || null,
-      segment_id: form.segmentId || null,
-      formulation_id: form.formId || null,
-      cfu_id: form.cfuId || null,
+      hsn_id: toUuidOrNull(form.hsnId || form.hsnCode),
+      gst_rate_id: toUuidOrNull(form.gstId),
+      category_id: toUuidOrNull(form.categoryId),
+      segment_id: toUuidOrNull(form.segmentId),
+      formulation_id: toUuidOrNull(form.formId),
+      cfu_id: toUuidOrNull(form.cfuId),
       authority: form.authority || null,
       pack_size: parseNum(form.packSize),
       base_unit: form.baseUnit,
@@ -162,8 +175,27 @@ export default function EditProductPage() {
           setTimeout(() => router.push(`/masters/products/${id}`), 900);
         },
         onError: (err) => {
+          if (isProductApiValidationError(err)) {
+            const apiFieldErrors = mapProductApiErrorsToFormFields(err);
+            if (Object.keys(apiFieldErrors).length > 0) {
+              setErrors((prev) => ({ ...prev, ...apiFieldErrors }));
+            }
+            setToast({
+              msg: getProductApiValidationToastMessage(
+                err,
+                "Please fix the validation errors.",
+              ),
+              type: "error",
+            });
+            setTimeout(() => setToast(null), 5000);
+            return;
+          }
+
           setToast({
-            msg: err instanceof Error ? err.message : "Failed to update product.",
+            msg: ProductListService.extractErrorMessage(
+              err,
+              "Failed to update product.",
+            ),
             type: "error",
           });
           setTimeout(() => setToast(null), 4000);
