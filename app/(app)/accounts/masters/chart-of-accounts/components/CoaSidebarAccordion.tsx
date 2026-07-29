@@ -190,10 +190,12 @@ export function CoaSidebarAccordion({
   onToggle,
 }: CoaSidebarAccordionProps) {
   const primaryHeads = useMemo(
-    () =>
-      records
+    () => {
+      const order: Record<string, number> = { AST: 1, LIA: 2, INC: 3, EXP: 4 };
+      return records
         .filter((r) => r.nodeLevel === "primary_head")
-        .sort((a, b) => a.accountCode.localeCompare(b.accountCode)),
+        .sort((a, b) => (order[a.accountCode] ?? 99) - (order[b.accountCode] ?? 99));
+    },
     [records],
   );
 

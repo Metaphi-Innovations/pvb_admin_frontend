@@ -68,7 +68,7 @@ async function upsertOpeningBalance(
     ledger.openingBalances?.[0] ??
     null;
 
-  if (existing?.openingBalanceId) {
+  if (existing?.openingBalanceId && existing.openingBalanceId !== "period-opening") {
     await LedgerService.updateOpeningBalance(ledgerId, existing.openingBalanceId, {
       amount,
       balanceType,

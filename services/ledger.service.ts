@@ -133,10 +133,14 @@ export const LedgerService = {
     return data?.previewNumber ?? "";
   },
 
-  async view(ledgerId: string, signal?: AbortSignal): Promise<LedgerDetailDto> {
+  async view(
+    ledgerId: string,
+    params?: { dateFrom?: string; dateTo?: string },
+    signal?: AbortSignal,
+  ): Promise<LedgerDetailDto & { transactions?: any[]; totalDebit?: number; totalCredit?: number; currentBalance?: number; balanceType?: string }> {
     const response = await axiosInstance.get<ApiResponse<LedgerDetailDto>>(
       API_ENDPOINTS.ACCOUNTS.LEDGERS.VIEW(ledgerId),
-      { signal },
+      { params, signal },
     );
     return unwrapData(response);
   },
@@ -229,6 +233,17 @@ export const LedgerService = {
       return unwrapData(response) ?? null;
     } catch {
       return null;
+    }
+  },
+
+  async delete(ledgerId: string): Promise<LedgerDetailDto> {
+    try {
+      const response = await axiosInstance.delete<ApiResponse<LedgerDetailDto>>(
+        `${API_ENDPOINTS.ACCOUNTS.LEDGERS.LIST}/${ledgerId}`,
+      );
+      return unwrapData(response);
+    } catch (error) {
+      throw new Error(extractErrorMessage(error, "Failed to delete ledger."));
     }
   },
 };

@@ -248,20 +248,20 @@ export default function AccountsSundryCreditorVendorFormClient({
 
   useEffect(() => {
     if (!isEdit || !supplier) return;
-    setForm((prev) => ({
-      ...supplierToForm(supplier),
-      openingBalance: prev.openingBalance,
-      balanceType: prev.balanceType || "Credit",
-      openingBalanceDate: prev.openingBalanceDate || fyOpeningDateIso(selectedFY.id),
-      billWiseAccounting: prev.billWiseAccounting,
-      accountingDescription: prev.accountingDescription,
-    }));
     let cancelled = false;
     setAccountingLoading(true);
     loadPartyMasterAccounting({ kind: "supplier", partyId: supplier.supplierUuid })
       .then((accounting) => {
         if (cancelled) return;
-        setForm((prev) => ({ ...prev, ...accounting }));
+        setForm((prev) => ({
+          ...supplierToForm(supplier),
+          ...accounting,
+          openingBalance: accounting.openingBalance ?? prev.openingBalance,
+          balanceType: accounting.balanceType ?? (prev.balanceType || "Credit"),
+          openingBalanceDate: accounting.openingBalanceDate ?? (prev.openingBalanceDate || fyOpeningDateIso(selectedFY.id)),
+          billWiseAccounting: accounting.billWiseAccounting ?? prev.billWiseAccounting,
+          accountingDescription: accounting.accountingDescription ?? prev.accountingDescription,
+        }));
       })
       .finally(() => {
         if (!cancelled) setAccountingLoading(false);
