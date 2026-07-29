@@ -329,9 +329,21 @@ export function applySelectedProductIds(
   productIds: string[],
 ): SchemeUnifiedForm {
   if (form.schemeCategory !== "Product Discount") {
-    return { ...form, productIds };
+    return {
+      ...form,
+      productIds,
+      productScope: productIds.length === 0 ? "All Products" : "Selected Products",
+    };
   }
-  // Multi-select is only shown for Selected Products — keep that scope.
+  // Blank selection = all products (common discount); picks = selected products.
+  if (productIds.length === 0) {
+    return {
+      ...form,
+      productIds: [],
+      productScope: "All Products",
+      discountMode: "COMMON",
+    };
+  }
   return {
     ...form,
     productIds,
@@ -505,19 +517,17 @@ export function applySpecialDiscountProductIds(
   productIds: string[],
 ): SchemeUnifiedForm {
   const { uom } = resolveSpecialDiscountUom(productIds);
-  const forceSelected =
-    form.specialDiscountBasedOn === "Sales Quantity" ||
-    form.productScope === "Selected Products";
+  const isQty = form.specialDiscountBasedOn === "Sales Quantity";
   return {
     ...form,
     productIds,
-    productScope: forceSelected ? "Selected Products" : form.productScope,
-    specialDiscountUom:
-      form.specialDiscountBasedOn === "Sales Quantity" ? uom : form.specialDiscountUom,
+    // Blank = all products (Sales Amount); Sales Quantity always requires selection.
+    productScope:
+      isQty || productIds.length > 0 ? "Selected Products" : "All Products",
+    specialDiscountUom: isQty ? uom : form.specialDiscountUom,
     specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map((s) => ({
       ...s,
-      uom:
-        form.specialDiscountBasedOn === "Sales Quantity" ? uom : s.uom,
+      uom: isQty ? uom : s.uom,
     })),
   };
 }
@@ -590,7 +600,6 @@ export function categoryUsesProducts(category: SchemeCategory): boolean {
   return (
     category === "Product Discount" ||
     category === "Near Expiry Discount" ||
-    category === "Turnover Discount" ||
     category === "Special Discount"
   );
 }

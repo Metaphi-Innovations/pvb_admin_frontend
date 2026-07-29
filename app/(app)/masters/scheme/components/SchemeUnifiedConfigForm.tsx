@@ -34,11 +34,9 @@ import {
   DISCOUNT_TYPE_OPTIONS,
   PAYMENT_CALCULATION_ON_OPTIONS,
   PAYMENT_CONDITION_OPTIONS,
-  PRODUCT_SCOPE_OPTIONS,
   SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
   SCHEME_TYPE_DISPLAY_LABELS,
   applyDiscountSetupMode,
-  applyProductScopeForUnifiedForm,
   applySchemeTypeChange,
   applySelectedProductIds,
   applySpecialDiscountBasedOn,
@@ -59,12 +57,12 @@ import {
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
-  type ProductScopeUI,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
 } from "../scheme-unified-config";
 import {
   SCHEME_CATEGORIES,
+  SCHEME_CUSTOMER_OPTIONS,
   type DiscountType,
   type SchemeApplyDiscountOn,
   type SchemeCategory,
@@ -126,33 +124,27 @@ function ProductsApplicability({
   productOptions: SchemeProductSelectOption[];
   showProductError?: boolean;
 }) {
-  const isNearExpiry = form.schemeCategory === "Near Expiry Discount";
+  const isSpecialQty =
+    form.schemeCategory === "Special Discount" &&
+    form.specialDiscountBasedOn === "Sales Quantity";
+  /** Blank multi-select means all products — except Sales Quantity which requires picks. */
+  const allowsAllWhenBlank = !isSpecialQty;
 
   const productFieldError =
-    showProductError &&
-    form.schemeCategory === "Special Discount" &&
-    (form.specialDiscountBasedOn === "Sales Quantity" ||
-      form.productScope === "Selected Products") &&
-    form.productIds.length === 0
+    showProductError && isSpecialQty && form.productIds.length === 0
       ? "Select at least one product."
       : showProductError &&
           form.schemeCategory === "Product Discount" &&
-          form.productScope === "Selected Products" &&
+          form.discountMode === "PRODUCT_WISE" &&
           form.productIds.length === 0
         ? "Select at least one product."
-        : showProductError &&
-            form.schemeCategory === "Product Discount" &&
-            form.discountMode === "PRODUCT_WISE" &&
-            form.productIds.length === 0
-          ? "Select at least one product."
-          : showProductError &&
-              form.schemeCategory !== "Near Expiry Discount" &&
-              form.schemeCategory !== "Product Discount" &&
-              form.schemeCategory !== "Special Discount" &&
-              form.productScope === "Selected Products" &&
-              form.productIds.length === 0
-            ? "Select at least one product."
-            : undefined;
+        : undefined;
+
+  const { uom, incompatible } = resolveSpecialDiscountUom(form.productIds);
+  const uomError =
+    isSpecialQty && form.productIds.length > 0 && incompatible
+      ? "Selected products must use the same unit of measurement for a quantity-based scheme."
+      : undefined;
 
   const [pendingRemoveIds, setPendingRemoveIds] = React.useState<string[] | null>(
     null,
@@ -167,15 +159,11 @@ function ProductsApplicability({
       onChange(applySpecialDiscountProductIds(form, ids));
       return;
     }
-    if (isNearExpiry) {
-      onChange({
-        ...form,
-        productIds: ids,
-        productScope: ids.length === 0 ? "All Products" : "Selected Products",
-      });
-      return;
-    }
-    onChange({ ...form, productIds: ids });
+    onChange({
+      ...form,
+      productIds: ids,
+      productScope: ids.length === 0 ? "All Products" : "Selected Products",
+    });
   };
 
   const handleProductsChange = (ids: string[]) => {
@@ -192,72 +180,39 @@ function ProductsApplicability({
     commitProductIds(ids);
   };
 
-  /** Near Expiry: one searchable multi-select — blank = all active products. */
-  if (isNearExpiry) {
-    return (
+  return (
+    <>
       <Field className="scheme-w-products">
         <SchemeProductMultiSelect
           label="Products"
           value={form.productIds}
           onChange={handleProductsChange}
           options={productOptions}
-          placeholder="All Products"
-          searchPlaceholder="Leave blank to apply to all products, or search and select specific products."
+          placeholder={allowsAllWhenBlank ? "All Products" : "Select products"}
+          searchPlaceholder={
+            allowsAllWhenBlank
+              ? "Leave blank for all products, or search and select specific products."
+              : "Search name, code, or SKU…"
+          }
+          required={isSpecialQty}
           dense
           showClearAll
           preferIdentityLabel
-          emptyAsSummary
+          emptyAsSummary={allowsAllWhenBlank}
+          error={Boolean(productFieldError || uomError)}
+          errorMessage={productFieldError || uomError}
         />
-        <p className="text-[10px] text-muted-foreground leading-snug">
-          Leave blank to apply to all products, or search and select specific products.
-        </p>
-      </Field>
-    );
-  }
-
-  /** Product Discount: All / Selected dropdown + Select Products when Selected. */
-  if (form.schemeCategory === "Product Discount") {
-    return (
-      <>
-        <Field className="scheme-w-products-scope" label="Products" required>
-          <Select
-            value={form.productScope}
-            onValueChange={(v) => {
-              const next = v as ProductScopeUI;
-              onChange(applyProductScopeForUnifiedForm(form, next));
-            }}
-          >
-            <SelectTrigger className={ctrl}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PRODUCT_SCOPE_OPTIONS.map((m) => (
-                <SelectItem key={m} value={m} className="text-xs">
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        {form.productScope === "Selected Products" ? (
-          <Field className="scheme-w-products">
-            <SchemeProductMultiSelect
-              label="Select Products"
-              value={form.productIds}
-              onChange={handleProductsChange}
-              options={productOptions}
-              placeholder="Select products"
-              searchPlaceholder="Search name, code, or SKU…"
-              required
-              dense
-              showClearAll
-              preferIdentityLabel
-              error={Boolean(productFieldError)}
-              errorMessage={productFieldError}
-            />
-          </Field>
+        {isSpecialQty &&
+        form.productIds.length > 0 &&
+        !incompatible &&
+        uom ? (
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            UOM: {uom} (derived from selected products)
+          </p>
         ) : null}
+      </Field>
 
+      {form.schemeCategory === "Product Discount" ? (
         <Dialog
           open={pendingRemoveIds !== null}
           onOpenChange={(open) => {
@@ -296,129 +251,6 @@ function ProductsApplicability({
             </div>
           </DialogContent>
         </Dialog>
-      </>
-    );
-  }
-
-  /** Special Discount: Sales Amount = All/Selected; Sales Quantity = Selected only. */
-  if (form.schemeCategory === "Special Discount") {
-    const isQty = form.specialDiscountBasedOn === "Sales Quantity";
-    const showMultiSelect =
-      isQty || form.productScope === "Selected Products";
-    const { uom, incompatible } = resolveSpecialDiscountUom(form.productIds);
-    const uomError =
-      isQty && form.productIds.length > 0 && incompatible
-        ? "Selected products must use the same unit of measurement for a quantity-based scheme."
-        : undefined;
-
-    return (
-      <>
-        {isQty ? (
-          <Field className="scheme-w-products-scope" label="Products">
-            <div
-              className={cn(
-                ctrl,
-                "flex items-center bg-muted/30 text-foreground cursor-not-allowed",
-              )}
-            >
-              Selected Products
-            </div>
-          </Field>
-        ) : (
-          <Field className="scheme-w-products-scope" label="Products" required>
-            <Select
-              value={form.productScope}
-              onValueChange={(v) => {
-                const next = v as ProductScopeUI;
-                onChange(applyProductScopeForUnifiedForm(form, next));
-              }}
-            >
-              <SelectTrigger className={ctrl}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRODUCT_SCOPE_OPTIONS.map((m) => (
-                  <SelectItem key={m} value={m} className="text-xs">
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
-        {showMultiSelect ? (
-          <Field className="scheme-w-products">
-            <SchemeProductMultiSelect
-              label="Select Products"
-              value={form.productIds}
-              onChange={handleProductsChange}
-              options={productOptions}
-              placeholder="Select products"
-              searchPlaceholder="Search name, code, or SKU…"
-              required
-              dense
-              showClearAll
-              preferIdentityLabel
-              error={Boolean(productFieldError || uomError)}
-              errorMessage={productFieldError || uomError}
-            />
-            {isQty ? (
-              form.productIds.length > 0 && !incompatible && uom ? (
-                <p className="text-[10px] text-muted-foreground leading-snug">
-                  UOM: {uom} (derived from selected products)
-                </p>
-              ) : !productFieldError && !uomError ? (
-                <p className="text-[10px] text-muted-foreground leading-snug">
-                  Selected products only. Quantity cannot be combined across different
-                  UOMs.
-                </p>
-              ) : null
-            ) : null}
-          </Field>
-        ) : null}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <Field className="scheme-w-products-scope" label="Products">
-        <Select
-          value={form.productScope}
-          onValueChange={(v) => {
-            const next = v as ProductScopeUI;
-            onChange(applyProductScopeForUnifiedForm(form, next));
-          }}
-        >
-          <SelectTrigger className={ctrl}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PRODUCT_SCOPE_OPTIONS.map((m) => (
-              <SelectItem key={m} value={m} className="text-xs">
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      {form.productScope === "Selected Products" ? (
-        <Field className="scheme-w-products">
-          <SchemeProductMultiSelect
-            label="Select Products"
-            value={form.productIds}
-            onChange={handleProductsChange}
-            options={productOptions}
-            placeholder="Select products"
-            searchPlaceholder="Search name, code, or SKU…"
-            required
-            dense
-            showClearAll
-            preferIdentityLabel
-            error={Boolean(productFieldError)}
-            errorMessage={productFieldError}
-          />
-        </Field>
       ) : null}
     </>
   );
@@ -1137,6 +969,10 @@ export function SchemeUnifiedConfigForm({
 }: SchemeUnifiedConfigFormProps) {
   const stateOptions = useMemo(() => loadSchemeStateOptions(), []);
   const productOptions = useMemo(() => loadSchemeProductSelectOptions(), []);
+  const customerOptions = useMemo(
+    () => SCHEME_CUSTOMER_OPTIONS.map((c) => ({ id: c.id, name: c.name })),
+    [],
+  );
   const usesProducts = formShowsProductApplicability(form);
   const showImpact = categoryShowsImpactFlags(form.schemeCategory);
   const autoBenefit = resolveAutomaticBenefit(form.schemeCategory, {
@@ -1436,6 +1272,17 @@ export function SchemeUnifiedConfigForm({
                     customerIds: [],
                   })
                 }
+                className="w-full"
+                dense
+              />
+            </Field>
+            <Field className="scheme-w-customer">
+              <SchemeMultiSelect
+                label="Customers"
+                placeholder="All customers of selected type"
+                options={customerOptions}
+                selectedIds={form.customerIds}
+                onChange={(ids) => set("customerIds", ids)}
                 className="w-full"
                 dense
               />
@@ -1844,6 +1691,20 @@ export function SchemeUnifiedConfigForm({
                   form.customerTypes.length === CUSTOMER_TYPE_MULTI_OPTIONS.length
                     ? "All customer types"
                     : form.customerTypes.join(", ")}
+                </dd>
+              </div>
+              <div className="scheme-review-item">
+                <dt>Customers</dt>
+                <dd>
+                  {form.customerIds.length === 0
+                    ? "All customers of selected type"
+                    : form.customerIds
+                        .map(
+                          (id) =>
+                            SCHEME_CUSTOMER_OPTIONS.find((c) => c.id === id)
+                              ?.name ?? id,
+                        )
+                        .join(", ")}
                 </dd>
               </div>
               <div className="scheme-review-item">
