@@ -461,5 +461,15 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
     },
+    BANKING: {
+      BANK_ACCOUNTS: {
+        LIST: "/accounts/banking/bank-accounts",
+        CREATE: "/accounts/banking/bank-accounts",
+        BY_LEDGER: (ledgerId: string) =>
+          `/accounts/banking/bank-accounts/ledger/${ledgerId}`,
+        COMPLETE_DETAILS: (ledgerId: string) =>
+          `/accounts/banking/bank-accounts/ledger/${ledgerId}/details`,
+      },
+    },
   },
 };

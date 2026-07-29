@@ -98,7 +98,7 @@ const AccountsTdsLedgerFormClient = dynamic(
 );
 
 const BankAccountFormClient = dynamic(
-  () => import("../../banking/bank-accounts/BankAccountFormClient"),
+  () => import("../../banking/bank-accounts/BankAccountFormClientLocal"),
   { ssr: false },
 );
 
