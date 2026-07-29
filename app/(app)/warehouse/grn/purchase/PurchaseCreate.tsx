@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Upload, AlertCircle, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Send, Upload, AlertCircle, Plus, Trash2, AlertTriangle, Loader2, FileText, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { GrnItem } from "../shared/types";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,13 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Field, TextField } from "@/components/ui/FormFields";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { useGrnPreviewNumber, useCreateGrn, useUpdateGrn, useGrn } from "@/hooks/warehouse/use-grn";
+import { useExtractInvoice } from "@/hooks/warehouse/use-invoice-extraction";
+import {
+  normalizeExtractionDate,
+  type InvoiceExtractionItem,
+  type InvoiceExtractionResult,
+} from "@/services/invoice-extraction.service";
+import { showToast } from "@/lib/toast";
 import {
   usePurchaseOrder,
   usePurchaseOrderDropdown,
@@ -111,7 +118,51 @@ function getApiErrorMessage(err: unknown, fallback: string): string {
     const msg = (err as { message?: unknown }).message;
     if (typeof msg === "string" && msg.trim()) return msg;
   }
+  if (err && typeof err === "object" && "response" in err) {
+    const response = (err as { response?: { data?: { message?: unknown; error?: unknown } } })
+      .response;
+    const apiMsg = response?.data?.message ?? response?.data?.error;
+    if (typeof apiMsg === "string" && apiMsg.trim()) return apiMsg;
+  }
   return fallback;
+}
+
+function normalizeMatchText(value: string | null | undefined): string {
+  return (value || "").trim().toLowerCase();
+}
+
+function matchExtractedItemToPoLine(
+  item: InvoiceExtractionItem,
+  lines: POLineItem[],
+): POLineItem | null {
+  const sku = normalizeMatchText(item.sku);
+  const name = normalizeMatchText(item.product_name);
+
+  if (sku) {
+    const bySku = lines.find((line) => {
+      const code = normalizeMatchText(line.productCode || line.sku);
+      return code && code === sku;
+    });
+    if (bySku) return bySku;
+  }
+
+  if (name) {
+    const exact = lines.find(
+      (line) => normalizeMatchText(line.productName) === name,
+    );
+    if (exact) return exact;
+
+    const partial = lines.find((line) => {
+      const productName = normalizeMatchText(line.productName);
+      return (
+        productName.includes(name) ||
+        name.includes(productName)
+      );
+    });
+    if (partial) return partial;
+  }
+
+  return null;
 }
 
 function calcAmounts(qty: number, unitPrice: number, gstPct: number) {
@@ -314,9 +365,12 @@ export function PurchaseCreate({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editPrefillDone, setEditPrefillDone] = useState(false);
   const [editItemsSeeded, setEditItemsSeeded] = useState(false);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [extractionWarnings, setExtractionWarnings] = useState<string[]>([]);
 
   const { data: previewNumber, refetch: refetchPreviewNumber } =
     useGrnPreviewNumber(!isEdit);
+  const extractInvoiceMutation = useExtractInvoice();
   const {
     data: existingGrn,
     isLoading: grnLoading,
@@ -814,6 +868,117 @@ export function PurchaseCreate({
     });
   };
 
+  const handleInvoiceFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    setInvoiceFiles(files);
+    setExtractionWarnings([]);
+    setFormError(null);
+    // allow re-selecting the same file
+    e.target.value = "";
+  };
+
+  const buildRowsFromExtraction = useCallback(
+    (result: InvoiceExtractionResult): ManualInvoiceRow[] => {
+      const sourceItems =
+        result.items.length > 0 ? result.items : [null];
+
+      return sourceItems.map((item) => {
+        const matched = item ? matchExtractedItemToPoLine(item, poLines) : null;
+        const lineId = matched
+          ? matched.purchaseOrderProductId || matched.uid
+          : "";
+
+        const baseRow = createEmptyRow();
+        const withProduct = lineId
+          ? applyProductToRow(baseRow, lineId, [])
+          : {
+              ...baseRow,
+              productName: item?.product_name || "",
+              productCode: item?.sku || "",
+            };
+
+        const displayQtyRaw =
+          item?.bag_case_quantity ?? item?.total_quantity ?? withProduct.displayQty;
+        const displayQty = Math.max(0, Number(displayQtyRaw) || 0);
+        const quantity = lineId
+          ? toInvoiceBaseQty(lineId, displayQty)
+          : displayQty;
+
+        const unitPrice =
+          item?.price != null && Number.isFinite(item.price)
+            ? item.price
+            : withProduct.unitPrice;
+        const gstPct =
+          item?.gst_percentage != null && Number.isFinite(item.gst_percentage)
+            ? item.gst_percentage
+            : withProduct.gstPct;
+        const amounts = calcAmounts(quantity, unitPrice, gstPct);
+
+        return {
+          ...withProduct,
+          batchNumber: item?.batch_number || "",
+          mfgDate: normalizeExtractionDate(item?.mfg_date),
+          expDate: normalizeExtractionDate(item?.exp_date),
+          displayQty,
+          quantity,
+          unitPrice,
+          gstPct,
+          ...amounts,
+        };
+      });
+    },
+    // applyProductToRow / toInvoiceBaseQty close over latest state via callbacks below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [poLines, items],
+  );
+
+  const applyExtractionResult = useCallback(
+    (result: InvoiceExtractionResult) => {
+      if (result.invoice_number) {
+        setInvoiceNumber(result.invoice_number);
+      }
+      const parsedDate = normalizeExtractionDate(result.invoice_date);
+      if (parsedDate) {
+        setInvoiceDate(parsedDate);
+      }
+
+      const nextRows = buildRowsFromExtraction(result);
+      setManualRows(nextRows.length > 0 ? nextRows : [createEmptyRow()]);
+      setExtractionWarnings(result.warnings ?? []);
+      setFormError(null);
+    },
+    [buildRowsFromExtraction],
+  );
+
+  const handleExtractInvoice = async () => {
+    if (!selectedPoId) {
+      setFormError("Select a purchase order before extracting an invoice.");
+      return;
+    }
+    if (invoiceFiles.length === 0) {
+      setFormError("Please upload an invoice file first.");
+      return;
+    }
+
+    const file = invoiceFiles[0];
+    setFormError(null);
+
+    try {
+      const result = await extractInvoiceMutation.mutateAsync(file);
+      applyExtractionResult(result);
+      showToast(
+        result.warnings?.length
+          ? "Invoice extracted with warnings. Review fields below."
+          : "Invoice extracted successfully.",
+        "success",
+      );
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Failed to extract invoice.");
+      setFormError(message);
+      showToast(message, "error");
+    }
+  };
+
   const handleSubmit = async () => {
     setFormError(null);
 
@@ -1101,7 +1266,7 @@ export function PurchaseCreate({
       description={
         isEdit
           ? "Update received quantities and batch details for this purchase GRN. Supplier and PO cannot be changed."
-          : "Capture physical goods receipt and batch details against a single purchase order. OCR will be integrated later."
+          : "Capture physical goods receipt and batch details against a single purchase order. Upload an invoice to auto-fill header and batch rows."
       }
       onBack={() => router.push(backHref)}
       onCancel={() => router.push(backHref)}
@@ -1351,24 +1516,89 @@ export function PurchaseCreate({
 
       <SectionCard
         title="Upload Invoice(s)"
-        description="OCR will be integrated later. Use Manual Invoice Entry below to capture invoice and batch details."
+        description="Upload a PDF/JPG/PNG invoice, then extract details into Manual Invoice Entry below."
       >
         <div className="flex flex-wrap items-center gap-2">
           <label
             className={cn(
-              "inline-flex items-center gap-1.5 h-9 px-3 border border-border rounded-lg bg-muted/40 text-xs font-medium text-muted-foreground cursor-not-allowed opacity-70",
+              "inline-flex items-center gap-1.5 h-9 px-3 border border-border rounded-lg bg-white text-xs font-medium text-foreground cursor-pointer hover:bg-muted/40 transition-colors",
+              extractInvoiceMutation.isPending && "pointer-events-none opacity-70",
             )}
-            aria-disabled="true"
-            title="OCR will be integrated later"
           >
             <Upload className="w-3.5 h-3.5 text-muted-foreground" />
             Add invoice file(s)
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden" disabled />
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+              multiple
+              className="hidden"
+              onChange={handleInvoiceFilesChange}
+              disabled={extractInvoiceMutation.isPending}
+            />
           </label>
+
+          <Button
+            type="button"
+            className="h-9 text-xs gap-1.5"
+            onClick={handleExtractInvoice}
+            disabled={
+              extractInvoiceMutation.isPending ||
+              invoiceFiles.length === 0 ||
+              !selectedPoId
+            }
+          >
+            {extractInvoiceMutation.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            {extractInvoiceMutation.isPending ? "Extracting…" : "Extract Invoice"}
+          </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">
-          OCR upload and processing are temporarily disabled. Invoice details can be entered manually below.
-        </p>
+
+        {invoiceFiles.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {invoiceFiles.map((file) => (
+              <li
+                key={`${file.name}-${file.size}-${file.lastModified}`}
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+              >
+                <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{file.name}</span>
+                <span className="tabular-nums">
+                  ({Math.max(1, Math.round(file.size / 1024))} KB)
+                </span>
+              </li>
+            ))}
+            {invoiceFiles.length > 1 && (
+              <li className="text-[11px] text-amber-700">
+                Multiple files selected — extraction uses the first file for now.
+              </li>
+            )}
+          </ul>
+        )}
+
+        {!selectedPoId && (
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Select a purchase order first so extracted line items can be matched to PO products.
+          </p>
+        )}
+
+        {extractionWarnings.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
+            <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Extraction warnings
+            </p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {extractionWarnings.map((warning) => (
+                <li key={warning} className="text-[11px] text-amber-800">
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard
