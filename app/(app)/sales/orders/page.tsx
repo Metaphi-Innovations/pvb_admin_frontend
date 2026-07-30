@@ -36,6 +36,10 @@ import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
 import { downloadProformaInvoice } from "./pi-document";
 import {
+  openPackingListPdfWindow,
+  downloadPackingListPdfForSalesOrder,
+} from "./pl-pdf/packingListPdfGenerator";
+import {
   type SalesOrder,
   type OrderStatus,
   formatOrderStatus,
@@ -429,6 +433,25 @@ export default function SalesOrdersPage() {
                 )}
               >
                 <Package className="w-3.5 h-3.5 mr-2" /> Generate Packing List
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await downloadPackingListPdfForSalesOrder(String(row.id));
+                    setToast({ msg: "Packing List ready to download.", type: "success" });
+                  } catch (e: unknown) {
+                    console.error("Packing List download error", e);
+                    const message =
+                      e instanceof Error && e.message
+                        ? e.message
+                        : "Failed to download Packing List.";
+                    setToast({ msg: message, type: "error" });
+                  }
+                }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Download className="w-3.5 h-3.5 mr-2" /> Download Packing List
               </button>
               <DropdownMenuSeparator />
               <button

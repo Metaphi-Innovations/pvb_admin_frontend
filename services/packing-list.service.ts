@@ -384,9 +384,15 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
         ordered_cases: Math.floor(orderBaseQty / packSize),
         packedQty: Math.floor(packedBaseQty / packSize),
         pending_cases: Math.floor(pendingBaseQty / packSize),
-        batchNumber: p.batch_code || snap.batch_code || "",
+        batchNumber: p.batch_code || snap.batch_code || snap.batch_number || "",
         expDate: snap.expiry_date || snap.expiryDate || "",
-        mfgDate: snap.mfg_date || snap.mfgDate || "",
+        mfgDate:
+          snap.mfg_date ||
+          snap.mfgDate ||
+          snap.manufacture_date ||
+          snap.manufactureDate ||
+          snap.manufacturing_date ||
+          "",
         grnNo: snap.grn_no || snap.grnNo || "",
         lineId: p.packing_list_product_id,
         quantity_type: p.quantity_type,

@@ -507,5 +507,8 @@ export const API_ENDPOINTS = {
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract"
   },
+  PDF: {
+    FROM_HTML: "/pdf/from-html",
+  },
 };
 

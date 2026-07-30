@@ -1,138 +1,170 @@
 "use client";
 
 import type { DeliveryChallanViewModel } from "./deliveryChallanPdf";
+import { PARAMVERSE_COMPANY } from "@/lib/pdf/paramverse";
 
-/** On-screen preview matching the Delivery Challan PDF layout. */
+/** On-screen preview matching the Paramverse Delivery Challan PDF layout. */
 export function DeliveryChallanPreview({
   data,
 }: {
   data: DeliveryChallanViewModel;
 }) {
+  const totalQty = data.lines.reduce((s, l) => s + (l.qty || 0), 0);
+  const totalAmount = data.lines.reduce((s, l) => s + (l.amount || 0), 0);
+  const inr = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
   return (
-    <div className="bg-white border border-border rounded-lg overflow-hidden text-[12px] text-[#1a1a1a] font-sans">
-      <div className="p-6 space-y-6">
-        <div className="flex justify-between gap-6 items-start">
-          <div className="min-w-0">
-            <p className="text-[18px] font-bold text-[#B85508] leading-snug">
-              {data.companyName}
+    <div className="bg-white border border-border rounded-lg overflow-hidden text-[11px] text-[#1a1a1a] font-sans">
+      <div className="p-5 space-y-4">
+        <div className="grid grid-cols-[68px_1fr_auto] gap-3 border-b border-slate-200 pb-3">
+          <div />
+          <div>
+            <p className="text-[13px] font-bold uppercase tracking-wide">
+              {data.companyName || PARAMVERSE_COMPANY.companyName}
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed">{data.companyAddress}</p>
-            <p className="text-[11px]">GSTIN: {data.companyGstin}</p>
+            <p className="text-[10px] text-slate-600 leading-relaxed mt-0.5">
+              {data.companyAddress || PARAMVERSE_COMPANY.companyAddress}
+            </p>
+            <p className="text-[10px] text-slate-600">
+              {data.companyMetaLine || PARAMVERSE_COMPANY.companyMetaLine}
+            </p>
           </div>
-          <div className="text-right shrink-0 min-w-[160px]">
-            <p className="text-[13px] font-bold text-[#1A3A96] tracking-wide">
-              DELIVERY CHALLAN
-            </p>
-            <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-500">
-              Challan No.
-            </p>
-            <p className="font-bold text-[12px]">{data.challanNo}</p>
-            <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-500">
-              Dispatch No.
-            </p>
-            <p className="text-[12px]">{data.dispatchNo}</p>
-            <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-500">
-              Date
-            </p>
-            <p className="text-[12px]">{data.date || "—"}</p>
+          <p className="text-[15px] font-bold uppercase text-right whitespace-nowrap">
+            Delivery Challan
+          </p>
+        </div>
+
+        <div className="grid grid-cols-4 border border-slate-200 text-[10px]">
+          {[
+            ["Challan No.", data.challanNo],
+            ["Challan Date", data.date],
+            ["Reference No.", data.referenceNo || data.sourceDocument],
+            ["Vehicle No.", data.vehicleNo],
+            ["Transporter", data.transporter],
+            ["Place of Supply", data.placeOfSupply],
+            ["Driver Name", data.driverName],
+            ["Driver Mobile", data.driverMobile],
+          ].map(([label, value]) => (
+            <div key={label} className="border border-slate-100 px-2 py-1.5">
+              <p className="uppercase text-slate-500 font-semibold text-[9px]">
+                {label}
+              </p>
+              <p className="font-bold mt-0.5">{value || "—"}</p>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <p className="text-[10px] font-bold uppercase border-b border-slate-200 pb-1 mb-2">
+            Dispatch, Billing & Shipping Details
+          </p>
+          <div className="grid grid-cols-3 border border-slate-200 divide-x divide-slate-200">
+            {[data.dispatchFrom, data.billing, data.shipping].map((party, i) => (
+              <div key={i} className="p-2 min-h-[84px]">
+                <p className="font-bold">{party?.name || "—"}</p>
+                {(party?.lines || []).map((line) => (
+                  <p key={line} className="text-slate-700 text-[10px]">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-10">
-          <div className="space-y-2.5">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                Deliver To
-              </p>
-              <p className="font-semibold mt-0.5">{data.deliverTo}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                Source Document
-              </p>
-              <p className="mt-0.5">{data.sourceDocument}</p>
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                Warehouse
-              </p>
-              <p className="font-semibold mt-0.5">{data.warehouse}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                Transporter
-              </p>
-              <p className="mt-0.5">{data.transporter}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                Vehicle No.
-              </p>
-              <p className="mt-0.5">{data.vehicleNo}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                LR No.
-              </p>
-              <p className="mt-0.5">{data.lrNo}</p>
-            </div>
-          </div>
-        </div>
-
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr className="bg-slate-100">
-              <th className="border border-slate-200 px-2 py-2 text-left text-[11px] font-bold w-9">
-                #
-              </th>
-              <th className="border border-slate-200 px-2 py-2 text-left text-[11px] font-bold w-28">
-                SKU
-              </th>
-              <th className="border border-slate-200 px-2 py-2 text-left text-[11px] font-bold">
-                Product
-              </th>
-              <th className="border border-slate-200 px-2 py-2 text-right text-[11px] font-bold w-36">
-                Dispatch Qty
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.lines.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="border border-slate-200 px-3 py-3 text-center text-slate-500"
-                >
-                  No line items
-                </td>
+        <div>
+          <p className="text-[10px] font-bold uppercase border-b border-slate-200 pb-1 mb-2">
+            Item Details
+          </p>
+          <table className="w-full border-collapse text-[10px]">
+            <thead>
+              <tr className="bg-slate-100">
+                {["Sr", "Product Name", "HSN", "Qty", "UOM", "Rate", "Amount"].map(
+                  (h) => (
+                    <th
+                      key={h}
+                      className="border border-slate-200 px-1.5 py-1 uppercase text-[9px]"
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
               </tr>
-            ) : (
-              data.lines.map((line) => (
+            </thead>
+            <tbody>
+              {data.lines.map((line) => (
                 <tr key={line.sr}>
-                  <td className="border border-slate-200 px-2 py-1.5 text-center">
+                  <td className="border border-slate-200 px-1.5 py-1 text-center">
                     {line.sr}
                   </td>
-                  <td className="border border-slate-200 px-2 py-1.5">{line.sku}</td>
-                  <td className="border border-slate-200 px-2 py-1.5">
+                  <td className="border border-slate-200 px-1.5 py-1">
                     {line.productName}
                   </td>
-                  <td className="border border-slate-200 px-2 py-1.5 text-right">
-                    {line.qtyLabel}
+                  <td className="border border-slate-200 px-1.5 py-1 text-center">
+                    {line.hsnCode || "—"}
+                  </td>
+                  <td className="border border-slate-200 px-1.5 py-1 text-right">
+                    {line.qty}
+                  </td>
+                  <td className="border border-slate-200 px-1.5 py-1 text-center">
+                    {line.uom || "—"}
+                  </td>
+                  <td className="border border-slate-200 px-1.5 py-1 text-right">
+                    {inr.format(line.rate || 0)}
+                  </td>
+                  <td className="border border-slate-200 px-1.5 py-1 text-right">
+                    {inr.format(line.amount || 0)}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+              <tr className="bg-slate-50 font-semibold">
+                <td className="border border-slate-200 px-1.5 py-1" colSpan={3} />
+                <td className="border border-slate-200 px-1.5 py-1 text-right">
+                  {totalQty}
+                </td>
+                <td className="border border-slate-200 px-1.5 py-1" colSpan={2} />
+                <td className="border border-slate-200 px-1.5 py-1 text-right">
+                  ₹ {inr.format(totalAmount)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div className="border-t border-slate-200 pt-3 text-[11px] text-slate-500 space-y-1">
-          <p>This is a Delivery Challan for goods dispatched. Not a tax invoice.</p>
-          <p>
-            Generated on {data.generatedOn} · Challan No: {data.challanNo} ·
-            Dispatch: {data.dispatchNo}
-          </p>
+        <div className="grid grid-cols-[1fr_1fr_180px] gap-3">
+          <div className="border border-slate-200 p-2">
+            <p className="font-bold uppercase text-[9px] mb-1">Declaration</p>
+            <p className="text-slate-700 text-[10px] leading-relaxed">
+              {data.declaration ||
+                "Goods covered under this challan are not sold and are being transported for the purpose mentioned above."}
+            </p>
+          </div>
+          <div className="border border-slate-200 p-2">
+            <p className="font-bold uppercase text-[9px] mb-1">Remarks</p>
+            <p className="text-slate-700 text-[10px]">{data.remarks || "—"}</p>
+          </div>
+          <div>
+            <p className="font-bold uppercase text-[9px] mb-1 border-b border-slate-200 pb-1">
+              Summary
+            </p>
+            <div className="space-y-1 text-[10px]">
+              <div className="flex justify-between">
+                <span>Total Items</span>
+                <span className="font-semibold">{data.lines.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Quantity</span>
+                <span className="font-semibold">{totalQty}</span>
+              </div>
+              <div className="flex justify-between bg-slate-100 px-1 py-1 font-bold">
+                <span>Total Amount</span>
+                <span>₹ {inr.format(totalAmount)}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

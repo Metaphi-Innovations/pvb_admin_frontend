@@ -5,35 +5,26 @@ import { buildPurchaseOrderPdfHtml, type POPdfTemplateData } from "./poPdfTempla
 import {
   asText,
   formatDate,
-  sanitizePdfFileName,
   toNumber,
 } from "./poPdfFormatters";
+import {
+  PARAMVERSE_COMPANY,
+  loadNavbarLogoDataUrl,
+  openEditablePdfPreview,
+  openPdfPrintWindow,
+  sanitizePdfFileName,
+} from "@/lib/pdf/paramverse";
 
-/** Same logo used in TopNavbar. */
-const NAVBAR_LOGO_PATH = "/images/dharitri%20sutra.png";
-
-/** Exact company header from the reference PO PDF. */
 const COMPANY_HEADER = {
-  companyName: "PARAMVERSE BIO PRIVATE LIMITED",
-  companyAddress:
-    "402, 4th Floor, Omega Tower, Hiranandani Link Road, Hiranandani Gardens, Opp. Colgate Palmolive, Mumbai – 400076, Maharashtra",
+  ...PARAMVERSE_COMPANY,
   companyMetaLine:
-    "GSTIN: 27AAQCP4960M1ZL PAN: AAQCP4960M CIN: U46201MH2025PTC463792",
+    "GSTIN: 27AAQCP4960M1ZL   PAN: AAQCP4960M   CIN: U46201MH2025PTC463792",
   companyContactLine:
-    "Ph: 022-41276000/01/02/03 Email: info@paramverse.com Web: www.paramversebio.com",
-  signatoryCompany: "PARAMVERSE BIO PVT. LTD.",
+    "Ph: 022-41276000/01/02/03   Email: info@paramverse.com   Web: www.paramversebio.com",
 };
 
 export function openPurchaseOrderPdfWindow(): Window | null {
-  if (typeof window === "undefined") return null;
-  const popup = window.open("", "_blank");
-  if (popup?.document) {
-    popup.document.write(
-      "<!doctype html><html><head><title>Generating PDF...</title></head><body style='font-family:Arial,sans-serif;padding:12px'>Preparing purchase order PDF...</body></html>",
-    );
-    popup.document.close();
-  }
-  return popup;
+  return openPdfPrintWindow("Preparing purchase order PDF...");
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -63,23 +54,6 @@ function splitLines(value: unknown): string[] {
     .split(/\r?\n|(?<=\.)\s+/)
     .map((line) => line.trim())
     .filter(Boolean);
-}
-
-async function loadNavbarLogoDataUrl(): Promise<string | undefined> {
-  if (typeof window === "undefined") return undefined;
-  try {
-    const response = await fetch(NAVBAR_LOGO_PATH);
-    if (!response.ok) return undefined;
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return `${window.location.origin}${NAVBAR_LOGO_PATH}`;
-  }
 }
 
 const DEFAULT_TERMS_AND_CONDITIONS: string[] = [
@@ -206,8 +180,7 @@ function buildTemplateData(
   const termsLines = splitLines(pick(raw, ["terms_and_conditions", "terms"]));
   const fallbackTerms = splitLines(po.terms.map((term) => term.content));
   const specialInstructionLines = splitLines(
-    pick(raw, ["special_instructions", "instructions"]) ??
-      (po.notes ? po.notes : undefined),
+    pick(raw, ["special_instructions", "instructions"]),
   );
 
   const quotationRef = asText(
@@ -226,7 +199,7 @@ function buildTemplateData(
   );
 
   return {
-    fileTitle: sanitizePdfFileName(po.poNumber),
+    fileTitle: asText(po.poNumber, "Purchase Order"),
     logoSrc,
     companyName,
     companyAddress,
@@ -283,31 +256,16 @@ function buildTemplateData(
 export async function generateAndPrintPurchaseOrderPdf(
   po: PurchaseOrder,
   raw: Record<string, unknown>,
-  openedWindow?: Window | null,
+  _openedWindow?: Window | null,
 ): Promise<void> {
-  if (typeof window === "undefined") {
-    throw new Error("PDF download is only supported in browser.");
-  }
-
   const logoSrc = await loadNavbarLogoDataUrl();
   const templateData = buildTemplateData(po, raw, logoSrc);
-  const html = buildPurchaseOrderPdfHtml(templateData);
-  const printWindow = openedWindow ?? openPurchaseOrderPdfWindow();
-
-  if (!printWindow) {
-    throw new Error("Popup blocked. Please allow popups and try again.");
-  }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.document.title = templateData.fileTitle;
-
-  const triggerPrint = () => {
-    printWindow.focus();
-    printWindow.print();
-  };
-
-  // Wait briefly so embedded logo paints before print dialog.
-  window.setTimeout(triggerPrint, 250);
+  await openEditablePdfPreview({
+    title: "Purchase Order PDF Preview",
+    initialData: templateData as unknown as Record<string, unknown>,
+    renderHtml: (edited) =>
+      buildPurchaseOrderPdfHtml(edited as unknown as POPdfTemplateData),
+    printButtonLabel: "Download PO PDF",
+    outputFileName: `${sanitizePdfFileName(po.poNumber, "PO")}.pdf`,
+  });
 }

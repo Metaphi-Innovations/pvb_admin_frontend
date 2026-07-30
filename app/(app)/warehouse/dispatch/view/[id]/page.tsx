@@ -4,7 +4,21 @@ import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Truck, Package, Building, User, Calendar, FileText, Download } from "lucide-react";
 import { useParams } from "next/navigation";
-import { getDispatchById, downloadDeliveryChallan } from "../../services";
+import { getDispatchById } from "../../services";
+import {
+  mapDispatchToDeliveryChallan,
+  openEditableDeliveryChallanPreview,
+} from "../../dc-pdf/deliveryChallanPdf";
+import {
+  mapDispatchToTaxInvoice,
+  openEditableTaxInvoicePreview,
+} from "../../tax-invoice-pdf/taxInvoicePdf";
+import {
+  mapDispatchToStockTransfer,
+  openEditableStockTransferPreview,
+} from "../../stock-transfer-pdf/stockTransferPdf";
+import { axiosInstance } from "@/api/axios";
+import { API_ENDPOINTS } from "@/api/endpoints";
 
 export default function ViewDispatchPage() {
   const params = useParams();
@@ -13,6 +27,8 @@ export default function ViewDispatchPage() {
   const [record, setRecord] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingChallan, setDownloadingChallan] = useState(false);
+  const [downloadingTaxInvoice, setDownloadingTaxInvoice] = useState(false);
+  const [downloadingStockTransfer, setDownloadingStockTransfer] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -50,18 +66,81 @@ export default function ViewDispatchPage() {
   const isSample =
     String(record.source_type || "").toLowerCase() === "sample_order" ||
     String(record.source_type || "").toLowerCase() === "sample";
+  const isStockTransfer =
+    String(record.source_type || "").toLowerCase() === "stock_transfer";
+  const canDownloadInvoiceLike =
+    String(record.status || "").toUpperCase() === "DISPATCHED" ||
+    String(record.status || "").toUpperCase() === "DELIVERED" ||
+    String(record.status || "").toUpperCase() === "CLOSED";
 
   const handleDownloadChallan = async () => {
     setDownloadingChallan(true);
     try {
-      await downloadDeliveryChallan(record.id);
-      const refreshed = await getDispatchById(record.id).catch(() => null);
-      if (refreshed) setRecord(refreshed);
+      await openEditableDeliveryChallanPreview(
+        mapDispatchToDeliveryChallan(record),
+      );
     } catch (err) {
       console.error(err);
       alert("Failed to download delivery challan");
     } finally {
       setDownloadingChallan(false);
+    }
+  };
+
+  const handleDownloadTaxInvoice = async () => {
+    setDownloadingTaxInvoice(true);
+    try {
+      let salesOrder: Record<string, unknown> | null = null;
+      const sourceId = record.source_id;
+      const sourceType = String(record.source_type || "").toLowerCase();
+      if (sourceId && (sourceType === "normal_sales" || sourceType === "sales_order")) {
+        try {
+          const soRes = await axiosInstance.get(
+            API_ENDPOINTS.SALES.SALES_ORDER.DETAILS(String(sourceId)),
+          );
+          salesOrder = (soRes.data?.data || null) as Record<string, unknown> | null;
+        } catch {
+          salesOrder = null;
+        }
+      }
+      await openEditableTaxInvoicePreview(
+        mapDispatchToTaxInvoice(record, salesOrder),
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download tax invoice");
+    } finally {
+      setDownloadingTaxInvoice(false);
+    }
+  };
+
+  const handleDownloadStockTransfer = async () => {
+    setDownloadingStockTransfer(true);
+    try {
+      let stockTransfer: Record<string, unknown> | null =
+        (record.stock_transfer as Record<string, unknown>) || null;
+      const sourceId = record.source_id;
+      if (!stockTransfer && sourceId) {
+        try {
+          const stRes = await axiosInstance.get(
+            API_ENDPOINTS.SALES.STOCK_TRANSFER.DETAILS(String(sourceId)),
+          );
+          stockTransfer = (stRes.data?.data || null) as Record<
+            string,
+            unknown
+          > | null;
+        } catch {
+          stockTransfer = null;
+        }
+      }
+      await openEditableStockTransferPreview(
+        mapDispatchToStockTransfer(record, stockTransfer),
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download stock transfer PDF");
+    } finally {
+      setDownloadingStockTransfer(false);
     }
   };
 
@@ -94,6 +173,28 @@ export default function ViewDispatchPage() {
                 icon: downloadingChallan ? Download : FileText,
                 onClick: handleDownloadChallan,
               },
+              ...(canDownloadInvoiceLike && !isStockTransfer
+                ? [
+                    {
+                      label: downloadingTaxInvoice
+                        ? "Downloading…"
+                        : "Download Tax Invoice",
+                      icon: downloadingTaxInvoice ? Download : FileText,
+                      onClick: handleDownloadTaxInvoice,
+                    },
+                  ]
+                : []),
+              ...(canDownloadInvoiceLike && isStockTransfer
+                ? [
+                    {
+                      label: downloadingStockTransfer
+                        ? "Downloading…"
+                        : "Download Stock Transfer",
+                      icon: downloadingStockTransfer ? Download : FileText,
+                      onClick: handleDownloadStockTransfer,
+                    },
+                  ]
+                : []),
             ],
       }}
     >
