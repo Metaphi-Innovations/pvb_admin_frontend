@@ -496,6 +496,16 @@ export const API_ENDPOINTS = {
   },
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract",
+    BANKING: {
+      BANK_ACCOUNTS: {
+        LIST: "/accounts/banking/bank-accounts",
+        CREATE: "/accounts/banking/bank-accounts",
+        BY_LEDGER: (ledgerId: string) =>
+          `/accounts/banking/bank-accounts/ledger/${ledgerId}`,
+        COMPLETE_DETAILS: (ledgerId: string) =>
+          `/accounts/banking/bank-accounts/ledger/${ledgerId}/details`,
+      },
+    },
   },
 };
 
