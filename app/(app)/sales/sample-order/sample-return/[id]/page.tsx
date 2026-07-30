@@ -53,6 +53,8 @@ export default function SampleReturnViewPage() {
     SUBMITTED: "Submitted",
     APPROVED: "Approved",
     REJECTED: "Rejected",
+    sample_returned: "Sample Returned",
+    PARTIALLY_RECEIVED: "Partially Received",
     RECEIVED: "Received",
     CANCELLED: "Cancelled",
   };
@@ -61,6 +63,8 @@ export default function SampleReturnViewPage() {
     SUBMITTED: "neutral",
     APPROVED: "active",
     REJECTED: "inactive",
+    sample_returned: "neutral",
+    PARTIALLY_RECEIVED: "neutral",
     RECEIVED: "active",
     CANCELLED: "inactive",
   };

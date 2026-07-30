@@ -1,12 +1,11 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const BankAccountFormClient = lazyAccountsPage(() => import("../../BankAccountFormClient"));
-
+/** Edit of incomplete ledgers is the Complete Details flow. */
 export default async function EditBankAccountPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <BankAccountFormClient accountId={Number(id)} />;
+  redirect(`/accounts/banking/bank-accounts/${id}/complete`);
 }

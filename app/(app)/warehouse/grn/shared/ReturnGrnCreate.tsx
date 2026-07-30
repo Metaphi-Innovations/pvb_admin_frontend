@@ -152,7 +152,10 @@ export function ReturnGrnCreate({
     isLoading: salesDropdownLoading,
     isError: salesDropdownError,
     error: salesDropdownLoadError,
-  } = useSalesReturnDropdown(["sales_returned"], isSales && !isEdit);
+  } = useSalesReturnDropdown(
+    ["sales_returned", "partially_received"],
+    isSales && !isEdit,
+  );
 
   const {
     data: sampleDropdown = [],
@@ -160,7 +163,7 @@ export function ReturnGrnCreate({
     isError: sampleDropdownError,
     error: sampleDropdownLoadError,
   } = useSampleReturnDropdown(
-    ["DRAFT", "SUBMITTED", "APPROVED","sample_returned"],
+    ["DRAFT", "SUBMITTED", "APPROVED", "sample_returned", "PARTIALLY_RECEIVED"],
     !isSales && !isEdit,
   );
 
@@ -279,40 +282,45 @@ export function ReturnGrnCreate({
     }
 
     setLines(
-      activeReturn.items.map((item) => {
-        const caseSize = item.unitPerPacking > 0 ? item.unitPerPacking : 1;
-        // Prefer source return quantity_type (PIECE/CASE); default CASE if missing.
-        const quantityType = resolveGrnQuantityType(item.quantityType);
-        const receivedQty = item.returnedBaseQty;
-        const displayQty = round2(
-          fromBaseQuantity({
-            baseQty: receivedQty,
+      activeReturn.items
+        .map((item): LineInputState | null => {
+          const caseSize = item.unitPerPacking > 0 ? item.unitPerPacking : 1;
+          const quantityType = resolveGrnQuantityType(item.quantityType);
+          const previousReceivedQty = Math.max(0, round2(item.receivedBaseQty || 0));
+          const maxQty = Math.max(0, round2(item.returnedBaseQty));
+          const remaining = Math.max(0, round2(maxQty - previousReceivedQty));
+          if (remaining <= 0) return null;
+          const receivedQty = remaining;
+          const displayQty = round2(
+            fromBaseQuantity({
+              baseQty: receivedQty,
+              quantityType,
+              packingSize: caseSize,
+            }),
+          );
+          return {
+            sourceItemId: item.id,
+            productId: item.productId,
+            sku: item.sku || item.productCode,
+            productName: item.productName,
+            unit: item.unit || "Unit",
+            batchNo: item.batchNumber || "",
+            mfgDate: item.mfgDate || "",
+            expDate: item.expDate || "",
+            maxQty,
+            previousReceivedQty,
+            receivedQty,
+            displayQty,
             quantityType,
-            packingSize: caseSize,
-          }),
-        );
-        return {
-          sourceItemId: item.id,
-          productId: item.productId,
-          sku: item.sku || item.productCode,
-          productName: item.productName,
-          unit: item.unit || "Unit",
-          batchNo: item.batchNumber || "",
-          mfgDate: item.mfgDate || "",
-          expDate: item.expDate || "",
-          maxQty: item.returnedBaseQty,
-          previousReceivedQty: 0,
-          receivedQty,
-          displayQty,
-          quantityType,
-          caseSize,
-          batchLocked: Boolean(item.batchNumber),
-          productSnapshot: {
-            ...item.productSnapshot,
-            unit_per_packing: caseSize,
-          },
-        };
-      }),
+            caseSize,
+            batchLocked: Boolean(item.batchNumber),
+            productSnapshot: {
+              ...item.productSnapshot,
+              unit_per_packing: caseSize,
+            },
+          };
+        })
+        .filter((line): line is LineInputState => line != null),
     );
     setFieldErrors((prev) => ({ ...prev, selectedReturnId: undefined, lines: undefined }));
   }, [isEdit, activeReturn, selectedReturnId]);
@@ -408,8 +416,8 @@ export function ReturnGrnCreate({
         lineErrors[idx] = "Packing size is required when quantity type is Case.";
         return;
       }
-      if (line.receivedQty > line.maxQty) {
-        lineErrors[idx] = `Received qty exceeds returned qty (${line.maxQty} base).`;
+      if (line.receivedQty > line.maxQty - line.previousReceivedQty) {
+        lineErrors[idx] = `Received qty exceeds remaining qty (${Math.max(0, round2(line.maxQty - line.previousReceivedQty))} base).`;
         return;
       }
       if (line.receivedQty > 0) {
@@ -780,6 +788,12 @@ export function ReturnGrnCreate({
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
                         Returned
                       </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                        Prev. Received
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                        Remaining
+                      </th>
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[120px] min-w-[120px]">
                         Quantity Type
                       </th>
@@ -867,6 +881,27 @@ export function ReturnGrnCreate({
                           <td className="p-3 text-center text-xs font-medium tabular-nums">
                             {displayReturned}
                           </td>
+                          <td className="p-3 text-center text-xs font-medium text-muted-foreground tabular-nums">
+                            {round2(
+                              fromBaseQuantity({
+                                baseQty: line.previousReceivedQty,
+                                quantityType: line.quantityType,
+                                packingSize: caseSize,
+                              }),
+                            )}
+                          </td>
+                          <td className="p-3 text-center text-xs font-medium text-amber-700 tabular-nums">
+                            {round2(
+                              fromBaseQuantity({
+                                baseQty: Math.max(
+                                  0,
+                                  line.maxQty - line.previousReceivedQty,
+                                ),
+                                quantityType: line.quantityType,
+                                packingSize: caseSize,
+                              }),
+                            )}
+                          </td>
                           <td className="p-3 align-middle w-[120px] min-w-[120px]">
                             <Select value={line.quantityType} disabled>
                               <SelectTrigger className="h-8 w-full text-xs rounded-lg bg-muted opacity-100">
@@ -885,11 +920,15 @@ export function ReturnGrnCreate({
                             <div className="flex justify-center">
                               <Input
                                 type="number"
-                                readOnly
-                                disabled
+                                min={0}
+                                step="any"
                                 value={line.displayQty === 0 ? "" : line.displayQty}
+                                onChange={(e) => handleDisplayQtyChange(idx, e.target.value)}
                                 placeholder={line.quantityType === "CASE" ? "Cases" : "Pcs"}
-                                className="h-8 text-center text-xs font-medium w-24 bg-muted opacity-100 cursor-not-allowed"
+                                className={cn(
+                                  "h-8 text-center text-xs font-medium w-24",
+                                  lineError?.includes("qty") && "border-red-500",
+                                )}
                               />
                             </div>
                           </td>

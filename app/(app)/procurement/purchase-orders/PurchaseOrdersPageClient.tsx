@@ -428,20 +428,11 @@ export default function PurchaseOrdersPageClient() {
   };
 
   const handleDownloadPdf = async (row: PurchaseOrderListItem) => {
-    const popup = PurchaseOrderService.openPdfWindow();
-    if (!popup) {
-      setToast({
-        msg: "Popup blocked. Please allow popups and try again.",
-        type: "error",
-      });
-      return;
-    }
     try {
       setDownloadingPoId(row.id);
-      await PurchaseOrderService.downloadPdfById(row.id, { openedWindow: popup });
+      await PurchaseOrderService.downloadPdfById(row.id);
       setToast({ msg: "PO PDF ready. Use browser save as PDF.", type: "success" });
     } catch (error) {
-      popup.close();
       setToast({
         msg: getErrorMessage(error, "Failed to generate PO PDF."),
         type: "error",

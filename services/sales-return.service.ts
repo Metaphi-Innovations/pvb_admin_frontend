@@ -64,6 +64,8 @@ export interface SalesReturnLineItem {
   mfgDate: string;
   expDate: string;
   returnedBaseQty: number;
+  /** Cumulative GRN received qty in base units. */
+  receivedBaseQty: number;
   /** From backend; missing → UI defaults to CASE. */
   quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
@@ -161,6 +163,7 @@ function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
       asNumber(raw.total_return_pieces) ||
       asNumber(raw.base_qty) ||
       asNumber(raw.qty),
+    receivedBaseQty: asNumber(raw.received_base_qty),
     quantityType: normalizeGrnQuantityType(
       asString(raw.quantity_type) ||
         asString(raw.quantityType) ||

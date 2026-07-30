@@ -157,13 +157,20 @@ export default function AccountsSundryDebtorCustomerFormClient({
 
   useEffect(() => {
     if (!isEdit || !customer) return;
-    setForm(customerRecordToFormValues(customer));
     let cancelled = false;
     setAccountingLoading(true);
     loadPartyMasterAccounting({ kind: "customer", partyId: customer.customerUuid })
       .then((accounting) => {
         if (cancelled) return;
-        setForm((prev) => ({ ...prev, ...accounting }));
+        setForm((prev) => ({
+          ...customerRecordToFormValues(customer),
+          ...accounting,
+          openingBalance: accounting.openingBalance ?? prev?.openingBalance ?? "0",
+          balanceType: accounting.balanceType ?? (prev?.balanceType || "Debit"),
+          openingBalanceDate: accounting.openingBalanceDate ?? (prev?.openingBalanceDate || fyOpeningDateIso(selectedFY.id)),
+          billWiseAccounting: accounting.billWiseAccounting ?? prev?.billWiseAccounting ?? true,
+          accountingDescription: accounting.accountingDescription ?? prev?.accountingDescription ?? "",
+        }));
       })
       .finally(() => {
         if (!cancelled) setAccountingLoading(false);

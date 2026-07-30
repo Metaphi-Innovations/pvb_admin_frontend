@@ -3,6 +3,10 @@
 import React, { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { LedgerService } from "@/services/ledger.service";
+import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
+import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 import type { ChartOfAccount, CoaNodeId } from "../../../data";
 import {
   canAddLedgerUnder,
@@ -365,8 +369,10 @@ export function CoaExplorerTree({
   onAddSubGroup,
   onRecordsChange,
 }: CoaExplorerTreeProps) {
+  const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<ChartOfAccount | null>(null);
   const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const isSidebar = variant === "sidebar";
 
   const handleDeleteLedger = (ledgerId: CoaNodeId) => {
@@ -387,17 +393,32 @@ export function CoaExplorerTree({
     setDeleteBlockReason(null);
   };
 
-  const confirmDeleteLedger = () => {
-    if (!deleteTarget) return;
+  const confirmDeleteLedger = async () => {
+    if (!deleteTarget || isDeleting) return;
     const block = getLedgerDeleteBlockReason(deleteTarget, records);
     if (block) {
       setDeleteBlockReason(block);
       return;
     }
 
-    // API-backed ledgers are not deleted via localStorage — skip until ledger DELETE API is wired.
+    // API-backed ledgers: call the backend DELETE API
     if (deleteTarget.apiNodeId) {
-      closeDeleteDialog();
+      setIsDeleting(true);
+      try {
+        await LedgerService.delete(String(deleteTarget.apiNodeId));
+        await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+        dispatchCoaChanged();
+        dispatchAccountsDataChanged("ledgers", {
+          operation: "delete",
+          recordId: deleteTarget.id,
+        });
+        closeDeleteDialog();
+      } catch (err: any) {
+        const msg = err?.message || "Failed to delete ledger.";
+        setDeleteBlockReason(msg);
+      } finally {
+        setIsDeleting(false);
+      }
       return;
     }
 
@@ -420,10 +441,12 @@ export function CoaExplorerTree({
   };
 
   const roots = useMemo(
-    () =>
-      records
+    () => {
+      const order: Record<string, number> = { AST: 1, LIA: 2, INC: 3, EXP: 4 };
+      return records
         .filter((r) => r.nodeLevel === "primary_head")
-        .sort((a, b) => a.accountCode.localeCompare(b.accountCode)),
+        .sort((a, b) => (order[a.accountCode] ?? 99) - (order[b.accountCode] ?? 99));
+    },
     [records],
   );
 
@@ -540,8 +563,9 @@ export function CoaExplorerTree({
                     size="sm"
                     className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
                     onClick={confirmDeleteLedger}
+                    disabled={isDeleting}
                   >
-                    Delete
+                    {isDeleting ? "Deleting…" : "Delete"}
                   </Button>
                 </>
               )}

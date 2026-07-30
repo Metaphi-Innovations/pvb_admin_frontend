@@ -38,6 +38,7 @@ export function mapBackendStatusToFrontend(status: string): TransferStatus {
     case "FULLY_PACKED": return "packed";
     case "PACKED": return "packed";
     case "IN_TRANSIT": return "in_transit";
+    case "PARTIALLY_RECEIVED": return "partially_received";
     case "RECEIVED": return "received";
     case "CANCELLED": return "cancelled";
     default: return "draft";
@@ -54,6 +55,7 @@ export function mapFrontendStatusToBackend(status: string): string {
     case "ready_for_packing": return "READY_FOR_PACKING";
     case "packing_in_progress": return "PICKING";
     case "in_transit": return "IN_TRANSIT";
+    case "partially_received": return "PARTIALLY_RECEIVED";
     case "received": return "RECEIVED";
     case "rejected": return "REJECTED";
     case "cancelled": return "CANCELLED";
@@ -103,6 +105,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,
+    receivedQty: asNumber(raw.received_base_qty),
   };
 }
 

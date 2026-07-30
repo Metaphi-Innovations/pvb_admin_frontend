@@ -23,12 +23,21 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, downloadDeliveryChallan, printDeliveryChallan, getDispatchById } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, getDispatchById } from "./services";
 import {
   mapDispatchToDeliveryChallan,
-  openDeliveryChallanPrintWindow,
+  openEditableDeliveryChallanPreview,
 } from "./dc-pdf/deliveryChallanPdf";
-import { DeliveryChallanPreview } from "./dc-pdf/DeliveryChallanPreview";
+import {
+  mapDispatchToTaxInvoice,
+  openEditableTaxInvoicePreview,
+} from "./tax-invoice-pdf/taxInvoicePdf";
+import {
+  mapDispatchToStockTransfer,
+  openEditableStockTransferPreview,
+} from "./stock-transfer-pdf/stockTransferPdf";
+import { axiosInstance } from "@/api/axios";
+import { API_ENDPOINTS } from "@/api/endpoints";
 import {
   DELIVERY_STATUS_BADGE_CONFIG,
   TRANSPORTER_OPTIONS,
@@ -64,10 +73,6 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
 
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
-  const [challanTarget, setChallanTarget] = useState<any>(null);
-  const [challanLoading, setChallanLoading] = useState(false);
-  const [challanDownloading, setChallanDownloading] = useState(false);
-  const [challanPrinting, setChallanPrinting] = useState(false);
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
   const [closeTarget, setCloseTarget] = useState<any>(null);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
@@ -390,15 +395,13 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       action: "challan",
       icon: FileText,
       onClick: async (row) => {
-        setChallanTarget(row);
-        setChallanLoading(true);
         try {
           const detail = await getDispatchById(row.id);
-          setChallanTarget(detail || row);
+          await openEditableDeliveryChallanPreview(
+            mapDispatchToDeliveryChallan(detail || row),
+          );
         } catch (err) {
           console.error(err);
-        } finally {
-          setChallanLoading(false);
         }
       },
       hide: (row) =>
@@ -408,6 +411,95 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
           salesOrderNo: row.salesOrderNumber,
           source_document_no: row.source_document_no,
         }) === "sample_order",
+    },
+    {
+      label: "Download Tax Invoice",
+      action: "tax_invoice",
+      icon: FileText,
+      onClick: async (row) => {
+        try {
+          const detail = await getDispatchById(row.id);
+          const source = detail || row;
+          let salesOrder: Record<string, unknown> | null = null;
+          const sourceId = source.source_id || source.sourceId;
+          const sourceType = String(source.source_type || "").toLowerCase();
+          if (sourceId && (sourceType === "normal_sales" || sourceType === "sales_order")) {
+            try {
+              const soRes = await axiosInstance.get(
+                API_ENDPOINTS.SALES.SALES_ORDER.DETAILS(String(sourceId)),
+              );
+              salesOrder = (soRes.data?.data || null) as Record<string, unknown> | null;
+            } catch {
+              salesOrder = null;
+            }
+          }
+          await openEditableTaxInvoicePreview(
+            mapDispatchToTaxInvoice(source, salesOrder),
+          );
+        } catch (err) {
+          console.error(err);
+        }
+      },
+      hide: (row) => {
+        const status = String(row.status || row.dispatch_status || "").toUpperCase();
+        const isDispatched =
+          status === "DISPATCHED" || status === "DELIVERED" || status === "CLOSED";
+        const orderType = resolveWarehouseOrderType({
+          sourceDocumentType: row.sourceDocumentType,
+          source_type: row.source_type,
+          salesOrderNo: row.salesOrderNumber,
+          source_document_no: row.source_document_no,
+        });
+        const isSample = orderType === "sample_order";
+        const isStockTransfer =
+          orderType === "stock_transfer" ||
+          String(row.source_type || "").toLowerCase() === "stock_transfer";
+        return !isDispatched || isSample || isStockTransfer;
+      },
+    },
+    {
+      label: "Download Stock Transfer",
+      action: "stock_transfer_pdf",
+      icon: FileText,
+      onClick: async (row) => {
+        try {
+          const detail = await getDispatchById(row.id);
+          const source = detail || row;
+          let stockTransfer: Record<string, unknown> | null =
+            (source.stock_transfer as Record<string, unknown>) || null;
+          const sourceId = source.source_id || source.sourceId;
+          if (!stockTransfer && sourceId) {
+            try {
+              const stRes = await axiosInstance.get(
+                API_ENDPOINTS.SALES.STOCK_TRANSFER.DETAILS(String(sourceId)),
+              );
+              stockTransfer = (stRes.data?.data || null) as Record<string, unknown> | null;
+            } catch {
+              stockTransfer = null;
+            }
+          }
+          await openEditableStockTransferPreview(
+            mapDispatchToStockTransfer(source, stockTransfer),
+          );
+        } catch (err) {
+          console.error(err);
+        }
+      },
+      hide: (row) => {
+        const status = String(row.status || row.dispatch_status || "").toUpperCase();
+        const isDispatched =
+          status === "DISPATCHED" || status === "DELIVERED" || status === "CLOSED";
+        const orderType = resolveWarehouseOrderType({
+          sourceDocumentType: row.sourceDocumentType,
+          source_type: row.source_type,
+          salesOrderNo: row.salesOrderNumber,
+          source_document_no: row.source_document_no,
+        });
+        const isStockTransfer =
+          orderType === "stock_transfer" ||
+          String(row.source_type || "").toLowerCase() === "stock_transfer";
+        return !isDispatched || !isStockTransfer;
+      },
     },
     {
       label: "Sample Issue Note",
@@ -536,84 +628,6 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             </Button>
             <Button size="sm" className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={handleRevertConfirm}>
               Confirm Revert
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── CHALLAN PREVIEW DIALOG ── */}
-      <Dialog open={!!challanTarget} onOpenChange={() => setChallanTarget(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-center">
-                <FileText className="w-4 h-4 text-brand-600" />
-              </div>
-              Delivery Challan
-            </DialogTitle>
-          </DialogHeader>
-          {challanLoading ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              Loading challan details…
-            </div>
-          ) : challanTarget ? (
-            <DeliveryChallanPreview
-              data={mapDispatchToDeliveryChallan(challanTarget)}
-            />
-          ) : null}
-          <DialogFooter className="flex gap-2 justify-end pt-2 border-t">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => setChallanTarget(null)}>
-              <X className="w-3 h-3" /> Close
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1"
-              disabled={challanPrinting || challanLoading || !challanTarget?.id}
-              onClick={async () => {
-                if (!challanTarget?.id) return;
-                setChallanPrinting(true);
-                try {
-                  // Prefer official PDF (issues DC number). Fallback to HTML print.
-                  try {
-                    await printDeliveryChallan(challanTarget.id);
-                    const refreshed = await getDispatchById(challanTarget.id).catch(() => null);
-                    if (refreshed) setChallanTarget(refreshed);
-                    fetchData();
-                  } catch {
-                    openDeliveryChallanPrintWindow(
-                      mapDispatchToDeliveryChallan(challanTarget),
-                    );
-                  }
-                } finally {
-                  setChallanPrinting(false);
-                }
-              }}
-            >
-              <Printer className="w-3 h-3" />
-              {challanPrinting ? "Preparing…" : "Print"}
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
-              disabled={challanDownloading || challanLoading || !challanTarget?.id}
-              onClick={async () => {
-                if (!challanTarget?.id) return;
-                setChallanDownloading(true);
-                try {
-                  await downloadDeliveryChallan(challanTarget.id);
-                  const refreshed = await getDispatchById(challanTarget.id).catch(() => null);
-                  if (refreshed) setChallanTarget(refreshed);
-                  fetchData();
-                } catch (err) {
-                  console.error(err);
-                } finally {
-                  setChallanDownloading(false);
-                }
-              }}
-            >
-              <Download className="w-3 h-3" />
-              {challanDownloading ? "Downloading..." : "Download PDF"}
             </Button>
           </DialogFooter>
         </DialogContent>

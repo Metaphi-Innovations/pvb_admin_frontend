@@ -461,7 +461,7 @@ function mapItem(
         msmeRegistered: toBool(raw.msme_registered),
         msmeRegNo: asString(raw.msme_reg_no),
         address1: asString(raw.address_1),
-        pincodeId: asString(raw.pincode_id),
+        pincodeId: asString(raw.pincode_id || raw.pincode_master_id),
         pincodeMaster: mapPincode(raw.pincode_master),
         address2: asString(raw.address_2),
         state: asString(raw.state),

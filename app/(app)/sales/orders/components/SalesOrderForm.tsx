@@ -308,7 +308,7 @@ export function validateSplitOrderForm(
 		const max = line.maxSplitQty ?? parentLine.quantity;
 		const acc = (splitBySource[line.splitSourceLineId] ?? 0) + line.quantity;
 		if (acc > max) {
-			e.lineItems = `Split quantity cannot exceed available quantity for ${line.productName}`;
+			e.lineItems = `Split quantity cannot exceed available quantity for ${line.productName || "this product"}`;
 			break;
 		}
 		splitBySource[line.splitSourceLineId] = acc;

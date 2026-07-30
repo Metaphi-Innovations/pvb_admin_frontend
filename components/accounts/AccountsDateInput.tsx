@@ -57,28 +57,16 @@ export function AccountsDateInput({
       )}
     >
       <span
-        onClick={openPicker}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") openPicker(e);
-        }}
-        role="button"
-        tabIndex={disabled ? -1 : 0}
-        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937] transition-colors flex-shrink-0 z-[1] cursor-pointer"
-        aria-label={ariaLabel ? `${ariaLabel} — open calendar` : "Open calendar"}
+        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#6B7280] flex-shrink-0 z-[1] pointer-events-none"
+        aria-hidden
       >
         <Calendar className="w-3.5 h-3.5" />
       </span>
       <span
         className={cn(
-          "accounts-date-display block min-w-0 pl-7 pr-1.5 w-full cursor-pointer truncate tabular-nums",
+          "accounts-date-display block min-w-0 pl-7 pr-1.5 w-full truncate tabular-nums z-[1] pointer-events-none",
           display ? "text-[#1F2937]" : "text-[#6B7280]",
         )}
-        onClick={openPicker}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") openPicker(e);
-        }}
-        role="button"
-        tabIndex={disabled ? -1 : 0}
       >
         {display || placeholder}
       </span>
@@ -88,9 +76,14 @@ export function AccountsDateInput({
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => {
+          try {
+            (e.target as any).showPicker?.();
+          } catch (err) {}
+        }}
         disabled={disabled}
         aria-label={ariaLabel}
-        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-[2]"
       />
     </div>
   );

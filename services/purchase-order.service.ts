@@ -195,6 +195,10 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     asString(snapshotHsn.code) ||
     "";
 
+  // const snapshot = asRecord(raw.product_snapshot);
+  // const hsnObj = asRecord(snapshot.hsn);
+  // const hsnCode = asString(raw.hsn_code || raw.hsnCode || hsnObj.hsnCode || hsnObj.hsn_code || (snapshot as any).hsnCode || (snapshot as any).hsn_code || "");
+
   return {
     uid: asString(raw.purchase_order_product_id) || `pl-${index}`,
     purchaseOrderProductId: toUuidOrNull(raw.purchase_order_product_id) ?? undefined,
@@ -202,7 +206,13 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     productCode: asString(raw.product_code),
     productName: asString(raw.product_name),
     description: "",
-    sku: asString(raw.product_code),
+    // Prefer master SKU from snapshot — this is what invoices use (e.g. FGASM00632).
+    // product_code is the internal code (e.g. 0.0.100005) and must not be treated as SKU.
+    sku:
+      asString(snapshot.sku) ||
+      asString(raw.sku) ||
+      asString(raw.product_sku) ||
+      "",
     category: asString(
       asRecord(snapshot.category).category_name ??
         asRecord(snapshot.category).name ??
