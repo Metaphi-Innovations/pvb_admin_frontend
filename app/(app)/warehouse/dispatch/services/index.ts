@@ -22,6 +22,33 @@ export async function getDispatches(payload: any = {}) {
   return response.data;
 }
 
+export interface DispatchDropdownItem {
+  id: string;
+  dispatch_number: string;
+  source_type: string;
+  source_id: string | null;
+  source_document_no: string;
+  status: string;
+  customer_id: string | null;
+  customer_name: string;
+  customer_code?: string;
+  warehouse_id: string | null;
+  warehouse_name: string;
+  label: string;
+}
+
+/** Lightweight dispatch options for form selects (prefer over list API). */
+export async function getDispatchDropdown(params?: {
+  source_type?: string;
+  status?: string;
+}): Promise<DispatchDropdownItem[]> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DROPDOWN, {
+    params: params || {},
+  });
+  const data = response.data?.data;
+  return Array.isArray(data) ? data : [];
+}
+
 export async function getDispatchById(id: string) {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DETAILS(id));
   return response.data?.data;

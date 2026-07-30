@@ -360,14 +360,14 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
       label: "Edit",
       action: "edit",
       icon: Pencil,
-      hide: (row) => row.status !== "Ready For Dispatch",
+      hide: (row) => row.status !== "Available for Dispatch" && row.status !== "Ready For Dispatch",
       onClick: (row) => router.push(`/warehouse/packing/edit/${row.id}`),
     },
     {
       label: "Create Dispatch",
       action: "dispatch",
       icon: Truck,
-      hide: (row) => row.status !== "Ready For Dispatch",
+      hide: (row) => row.status !== "Available for Dispatch" && row.status !== "Ready For Dispatch",
       onClick: (row) => router.push(`/warehouse/dispatch/create?packingId=${row.id}`),
     },
     {
@@ -388,7 +388,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
           toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to revert Packing Done");
         }
       },
-      disabled: (row) => row.status !== "Ready For Dispatch",
+      disabled: (row) => row.status !== "Available for Dispatch" && row.status !== "Ready For Dispatch",
       variant: "destructive",
     },
   ];

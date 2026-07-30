@@ -451,11 +451,16 @@ function migratePricingRecord(raw: Partial<PricingRecord>): PricingRecord {
     raw.distributorPrice ?? raw.retailPrice ?? raw.dealerPrice ?? raw.farmerPrice ?? 0;
 
   const product = raw.productId
-    ? loadProducts().find((p) => p.id === raw.productId)
-    : undefined;
+    ? loadProducts().find((p) => p.id === raw.productId || String(p.id) === raw.productUuid)
+    : raw.productUuid
+      ? loadProducts().find((p) => String(p.id) === raw.productUuid)
+      : undefined;
 
   const record: PricingRecord = {
     id: raw.id ?? 0,
+    pricingUuid: raw.pricingUuid,
+    productUuid: raw.productUuid,
+    customerTypeId: raw.customerTypeId,
     productId: raw.productId ?? 0,
     productCode: raw.productCode ?? product?.productCode ?? raw.sku ?? "",
     sku: raw.sku ?? product?.sku ?? "",
@@ -959,15 +964,34 @@ export function setDynamicPricingRecords(records: PricingRecord[] | null) {
 export function mapProductPricingDropdownItem(pr: Record<string, unknown>): Partial<PricingRecord> {
   const product = (pr.product ?? {}) as Record<string, unknown>;
   const customerType = (pr.customer_type ?? {}) as Record<string, unknown>;
+  const productUuid = String(pr.product_id ?? product.product_id ?? "");
+  const pricingUuid = String(pr.id ?? "");
+  // Keep numeric productId only when backend still sends a numeric id (legacy demo data).
+  const numericProductId =
+    typeof pr.product_id === "number"
+      ? pr.product_id
+      : Number.isFinite(Number(pr.product_id)) && String(pr.product_id).trim() !== "" && !productUuid.includes("-")
+        ? Number(pr.product_id)
+        : 0;
+  const numericId =
+    typeof pr.id === "number"
+      ? pr.id
+      : Number.isFinite(Number(pr.id)) && String(pr.id).trim() !== "" && !pricingUuid.includes("-")
+        ? Number(pr.id)
+        : 0;
+
   return {
-    id: typeof pr.id === "number" ? pr.id : Number(pr.id) || 0,
-    productId: typeof pr.product_id === "number" ? pr.product_id : Number(pr.product_id) || 0,
+    id: numericId,
+    pricingUuid: pricingUuid || undefined,
+    productUuid: productUuid || undefined,
+    productId: numericProductId,
     productCode: String(product.product_code ?? ""),
     sku: String(product.product_code ?? product.sku ?? ""),
     productName: String(product.product_name ?? ""),
     state: String(pr.state_name ?? ""),
     customerType: (String(customerType.customer_type_name ?? "") || "Distributor") as PricingCustomerType,
-    status: pr.is_active ? "active" : "inactive",
+    customerTypeId: String(pr.customer_type_id ?? customerType.id ?? "") || undefined,
+    status: pr.is_active === false ? "inactive" : "active",
     dealerPrice: Number(pr.dealer_price ?? 0),
     costPrice: Number(pr.cost_price ?? product.cost_price ?? 0),
     distributorPrice: Number(pr.dealer_price ?? 0),

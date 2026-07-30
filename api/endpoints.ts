@@ -425,6 +425,7 @@ export const API_ENDPOINTS = {
     DISPATCH: {
       PREVIEW_NUMBER: "/warehouse/dispatch/preview-number",
       LIST: "/warehouse/dispatch/list",
+      DROPDOWN: "/warehouse/dispatch/dropdown",
       FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
       CREATE: "/warehouse/dispatch/create",
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
