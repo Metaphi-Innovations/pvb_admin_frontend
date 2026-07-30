@@ -206,7 +206,13 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     productCode: asString(raw.product_code),
     productName: asString(raw.product_name),
     description: "",
-    sku: asString(raw.product_code),
+    // Prefer master SKU from snapshot — this is what invoices use (e.g. FGASM00632).
+    // product_code is the internal code (e.g. 0.0.100005) and must not be treated as SKU.
+    sku:
+      asString(snapshot.sku) ||
+      asString(raw.sku) ||
+      asString(raw.product_sku) ||
+      "",
     category: asString(
       asRecord(snapshot.category).category_name ??
         asRecord(snapshot.category).name ??

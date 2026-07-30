@@ -22,7 +22,7 @@ import {
 	loadProductCatalog,
 	setDynamicProducts,
 } from "../orders-data";
-import { setDynamicPricingRecords } from "@/app/(app)/masters/pricing/pricing-data";
+import { setDynamicPricingRecords, mapProductPricingDropdownRecords } from "@/app/(app)/masters/pricing/pricing-data";
 import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
 import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
 import CreditLimitExceededDialog from "../components/CreditLimitExceededDialog";
@@ -145,17 +145,8 @@ export default function AddSalesOrderPage() {
 	}, [productData]);
 
 	useEffect(() => {
-		if (pricingData) {
-			const mapped = pricingData.map((pr: any) => ({
-				id: pr.id,
-				productId: pr.product_id,
-				state: pr.state_name,
-				customerType: pr.customer_type?.customer_type_name || "",
-				status: pr.is_active ? "active" : "inactive",
-				dealerPrice: Number(pr.dealer_price || 0),
-				costPrice: Number(pr.cost_price || 0),
-			}));
-			setDynamicPricingRecords(mapped as any);
+		if (pricingData && pricingData.length > 0) {
+			setDynamicPricingRecords(mapProductPricingDropdownRecords(pricingData));
 		} else {
 			setDynamicPricingRecords(null);
 		}

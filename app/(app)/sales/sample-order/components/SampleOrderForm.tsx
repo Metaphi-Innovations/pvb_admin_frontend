@@ -19,7 +19,7 @@ import {
 	formatCustomerDropdownSublabel,
 } from "@/lib/masters/entity-display";
 import { useCustomerDetails, useCustomersDropdown, useWarehousesDropdown, useProductPricingDropdown } from "@/hooks/sales/use-sales-orders";
-import { setDynamicPricingRecords } from "@/app/(app)/masters/pricing/pricing-data";
+import { setDynamicPricingRecords, mapProductPricingDropdownRecords } from "@/app/(app)/masters/pricing/pricing-data";
 import {
 	loadWarehouses,
 	type WarehouseMaster,
@@ -278,17 +278,8 @@ export default function SampleOrderForm({
 	const { data: pricingData } = useProductPricingDropdown();
 
 	useEffect(() => {
-		if (pricingData) {
-			const mapped = pricingData.map((pr: any) => ({
-				id: pr.id,
-				productId: pr.product_id,
-				state: pr.state_name,
-				customerType: pr.customer_type?.customer_type_name || "",
-				status: pr.is_active ? "active" : "inactive",
-				dealerPrice: Number(pr.dealer_price || 0),
-				costPrice: Number(pr.cost_price || 0),
-			}));
-			setDynamicPricingRecords(mapped as any);
+		if (pricingData && pricingData.length > 0) {
+			setDynamicPricingRecords(mapProductPricingDropdownRecords(pricingData));
 		} else {
 			setDynamicPricingRecords(null);
 		}

@@ -168,10 +168,17 @@ export function StockTransferCreate({
 
         const sourceId = String(dispatch.source_id || "");
         let transferNo = "";
+        const receivedBySourceItem = new Map<string, number>();
+        const transferQtyBySourceItem = new Map<string, number>();
         if (sourceId) {
           try {
             const transfer = await StockTransferService.getById(sourceId);
             transferNo = transfer.transferNumber;
+            for (const line of transfer.lineItems || []) {
+              if (!line.id) continue;
+              receivedBySourceItem.set(String(line.id), Number(line.receivedQty || 0));
+              transferQtyBySourceItem.set(String(line.id), Number(line.quantity || 0));
+            }
           } catch {
             transferNo = dispatch.dispatch_number || sourceId;
           }
@@ -187,31 +194,46 @@ export function StockTransferCreate({
         setWarehouseName(toName || matchedWarehouse?.warehouseName || "");
         setWarehouseId(matchedWarehouse?.warehouse_id || "");
         setLines(
-          builtLines.map((line) => {
-            const caseSize = line.caseSize > 0 ? line.caseSize : 1;
-            const quantityType = resolveGrnQuantityType(line.quantityType);
-            const receivedQty = line.maxQty;
-            const displayQty = round2(
-              fromBaseQuantity({
-                baseQty: receivedQty,
+          builtLines
+            .map((line): LineInputState | null => {
+              const caseSize = line.caseSize > 0 ? line.caseSize : 1;
+              const quantityType = resolveGrnQuantityType(line.quantityType);
+              const previousReceivedQty = Math.max(
+                0,
+                round2(receivedBySourceItem.get(line.sourceItemId) || 0),
+              );
+              const orderedQty = Math.max(
+                0,
+                round2(
+                  transferQtyBySourceItem.get(line.sourceItemId) || line.maxQty,
+                ),
+              );
+              const remaining = Math.max(0, round2(orderedQty - previousReceivedQty));
+              if (remaining <= 0) return null;
+              const receivedQty = remaining;
+              const displayQty = round2(
+                fromBaseQuantity({
+                  baseQty: receivedQty,
+                  quantityType,
+                  packingSize: caseSize,
+                }),
+              );
+              return {
+                ...line,
+                maxQty: orderedQty,
+                caseSize,
+                previousReceivedQty,
+                receivedQty,
+                displayQty,
                 quantityType,
-                packingSize: caseSize,
-              }),
-            );
-            return {
-              ...line,
-              caseSize,
-              previousReceivedQty: 0,
-              receivedQty,
-              displayQty,
-              quantityType,
-              batchLocked: Boolean(line.batchNo),
-              productSnapshot: {
-                ...line.productSnapshot,
-                unit_per_packing: caseSize,
-              },
-            };
-          }),
+                batchLocked: Boolean(line.batchNo),
+                productSnapshot: {
+                  ...line.productSnapshot,
+                  unit_per_packing: caseSize,
+                },
+              };
+            })
+            .filter((line): line is LineInputState => line != null),
         );
       } catch (err) {
         if (!active) return;
@@ -382,8 +404,8 @@ export function StockTransferCreate({
         lineErrors[idx] = "Packing size is required when quantity type is Case.";
         return;
       }
-      if (line.receivedQty > line.maxQty) {
-        lineErrors[idx] = `Received qty exceeds dispatched qty (${line.maxQty} base).`;
+      if (line.receivedQty > line.maxQty - line.previousReceivedQty) {
+        lineErrors[idx] = `Received qty exceeds remaining qty (${Math.max(0, round2(line.maxQty - line.previousReceivedQty))} base).`;
         return;
       }
       if (line.receivedQty > 0) {
@@ -732,6 +754,12 @@ export function StockTransferCreate({
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
                         Dispatched
                       </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                        Prev. Received
+                      </th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-24">
+                        Remaining
+                      </th>
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[120px] min-w-[120px]">
                         Quantity Type
                       </th>
@@ -801,6 +829,27 @@ export function StockTransferCreate({
                           <td className="p-3 text-center text-xs font-medium tabular-nums">
                             {displayDispatched}
                           </td>
+                          <td className="p-3 text-center text-xs font-medium text-muted-foreground tabular-nums">
+                            {round2(
+                              fromBaseQuantity({
+                                baseQty: line.previousReceivedQty,
+                                quantityType: line.quantityType,
+                                packingSize: caseSize,
+                              }),
+                            )}
+                          </td>
+                          <td className="p-3 text-center text-xs font-medium text-amber-700 tabular-nums">
+                            {round2(
+                              fromBaseQuantity({
+                                baseQty: Math.max(
+                                  0,
+                                  line.maxQty - line.previousReceivedQty,
+                                ),
+                                quantityType: line.quantityType,
+                                packingSize: caseSize,
+                              }),
+                            )}
+                          </td>
                           <td className="p-3 align-middle w-[120px] min-w-[120px]">
                             <Select value={line.quantityType} disabled>
                               <SelectTrigger className="h-8 w-full text-xs rounded-lg bg-muted opacity-100">
@@ -819,11 +868,15 @@ export function StockTransferCreate({
                             <div className="flex justify-center">
                               <Input
                                 type="number"
-                                readOnly
-                                disabled
+                                min={0}
+                                step="any"
                                 value={line.displayQty === 0 ? "" : line.displayQty}
+                                onChange={(e) => handleDisplayQtyChange(idx, e.target.value)}
                                 placeholder={line.quantityType === "CASE" ? "Cases" : "Pcs"}
-                                className="h-8 text-center text-xs font-medium w-24 bg-muted opacity-100 cursor-not-allowed"
+                                className={cn(
+                                  "h-8 text-center text-xs font-medium w-24",
+                                  lineError?.includes("qty") && "border-red-500",
+                                )}
                               />
                             </div>
                           </td>

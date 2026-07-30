@@ -18,8 +18,12 @@ import {
   hydrateOrderLineItems,
   canSplitOrder,
   setDynamicProducts,
+  orderToFormValues,
 } from "../../orders-data";
-import { setDynamicPricingRecords } from "@/app/(app)/masters/pricing/pricing-data";
+import {
+  mapProductPricingDropdownRecords,
+  setDynamicPricingRecords,
+} from "@/app/(app)/masters/pricing/pricing-data";
 import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
 import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
 import CreditLimitExceededDialog from "../../components/CreditLimitExceededDialog";
@@ -124,17 +128,8 @@ export default function SplitSalesOrderPage() {
   }, [productData]);
 
   useEffect(() => {
-    if (pricingData) {
-      const mapped = pricingData.map((pr: any) => ({
-        id: pr.id,
-        productId: pr.product_id,
-        state: pr.state_name,
-        customerType: pr.customer_type?.customer_type_name || "",
-        status: pr.is_active ? "active" : "inactive",
-        dealerPrice: Number(pr.dealer_price || 0),
-        costPrice: Number(pr.cost_price || 0),
-      }));
-      setDynamicPricingRecords(mapped as any);
+    if (pricingData && pricingData.length > 0) {
+      setDynamicPricingRecords(mapProductPricingDropdownRecords(pricingData));
     } else {
       setDynamicPricingRecords(null);
     }
@@ -144,27 +139,32 @@ export default function SplitSalesOrderPage() {
   useEffect(() => {
     if (!loadedOrder) return;
 
+    if (!canSplitOrder(loadedOrder)) {
+      setToast({ msg: "This order cannot be split.", type: "error" });
+      setTimeout(() => router.push(`/sales/orders/${id}`), 1200);
+      return;
+    }
+
     const hydrated = hydrateOrderLineItems(loadedOrder);
     setOriginalOrder(hydrated);
 
+    const baseForm = orderToFormValues(hydrated);
     setForm({
-      orderDate: hydrated.orderDate,
-      customerId: hydrated.customerId,
-      salesManId: hydrated.salesManId,
-      deliveryDate: hydrated.deliveryDate,
+      ...baseForm,
       status: hydrated.status === "draft" ? "draft" : "confirmed",
-      lineItems: hydrated.lineItems.map((item) => ({
-        ...item,
-        id: `line-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        splitSourceLineId: item.id,
-        maxSplitQty: item.quantity,
-      })),
+      lineItems:
+        hydrated.lineItems.length > 0
+          ? hydrated.lineItems.map((item) => ({
+              ...item,
+              id: `line-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              splitSourceLineId: item.id,
+              maxSplitQty: item.quantity,
+            }))
+          : [],
       additionalExpenses: [],
-      warehouseId: hydrated.warehouseId ?? null,
-      warehouseName: hydrated.warehouseName ?? "",
       remarks: "",
     });
-  }, [loadedOrder]);
+  }, [loadedOrder, id, router]);
 
   useEffect(() => {
     if (!toast) return;
