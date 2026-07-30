@@ -493,10 +493,7 @@ export const API_ENDPOINTS = {
       SYNC_SUPPLIER_LEDGER: (supplierId: string) =>
         `/accounts/integrations/suppliers/${supplierId}/sync-ledger`,
     },
-  },
-  INVOICE_EXTRACTION: {
-    EXTRACT: "/invoice-extraction/extract",
-    BANKING: {
+     BANKING: {
       BANK_ACCOUNTS: {
         LIST: "/accounts/banking/bank-accounts",
         CREATE: "/accounts/banking/bank-accounts",
@@ -506,6 +503,9 @@ export const API_ENDPOINTS = {
           `/accounts/banking/bank-accounts/ledger/${ledgerId}/details`,
       },
     },
+  },
+  INVOICE_EXTRACTION: {
+    EXTRACT: "/invoice-extraction/extract"
   },
 };
 
