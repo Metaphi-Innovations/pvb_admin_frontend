@@ -283,7 +283,7 @@ export function ReturnGrnCreate({
 
     setLines(
       activeReturn.items
-        .map((item) => {
+        .map((item): LineInputState | null => {
           const caseSize = item.unitPerPacking > 0 ? item.unitPerPacking : 1;
           const quantityType = resolveGrnQuantityType(item.quantityType);
           const previousReceivedQty = Math.max(0, round2(item.receivedBaseQty || 0));
@@ -320,7 +320,7 @@ export function ReturnGrnCreate({
             },
           };
         })
-        .filter((line): line is LineInputState => Boolean(line)),
+        .filter((line): line is LineInputState => line != null),
     );
     setFieldErrors((prev) => ({ ...prev, selectedReturnId: undefined, lines: undefined }));
   }, [isEdit, activeReturn, selectedReturnId]);

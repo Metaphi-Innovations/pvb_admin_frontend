@@ -195,7 +195,7 @@ export function StockTransferCreate({
         setWarehouseId(matchedWarehouse?.warehouse_id || "");
         setLines(
           builtLines
-            .map((line) => {
+            .map((line): LineInputState | null => {
               const caseSize = line.caseSize > 0 ? line.caseSize : 1;
               const quantityType = resolveGrnQuantityType(line.quantityType);
               const previousReceivedQty = Math.max(
@@ -233,7 +233,7 @@ export function StockTransferCreate({
                 },
               };
             })
-            .filter((line): line is LineInputState => Boolean(line)),
+            .filter((line): line is LineInputState => line != null),
         );
       } catch (err) {
         if (!active) return;
