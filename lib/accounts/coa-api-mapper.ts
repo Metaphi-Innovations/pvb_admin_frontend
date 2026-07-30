@@ -60,6 +60,7 @@ function mapMasterType(sourceType: string | null | undefined): string | null {
   if (t === "CUSTOMER") return "customer";
   if (t === "SUPPLIER") return "vendor";
   if (t === "WAREHOUSE") return "warehouse";
+  if (t === "BANK") return "bank";
   return null;
 }
 
@@ -68,6 +69,7 @@ function mapErpSourceModule(sourceType: string | null | undefined): string | und
   if (t === "CUSTOMER") return "customer_master";
   if (t === "SUPPLIER") return "vendor_master";
   if (t === "WAREHOUSE") return "warehouse_master";
+  if (t === "BANK") return "bank_account";
   if (t === "SYSTEM") return "system";
   return sourceType ?? undefined;
 }
@@ -119,7 +121,7 @@ function toChartOfAccount(
     tdsApplicable: false,
     costCenterApplicable: false,
     billWiseAccounting: false,
-    bankAccountFlag: false,
+    bankAccountFlag: masterType === "bank",
     ledgerKind: mapLedgerKind(node),
     masterType,
     masterId: sourceEntityId,

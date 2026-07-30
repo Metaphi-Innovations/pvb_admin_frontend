@@ -464,6 +464,10 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
     },
+    PENDING_INVOICES: {
+      LIST: "/accounts/pending-invoices/list",
+      GENERATE: (dispatchId: string) => `/accounts/pending-invoices/${dispatchId}/generate-invoice`,
+    },
     CHART_OF_ACCOUNTS: {
       TREE: "/accounts/chart-of-accounts/tree",
       PRIMARY_HEADS: "/accounts/chart-of-accounts/primary-heads",
