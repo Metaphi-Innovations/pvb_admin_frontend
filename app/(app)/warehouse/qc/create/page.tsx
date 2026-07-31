@@ -117,10 +117,7 @@ function CreateQcForm() {
         setIsStockTransfer(stMode);
         setSourceType(getQcSourceType(qc));
         setQcRemarks(qc.qcRemarks ?? "");
-        if (qc.qcDate) {
-          setQcDate(qc.qcDate.split("T")[0]);
-        } else if (qc.inspectionDate) {
-          // If qcDate is not there but inspectionDate is there, format it or split it
+        if (qc.inspectionDate) {
           setQcDate(qc.inspectionDate.split("T")[0]);
         }
 
