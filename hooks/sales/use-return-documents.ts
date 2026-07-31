@@ -39,6 +39,22 @@ export function useSalesReturn(id: string | null | undefined, enabled = true) {
   });
 }
 
+export function useNextReturnNumber(
+  warehouseId?: string | null,
+  enabled = true,
+) {
+  const resolvedWarehouseId = warehouseId ? String(warehouseId) : null;
+  return useQuery({
+    queryKey: [...salesReturnKeys.all, "next-return-number", resolvedWarehouseId],
+    queryFn: ({ signal }) =>
+      SalesReturnService.getPreviewNumber(resolvedWarehouseId, signal),
+    enabled: Boolean(enabled && resolvedWarehouseId),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+  });
+}
+
 export function useSampleReturnDropdown(statuses?: string[], enabled = true) {
   return useQuery({
     queryKey: sampleReturnKeys.dropdown(statuses),

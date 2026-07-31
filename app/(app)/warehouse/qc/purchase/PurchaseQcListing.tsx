@@ -99,14 +99,27 @@ export function PurchaseQcListing() {
       try {
         let ordering = undefined;
         if (qcSort.key && qcSort.direction !== "none") {
-          const mapping: Record<string, string> = {
-            qcNo: "qcNumber",
-            grnNo: "grn__grnNumber",
-            inspectionDate: "qcDate",
-            vendorName: "grn__supplier__supplier_name",
-            warehouse: "grn__warehouse__warehouse_name",
-          };
-          const baseKey = mapping[qcSort.key] || qcSort.key;
+          let baseKey = qcSort.key;
+          if (activeTab === "pending") {
+            // Pending hits GRN list — fields are on Grn, not nested under grn__
+            const mapping: Record<string, string> = {
+              grnNo: "grnNumber",
+              poNumber: "po_no",
+              vendorName: "supplier__supplier_name",
+              warehouse: "warehouse__warehouse_name",
+              totalReceivedQty: "receivedQty",
+            };
+            baseKey = mapping[qcSort.key] || qcSort.key;
+          } else {
+            const mapping: Record<string, string> = {
+              qcNo: "qcNumber",
+              grnNo: "grn__grnNumber",
+              inspectionDate: "qcDate",
+              vendorName: "grn__supplier__supplier_name",
+              warehouse: "grn__warehouse__warehouse_name",
+            };
+            baseKey = mapping[qcSort.key] || qcSort.key;
+          }
           ordering = qcSort.direction === "desc" ? `-${baseKey}` : baseKey;
         }
 
@@ -301,6 +314,7 @@ export function PurchaseQcListing() {
       action: "view",
       icon: Eye,
       onClick: (row) => router.push(row.status === "pending" ? `/warehouse/qc/create?grnId=${row.id}` : `/warehouse/qc/view/${row.id}`),
+      hide: (row) => row.status === "pending",
     },
     {
       label: "Perform QC",

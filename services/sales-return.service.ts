@@ -241,6 +241,21 @@ export const SalesReturnService = {
     return mapDetail(data as Record<string, unknown>);
   },
 
+  async getPreviewNumber(
+    warehouseId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SALES_RETURN.PREVIEW_NUMBER,
+      {
+        signal,
+        params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
+    return response.data?.data?.return_number || "";
+  },
+
   async create(payload: any): Promise<any> {
     const response = await axiosInstance.post(
       API_ENDPOINTS.SALES.SALES_RETURN.CREATE,

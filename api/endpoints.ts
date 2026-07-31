@@ -322,6 +322,7 @@ export const API_ENDPOINTS = {
       DROPDOWN: "/sales/sales-return/dropdown",
       FILTER: "/sales/sales-return/filter",
       CREATE: "/sales/sales-return/create",
+      PREVIEW_NUMBER: "/sales/sales-return/preview-number",
       DETAILS: (id: string) => `/sales/sales-return/${id}`,
     },
     SAMPLE_RETURN: {
