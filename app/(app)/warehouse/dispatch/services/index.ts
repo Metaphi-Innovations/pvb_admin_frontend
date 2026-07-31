@@ -120,8 +120,11 @@ export async function allocateStockTransferInvoiceNumber(id: string): Promise<st
   );
 }
 
-export async function downloadDeliveryChallan(id: string): Promise<void> {
-  const { blob, fileName } = await fetchDeliveryChallanPdf(id);
+export async function downloadDeliveryChallan(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<void> {
+  const { blob, fileName } = await fetchDeliveryChallanPdf(id, options);
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -134,22 +137,33 @@ export async function downloadDeliveryChallan(id: string): Promise<void> {
 
 export async function fetchDeliveryChallanPdf(
   id: string,
+  options: { withGoodsValue?: boolean } = {},
 ): Promise<{ blob: Blob; fileName: string }> {
-  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id), {
-    responseType: "blob",
-  });
+  const withGoodsValue = options.withGoodsValue !== false;
+  const response = await api.get(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id),
+    {
+      responseType: "blob",
+      params: { withGoodsValue },
+    },
+  );
   const blob = response.data as Blob;
   const disposition = response.headers?.["content-disposition"] as string | undefined;
   const matched = disposition?.match(/filename="?([^"]+)"?/i);
   return {
     blob,
-    fileName: matched?.[1] || `delivery-challan-${id}.pdf`,
+    fileName:
+      matched?.[1] ||
+      `delivery-challan-${withGoodsValue ? "with-value" : "without-value"}-${id}.pdf`,
   };
 }
 
 /** Open official server PDF in a new tab for printing. */
-export async function printDeliveryChallan(id: string): Promise<void> {
-  const { blob } = await fetchDeliveryChallanPdf(id);
+export async function printDeliveryChallan(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<void> {
+  const { blob } = await fetchDeliveryChallanPdf(id, options);
   const url = window.URL.createObjectURL(blob);
   const popup = window.open(url, "_blank");
   if (!popup) {
