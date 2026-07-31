@@ -92,13 +92,13 @@ function CreateQcForm() {
         let displayQcNo = qc.qcNo;
         if (!displayQcNo || displayQcNo === "—") {
           try {
-            const preview = await QcService.getPreviewNumber();
+            const preview = await QcService.getPreviewNumber(qc.warehouseId);
             displayQcNo = preview.qcNumber;
           } catch (err) {
             console.error("Failed to fetch preview QC number:", err);
           }
         }
-        setQcNo(displayQcNo || "—");
+        setQcNo(displayQcNo || "QC/27/2627/000001");
         setGrnRecordId(qc.grnId ?? "");
         setGrnNo(qc.grnNo);
         setPoNumber(qc.poNumber ?? "");

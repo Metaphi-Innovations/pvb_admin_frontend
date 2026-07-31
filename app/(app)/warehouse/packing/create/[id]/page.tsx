@@ -86,11 +86,25 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         setOrder(record);
         
         try {
-          const previewResponse = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.PREVIEW_NUMBER);
-          const previewNo = previewResponse.data?.data?.next_number || previewResponse.data?.data || `PKG-2026-${Math.floor(100 + Math.random() * 900)}`;
-          setPackingNo(previewNo);
+          const warehouseId = record.warehouseId;
+          const previewResponse = await axiosInstance.get(
+            API_ENDPOINTS.WAREHOUSE.PACKING_DONE.PREVIEW_NUMBER,
+            {
+              params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+              headers: { "Cache-Control": "no-cache" },
+            },
+          );
+          const previewNo =
+            previewResponse.data?.data?.next_number ||
+            previewResponse.data?.data ||
+            "";
+          setPackingNo(
+            typeof previewNo === "string" && previewNo
+              ? previewNo
+              : "PD/27/2627/000001",
+          );
         } catch {
-          setPackingNo(`PKG-2026-${Math.floor(100 + Math.random() * 900)}`);
+          setPackingNo("PD/27/2627/000001");
         }
         
         setPackingDate(new Date().toISOString().split("T")[0]);
@@ -141,7 +155,6 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     try {
       await PackingDoneService.create({
         packing_list_id: order.id,
-        packing_done_no: packingNo || undefined,
         packing_date: packingDate || undefined,
         products: productsPayload,
       });

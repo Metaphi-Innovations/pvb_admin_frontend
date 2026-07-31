@@ -518,22 +518,6 @@ export const SalesOrderService = {
     return response.data?.data || {};
   },
 
-  async downloadPI(id: string | number): Promise<void> {
-    const response = await axiosInstance.get(
-      API_ENDPOINTS.SALES.SALES_ORDER.DOWNLOAD_PI(String(id)),
-      { responseType: "blob" }
-    );
-    const blob = response.data as Blob;
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `proforma-invoice-${id}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  },
-
   async createPackingList(payload: {
     source_type: string;
     source_id: string;

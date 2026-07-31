@@ -15,12 +15,19 @@ import {
   sampleReturnKeys,
 } from "@/hooks/sales/use-return-documents";
 
-export function useGrnPreviewNumber(enabled = true) {
+export function useGrnPreviewNumber(
+  enabled = true,
+  warehouseId?: string | null,
+) {
+  const id =
+    warehouseId != null && warehouseId !== ""
+      ? String(warehouseId)
+      : null;
   return useQuery({
-    queryKey: grnKeys.previewNumber(),
-    queryFn: ({ signal }) => GrnService.getPreviewNumber(signal),
-    enabled,
-    staleTime: Infinity,
+    queryKey: grnKeys.previewNumber(id),
+    queryFn: ({ signal }) => GrnService.getPreviewNumber(id, signal),
+    enabled: enabled && Boolean(id),
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

@@ -357,6 +357,7 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     priority: "Medium",
     status: raw.status as any,
     warehouse: warehouse,
+    warehouseId: asString(raw.warehouse_id) || undefined,
     sourceDocumentType: sourceDocType as any,
     sourceDocumentNo: sourceDocumentNo || raw.packing_number,
     sourceWarehouse: warehouse,
