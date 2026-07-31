@@ -340,8 +340,12 @@ function buildLineFromSampleItem(
 
 /**
  * Map sample order API payload → shared Paramverse invoice view-model.
+ * @param piNumber Allocated PFI code for Proforma Invoice No. (Sales Order No. stays order_no).
  */
-export function mapSampleOrderToProforma(rawOrder: any): TaxInvoiceViewModel {
+export function mapSampleOrderToProforma(
+  rawOrder: any,
+  piNumber?: string | null,
+): TaxInvoiceViewModel {
   const order = readRecord(rawOrder);
   const warehouse = readRecord(order.warehouse);
   const customer = readRecord(order.customer);
@@ -502,12 +506,13 @@ export function mapSampleOrderToProforma(rawOrder: any): TaxInvoiceViewModel {
   });
 
   const orderNo = asText(order.order_no, "—");
+  const proformaNo = asText(piNumber, "—");
 
   return {
     logoSrc: undefined,
     ...PARAMVERSE_COMPANY,
     copyLabel: "Proforma Invoice - Sample Order",
-    invoiceNo: orderNo,
+    invoiceNo: proformaNo,
     invoiceDate: formatDate(order.order_date || order.created_at),
     customerPoNo: asText(
       pick(order, ["customer_po_number", "customer_po_no", "po_number", "reference_number"]),
@@ -580,6 +585,19 @@ export async function openEditableProformaPreview(
 export async function downloadProformaInvoicePdf(
   orderId: string | number,
 ): Promise<void> {
+  // Allocate first (same pattern as Delivery Challan) so PDF always has SM number.
+  const pfiRes = await axiosInstance.get(
+    API_ENDPOINTS.SALES.SAMPLE_ORDER.ALLOCATE_PFI(String(orderId)),
+  );
+  const piNumber = String(
+    pfiRes.data?.data?.pi_number ||
+      pfiRes.data?.pi_number ||
+      "",
+  ).trim();
+  if (!piNumber) {
+    throw new Error("Failed to allocate Proforma Invoice number.");
+  }
+
   const response = await axiosInstance.get(
     API_ENDPOINTS.SALES.SAMPLE_ORDER.DETAILS(String(orderId)),
   );
@@ -621,9 +639,12 @@ export async function downloadProformaInvoicePdf(
     }
   }
 
-  const mapped = mapSampleOrderToProforma({
-    ...raw,
-    packing_lists: packingLists,
-  });
+  const mapped = mapSampleOrderToProforma(
+    {
+      ...raw,
+      packing_lists: packingLists,
+    },
+    piNumber,
+  );
   await openEditableProformaPreview(mapped);
 }

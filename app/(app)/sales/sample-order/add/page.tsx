@@ -48,14 +48,17 @@ export default function AddSalesOrderPage() {
 	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
-	const { data: nextNumber } = useNextSampleOrderNumber();
+	const { data: nextNumber, isLoading: loadingNo } = useNextSampleOrderNumber(
+		form.warehouseId,
+	);
 	const createMutation = useCreateSampleOrder();
 
 	const { data: salesmanData } = useSalesmenDropdown();
 	const { data: productData } = useProductsDropdown();
 	const { data: customerData } = useCustomersDropdown();
 
-	const orderNumber = nextNumber || "SMO/27/2627/000001";
+	const orderNumber =
+		nextNumber || (loadingNo ? "Loading..." : "Select source warehouse…");
 
 	useEffect(() => {
 		if (customerData) {

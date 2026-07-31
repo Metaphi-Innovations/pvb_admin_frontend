@@ -42,6 +42,7 @@ export default function EditStockTransferPage() {
         status: "active" as const,
         stock: Number(p.pack_size || 1000),
         sellingPrice: Number(p.mrp || 0),
+        costPrice: Number(p.cost_price || 0),
         gstRate: String(p.gst_rate?.gstPercentage || 18),
         packSize: Number(p.unit_per_packing || 1),
       }));

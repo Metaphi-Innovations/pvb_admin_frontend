@@ -160,12 +160,14 @@ function collectSidebarLedgers(
   };
 
   if (isBankAccountsSubGroup(records.find((r) => r.id === subgroupId)!)) {
-    for (const group of getBankGroups(records)) {
-      for (const ledger of getBankAccountLedgersUnderGroup(records, group.id)) {
-        addLedger(ledger);
+    const bankGroups = getBankGroups(records);
+    if (bankGroups.length > 0) {
+      for (const group of bankGroups) {
+        addLedger(group);
       }
+      return result.sort((a, b) => a.accountName.localeCompare(b.accountName));
     }
-    return result.sort((a, b) => a.accountName.localeCompare(b.accountName));
+    // No two-tier bank group structure — fall through to regular walk
   }
 
   walk(subgroupId);
@@ -208,6 +210,11 @@ export function getCoaSidebarTreeChildren(
       .sort((a, b) => a.accountName.localeCompare(b.accountName));
   }
 
+  // Bank grouping nodes (e.g. HDFC Bank) — expand to show individual bank accounts
+  if (parent.nodeLevel === "ledger" && isBankGroupNode(parent)) {
+    return getBankAccountLedgersUnderGroup(records, parentId);
+  }
+
   return [];
 }
 
@@ -224,7 +231,8 @@ export function coaSidebarNodeShowsExpandChevron(
   records: ChartOfAccount[],
 ): boolean {
   if (node.nodeLevel === "ledger") {
-    return isStatutoryTaxPayableParent(node) && coaSidebarNodeHasChildren(records, node.id);
+    const isExpandableLedger = isStatutoryTaxPayableParent(node) || isBankGroupNode(node);
+    return isExpandableLedger && coaSidebarNodeHasChildren(records, node.id);
   }
   return coaSidebarNodeHasChildren(records, node.id);
 }

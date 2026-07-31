@@ -138,7 +138,7 @@ export function ReturnGrnCreate({
     isError: previewError,
     error: previewLoadError,
     refetch: refetchPreviewNumber,
-  } = useGrnPreviewNumber(!isEdit);
+  } = useGrnPreviewNumber(!isEdit, warehouseId);
 
   const {
     data: existingGrn,
@@ -401,6 +401,8 @@ export function ReturnGrnCreate({
     }
     if (!grnDate) {
       next.grnDate = "GRN date is required.";
+    } else if (grnDate > new Date().toISOString().split("T")[0]) {
+      next.grnDate = "GRN date cannot be in the future.";
     }
 
     const lineErrors: Record<number, string> = {};
@@ -514,7 +516,6 @@ export function ReturnGrnCreate({
         router.push(`${basePath}/${grnId}`);
       } else {
         const payload: CreateGrnPayload = {
-          grnNumber: grnNo || null,
           source_id: selectedReturnId,
           source_type: sourceType,
           supplierId: null,
@@ -726,13 +727,16 @@ export function ReturnGrnCreate({
               label="GRN Date"
               type="date"
               required
-              error={fieldErrors.grnDate}
+              error={fieldErrors.grnDate || (grnDate > new Date().toISOString().split("T")[0] ? "GRN date cannot be in the future." : undefined)}
               value={grnDate}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                setGrnDate(e.target.value);
-                setFieldErrors((prev) => ({ ...prev, grnDate: undefined }));
+                const val = e.target.value;
+                setGrnDate(val);
+                const err = val > new Date().toISOString().split("T")[0] ? "GRN date cannot be in the future." : undefined;
+                setFieldErrors((prev) => ({ ...prev, grnDate: err }));
               }}
               className="h-9 text-xs bg-white"
+              max={new Date().toISOString().split("T")[0]}
             />
           </div>
 

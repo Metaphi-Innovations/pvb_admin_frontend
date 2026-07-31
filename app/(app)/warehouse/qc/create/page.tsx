@@ -61,6 +61,13 @@ function CreateQcForm() {
   const [isStockTransfer, setIsStockTransfer] = useState(false);
   const [sourceType, setSourceType] = useState<QcRecord["sourceType"]>("purchase_order");
   const [qcRemarks, setQcRemarks] = useState("");
+  const [qcDate, setQcDate] = useState(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  });
   const [items, setItems] = useState<QcItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -92,13 +99,13 @@ function CreateQcForm() {
         let displayQcNo = qc.qcNo;
         if (!displayQcNo || displayQcNo === "—") {
           try {
-            const preview = await QcService.getPreviewNumber();
+            const preview = await QcService.getPreviewNumber(qc.warehouseId);
             displayQcNo = preview.qcNumber;
           } catch (err) {
             console.error("Failed to fetch preview QC number:", err);
           }
         }
-        setQcNo(displayQcNo || "—");
+        setQcNo(displayQcNo || "QC/27/2627/000001");
         setGrnRecordId(qc.grnId ?? "");
         setGrnNo(qc.grnNo);
         setPoNumber(qc.poNumber ?? "");
@@ -110,6 +117,10 @@ function CreateQcForm() {
         setIsStockTransfer(stMode);
         setSourceType(getQcSourceType(qc));
         setQcRemarks(qc.qcRemarks ?? "");
+        if (qc.inspectionDate) {
+          setQcDate(qc.inspectionDate.split("T")[0]);
+        }
+
         
         setItems(qc.items.map((it) => {
           const unitPerPacking = it.unitPerPacking || 10;
@@ -279,7 +290,7 @@ function CreateQcForm() {
 
       const payload = {
         grnId: grnRecordId,
-        qcDate: new Date().toISOString(),
+        qcDate: qcDate ? new Date(qcDate).toISOString() : new Date().toISOString(),
         remarks: qcRemarks.trim(),
         source_type: backendSourceType,
         items: items.map((it) => ({
@@ -376,7 +387,7 @@ function CreateQcForm() {
               <TextField label="Warehouse" value={warehouse} readOnly className="h-8 text-xs bg-muted/30 font-medium" />
             </>
           )}
-          <TextField label="Inspection Date" value="Set on completion" readOnly className="h-8 text-xs bg-muted/30 text-muted-foreground" />
+          <TextField type="date" label="Inspection Date" value={qcDate} readOnly className="h-8 text-xs bg-muted/30 text-muted-foreground" />
         </div>
 
         <TextField
@@ -401,8 +412,8 @@ function CreateQcForm() {
         {items.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">Referenced GRN contains no batch rows.</p>
         ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
+          <div className="border border-border rounded-lg overflow-x-auto w-full">
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>

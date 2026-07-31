@@ -6,7 +6,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Edit,
-  FileText,
   Package,
   Split,
   Trash2,
@@ -30,7 +29,6 @@ import {
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
-import { downloadProformaInvoice } from "../pi-document";
 import {
   openPackingListPdfWindow,
   downloadPackingListPdfForSalesOrder,
@@ -44,7 +42,6 @@ import {
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
-  canDownloadPI,
   canGeneratePackingList,
   canApproveOrder,
   formatApprovalStatus,
@@ -119,7 +116,6 @@ export default function ViewSalesOrderPage() {
   const editable = canEditOrder(order);
   const splittable = canSplitOrder(order);
   const cancellable = canCancelOrder(order);
-  const piAllowed = canDownloadPI(order);
   const packingAllowed = canGeneratePackingList(order);
   const showApprovalActions = approvalMode && canApproveOrder(order);
   const approvalStatus = resolveApprovalStatus(order);
@@ -153,13 +149,6 @@ export default function ViewSalesOrderPage() {
       label: "Edit Order",
       icon: Edit,
       onClick: () => router.push(`/sales/orders/${order.id}/edit`),
-    });
-  }
-  if (!approvalMode && piAllowed) {
-    quickActions.push({
-      label: "Download PI",
-      icon: FileText,
-      onClick: () => downloadProformaInvoice(order),
     });
   }
   if (!approvalMode && packingAllowed) {
