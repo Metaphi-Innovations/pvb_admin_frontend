@@ -24,6 +24,7 @@ import {
   getWarehouseDocumentPreviewUrl,
   isWarehouseDocumentLink,
   isWarehouseImageDocument,
+  openWarehouseDocument,
   type WarehouseDocumentPayload,
   type WarehouseListRecord,
 } from "@/services/warehouse-list.service";
@@ -83,26 +84,21 @@ function WarehouseDocumentsSection({
     }
   };
 
-  const openDocument = (doc: WarehouseDocumentPayload) => {
-    const url = getWarehouseDocumentPreviewUrl(doc);
-    if (!url) {
-      setDownloadError("Document URL is missing or invalid.");
-      return;
-    }
+  const openDocument = async (doc: WarehouseDocumentPayload) => {
     if (isWarehouseImageDocument(doc)) {
+      const url = getWarehouseDocumentPreviewUrl(doc);
+      if (!url) {
+        setDownloadError("Document URL is missing or invalid.");
+        return;
+      }
       setPreviewDoc(doc);
       return;
     }
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      // Popup blocked — fall back to same-tab navigation via temporary anchor
-      const link = document.createElement("a");
-      link.href = url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+    setDownloadError(null);
+    try {
+      await openWarehouseDocument(doc);
+    } catch {
+      setDownloadError("Failed to open document. Please try again.");
     }
   };
 
@@ -258,7 +254,6 @@ function WarehouseDocumentsSection({
                         src={previewUrl}
                         alt={doc.file_name || doc.document_name}
                         className="object-cover w-full h-full"
-                        crossOrigin="anonymous"
                       />
                     </button>
                     <div className="px-2 py-1.5 border-t border-border/40">
@@ -285,7 +280,6 @@ function WarehouseDocumentsSection({
               src={getWarehouseDocumentPreviewUrl(previewDoc)}
               alt={previewDoc.file_name || previewDoc.document_name}
               className="max-h-[70vh] w-full object-contain"
-              crossOrigin="anonymous"
             />
           )}
         </DialogContent>

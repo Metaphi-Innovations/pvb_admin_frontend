@@ -13,11 +13,9 @@ import {
   StatusBadge,
 } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   AlertCircle,
+  AlertTriangle,
   Ban,
   Calendar,
   CheckCircle,
@@ -37,6 +35,15 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   type CustomerStatus,
   formatMobile,
@@ -135,6 +142,7 @@ export default function CustomerDetailPage() {
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
   const [blockError, setBlockError] = useState("");
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{
     title: string;
     fileUrl: string;
@@ -175,6 +183,14 @@ export default function CustomerDetailPage() {
   const updateStatus = (status: CustomerStatus, isActive: boolean) => {
     if (!customer) return;
     toggleStatus.mutate({ id: customer.customerUuid, isActive });
+  };
+
+  const requestStatusChange = (on: boolean) => {
+    if (!on) {
+      setConfirmDeactivate(true);
+      return;
+    }
+    updateStatus("active", true);
   };
 
   if (!perms.canView) {
@@ -703,7 +719,7 @@ export default function CustomerDetailPage() {
         active={customer.status === "active"}
         onActiveChange={
           canToggle
-            ? (on) => updateStatus(on ? "active" : "inactive", on)
+            ? requestStatusChange
             : undefined
         }
         toggleDisabled={!canToggle}
@@ -809,6 +825,44 @@ export default function CustomerDetailPage() {
               }}
             >
               Confirm Block
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
+        <DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border rounded-lg bg-amber-50 border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              Deactivate Customer?
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              This will mark &quot;{customer.customerName}&quot; as inactive.
+              You can activate the customer again later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setConfirmDeactivate(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              disabled={toggleStatus.isPending}
+              onClick={() => {
+                updateStatus("inactive", false);
+                setConfirmDeactivate(false);
+              }}
+            >
+              Confirm
             </Button>
           </div>
         </DialogContent>

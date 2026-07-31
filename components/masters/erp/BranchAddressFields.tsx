@@ -175,10 +175,11 @@ export function BranchAddressFields({
 		return {
 			...address,
 			pincode: digits,
-			city: "",
-			town: "",
-			district: "",
-			state: "",
+			// Prefer keeping existing geo when a town was chosen but postal lookup missed.
+			city: preferredTown ? address.city : "",
+			town: preferredTown ?? "",
+			district: preferredTown ? (address.district ?? "") : "",
+			state: preferredTown ? address.state : "",
 		};
 	};
 
@@ -209,11 +210,26 @@ export function BranchAddressFields({
 	};
 
 	const handleTownChange = (town: string) => {
+		// API-backed pincode flow: only update town; parent reconciles city/state.
+		// Never call applyPostalLocation here — a miss would clear City/State.
+		if (onPincodeChange) {
+			set("town", town);
+			return;
+		}
 		if (!address.pincode || address.pincode.length !== 6) {
 			set("town", town);
 			return;
 		}
-		onChange(applyPostalLocation(address.pincode, town));
+		const next = applyPostalLocation(address.pincode, town);
+		// If postal lookup misses the town, keep existing City/State and still set Town.
+		if (!next.city && !next.state && (address.city || address.state)) {
+			onChange({
+				...address,
+				town,
+			});
+			return;
+		}
+		onChange({ ...next, town: town || next.town });
 	};
 
 	const townSelectOptions = useMemo(

@@ -156,31 +156,49 @@ export default function ViewVendorPage() {
           summary={accountingSummary}
           partyLabel="Supplier"
         />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
           <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
             <RecordKvRow label="Supplier Code" value={vendor.supplierCode || "—"} mono highlight />
             <RecordKvRow label="Supplier Name" value={vendor.supplierName} highlight />
             <RecordKvRow label="Supplier Type" value={vendor.supplierType?.supplier_type_name || "—"} />
             <RecordKvRow label="Payment Terms" value={vendor.paymentTerms || "30 Days"} />
-            <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
-            <RecordKvRow
-              label="Mobile Number"
-              value={formatMobile(vendor.mobileCountryCode, vendor.mobileNumber)}
-              mono
-              link={!!vendor.mobileNumber}
-              href={vendor.mobileNumber ? `tel:${vendor.mobileNumber}` : undefined}
-            />
+            {vendor.contactPerson?.trim() ? (
+              <RecordKvRow label="Contact Person" value={vendor.contactPerson.trim()} />
+            ) : null}
+            {vendor.mobileNumber?.trim() ? (
+              <RecordKvRow
+                label="Mobile Number"
+                value={formatMobile(vendor.mobileCountryCode, vendor.mobileNumber.trim())}
+                mono
+                link
+                href={`tel:${vendor.mobileNumber.trim()}`}
+              />
+            ) : null}
             <RecordKvRow
               label="Email Address"
-              value={vendor.email || "—"}
-              link={!!vendor.email}
-              href={vendor.email ? `mailto:${vendor.email}` : undefined}
+              value={vendor.email?.trim() || "—"}
+              link={!!vendor.email?.trim()}
+              href={vendor.email?.trim() ? `mailto:${vendor.email.trim()}` : undefined}
               isLast
             />
           </RecordSectionCard>
 
           <RecordSectionCard title="Registered Address" icon={MapPin} accent="green">
-            <RecordKvRow label="Address" value={vendor.registeredGstAddress || "—"} isLast />
+            <RecordKvRow
+              label="Address"
+              value={
+                [
+                  vendor.registeredGstAddress?.trim(),
+                  [vendor.address1, vendor.address2].filter((p) => p?.trim()).join(", "),
+                  [vendor.town, vendor.city, vendor.state].filter((p) => p?.trim()).join(", "),
+                  vendor.pincodeMaster?.pincode?.trim(),
+                ]
+                  .filter((part) => part && part.trim())
+                  .filter((part, idx, arr) => arr.indexOf(part) === idx)
+                  .join(" · ") || "—"
+              }
+              isLast
+            />
           </RecordSectionCard>
 
           <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
@@ -237,7 +255,7 @@ export default function ViewVendorPage() {
                     <RecordKvRow
                       label="Email"
                       value={contact.email || "—"}
-                      isLast={idx === (vendor.contacts?.length ?? 0) - 1}
+                      isLast
                     />
                   </div>
                 ))}

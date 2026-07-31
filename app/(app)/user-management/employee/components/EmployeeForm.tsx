@@ -158,16 +158,18 @@ function validateStructuredAddress(
   errors: Record<string, string>,
   options?: { skipPostalMasterCheck?: boolean },
 ) {
-  if (!addr.line1.trim()) errors[`${prefix}_line1`] = "Required";
-  if (!addr.pincode.trim()) errors[`${prefix}_pincode`] = "Required";
+  const label =
+    prefix === "current" ? "Current address" : prefix === "permanent" ? "Permanent address" : "Address";
+  if (!addr.line1.trim()) errors[`${prefix}_line1`] = `${label} line 1 is required`;
+  if (!addr.pincode.trim()) errors[`${prefix}_pincode`] = "Pincode is required";
   else if (!isValidPincodeFormat(addr.pincode)) errors[`${prefix}_pincode`] = "Enter a valid 6-digit pincode";
   else if (!options?.skipPostalMasterCheck && !lookupPostalPincode(addr.pincode, addr.town)) {
     errors[`${prefix}_pincode`] = "Pincode not found in Postal Master.";
   }
-  if (!addr.city.trim()) errors[`${prefix}_city`] = "Required";
-  if (!addr.town.trim()) errors[`${prefix}_town`] = "Required";
-  if (!addr.district.trim()) errors[`${prefix}_district`] = "Required";
-  if (!addr.state.trim()) errors[`${prefix}_state`] = "Required";
+  if (!addr.city.trim()) errors[`${prefix}_city`] = "City is required";
+  if (!addr.town.trim()) errors[`${prefix}_town`] = "Town is required";
+  if (!addr.district.trim()) errors[`${prefix}_district`] = "District is required";
+  if (!addr.state.trim()) errors[`${prefix}_state`] = "State is required";
 }
 
 function mapAddressErrors(
@@ -1868,8 +1870,9 @@ export default function EmployeeForm({
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.firstName?.trim()) e.firstName = "Required";
-    if (!form.lastName?.trim()) e.lastName = "Required";
+    const today = todayStr();
+    if (!form.firstName?.trim()) e.firstName = "First name is required";
+    if (!form.lastName?.trim()) e.lastName = "Last name is required";
     const eErr = validateEmail(form.email || "");
     if (eErr) e.email = eErr;
     else if (!isApiMode) {
@@ -1882,12 +1885,16 @@ export default function EmployeeForm({
       const mu = validateMobileUnique(form.mobile || "", allEmployees, employee?.id);
       if (mu) e.mobile = mu;
     }
-    if (!form.departmentId) e.departmentId = "Required";
-    if (!form.employeeType) e.employeeType = "Required";
-    if (!form.roleType) e.roleType = "Required";
-    if (form.roleType === "Field User" && !form.salesType) e.salesType = "Required";
-    if (!form.roleId) e.roleId = "Required";
-    if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Required";
+    if (form.dob?.trim()) {
+      if (form.dob > today) e.dob = "Date of birth cannot be a future date";
+    }
+    if (!form.joiningDate?.trim()) e.joiningDate = "Date of joining is required";
+    if (!form.departmentId) e.departmentId = "Department is required";
+    if (!form.employeeType) e.employeeType = "Employee type is required";
+    if (!form.roleType) e.roleType = "Role type is required";
+    if (form.roleType === "Field User" && !form.salesType) e.salesType = "Sales type is required";
+    if (!form.roleId) e.roleId = "Role is required";
+    if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Emergency contact name is required";
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
     validateStructuredAddress(currentAddr, "current", e, {
@@ -1903,7 +1910,7 @@ export default function EmployeeForm({
         geoFields.forEach((field) => {
           const key = geoKey[field] as keyof GeoMappingRow;
           if (!mapping[key]?.trim()) {
-            e[getGeoMappingErrorKey(index, key)] = "Required";
+            e[getGeoMappingErrorKey(index, key)] = `${field} is required`;
           }
         });
       });
@@ -2133,9 +2140,14 @@ export default function EmployeeForm({
                 </div>
 
                 {/* DOB */}
-                <Field label="Date of Birth">
-                  <Input type="date" value={form.dob || ""} onChange={e => set("dob", e.target.value)}
-                    className="h-8 text-xs" />
+                <Field label="Date of Birth" error={errors.dob}>
+                  <Input
+                    type="date"
+                    value={form.dob || ""}
+                    max={todayStr()}
+                    onChange={e => set("dob", e.target.value)}
+                    className={cn("h-8 text-xs", errors.dob && "border-red-400")}
+                  />
                 </Field>
 
                 {/* Gender */}
@@ -2260,8 +2272,15 @@ export default function EmployeeForm({
 
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Date of Joining <span className="text-red-500">*</span></Label>
-                  <Input type="date" value={form.joiningDate || todayStr()}
-                    onChange={e => set("joiningDate", e.target.value)} className="h-8 text-xs" />
+                  <Input
+                    type="date"
+                    value={form.joiningDate || todayStr()}
+                    onChange={e => set("joiningDate", e.target.value)}
+                    className={cn("h-8 text-xs", errors.joiningDate && "border-red-400")}
+                  />
+                  {errors.joiningDate && (
+                    <p className="text-[10px] text-red-500">{errors.joiningDate}</p>
+                  )}
                 </div>
 
                 {mode === "edit" && (

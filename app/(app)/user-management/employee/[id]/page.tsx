@@ -769,7 +769,6 @@ export default function EmployeeDetailPage() {
                 }
                 mono
               />
-              <CompactField label="Alt. Mobile" value={employee.alternativeMobile} mono />
               <CompactField label="Email" value={employee.email} />
             </CompactInfoCard>
 
@@ -796,7 +795,7 @@ export default function EmployeeDetailPage() {
                 <CompactField label="Department" value={employee.department} />
                 <CompactField label="Designation" value={designation} />
                 <CompactField label="Role" value={employee.role} />
-                <CompactField label="Manager" value={employee.reportingManager || "—"} />
+                <CompactField label="Manager Name" value={employee.reportingManager || "—"} />
                 <CompactField label="Joining Date" value={formatProfileDate(employee.joiningDate)} mono />
                 <CompactField label="Employment Type" value={employee.employeeType} />
                 <CompactField label="Status" value={<StatusBadge status={employee.status} />} />

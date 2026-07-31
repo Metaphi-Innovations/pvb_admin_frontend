@@ -14,6 +14,7 @@ import {
   Check,
   Save,
   AlertCircle,
+  Pencil,
 } from "lucide-react";
 import {
   Dialog,
@@ -339,7 +340,17 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
       cancelLabel={isReadOnly ? "Back" : "Cancel"}
       noCard={true}
       actions={
-        !isReadOnly && (
+        mode === "view" && templateId ? (
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={() =>
+              router.push(`/user-management/roles/templates/${templateId}/edit`)
+            }
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit
+          </Button>
+        ) : !isReadOnly ? (
           <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
@@ -348,7 +359,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
           >
             <Save className="w-3.5 h-3.5" /> Save Template
           </Button>
-        )
+        ) : undefined
       }
     >
       {isLoadingTemplate ? (

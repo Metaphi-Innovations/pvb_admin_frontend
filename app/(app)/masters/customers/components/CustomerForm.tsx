@@ -1170,7 +1170,7 @@ export function CustomerForm({
 			),
 		};
 		onChange({ ...form, branches: updatedBranches });
-		showToast("Document selected.", "success");
+		showToast("Document uploaded successfully.", "success");
 		setActiveBranchUpload(null);
 	};
 	// console.log('customerTypes[0]:', customerTypes[0]); // ⬅ add here
@@ -3007,8 +3007,9 @@ export function validateCustomerForm(
 			(doc) => doc.required && !doc.fileName,
 		);
 		if (missing) {
-			e[`branch_${bIdx}_documents`] =
-				`Please upload all required documents for ${branch.branchName}.`;
+			const msg = `Please upload all required documents for ${branch.branchName || `Branch #${bIdx + 1}`}.`;
+			e[`branch_${bIdx}_documents`] = msg;
+			if (!e.requiredDocuments) e.requiredDocuments = msg;
 		}
 
 		branch.documents.forEach((doc, docIdx) => {
@@ -3067,7 +3068,6 @@ export function validateCustomerFormStep(
 			"msmeNumber",
 			"tdsMasterId",
 			"blockReason",
-			"requiredDocuments",
 		]);
 		for (const [key, message] of Object.entries(all)) {
 			if (basicKeys.has(key) || key.includes("Registered") || key.includes("Regn")) {
@@ -3081,6 +3081,7 @@ export function validateCustomerFormStep(
 		for (const [key, message] of Object.entries(all)) {
 			if (
 				key === "branches" ||
+				key === "requiredDocuments" ||
 				key.startsWith("branch_") ||
 				key.startsWith("mainBranch")
 			) {

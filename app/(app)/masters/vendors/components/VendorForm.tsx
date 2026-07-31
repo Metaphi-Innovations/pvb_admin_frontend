@@ -76,7 +76,11 @@ const ALL_TABS = [
 	{ id: "accounting", label: "Accounting" },
 ] as const;
 
-type TabId = (typeof ALL_TABS)[number]["id"];
+export const VENDOR_FORM_STEPS = ALL_TABS;
+
+export type VendorFormStepId = (typeof VENDOR_FORM_STEPS)[number]["id"];
+
+type TabId = VendorFormStepId;
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -163,9 +167,19 @@ function MobileRow({
 			<Input
 				value={mobile}
 				onChange={(e) => onMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+				onBeforeInput={(e) => {
+					const input = e.nativeEvent as InputEvent;
+					const data = input.data ?? "";
+					if (!data) return;
+					const el = e.currentTarget;
+					const selected = (el.selectionEnd ?? 0) - (el.selectionStart ?? 0);
+					const nextLen = el.value.length - selected + data.replace(/\D/g, "").length;
+					if (nextLen > 10) e.preventDefault();
+				}}
 				placeholder='10-digit mobile'
 				className={cn("flex-1 h-8 text-xs", hasError && "border-red-400 focus-visible:ring-red-300")}
 				inputMode='numeric'
+				maxLength={10}
 				disabled={disabled}
 			/>
 		</div>
@@ -271,6 +285,8 @@ export function VendorForm({
 	errors = {},
 	onClearError,
 	errorFocusToken = 0,
+	activeStep,
+	onStepChange,
 }: {
 	form: VendorFormValues;
 	onChange: (f: VendorFormValues) => void;
@@ -281,9 +297,12 @@ export function VendorForm({
 	onClearError?: (key: string) => void;
 	/** Bump after failed submit to switch tab / focus first invalid field. */
 	errorFocusToken?: number;
+	/** When set, only that step section is shown (wizard mode). */
+	activeStep?: VendorFormStepId;
+	onStepChange?: (step: VendorFormStepId) => void;
 }) {
 	const { selectedFY } = useFY();
-	const [tab, setTab] = useState<TabId>("basic");
+	const [tab, setTab] = useState<TabId>(activeStep ?? "basic");
 	const [fetchingGst, setFetchingGst] = useState(false);
 	const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 	const [bulkDocumentTypeIds, setBulkDocumentTypeIds] = useState<string[]>([]);
@@ -297,6 +316,15 @@ export function VendorForm({
 	const [geoNodes, setGeoNodes] = useState<ReturnType<typeof loadGeoNodes>>([]);
 
 	useEffect(() => {
+		if (activeStep) setTab(activeStep);
+	}, [activeStep]);
+
+	const handleTabChange = (id: TabId) => {
+		setTab(id);
+		onStepChange?.(id);
+	};
+
+	useEffect(() => {
 		setGeoNodes(loadGeoNodes());
 	}, []);
 
@@ -306,6 +334,7 @@ export function VendorForm({
 		if (!firstKey) return;
 		const nextTab = resolveFieldTab(firstKey);
 		setTab(nextTab);
+		onStepChange?.(nextTab);
 		const timer = window.setTimeout(() => {
 			const el = document.querySelector<HTMLElement>(`[data-field="${firstKey}"]`);
 			if (!el) return;
@@ -622,13 +651,20 @@ export function VendorForm({
 
 	return (
 		<div className='shadow-sm min-w-0 max-w-full overflow-x-hidden'>
-			<VendorTabBar
-				tabs={ALL_TABS}
-				active={tab}
-				onChange={(id) => setTab(id as TabId)}
-			/>
+			{!activeStep && (
+				<VendorTabBar
+					tabs={ALL_TABS}
+					active={tab}
+					onChange={(id) => handleTabChange(id as TabId)}
+				/>
+			)}
 
-			<div className='px-4 py-4 bg-white border border-t-0 rounded-b-lg border-border/60 md:px-5 md:py-4'>
+			<div
+				className={cn(
+					"px-4 py-4 bg-white border rounded-lg border-border/60 md:px-5 md:py-4",
+					!activeStep && "border-t-0 rounded-t-none rounded-b-lg",
+				)}
+			>
 				{tab === "basic" && (
 					<div className={ERP.sectionGap}>
 						<ErpFormSection title='Basic Information'>
@@ -748,6 +784,12 @@ export function VendorForm({
 									gstRegistered: form.gstRegistered,
 									gstRegistrationType: form.gstRegistrationType,
 									gstin: form.gstNumber,
+									registeredLegalName: form.legalCompanyName,
+									registeredAddress:
+										gstAddressSnapshot?.address ||
+										[form.billingAddress.line1, form.billingAddress.line2]
+											.filter((p) => p?.trim())
+											.join(", "),
 								}}
 								onChange={(gst) => {
 									clearErr("gstin");
@@ -762,6 +804,7 @@ export function VendorForm({
 										gstNumber: gst.gstin,
 										gstCategory,
 										gstApplicable: gstApplicableFromCategory(gstCategory),
+										legalCompanyName: gst.registeredLegalName ?? form.legalCompanyName,
 									});
 								}}
 								readOnly={readOnly}

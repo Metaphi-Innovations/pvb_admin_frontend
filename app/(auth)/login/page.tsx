@@ -23,7 +23,7 @@ type IdentifierType = "email" | "mobile" | "unknown";
 function detectType(val: string): IdentifierType {
   const trimmed = val.trim();
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return "email";
-  if (/^[6-9]\d{9}$/.test(trimmed)) return "mobile";
+  if (/^\d{10}$/.test(trimmed)) return "mobile";
   return "unknown";
 }
 
