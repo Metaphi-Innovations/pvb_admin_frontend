@@ -6,7 +6,7 @@ import {
   type PendingInvoiceTabId,
 } from "./pending-invoice-tab-data";
 
-const TABS: PendingInvoiceTabId[] = ["sales_order", "stock_transfer", "sample_order"];
+const TABS: PendingInvoiceTabId[] = ["sales_order", "stock_transfer"/*, "sample_order"*/];
 
 export function PendingInvoicesTabs({
   value,

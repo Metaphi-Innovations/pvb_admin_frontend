@@ -134,6 +134,7 @@ function exportPendingTabCsv(tab: PendingInvoiceTabId, rows: PendingInvoiceListR
       formatMoney(r.invoiceValue),
       r.branch || "—",
     ];
+  /*
   } else if (tab === "sample_order") {
     headers = [
       "Dispatch Date",
@@ -151,6 +152,7 @@ function exportPendingTabCsv(tab: PendingInvoiceTabId, rows: PendingInvoiceListR
       r.qty,
       formatMoney(0),
     ];
+  */
   } else {
     headers = [
       "Dispatch Date",
@@ -279,7 +281,7 @@ function PendingInvoicesTable({
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   const isSalesOrder = tab === "sales_order";
-  const isSampleOrder = tab === "sample_order";
+  const isSampleOrder = (tab as string) === "sample_order";
   const isStockTransfer = tab === "stock_transfer";
   const colSpan = isSalesOrder ? 8 : isStockTransfer ? 8 : 7;
 
@@ -375,6 +377,7 @@ function PendingInvoicesTable({
     );
   }
 
+  /*
   if (isSampleOrder) {
     return (
       <AccountsTable minWidth={1040}>
@@ -431,6 +434,9 @@ function PendingInvoicesTable({
       </AccountsTable>
     );
   }
+  */
+
+
 
   return (
     <AccountsTable minWidth={1180}>
@@ -494,7 +500,7 @@ export default function PendingTaxInvoicesClient() {
   const [tabState, setTabState] = useState<Record<PendingInvoiceTabId, TabCache>>({
     sales_order: createEmptyTabCache(),
     stock_transfer: createEmptyTabCache(),
-    sample_order: createEmptyTabCache(),
+    // sample_order: createEmptyTabCache(),
   });
 
   const filterKey = `${financialYearId}|${dateFrom}|${dateTo}|${branches.join(",")}`;
@@ -655,7 +661,7 @@ export default function PendingTaxInvoicesClient() {
     const counts: Record<PendingInvoiceTabId, number | null> = {
       sales_order: null,
       stock_transfer: null,
-      sample_order: null,
+      // sample_order: null,
     };
     if (!mounted) return counts;
     (Object.keys(counts) as PendingInvoiceTabId[]).forEach((tab) => {
@@ -723,10 +729,10 @@ export default function PendingTaxInvoicesClient() {
 
   const getCellValue = useCallback((row: PendingInvoiceListRow, key: string) => {
     if (key === "invoiceValue") {
-      return formatMoney(activeTab === "sample_order" ? 0 : row.invoiceValue);
+      return formatMoney((activeTab as string) === "sample_order" ? 0 : row.invoiceValue);
     }
     if (key === "totalAmount") {
-      return formatMoney(activeTab === "sample_order" ? 0 : row.totalAmount);
+      return formatMoney((activeTab as string) === "sample_order" ? 0 : row.totalAmount);
     }
     return (row as unknown as Record<string, unknown>)[key];
   }, [activeTab]);
@@ -742,7 +748,7 @@ export default function PendingTaxInvoicesClient() {
           invoiceValue: { type: "amount" },
           branch: { type: "text" },
         }
-      : activeTab === "sample_order"
+      : (activeTab as string) === "sample_order"
         ? {
             dispatchDate: { type: "date" },
             dispatchNo: { type: "text" },
