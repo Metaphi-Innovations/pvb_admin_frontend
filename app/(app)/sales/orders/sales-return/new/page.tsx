@@ -14,6 +14,7 @@ import {
   type DispatchDropdownItem,
 } from "@/app/(app)/warehouse/dispatch/services";
 import { SalesReturnService } from "@/services/sales-return.service";
+import { useNextReturnNumber } from "@/hooks/sales/use-return-documents";
 
 import { DispatchDetailsPanel } from "../../components/DispatchDetailsPanel";
 import {
@@ -110,6 +111,13 @@ export default function NewSalesReturnPage() {
   const [deliveredDispatches, setDeliveredDispatches] = useState<DispatchDropdownItem[]>([]);
   const [loadingDispatches, setLoadingDispatches] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const { data: nextReturnNumber, isLoading: loadingReturnNumber } = useNextReturnNumber(
+    dispatch?.warehouse_id,
+    Boolean(dispatch?.warehouse_id)
+  );
+
+  const previewReturnNumber = nextReturnNumber || (loadingReturnNumber ? "..." : dispatch?.warehouse_id ? "" : "Select dispatch");
 
   useEffect(() => {
     async function fetchDispatches() {
@@ -350,7 +358,7 @@ export default function NewSalesReturnPage() {
       <div className="space-y-4">
         <div className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Select Delivered Dispatch</p>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sales Order No *</p>
               <AutocompleteSelect
@@ -377,6 +385,14 @@ export default function NewSalesReturnPage() {
                 className="h-9 w-full text-xs"
                 disabled={!selectedSalesOrderNo || dispatchOptions.length === 0}
               />
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Return Number</p>
+              <div className="h-9 px-2.5 border border-border rounded-lg bg-muted/30 flex items-center">
+                <span className="font-mono text-xs font-semibold text-red-600">
+                  {previewReturnNumber}
+                </span>
+              </div>
             </div>
           </div>
         </div>
