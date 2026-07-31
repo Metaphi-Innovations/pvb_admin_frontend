@@ -196,6 +196,7 @@ export default function CreateDispatchPage() {
       for (const packingDoneId of selectedPackingDoneIds) {
         await createDispatch({
           packing_done_id: packingDoneId,
+          status: "Ready for Dispatch",
           dispatch_date: dispatchDateIso,
         });
       }

@@ -60,7 +60,7 @@ export default function ViewDispatchPage() {
   }
 
   const statusVariant =
-    record.status === "DISPATCHED" ? "active" :
+    record.status === "DISPATCHED" || record.status === "Ready for Dispatch" ? "active" :
     record.status === "DRAFT" ? "draft" : "neutral";
 
   const isSample =

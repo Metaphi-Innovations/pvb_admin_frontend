@@ -460,27 +460,69 @@ export function formatStoredDiscountType(
 }
 
 function pricingCustomerMatches(schemeCustomer: CustomerType, pricingCustomer: string): boolean {
-  if (schemeCustomer === "All") return true;
-  if (schemeCustomer === "Distributor") return pricingCustomer === "Distributor";
+  if (
+    pricingCustomer === "All" ||
+    pricingCustomer === "All Customer Types" ||
+    schemeCustomer === "All"
+  ) {
+    return true;
+  }
+  if (schemeCustomer === "Distributor") {
+    return (
+      pricingCustomer === "Distributor" ||
+      pricingCustomer === "C&F" ||
+      pricingCustomer === "CBBO" ||
+      pricingCustomer === "Dealer"
+    );
+  }
   if (schemeCustomer === "Retailer") return pricingCustomer === "Retailer";
   if (schemeCustomer === "Wholesaler")
     return pricingCustomer === "Wholesaler" || pricingCustomer === "Distributor";
   if (schemeCustomer === "Institutional")
-    return pricingCustomer === "Institutional" || pricingCustomer === "FPO";
+    return (
+      pricingCustomer === "Institutional" ||
+      pricingCustomer === "FPO" ||
+      pricingCustomer === "CBBO"
+    );
   return false;
 }
 
+function pricingRecordMatchesProduct(
+  record: { productId: number; productUuid?: string },
+  productId: number | string,
+): boolean {
+  const key = String(productId ?? "").trim();
+  if (!key) return false;
+  if (record.productUuid && record.productUuid === key) return true;
+  if (record.productId != null && String(record.productId) === key) return true;
+  return false;
+}
+
+function pricingRecordMatchesState(recordState: string, stateName: string): boolean {
+  if (!stateName) return false;
+  if (recordState === "All States") return true;
+  return recordState.trim().toLowerCase() === stateName.trim().toLowerCase();
+}
+
 export function resolveDealerPriceForScheme(
-  productId: number,
+  productId: number | string,
   stateName: string,
   customerType: CustomerType,
+  customerMasterType?: string | null,
 ): number {
   const pricingRows = loadPricingRecords().filter(
-    (r) => r.productId === productId && r.status === "active" && r.state === stateName,
+    (r) =>
+      pricingRecordMatchesProduct(r, productId) &&
+      r.status === "active" &&
+      pricingRecordMatchesState(r.state, stateName),
   );
 
+  const masterType = (customerMasterType ?? "").trim().toLowerCase();
+  const exactMasterMatch = masterType
+    ? pricingRows.find((r) => String(r.customerType).trim().toLowerCase() === masterType)
+    : undefined;
   const typedMatch = pricingRows.find((r) => pricingCustomerMatches(customerType, r.customerType));
-  const match = typedMatch ?? pricingRows[0];
+  const match = exactMasterMatch ?? typedMatch ?? pricingRows[0];
   if (match) {
     const fromRecord = getSellingPriceFromRecord(match);
     if (fromRecord > 0) return fromRecord;
@@ -488,7 +530,9 @@ export function resolveDealerPriceForScheme(
     if (match.distributorPrice > 0) return match.distributorPrice;
   }
 
-  const product = loadProducts().find((p) => p.id === productId);
+  const product = loadProducts().find(
+    (p) => String(p.id) === String(productId) || p.id === productId,
+  );
   if (!product) return 0;
   const snapshot = buildProductPricingSnapshot(product);
   if (snapshot.productDealerPrice > 0) return snapshot.productDealerPrice;
@@ -1197,16 +1241,21 @@ export function findEligibleProductDiscountSchemesForOrder(input: {
 }
 
 export function resolveSalesOrderDealerPrice(input: {
-  productId: number;
+  productId: number | string;
   stateName: string;
   customerMasterType: string;
 }): number {
   const schemeCustomerType = mapCustomerMasterTypeToSchemeType(input.customerMasterType);
-  return resolveDealerPriceForScheme(input.productId, input.stateName, schemeCustomerType);
+  return resolveDealerPriceForScheme(
+    input.productId,
+    input.stateName,
+    schemeCustomerType,
+    input.customerMasterType,
+  );
 }
 
 export function lookupEligibleSchemesForSalesOrder(input: {
-  productId: number;
+  productId: number | string;
   stateName: string;
   customerMasterType: string;
   orderDate: string;

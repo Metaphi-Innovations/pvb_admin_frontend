@@ -179,12 +179,10 @@ export default function TransferProductLinesEditor({
     newLine.productId = topSelectedProduct.id;
     newLine.productCode = topSelectedProduct.code;
     newLine.productName = topSelectedProduct.name;
-    // Using MRP as fallback or some default, let's use 0 or something.
-    // Wait, cp price is usually fetched from the batch. If there's no batch, we can set it to 0 or product cost price.
-    // Let's use 0 for now since batch is unknown.
-    newLine.dealerPrice = 0;
-    newLine.unitPrice = 0;
-    newLine.finalRate = 0;
+    const costPrice = topSelectedProduct.costPrice ?? 0;
+    newLine.dealerPrice = costPrice;
+    newLine.unitPrice = costPrice;
+    newLine.finalRate = costPrice;
     newLine.gstRate = topSelectedProduct.gstRate;
     newLine.quantityType = topQuantityType;
     newLine.caseQuantity = topCaseQuantity;
@@ -366,14 +364,15 @@ export default function TransferProductLinesEditor({
                     value={line.productId}
                     products={products}
                     onSelect={(p) => {
+                      const costPrice = p.costPrice ?? 0;
                       updateLine(line.id, {
                         productId: p.id,
                         productCode: p.code,
                         productName: p.name,
                         availableStock: p.stock,
-                        dealerPrice: p.sellingPrice,
-                        unitPrice: p.sellingPrice,
-                        finalRate: p.sellingPrice,
+                        dealerPrice: costPrice,
+                        unitPrice: costPrice,
+                        finalRate: costPrice,
                         gstRate: p.gstRate,
                         batchNumber: undefined,
                         batchInventoryId: undefined,
@@ -606,7 +605,7 @@ function ProductSelect({
   products,
   onSelect,
 }: {
-  value: number | null;
+  value: number | string | null;
   products: ProductCatalogItem[];
   onSelect: (product: ProductCatalogItem) => void;
 }) {

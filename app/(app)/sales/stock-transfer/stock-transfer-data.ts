@@ -200,7 +200,7 @@ function buildSeedTransfers(): StockTransfer[] {
   const p2 = products[1] || { id: 2, code: "PRD-002", name: "DAP Fertilizer", sellingPrice: 1250, stock: 320, uom: "KG", gstRate: "5%" };
 
   // Helper to build line item
-  const buildLine = (productId: number, code: string, name: string, stock: number, qty: number, price: number, gstRate: string): SalesOrderLineItem => {
+  const buildLine = (productId: number | string, code: string, name: string, stock: number, qty: number, price: number, gstRate: string): SalesOrderLineItem => {
     const rawLine: SalesOrderLineItem = {
       id: `line-${Math.random()}`,
       productId,

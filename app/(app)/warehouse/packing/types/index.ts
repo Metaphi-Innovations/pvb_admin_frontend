@@ -97,7 +97,7 @@ export interface PackingRecord {
   packedQuantity: number;
   packingDate: string;
   packedBy: string;
-  status: "Packed" | "Dispatched" | "Cancelled" | "Ready For Dispatch";
+  status: "Packed" | "Dispatched" | "Cancelled" | "Ready For Dispatch" | "Available for Dispatch";
   warehouse: string;
   products: PackedProduct[];
   nearExpirySchemes?: PackingNearExpirySchemeEntry[];

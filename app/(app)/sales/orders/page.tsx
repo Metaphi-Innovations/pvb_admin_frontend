@@ -61,6 +61,9 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   confirmed: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
   ready_for_packing: { bg: "bg-cyan-50", text: "text-cyan-700", dot: "bg-cyan-500" },
   packed: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
+  available_for_dispatch: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500" },
+  ready_for_dispatch: { bg: "bg-fuchsia-50", text: "text-fuchsia-700", dot: "bg-fuchsia-500" },
+  partially_ready_for_dispatch: { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500" },
   dispatched: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
   delivered: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
@@ -73,6 +76,8 @@ const STATUS_OPTIONS = [
   { label: "Rejected", value: "REJECTED" },
   { label: "Ready For Packing", value: "READY_FOR_PACKING" },
   { label: "Packed", value: "PACKED" },
+  { label: "Available for Dispatch", value: "Available for Dispatch" },
+  { label: "Ready for Dispatch", value: "Ready for Dispatch" },
   { label: "Dispatched", value: "DISPATCHED" },
   { label: "Delivered", value: "DELIVERED" },
 ];
@@ -80,7 +85,8 @@ const STATUS_OPTIONS = [
 type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status.toLowerCase()] ?? STATUS_CFG.draft;
+  const key = status.toLowerCase().replace(/\s+/g, "_");
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.draft;
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />

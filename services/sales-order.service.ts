@@ -59,6 +59,9 @@ function mapBackendStatusToFrontend(status: string): any {
   if (s === "dispatched") return "dispatched";
   if (s === "delivered") return "delivered";
   if (s === "ready_for_packing") return "ready_for_packing";
+  if (s === "available_for_dispatch") return "Available for Dispatch";
+  if (s === "ready_for_dispatch") return "Ready for Dispatch";
+  if (s === "partially_ready_for_dispatch") return "Partially Ready for Dispatch";
   if (s === "packed" || s === "fully_packed") return "fully_packed";
   return "draft";
 }
@@ -73,6 +76,9 @@ function mapFrontendStatusToBackend(status: string): string {
   if (s === "dispatched") return "DISPATCHED";
   if (s === "delivered") return "DELIVERED";
   if (s === "ready_for_packing") return "READY_FOR_PACKING";
+  if (s === "available for dispatch" || s === "available_for_dispatch") return "Available for Dispatch";
+  if (s === "ready for dispatch" || s === "ready_for_dispatch") return "Ready for Dispatch";
+  if (s === "partially ready for dispatch" || s === "partially_ready_for_dispatch") return "Partially Ready for Dispatch";
   if (s === "packed") return "PACKED";
   return "DRAFT";
 }
