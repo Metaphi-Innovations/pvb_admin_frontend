@@ -6,9 +6,15 @@ import {
   type InvoiceExtractionResult,
 } from "@/services/invoice-extraction.service";
 
+export type ExtractInvoiceInput = {
+  file: File;
+  purchaseOrderId?: string | null;
+};
+
 export function useExtractInvoice() {
   return useMutation({
-    mutationFn: (file: File) => InvoiceExtractionService.extractInvoice(file),
+    mutationFn: ({ file, purchaseOrderId }: ExtractInvoiceInput) =>
+      InvoiceExtractionService.extractInvoice(file, purchaseOrderId),
   });
 }
 
