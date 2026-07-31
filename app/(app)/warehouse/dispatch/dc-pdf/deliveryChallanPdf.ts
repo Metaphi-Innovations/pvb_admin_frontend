@@ -24,6 +24,7 @@ import {
   type PdfTableColumn,
   type PdfTableRow,
 } from "@/lib/pdf/paramverse";
+import { allocateDeliveryChallanNumber, getDispatchById } from "../services";
 
 const DEFAULT_DC_DECLARATION =
   "Goods covered under this challan are not sold and are being transported for the purpose mentioned above. This challan is not a tax invoice and no GST liability arises on account of this document.";
@@ -165,6 +166,7 @@ export function formatDispatchQtyLabel(
 
 export function mapDispatchToDeliveryChallan(
   dispatch: any,
+  challanNumber?: string | null,
 ): DeliveryChallanViewModel {
   const warehouse = readRecord(dispatch?.warehouse);
   const customer = readRecord(dispatch?.customer);
@@ -257,7 +259,7 @@ export function mapDispatchToDeliveryChallan(
   return {
     ...DELIVERY_CHALLAN_COMPANY,
     challanNo: asText(
-      dispatch?.challan_number || dispatch?.challanNumber,
+      challanNumber || dispatch?.challan_number || dispatch?.challanNumber,
       "Assigned on download",
     ),
     dispatchNo: asText(
@@ -496,4 +498,15 @@ export async function openEditableDeliveryChallanPreview(
       "DELIVERY_CHALLAN",
     )}.pdf`,
   });
+}
+
+/** Allocate DC number, load dispatch detail, and open editable preview. */
+export async function openDeliveryChallanPreviewForDispatch(
+  dispatchId: string,
+): Promise<void> {
+  const challanNumber = await allocateDeliveryChallanNumber(dispatchId);
+  const detail = await getDispatchById(dispatchId);
+  await openEditableDeliveryChallanPreview(
+    mapDispatchToDeliveryChallan(detail, challanNumber),
+  );
 }

@@ -23,7 +23,6 @@ import {
   TrendingUp,
   ShoppingBag,
   Split,
-  FileText,
   Package,
   XCircle,
 } from "lucide-react";
@@ -34,7 +33,6 @@ import type { ColumnConfig, FilterState, SortState } from "@/components/listing/
 import CancelOrderDialog from "./components/CancelOrderDialog";
 import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
-import { downloadProformaInvoice } from "./pi-document";
 import {
   openPackingListPdfWindow,
   downloadPackingListPdfForSalesOrder,
@@ -46,7 +44,6 @@ import {
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
-  canDownloadPI,
   canGeneratePackingList,
   hydrateOrderLineItems,
 } from "./orders-data";
@@ -357,7 +354,6 @@ export default function SalesOrdersPage() {
         const editable = canEditOrder(hydrated);
         const splittable = canSplitOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);
-        const piAllowed = canDownloadPI(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
 
         return isApprovalTab ? (
@@ -409,25 +405,6 @@ export default function SalesOrdersPage() {
                 )}
               >
                 <Split className="w-3.5 h-3.5 mr-2" /> Split Order
-              </button>
-              <button
-                type="button"
-                disabled={!piAllowed}
-                onClick={async () => {
-                  try {
-                    await SalesOrderService.downloadPI(row.id);
-                    setToast({ msg: "Proforma Invoice downloaded successfully.", type: "success" });
-                  } catch (e) {
-                    console.error("PI download error", e);
-                    setToast({ msg: "Failed to download Proforma Invoice.", type: "error" });
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
-                  !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
-                )}
-              >
-                <FileText className="w-3.5 h-3.5 mr-2" /> Download PI
               </button>
               <button
                 type="button"

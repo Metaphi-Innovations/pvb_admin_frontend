@@ -138,7 +138,7 @@ export function ReturnGrnCreate({
     isError: previewError,
     error: previewLoadError,
     refetch: refetchPreviewNumber,
-  } = useGrnPreviewNumber(!isEdit);
+  } = useGrnPreviewNumber(!isEdit, warehouseId);
 
   const {
     data: existingGrn,
@@ -516,7 +516,6 @@ export function ReturnGrnCreate({
         router.push(`${basePath}/${grnId}`);
       } else {
         const payload: CreateGrnPayload = {
-          grnNumber: grnNo || null,
           source_id: selectedReturnId,
           source_type: sourceType,
           supplierId: null,

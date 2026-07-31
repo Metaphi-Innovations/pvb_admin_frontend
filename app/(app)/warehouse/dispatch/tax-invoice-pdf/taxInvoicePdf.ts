@@ -188,9 +188,30 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+function deriveSiFallbackFromDispatch(dispatch: any): string {
+  const rawDispatchNo = asText(
+    dispatch?.dispatch_number || dispatch?.dispatch_no || dispatch?.dispatchNumber,
+    "",
+  );
+  const rawChallanNo = asText(
+    dispatch?.challan_number || dispatch?.challanNumber,
+    "",
+  );
+  const rawNo = rawDispatchNo || rawChallanNo;
+  if (!rawNo || rawNo === "—") return "";
+  if (/^DSP\//i.test(rawNo)) {
+    return rawNo.replace(/^DSP\//i, "SI/");
+  }
+  if (/^DC\//i.test(rawNo)) {
+    return rawNo.replace(/^DC\//i, "SI/");
+  }
+  return rawNo;
+}
+
 export function mapDispatchToTaxInvoice(
   dispatch: any,
   salesOrder?: Record<string, unknown> | null,
+  invoiceNoOverride?: string | null,
 ): TaxInvoiceViewModel {
   const warehouse = readRecord(dispatch?.warehouse);
   const customer = readRecord(dispatch?.customer);
@@ -431,9 +452,14 @@ export function mapDispatchToTaxInvoice(
     gstin: shipTo.gstin || customerGstin,
   });
 
+  const derivedSiNo = deriveSiFallbackFromDispatch(dispatch);
   const invoiceNo = asText(
-    dispatch?.sales_invoice?.invoice_number ||
+    invoiceNoOverride ||
+    dispatch?.sales_invoice?.invoice_no ||
+      dispatch?.sales_invoices?.[0]?.invoice_no ||
+      dispatch?.sales_invoice?.invoice_number ||
       dispatch?.sales_invoices?.[0]?.invoice_number ||
+      derivedSiNo ||
       dispatch?.challan_number ||
       dispatch?.challanNumber,
     "Assigned on download",

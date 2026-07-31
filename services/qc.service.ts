@@ -78,6 +78,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
     poNumber: grn.sales_return_no || grn.sample_return_no || grn.poNumber || grn.po_no || "",
     vendorName: grn.customer_name || grn.supplier?.supplier_name || "",
     warehouse: grn.warehouse?.warehouse_name || "",
+    warehouseId: grn.warehouseId || grn.warehouse_id || grn.warehouse?.warehouse_id || "",
     inspectionDate: "",
     totalReceivedQty: totalReceived,
     totalAcceptedQty: 0,
@@ -121,6 +122,11 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
     poNumber: qc.poNumber || qc.grn?.poNumber || "",
     vendorName: qc.grn?.supplier?.supplier_name || "",
     warehouse: qc.grn?.warehouse?.warehouse_name || "",
+    warehouseId:
+      qc.grn?.warehouseId ||
+      qc.grn?.warehouse_id ||
+      qc.grn?.warehouse?.warehouse_id ||
+      "",
     inspectionDate: qc.qcDate ? qc.qcDate.split("T")[0] : "",
     totalReceivedQty: totalReceived,
     totalAcceptedQty: totalAccepted,
@@ -166,6 +172,7 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
     poNumber: grn.poNumber || "",
     vendorName: grn.supplier?.supplier_name || "",
     warehouse: grn.warehouse?.warehouse_name || "",
+    warehouseId: grn.warehouseId || grn.warehouse_id || grn.warehouse?.warehouse_id || "",
     inspectionDate: "",
     totalReceivedQty: totalReceived,
     totalAcceptedQty: 0,
@@ -265,8 +272,14 @@ export const QcService = {
     return response.data;
   },
   
-  async getPreviewNumber(): Promise<{ qcNumber: string }> {
-    const response = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.QC.PREVIEW_NUMBER);
+  async getPreviewNumber(warehouseId?: string | null): Promise<{ qcNumber: string }> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.WAREHOUSE.QC.PREVIEW_NUMBER,
+      {
+        params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
     return response.data?.data || { qcNumber: "" };
   },
 };

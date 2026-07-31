@@ -10,7 +10,6 @@ const getDispatchRecords = (): any[] => [];
 
 import { loadPricingRecords, findActivePricingForStock, ensurePricingDemoSeed } from "@/app/(app)/masters/pricing/pricing-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
-import { findProductByName } from "@/lib/accounts/transaction-master-fetch";
 import { loadStockOpeningRows } from "@/lib/accounts/stock-opening-data";
 import { loadInvoices } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
@@ -148,7 +147,7 @@ export interface InventoryDashboardMetrics {
 export function resolveSku(productName: string, skuHint?: string): string {
   if (skuHint?.trim()) return skuHint.trim();
   const normalizedProductName = productName.trim().toLowerCase();
-  const match = findProductByName(productName);
+  const match = findProductByNameLocal(productName);
   if (match?.sku) return match.sku;
   const products = loadProducts();
   const exact = products.find(
@@ -159,6 +158,29 @@ export function resolveSku(productName: string, skuHint?: string): string {
     (r) => r.productName?.trim().toLowerCase() === normalizedProductName,
   );
   return pricing?.sku ?? productName;
+}
+
+function findProductByNameLocal(
+  name: string,
+): { sku?: string; productName?: string } | undefined {
+  const q = name.trim().toLowerCase();
+  if (!q) return undefined;
+  const products = loadProducts();
+  const exact = products.find(
+    (p) =>
+      p.status === "active" &&
+      p.productName?.trim().toLowerCase() === q,
+  );
+  if (exact) return { sku: exact.sku, productName: exact.productName };
+
+  const partial = products.find(
+    (p) =>
+      p.status === "active" &&
+      (p.productName?.trim().toLowerCase().includes(q) ||
+        q.includes(p.productName?.trim().toLowerCase() || "")),
+  );
+  if (partial) return { sku: partial.sku, productName: partial.productName };
+  return undefined;
 }
 
 export function getCostPriceBySku(sku: string, productName?: string): number {

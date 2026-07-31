@@ -4,10 +4,9 @@ import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Truck, Package, Building, User, Calendar, FileText, Download } from "lucide-react";
 import { useParams } from "next/navigation";
-import { getDispatchById } from "../../services";
+import { getDispatchById, allocateSalesInvoiceNumber, allocateStockTransferInvoiceNumber } from "../../services";
 import {
-  mapDispatchToDeliveryChallan,
-  openEditableDeliveryChallanPreview,
+  openDeliveryChallanPreviewForDispatch,
 } from "../../dc-pdf/deliveryChallanPdf";
 import {
   mapDispatchToTaxInvoice,
@@ -76,9 +75,9 @@ export default function ViewDispatchPage() {
   const handleDownloadChallan = async () => {
     setDownloadingChallan(true);
     try {
-      await openEditableDeliveryChallanPreview(
-        mapDispatchToDeliveryChallan(record),
-      );
+      await openDeliveryChallanPreviewForDispatch(id);
+      const refreshed = await getDispatchById(id);
+      if (refreshed) setRecord(refreshed);
     } catch (err) {
       console.error(err);
       alert("Failed to download delivery challan");
@@ -103,8 +102,15 @@ export default function ViewDispatchPage() {
           salesOrder = null;
         }
       }
+      let allocatedInvoiceNo: string | null = null;
+      try {
+        const allocated = await allocateSalesInvoiceNumber(String(record.id || id));
+        allocatedInvoiceNo = allocated || null;
+      } catch {
+        allocatedInvoiceNo = null;
+      }
       await openEditableTaxInvoicePreview(
-        mapDispatchToTaxInvoice(record, salesOrder),
+        mapDispatchToTaxInvoice(record, salesOrder, allocatedInvoiceNo),
       );
     } catch (err) {
       console.error(err);
@@ -133,8 +139,15 @@ export default function ViewDispatchPage() {
           stockTransfer = null;
         }
       }
+      let allocatedInvoiceNo: string | null = null;
+      try {
+        const allocated = await allocateStockTransferInvoiceNumber(String(record.id || id));
+        allocatedInvoiceNo = allocated || null;
+      } catch {
+        allocatedInvoiceNo = null;
+      }
       await openEditableStockTransferPreview(
-        mapDispatchToStockTransfer(record, stockTransfer),
+        mapDispatchToStockTransfer(record, stockTransfer, allocatedInvoiceNo),
       );
     } catch (err) {
       console.error(err);

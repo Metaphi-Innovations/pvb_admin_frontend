@@ -8,7 +8,8 @@ const sampleOrderKeys = {
   list: (params: any) => [...sampleOrderKeys.lists(), params] as const,
   details: () => [...sampleOrderKeys.all, "detail"] as const,
   detail: (id: string | number) => [...sampleOrderKeys.details(), id] as const,
-  nextNumber: () => [...sampleOrderKeys.all, "next-number"] as const,
+  nextNumber: (warehouseId?: string | number | null) =>
+    [...sampleOrderKeys.all, "next-number", warehouseId ?? ""] as const,
   dropdowns: () => [...sampleOrderKeys.all, "dropdowns"] as const,
   filterDropdown: (fieldName: string) => [...sampleOrderKeys.all, "filter-dropdown", fieldName] as const,
 };
@@ -36,10 +37,16 @@ export function useSampleOrder(id: string | null | undefined) {
   });
 }
 
-export function useNextSampleOrderNumber() {
+export function useNextSampleOrderNumber(
+  warehouseId?: string | number | null,
+) {
+  const id =
+    warehouseId != null && warehouseId !== ""
+      ? String(warehouseId)
+      : null;
   return useQuery({
-    queryKey: sampleOrderKeys.nextNumber(),
-    queryFn: ({ signal }) => SampleOrderService.getNextNumber(signal),
+    queryKey: sampleOrderKeys.nextNumber(id),
+    queryFn: ({ signal }) => SampleOrderService.getNextNumber(id, signal),
   });
 }
 

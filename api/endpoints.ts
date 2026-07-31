@@ -289,7 +289,6 @@ export const API_ENDPOINTS = {
       APPROVE_REJECT: (id: string) => `/sales/sales-order/${id}/approve-reject`,
       CANCEL: (id: string) => `/sales/sales-order/${id}/cancel`,
       SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
-      DOWNLOAD_PI: (id: string) => `/sales/sales-order/${id}/download-pi`,
     },
     STOCK_TRANSFER: {
       SUMMARY: "/sales/stock-transfer/summary",
@@ -316,6 +315,7 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
       UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
+      ALLOCATE_PFI: (id: string) => `/sales/sample-order/${id}/allocate-pfi`,
     },
     SALES_RETURN: {
       LIST: "/sales/sales-return/list",
@@ -431,6 +431,9 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
+      ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
+      ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
+      ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",

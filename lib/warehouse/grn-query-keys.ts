@@ -6,7 +6,8 @@ export const grnKeys = {
   summaries: () => [...grnKeys.all, "summary"] as const,
   summary: (sourceType: BackendGrnSourceType, warehouseId?: string) =>
     [...grnKeys.summaries(), sourceType, warehouseId ?? "all"] as const,
-  previewNumber: () => [...grnKeys.all, "preview-number"] as const,
+  previewNumber: (warehouseId?: string | null) =>
+    [...grnKeys.all, "preview-number", warehouseId ?? ""] as const,
   details: () => [...grnKeys.all, "detail"] as const,
   detail: (id: string) => [...grnKeys.details(), id] as const,
 } as const;

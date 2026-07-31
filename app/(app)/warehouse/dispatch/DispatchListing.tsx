@@ -23,10 +23,9 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, getDispatchById } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, getDispatchById, allocateSalesInvoiceNumber, allocateStockTransferInvoiceNumber } from "./services";
 import {
-  mapDispatchToDeliveryChallan,
-  openEditableDeliveryChallanPreview,
+  openDeliveryChallanPreviewForDispatch,
 } from "./dc-pdf/deliveryChallanPdf";
 import {
   mapDispatchToTaxInvoice,
@@ -396,10 +395,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       icon: FileText,
       onClick: async (row) => {
         try {
-          const detail = await getDispatchById(row.id);
-          await openEditableDeliveryChallanPreview(
-            mapDispatchToDeliveryChallan(detail || row),
-          );
+          await openDeliveryChallanPreviewForDispatch(row.id);
         } catch (err) {
           console.error(err);
         }
@@ -433,8 +429,15 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               salesOrder = null;
             }
           }
+          let allocatedInvoiceNo: string | null = null;
+          try {
+            const allocated = await allocateSalesInvoiceNumber(String(row.id));
+            allocatedInvoiceNo = allocated || null;
+          } catch {
+            allocatedInvoiceNo = null;
+          }
           await openEditableTaxInvoicePreview(
-            mapDispatchToTaxInvoice(source, salesOrder),
+            mapDispatchToTaxInvoice(source, salesOrder, allocatedInvoiceNo),
           );
         } catch (err) {
           console.error(err);
@@ -478,8 +481,15 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               stockTransfer = null;
             }
           }
+          let allocatedInvoiceNo: string | null = null;
+          try {
+            const allocated = await allocateStockTransferInvoiceNumber(String(row.id));
+            allocatedInvoiceNo = allocated || null;
+          } catch {
+            allocatedInvoiceNo = null;
+          }
           await openEditableStockTransferPreview(
-            mapDispatchToStockTransfer(source, stockTransfer),
+            mapDispatchToStockTransfer(source, stockTransfer, allocatedInvoiceNo),
           );
         } catch (err) {
           console.error(err);
