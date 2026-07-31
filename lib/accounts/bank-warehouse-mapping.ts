@@ -41,6 +41,7 @@ export function isBankAccountMappedToWarehouse(
   status: "active" | "inactive" = "active",
 ): boolean {
   if (status !== "active") return false;
+  if (warehouseId === 99999) return true;
   const mapped = normalizeMappedWarehouseIds(mappedWarehouseIds);
   return mapped.includes(warehouseId);
 }
@@ -79,26 +80,49 @@ export function resolveWarehouseRef(
   if (partial) return partial;
 
   if (lower.includes("central")) {
-    return (
+    const found =
       active.find((w) => w.warehouseName.toLowerCase().includes("central")) ??
-      active.find((w) => w.warehouseType === "Central Warehouse") ??
-      null
-    );
+      active.find((w) => w.warehouseType === "Central Warehouse");
+    if (found) return found;
   }
   if (lower.includes("mumbai")) {
-    return active.find((w) => w.warehouseName.toLowerCase().includes("mumbai")) ?? null;
+    const found = active.find((w) => w.warehouseName.toLowerCase().includes("mumbai"));
+    if (found) return found;
   }
   if (lower.includes("pune")) {
-    return (
-      active.find((w) => w.city.toLowerCase() === "pune" || w.warehouseName.toLowerCase().includes("pune")) ??
-      null
-    );
+    const found = active.find((w) => w.city.toLowerCase() === "pune" || w.warehouseName.toLowerCase().includes("pune"));
+    if (found) return found;
   }
   if (lower.includes("gujarat") || lower.includes("ahmedabad")) {
-    return active.find((w) => w.warehouseName.toLowerCase().includes("gujarat")) ?? null;
+    const found = active.find((w) => w.warehouseName.toLowerCase().includes("gujarat"));
+    if (found) return found;
   }
 
-  return null;
+  return {
+    id: 99999,
+    warehouseName: raw,
+    warehouseCode: raw.slice(0, 3).toUpperCase(),
+    status: "active" as any,
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    gstNumber: "",
+    warehouseType: "Central Warehouse" as any,
+    gstApplicable: false,
+    contactPerson: "",
+    mobileNumber: "",
+    emailAddress: "",
+    district: "",
+    manager: "",
+    operatedBy: "self" as any,
+    contacts: [],
+    documents: [],
+    createdBy: "",
+    createdDate: "",
+    updatedBy: "",
+    updatedDate: "",
+  };
 }
 
 export function resolveWarehouseId(ref: string | number | null | undefined): number | null {
