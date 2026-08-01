@@ -6,7 +6,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Edit,
-  FileText,
   Package,
   Split,
   Trash2,
@@ -17,6 +16,7 @@ import {
   IndianRupee,
   ListOrdered,
   Activity,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -29,7 +29,10 @@ import {
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
-import { downloadProformaInvoice } from "../pi-document";
+import {
+  openPackingListPdfWindow,
+  downloadPackingListPdfForSalesOrder,
+} from "../pl-pdf/packingListPdfGenerator";
 import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-data";
 import {
   type SalesOrder,
@@ -39,7 +42,6 @@ import {
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
-  canDownloadPI,
   canGeneratePackingList,
   canApproveOrder,
   formatApprovalStatus,
@@ -114,7 +116,6 @@ export default function ViewSalesOrderPage() {
   const editable = canEditOrder(order);
   const splittable = canSplitOrder(order);
   const cancellable = canCancelOrder(order);
-  const piAllowed = canDownloadPI(order);
   const packingAllowed = canGeneratePackingList(order);
   const showApprovalActions = approvalMode && canApproveOrder(order);
   const approvalStatus = resolveApprovalStatus(order);
@@ -150,18 +151,29 @@ export default function ViewSalesOrderPage() {
       onClick: () => router.push(`/sales/orders/${order.id}/edit`),
     });
   }
-  if (!approvalMode && piAllowed) {
-    quickActions.push({
-      label: "Download PI",
-      icon: FileText,
-      onClick: () => downloadProformaInvoice(order),
-    });
-  }
   if (!approvalMode && packingAllowed) {
     quickActions.push({
       label: "Generate Packing List",
       icon: Package,
       onClick: () => router.push(`/sales/orders/${order.id}/packing-list/new`),
+    });
+  }
+  if (!approvalMode) {
+    quickActions.push({
+      label: "Download Packing List",
+      icon: Download,
+      onClick: async () => {
+        try {
+          await downloadPackingListPdfForSalesOrder(String(order.id));
+        } catch (e: unknown) {
+          console.error("Packing List download error", e);
+          const message =
+            e instanceof Error && e.message
+              ? e.message
+              : "Failed to download Packing List.";
+          window.alert(message);
+        }
+      },
     });
   }
   if (!approvalMode && splittable) {

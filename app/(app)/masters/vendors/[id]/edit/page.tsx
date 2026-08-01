@@ -31,96 +31,83 @@ export default function EditSupplierPage() {
 
   useEffect(() => {
     if (!supplier) return;
-
-    setForm({
-      ...DEFAULT_VENDOR_FORM,
-
-      vendorType: supplier.supplierTypeId,
-      vendorName: supplier.supplierName,
-      contactPerson: supplier.contactPerson ?? "",
-
-      mobileCountryCode: supplier.mobileCountryCode ?? "+91",
-      mobile: supplier.mobileNumber ?? "",
-      email: supplier.email ?? "",
-
-      gstRegistered: supplier.gstRegistered,
-      gstRegistrationType: supplier.registrationType ?? "regular",
-      gstNumber: supplier.gstinNumber ?? "",
-      legalCompanyName: supplier.registeredLegalName ?? "",
-      panNumber: supplier.panNumber ?? "",
-      tanNumber: supplier.tanNumber ?? "",
-
-      tdsApplicable: supplier.tdsApplicable,
-      tdsMasterId: supplier.tdsSectionId ?? "",
-
-      msmeRegistered: supplier.msmeRegistered,
-      msmeNumber: supplier.msmeRegNo ?? "",
-
-      billingAddress: {
-        line1: supplier.address1 ?? "",
-        line2: supplier.address2 ?? "",
-        pincodeId: supplier.pincodeId ?? "",
-        pincode: supplier.pincodeMaster?.pincode ?? "",
-        state: supplier.state ?? "",
-        city: supplier.city ?? "",
-        town: supplier.town ?? "",
-        country: "India",
-      },
-
-      remarks: supplier.remarks ?? "",
-
-      contacts:
-        supplier.contacts?.map((c) => ({
-          uid: c.supplier_contact_id,
-          name: c.contact_name,
-          designation: c.designation ?? "",
-          countryCode: c.mobile_country_code ?? "+91",
-          mobile: c.mobile_number,
-          email: c.email ?? "",
-        })) ?? [],
-
-      vendorProducts:
-        supplier.products?.map((p) => ({
-          id: p.supplier_product_id,
-          productId: p.product_id,
-          productName: p.product?.product_name ?? "",
-          sku: p.product?.product_code,
-          price: Number(p.cost_price),
-          status: "Active",
-        })) ?? [],
-
-      documents:
-        supplier.documents?.map((d) => ({
-          uid: d.supplier_document_id,
-          documentTypeId: undefined,
-          documentName: d.document_name,
-          file: undefined,
-          fileUrl: d.file_url,
-          uploaded: true,
-          fileName: d.file_name,
-          uploadedAt: d.created_at,
-          size: "",
-        })) ?? [],
-
-      accountHolderName: supplier.bankAccounts?.[0]?.account_holder_name ?? "",
-      bankName: supplier.bankAccounts?.[0]?.bank_name ?? "",
-      branch: supplier.bankAccounts?.[0]?.branch_name ?? "",
-      accountNumber: supplier.bankAccounts?.[0]?.account_number ?? "",
-      confirmAccountNumber: supplier.bankAccounts?.[0]?.account_number ?? "",
-      ifscCode: supplier.bankAccounts?.[0]?.ifsc_code ?? "",
-      swiftCode: supplier.bankAccounts?.[0]?.swift_code ?? "",
-      paymentType:
-        (supplier.bankAccounts?.[0]?.payment_type?.startsWith("immediate")
-          ? "immediate"
-          : supplier.bankAccounts?.[0]?.payment_type) as VendorFormValues["paymentType"] ?? "",
-      creditDays: String(supplier.bankAccounts?.[0]?.credit_days ?? ""),
-    });
-
     let cancelled = false;
     loadPartyMasterAccounting({ kind: "supplier", partyId: supplier.supplierUuid }).then(
       (accounting) => {
         if (cancelled) return;
-        setForm((prev) => ({ ...prev, ...accounting }));
+        setForm((prev) => ({
+          ...DEFAULT_VENDOR_FORM,
+          vendorType: supplier.supplierTypeId,
+          vendorName: supplier.supplierName,
+          contactPerson: supplier.contactPerson ?? "",
+          mobileCountryCode: supplier.mobileCountryCode ?? "+91",
+          mobile: supplier.mobileNumber ?? "",
+          email: supplier.email ?? "",
+          gstRegistered: supplier.gstRegistered,
+          gstRegistrationType: supplier.registrationType ?? "regular",
+          gstNumber: supplier.gstinNumber ?? "",
+          legalCompanyName: supplier.registeredLegalName ?? "",
+          panNumber: supplier.panNumber ?? "",
+          tanNumber: supplier.tanNumber ?? "",
+          tdsApplicable: supplier.tdsApplicable,
+          tdsMasterId: supplier.tdsSectionId ?? "",
+          msmeRegistered: supplier.msmeRegistered,
+          msmeNumber: supplier.msmeRegNo ?? "",
+          billingAddress: {
+            line1: supplier.address1 ?? "",
+            line2: supplier.address2 ?? "",
+            pincodeId: supplier.pincodeId ?? "",
+            pincode: supplier.pincodeMaster?.pincode ?? "",
+            state: supplier.state ?? "",
+            city: supplier.city ?? "",
+            town: supplier.town ?? "",
+            country: "India",
+          },
+          remarks: supplier.remarks ?? "",
+          contacts:
+            supplier.contacts?.map((c) => ({
+              uid: c.supplier_contact_id,
+              name: c.contact_name,
+              designation: c.designation ?? "",
+              countryCode: c.mobile_country_code ?? "+91",
+              mobile: c.mobile_number,
+              email: c.email ?? "",
+            })) ?? [],
+          vendorProducts:
+            supplier.products?.map((p) => ({
+              id: p.supplier_product_id,
+              productId: p.product_id,
+              productName: p.product?.product_name ?? "",
+              sku: p.product?.product_code,
+              price: Number(p.cost_price),
+              status: "Active",
+            })) ?? [],
+          documents:
+            supplier.documents?.map((d) => ({
+              uid: d.supplier_document_id,
+              documentTypeId: undefined,
+              documentName: d.document_name,
+              file: undefined,
+              fileUrl: d.file_url,
+              uploaded: true,
+              fileName: d.file_name,
+              uploadedAt: d.created_at,
+              size: "",
+            })) ?? [],
+          accountHolderName: supplier.bankAccounts?.[0]?.account_holder_name ?? "",
+          bankName: supplier.bankAccounts?.[0]?.bank_name ?? "",
+          branch: supplier.bankAccounts?.[0]?.branch_name ?? "",
+          accountNumber: supplier.bankAccounts?.[0]?.account_number ?? "",
+          confirmAccountNumber: supplier.bankAccounts?.[0]?.account_number ?? "",
+          ifscCode: supplier.bankAccounts?.[0]?.ifsc_code ?? "",
+          swiftCode: supplier.bankAccounts?.[0]?.swift_code ?? "",
+          paymentType:
+            (supplier.bankAccounts?.[0]?.payment_type?.startsWith("immediate")
+              ? "immediate"
+              : supplier.bankAccounts?.[0]?.payment_type) as VendorFormValues["paymentType"] ?? "",
+          creditDays: String(supplier.bankAccounts?.[0]?.credit_days ?? ""),
+          ...accounting,
+        }));
       },
     );
     return () => {

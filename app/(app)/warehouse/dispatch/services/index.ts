@@ -90,6 +90,36 @@ export async function revertDispatch(id: string) {
   return response.data;
 }
 
+export async function allocateDeliveryChallanNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_DC(id));
+  const data = response.data?.data;
+  return (
+    data?.challan_number ||
+    response.data?.challan_number ||
+    ""
+  );
+}
+
+export async function allocateSalesInvoiceNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_SI(id));
+  const data = response.data?.data;
+  return (
+    data?.invoice_no ||
+    response.data?.invoice_no ||
+    ""
+  );
+}
+
+export async function allocateStockTransferInvoiceNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_ST(id));
+  const data = response.data?.data;
+  return (
+    data?.invoice_no ||
+    response.data?.invoice_no ||
+    ""
+  );
+}
+
 export async function downloadDeliveryChallan(id: string): Promise<void> {
   const { blob, fileName } = await fetchDeliveryChallanPdf(id);
   const url = window.URL.createObjectURL(blob);

@@ -35,6 +35,7 @@ export interface SalesOrderRecord {
   priority: "Low" | "Medium" | "High" | "Urgent";
   status: "Ready For Packing" | "Partially Packed" | "Packing In Progress";
   warehouse: string;
+  warehouseId?: string;
   products: SalesOrderProduct[];
   sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceDocumentNo?: string;

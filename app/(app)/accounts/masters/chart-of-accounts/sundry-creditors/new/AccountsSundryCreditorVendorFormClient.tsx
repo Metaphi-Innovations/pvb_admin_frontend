@@ -261,7 +261,15 @@ export default function AccountsSundryCreditorVendorFormClient({
     loadPartyMasterAccounting({ kind: "supplier", partyId: supplier.supplierUuid })
       .then((accounting) => {
         if (cancelled) return;
-        setForm((prev) => ({ ...prev, ...accounting }));
+        setForm((prev) => ({
+          ...supplierToForm(supplier),
+          ...accounting,
+          openingBalance: accounting.openingBalance ?? prev.openingBalance,
+          balanceType: accounting.balanceType ?? (prev.balanceType || "Credit"),
+          openingBalanceDate: accounting.openingBalanceDate ?? (prev.openingBalanceDate || fyOpeningDateIso(selectedFY.id)),
+          billWiseAccounting: accounting.billWiseAccounting ?? prev.billWiseAccounting,
+          accountingDescription: accounting.accountingDescription ?? prev.accountingDescription,
+        }));
       })
       .finally(() => {
         if (!cancelled) setAccountingLoading(false);

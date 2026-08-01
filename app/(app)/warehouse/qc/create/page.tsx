@@ -99,13 +99,13 @@ function CreateQcForm() {
         let displayQcNo = qc.qcNo;
         if (!displayQcNo || displayQcNo === "—") {
           try {
-            const preview = await QcService.getPreviewNumber();
+            const preview = await QcService.getPreviewNumber(qc.warehouseId);
             displayQcNo = preview.qcNumber;
           } catch (err) {
             console.error("Failed to fetch preview QC number:", err);
           }
         }
-        setQcNo(displayQcNo || "—");
+        setQcNo(displayQcNo || "QC/27/2627/000001");
         setGrnRecordId(qc.grnId ?? "");
         setGrnNo(qc.grnNo);
         setPoNumber(qc.poNumber ?? "");
@@ -117,10 +117,7 @@ function CreateQcForm() {
         setIsStockTransfer(stMode);
         setSourceType(getQcSourceType(qc));
         setQcRemarks(qc.qcRemarks ?? "");
-        if (qc.qcDate) {
-          setQcDate(qc.qcDate.split("T")[0]);
-        } else if (qc.inspectionDate) {
-          // If qcDate is not there but inspectionDate is there, format it or split it
+        if (qc.inspectionDate) {
           setQcDate(qc.inspectionDate.split("T")[0]);
         }
 

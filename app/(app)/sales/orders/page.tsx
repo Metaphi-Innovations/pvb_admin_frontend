@@ -23,7 +23,6 @@ import {
   TrendingUp,
   ShoppingBag,
   Split,
-  FileText,
   Package,
   XCircle,
 } from "lucide-react";
@@ -34,7 +33,10 @@ import type { ColumnConfig, FilterState, SortState } from "@/components/listing/
 import CancelOrderDialog from "./components/CancelOrderDialog";
 import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
-import { downloadProformaInvoice } from "./pi-document";
+import {
+  openPackingListPdfWindow,
+  downloadPackingListPdfForSalesOrder,
+} from "./pl-pdf/packingListPdfGenerator";
 import {
   type SalesOrder,
   type OrderStatus,
@@ -42,7 +44,6 @@ import {
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
-  canDownloadPI,
   canGeneratePackingList,
   hydrateOrderLineItems,
 } from "./orders-data";
@@ -353,7 +354,6 @@ export default function SalesOrdersPage() {
         const editable = canEditOrder(hydrated);
         const splittable = canSplitOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);
-        const piAllowed = canDownloadPI(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
 
         return isApprovalTab ? (
@@ -408,25 +408,6 @@ export default function SalesOrdersPage() {
               </button>
               <button
                 type="button"
-                disabled={!piAllowed}
-                onClick={async () => {
-                  try {
-                    await SalesOrderService.downloadPI(row.id);
-                    setToast({ msg: "Proforma Invoice downloaded successfully.", type: "success" });
-                  } catch (e) {
-                    console.error("PI download error", e);
-                    setToast({ msg: "Failed to download Proforma Invoice.", type: "error" });
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
-                  !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
-                )}
-              >
-                <FileText className="w-3.5 h-3.5 mr-2" /> Download PI
-              </button>
-              <button
-                type="button"
                 disabled={!packingAllowed}
                 onClick={() => router.push(`/sales/orders/${hydrated.id}/packing-list/new`)}
                 className={cn(
@@ -435,6 +416,25 @@ export default function SalesOrdersPage() {
                 )}
               >
                 <Package className="w-3.5 h-3.5 mr-2" /> Generate Packing List
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await downloadPackingListPdfForSalesOrder(String(row.id));
+                    setToast({ msg: "Packing List ready to download.", type: "success" });
+                  } catch (e: unknown) {
+                    console.error("Packing List download error", e);
+                    const message =
+                      e instanceof Error && e.message
+                        ? e.message
+                        : "Failed to download Packing List.";
+                    setToast({ msg: message, type: "error" });
+                  }
+                }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Download className="w-3.5 h-3.5 mr-2" /> Download Packing List
               </button>
               <DropdownMenuSeparator />
               <button

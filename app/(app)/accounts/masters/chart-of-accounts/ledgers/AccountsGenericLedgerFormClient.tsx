@@ -334,7 +334,7 @@ export default function AccountsGenericLedgerFormClient({
         if (fy?.financialYearId) {
           const latest = await LedgerService.view(active.apiNodeId ?? String(active.id));
           const existing = latest.openingBalance ?? latest.openingBalances?.[0];
-          if (existing?.openingBalanceId) {
+          if (existing?.openingBalanceId && existing.openingBalanceId !== "period-opening") {
             await LedgerService.updateOpeningBalance(
               active.apiNodeId ?? String(active.id),
               existing.openingBalanceId,

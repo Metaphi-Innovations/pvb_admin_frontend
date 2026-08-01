@@ -386,7 +386,7 @@ export function PurchaseCreate({
   }, [invoiceDate, grnDate, todayStr]);
 
   const { data: previewNumber, refetch: refetchPreviewNumber } =
-    useGrnPreviewNumber(!isEdit);
+    useGrnPreviewNumber(!isEdit, warehouseId);
   const extractInvoiceMutation = useExtractInvoice();
   const {
     data: existingGrn,
@@ -435,8 +435,10 @@ export function PurchaseCreate({
   }, [isEdit, existingGrn]);
 
   useEffect(() => {
-    if (!isEdit && previewNumber) setGrnNo(previewNumber);
-  }, [isEdit, previewNumber]);
+    if (isEdit) return;
+    if (previewNumber) setGrnNo(previewNumber);
+    else if (!warehouseId) setGrnNo("Select warehouse…");
+  }, [isEdit, previewNumber, warehouseId]);
 
   // Prefill header fields from existing GRN (once)
   useEffect(() => {
@@ -1277,7 +1279,6 @@ export function PurchaseCreate({
         router.push(`/warehouse/grn/purchase/${grnId}`);
       } else {
         const payload: CreateGrnPayload = {
-          grnNumber: grnNo || null,
           source_id: selectedPoId,
           source_type: "PURCHASE_ORDER",
           supplierId,

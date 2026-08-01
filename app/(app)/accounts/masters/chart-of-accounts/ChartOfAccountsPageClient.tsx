@@ -61,6 +61,7 @@ import {
 } from "./coa-master-linked-form-bridge";
 import { AccountsMasterLinkedLedgerForm } from "./components/AccountsMasterLinkedLedgerForm";
 import { registerCoaBankFormHandler } from "./coa-bank-form-bridge";
+import { registerCoaEditLedgerHandler } from "./coa-edit-ledger-bridge";
 import { CoaListingTable } from "./components/CoaListingTable";
 import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
@@ -73,7 +74,10 @@ import { CoaDrillDownEmptyState } from "./components/CoaDrillDownEmptyState";
 import { CoaMaxHierarchyNotice } from "./components/CoaMaxHierarchyNotice";
 import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  chartOfAccountsKeys,
+} from "@/hooks/accounts/use-chart-of-accounts";
 import {
   LedgerService,
   type LedgerDetailDto,
@@ -81,6 +85,15 @@ import {
 } from "@/services/ledger.service";
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
+import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 /** Ledger statement summary from API-backed COA records (no localStorage voucher demo). */
 function resolveLedgerOpeningBalance(
@@ -98,8 +111,9 @@ function resolveLedgerOpeningBalance(
 
 function buildApiLedgerDetailSummary(
   ledger: ChartOfAccount,
-  openingBalance?: LedgerOpeningBalanceDto | null,
+  detail?: any,
 ) {
+  const openingBalance = detail?.openingBalance;
   const parsedOpeningAmount =
     openingBalance?.amount != null
       ? Number(openingBalance.amount)
@@ -110,15 +124,21 @@ function buildApiLedgerDetailSummary(
     "CREDIT"
       ? ("Credit" as const)
       : ("Debit" as const);
+
+  const transactions = (detail?.transactions || []).map((t: any) => ({
+    ...t,
+    isOpeningRow: false,
+  }));
+
   return {
     ledgerId: ledger.id,
     openingBalance: openingAmount,
     openingBalanceType: openingSide,
-    currentBalance: openingAmount,
-    balanceType: openingSide,
-    totalDebit: 0,
-    totalCredit: 0,
-    transactions: [] as CoaLedgerDetailRow[],
+    currentBalance: detail?.currentBalance ?? openingAmount,
+    balanceType: detail?.balanceType === "Credit" ? ("Credit" as const) : ("Debit" as const),
+    totalDebit: detail?.totalDebit ?? 0,
+    totalCredit: detail?.totalCredit ?? 0,
+    transactions: transactions as CoaLedgerDetailRow[],
   };
 }
 
@@ -143,7 +163,7 @@ const AccountsTdsLedgerFormClient = dynamic(
 );
 
 const BankAccountFormClient = dynamic(
-  () => import("../../banking/bank-accounts/BankAccountFormClient"),
+  () => import("../../banking/bank-accounts/BankAccountFormClientLocal"),
   { ssr: false },
 );
 
@@ -152,7 +172,6 @@ const HIGHLIGHT_MS = 4000;
 /** Ledger detail view for posting ledgers only (TDS/TCS statutory nodes excluded). */
 function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
   if (!isPostingLedger(node, records)) return false;
-  if (node.bankGroupFlag) return false;
   if (isTdsCoaNode(node, records)) return false;
   if (isStatutoryTaxPayableParent(node)) return false;
   if (isStatutoryTaxSectionProjection(node)) return false;
@@ -180,19 +199,29 @@ export default function ChartOfAccountsPageClient() {
     "contra-vouchers",
     "journal-vouchers",
   ]);
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [datesReady, setDatesReady] = useState(false);
+
   const { data: selectedLedgerDetail } = useQuery({
     queryKey: [
       "accounts",
       "chart-of-accounts",
       "selected-ledger-detail",
       selectedNode?.apiNodeId ?? selectedNode?.id ?? null,
+      dateFrom,
+      dateTo,
       ledgerDataTick,
     ],
-    enabled: Boolean(selectedNode && isCoaLedgerDetailView(selectedNode, records)),
+    enabled: Boolean(selectedNode && isCoaLedgerDetailView(selectedNode, records) && datesReady),
     queryFn: async () => {
       if (!selectedNode) return null;
       const [detail, currentFy] = await Promise.all([
-        LedgerService.view(selectedNode.apiNodeId ?? String(selectedNode.id)),
+        LedgerService.view(
+          selectedNode.apiNodeId ?? String(selectedNode.id),
+          { dateFrom, dateTo }
+        ),
         LedgerService.getCurrentFinancialYear(),
       ]);
       return {
@@ -207,10 +236,6 @@ export default function ChartOfAccountsPageClient() {
 
   const [showRoot, setShowRoot] = useState(false);
   const [contentSearch, setContentSearch] = useState("");
-  const [preset, setPreset] = useState<DateRangePresetId>("custom");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [datesReady, setDatesReady] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [sundryDebtorFormParentId, setSundryDebtorFormParentId] = useState<CoaNodeId | null>(null);
   const [sundryDebtorEditCustomerId, setSundryDebtorEditCustomerId] = useState<
@@ -233,6 +258,12 @@ export default function ChartOfAccountsPageClient() {
 
   const canCreate = useCanCoa("create");
   const canEdit = useCanCoa("edit");
+  const queryClient = useQueryClient();
+
+  // Delete ledger state
+  const [ledgerDeleteTarget, setLedgerDeleteTarget] = useState<ChartOfAccount | null>(null);
+  const [ledgerDeleteError, setLedgerDeleteError] = useState<string | null>(null);
+  const [ledgerDeleting, setLedgerDeleting] = useState(false);
   const { openTransaction, drawer: voucherDetailDrawer } = useTransactionDetailsDrawer();
 
   const handleLedgerStatementVoucherClick = useCallback((row: CoaLedgerDetailRow) => {
@@ -290,6 +321,23 @@ export default function ChartOfAccountsPageClient() {
         selectNode(parent);
       }
     });
+    registerCoaEditLedgerHandler((ledgerId) => {
+      const list = records.length > 0 ? records : [];
+      const ledger = list.find((r) => r.id === ledgerId);
+      if (ledger && (ledger.masterType === "bank" || ledger.masterType === "BANK")) {
+        const bankGroupId = ledger.parentAccountId;
+        if (bankGroupId != null) {
+          const parent = list.find((r) => r.id === bankGroupId);
+          setBankFormEditAccountId(Number(ledger.masterId) || undefined);
+          setBankFormParentId(bankGroupId);
+          if (parent) {
+            const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
+            ensureExpanded([...ancestorIds, parent.id]);
+            selectNode(parent);
+          }
+        }
+      }
+    });
     return () => {
       registerSundryDebtorCustomerFormHandler(null);
       registerSundryCreditorVendorFormHandler(null);
@@ -297,6 +345,7 @@ export default function ChartOfAccountsPageClient() {
       registerTdsLedgerFormHandler(null);
       registerCoaMasterLinkedFormHandler(null);
       registerCoaBankFormHandler(null);
+      registerCoaEditLedgerHandler(null);
     };
   }, [records, ensureExpanded, selectNode]);
 
@@ -399,7 +448,7 @@ export default function ChartOfAccountsPageClient() {
     // Opening/closing from API COA tree only — do not mix localStorage voucher demos.
     return buildApiLedgerDetailSummary(
       selectedNode,
-      selectedLedgerDetail?.openingBalance,
+      selectedLedgerDetail?.detail,
     );
   }, [
     isLedgerStatementView,
@@ -552,6 +601,28 @@ export default function ChartOfAccountsPageClient() {
     },
     [selectNode, records, ensureExpanded],
   );
+
+  const handleDeleteLedger = useCallback((ledger: ChartOfAccount) => {
+    setLedgerDeleteError(null);
+    setLedgerDeleteTarget(ledger);
+  }, []);
+
+  const confirmDeleteLedger = useCallback(async () => {
+    if (!ledgerDeleteTarget || ledgerDeleting) return;
+    const ledgerId = ledgerDeleteTarget.apiNodeId ?? String(ledgerDeleteTarget.id);
+    setLedgerDeleting(true);
+    setLedgerDeleteError(null);
+    try {
+      await LedgerService.delete(ledgerId);
+      await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+      dispatchCoaChanged();
+      setLedgerDeleteTarget(null);
+    } catch (err: any) {
+      setLedgerDeleteError(err?.message || "Failed to delete ledger.");
+    } finally {
+      setLedgerDeleting(false);
+    }
+  }, [ledgerDeleteTarget, ledgerDeleting, queryClient]);
 
   const handleExcelExport = async () => {
     if (!mounted) return;
@@ -891,6 +962,7 @@ export default function ChartOfAccountsPageClient() {
                 highlightedLedgerId={highlightedLedgerId}
                 isSearchMode={Boolean(contentSearch.trim())}
                 onDrillInto={handleDrillInto}
+                onDeleteLedger={canEdit ? handleDeleteLedger : undefined}
                 emptyMessage={
                   contentSearch.trim()
                     ? "No ledgers match your search."
@@ -982,6 +1054,41 @@ export default function ChartOfAccountsPageClient() {
         </div>
       </AccountsPageShell>
       {voucherDetailDrawer}
+
+      {/* Delete Ledger Confirmation Dialog */}
+      <Dialog open={Boolean(ledgerDeleteTarget)} onOpenChange={(open) => { if (!open && !ledgerDeleting) { setLedgerDeleteTarget(null); setLedgerDeleteError(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Ledger</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-foreground">"{ledgerDeleteTarget?.accountName}"</span>?{" "}
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {ledgerDeleteError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded p-2">{ledgerDeleteError}</p>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setLedgerDeleteTarget(null); setLedgerDeleteError(null); }}
+              disabled={ledgerDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={confirmDeleteLedger}
+              disabled={ledgerDeleting}
+            >
+              {ledgerDeleting ? "Deleting…" : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

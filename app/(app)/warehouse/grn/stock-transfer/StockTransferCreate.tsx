@@ -122,7 +122,7 @@ export function StockTransferCreate({
     isError: previewError,
     error: previewLoadError,
     refetch: refetchPreviewNumber,
-  } = useGrnPreviewNumber(!isEdit);
+  } = useGrnPreviewNumber(!isEdit, warehouseId);
 
   const {
     data: existingGrn,
@@ -503,7 +503,6 @@ export function StockTransferCreate({
         router.push(`${basePath}/${grnId}`);
       } else {
         const payload: CreateGrnPayload = {
-          grnNumber: grnNo || null,
           source_id: stockTransferId,
           source_type: "STOCK_TRANSFER",
           supplierId: null,

@@ -47,7 +47,7 @@ import {
   useUpdateSampleOrderStatus,
 } from "@/hooks/sales/use-sample-orders";
 import { useCustomer } from "@/hooks/masters/use-customers";
-import { SampleOrderService } from "@/services/sample-order.service";
+import { downloadProformaInvoicePdf } from "../proforma-pdf/proformaInvoicePdf";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "packed", "delivered", "dispatched"].includes(status)) return "active";
@@ -119,20 +119,12 @@ export default function ViewSalesOrderPage() {
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
-  const handleDownloadNote = async () => {
+  const handleDownloadProforma = async () => {
     try {
-      showToast("Downloading sample note...");
-      const blob = await SampleOrderService.downloadNote(id);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `sample-note-${order.soNumber}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      showToast("Opening Proforma Invoice...");
+      await downloadProformaInvoicePdf(id);
     } catch {
-      showToast("Failed to download note.", "error");
+      showToast("Failed to open Proforma Invoice.", "error");
     }
   };
 
@@ -192,11 +184,11 @@ export default function ViewSalesOrderPage() {
       onClick: () => router.push(`/sales/sample-order/${order.id}/edit`),
     });
   }
-  // Download Note is always allowed for viewing
+  // Proforma Invoice download is always allowed for viewing
   quickActions.push({
-    label: "Download Sample Note",
+    label: "Download Proforma Invoice",
     icon: FileText,
-    onClick: handleDownloadNote,
+    onClick: handleDownloadProforma,
   });
   if (!showApprovalActions && packingAllowed) {
     quickActions.push({
