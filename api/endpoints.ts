@@ -509,10 +509,8 @@ export const API_ENDPOINTS = {
         CREATE: "/accounts/banking/bank-accounts",
         BY_LEDGER: (ledgerId: string) =>
           `/accounts/banking/bank-accounts/ledger/${ledgerId}`,
-        COMPLETE_DETAILS: (ledgerId: string) =>
-          `/accounts/banking/bank-accounts/ledger/${ledgerId}/details`,
-        STATUS_UPDATE: (ledgerId: string) =>
-          `/accounts/banking/bank-accounts/ledger/${ledgerId}/status`,
+        STATUS_UPDATE: (bankAccountId: string) =>
+          `/accounts/banking/bank-accounts/${bankAccountId}/status`,
       },
     },
   },

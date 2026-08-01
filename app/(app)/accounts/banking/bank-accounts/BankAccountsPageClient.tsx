@@ -65,7 +65,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { isActiveStatus } from "@/components/listing";
+import { BankAccountToggle } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_API_SORT: {
@@ -219,14 +220,14 @@ function BankAccountsTable({
   search,
   onClearSearch,
   onRequestStatusChange,
-  statusPendingLedgerId,
+  statusPendingBankAccountId,
 }: {
   loading: boolean;
   onPageChange: (p: number) => void;
   search: string;
   onClearSearch: () => void;
   onRequestStatusChange: (account: BankAccountListRow) => void;
-  statusPendingLedgerId: string | null;
+  statusPendingBankAccountId: string | null;
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
@@ -362,12 +363,23 @@ function BankAccountsTable({
                 <AccountsTableCell className={cn("bank-accounts-wh-cell", "whitespace-nowrap")}>
                   <MappedWarehousesCell names={account.mappedWarehouseNames} />
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap">
-                  <ListingStatusToggle
-                    active={isActiveStatus(account.status)}
-                    disabled={!canUpdate || statusPendingLedgerId === account.ledgerId}
-                    onChange={() => onRequestStatusChange(account)}
-                  />
+                <AccountsTableCell className={cn("bank-accounts-status-cell", "whitespace-nowrap")}>
+                  <div
+                    className="inline-flex items-center"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <BankAccountToggle
+                      checked={isActiveStatus(account.status)}
+                      disabled={
+                        !canUpdate ||
+                        !account.bankAccountId ||
+                        statusPendingBankAccountId === account.bankAccountId
+                      }
+                      onCheckedChange={() => onRequestStatusChange(account)}
+                      showLabel={false}
+                    />
+                  </div>
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <AccountsTableActionCell className="!w-auto !min-w-0">
@@ -472,15 +484,24 @@ export default function BankAccountsPageClient() {
   }, [debouncedSearch, pageSize, apiSort.sortBy, apiSort.sortOrder]);
 
   const confirmStatusChange = () => {
-    if (!statusTarget?.ledgerId) {
-      showToast("Ledger id missing. Unable to update status.", "error");
+    if (!statusTarget?.bankAccountId) {
+      showToast(
+        statusTarget?.bankDetailsStatus === "PENDING"
+          ? "Complete bank details before changing status."
+          : "Bank account id missing. Unable to update status.",
+        "error",
+      );
       setStatusTarget(null);
       return;
     }
 
     const nextStatus = statusTarget.status === "active" ? "INACTIVE" : "ACTIVE";
     updateStatusMutation.mutate(
-      { ledgerId: statusTarget.ledgerId, status: nextStatus },
+      {
+        bankAccountId: statusTarget.bankAccountId,
+        status: nextStatus,
+        ledgerId: statusTarget.ledgerId,
+      },
       {
         onSuccess: () => {
           showToast(
@@ -570,8 +591,10 @@ export default function BankAccountsPageClient() {
                 search={debouncedSearch}
                 onClearSearch={() => setSearch("")}
                 onRequestStatusChange={setStatusTarget}
-                statusPendingLedgerId={
-                  updateStatusMutation.isPending ? statusTarget?.ledgerId ?? null : null
+                statusPendingBankAccountId={
+                  updateStatusMutation.isPending
+                    ? statusTarget?.bankAccountId ?? null
+                    : null
                 }
               />
             </AccountsTableListing>
