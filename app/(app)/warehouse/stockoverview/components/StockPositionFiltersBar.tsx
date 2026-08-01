@@ -48,8 +48,8 @@ export function StockPositionFiltersBar({
   const isCustom = filters.datePreset === "custom";
 
   const periodOptions = useMemo(
-    () => buildStockDatePresetOptions(selectedFY.id, today, allFYs),
-    [selectedFY.id, today, allFYs],
+    () => buildStockDatePresetOptions(selectedFY, today, allFYs),
+    [selectedFY, today, allFYs],
   );
 
   const activeFilters: { key: string; label: string; clear: () => void }[] = [];
@@ -71,7 +71,7 @@ export function StockPositionFiltersBar({
   }
 
   const handlePeriodChange = (presetId: string) => {
-    const resolved = resolveStockDatePreset(presetId, today, selectedFY.id, allFYs);
+    const resolved = resolveStockDatePreset(presetId, today, selectedFY, allFYs);
     if (resolved) {
       onChange({ datePreset: presetId, ...resolved });
     } else {

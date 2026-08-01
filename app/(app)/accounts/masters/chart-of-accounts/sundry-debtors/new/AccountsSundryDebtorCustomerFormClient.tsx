@@ -97,7 +97,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
 
   const [form, setForm] = useState<CustomerFormValues>(() => ({
     ...DEFAULT_CUSTOMER_FORM,
-    openingBalanceDate: fyOpeningDateIso(selectedFY.id),
+    openingBalanceDate: fyOpeningDateIso(selectedFY!),
   }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);

@@ -488,6 +488,7 @@ export const API_ENDPOINTS = {
     FINANCIAL_YEARS: {
       CURRENT: "/accounts/financial-years/current",
       LIST: "/accounts/financial-years",
+      DROPDOWN: "/accounts/financial-years/dropdown",
     },
     INTEGRATIONS: {
       SYNC_CUSTOMER_LEDGER: (customerId: string) =>

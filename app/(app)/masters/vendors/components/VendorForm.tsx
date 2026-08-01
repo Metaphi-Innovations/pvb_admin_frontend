@@ -326,7 +326,7 @@ export function VendorForm({
 	/** Default Opening Balance Date to selected FY start when empty (new vendors). */
 	useEffect(() => {
 		if (form.openingBalanceDate?.trim()) return;
-		const iso = fyOpeningDateIso(selectedFY.id);
+		const iso = fyOpeningDateIso(selectedFY);
 		if (!iso) return;
 		onChange({ ...form, openingBalanceDate: iso });
 		// Only when date is empty / FY changes — intentionally omit form from deps.

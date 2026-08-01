@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FINANCIAL_YEARS, FY_STATUS_CONFIG, setStoredFYId, type FinancialYear } from "@/lib/fy-store";
+import { FY_STATUS_CONFIG, setStoredFYId, mapApiFinancialYear, type FinancialYear } from "@/lib/fy-store";
+import { FinancialYearApiService } from "@/services/financial-year.service";
 import { useAuth } from "@/lib/auth/auth-context";
 import { LoginRequest } from "@/types/api.types";
 import { FY_PENDING_KEY } from "@/components/auth/GuestGate";
@@ -201,14 +202,37 @@ export default function LoginPage() {
   const [forgotVal, setForgotVal] = useState("");
   const [resendSecs, setResendSecs] = useState(0);
   const [selectedFY, setSelectedFY] = useState<FinancialYear | null>(null);
+  const [fyOptions, setFyOptions] = useState<FinancialYear[]>([]);
+  const [fyLoadError, setFyLoadError] = useState<string | null>(null);
 
   const idType = detectType(identifier);
 
-  // pre-select live FY
   useEffect(() => {
-    const live = FINANCIAL_YEARS.find((f) => f.status === "live");
-    if (live) setSelectedFY(live);
-  }, []);
+    if (step !== "fy-select") return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setFyLoadError(null);
+      try {
+        const rows = await FinancialYearApiService.list(true);
+        if (cancelled) return;
+        const mapped = rows.map(mapApiFinancialYear);
+        setFyOptions(mapped);
+        const current = mapped.find((f) => f.isCurrent) ?? mapped.find((f) => f.status === "live") ?? mapped[0] ?? null;
+        setSelectedFY(current);
+      } catch (err: any) {
+        if (!cancelled) {
+          setFyLoadError(err?.message || "Failed to load financial years");
+          setFyOptions([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const simulate = (fn: () => void, ms = 1400) => {
@@ -462,7 +486,12 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-2">
-          {FINANCIAL_YEARS.filter((fy) => fy.status !== "archived").map((fy) => (
+          {fyLoadError && (
+            <p className="text-xs text-red-500 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {fyLoadError}
+            </p>
+          )}
+          {fyOptions.filter((fy) => fy.status !== "archived").map((fy) => (
             <button
               key={fy.id}
               onClick={() => setSelectedFY(fy)}
@@ -482,7 +511,12 @@ export default function LoginPage() {
                   : <Calendar className="w-4 h-4 text-muted-foreground" />}
               </div>
               <div className="flex-1 text-left">
-                <p className="text-sm font-semibold text-foreground">{fy.label}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {fy.label}
+                  {fy.isCurrent ? (
+                    <span className="ml-1.5 text-[10px] font-medium text-green-600">Current</span>
+                  ) : null}
+                </p>
                 <p className="text-xs text-muted-foreground mt-0.5">{fy.start} – {fy.end}</p>
               </div>
               <FYStatusBadge status={fy.status} />

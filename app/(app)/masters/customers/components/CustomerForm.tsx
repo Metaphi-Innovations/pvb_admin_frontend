@@ -1024,7 +1024,7 @@ export function CustomerForm({
 	/** Default Opening Balance Date to selected FY start when empty (new customers). */
 	useEffect(() => {
 		if (form.openingBalanceDate?.trim()) return;
-		const iso = fyOpeningDateIso(selectedFY.id);
+		const iso = fyOpeningDateIso(selectedFY);
 		if (!iso) return;
 		onChange({ ...form, openingBalanceDate: iso });
 		// Only when date is empty / FY changes — intentionally omit form from deps.

@@ -37,15 +37,15 @@ export function useLedgerTransactionDateFilter(options?: { autoApply?: boolean }
   const { selectedFY } = useFY();
   const autoApply = options?.autoApply ?? false;
   const [applied, setApplied] = useState<LedgerDateRangeState>(() =>
-    defaultLedgerDateRangeState(selectedFY.id),
+    defaultLedgerDateRangeState(selectedFY),
   );
   const [draft, setDraft] = useState<LedgerDateRangeState>(applied);
 
   useEffect(() => {
-    const next = defaultLedgerDateRangeState(selectedFY.id);
+    const next = defaultLedgerDateRangeState(selectedFY);
     setApplied(next);
     setDraft(next);
-  }, [selectedFY.id]);
+  }, [selectedFY]);
 
   const apply = () => {
     const range = resolvePresetDateRange(draft.preset, { from: draft.from, to: draft.to });
