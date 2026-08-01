@@ -53,6 +53,7 @@ import {
 	GST_REGISTRATION_TYPE_DEFAULT,
 } from "@/lib/masters/gst-compliance";
 import { useCfDropdown, usePincode } from "@/hooks/masters";
+import { normalizePlaceName } from "@/lib/geography/india-post-normalize";
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -947,10 +948,13 @@ export function WarehouseForm({
 
 		updateWarehouseAddress({
 			...warehouseAddress,
-			state: first.statename || warehouseAddress.state,
-			district: first.district || warehouseAddress.district,
+			state: normalizePlaceName(first.statename || "") || warehouseAddress.state,
+			district: normalizePlaceName(first.district || "") || warehouseAddress.district,
 			...(pincodeRecords.length === 1
-				? { town: first.officename || warehouseAddress.town, city: first.officename || warehouseAddress.city }
+				? {
+						town: normalizePlaceName(first.officename || "") || warehouseAddress.town,
+						city: normalizePlaceName(first.officename || "") || warehouseAddress.city,
+					}
 				: {}),
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps

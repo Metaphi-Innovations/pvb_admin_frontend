@@ -533,15 +533,21 @@ export function ProductForm({
 	const [urlDialogOpen, setUrlDialogOpen] = useState(false);
 	const [previewImage, setPreviewImage] = useState<ProductImage | null>(null);
 	const [uploadingImages, setUploadingImages] = useState(false);
-	const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+	const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
+	const [pendingStatusActive, setPendingStatusActive] = useState<boolean | null>(null);
 
 	const handleStatusChange = (nextActive: boolean) => {
 		if (readOnly) return;
-		if (!nextActive && form.status === "active") {
-			setDeactivateConfirmOpen(true);
-			return;
-		}
-		set("status", nextActive ? "active" : "inactive");
+		if (nextActive === (form.status === "active")) return;
+		setPendingStatusActive(nextActive);
+		setStatusConfirmOpen(true);
+	};
+
+	const confirmStatusChange = () => {
+		if (pendingStatusActive == null) return;
+		set("status", pendingStatusActive ? "active" : "inactive");
+		setStatusConfirmOpen(false);
+		setPendingStatusActive(null);
 	};
 
 	const handleImageFiles = async (files: File[]) => {
@@ -847,7 +853,9 @@ export function ProductForm({
 					</div>
 
 					<div className='space-y-1'>
-						<Label className='text-xs font-medium'>Gross Weight</Label>
+						<Label className='text-xs font-medium'>
+							Gross Weight <span className='text-red-500'>*</span>
+						</Label>
 						<div className='relative'>
 							<Input
 								value={form.grossWeight}
@@ -920,7 +928,7 @@ export function ProductForm({
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead label='Status' />
 				<div className='flex items-center gap-3'>
-					<Label className='text-xs font-medium min-w-[52px]'>Status</Label>
+					<Label className='text-xs font-medium'>Product Status</Label>
 					<ListingStatusToggle
 						active={form.status === "active"}
 						onChange={handleStatusChange}
@@ -928,11 +936,14 @@ export function ProductForm({
 					/>
 					<span
 						className={cn(
-							"text-xs font-semibold",
+							"text-xs font-semibold uppercase tracking-wide",
 							form.status === "active" ? "text-emerald-700" : "text-slate-600",
 						)}
 					>
 						{form.status === "active" ? "ON" : "OFF"}
+					</span>
+					<span className='text-xs text-muted-foreground'>
+						{form.status === "active" ? "Active" : "Inactive"}
 					</span>
 				</div>
 			</div>
@@ -1174,34 +1185,47 @@ export function ProductForm({
 				</DialogContent>
 			</Dialog>
 
-			<Dialog open={deactivateConfirmOpen} onOpenChange={setDeactivateConfirmOpen}>
+			<Dialog
+				open={statusConfirmOpen}
+				onOpenChange={(open) => {
+					setStatusConfirmOpen(open);
+					if (!open) setPendingStatusActive(null);
+				}}
+			>
 				<DialogContent className='max-w-md p-4'>
 					<DialogHeader>
-						<DialogTitle className='text-sm'>Deactivate product?</DialogTitle>
+						<DialogTitle className='text-sm'>
+							{pendingStatusActive ? "Activate product?" : "Deactivate product?"}
+						</DialogTitle>
 					</DialogHeader>
 					<p className='text-xs text-muted-foreground leading-relaxed'>
-						This product will be marked inactive and hidden from active selections.
-						You can reactivate it later from Edit Product.
+						{pendingStatusActive
+							? "This product will be marked active and available in selections again."
+							: "This product will be marked inactive and hidden from active selections. You can reactivate it later from Edit Product."}
 					</p>
 					<div className='flex justify-end gap-2 pt-2'>
 						<Button
 							type='button'
 							variant='outline'
 							size='sm'
-							onClick={() => setDeactivateConfirmOpen(false)}
+							onClick={() => {
+								setStatusConfirmOpen(false);
+								setPendingStatusActive(null);
+							}}
 						>
 							Cancel
 						</Button>
 						<Button
 							type='button'
 							size='sm'
-							className='bg-red-600 hover:bg-red-700 text-white'
-							onClick={() => {
-								set("status", "inactive");
-								setDeactivateConfirmOpen(false);
-							}}
+							className={
+								pendingStatusActive
+									? "bg-brand-600 hover:bg-brand-700 text-white"
+									: "bg-red-600 hover:bg-red-700 text-white"
+							}
+							onClick={confirmStatusChange}
 						>
-							Deactivate
+							{pendingStatusActive ? "Activate" : "Deactivate"}
 						</Button>
 					</div>
 				</DialogContent>
@@ -1289,7 +1313,7 @@ export function validateProductForm(
 		true,
 		UNIT_PER_CASE_MAX,
 	);
-	requirePositiveNumber(form.grossWeight, "grossWeight", "Gross weight", false, DECIMAL_18_4_MAX);
+	requirePositiveNumber(form.grossWeight, "grossWeight", "Gross weight", true, DECIMAL_18_4_MAX);
 	requireNonNegativeNumber(form.mrp, "mrp", "MRP", MRP_MAX);
 	requireNonNegativeNumber(form.costPrice, "costPrice", "Cost price", COST_PRICE_MAX);
 	requireNonNegativeNumber(

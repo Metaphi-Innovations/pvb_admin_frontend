@@ -35,11 +35,10 @@ export function useCreateSupplierType() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (payload: SupplierTypeCreatePayload) => SupplierTypeListService.create(payload),
-        onSuccess: async () => {
-            await Promise.all([
-                queryClient.invalidateQueries({ queryKey: masterKeys.supplierTypes.lists() }),
-                queryClient.invalidateQueries({ queryKey: masterKeys.supplierTypes.dropdown() }),
-            ]);
+        onSuccess: () => {
+            // Do not await — waiting blocks navigation after save.
+            void queryClient.invalidateQueries({ queryKey: masterKeys.supplierTypes.lists() });
+            void queryClient.invalidateQueries({ queryKey: masterKeys.supplierTypes.dropdown() });
         },
     });
 }

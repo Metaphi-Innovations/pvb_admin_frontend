@@ -332,27 +332,43 @@ function isLikelyId(segment: string): boolean {
   );
 }
 
+/** Trailing route actions that share permissions with the list page. */
+const ROUTE_ACTION_SEGMENTS = new Set([
+  "add",
+  "new",
+  "create",
+  "edit",
+  "view",
+  "details",
+]);
+
 /**
  * Stable key for permission refetch — changes on module OR submodule navigation.
- * - Full logical path (skips record id segments like UUIDs)
+ * Uses the matched route-permission prefix when available so list / add / edit / view
+ * share one cache key (avoids refetch + "Checking access…" on every form open).
+ * - Falls back to logical path (skips record ids and trailing action segments)
  * - `?tab=` for tabbed submodules on the same path (roles/templates, HR tabs, vouchers)
  */
 export function getPermissionScopeKey(pathname: string, search = ""): string {
   const path = pathname.split("?")[0].replace(/\/+$/, "") || "/";
-  const segments = path.split("/").filter(Boolean);
+  const params = new URLSearchParams(search.replace(/^\?/, ""));
+  const tab = params.get("tab");
 
+  const rule = resolveRouteRule(path);
+  if (rule?.prefix) {
+    return tab ? `${rule.prefix}?tab=${tab}` : rule.prefix;
+  }
+
+  const segments = path.split("/").filter(Boolean);
   const logical: string[] = [];
   for (const segment of segments) {
     if (isLikelyId(segment)) break;
+    if (ROUTE_ACTION_SEGMENTS.has(segment.toLowerCase())) break;
     logical.push(segment);
   }
 
   const base = logical.length === 0 ? "/" : `/${logical.join("/")}`;
-
-  const params = new URLSearchParams(search.replace(/^\?/, ""));
-  const tab = params.get("tab");
   if (tab) return `${base}?tab=${tab}`;
-
   return base;
 }
 
