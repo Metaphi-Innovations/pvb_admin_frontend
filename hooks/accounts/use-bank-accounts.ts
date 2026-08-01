@@ -72,3 +72,24 @@ export function useCompleteBankAccountDetails() {
     },
   });
 }
+
+export function useUpdateBankAccountStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ledgerId,
+      status,
+    }: {
+      ledgerId: string;
+      status: "ACTIVE" | "INACTIVE";
+    }) => BankAccountsListService.updateStatus(ledgerId, status),
+    onSuccess: async (_result, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsKeys.bankAccounts.lists() }),
+        queryClient.invalidateQueries({
+          queryKey: accountsKeys.bankAccounts.detail(variables.ledgerId),
+        }),
+      ]);
+    },
+  });
+}

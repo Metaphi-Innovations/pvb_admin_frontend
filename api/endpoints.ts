@@ -501,6 +501,8 @@ export const API_ENDPOINTS = {
           `/accounts/banking/bank-accounts/ledger/${ledgerId}`,
         COMPLETE_DETAILS: (ledgerId: string) =>
           `/accounts/banking/bank-accounts/ledger/${ledgerId}/details`,
+        STATUS_UPDATE: (ledgerId: string) =>
+          `/accounts/banking/bank-accounts/ledger/${ledgerId}/status`,
       },
     },
   },
