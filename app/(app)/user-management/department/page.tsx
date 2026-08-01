@@ -142,6 +142,7 @@ export default function DepartmentPage() {
   const [viewDept, setViewDept] = useState<Department | null>(null);
   const [activeDept, setActiveDept] = useState<Department | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<Department | null>(null);
 
   const ordering = useMemo(
@@ -192,6 +193,9 @@ export default function DepartmentPage() {
   const nameOptionsQuery = useDepartmentFilterDropdown("department_name", {
     enabled: isFilterOpen("name"),
   });
+  const remarksOptionsQuery = useDepartmentFilterDropdown("remark", {
+    enabled: isFilterOpen("remarks"),
+  });
   const createdByOptionsQuery = useDepartmentFilterDropdown("created_by_user__username", {
     enabled: isFilterOpen("createdDate"),
   });
@@ -200,6 +204,10 @@ export default function DepartmentPage() {
   });
 
   const nameOptions = useMemo(() => nameOptionsQuery.data ?? [], [nameOptionsQuery.data]);
+  const remarksOptions = useMemo(
+    () => remarksOptionsQuery.data ?? [],
+    [remarksOptionsQuery.data],
+  );
   const createdByOptions = useMemo(
     () => createdByOptionsQuery.data ?? [],
     [createdByOptionsQuery.data],
@@ -269,12 +277,14 @@ export default function DepartmentPage() {
   const openAdd = () => {
     setActiveDept(null);
     setFormError(null);
+    setNameError(null);
     setSheetMode("add");
   };
 
   const openEdit = (dept: Department) => {
     setActiveDept(dept);
     setFormError(null);
+    setNameError(null);
     setSheetMode("edit");
   };
 
@@ -282,6 +292,7 @@ export default function DepartmentPage() {
     setSheetMode(null);
     setActiveDept(null);
     setFormError(null);
+    setNameError(null);
   };
 
   const openView = useCallback((dept: Department) => {
@@ -299,8 +310,20 @@ export default function DepartmentPage() {
   };
 
   const handleSave = (data: DepartmentFormState) => {
+    const applySaveError = (error: unknown, fallback: string) => {
+      const message = getErrorMessage(error, fallback);
+      if (/already exists/i.test(message)) {
+        setNameError(message);
+        setFormError(null);
+      } else {
+        setNameError(null);
+        setFormError(message);
+      }
+    };
+
     if (sheetMode === "add") {
       setFormError(null);
+      setNameError(null);
       createMutation.mutate(
         {
           department_name: data.name,
@@ -313,7 +336,7 @@ export default function DepartmentPage() {
             closeSheet();
           },
           onError: (error) => {
-            setFormError(getErrorMessage(error, "Failed to create department."));
+            applySaveError(error, "Failed to create department.");
           },
         },
       );
@@ -326,6 +349,7 @@ export default function DepartmentPage() {
     }
 
     setFormError(null);
+    setNameError(null);
     updateMutation.mutate(
       {
         id: activeDept.departmentUuid,
@@ -340,7 +364,7 @@ export default function DepartmentPage() {
           closeSheet();
         },
         onError: (error) => {
-          setFormError(getErrorMessage(error, "Failed to update department."));
+          applySaveError(error, "Failed to update department.");
         },
       },
     );
@@ -396,14 +420,36 @@ export default function DepartmentPage() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: nameOptions,
+        width: "250px",
         render: (_val, row) => (
           <button
-            className="text-xs font-semibold text-left transition-colors text-foreground hover:text-brand-600"
+            className="text-xs font-semibold text-left transition-colors text-foreground hover:text-brand-600 truncate max-w-[250px] block"
+            title={row.name}
             onClick={() => openView(row)}
           >
             {row.name}
           </button>
         ),
+      },
+      {
+        key: "remarks",
+        header: "Remarks",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: remarksOptions,
+        width: "320px",
+        render: (val) => {
+          const text = val ? String(val) : "—";
+          return (
+            <span
+              className="text-xs text-muted-foreground truncate max-w-[320px] block"
+              title={val ? String(val) : undefined}
+            >
+              {text}
+            </span>
+          );
+        },
       },
       {
         key: "status",
@@ -469,7 +515,7 @@ export default function DepartmentPage() {
         ),
       },
     ],
-    [nameOptions, statusOptions, createdByOptions, openView],
+    [nameOptions, remarksOptions, statusOptions, createdByOptions, updatedByOptions, openView],
   );
 
   return (
@@ -517,6 +563,8 @@ export default function DepartmentPage() {
         dept={sheetMode === "edit" ? activeDept : null}
         saving={saving}
         formError={formError}
+        nameError={nameError}
+        onClearNameError={() => setNameError(null)}
       />
 
       <DepartmentDetailSheet

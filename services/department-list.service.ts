@@ -58,6 +58,7 @@ export interface DepartmentFilterOption {
 
 export type DepartmentFilterField =
   | "department_name"
+  | "remark"
   | "is_active"
   | "created_by_user__username"
   | "updated_by_user__username"
@@ -66,6 +67,7 @@ export type DepartmentFilterField =
 
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
   name: "department_name",
+  remarks: "remark",
   status: "is_active",
   createdDate: "created_at",
   updatedDate: "updated_at",
@@ -249,14 +251,22 @@ export const DepartmentListService = {
     const response = await axiosInstance.post(
       `${API_ENDPOINTS.USER_MANAGEMENT.DEPARTMENT.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
       { filters: params.apiFilters ?? {} },
-      { responseType: "blob" },
+      {
+        responseType: "blob",
+        headers: {
+          Accept:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        },
+      },
     );
 
-    const blob = response.data as Blob;
+    const blob = new Blob([response.data], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `departments_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `departments_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

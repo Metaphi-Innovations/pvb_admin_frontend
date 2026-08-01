@@ -317,7 +317,9 @@ function mapPincode(value: unknown): SupplierPincode | null {
 }
 
 function asString(value: unknown): string {
-    return typeof value === "string" ? value : String(value ?? "");
+    if (typeof value === "string") return value.trim();
+    if (value === null || value === undefined) return "";
+    return String(value).trim();
 }
 
 function toStatus(value: unknown, fallbackValue?: unknown): "active" | "inactive" {

@@ -304,6 +304,7 @@ export function MasterListing<T = any>({
                         return (
                           <td
                             key={col.key}
+                            style={col.width ? { width: col.width, maxWidth: col.width } : undefined}
                             className={cn(
                               "px-4 py-2.5 text-xs text-foreground whitespace-nowrap",
                               col.align === "center" && "text-center",

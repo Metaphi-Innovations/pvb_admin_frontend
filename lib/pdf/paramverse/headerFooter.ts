@@ -5,12 +5,15 @@ import { PARAMVERSE_COMPANY } from "./company";
 export interface PdfHeaderInput {
   logoSrc?: string;
   docTitle: string;
+  /** Optional second line under title (e.g. WITH GOODS VALUE). */
+  docSubtitle?: string;
   company?: Partial<ParamverseCompany>;
 }
 
 /** Logo + company block (left) + document title (right). */
 export function renderParamverseHeader(input: PdfHeaderInput): string {
   const company = { ...PARAMVERSE_COMPANY, ...input.company };
+  const subtitle = String(input.docSubtitle ?? "").trim();
   return `
   <div class="pv-header">
     <div class="pv-logo">
@@ -22,7 +25,10 @@ export function renderParamverseHeader(input: PdfHeaderInput): string {
       <div class="pv-muted">${escapeHtml(company.companyMetaLine)}</div>
       <div class="pv-muted">${escapeHtml(company.companyContactLine)}</div>
     </div>
-    <div class="pv-doc-title">${escapeHtml(input.docTitle)}</div>
+    <div class="pv-doc-title-wrap">
+      <div class="pv-doc-title">${escapeHtml(input.docTitle)}</div>
+      ${subtitle ? `<div class="pv-doc-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+    </div>
   </div>`;
 }
 

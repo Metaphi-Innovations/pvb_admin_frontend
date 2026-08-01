@@ -44,6 +44,10 @@ export function tdsApiToForm(record: TdsApiRecord): TdsApiForm {
   };
 }
 
+/** TDS rate is a percentage: greater than 0 and at most 100, max 2 decimals. */
+export const TDS_RATE_MIN = 0;
+export const TDS_RATE_MAX = 100;
+
 export function validateTdsApiForm(form: TdsApiForm): Record<string, string> {
   const errors: Record<string, string> = {};
   const rate = form.tdsRate.trim().replace(/%$/, "");
@@ -58,8 +62,10 @@ export function validateTdsApiForm(form: TdsApiForm): Record<string, string> {
     errors.tdsRate = "Enter a valid numeric TDS rate (max 2 decimal places).";
   } else {
     const num = Number(rate);
-    if (!Number.isFinite(num) || num <= 0) {
+    if (!Number.isFinite(num) || num <= TDS_RATE_MIN) {
       errors.tdsRate = "TDS rate must be greater than zero.";
+    } else if (num > TDS_RATE_MAX) {
+      errors.tdsRate = "TDS rate cannot exceed 100%.";
     }
   }
 

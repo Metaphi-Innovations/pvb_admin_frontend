@@ -1,4 +1,4 @@
-/** Shared Paramverse PDF base styles matching PVB sample PDFs. */
+/** Shared Paramverse PDF base styles matching PVB Delivery Challan sample. */
 export function paramverseBaseCss(): string {
   return `
     @page { size: A4; margin: 10mm; }
@@ -20,7 +20,7 @@ export function paramverseBaseCss(): string {
       align-items: start;
       margin-bottom: 8px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1.5px solid #1a1a1a;
     }
     .pv-logo img {
       max-height: 52px;
@@ -29,81 +29,114 @@ export function paramverseBaseCss(): string {
       display: block;
     }
     .pv-company-name {
-      font-size: 12px;
+      font-size: 13.5px;
       font-weight: 700;
       text-transform: uppercase;
       color: #1a1a1a;
-      margin-bottom: 2px;
+      margin-bottom: 4px;
       letter-spacing: 0.2px;
+      line-height: 1.35;
     }
     .pv-muted {
       color: #333333;
-      font-size: 6.5px;
-      line-height: 1.4;
+      font-size: 8px;
+      line-height: 1.55;
+      margin-bottom: 1px;
+    }
+    .pv-doc-title-wrap {
+      text-align: right;
+      padding-top: 2px;
     }
     .pv-doc-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: #1a1a1a;
-      text-align: right;
       text-transform: uppercase;
       letter-spacing: 0.4px;
       white-space: nowrap;
-      padding-top: 2px;
+      line-height: 1.15;
+    }
+    .pv-doc-subtitle {
+      font-size: 8px;
+      font-weight: 700;
+      color: #1a1a1a;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-top: 2px;
     }
     .pv-section-title {
       font-size: 7.5px;
       font-weight: 700;
       text-transform: uppercase;
       color: #1a1a1a;
-      letter-spacing: 0.3px;
-      border-bottom: 1px solid #e5e7eb;
+      letter-spacing: 0.35px;
+      border-bottom: 1px solid #1a1a1a;
       padding-bottom: 3px;
       margin: 10px 0 6px;
     }
+    /* Open meta strip — labels/values in a row, NO cell borders (sample PDF). */
     .pv-meta {
       width: 100%;
       border-collapse: collapse;
       table-layout: fixed;
-      margin-bottom: 2px;
+      margin: 4px 0 0;
     }
     .pv-meta td {
-      border: 1px solid #e5e7eb;
-      padding: 4px 6px;
+      border: none !important;
+      padding: 3px 10px 4px 0;
       vertical-align: top;
     }
     .pv-meta-label {
-      font-size: 6.2px;
+      font-size: 6px;
       color: #5a5a5a;
       text-transform: uppercase;
       font-weight: 700;
-      letter-spacing: 0.2px;
+      letter-spacing: 0.25px;
     }
     .pv-meta-value {
-      font-size: 7.5px;
+      font-size: 8px;
       font-weight: 700;
       color: #1a1a1a;
-      margin-top: 2px;
+      margin-top: 1px;
       min-height: 10px;
+      line-height: 1.25;
     }
     .pv-meta-value.dotted {
       border-bottom: 1px dotted #9ca3af;
       min-height: 12px;
-      margin-top: 6px;
+      margin-top: 4px;
     }
+    .pv-meta-divider {
+      border: none;
+      border-top: 1px solid #c4c4c4;
+      margin: 8px 0 6px;
+    }
+    /* Party columns — grey vertical dividers between Bill From / Bill To / Ship To. */
     .pv-parties {
       display: grid;
       gap: 0;
-      border: 1px solid #e5e7eb;
-      margin-bottom: 4px;
+      border: none;
+      margin: 0 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #c4c4c4;
     }
     .pv-parties.cols-2 { grid-template-columns: 1fr 1fr; }
     .pv-parties.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
     .pv-party {
-      padding: 6px 8px;
-      min-height: 72px;
+      padding: 2px 12px 8px 0;
     }
-    .pv-party + .pv-party { border-left: 1px solid #e5e7eb; }
+    .pv-party + .pv-party {
+      padding-left: 12px;
+      border-left: 1px solid #c4c4c4;
+    }
+    .pv-party-title {
+      font-size: 6.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #5a5a5a;
+      letter-spacing: 0.3px;
+      margin: 0 0 3px;
+    }
     .pv-party .name {
       font-weight: 700;
       font-size: 8px;
@@ -162,19 +195,19 @@ export function paramverseBaseCss(): string {
     .pv-summary {
       width: 100%;
       border-collapse: collapse;
-      border: 1px solid #e5e7eb;
+      border: none;
     }
     .pv-summary td {
       border-bottom: 1px solid #eceff1;
-      padding: 3px 6px;
+      padding: 3px 2px;
       font-size: 7.5px;
     }
     .pv-summary tr:last-child td {
       border-bottom: none;
-      background: #f3f4f6;
+      background: transparent;
       font-weight: 700;
       font-size: 9px;
-      padding: 5px 6px;
+      padding: 5px 2px 2px;
     }
     .pv-summary .lbl { color: #3a3a3a; }
     .pv-bullets {
@@ -216,7 +249,6 @@ export function paramverseBaseCss(): string {
     }
     @media print {
       body { padding: 0; }
-      .pv-footer { position: running(footer); }
     }
   `;
 }

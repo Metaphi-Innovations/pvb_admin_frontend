@@ -4,47 +4,31 @@ import {
   asText,
   buildParamversePdfDocument,
   escapeHtml,
-  formatNumber,
-  renderMetaGrid,
-  renderParamverseFooter,
-  renderParamverseHeader,
-  renderParamverseSectionTitle,
-  renderPdfTable,
-  renderSummaryRows,
-  type PdfMetaField,
-  type PdfTableColumn,
-  type PdfTableRow,
 } from "@/lib/pdf/paramverse";
 
 export interface PackingListPartyBlock {
   name: string;
   addressLine?: string;
-  city?: string;
   state?: string;
   pincode?: string;
   gstin?: string;
-  contact?: string;
-  mobile?: string;
+  pan?: string;
+  contactNo?: string;
+  email?: string;
 }
 
 export interface PackingListProductRow {
   sr: number;
+  productCode: string;
   productName: string;
-  hsnCode: string;
   batchNo: string;
   mfgDate: string;
   expiryDate: string;
   qty: number;
   unit: string;
   packSize: string;
-  netWtKg: number;
-  grossWtKg: number;
-}
-
-export interface PackingListCartonRow {
-  batchNo: string;
-  unitsPacked: number;
-  weightLabel: string;
+  netWtLabel: string;
+  grossWtLabel: string;
 }
 
 export interface PackingListPdfData {
@@ -56,193 +40,176 @@ export interface PackingListPdfData {
   packingListNo: string;
   packingListDate: string;
   refInvoiceNo: string;
+  invoiceDate: string;
   dispatchDate: string;
   billTo: PackingListPartyBlock;
   shipTo: PackingListPartyBlock;
-  transporterName: string;
-  vehicleNumber: string;
-  lrNumber: string;
-  dispatchMode: string;
-  placeOfSupply: string;
-  totalPackages: number;
-  totalCartons: number;
   products: PackingListProductRow[];
-  cartons: PackingListCartonRow[];
   totalQuantityLabel: string;
-  totalNetWeightKg: number;
-  totalGrossWeightKg: number;
+  totalUnits: number;
+  totalNetWeightLabel: string;
+  totalGrossWeightLabel: string;
   declaration?: string;
   signatoryLabel: string;
 }
 
-/** Packing list sample uses a Powai address variant + Dharitri signatory. */
+/** Matches PVB_Packing List_v2.pdf company block. */
 export const PACKING_LIST_COMPANY = {
   companyName: "PARAMVERSE BIO PRIVATE LIMITED",
   companyAddress:
     "Unit No. 402, Omega Building, Near Hiranandani Garden, Opp. Colgate Palmolive, Powai, Mumbai, Maharashtra, India - 400076",
   companyMetaLine:
     "GSTIN: 27AAPCP1234F1Z8   PAN: AAPCP1234F   CIN: U46201MH2025PTC463792",
-  companyContactLine:
-    "Ph: 022-41276000/01/02/03   Email: info@paramverse.com",
-  signatoryLabel: "FOR DHARITRI SUTRA",
+  companyContactLine: "Ph: 022-41276000/01/02/03   Email: info@paramverse.com",
+  signatoryLabel: "FOR PARAMVERSE BIO PRIVATE LIMITED",
 } as const;
 
 export const DEFAULT_PACKING_DECLARATION =
   "We hereby certify that the above-mentioned agricultural products have been packed in good condition and belong to the batches mentioned above. All batch, manufacturing, and expiry details are true and correct as per company records.";
 
-function partyLines(party: PackingListPartyBlock): string[] {
-  const lines: string[] = [];
-  if (party.addressLine) lines.push(party.addressLine);
-  const cityStatePin = [
-    party.city ? `City: ${party.city}` : "",
-    party.state ? `State: ${party.state}` : "",
-    party.pincode ? `PIN: ${party.pincode}` : "",
-  ]
-    .filter(Boolean)
-    .join("   ");
-  if (cityStatePin) lines.push(cityStatePin);
-  if (party.gstin) lines.push(`GSTIN: ${party.gstin}`);
-  const contact = [
-    party.contact ? `Contact: ${party.contact}` : "",
-    party.mobile ? `Mobile: ${party.mobile}` : "",
-  ]
-    .filter(Boolean)
-    .join("   ");
-  if (contact) lines.push(contact);
-  return lines;
+const ACCENT = "#1a5276";
+const BORDER = "#bfbfbf";
+const RULE = "#1a1a1a";
+const MUTED = "#444444";
+const SUB = "#595959";
+
+function partyField(label: string, value: string): string {
+  return `<tr>
+    <td class="pl-pf-lbl">${escapeHtml(label)}</td>
+    <td class="pl-pf-sep">:</td>
+    <td class="pl-pf-val">${escapeHtml(asText(value, "—"))}</td>
+  </tr>`;
 }
 
-function meta(label: string, value: string): PdfMetaField {
-  return { label, value: asText(value, "—") };
+function renderPartyColumn(title: string, party: PackingListPartyBlock): string {
+  return `
+    <div class="pl-party-col">
+      <div class="pl-party-heading">${escapeHtml(title)}</div>
+      <table class="pl-party-fields">
+        ${partyField("Company Name", party.name)}
+        ${partyField("Address", asText(party.addressLine, "—"))}
+        ${partyField("State", asText(party.state, "—"))}
+        ${partyField("Pincode", asText(party.pincode, "—"))}
+        ${partyField("GSTIN", asText(party.gstin, "—"))}
+        ${partyField("PAN", asText(party.pan, "—"))}
+        ${partyField("Contact No.", asText(party.contactNo, "—"))}
+        ${partyField("Email Id", asText(party.email, "—"))}
+      </table>
+    </div>`;
 }
 
-const PRODUCT_COLUMNS: PdfTableColumn[] = [
-  { key: "sr", header: "Sr No", width: "4%", align: "center" },
-  { key: "productName", header: "Product Name", width: "18%" },
-  { key: "hsn", header: "HSN Code", width: "8%", align: "center", nowrap: true },
-  { key: "batch", header: "Batch No", width: "9%", align: "center", nowrap: true },
-  { key: "mfg", header: "Mfg Date", width: "8%", align: "center", nowrap: true },
-  { key: "exp", header: "Expiry Date", width: "9%", align: "center", nowrap: true },
-  { key: "qty", header: "Qty", width: "6%", numeric: true },
-  { key: "unit", header: "Unit", width: "7%", align: "center" },
-  { key: "pack", header: "Pack Size", width: "8%", align: "center", nowrap: true },
-  { key: "net", header: "Net Wt (Kg)", width: "11%", numeric: true },
-  { key: "gross", header: "Gross Wt (Kg)", width: "12%", numeric: true },
-];
+function renderMetaRow(label: string, value: string): string {
+  return `<div class="pl-meta-row">
+    <span class="pl-meta-lbl">${escapeHtml(label)}</span>
+    <span class="pl-meta-val">${escapeHtml(asText(value, "—"))}</span>
+  </div>`;
+}
 
-const CARTON_COLUMNS: PdfTableColumn[] = [
-  { key: "batch", header: "Batch No" },
-  { key: "units", header: "Units Packed", align: "center" },
-  { key: "weight", header: "Weight", align: "right" },
-];
+function renderProductRows(products: PackingListProductRow[]): string {
+  if (!products.length) {
+    return `<tr><td colspan="8" class="pl-c">No products</td></tr>`;
+  }
+  return products
+    .map((row) => {
+      const batch = asText(row.batchNo, "");
+      const mfg = asText(row.mfgDate, "");
+      const exp = asText(row.expiryDate, "");
+      const dateLine = [
+        mfg && mfg !== "-" ? `Mfg: ${mfg}` : "",
+        exp && exp !== "-" ? `Expiry: ${exp}` : "",
+      ]
+        .filter(Boolean)
+        .join("&nbsp;&nbsp;&nbsp;&nbsp;");
+      return `<tr>
+        <td class="pl-c">${row.sr}</td>
+        <td class="pl-c pl-nowrap">${escapeHtml(asText(row.productCode, ""))}</td>
+        <td class="pl-pname">
+          <div class="pl-pname-main">${escapeHtml(asText(row.productName))}</div>
+          ${batch && batch !== "-" ? `<div class="pl-pname-sub">Batch No: ${escapeHtml(batch)}</div>` : ""}
+          ${dateLine ? `<div class="pl-pname-sub">${dateLine}</div>` : ""}
+        </td>
+        <td class="pl-c">${escapeHtml(String(row.qty))}</td>
+        <td class="pl-c">${escapeHtml(asText(row.unit, ""))}</td>
+        <td class="pl-c">${escapeHtml(asText(row.packSize, ""))}</td>
+        <td class="pl-r pl-nowrap">${escapeHtml(asText(row.netWtLabel, "—"))}</td>
+        <td class="pl-r pl-nowrap">${escapeHtml(asText(row.grossWtLabel, "—"))}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function summaryRow(label: string, value: string, strong = false): string {
+  return `<tr class="${strong ? "pl-sum-strong" : ""}">
+    <td>${escapeHtml(label)}</td>
+    <td class="pl-r">${escapeHtml(value)}</td>
+  </tr>`;
+}
 
 export function buildPackingListPdfHtml(data: PackingListPdfData): string {
-  const productRows: PdfTableRow[] = data.products.map((row) => ({
-    cells: {
-      sr: String(row.sr),
-      productName: row.productName,
-      hsn: row.hsnCode,
-      batch: row.batchNo,
-      mfg: row.mfgDate,
-      exp: row.expiryDate,
-      qty: String(row.qty),
-      unit: row.unit,
-      pack: row.packSize,
-      net: formatNumber(row.netWtKg),
-      gross: formatNumber(row.grossWtKg),
-    },
-  }));
-
-  const cartonRows: PdfTableRow[] = data.cartons.map((row) => ({
-    cells: {
-      batch: row.batchNo,
-      units: String(row.unitsPacked),
-      weight: row.weightLabel,
-    },
-  }));
-
   const bodyHtml = `
     <div class="pl-header">
-      <div class="pl-logo">${data.logoSrc ? `<img src="${escapeHtml(data.logoSrc)}" alt="Logo" />` : ""}</div>
-      <div class="pl-company">
+      <div class="pl-header-left">
+        <div class="pl-logo">${
+          data.logoSrc
+            ? `<img src="${escapeHtml(data.logoSrc)}" alt="Logo" />`
+            : ""
+        }</div>
         <div class="pl-company-name">${escapeHtml(data.companyName)}</div>
         <div class="pl-muted">${escapeHtml(data.companyAddress)}</div>
-        <div class="pl-muted">${escapeHtml(data.companyMetaLine)}</div>
-        <div class="pl-muted">${escapeHtml(data.companyContactLine)}</div>
+        <div class="pl-muted pl-meta-dark">${escapeHtml(data.companyMetaLine)}</div>
+        <div class="pl-muted pl-meta-dark">${escapeHtml(data.companyContactLine)}</div>
       </div>
-      <div class="pl-right">
-        <div class="pl-title">PACKING LIST</div>
+      <div class="pl-header-right">
+        <div class="pl-doc-title">PACKING LIST</div>
         <div class="pl-doc-meta">
-          <div><span class="lbl">Packing List No.</span> ${escapeHtml(data.packingListNo)}</div>
-          <div><span class="lbl">Packing List Date</span> ${escapeHtml(data.packingListDate)}</div>
-          <div><span class="lbl">Ref. Invoice No.</span> ${escapeHtml(asText(data.refInvoiceNo, "—"))}</div>
-          <div><span class="lbl">Dispatch Date</span> ${escapeHtml(asText(data.dispatchDate, "—"))}</div>
+          ${renderMetaRow("Packing List No.", data.packingListNo)}
+          ${renderMetaRow("Packing List Date", data.packingListDate)}
+          ${renderMetaRow("Ref. Invoice No.", data.refInvoiceNo)}
+          ${renderMetaRow("Invoice Date", data.invoiceDate)}
+          ${renderMetaRow("Dispatch Date", data.dispatchDate)}
         </div>
       </div>
     </div>
 
-    ${renderParamverseSectionTitle("Party Details")}
-    <div class="pl-parties">
-      <div class="pl-party">
-        <div class="pl-party-title">BILL TO</div>
-        <p class="name">${escapeHtml(asText(data.billTo.name))}</p>
-        ${partyLines(data.billTo)
-          .map((line) => `<p>${escapeHtml(line)}</p>`)
-          .join("")}
-      </div>
-      <div class="pl-party">
-        <div class="pl-party-title">SHIP TO</div>
-        <p class="name">${escapeHtml(asText(data.shipTo.name))}</p>
-        ${partyLines(data.shipTo)
-          .map((line) => `<p>${escapeHtml(line)}</p>`)
-          .join("")}
+    <div class="pl-header-rule"></div>
+
+    <div class="pl-box">
+      <div class="pl-box-title">PARTY DETAILS</div>
+      <div class="pl-parties">
+        ${renderPartyColumn("Bill To", data.billTo)}
+        ${renderPartyColumn("Ship To", data.shipTo)}
       </div>
     </div>
 
-    ${renderParamverseSectionTitle("Shipment Details")}
-    ${renderMetaGrid([
-      [
-        meta("Transporter Name", data.transporterName),
-        meta("Vehicle Number", data.vehicleNumber),
-        meta("LR Number", data.lrNumber),
-        meta("Dispatch Mode", data.dispatchMode),
-      ],
-      [
-        meta("Place of Supply", data.placeOfSupply),
-        meta("Total Packages", String(data.totalPackages || "—")),
-        meta("Total Cartons", String(data.totalCartons || "—")),
-        { label: " ", value: " " },
-      ],
-    ])}
+    <div class="pl-box pl-box-products">
+      <div class="pl-box-title">PRODUCT DETAILS</div>
+      <table class="pl-table">
+        <thead>
+          <tr>
+            <th style="width:5%">SR NO</th>
+            <th style="width:11%">PRODUCT CODE</th>
+            <th style="width:28%">PRODUCT NAME</th>
+            <th style="width:7%">QTY</th>
+            <th style="width:8%">UNIT</th>
+            <th style="width:10%">PACK SIZE</th>
+            <th style="width:15%">NET WT (KG/LTR)</th>
+            <th style="width:16%">GROSS WT (KG/LTR)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderProductRows(data.products)}
+        </tbody>
+      </table>
+    </div>
 
-    ${renderParamverseSectionTitle("Product Details")}
-    ${renderPdfTable({ columns: PRODUCT_COLUMNS, rows: productRows, emptyText: "No products" })}
-
-    <div class="pl-bottom">
-      <div>
-        ${renderParamverseSectionTitle("Carton / Package Breakup")}
-        ${renderPdfTable({
-          columns: CARTON_COLUMNS,
-          rows: cartonRows,
-          emptyText: "—",
-        })}
-      </div>
-      <div>
-        ${renderParamverseSectionTitle("Packing Summary")}
-        ${renderSummaryRows([
-          { label: "Total Quantity", value: data.totalQuantityLabel },
-          { label: "Total Packages", value: String(data.totalPackages) },
-          {
-            label: "Total Net Weight",
-            value: `${formatNumber(data.totalNetWeightKg)} Kg`,
-          },
-          {
-            label: "Total Gross Weight",
-            value: `${formatNumber(data.totalGrossWeightKg)} Kg`,
-            strong: true,
-          },
-        ])}
-      </div>
+    <div class="pl-box pl-box-summary">
+      <div class="pl-box-title">PACKING SUMMARY</div>
+      <table class="pl-summary">
+        ${summaryRow("TOTAL QUANTITY", data.totalQuantityLabel)}
+        ${summaryRow("TOTAL UNITS", String(data.totalUnits))}
+        ${summaryRow("TOTAL NET WEIGHT", data.totalNetWeightLabel)}
+        ${summaryRow("TOTAL GROSS WEIGHT", data.totalGrossWeightLabel, true)}
+      </table>
     </div>
 
     <div class="pl-declaration">
@@ -252,96 +219,236 @@ export function buildPackingListPdfHtml(data: PackingListPdfData): string {
     </div>
 
     <div class="pl-sign">
-      <div class="pl-sign-label">${escapeHtml(data.signatoryLabel)}</div>
+      <div class="pl-sign-company">${escapeHtml(data.signatoryLabel)}</div>
       <div class="pl-sign-gap"></div>
+      <div class="pl-sign-line"></div>
       <div class="pl-sign-sub">(Authorized Signatory)</div>
     </div>
 
-    ${renderParamverseFooter({
-      left: "This is a Packing List only and not a Tax Invoice.",
-      center: `Packing List No: ${asText(data.packingListNo)}  |  Date: ${asText(
-        data.packingListDate,
-      )}`,
-      right: " ",
-    })}
+    <div class="pl-footer">
+      <span>This is a Packing List only and not a Tax Invoice.</span>
+      <span>Packing List No: ${escapeHtml(
+        asText(data.packingListNo),
+      )}&nbsp;&nbsp;|&nbsp;&nbsp;Date: ${escapeHtml(
+        asText(data.packingListDate),
+      )}</span>
+    </div>
   `;
 
   return buildParamversePdfDocument({
     title: " ",
     bodyHtml,
     extraCss: `
+      @page { size: A4 portrait; margin: 10mm; }
+      .pv-sheet { color: #0d0d0d; font-size: 8px; }
+
       .pl-header {
         display: grid;
-        grid-template-columns: 72px 1fr 185px;
-        gap: 10px;
+        grid-template-columns: 1fr 175px;
+        gap: 12px;
         align-items: start;
-        margin-bottom: 10px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #e5e7eb;
-      }
-      .pl-logo img { max-height: 54px; max-width: 70px; object-fit: contain; display: block; }
-      .pl-company-name {
-        color: #1a5276;
-        font-size: 13px;
-        font-weight: 700;
-        text-transform: uppercase;
-        margin-bottom: 2px;
-      }
-      .pl-muted { color: #444; font-size: 6.5px; line-height: 1.4; }
-      .pl-right { text-align: right; }
-      .pl-title {
-        color: #1a5276;
-        font-size: 15px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
         margin-bottom: 6px;
       }
-      .pl-doc-meta {
-        font-size: 7px;
-        color: #111;
+      .pl-logo { margin-bottom: 4px; }
+      .pl-logo img {
+        max-height: 42px;
+        max-width: 58px;
+        object-fit: contain;
+        display: block;
       }
-      .pl-doc-meta .lbl { color: #666; margin-right: 6px; }
-      .pl-doc-meta div { margin-bottom: 2px; }
-      .pv-section-title { color: #ababab; }
+      .pl-company-name {
+        color: ${ACCENT};
+        font-size: 12.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 0 0 3px;
+        line-height: 1.2;
+      }
+      .pl-muted {
+        color: #444444;
+        font-size: 6.2px;
+        line-height: 1.45;
+        margin: 0 0 1px;
+      }
+      .pl-meta-dark { color: #222222; }
+
+      .pl-header-right { text-align: right; padding-top: 0; }
+      .pl-doc-title {
+        color: ${ACCENT};
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        margin: 0 0 8px;
+        white-space: nowrap;
+      }
+      .pl-doc-meta { width: 100%; }
+      .pl-meta-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: baseline;
+        margin-bottom: 3px;
+        font-size: 6.8px;
+      }
+      .pl-meta-lbl { color: #666666; text-align: right; }
+      .pl-meta-val { color: #111111; font-weight: 700; text-align: right; white-space: nowrap; }
+
+      .pl-header-rule {
+        height: 1.5px;
+        background: ${ACCENT};
+        margin: 4px 0 10px;
+      }
+
+      .pl-box {
+        border: 0.75px solid ${BORDER};
+        margin: 0 0 10px;
+        page-break-inside: avoid;
+      }
+      .pl-box-title {
+        font-size: 7.2px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: #0d0d0d;
+        padding: 5px 7px 4px;
+        border-bottom: 0.9px solid ${RULE};
+      }
+
       .pl-parties {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 16px;
-        margin-bottom: 4px;
       }
-      .pl-party-title {
-        color: #1a5276;
+      .pl-party-col {
+        padding: 6px 10px 8px;
+      }
+      .pl-party-col + .pl-party-col {
+        border-left: 0.75px solid ${BORDER};
+      }
+      .pl-party-heading {
+        font-size: 7.5px;
         font-weight: 700;
-        font-size: 7px;
-        margin-bottom: 4px;
+        color: #0d0d0d;
+        padding-bottom: 3px;
+        margin-bottom: 6px;
+        border-bottom: 0.9px solid ${RULE};
+        display: inline-block;
+        min-width: 70%;
       }
-      .pl-party .name { font-weight: 700; font-size: 8.5px; margin: 0 0 2px; }
-      .pl-party p { margin: 0 0 1px; color: #333; font-size: 7.5px; }
-      .pl-bottom {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-top: 8px;
+      .pl-party-fields {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
       }
-      .pl-declaration {
-        margin-top: 12px;
-        border: 1px solid #bcd4e6;
-        background: #f7fbfe;
+      .pl-party-fields td {
+        border: none !important;
+        padding: 1.5px 0;
+        font-size: 6.8px;
+        color: #0d0d0d;
+        vertical-align: top;
+        line-height: 1.35;
+      }
+      .pl-pf-lbl { width: 78px; white-space: nowrap; font-weight: 700; }
+      .pl-pf-sep { width: 10px; text-align: center; }
+      .pl-pf-val { word-break: break-word; }
+
+      .pl-box-products { padding-bottom: 0; }
+      .pl-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 6.6px;
+      }
+      .pl-table th {
+        background: transparent;
+        border: none;
+        border-bottom: 0.75px solid ${RULE};
+        border-right: 0.6px solid ${BORDER};
+        padding: 5px 3px;
+        font-size: 6px;
+        font-weight: 700;
+        text-transform: uppercase;
+        text-align: center;
+        color: #0d0d0d;
+        white-space: nowrap;
+      }
+      .pl-table th:last-child { border-right: none; }
+      .pl-table td {
+        border: none;
+        border-bottom: 0.6px solid ${BORDER};
+        border-right: 0.6px solid ${BORDER};
+        padding: 6px 3px;
+        vertical-align: middle;
+        color: #404040;
+      }
+      .pl-table td:last-child { border-right: none; }
+      .pl-table tbody tr:last-child td { border-bottom: none; }
+      .pl-pname { text-align: left; vertical-align: top !important; color: #0d0d0d !important; }
+      .pl-pname-main { font-weight: 700; font-size: 6.6px; color: #0d0d0d; margin-bottom: 2px; }
+      .pl-pname-sub { font-size: 5.8px; color: ${SUB}; font-weight: 400; line-height: 1.35; }
+      .pl-c { text-align: center; }
+      .pl-r { text-align: right; }
+      .pl-nowrap { white-space: nowrap; }
+
+      .pl-summary {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .pl-summary td {
+        border: none;
+        border-bottom: 0.75px solid #d9d9d9;
         padding: 6px 8px;
-        font-size: 7px;
-        color: #1a5276;
-        line-height: 1.4;
+        font-size: 6.8px;
+        font-weight: 700;
+        color: #0d0d0d;
       }
+      .pl-summary tr:last-child td { border-bottom: none; }
+      .pl-sum-strong td { color: #595959; }
+
+      .pl-declaration {
+        border: 0.75px solid ${BORDER};
+        border-left: 2.2px solid #0d0d0d;
+        padding: 6px 8px;
+        font-size: 6.4px;
+        color: #0d0d0d;
+        line-height: 1.45;
+        margin: 0 0 18px;
+      }
+      .pl-declaration strong { font-weight: 700; }
+
       .pl-sign {
-        margin-top: 18px;
         text-align: right;
         page-break-inside: avoid;
+        margin: 8px 0 24px;
       }
-      .pl-sign-label { color: #1a5276; font-weight: 700; font-size: 8px; }
-      .pl-sign-gap { height: 28px; }
-      .pl-sign-sub { color: #555; font-size: 7px; }
+      .pl-sign-company {
+        font-size: 6.8px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #0d0d0d;
+      }
+      .pl-sign-gap { height: 36px; }
+      .pl-sign-line {
+        display: inline-block;
+        width: 140px;
+        border-top: 1px solid ${RULE};
+        margin-bottom: 3px;
+      }
+      .pl-sign-sub {
+        font-size: 6.4px;
+        color: ${SUB};
+      }
+
+      .pl-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 0.75px solid #d9d9d9;
+        padding-top: 5px;
+        font-size: 5.6px;
+        color: #666666;
+      }
     `,
   });
 }
 
-export { formatDate, toNumber } from "@/lib/pdf/paramverse";
+export { formatDate, toNumber, formatNumber } from "@/lib/pdf/paramverse";

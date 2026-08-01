@@ -24,6 +24,8 @@ interface DepartmentSheetProps {
   dept?: Department | null;
   saving?: boolean;
   formError?: string | null;
+  nameError?: string | null;
+  onClearNameError?: () => void;
 }
 
 export default function DepartmentSheet({
@@ -33,6 +35,8 @@ export default function DepartmentSheet({
   dept,
   saving = false,
   formError,
+  nameError,
+  onClearNameError,
 }: DepartmentSheetProps) {
   const isEdit = !!dept;
 
@@ -54,9 +58,16 @@ export default function DepartmentSheet({
     setErrors({});
   }, [dept, open]);
 
+  useEffect(() => {
+    if (nameError) {
+      setErrors((p) => ({ ...p, name: nameError }));
+    }
+  }, [nameError]);
+
   const set = (field: keyof DepartmentFormState, value: string) => {
     setForm((p) => ({ ...p, [field]: value }));
     if (errors[field as keyof Errors]) setErrors((p) => ({ ...p, [field]: undefined }));
+    if (field === "name") onClearNameError?.();
   };
 
   const validate = (): boolean => {
@@ -70,6 +81,8 @@ export default function DepartmentSheet({
     if (!validate()) return;
     onSave(form);
   };
+
+  const displayNameError = errors.name;
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -94,11 +107,11 @@ export default function DepartmentSheet({
               placeholder="e.g. Sales, HR, Accounts"
               className={cn(
                 "h-9 text-sm rounded-lg",
-                errors.name && "border-red-400 focus-visible:ring-red-300",
+                displayNameError && "border-red-400 focus-visible:ring-red-300",
               )}
               autoFocus
             />
-            {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+            {displayNameError && <p className="text-xs text-red-500">{displayNameError}</p>}
           </div>
 
           <div className="space-y-1.5">

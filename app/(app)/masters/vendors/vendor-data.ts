@@ -1037,6 +1037,92 @@ export function validateVendorForm(form: VendorFormValues): string | null {
   return Object.values(errors)[0] ?? null;
 }
 
+export type VendorFormStepId =
+  | "basic"
+  | "contact"
+  | "banking"
+  | "documents"
+  | "accounting";
+
+export const VENDOR_FORM_STEP_IDS: VendorFormStepId[] = [
+  "basic",
+  "contact",
+  "banking",
+  "documents",
+  "accounting",
+];
+
+export function validateVendorFormStep(
+  form: VendorFormValues,
+  stepId: VendorFormStepId,
+): Record<string, string> {
+  const all = collectVendorFormFieldErrors(form);
+  const e: Record<string, string> = {};
+
+  if (stepId === "basic") {
+    const basicKeys = new Set([
+      "vendorName",
+      "vendorType",
+      "mobile",
+      "email",
+      "gstin",
+      "panNumber",
+      "tanNumber",
+      "tdsMasterId",
+      "msmeNumber",
+      "address",
+      "pincode",
+    ]);
+    for (const [key, message] of Object.entries(all)) {
+      if (basicKeys.has(key)) e[key] = message;
+    }
+    return e;
+  }
+
+  if (stepId === "contact") {
+    for (const [key, message] of Object.entries(all)) {
+      if (key.startsWith("contact_")) e[key] = message;
+    }
+    return e;
+  }
+
+  if (stepId === "banking") {
+    const bankKeys = new Set([
+      "paymentType",
+      "creditDays",
+      "advancePercentage",
+      "accountHolderName",
+      "bankName",
+      "branch",
+      "accountNumber",
+      "confirmAccountNumber",
+      "ifscCode",
+    ]);
+    for (const [key, message] of Object.entries(all)) {
+      if (bankKeys.has(key)) e[key] = message;
+    }
+    return e;
+  }
+
+  if (stepId === "documents") {
+    if (all.documents) e.documents = all.documents;
+    return e;
+  }
+
+  // accounting step has no hard client validation
+  return e;
+}
+
+export function firstVendorStepWithErrors(
+  form: VendorFormValues,
+  steps: readonly { id: VendorFormStepId }[],
+): number {
+  return steps.findIndex((step) => {
+    const stepErrors = validateVendorFormStep(form, step.id);
+    return Object.keys(stepErrors).length > 0;
+  });
+}
+
 export type SupplierApiValidationError = {
   status?: number;
   message?: string;

@@ -45,7 +45,6 @@ import {
   useRoleFilterDropdown,
   useTemplates,
   useToggleTemplateStatus,
-  useExportTemplates,
 } from "@/hooks/user-management";
 import {
   MASTER_FILTER_FIELD_MAPS,
@@ -285,6 +284,23 @@ export default function RolesPage() {
     status: "inactive",
     apiFilters: buildStatusFilter("inactive", "is_active"),
   });
+
+  const allTemplateCountQuery = useTemplates({
+    ...COUNT_PARAMS,
+    status: "all",
+    apiFilters: {},
+  });
+  const activeTemplateCountQuery = useTemplates({
+    ...COUNT_PARAMS,
+    status: "active",
+    apiFilters: buildStatusFilter("active", "is_active"),
+  });
+  const inactiveTemplateCountQuery = useTemplates({
+    ...COUNT_PARAMS,
+    status: "inactive",
+    apiFilters: buildStatusFilter("inactive", "is_active"),
+  });
+
   const roleNameOptionsQuery = useRoleFilterDropdown("role_name", { enabled: isFilterOpen("roleName") });
   const departmentOptionsQuery = useRoleFilterDropdown("department__department_name", {
     enabled: isFilterOpen("department"),
@@ -301,7 +317,6 @@ export default function RolesPage() {
 
   const templatesQuery = useTemplates(templateParams, { enabled: activeTab === "templates" });
   const toggleTemplateStatus = useToggleTemplateStatus();
-  const exportTemplates = useExportTemplates();
 
   const roleRecords = useMemo(
     () => (rolesQuery.data?.items ?? []).map(toRoleRecord),
@@ -346,14 +361,30 @@ export default function RolesPage() {
     [templateRecords],
   );
 
-  const summary = useMemo(
-    () => ({
+  const summary = useMemo(() => {
+    if (activeTab === "templates") {
+      return {
+        totalLabel: "Total Templates",
+        total: allTemplateCountQuery.data?.total ?? 0,
+        active: activeTemplateCountQuery.data?.total ?? 0,
+        inactive: inactiveTemplateCountQuery.data?.total ?? 0,
+      };
+    }
+    return {
+      totalLabel: "Total Roles",
       total: allCountQuery.data?.total ?? 0,
       active: activeCountQuery.data?.total ?? 0,
       inactive: inactiveCountQuery.data?.total ?? 0,
-    }),
-    [allCountQuery.data?.total, activeCountQuery.data?.total, inactiveCountQuery.data?.total],
-  );
+    };
+  }, [
+    activeTab,
+    allCountQuery.data?.total,
+    activeCountQuery.data?.total,
+    inactiveCountQuery.data?.total,
+    allTemplateCountQuery.data?.total,
+    activeTemplateCountQuery.data?.total,
+    inactiveTemplateCountQuery.data?.total,
+  ]);
 
   const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -640,7 +671,7 @@ export default function RolesPage() {
       titleIcon={Shield}
       metrics={
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Total Roles" value={summary.total} icon={Shield} bgClass="bg-brand-600" />
+          <KpiCard label={summary.totalLabel} value={summary.total} icon={Shield} bgClass="bg-brand-600" />
           <KpiCard label="Active" value={summary.active} icon={CheckCircle2} bgClass="bg-emerald-600" />
           <KpiCard label="Inactive" value={summary.inactive} icon={XCircle} bgClass="bg-slate-400" />
         </div>
@@ -714,20 +745,6 @@ export default function RolesPage() {
             searchPlaceholder="Search template name…"
             onAdd={() => router.push("/user-management/roles/templates/add")}
             addLabel="Add Template"
-            onExport={() =>
-              exportTemplates.mutate(
-                {
-                  search: templateAppliedSearch,
-                  status: templateStatus,
-                  ordering: templateOrdering,
-                  apiFilters: templateApiFilters,
-                },
-                {
-                  onSuccess: () => showToast("Templates exported successfully"),
-                  onError: (error) => showToast(getErrorMessage(error, "Failed to export templates"), "error"),
-                },
-              )
-            }
             currentFilters={templateFilters}
             currentSort={templateSort}
           />

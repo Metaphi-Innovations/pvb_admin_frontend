@@ -45,16 +45,7 @@ import {
 } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
-type StatusTab = "all" | "active" | "inactive";
-const USER_TAB_KEY = "user-list-status-tab";
-
 interface ToastState { msg: string; type: "success" | "error" }
-
-function readStoredStatusTab(): StatusTab {
-  if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(USER_TAB_KEY);
-  return v === "active" || v === "inactive" ? v : "all";
-}
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
@@ -118,7 +109,6 @@ function extractAuditFilter(value: unknown): { user: string; fromDate: string; t
 
 export default function EmployeeListingPage() {
   const router = useRouter();
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const {
     draftFilters: filters,
     setDraftFilters: setFilters,
@@ -172,14 +162,14 @@ export default function EmployeeListingPage() {
   const createdByOptions = createdByOptionsQuery.data ?? [];
   const updatedByOptions = updatedByOptionsQuery.data ?? [];
 
-  const listStatus = resolveListStatus(appliedFilters, statusTab);
+  const listStatus = resolveListStatus(appliedFilters, "all");
   const apiFilters = useMemo(
     () =>
       mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.user, {
-        statusTab,
+        statusTab: "all",
         statusField: "is_active",
       }),
-    [appliedFilters, statusTab],
+    [appliedFilters],
   );
 
   const listParams: MasterListKeyParams = useMemo(
@@ -205,10 +195,6 @@ export default function EmployeeListingPage() {
   const totalRecords = listQuery.data?.total ?? 0;
 
   useEffect(() => {
-    setStatusTab(readStoredStatusTab());
-  }, []);
-
-  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(timer);
@@ -216,26 +202,13 @@ export default function EmployeeListingPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   const stats = useMemo(() => {
     const active = records.filter((r) => r.status === "active").length;
     const inactive = records.filter((r) => r.status === "inactive").length;
     return { total: totalRecords, active, inactive };
   }, [records, totalRecords]);
-
-  const handleStatusTabChange = (tab: string) => {
-    const next = tab as StatusTab;
-    setStatusTab(next);
-    sessionStorage.setItem(USER_TAB_KEY, next);
-    // Keep tab-based status authoritative for listing.
-    setFilters((prev) => {
-      const nextFilters = { ...prev };
-      delete nextFilters.status;
-      return nextFilters;
-    });
-    setPage(1);
-  };
 
   const handleStatusToggleRequest = (record: UserRecord) => {
     setStatusTarget(record);
@@ -479,13 +452,6 @@ export default function EmployeeListingPage() {
     <ListingContainer
       title="User"
       titleIcon={Users}
-      tabs={[
-        { value: "all", label: `All (${stats.total})` },
-        { value: "active", label: `Active (${stats.active})` },
-        { value: "inactive", label: `Inactive (${stats.inactive})` },
-      ]}
-      activeTab={statusTab}
-      onTabChange={handleStatusTabChange}
       metrics={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
