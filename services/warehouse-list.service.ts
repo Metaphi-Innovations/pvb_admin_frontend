@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { normalizePlaceName } from "@/lib/geography/india-post-normalize";
 
 // ---------------------------------------------------------------------------
 // Nested payload shapes
@@ -407,11 +408,11 @@ function mapItem(
         swiftCode: asString(raw.swift_code),
         address: asString(raw.address),
         address1: asString(raw.address_1),
-        town: asString(raw.town),
+        town: normalizePlaceName(asString(raw.town)),
         pincodeId: asString(raw.pincode_id),
-        state: asString(raw.state),
-        district: asString(raw.district),
-        city: asString(raw.city),
+        state: normalizePlaceName(asString(raw.state)),
+        district: normalizePlaceName(asString(raw.district)),
+        city: normalizePlaceName(asString(raw.city)),
         pincode: asString(raw.pincode),
         contacts: mapContacts(raw.contacts),
         documents: mapDocuments(raw.warehouse_documents ?? raw.documents),

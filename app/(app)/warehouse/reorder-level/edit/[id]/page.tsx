@@ -26,9 +26,10 @@ export default function EditReorderLevelPage() {
     if (id) {
       ReorderLevelService.getById(id).then((r) => {
         setRecord(r);
-        // Keep exact numeric value without float noise (e.g. 500 not 499.999...)
         const qty = Number(r.reorderLevelQty);
-        setReorderLevelQty(Number.isFinite(qty) ? String(qty) : "");
+        setReorderLevelQty(
+          Number.isFinite(qty) && qty > 0 ? String(Math.trunc(qty)) : "",
+        );
         setRemark(r.remark || "");
         setIsActive(r.isActive);
       }).catch(() => undefined);
@@ -38,15 +39,15 @@ export default function EditReorderLevelPage() {
   const parseQty = (raw: string): number | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
-    if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+    if (!/^\d+$/.test(trimmed)) return null;
     const qty = Number(trimmed);
-    if (!Number.isFinite(qty) || qty <= 0) return null;
+    if (!Number.isInteger(qty) || qty <= 0) return null;
     return qty;
   };
 
   const validate = (): boolean => {
     if (parseQty(reorderLevelQty) == null) {
-      setError("Reorder Level Qty must be greater than 0.");
+      setError("Must be a whole number greater than 0.");
       return false;
     }
     setError("");
@@ -151,10 +152,10 @@ export default function EditReorderLevelPage() {
               </p>
               <Input
                 type="text"
-                inputMode="decimal"
+                inputMode="numeric"
                 value={reorderLevelQty}
                 onChange={(e) => {
-                  const next = e.target.value.replace(/[^\d.]/g, "");
+                  const next = e.target.value.replace(/\D/g, "");
                   setReorderLevelQty(next);
                   setError("");
                 }}

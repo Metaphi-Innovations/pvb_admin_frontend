@@ -62,6 +62,13 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
   }, [selectedWarehouseId]);
 
   useEffect(() => {
+    if (!selectedWarehouseId) {
+      setRecords([]);
+      setTotalRecords(0);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     setLoading(true);
     setError(null);

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { Activity, Building, Package, BarChart2 } from "lucide-react";
+import { Building, Package, BarChart2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { ReorderLevelService } from "../../services";
 import { ReorderLevel } from "../../types";
@@ -38,10 +38,10 @@ export default function ViewReorderLevelPage() {
           }
           return ReorderLevelService.list({
             page: 1,
-            pageSize: 200,
+            pageSize: 50,
             search: "",
             reorder_type: "WAREHOUSE",
-            filters: { product: [r.product] },
+            filters: { masterItemId: r.productId },
           });
         })
         .then((res) => {
@@ -51,14 +51,7 @@ export default function ViewReorderLevelPage() {
     }
   }, [id]);
 
-  const statusConfig = useMemo(
-    () => record ? (record.status === "Low Stock"
-      ? { bg: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" }
-      : { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" }) : null,
-    [record]
-  );
-
-  if (!record || !statusConfig) {
+  if (!record) {
     return (
       <RecordDetailPage
         listHref="/warehouse/reorder-level"
@@ -71,11 +64,6 @@ export default function ViewReorderLevelPage() {
       </RecordDetailPage>
     );
   }
-
-  const availableStock = record.currentStock - record.reservedStock;
-  const stockPercent = record.reorderLevelQty > 0
-    ? Math.min(100, Math.round((record.currentStock / (record.reorderLevelQty * 2)) * 100))
-    : 100;
 
   const statusVariant =
     record.status === "In Stock" ? "active" :
@@ -97,58 +85,8 @@ export default function ViewReorderLevelPage() {
         { icon: Package, label: record.category },
       ]}
       onEdit={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}
-      sidebar={{
-        summary: [
-          { label: "Current Stock", value: record.currentStock, highlight: true },
-          { label: "Reserved Stock", value: record.reservedStock },
-          { label: "Available Stock", value: availableStock },
-          { label: "Reorder Level Qty", value: record.reorderLevelQty },
-          { label: "Last Updated", value: record.updatedDate },
-        ],
-      }}
     >
       <div className="space-y-6">
-
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Current Stock", value: record.currentStock, color: "text-foreground" },
-            { label: "Reserved Stock", value: record.reservedStock, color: "text-amber-600" },
-            { label: "Available Stock", value: availableStock, color: availableStock < 0 ? "text-rose-600" : "text-emerald-600" },
-            { label: "Reorder Level Qty", value: record.reorderLevelQty, color: "text-brand-600" },
-          ].map(card => (
-            <div key={card.label} className="bg-white border border-border rounded-xl p-4 shadow-sm text-center">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{card.label}</p>
-              <p className={`text-2xl font-bold mt-1 ${card.color}`}>{card.value}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Stock progress bar */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-foreground">Stock Level vs Reorder Level Qty</p>
-            <p className="text-xs text-muted-foreground">
-              Threshold: <span className="font-bold text-foreground">{record.reorderLevelQty}</span>
-            </p>
-          </div>
-          <div className="relative h-4 rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                record.status === "In Stock" ? "bg-emerald-500" :
-                record.status === "Low Stock" ? "bg-rose-500" :
-                "bg-slate-400"
-              }`}
-              style={{ width: `${stockPercent}%` }}
-            />
-            <div className="absolute top-0 left-[50%] w-0.5 h-full bg-slate-500 opacity-50" title="Reorder Level Qty" />
-          </div>
-          <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
-            <span>0</span>
-            <span className="text-slate-500">↑ Reorder Level Qty: {record.reorderLevelQty}</span>
-            <span>{record.reorderLevelQty * 2}+</span>
-          </div>
-        </div>
 
         {/* Product info */}
         <div className="bg-white rounded-xl border border-border p-5 shadow-sm">

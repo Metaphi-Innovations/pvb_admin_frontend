@@ -50,6 +50,7 @@ import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { getMasterListErrorMessage, getErrorMessage } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import { normalizePlaceName } from "@/lib/geography/india-post-normalize";
 
 // ---------------------------------------------------------------------------
 // Status helpers
@@ -319,7 +320,7 @@ export default function WarehouseListPage() {
       filterType: "dropdown",
       filterOptions: stateOptions,
       width: "130px",
-      render: (_val, row) => row.state || "—",
+      render: (_val, row) => normalizePlaceName(row.state || "") || "—",
     },
     {
       key: "district",
@@ -329,7 +330,7 @@ export default function WarehouseListPage() {
       filterType: "dropdown",
       filterOptions: districtOptions,
       width: "130px",
-      render: (_val, row) => row.district || "—",
+      render: (_val, row) => normalizePlaceName(row.district || "") || "—",
     },
     {
       key: "city",
@@ -339,7 +340,7 @@ export default function WarehouseListPage() {
       filterType: "dropdown",
       filterOptions: cityOptions,
       width: "120px",
-      render: (_val, row) => row.city || "—",
+      render: (_val, row) => normalizePlaceName(row.city || "") || "—",
     },
     {
       key: "pincode",

@@ -75,8 +75,10 @@ export default function NewProductPage() {
     }
 
     const parseNum = (val: string) => {
-      const num = Number(val);
-      return isNaN(num) ? null : num;
+      const trimmed = val.trim();
+      if (!trimmed) return null;
+      const num = Number(trimmed);
+      return Number.isFinite(num) ? num : null;
     };
 
     const payload = {
