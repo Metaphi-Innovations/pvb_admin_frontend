@@ -1,19 +1,28 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  XCircle,
+} from "lucide-react";
 import { useCreateSupplier, useSupplierPreviewNumber } from "@/hooks/masters/use-supplier";
-import { VendorForm } from "../components/VendorForm";
+import { VendorForm, VENDOR_FORM_STEPS, type VendorFormStepId } from "../components/VendorForm";
 import {
   DEFAULT_VENDOR_FORM,
   VendorFormValues,
   collectVendorFormFieldErrors,
+  firstVendorStepWithErrors,
   isSupplierApiValidationError,
   mapSupplierApiErrorsToVendorFormFields,
+  validateVendorFormStep,
 } from "../vendor-data";
 import { SupplierCreatePayload } from "@/services/supplier-list.service";
 import { persistPartyMasterAccounting } from "@/lib/accounts/party-master-accounting-sync";
@@ -24,11 +33,15 @@ export default function NewSupplierPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [errorFocusToken, setErrorFocusToken] = useState(0);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
 
   const { data: previewCode } = useSupplierPreviewNumber(form.vendorType, true);
   const supplierCode = previewCode ?? "SUP-XXXX";
 
   const createMutation = useCreateSupplier();
+  const currentStep = VENDOR_FORM_STEPS[stepIndex];
+  const isFirstStep = stepIndex === 0;
+  const isLastStep = stepIndex === VENDOR_FORM_STEPS.length - 1;
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -72,11 +85,33 @@ export default function NewSupplierPage() {
     });
   };
 
+  const handleNext = () => {
+    const stepErrors = validateVendorFormStep(form, currentStep.id as VendorFormStepId);
+    setErrors(stepErrors);
+    if (Object.keys(stepErrors).length > 0) {
+      setErrorFocusToken((t) => t + 1);
+      setToast({ msg: "Please fix the errors before continuing.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+      return;
+    }
+    setErrors({});
+    setStepIndex((i) => Math.min(i + 1, VENDOR_FORM_STEPS.length - 1));
+  };
+
+  const handleBack = () => {
+    setErrors({});
+    setStepIndex((i) => Math.max(i - 1, 0));
+  };
+
   const handleSave = () => {
     const fieldErrors = collectVendorFormFieldErrors(form);
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) {
+      const firstStep = firstVendorStepWithErrors(form, VENDOR_FORM_STEPS);
+      if (firstStep >= 0) setStepIndex(firstStep);
       setErrorFocusToken((t) => t + 1);
+      setToast({ msg: "Please fix the errors before saving.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
       return;
     }
 
@@ -199,7 +234,10 @@ export default function NewSupplierPage() {
           </button>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold leading-none text-foreground">Add Supplier</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Supplier Master → Add</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Masters → Supplier Master → Add · Step {stepIndex + 1} of {VENDOR_FORM_STEPS.length}:{" "}
+              {currentStep.label}
+            </p>
           </div>
           <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
             {supplierCode}
@@ -207,14 +245,34 @@ export default function NewSupplierPage() {
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button
-            size="sm"
-            disabled={createMutation.isPending}
-            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
-            onClick={handleSave}
-          >
-            <Save className="w-3.5 h-3.5" /> Save
-          </Button>
+          {!isFirstStep && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] gap-1 px-3"
+              onClick={handleBack}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Previous
+            </Button>
+          )}
+          {!isLastStep ? (
+            <Button
+              size="sm"
+              className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+              onClick={handleNext}
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={createMutation.isPending}
+              className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+              onClick={handleSave}
+            >
+              <Save className="w-3.5 h-3.5" /> Save
+            </Button>
+          )}
         </div>
 
         {errors._form && (
@@ -224,6 +282,31 @@ export default function NewSupplierPage() {
         )}
 
         <div className="flex-1 px-6 py-6 pb-24 overflow-y-auto bg-muted/10">
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {VENDOR_FORM_STEPS.map((step, idx) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => {
+                  if (idx <= stepIndex) {
+                    setErrors({});
+                    setStepIndex(idx);
+                  }
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-colors",
+                  idx === stepIndex
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : idx < stepIndex
+                      ? "bg-brand-50 text-brand-700 border-brand-200 cursor-pointer"
+                      : "bg-muted/40 text-muted-foreground border-border cursor-default",
+                )}
+              >
+                {idx + 1}. {step.label}
+              </button>
+            ))}
+          </div>
+
           <VendorForm
             form={form}
             onChange={handleFormChange}
@@ -231,6 +314,11 @@ export default function NewSupplierPage() {
             errors={errors}
             onClearError={clearErr}
             errorFocusToken={errorFocusToken}
+            activeStep={currentStep.id}
+            onStepChange={(step) => {
+              const idx = VENDOR_FORM_STEPS.findIndex((s) => s.id === step);
+              if (idx >= 0) setStepIndex(idx);
+            }}
           />
         </div>
       </div>

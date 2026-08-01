@@ -216,7 +216,11 @@ export default function NewCustomerPage() {
 
   const findStepIndexForErrors = (fieldErrors: Record<string, string>): number => {
     const hasBranchError = Object.keys(fieldErrors).some(
-      (key) => key === "branches" || key.startsWith("branch_") || key.startsWith("mainBranch"),
+      (key) =>
+        key === "branches" ||
+        key === "requiredDocuments" ||
+        key.startsWith("branch_") ||
+        key.startsWith("mainBranch"),
     );
     const hasCommercialError = Object.keys(fieldErrors).some((key) =>
       ["creditLimit", "paymentType", "creditDays", "advancePercentage", "ifscCode", "accountNumber", "branch"].includes(key),
@@ -312,13 +316,16 @@ export default function NewCustomerPage() {
       return next;
     });
 
-  const showValidationToast = (stepErrors: Record<string, string>) => {
+	const showValidationToast = (stepErrors: Record<string, string>) => {
     const addressLine2Error = Object.values(stepErrors).find((msg) =>
       msg.includes("Address Line 2"),
     );
+    const docsError =
+      stepErrors.requiredDocuments ||
+      Object.entries(stepErrors).find(([key]) => key.includes("documents"))?.[1];
     const msg =
       addressLine2Error ||
-      stepErrors.requiredDocuments ||
+      docsError ||
       Object.values(stepErrors)[0] ||
       "Please fix the errors before continuing.";
     setToast({ msg, type: "error" });

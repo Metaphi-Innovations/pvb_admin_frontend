@@ -393,12 +393,13 @@ export default function ChartOfAccountsPageClient() {
       : (selectedNode?.id ?? null);
 
   useEffect(() => {
-    const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY.id);
+    if (!selectedFY?.id) return;
+    const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY);
     setPreset(initialPreset);
     setDateFrom(from);
     setDateTo(to);
     setDatesReady(true);
-  }, [selectedFY.id]);
+  }, [selectedFY]);
 
   useEffect(() => {
     if (selectedNode) setShowRoot(false);

@@ -292,16 +292,31 @@ export const TemplateListService = {
   },
 
   async export(params: TemplateExportParams): Promise<void> {
-    const result = await TemplateListService.list({
-      page: 1,
-      pageSize: 5000,
-      search: params.search,
-      ordering: params.ordering,
-      status: params.status,
-      apiFilters: params.apiFilters,
-    });
+    const pageSize = 100;
+    let page = 1;
+    let total = Infinity;
+    const items: TemplateListRecord[] = [];
 
-    const csv = buildTemplateCsv(result.items);
+    while (items.length < total) {
+      const result = await TemplateListService.list({
+        page,
+        pageSize,
+        search: params.search,
+        ordering: params.ordering,
+        status: params.status,
+        apiFilters: params.apiFilters,
+      });
+
+      items.push(...result.items);
+      total = result.total;
+
+      if (result.items.length === 0 || result.items.length < pageSize) {
+        break;
+      }
+      page += 1;
+    }
+
+    const csv = buildTemplateCsv(items);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");

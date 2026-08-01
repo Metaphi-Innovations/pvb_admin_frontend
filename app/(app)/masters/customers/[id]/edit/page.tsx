@@ -182,7 +182,11 @@ export default function EditCustomerPage() {
 
   const findStepIndexForErrors = (fieldErrors: Record<string, string>): number => {
     const hasBranchError = Object.keys(fieldErrors).some(
-      (key) => key === "branches" || key.startsWith("branch_") || key.startsWith("mainBranch"),
+      (key) =>
+        key === "branches" ||
+        key === "requiredDocuments" ||
+        key.startsWith("branch_") ||
+        key.startsWith("mainBranch"),
     );
     const hasCommercialError = Object.keys(fieldErrors).some((key) =>
       ["creditLimit", "paymentType", "creditDays", "advancePercentage", "ifscCode", "accountNumber", "branch"].includes(key),
@@ -229,7 +233,10 @@ export default function EditCustomerPage() {
         return Object.keys(stepErrors).length > 0;
       });
       if (firstStepWithError >= 0) setStepIndex(firstStepWithError);
-      const msg = e.requiredDocuments || "Please fix the errors before saving.";
+      const docsError =
+        e.requiredDocuments ||
+        Object.entries(e).find(([key]) => key.includes("documents"))?.[1];
+      const msg = docsError || Object.values(e)[0] || "Please fix the errors before saving.";
       setToast({ msg, type: "error" });
       setTimeout(() => setToast(null), 3200);
       focusFirstInvalidField();

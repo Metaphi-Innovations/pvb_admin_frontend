@@ -1,11 +1,14 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { API_ENDPOINTS } from "./endpoints";
 import { showToast } from "@/lib/toast";
+import { getStoredFYId } from "@/lib/fy-storage";
 
 declare module "axios" {
   export interface AxiosRequestConfig {
     /** When true, response interceptor will not toast 403 messages. */
     skipPermissionToast?: boolean;
+    /** When true, do not attach x-financial-year-id (FY bootstrap APIs). */
+    skipFinancialYearHeader?: boolean;
   }
 }
 
@@ -23,6 +26,11 @@ function resolveAccessToken(): string | null {
 
 function isUsingDevAccessToken(): boolean {
   return !getAccessTokenFn() && process.env.NODE_ENV === "development" && !!DEV_ACCESS_TOKEN;
+}
+
+function isFinancialYearBootstrapUrl(url?: string): boolean {
+  if (!url) return false;
+  return url.includes("/accounts/financial-years");
 }
 
 export const axiosInstance = axios.create({
@@ -57,6 +65,18 @@ axiosInstance.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    const skipFy =
+      config.skipFinancialYearHeader === true ||
+      isFinancialYearBootstrapUrl(config.url);
+
+    if (!skipFy) {
+      const fyId = getStoredFYId();
+      if (fyId) {
+        config.headers["x-financial-year-id"] = fyId;
+      }
+    }
+
     return config;
   },
   (error) => {

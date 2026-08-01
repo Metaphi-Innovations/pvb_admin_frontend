@@ -237,7 +237,7 @@ export default function AccountsSundryCreditorVendorFormClient({
 
   const [form, setForm] = useState<VendorFormValues>(() => ({
     ...DEFAULT_VENDOR_FORM,
-    openingBalanceDate: fyOpeningDateIso(selectedFY.id),
+    openingBalanceDate: fyOpeningDateIso(selectedFY!),
     balanceType: "Credit",
   }));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -248,6 +248,14 @@ export default function AccountsSundryCreditorVendorFormClient({
 
   useEffect(() => {
     if (!isEdit || !supplier) return;
+    setForm((prev) => ({
+      ...supplierToForm(supplier),
+      openingBalance: prev.openingBalance,
+      balanceType: prev.balanceType || "Credit",
+      openingBalanceDate: prev.openingBalanceDate || fyOpeningDateIso(selectedFY!),
+      billWiseAccounting: prev.billWiseAccounting,
+      accountingDescription: prev.accountingDescription,
+    }));
     let cancelled = false;
     setAccountingLoading(true);
     loadPartyMasterAccounting({ kind: "supplier", partyId: supplier.supplierUuid })

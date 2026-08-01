@@ -23,8 +23,13 @@ export function TdsRateInput({
 				inputMode="decimal"
 				value={value}
 				onChange={(e) => onChange(sanitizeTdsRateInput(e.target.value))}
+				onBlur={() => {
+					const cleaned = sanitizeTdsRateInput(value).trim();
+					if (cleaned !== value) onChange(cleaned);
+				}}
 				className={cn(className, showSuffix && "pr-7")}
 				placeholder="e.g. 10"
+				aria-label="TDS rate percentage"
 			/>
 			{showSuffix && (
 				<span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">

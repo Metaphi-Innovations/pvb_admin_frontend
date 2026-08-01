@@ -5,15 +5,12 @@ import { useRouter } from "next/navigation";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Save, Check, XCircle } from "lucide-react";
+import { Save, Check, XCircle } from "lucide-react";
 import {
 	WarehouseForm,
 	validateWarehouseForm,
-	validateWarehouseFormStep,
-	WAREHOUSE_FORM_STEPS,
 	INITIAL_FORM,
 	type WarehouseFormValues,
-	type WarehouseFormStepId,
 } from "../components/WarehouseForm";
 import { useCreateWarehouse } from "@/hooks/masters";
 import { WarehouseListService } from "@/services/warehouse-list.service";
@@ -23,12 +20,8 @@ export default function AddWarehousePage() {
 	const [form, setForm] = useState<WarehouseFormValues>({ ...INITIAL_FORM });
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-	const [stepIndex, setStepIndex] = useState(0);
 
 	const createMutation = useCreateWarehouse();
-	const currentStep = WAREHOUSE_FORM_STEPS[stepIndex];
-	const isFirstStep = stepIndex === 0;
-	const isLastStep = stepIndex === WAREHOUSE_FORM_STEPS.length - 1;
 
 	const clearErr = (key: string) => {
 		setErrors((prev) => {
@@ -38,32 +31,10 @@ export default function AddWarehousePage() {
 		});
 	};
 
-	const handleNext = () => {
-		const stepErrors = validateWarehouseFormStep(form, currentStep.id as WarehouseFormStepId);
-		setErrors(stepErrors);
-		if (Object.keys(stepErrors).length > 0) {
-			setToast({ msg: "Please fix the errors before continuing.", type: "error" });
-			setTimeout(() => setToast(null), 3200);
-			return;
-		}
-		setErrors({});
-		setStepIndex((i) => Math.min(i + 1, WAREHOUSE_FORM_STEPS.length - 1));
-	};
-
-	const handleBack = () => {
-		setErrors({});
-		setStepIndex((i) => Math.max(i - 1, 0));
-	};
-
 	const handleSave = () => {
 		const e = validateWarehouseForm(form);
 		setErrors(e);
 		if (Object.keys(e).length > 0) {
-			const firstStepWithError = WAREHOUSE_FORM_STEPS.findIndex((step) => {
-				const stepErrors = validateWarehouseFormStep(form, step.id);
-				return Object.keys(stepErrors).length > 0;
-			});
-			if (firstStepWithError >= 0) setStepIndex(firstStepWithError);
 			setToast({ msg: "Please fix the errors before saving.", type: "error" });
 			setTimeout(() => setToast(null), 3200);
 			return;
@@ -128,7 +99,7 @@ export default function AddWarehousePage() {
 	return (
 		<FormContainer
 			title="Add Warehouse"
-			description={`Masters → Warehouse Master → Add · Step ${stepIndex + 1} of ${WAREHOUSE_FORM_STEPS.length}: ${currentStep.label}`}
+			description="Masters → Warehouse Master → Add"
 			compact
 			onBack={() => router.back()}
 			actions={
@@ -136,65 +107,21 @@ export default function AddWarehousePage() {
 					<Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
 						Discard
 					</Button>
-					{!isFirstStep && (
-						<Button
-							variant="outline"
-							className="h-9 text-xs font-semibold rounded-lg gap-1"
-							onClick={handleBack}
-						>
-							<ChevronLeft className="w-4 h-4" /> Back
-						</Button>
-					)}
-					{!isLastStep ? (
-						<Button
-							className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
-							onClick={handleNext}
-						>
-							Next <ChevronRight className="w-4 h-4" />
-						</Button>
-					) : (
-						<Button
-							className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
-							onClick={handleSave}
-							disabled={createMutation.isPending}
-						>
-							<Save className="w-4 h-4" /> Save
-						</Button>
-					)}
+					<Button
+						className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
+						onClick={handleSave}
+						disabled={createMutation.isPending}
+					>
+						<Save className="w-4 h-4" /> Save
+					</Button>
 				</div>
 			}
 		>
-			<div className="mb-3 flex flex-wrap gap-1.5">
-				{WAREHOUSE_FORM_STEPS.map((step, idx) => (
-					<button
-						key={step.id}
-						type="button"
-						onClick={() => {
-							if (idx <= stepIndex) {
-								setErrors({});
-								setStepIndex(idx);
-							}
-						}}
-						className={cn(
-							"rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-colors",
-							idx === stepIndex
-								? "bg-brand-600 text-white border-brand-600"
-								: idx < stepIndex
-									? "bg-brand-50 text-brand-700 border-brand-200 cursor-pointer"
-									: "bg-muted/40 text-muted-foreground border-border cursor-default",
-						)}
-					>
-						{idx + 1}. {step.label}
-					</button>
-				))}
-			</div>
-
 			<WarehouseForm
 				form={form}
 				onChange={setForm}
 				errors={errors}
 				onClearError={clearErr}
-				activeStep={currentStep.id}
 			/>
 
 			{toast && (

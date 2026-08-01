@@ -51,11 +51,12 @@ function warehouseApiRecordToForm(record: WarehouseListRecord): WarehouseFormVal
       mobileCountryCode: c.mobile_country_code || "+91",
     })),
     documents: (record.documents ?? []).map((d, idx) => ({
-      uid: `DOC-${idx + 1}`,
+      uid: d.warehouse_document_id || `DOC-${idx + 1}`,
       documentName: d.document_name,
-      uploaded: true,
-      fileName: "",
-      uploadedAt: "",
+      uploaded: Boolean(d.file_url || d.file_name),
+      fileName: d.file_name || "",
+      fileUrl: d.file_url || "",
+      uploadedAt: d.created_at || "",
       size: "",
     })),
   };

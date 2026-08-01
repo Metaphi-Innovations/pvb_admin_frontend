@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { useFY, FINANCIAL_YEARS, FY_STATUS_CONFIG, type FinancialYear } from "@/lib/fy-store";
+import { useFY, FY_STATUS_CONFIG, type FinancialYear } from "@/lib/fy-store";
 import { useAuth } from "@/lib/auth/auth-context";
 
 const NOTIFICATIONS = [
@@ -127,12 +127,12 @@ function FYSwitchDialog({
 }
 
 function FYSelector() {
-  const { selectedFY, setSelectedFY } = useFY();
+  const { selectedFY, setSelectedFY, allFYs, isLoading } = useFY();
   const [pendingFY, setPendingFY] = useState<FinancialYear | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleSelect = (fy: FinancialYear) => {
-    if (fy.id === selectedFY.id) return;
+    if (!selectedFY || fy.id === selectedFY.id) return;
     setPendingFY(fy);
     setDialogOpen(true);
   };
@@ -144,6 +144,19 @@ function FYSelector() {
     setDialogOpen(false);
     setPendingFY(null);
   };
+
+  if (isLoading || !selectedFY.id) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground whitespace-nowrap"
+      >
+        <Calendar className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Loading FY…</span>
+      </button>
+    );
+  }
 
   return (
     <>
@@ -158,10 +171,10 @@ function FYSelector() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 p-2">
           <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-1">
-            Financial Year
+            Working Financial Year
           </DropdownMenuLabel>
-          {FINANCIAL_YEARS.map((fy) => {
-            const c = FY_STATUS_CONFIG[fy.status];
+          {allFYs.map((fy) => {
+            const c = FY_STATUS_CONFIG[fy.status] ?? FY_STATUS_CONFIG.open;
             const isSelected = fy.id === selectedFY.id;
             return (
               <button
@@ -181,6 +194,9 @@ function FYSelector() {
                 <div className="flex-1 min-w-0">
                   <p className={cn("text-xs font-semibold", isSelected ? "text-brand-700" : "text-foreground")}>
                     {fy.label}
+                    {fy.isCurrent ? (
+                      <span className="ml-1 text-[10px] font-medium text-green-600">· Current</span>
+                    ) : null}
                   </p>
                   <p className="text-[10px] text-muted-foreground">{fy.start} – {fy.end}</p>
                 </div>

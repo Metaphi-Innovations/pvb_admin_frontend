@@ -27,7 +27,15 @@ import {
 	Ban,
 	UserCheck,
 	UserX,
+	AlertTriangle,
 } from "lucide-react";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import {
 	useCustomers,
 	useExportCustomers,
@@ -138,6 +146,7 @@ export default function CustomersPage() {
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
+	const [confirmDeactivate, setConfirmDeactivate] = useState<CustomerListRecord | null>(null);
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
 	const [perms, setPerms] = useState(readCustomerPermissions);
@@ -372,7 +381,17 @@ export default function CustomersPage() {
 			filterType: "dropdown",
 			filterOptions: addressOptions,
 			width: "240px",
-			render: (val, row) => row.address || "—",
+			render: (_val, row) => {
+				const address = (row.address || "").trim() || "—";
+				return (
+					<span
+						className="block max-w-[240px] truncate"
+						title={address !== "—" ? address : undefined}
+					>
+						{address}
+					</span>
+				);
+			},
 		},
 		{
 			key: "stateName",
@@ -429,7 +448,7 @@ export default function CustomersPage() {
 						{row.status === "active" ? (
 							<DropdownMenuItem
 								className='gap-2 text-xs cursor-pointer'
-								onClick={() => toggleStatus.mutate({ id: String(row.customerUuid), isActive: false })}
+								onClick={() => setConfirmDeactivate(row)}
 							>
 								<UserX className='w-3.5 h-3.5' /> Deactivate
 							</DropdownMenuItem>
@@ -682,10 +701,67 @@ export default function CustomersPage() {
 				/>
 			</div>
 
+			{confirmDeactivate && (
+				<Dialog
+					open={true}
+					onOpenChange={(open) => {
+						if (!open) setConfirmDeactivate(null);
+					}}
+				>
+					<DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">
+						<DialogHeader>
+							<DialogTitle className="flex items-center gap-2 text-base">
+								<div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border rounded-lg bg-amber-50 border-amber-200">
+									<AlertTriangle className="w-4 h-4 text-amber-500" />
+								</div>
+								Deactivate Customer?
+							</DialogTitle>
+							<DialogDescription className="pt-1">
+								This will mark &quot;{confirmDeactivate.customerName}&quot; as inactive.
+								You can activate the customer again later.
+							</DialogDescription>
+						</DialogHeader>
+						<div className="flex items-center justify-end gap-2 pt-2">
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-8 text-xs"
+								onClick={() => setConfirmDeactivate(null)}
+							>
+								Cancel
+							</Button>
+							<Button
+								size="sm"
+								className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+								disabled={toggleStatus.isPending}
+								onClick={() => {
+									toggleStatus.mutate(
+										{ id: String(confirmDeactivate.customerUuid), isActive: false },
+										{
+											onSuccess: () => {
+												setConfirmDeactivate(null);
+												showToast("Customer deactivated successfully.");
+											},
+											onError: () => {
+												setConfirmDeactivate(null);
+												showToast("Failed to deactivate customer.", "error");
+											},
+										},
+									);
+								}}
+							>
+								Confirm
+							</Button>
+						</div>
+					</DialogContent>
+				</Dialog>
+			)}
+
 			{toast && (
 				<div
 					className={cn(
-						"fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600",
+						"fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+						toast.type === "error" ? "bg-red-600" : "bg-emerald-600",
 					)}
 				>
 					{toast.msg}

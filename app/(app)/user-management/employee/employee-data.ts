@@ -601,9 +601,8 @@ export function formatEmployeeMobile(
 }
 
 export function validateMobile(mobile: string): string | null {
-  if (!mobile.trim()) return "Mobile is required";
-  if (!/^\d{10}$/.test(mobile)) return "Must be exactly 10 digits";
-  if (!/^[6-9]/.test(mobile)) return "Must start with 6–9";
+  if (!mobile.trim()) return "Mobile number is required";
+  if (!/^\d{10}$/.test(mobile)) return "Mobile number must be exactly 10 digits";
   return null;
 }
 

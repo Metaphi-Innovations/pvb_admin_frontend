@@ -367,6 +367,9 @@ export function PurchaseCreate({
   const [editItemsSeeded, setEditItemsSeeded] = useState(false);
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [extractionWarnings, setExtractionWarnings] = useState<string[]>([]);
+  const [extractionErrors, setExtractionErrors] = useState<string[]>([]);
+  const [supplierMatch, setSupplierMatch] = useState<boolean | null>(null);
+  const [unmatchedSupplier, setUnmatchedSupplier] = useState<string | null>(null);
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -675,6 +678,10 @@ export function PurchaseCreate({
     setInvoiceNumber("");
     setItemErrors({});
     setItemWarnings({});
+    setExtractionWarnings([]);
+    setExtractionErrors([]);
+    setSupplierMatch(null);
+    setUnmatchedSupplier(null);
     setFormError(null);
   };
 
@@ -685,6 +692,10 @@ export function PurchaseCreate({
     setInvoiceNumber("");
     setItemErrors({});
     setItemWarnings({});
+    setExtractionWarnings([]);
+    setExtractionErrors([]);
+    setSupplierMatch(null);
+    setUnmatchedSupplier(null);
     setFormError(null);
   };
 
@@ -892,6 +903,9 @@ export function PurchaseCreate({
     const files = Array.from(e.target.files ?? []);
     setInvoiceFiles(files);
     setExtractionWarnings([]);
+    setExtractionErrors([]);
+    setSupplierMatch(null);
+    setUnmatchedSupplier(null);
     setFormError(null);
     // allow re-selecting the same file
     e.target.value = "";
@@ -998,6 +1012,37 @@ export function PurchaseCreate({
 
   const applyExtractionResult = useCallback(
     (result: InvoiceExtractionResult) => {
+      const blocked =
+        result.success === false || result.supplier_match === false;
+
+      setExtractionWarnings(result.warnings ?? []);
+      setExtractionErrors(
+        result.errors?.length
+          ? result.errors
+          : blocked
+            ? [
+                result.warnings?.[0] ||
+                  "Supplier on invoice does not match the selected Purchase Order.",
+              ]
+            : [],
+      );
+      setSupplierMatch(
+        typeof result.supplier_match === "boolean"
+          ? result.supplier_match
+          : null,
+      );
+      setUnmatchedSupplier(result.unmatched_supplier ?? null);
+
+      if (blocked) {
+        // Do not apply invoice fields / line items when supplier does not match
+        setFormError(
+          result.errors?.[0] ||
+            result.warnings?.[0] ||
+            "Supplier on invoice does not match the selected Purchase Order.",
+        );
+        return;
+      }
+
       if (result.invoice_number) {
         setInvoiceNumber(result.invoice_number);
       }
@@ -1008,7 +1053,6 @@ export function PurchaseCreate({
 
       const nextRows = buildRowsFromExtraction(result);
       setManualRows(nextRows.length > 0 ? nextRows : [createEmptyRow()]);
-      setExtractionWarnings(result.warnings ?? []);
       setFormError(null);
     },
     [buildRowsFromExtraction],
@@ -1026,16 +1070,32 @@ export function PurchaseCreate({
 
     const file = invoiceFiles[0];
     setFormError(null);
+    setExtractionErrors([]);
+    setExtractionWarnings([]);
+    setSupplierMatch(null);
+    setUnmatchedSupplier(null);
 
     try {
-      const result = await extractInvoiceMutation.mutateAsync(file);
+      const result = await extractInvoiceMutation.mutateAsync({
+        file,
+        purchaseOrderId: selectedPoId,
+      });
       applyExtractionResult(result);
-      showToast(
-        result.warnings?.length
-          ? "Invoice extracted with warnings. Review fields below."
-          : "Invoice extracted successfully.",
-        "success",
-      );
+      if (result.success === false || result.supplier_match === false) {
+        showToast(
+          result.errors?.[0] ||
+            result.warnings?.[0] ||
+            "Supplier on invoice does not match the selected Purchase Order.",
+          "error",
+        );
+      } else {
+        showToast(
+          result.warnings?.length
+            ? "Invoice extracted with warnings. Review fields below."
+            : "Invoice extracted successfully.",
+          "success",
+        );
+      }
     } catch (err) {
       const message = getApiErrorMessage(err, "Failed to extract invoice.");
       setFormError(message);
@@ -1073,6 +1133,13 @@ export function PurchaseCreate({
     }
     if (!invoiceDate) {
       setFormError("Invoice Date is required.");
+      return;
+    }
+    if (supplierMatch === false) {
+      setFormError(
+        extractionErrors[0] ||
+          "Supplier on invoice does not match the selected Purchase Order.",
+      );
       return;
     }
 
@@ -1656,6 +1723,33 @@ export function PurchaseCreate({
         {!selectedPoId && (
           <p className="text-[11px] text-muted-foreground mt-2">
             Select a purchase order first so extracted line items can be matched to PO products.
+          </p>
+        )}
+
+        {extractionErrors.length > 0 && (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 space-y-1">
+            <p className="text-[11px] font-semibold text-red-800 flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Supplier validation
+            </p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {extractionErrors.map((error) => (
+                <li key={error} className="text-[11px] text-red-800">
+                  {error}
+                </li>
+              ))}
+            </ul>
+            {unmatchedSupplier && (
+              <p className="text-[11px] text-red-800 pt-1">
+                Expected supplier: <span className="font-semibold">{unmatchedSupplier}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {supplierMatch === true && (
+          <p className="mt-2 text-[11px] text-emerald-700">
+            Invoice supplier matches the selected Purchase Order.
           </p>
         )}
 

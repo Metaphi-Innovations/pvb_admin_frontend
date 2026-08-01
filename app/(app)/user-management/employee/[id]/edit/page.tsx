@@ -182,7 +182,7 @@ export default function EditEmployeePage() {
             }
           }
           setToast({ msg: "User updated successfully", type: "success" });
-          setTimeout(() => router.push(`/user-management/employee/${userId}`), 1500);
+          setTimeout(() => router.push("/user-management/employee"), 1500);
         },
         onError: (error) => {
           setToast({ msg: getErrorMessage(error, "Failed to update user."), type: "error" });
