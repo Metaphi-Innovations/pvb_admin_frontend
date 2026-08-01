@@ -265,36 +265,38 @@ function mapDocuments(value: unknown): WarehouseDocumentPayload[] {
     }));
 }
 
+/** Prefer same-origin `/uploads/...` so Next rewrites proxy to the backend (avoids CORS on open/download). */
 export function resolveWarehouseDocumentUrl(path: string): string {
     const raw = path.trim();
     if (!raw) return "";
-
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
-    const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
-
-    if (/^https?:\/\//i.test(raw)) {
-        try {
-            const parsed = new URL(raw);
-            // Rewrite stored localhost / wrong-host absolute URLs to the app API origin
-            if (
-                parsed.pathname.startsWith("/uploads/") ||
-                parsed.hostname === "localhost" ||
-                parsed.hostname === "127.0.0.1"
-            ) {
-                return `${origin}${parsed.pathname}${parsed.search}`;
-            }
-        } catch {
-            /* keep absolute URL as-is when parsing fails */
-        }
-        return raw;
-    }
 
     if (raw.startsWith("data:") || raw.startsWith("blob:")) {
         return raw;
     }
 
+    if (/^https?:\/\//i.test(raw)) {
+        try {
+            const parsed = new URL(raw);
+            if (parsed.pathname.startsWith("/uploads/")) {
+                return `${parsed.pathname}${parsed.search}`;
+            }
+            // External document links stay absolute
+            return raw;
+        } catch {
+            return raw;
+        }
+    }
+
+    // "uploads/warehouse/..." or "/uploads/..."
     const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
-    return `${origin}${normalizedPath}`;
+    if (normalizedPath.startsWith("/uploads/")) {
+        return normalizedPath;
+    }
+    // Legacy relative without leading uploads/
+    if (normalizedPath.includes("/uploads/")) {
+        return normalizedPath.slice(normalizedPath.indexOf("/uploads/"));
+    }
+    return `/uploads/${normalizedPath.replace(/^\//, "")}`;
 }
 
 export function isWarehouseImageDocument(doc: WarehouseDocumentPayload): boolean {
@@ -304,11 +306,61 @@ export function isWarehouseImageDocument(doc: WarehouseDocumentPayload): boolean
 
 export function isWarehouseDocumentLink(doc: WarehouseDocumentPayload): boolean {
     const url = (doc.file_url || "").trim();
-    return /^https?:\/\//i.test(url) && !url.includes("/uploads/");
+    if (!url) return false;
+    if (!/^https?:\/\//i.test(url)) return false;
+    try {
+        const parsed = new URL(url);
+        // Uploaded files (even with absolute backend host) are not external links
+        if (parsed.pathname.startsWith("/uploads/")) return false;
+    } catch {
+        if (url.includes("/uploads/")) return false;
+    }
+    return true;
 }
 
 export function getWarehouseDocumentPreviewUrl(doc: WarehouseDocumentPayload): string {
     return resolveWarehouseDocumentUrl(doc.file_url ?? "");
+}
+
+async function fetchWarehouseDocumentBlob(url: string): Promise<Blob> {
+    // Same-origin /uploads is preferred; fall back to absolute backend URL if needed.
+    const response = await fetch(url, { credentials: "same-origin" });
+    if (response.ok) return response.blob();
+
+    if (url.startsWith("/uploads/")) {
+        const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+        const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+        const fallback = await fetch(`${origin}${url}`, { credentials: "include" });
+        if (fallback.ok) return fallback.blob();
+        throw new Error("Failed to download document.");
+    }
+
+    throw new Error("Failed to download document.");
+}
+
+export async function openWarehouseDocument(doc: WarehouseDocumentPayload): Promise<void> {
+    const url = getWarehouseDocumentPreviewUrl(doc);
+    if (!url) {
+        throw new Error("Document URL is missing.");
+    }
+    if (url.startsWith("blob:") || url.startsWith("data:") || isWarehouseDocumentLink(doc)) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
+    }
+
+    const blob = await fetchWarehouseDocumentBlob(url);
+    const objectUrl = URL.createObjectURL(blob);
+    const opened = window.open(objectUrl, "_blank", "noopener,noreferrer");
+    if (!opened) {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 export async function downloadWarehouseDocument(doc: WarehouseDocumentPayload): Promise<void> {
@@ -318,12 +370,7 @@ export async function downloadWarehouseDocument(doc: WarehouseDocumentPayload): 
     }
 
     const fileName = doc.file_name?.trim() || doc.document_name?.trim() || "document";
-    const response = await fetch(url, { credentials: "include" });
-    if (!response.ok) {
-        throw new Error("Failed to download document.");
-    }
-
-    const blob = await response.blob();
+    const blob = await fetchWarehouseDocumentBlob(url);
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = objectUrl;
@@ -333,7 +380,6 @@ export async function downloadWarehouseDocument(doc: WarehouseDocumentPayload): 
     document.body.appendChild(link);
     link.click();
     link.remove();
-    // Delay revoke so the browser can start the download without UI flicker/cancel
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
 }
 

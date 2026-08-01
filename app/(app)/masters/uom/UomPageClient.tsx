@@ -29,6 +29,7 @@ import {
   DEFAULT_UNIT_FORM,
   unitToForm,
   validateUnitApiForm,
+  sanitizeConversionFactorInput,
   type UnitForm,
   type UnitRecord,
 } from "./uom-data";
@@ -686,21 +687,21 @@ export default function UomPageClient() {
                 )}
               </MasterField>
 
-              <MasterField label="Conversion Factor" required>
+              <MasterField label="Conversion Factor" required error={errors.conversionFactor}>
                 <Input
-                  type="number"
-                  step="any"
+                  type="text"
+                  inputMode="decimal"
                   className={cn(compactInput(), errors.conversionFactor && "border-red-400 focus-visible:ring-red-300")}
                   value={form.conversionFactor}
                   onChange={(e) => {
-                    setForm((prev) => ({ ...prev, conversionFactor: e.target.value }));
+                    setForm((prev) => ({
+                      ...prev,
+                      conversionFactor: sanitizeConversionFactorInput(e.target.value),
+                    }));
                     setErrors((prev) => ({ ...prev, conversionFactor: "" }));
                   }}
                   placeholder="e.g. 1000"
                 />
-                {errors.conversionFactor && (
-                  <p className="text-[11px] text-red-500 mt-1">{errors.conversionFactor}</p>
-                )}
               </MasterField>
 
               <MasterField label="Parent UOM" className="sm:col-span-2">

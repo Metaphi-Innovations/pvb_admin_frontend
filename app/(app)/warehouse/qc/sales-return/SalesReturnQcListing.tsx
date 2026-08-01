@@ -361,6 +361,7 @@ export function SalesReturnQcListing() {
       action: "view",
       icon: Eye,
       onClick: (row) => router.push(`/warehouse/qc/view/${row.id}`),
+      hide: (row) => row.status === "pending",
     },
     {
       label: "Perform QC",

@@ -24,15 +24,19 @@ import {
   type PdfTableColumn,
   type PdfTableRow,
 } from "@/lib/pdf/paramverse";
+import { allocateDeliveryChallanNumber, getDispatchById } from "../services";
 
 const DEFAULT_DC_DECLARATION =
   "Goods covered under this challan are not sold and are being transported for the purpose mentioned above. This challan is not a tax invoice and no GST liability arises on account of this document.";
 
 export interface DeliveryChallanLineItem {
   sr: number;
+  productCode?: string;
   productName: string;
+  productSubLines?: string[];
   hsnCode: string;
   qty: number;
+  unitsPerCase?: number;
   uom: string;
   rate: number;
   amount: number;
@@ -163,8 +167,126 @@ export function formatDispatchQtyLabel(
   return `${baseQty} Units`;
 }
 
+function formatMonthYear(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    // Already like "Jun-2025" / "Jun 2025"
+    return raw.replace(/\s+/g, "-");
+  }
+  return parsed
+    .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+    .replaceAll(" ", "-");
+}
+
+function pickFirst(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text && text !== "-" && text !== "—") return text;
+  }
+  return "";
+}
+
+/** Sample challan sub-lines under product name from batch_snapshot + product. */
+function buildChallanProductSubLines(item: any): string[] {
+  const product = readRecord(item?.product);
+  const productSnapshot = readRecord(item?.product_snapshot);
+  const packingProduct = readRecord(item?.packing_done_product);
+  const packingListProduct = readRecord(packingProduct.packing_list_product);
+  const inventoryBatch = readRecord(item?.inventory_batch);
+  const batchSnap = readRecord(
+    item?.batch_snapshot ??
+      packingProduct.batch_snapshot ??
+      packingListProduct.batch_snapshot,
+  );
+
+  const batchNo = pickFirst(
+    batchSnap.batch_code,
+    batchSnap.batch_no,
+    batchSnap.batch_number,
+    batchSnap.batchNumber,
+    item?.batch_code,
+    item?.batch_no,
+    packingProduct.batch_code,
+    packingProduct.batch_no,
+    inventoryBatch.batch_no,
+  );
+
+  const mfg = formatMonthYear(
+    pickFirst(
+      batchSnap.mfg_date,
+      batchSnap.manufacture_date,
+      batchSnap.manufacturing_date,
+      batchSnap.mfgDate,
+      batchSnap.manufactureDate,
+      batchSnap.manufacturingDate,
+      item?.manufacture_date,
+      item?.manufacturingDate,
+      inventoryBatch.manufacture_date,
+      inventoryBatch.manufacturingDate,
+    ),
+  );
+
+  const exp = formatMonthYear(
+    pickFirst(
+      batchSnap.expiry_date,
+      batchSnap.expiryDate,
+      batchSnap.exp_date,
+      batchSnap.expDate,
+      batchSnap.expiry,
+      batchSnap.batchExpiryDate,
+      inventoryBatch.expiry_date,
+      item?.expiry_date,
+    ),
+  );
+
+  const packSizeRaw = pickFirst(
+    batchSnap.sku_size,
+    batchSnap.skuSize,
+    batchSnap.pack_size_label,
+    productSnapshot.sku_size,
+    product.sku_size,
+    product.pack_size,
+    productSnapshot.pack_size,
+    packingProduct.pack_size,
+  );
+  const packingUnit = pickFirst(
+    product.packing_unit,
+    productSnapshot.packing_unit,
+    product.unit,
+    productSnapshot.unit,
+    batchSnap.packing_unit,
+  );
+  let skuSize = "";
+  if (packSizeRaw) {
+    // If snapshot already has a full label like "500 mL", keep it.
+    if (/[a-zA-Z]/.test(packSizeRaw) && /\d/.test(packSizeRaw)) {
+      skuSize = packSizeRaw;
+    } else {
+      const n = Number(packSizeRaw);
+      skuSize = Number.isFinite(n)
+        ? `${n}${packingUnit ? ` ${packingUnit}` : ""}`.trim()
+        : `${packSizeRaw}${packingUnit ? ` ${packingUnit}` : ""}`.trim();
+    }
+  }
+
+  const lines: string[] = [];
+  if (batchNo) lines.push(`Batch No.: ${batchNo}`);
+  if (mfg || exp) {
+    const parts = [
+      mfg ? `Mfg. Date: ${mfg}` : "",
+      exp ? `Expiry Date: ${exp}` : "",
+    ].filter(Boolean);
+    lines.push(parts.join(" | "));
+  }
+  if (skuSize) lines.push(`SKU Size: ${skuSize}`);
+  return lines;
+}
+
 export function mapDispatchToDeliveryChallan(
   dispatch: any,
+  challanNumber?: string | null,
 ): DeliveryChallanViewModel {
   const warehouse = readRecord(dispatch?.warehouse);
   const customer = readRecord(dispatch?.customer);
@@ -184,20 +306,33 @@ export function mapDispatchToDeliveryChallan(
   const lines: DeliveryChallanLineItem[] = items.map((item, index) => {
     const product = readRecord(item.product);
     const productSnapshot = readRecord(item.product_snapshot);
+    const packingProduct = readRecord(item.packing_done_product);
     const hsnObj = readRecord(product.hsn ?? productSnapshot.hsn);
     const qty = Number(item.dispatched_base_qty ?? item.dispatchQty ?? 0);
     const rate = Number(
       item.unit_price ?? item.unit_rate ?? product.unit_price ?? 0,
     );
     const amount = Number(item.item_total ?? qty * rate);
+    const unitsPerCase = Number(
+      product.unit_per_packing ||
+        productSnapshot.unit_per_packing ||
+        packingProduct.units_per_case ||
+        packingProduct.unit_per_packing ||
+        0,
+    );
     return {
       sr: index + 1,
+      productCode: asText(
+        product.product_code || productSnapshot.product_code,
+        "",
+      ),
       productName: asText(
         product.product_name ||
           productSnapshot.product_name ||
           item.product_name ||
           item.product,
       ),
+      productSubLines: buildChallanProductSubLines(item),
       hsnCode: asText(
         hsnObj.hsnCode ||
           productSnapshot.hsn_code ||
@@ -206,6 +341,7 @@ export function mapDispatchToDeliveryChallan(
         "",
       ),
       qty,
+      unitsPerCase: unitsPerCase > 0 ? unitsPerCase : undefined,
       uom: asText(
         product.unit ||
           product.mou ||
@@ -257,7 +393,7 @@ export function mapDispatchToDeliveryChallan(
   return {
     ...DELIVERY_CHALLAN_COMPANY,
     challanNo: asText(
-      dispatch?.challan_number || dispatch?.challanNumber,
+      challanNumber || dispatch?.challan_number || dispatch?.challanNumber,
       "Assigned on download",
     ),
     dispatchNo: asText(
@@ -300,86 +436,158 @@ function meta(label: string, value: string, dottedWhenEmpty = false): PdfMetaFie
   return { label, value: asText(value, "—"), dottedWhenEmpty };
 }
 
-const DC_COLUMNS: PdfTableColumn[] = [
-  { key: "sr", header: "Sr", width: "5%", align: "center" },
-  { key: "productName", header: "Product Name", width: "34%" },
-  { key: "hsn", header: "HSN Code", width: "11%", align: "center", nowrap: true },
-  { key: "qty", header: "Qty", width: "10%", numeric: true },
-  { key: "uom", header: "UOM", width: "8%", align: "center" },
-  { key: "rate", header: "Rate (₹)", width: "14%", numeric: true },
-  { key: "amount", header: "Amount (₹)", width: "18%", numeric: true },
-];
+export type DeliveryChallanPdfOptions = {
+  /** Default true — WITH GOODS VALUE. Pass false for WITHOUT GOODS VALUE. */
+  withGoodsValue?: boolean;
+};
 
-export function buildDeliveryChallanHtml(data: DeliveryChallanViewModel): string {
-  const totalQty = data.lines.reduce(
+function lineQtyCase(line: DeliveryChallanLineItem): number {
+  const unitsPerCase = Number(line.unitsPerCase || 0);
+  const totalUnits = Number(line.qty || 0);
+  if (unitsPerCase > 1) {
+    return Math.floor(totalUnits / unitsPerCase) || totalUnits;
+  }
+  return totalUnits;
+}
+
+function buildDcColumns(withGoodsValue: boolean): PdfTableColumn[] {
+  const base: PdfTableColumn[] = [
+    { key: "sr", header: "Sr", width: "4%", align: "center" },
+    { key: "productCode", header: "Product Code", width: "10%", align: "center", nowrap: true },
+    { key: "productName", header: "Product Name", width: withGoodsValue ? "26%" : "34%" },
+    { key: "hsn", header: "HSN", width: "8%", align: "center", nowrap: true },
+    { key: "qtyCase", header: "Qty (Case)", width: "9%", numeric: true },
+    { key: "unitsPerCase", header: "Units/Case", width: "10%", align: "center" },
+    { key: "totalUnits", header: "Total Units", width: "10%", numeric: true },
+  ];
+  if (!withGoodsValue) return base;
+  return [
+    ...base,
+    { key: "rate", header: "Rate/Unit (₹)", width: "12%", numeric: true },
+    { key: "amount", header: "Value (₹)", width: "14%", numeric: true },
+  ];
+}
+
+export function buildDeliveryChallanHtml(
+  data: DeliveryChallanViewModel,
+  options: DeliveryChallanPdfOptions = {},
+): string {
+  const withGoodsValue = options.withGoodsValue !== false;
+  const totalUnits = data.lines.reduce(
     (s, l) => s + (Number.isFinite(l.qty) ? l.qty : 0),
     0,
   );
+  const totalCases = data.lines.reduce((s, l) => s + lineQtyCase(l), 0);
   const totalAmount = data.lines.reduce(
     (s, l) => s + (Number.isFinite(l.amount) ? l.amount : 0),
     0,
   );
 
-  const rows: PdfTableRow[] = data.lines.map((line) => ({
-    cells: {
+  const rows: PdfTableRow[] = data.lines.map((line) => {
+    const unitsPerCase = Number(line.unitsPerCase || 0);
+    const cells: Record<string, string> = {
       sr: String(line.sr),
+      productCode: asText(line.productCode, ""),
       productName: line.productName,
       hsn: line.hsnCode,
-      qty: formatQty(line.qty),
-      uom: line.uom,
-      rate: formatNumber(line.rate),
-      amount: formatNumber(line.amount),
-    },
-  }));
+      qtyCase: formatQty(lineQtyCase(line)),
+      unitsPerCase:
+        unitsPerCase > 0 ? formatQty(unitsPerCase) : asText(line.uom, ""),
+      totalUnits: formatQty(line.qty),
+    };
+    if (withGoodsValue) {
+      cells.rate = formatNumber(line.rate);
+      cells.amount = formatNumber(line.amount);
+    }
+    const sub = (line.productSubLines || [])
+      .filter((s) => String(s ?? "").trim())
+      .map((s) => `<span class="sub">${escapeHtml(s)}</span>`)
+      .join("");
+    return {
+      cells,
+      htmlCells: sub
+        ? { productName: `${escapeHtml(line.productName)}${sub}` }
+        : undefined,
+    };
+  });
 
-  const footerRow: PdfTableRow = {
-    cells: {
-      sr: "",
-      productName: "",
-      hsn: "",
-      qty: formatQty(totalQty),
-      uom: "",
-      rate: "",
-      amount: formatCurrency(totalAmount),
-    },
+  const footerCells: Record<string, string> = {
+    sr: "",
+    productCode: "",
+    productName: "",
+    hsn: "",
+    qtyCase: formatQty(totalCases),
+    unitsPerCase: "",
+    totalUnits: formatQty(totalUnits),
   };
+  if (withGoodsValue) {
+    footerCells.rate = "";
+    footerCells.amount = formatNumber(totalAmount);
+  }
+  const footerRow: PdfTableRow = { cells: footerCells };
+
+  const summaryBlock = withGoodsValue
+    ? `<div class="dc-summary">
+        ${renderParamverseSectionTitle("Summary")}
+        ${renderSummaryRows([
+          { label: "Total Items", value: String(data.lines.length) },
+          { label: "Total Quantity", value: formatQty(totalUnits) },
+          {
+            label: "Total Amount",
+            value: formatCurrency(totalAmount),
+            strong: true,
+          },
+        ])}
+      </div>`
+    : "";
 
   const bodyHtml = `
     ${renderParamverseHeader({
       logoSrc: data.logoSrc,
       docTitle: "DELIVERY CHALLAN",
+      docSubtitle: withGoodsValue
+        ? "WITH GOODS VALUE"
+        : "WITHOUT GOODS VALUE",
       company: data,
     })}
 
-    ${renderMetaGrid([
+    ${renderMetaGrid(
       [
-        meta("Challan No.", data.challanNo),
-        meta("Challan Date", data.date),
-        meta("Reference No.", data.referenceNo || data.sourceDocument),
-        meta("Vehicle No.", data.vehicleNo),
+        [
+          meta("Challan No.", data.challanNo),
+          meta("Challan Date", data.date),
+          meta("Reference No.", data.referenceNo || data.sourceDocument),
+          meta("Vehicle No.", data.vehicleNo),
+          meta("Transporter", data.transporter),
+        ],
+        [
+          meta("Place of Supply", data.placeOfSupply),
+          meta("Driver Name", data.driverName),
+          meta("Driver Mobile", data.driverMobile),
+          { label: " ", value: " ", colSpan: 2 },
+        ],
       ],
-      [
-        meta("Transporter", data.transporter),
-        meta("Place of Supply", data.placeOfSupply),
-        meta("Driver Name", data.driverName),
-        meta("Driver Mobile", data.driverMobile),
-      ],
-      [
-        meta("E-Way Bill No.", data.ewayBillNo, true),
-        meta("E-Way Bill Date", data.ewayBillDate, true),
-        { label: " ", value: " ", colSpan: 2 },
-      ],
-    ])}
+      { withDivider: true },
+    )}
 
-    <div class="dc-party-box">
-      ${renderParamverseSectionTitle("Dispatch, Billing & Shipping Details")}
-      ${renderPartyColumns([data.dispatchFrom, data.billing, data.shipping], 3)}
-    </div>
+    ${renderParamverseSectionTitle("Dispatch, Billing & Shipping Details")}
+    ${renderPartyColumns(
+      [
+        { ...data.dispatchFrom, title: "Bill From" },
+        { ...data.billing, title: "Bill To" },
+        { ...data.shipping, title: "Ship To" },
+      ],
+      3,
+    )}
 
     ${renderParamverseSectionTitle("Item Details")}
-    ${renderPdfTable({ columns: DC_COLUMNS, rows, footerRow })}
+    ${renderPdfTable({
+      columns: buildDcColumns(withGoodsValue),
+      rows,
+      footerRow,
+    })}
 
-    <div class="dc-bottom">
+    <div class="dc-bottom${withGoodsValue ? "" : " dc-bottom-no-value"}">
       <div class="dc-declaration">
         ${renderParamverseSectionTitle("Declaration")}
         <div class="body">${escapeHtml(
@@ -390,18 +598,7 @@ export function buildDeliveryChallanHtml(data: DeliveryChallanViewModel): string
         ${renderParamverseSectionTitle("Remarks")}
         <div class="body">${escapeHtml(asText(data.remarks, "—"))}</div>
       </div>
-      <div class="dc-summary">
-        ${renderParamverseSectionTitle("Summary")}
-        ${renderSummaryRows([
-          { label: "Total Items", value: String(data.lines.length) },
-          { label: "Total Quantity", value: formatQty(totalQty) },
-          {
-            label: "Total Amount",
-            value: formatCurrency(totalAmount),
-            strong: true,
-          },
-        ])}
-      </div>
+      ${summaryBlock}
     </div>
     <div class="dc-sign">
       ${renderParamverseSignatory(
@@ -433,17 +630,10 @@ export function buildDeliveryChallanHtml(data: DeliveryChallanViewModel): string
         gap: 10px;
         align-items: start;
       }
-      .dc-party-box {
-        border: 1px solid #e5e7eb;
-        margin-top: 8px;
-      }
-      .dc-party-box .pv-section-title {
-        margin: 0;
-        padding: 4px 7px 3px;
-      }
-      .dc-party-box .pv-parties {
-        border: none;
-        margin-bottom: 0;
+      .dc-bottom-no-value {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "declaration remarks";
       }
       .dc-summary { grid-area: summary; }
       .dc-declaration { grid-area: declaration; }
@@ -473,27 +663,54 @@ export function buildDeliveryChallanHtml(data: DeliveryChallanViewModel): string
 
 export function openDeliveryChallanPrintWindow(
   data: DeliveryChallanViewModel,
+  options: DeliveryChallanPdfOptions = {},
 ): void {
+  const withGoodsValue = options.withGoodsValue !== false;
   void writeHtmlAndPrint(
-    buildDeliveryChallanHtml(data),
+    buildDeliveryChallanHtml(data, options),
     undefined,
-    `${sanitizePdfFileName(data.challanNo || data.dispatchNo, "DELIVERY_CHALLAN")}.pdf`,
+    `${sanitizePdfFileName(
+      data.challanNo || data.dispatchNo,
+      withGoodsValue ? "DELIVERY_CHALLAN" : "DELIVERY_CHALLAN_WO_VALUE",
+    )}.pdf`,
   );
 }
 
 export async function openEditableDeliveryChallanPreview(
   data: DeliveryChallanViewModel,
+  options: DeliveryChallanPdfOptions = {},
 ): Promise<void> {
+  const withGoodsValue = options.withGoodsValue !== false;
   const logoSrc = data.logoSrc || (await loadNavbarLogoDataUrl());
   await openEditablePdfPreview({
-    title: "Delivery Challan PDF Preview",
+    title: withGoodsValue
+      ? "Delivery Challan PDF Preview (With Goods Value)"
+      : "Delivery Challan PDF Preview (Without Goods Value)",
     initialData: { ...data, logoSrc } as unknown as Record<string, unknown>,
     renderHtml: (edited) =>
-      buildDeliveryChallanHtml(edited as unknown as DeliveryChallanViewModel),
-    printButtonLabel: "Download Delivery Challan PDF",
+      buildDeliveryChallanHtml(
+        edited as unknown as DeliveryChallanViewModel,
+        options,
+      ),
+    printButtonLabel: withGoodsValue
+      ? "Download Delivery Challan PDF"
+      : "Download Challan Without Goods Value",
     outputFileName: `${sanitizePdfFileName(
       data.challanNo || data.dispatchNo,
-      "DELIVERY_CHALLAN",
+      withGoodsValue ? "DELIVERY_CHALLAN" : "DELIVERY_CHALLAN_WO_VALUE",
     )}.pdf`,
   });
+}
+
+/** Allocate DC number, load dispatch detail, and open editable preview. */
+export async function openDeliveryChallanPreviewForDispatch(
+  dispatchId: string,
+  options: DeliveryChallanPdfOptions = {},
+): Promise<void> {
+  const challanNumber = await allocateDeliveryChallanNumber(dispatchId);
+  const detail = await getDispatchById(dispatchId);
+  await openEditableDeliveryChallanPreview(
+    mapDispatchToDeliveryChallan(detail, challanNumber),
+    options,
+  );
 }

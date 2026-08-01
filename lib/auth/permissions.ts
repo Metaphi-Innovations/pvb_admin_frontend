@@ -212,5 +212,30 @@ export function canAny(
 
 export function normalizeWebPermissions(raw: unknown): WebPermissionTree {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  return raw as WebPermissionTree;
+
+  // Unwrap if API returned the full UserPermission row
+  const maybeWrapped = raw as Record<string, unknown>;
+  const tree =
+    maybeWrapped.web_permission && typeof maybeWrapped.web_permission === "object"
+      ? maybeWrapped.web_permission
+      : raw;
+
+  if (!tree || typeof tree !== "object" || Array.isArray(tree)) return {};
+
+  const out: WebPermissionTree = {};
+  for (const [mod, subs] of Object.entries(tree as Record<string, unknown>)) {
+    if (!subs || typeof subs !== "object" || Array.isArray(subs)) continue;
+    out[mod] = {};
+    for (const [sub, actions] of Object.entries(subs as Record<string, unknown>)) {
+      if (!actions || typeof actions !== "object" || Array.isArray(actions)) continue;
+      const normalized: Record<string, boolean> = {};
+      for (const [action, enabled] of Object.entries(actions as Record<string, unknown>)) {
+        if (enabled !== true) continue;
+        const key = action.toLowerCase() === "update" ? "edit" : action;
+        normalized[key] = true;
+      }
+      out[mod][sub] = normalized;
+    }
+  }
+  return out;
 }

@@ -383,6 +383,7 @@ export const MASTER_FILTER_FIELD_MAPS = {
   },
   department: {
     name: "department_name",
+    remarks: "remark",
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },

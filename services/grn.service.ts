@@ -349,10 +349,18 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
 }
 
 export const GrnService = {
-  async getPreviewNumber(signal?: AbortSignal): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.WAREHOUSE.GRN.PREVIEW_NUMBER, {
-      signal,
-    });
+  async getPreviewNumber(
+    warehouseId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.WAREHOUSE.GRN.PREVIEW_NUMBER,
+      {
+        signal,
+        params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
     const payload = response.data as Record<string, unknown>;
     const data = payload.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) return "";

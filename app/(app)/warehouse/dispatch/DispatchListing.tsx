@@ -23,10 +23,9 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, getDispatchById } from "./services";
+import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, getDispatchById, allocateSalesInvoiceNumber, allocateStockTransferInvoiceNumber } from "./services";
 import {
-  mapDispatchToDeliveryChallan,
-  openEditableDeliveryChallanPreview,
+  openDeliveryChallanPreviewForDispatch,
 } from "./dc-pdf/deliveryChallanPdf";
 import {
   mapDispatchToTaxInvoice,
@@ -391,15 +390,35 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
     {
-      label: "Download Challan",
+      label: "Download Challan (With Value)",
       action: "challan",
       icon: FileText,
       onClick: async (row) => {
         try {
-          const detail = await getDispatchById(row.id);
-          await openEditableDeliveryChallanPreview(
-            mapDispatchToDeliveryChallan(detail || row),
-          );
+          await openDeliveryChallanPreviewForDispatch(row.id, {
+            withGoodsValue: true,
+          });
+        } catch (err) {
+          console.error(err);
+        }
+      },
+      hide: (row) =>
+        resolveWarehouseOrderType({
+          sourceDocumentType: row.sourceDocumentType,
+          source_type: row.source_type,
+          salesOrderNo: row.salesOrderNumber,
+          source_document_no: row.source_document_no,
+        }) === "sample_order",
+    },
+    {
+      label: "Download Challan (Without Value)",
+      action: "challan_wo_value",
+      icon: FileText,
+      onClick: async (row) => {
+        try {
+          await openDeliveryChallanPreviewForDispatch(row.id, {
+            withGoodsValue: false,
+          });
         } catch (err) {
           console.error(err);
         }
@@ -433,8 +452,15 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               salesOrder = null;
             }
           }
+          let allocatedInvoiceNo: string | null = null;
+          try {
+            const allocated = await allocateSalesInvoiceNumber(String(row.id));
+            allocatedInvoiceNo = allocated || null;
+          } catch {
+            allocatedInvoiceNo = null;
+          }
           await openEditableTaxInvoicePreview(
-            mapDispatchToTaxInvoice(source, salesOrder),
+            mapDispatchToTaxInvoice(source, salesOrder, allocatedInvoiceNo),
           );
         } catch (err) {
           console.error(err);
@@ -478,8 +504,15 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               stockTransfer = null;
             }
           }
+          let allocatedInvoiceNo: string | null = null;
+          try {
+            const allocated = await allocateStockTransferInvoiceNumber(String(row.id));
+            allocatedInvoiceNo = allocated || null;
+          } catch {
+            allocatedInvoiceNo = null;
+          }
           await openEditableStockTransferPreview(
-            mapDispatchToStockTransfer(source, stockTransfer),
+            mapDispatchToStockTransfer(source, stockTransfer, allocatedInvoiceNo),
           );
         } catch (err) {
           console.error(err);

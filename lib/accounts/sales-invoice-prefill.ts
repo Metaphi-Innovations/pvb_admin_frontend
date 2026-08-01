@@ -28,7 +28,7 @@ function dueDateFromTerms(orderDate: string, creditDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function resolveProductMasterId(productId: number | null, productName: string, productCode: string): number | null {
+function resolveProductMasterId(productId: number | string | null, productName: string, productCode: string): number | null {
   const products = loadProducts().filter((p) => p.status === "active");
   const byId = productId ? products.find((p) => p.id === productId) : undefined;
   if (byId) return byId.id;

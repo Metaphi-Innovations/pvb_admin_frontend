@@ -34,6 +34,38 @@ function warehouseBranchCode(wh: Record<string, unknown>): string {
   return "";
 }
 
+function deriveStockTransferInvoiceNo(dispatch: any, st: Record<string, unknown>): string {
+  const explicit = asText(
+    dispatch?.sales_invoice?.invoice_no ||
+      dispatch?.sales_invoices?.[0]?.invoice_no ||
+      dispatch?.sales_invoice?.invoice_number ||
+      dispatch?.sales_invoices?.[0]?.invoice_number,
+    "",
+  );
+  if (explicit && explicit !== "—") return explicit;
+
+  const rawNo = asText(
+    dispatch?.dispatch_number ||
+      dispatch?.dispatch_no ||
+      dispatch?.dispatchNumber ||
+      dispatch?.challan_number ||
+      dispatch?.challanNumber,
+    "",
+  );
+  const match = rawNo.match(/^(?:DSP|DC)\/(\d{2})\/(\d{4})\/(\d+)$/i);
+  if (match) {
+    const [, stateCode, fyCode, serialRaw] = match;
+    const serial = Number.parseInt(serialRaw, 10);
+    if (Number.isFinite(serial) && serial > 0) {
+      return `ST${stateCode}/${fyCode}/${serial}`;
+    }
+  }
+
+  const transferNo = asText(st.transfer_no, "");
+  if (transferNo && transferNo !== "—") return transferNo;
+  return "Assigned on download";
+}
+
 function partyFromWarehouse(
   wh: Record<string, unknown>,
   fallbackName = "—",
@@ -81,6 +113,7 @@ function partyFromWarehouse(
 export function mapDispatchToStockTransfer(
   dispatch: any,
   stockTransfer?: Record<string, unknown> | null,
+  invoiceNoOverride?: string | null,
 ): TaxInvoiceViewModel {
   const st = {
     ...readRecord(dispatch?.stock_transfer),
@@ -159,10 +192,7 @@ export function mapDispatchToStockTransfer(
     ...base,
     copyLabel: "Duplicate for Warehouse",
     invoiceNo: asText(
-      dispatch?.sales_invoice?.invoice_number ||
-        dispatch?.challan_number ||
-        dispatch?.dispatch_number ||
-        st.transfer_no,
+      invoiceNoOverride || deriveStockTransferInvoiceNo(dispatch, st),
       "Assigned on download",
     ),
     invoiceDate: formatDate(

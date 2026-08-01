@@ -75,6 +75,9 @@ import {
 } from "./components/GoodsTransportStatutorySection";
 import { GoodsStatutoryGenerationSection } from "./components/GoodsStatutoryGenerationSection";
 import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
+import { SalesOrderService } from "@/services/sales-order.service";
+import { pendingInvoicesService } from "@/services/pending-invoices.service";
+import { getDispatchById as getBackendDispatchById } from "@/app/(app)/warehouse/dispatch/services";
 import {
   calculateInvoiceTotals,
   createEmptyLine,
@@ -98,6 +101,7 @@ import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
 import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { getOrderById } from "@/app/(app)/sales/orders/orders-data";
+import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import {
@@ -198,7 +202,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     createEmptyAdditionalExpense(),
   ]);
   const [roundOff, setRoundOff] = useState(0);
-  const [salesOrderId, setSalesOrderId] = useState<number | null>(null);
+  const [salesOrderId, setSalesOrderId] = useState<number | string | null>(null);
   const [invoiceType, setInvoiceType] = useState<InvoiceDocumentType>("sales");
   const [sourceType, setSourceType] = useState<SalesInvoiceSourceType | "">("");
   const [sourceDispatchId, setSourceDispatchId] = useState("");
@@ -621,29 +625,189 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     if (routeSource === "sales_order") setSourceType("sales_order");
     else if (routeSource === "stock_transfer") setSourceType("stock_transfer");
     else if (routeSource === "sample_order") setSourceType("sample_order");
-    if (!dispatchId && !soId) return;
+
+    if (dispatchId) {
+      const loadPrefillFromBackend = async (dId: string) => {
+        try {
+          const dispatchObj = await getBackendDispatchById(dId);
+          if (!dispatchObj) return;
+
+          const customer = dispatchObj.customer;
+          const warehouse = dispatchObj.warehouse;
+          
+          let salesOrderObj: any = null;
+          if (dispatchObj.source_id && routeSource === "sales_order") {
+            try {
+              salesOrderObj = await SalesOrderService.getById(dispatchObj.source_id);
+            } catch (soErr) {
+              console.error("Failed to load sales order from backend:", soErr);
+            }
+          }
+
+          const matchedCust = customer
+            ? customers.find(
+                (c: any) =>
+                  c.customerName?.trim().toLowerCase() === customer.customer_name?.trim().toLowerCase(),
+              )
+            : null;
+
+          const productsList = getProductsForInvoice();
+          const masterProductsList = loadProducts();
+          const lineItems = (dispatchObj.items || []).map((item: any, index: number) => {
+            const snapshot = item.product_snapshot || {};
+            const soItem = salesOrderObj?.lineItems?.find(
+              (soi: any) => String(soi.id) === String(item.source_item_id)
+            );
+
+            const rate = soItem ? soItem.unitPrice : (item.unit_rate || item.unit_price || snapshot.pricing?.rate || snapshot.rate || 0);
+            const rawGst = item.gst_percentage || snapshot.gst_percent || snapshot.gst_rate?.gstPercentage || snapshot.gst?.gst_percent || 18;
+            const gstPercent = soItem ? (soItem.gstPercent || soItem.taxPct || rawGst) : rawGst;
+            const discountPct = soItem ? soItem.discount || soItem.schemeDiscountPercent || 0 : 0;
+            const discountAmt = soItem ? soItem.discountValue || soItem.schemeDiscountAmount || 0 : 0;
+            
+            const pName = item.product?.product_name || snapshot.product_name || "";
+            const pCode = item.product?.product_code || snapshot.product_code || "";
+            const matchedProduct = productsList.find(
+              (p: any) =>
+                p.code?.toLowerCase() === pCode.toLowerCase() ||
+                p.name?.toLowerCase() === pName.toLowerCase(),
+            );
+
+            const matchedMasterProduct = masterProductsList.find(
+              (p: any) =>
+                p.sku?.toLowerCase() === pCode.toLowerCase() ||
+                p.productName?.toLowerCase() === pName.toLowerCase(),
+            );
+
+            const unitPerPacking = Number(item.product?.unit_per_packing || snapshot.unit_per_packing || matchedMasterProduct?.unitPerCase || 1);
+            const qtyInCase = unitPerPacking > 0 ? Number(item.dispatched_base_qty || 0) / unitPerPacking : 0;
+
+            const mfg = item.inventory_batch?.manufacture_date || item.inventory_batch?.mfg_date || item.manufacture_date || item.manufacturingDate || null;
+            const exp = item.inventory_batch?.expiry_date || item.expiry_date || null;
+
+            return {
+              id: item.id || `line-${index}`,
+              productId: item.product_id, // REAL DB UUID
+              productCode: pCode,
+              productName: pName || matchedProduct?.name || "—",
+              description: `Dispatch Ref: ${dispatchObj.dispatch_number}`,
+              hsn: item.product?.hsn?.hsnCode || item.product?.hsn?.hsn_code || item.product?.hsn_code || snapshot.hsn?.hsnCode || snapshot.hsn?.hsn_code || snapshot.hsnCode || matchedProduct?.hsn || "—",
+              qty: Number(item.dispatched_base_qty || 0),
+              qtyInCase: qtyInCase > 0 ? Math.round(qtyInCase * 100) / 100 : 0,
+              unit: item.product?.packaging_unit || matchedProduct?.unit || snapshot.pricing?.uom || "PCS",
+              unitPrice: Number(rate),
+              discountPct: Number(discountPct),
+              discountAmt: Number(discountAmt),
+              taxPct: Number(gstPercent),
+              amount: Number(item.dispatched_base_qty || 0) * Number(rate),
+              batchNo: item.inventory_batch?.batch_code || item.inventory_batch?.batch_number || item.batch_snapshot?.batch_code || item.batch_snapshot?.batch_no || "—",
+              expiryDate: exp ? exp.split("T")[0] : undefined,
+              mfgDate: mfg ? mfg.split("T")[0] : undefined,
+              manufacturingDate: mfg ? mfg.split("T")[0] : undefined,
+              dispatchReadyQty: Number(item.dispatched_base_qty || 0),
+              salesperson: salesOrderObj?.salesManName || salesOrderObj?.salesperson || dispatchObj.salesperson || "—",
+            };
+          });
+
+          const destWh = routeSource === "stock_transfer" ? resolveWarehouseMaster(dispatchObj.customer_name) : null;
+
+          const prefill: any = {
+            invoiceType: routeSource === "stock_transfer" ? "stock_transfer" : "sales",
+            sourceType: routeSource,
+            salesOrderId: dispatchObj.source_id,
+            salesOrderNo: dispatchObj.source_document_no || "",
+            salesOrderDate: dispatchObj.created_at ? dispatchObj.created_at.split("T")[0] : "",
+            sourceDispatchId: dispatchObj.id,
+            dispatchNo: dispatchObj.dispatch_number,
+            dispatchDate: dispatchObj.dispatch_date ? dispatchObj.dispatch_date.split("T")[0] : "",
+            branch: warehouse?.warehouse_name || "Head Office",
+            warehouse: warehouse?.warehouse_name || "Central Warehouse",
+            salesperson: salesOrderObj?.salesManName || salesOrderObj?.salesperson || dispatchObj.salesperson || "—",
+            referenceNo: dispatchObj.dispatch_number,
+            paymentTerms: "Net 30",
+            creditDays: 30,
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            invoiceDate: new Date().toISOString().split("T")[0],
+            customerId: dispatchObj.customer_id, // REAL DB UUID
+            customerLedgerId: null,
+            customerCode: customer?.customer_code || matchedCust?.customerCode || "",
+            customerName: dispatchObj.customer_name || customer?.customer_name || "",
+            customerMobile: customer?.mobile_no || "",
+            customerEmail: customer?.email || "",
+            customerGst: customer?.gstin_no || destWh?.gstNumber || "",
+            customerGstCategory: customer?.gst_category,
+            billingAddress: customer?.registered_gst_address || (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
+            shippingAddress: customer?.registered_gst_address || (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
+            pan: customer?.pan_no || "",
+            contactPerson: customer?.contact_person || "",
+            placeOfSupply: customer?.billing_state || customer?.shipping_state || destWh?.state || "",
+            state: customer?.billing_state || customer?.shipping_state || destWh?.state || "",
+            gstTreatment: customer?.gst_treatment || "registered",
+            receivableLedger: customer?.customer_name || "",
+            billFrom: warehouse?.warehouse_name || "",
+            billTo: dispatchObj.customer_name || customer?.customer_name || "",
+            shipTo: dispatchObj.customer_name || customer?.customer_name || "",
+            dispatchQty: lineItems.reduce((acc: number, l: any) => acc + (l.qty || 0), 0),
+            transportMode: "",
+            transporterName: "",
+            transporterId: "",
+            vehicleNo: "",
+            lrNo: "",
+            lrDate: "",
+            transportDocNo: "",
+            transportDocDate: "",
+            distanceKm: null,
+            lineItems,
+            lineErrors: [],
+            additionalExpenses: salesOrderObj?.additionalExpenses?.map((exp: any) => {
+              const gstPercent = Number(exp.gstRate || 0);
+              return {
+                id: exp.id,
+                expenseHead: exp.expenseName || "",
+                amount: exp.amount || 0,
+                gstApplicable: gstPercent > 0,
+                gstPct: gstPercent,
+                remarks: exp.remarks || "",
+                origin: "sales_order",
+              };
+            }) || [],
+            nearExpirySchemes: [],
+            sourceWarehouseGstin: warehouse?.gst_number || "",
+            destinationWarehouseGstin: customer?.gstin_no || destWh?.gstNumber || "",
+            sourceWarehouseState: warehouse?.state || "",
+            destinationWarehouseState: customer?.billing_state || customer?.shipping_state || destWh?.state || "",
+          };
+
+          applySalesInvoicePrefill(prefill);
+        } catch (err) {
+          console.error("Failed to load prefill from backend:", err);
+        }
+      };
+      loadPrefillFromBackend(dispatchId);
+      return;
+    }
+
+    if (!soId) return;
 
     const prefill = buildSalesInvoicePrefill(
-      soId ? Number(soId) : null,
+      Number(soId),
       dispatchNo,
       dispatchId,
     );
 
     if (!prefill) {
-      if (soId) {
-        const order = getOrderById(Number(soId));
-        if (!order) return;
-        setSalesOrderRef(order.soNumber);
-        setReferenceNo(order.soNumber);
-        setSalesOrderId(order.id);
-        if (routeSource === "sales_order") setSourceType("sales_order");
-        if (order.customerId) {
-          setCustomerId(String(order.customerId));
-          const c = customers.find((x) => x.id === order.customerId);
-          if (c) applyCustomerFields(customerToInvoiceFields(c), customerMasterToTransactionFields(c));
-        } else {
-          setCustomerName(order.customerName);
-        }
+      const order = getOrderById(Number(soId));
+      if (!order) return;
+      setSalesOrderRef(order.soNumber);
+      setReferenceNo(order.soNumber);
+      setSalesOrderId(order.id);
+      if (routeSource === "sales_order") setSourceType("sales_order");
+      if (order.customerId) {
+        setCustomerId(String(order.customerId));
+        const c = customers.find((x) => x.id === order.customerId);
+        if (c) applyCustomerFields(customerToInvoiceFields(c), customerMasterToTransactionFields(c));
+      } else {
+        setCustomerName(order.customerName);
       }
       return;
     }
@@ -1007,7 +1171,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       dueDate: smMode ? invoiceDate : dueDate,
       referenceNo: referenceNo.trim() || salesOrderRef.trim(),
       remarks: narrationText,
-      customerId: customerId ? Number(customerId) : null,
+      customerId: customerId && !isNaN(Number(customerId)) ? Number(customerId) : null,
       customerName: customerName.trim(),
       customerMobile: customerMobile.trim(),
       customerEmail: customerEmail.trim(),
@@ -1029,7 +1193,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       gstTreatment,
       receivableLedger: smMode ? "" : receivableLedger,
       salesOrderNo: salesOrderRef.trim(),
-      salesOrderId: smMode ? null : salesOrderId,
+      salesOrderId: smMode ? null : (salesOrderId && !isNaN(Number(salesOrderId)) ? Number(salesOrderId) : null),
       sourceDispatchId: sourceDispatchId || undefined,
       dispatchDate: dispatchDate || undefined,
       sourceType: (sourceType ||
@@ -1511,6 +1675,35 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       savingRef.current = true;
       setSaving(true);
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
+
+      if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
+        const charges = additionalExpenses
+          .filter((e) => e.expenseHead.trim() || e.amount > 0)
+          .map((e) => ({
+            additional_charge_id: e.chargeMasterId || e.id || "",
+            amount: e.amount,
+            gst_applicable: e.gstApplicable,
+            gst_percent: e.gstPct,
+            remarks: e.remarks,
+          }));
+
+        await pendingInvoicesService.generateInvoice(sourceDispatchId, {
+          invoice_date: invoiceDate,
+          due_date: dueDate || undefined,
+          bank_account_id: String(bankAccountId),
+          transport_mode: transport.transportMode.trim() || undefined,
+          transporter_name: transport.transporterName.trim() || undefined,
+          transporter_id: transport.transporterId.trim() || undefined,
+          vehicle_no: transport.vehicleNo.trim() || undefined,
+          distance_km: transport.distanceKm.trim() ? Number(transport.distanceKm) : undefined,
+          lr_no: transport.lrNo.trim() || undefined,
+          lr_date: transport.lrDate.trim() || undefined,
+          transport_doc_no: transport.transportDocNo.trim() || undefined,
+          transport_doc_date: transport.transportDocDate.trim() || undefined,
+          additional_charges: charges,
+        });
+      }
+
       if (isEdit && invoiceId != null) {
         updateInvoice(invoiceId, buildInput(status));
         dispatchAccountsDataChanged("sales-invoices");
@@ -1590,6 +1783,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   return (
     <div
       className={cn(
+        "h-full min-h-0 flex flex-col w-full",
         soGen && "sales-order-invoice-form-compact",
         stGen && "sales-order-invoice-form-compact stock-transfer-invoice-form-compact",
         smGen && "sales-order-invoice-form-compact sample-order-invoice-form-compact",

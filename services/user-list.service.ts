@@ -220,11 +220,16 @@ function toStatus(value: unknown): "active" | "inactive" {
 function toDisplayName(user: unknown): string {
   if (!user || typeof user !== "object") return "";
   const record = user as Record<string, unknown>;
-  const username = asString(record.username).trim();
-  if (username) return username;
   const first = asString(record.first_name).trim();
   const last = asString(record.last_name).trim();
-  return `${first} ${last}`.trim();
+  const full = `${first} ${last}`.trim();
+  if (full) return full;
+  return asString(record.username).trim();
+}
+
+/** Prefer full name for manager display (Employment tab). */
+function toManagerName(user: unknown): string {
+  return toDisplayName(user);
 }
 
 function formatDate(value: unknown): string {
@@ -342,6 +347,12 @@ function permissionsFromApiTree(
   const result: UserPermissions = { web: {}, mobile: {} };
   let hasAny = false;
 
+  const normalizeAction = (action: string): string => {
+    const key = action.trim().toLowerCase();
+    if (key === "update") return "edit";
+    return key;
+  };
+
   const walk = (
     tree: unknown,
     target: Record<string, Record<string, Record<string, boolean>>>,
@@ -354,6 +365,7 @@ function permissionsFromApiTree(
         if (!actionsRaw || typeof actionsRaw !== "object") continue;
         for (const [action, enabled] of Object.entries(actionsRaw as Record<string, unknown>)) {
           if (!enabled) continue;
+          const normalized = normalizeAction(action);
           if (!target[mod]) target[mod] = {};
           if (!target[mod][sub]) {
             target[mod][sub] = isMobile
@@ -368,8 +380,8 @@ function permissionsFromApiTree(
                   import: false,
                 };
           }
-          if (action in target[mod][sub]) {
-            (target[mod][sub] as Record<string, boolean>)[action] = true;
+          if (normalized in target[mod][sub]) {
+            (target[mod][sub] as Record<string, boolean>)[normalized] = true;
             hasAny = true;
           }
         }
@@ -622,7 +634,7 @@ export const UserListService = {
       dob: formatDate(raw.date_of_birth),
       joiningDate: formatDate(raw.date_of_joining),
       reportingManagerId: asString(raw.reporting_manager_id || reportingManager?.user_id),
-      reportingManager: toDisplayName(reportingManager),
+      reportingManager: toManagerName(reportingManager),
       currentAddress: asString(raw.current_address),
       permanentAddress: asString(raw.permanent_address),
       currentAddressLine1: currentAddr.line1,

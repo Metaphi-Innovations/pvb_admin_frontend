@@ -4,10 +4,9 @@ import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Truck, Package, Building, User, Calendar, FileText, Download } from "lucide-react";
 import { useParams } from "next/navigation";
-import { getDispatchById } from "../../services";
+import { getDispatchById, allocateSalesInvoiceNumber, allocateStockTransferInvoiceNumber } from "../../services";
 import {
-  mapDispatchToDeliveryChallan,
-  openEditableDeliveryChallanPreview,
+  openDeliveryChallanPreviewForDispatch,
 } from "../../dc-pdf/deliveryChallanPdf";
 import {
   mapDispatchToTaxInvoice,
@@ -26,7 +25,9 @@ export default function ViewDispatchPage() {
 
   const [record, setRecord] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [downloadingChallan, setDownloadingChallan] = useState(false);
+  const [downloadingChallan, setDownloadingChallan] = useState<
+    null | "with" | "without"
+  >(null);
   const [downloadingTaxInvoice, setDownloadingTaxInvoice] = useState(false);
   const [downloadingStockTransfer, setDownloadingStockTransfer] = useState(false);
 
@@ -60,7 +61,7 @@ export default function ViewDispatchPage() {
   }
 
   const statusVariant =
-    record.status === "DISPATCHED" ? "active" :
+    record.status === "DISPATCHED" || record.status === "Ready for Dispatch" ? "active" :
     record.status === "DRAFT" ? "draft" : "neutral";
 
   const isSample =
@@ -73,17 +74,21 @@ export default function ViewDispatchPage() {
     String(record.status || "").toUpperCase() === "DELIVERED" ||
     String(record.status || "").toUpperCase() === "CLOSED";
 
-  const handleDownloadChallan = async () => {
-    setDownloadingChallan(true);
+  const handleDownloadChallan = async (withGoodsValue: boolean) => {
+    setDownloadingChallan(withGoodsValue ? "with" : "without");
     try {
-      await openEditableDeliveryChallanPreview(
-        mapDispatchToDeliveryChallan(record),
-      );
+      await openDeliveryChallanPreviewForDispatch(id, { withGoodsValue });
+      const refreshed = await getDispatchById(id);
+      if (refreshed) setRecord(refreshed);
     } catch (err) {
       console.error(err);
-      alert("Failed to download delivery challan");
+      alert(
+        withGoodsValue
+          ? "Failed to download delivery challan"
+          : "Failed to download challan without goods value",
+      );
     } finally {
-      setDownloadingChallan(false);
+      setDownloadingChallan(null);
     }
   };
 
@@ -103,8 +108,15 @@ export default function ViewDispatchPage() {
           salesOrder = null;
         }
       }
+      let allocatedInvoiceNo: string | null = null;
+      try {
+        const allocated = await allocateSalesInvoiceNumber(String(record.id || id));
+        allocatedInvoiceNo = allocated || null;
+      } catch {
+        allocatedInvoiceNo = null;
+      }
       await openEditableTaxInvoicePreview(
-        mapDispatchToTaxInvoice(record, salesOrder),
+        mapDispatchToTaxInvoice(record, salesOrder, allocatedInvoiceNo),
       );
     } catch (err) {
       console.error(err);
@@ -133,8 +145,15 @@ export default function ViewDispatchPage() {
           stockTransfer = null;
         }
       }
+      let allocatedInvoiceNo: string | null = null;
+      try {
+        const allocated = await allocateStockTransferInvoiceNumber(String(record.id || id));
+        allocatedInvoiceNo = allocated || null;
+      } catch {
+        allocatedInvoiceNo = null;
+      }
       await openEditableStockTransferPreview(
-        mapDispatchToStockTransfer(record, stockTransfer),
+        mapDispatchToStockTransfer(record, stockTransfer, allocatedInvoiceNo),
       );
     } catch (err) {
       console.error(err);
@@ -169,9 +188,20 @@ export default function ViewDispatchPage() {
           ? []
           : [
               {
-                label: downloadingChallan ? "Downloading…" : "Download Challan",
-                icon: downloadingChallan ? Download : FileText,
-                onClick: handleDownloadChallan,
+                label:
+                  downloadingChallan === "with"
+                    ? "Downloading…"
+                    : "Download Challan (With Value)",
+                icon: downloadingChallan === "with" ? Download : FileText,
+                onClick: () => handleDownloadChallan(true),
+              },
+              {
+                label:
+                  downloadingChallan === "without"
+                    ? "Downloading…"
+                    : "Download Challan (Without Value)",
+                icon: downloadingChallan === "without" ? Download : FileText,
+                onClick: () => handleDownloadChallan(false),
               },
               ...(canDownloadInvoiceLike && !isStockTransfer
                 ? [

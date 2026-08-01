@@ -289,7 +289,6 @@ export const API_ENDPOINTS = {
       APPROVE_REJECT: (id: string) => `/sales/sales-order/${id}/approve-reject`,
       CANCEL: (id: string) => `/sales/sales-order/${id}/cancel`,
       SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
-      DOWNLOAD_PI: (id: string) => `/sales/sales-order/${id}/download-pi`,
     },
     STOCK_TRANSFER: {
       SUMMARY: "/sales/stock-transfer/summary",
@@ -316,12 +315,14 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
       UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
+      ALLOCATE_PFI: (id: string) => `/sales/sample-order/${id}/allocate-pfi`,
     },
     SALES_RETURN: {
       LIST: "/sales/sales-return/list",
       DROPDOWN: "/sales/sales-return/dropdown",
       FILTER: "/sales/sales-return/filter",
       CREATE: "/sales/sales-return/create",
+      PREVIEW_NUMBER: "/sales/sales-return/preview-number",
       DETAILS: (id: string) => `/sales/sales-return/${id}`,
     },
     SAMPLE_RETURN: {
@@ -425,11 +426,15 @@ export const API_ENDPOINTS = {
     DISPATCH: {
       PREVIEW_NUMBER: "/warehouse/dispatch/preview-number",
       LIST: "/warehouse/dispatch/list",
+      DROPDOWN: "/warehouse/dispatch/dropdown",
       FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
       CREATE: "/warehouse/dispatch/create",
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
+      ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
+      ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
+      ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
@@ -464,6 +469,10 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
     },
+    PENDING_INVOICES: {
+      LIST: "/accounts/pending-invoices/list",
+      GENERATE: (dispatchId: string) => `/accounts/pending-invoices/${dispatchId}/generate-invoice`,
+    },
     CHART_OF_ACCOUNTS: {
       TREE: "/accounts/chart-of-accounts/tree",
       PRIMARY_HEADS: "/accounts/chart-of-accounts/primary-heads",
@@ -486,6 +495,7 @@ export const API_ENDPOINTS = {
     FINANCIAL_YEARS: {
       CURRENT: "/accounts/financial-years/current",
       LIST: "/accounts/financial-years",
+      DROPDOWN: "/accounts/financial-years/dropdown",
     },
     INTEGRATIONS: {
       SYNC_CUSTOMER_LEDGER: (customerId: string) =>

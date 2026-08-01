@@ -53,6 +53,7 @@ import {
   type PendingInvoiceListRow,
   type PendingInvoiceTabId,
 } from "./pending-invoice-tab-data";
+import { pendingInvoicesService } from "@/services/pending-invoices.service";
 import "./pending-invoices-compact.css";
 
 type TabCache = {
@@ -134,6 +135,7 @@ function exportPendingTabCsv(tab: PendingInvoiceTabId, rows: PendingInvoiceListR
       formatMoney(r.invoiceValue),
       r.branch || "—",
     ];
+  /*
   } else if (tab === "sample_order") {
     headers = [
       "Dispatch Date",
@@ -151,6 +153,7 @@ function exportPendingTabCsv(tab: PendingInvoiceTabId, rows: PendingInvoiceListR
       r.qty,
       formatMoney(0),
     ];
+  */
   } else {
     headers = [
       "Dispatch Date",
@@ -279,7 +282,7 @@ function PendingInvoicesTable({
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   const isSalesOrder = tab === "sales_order";
-  const isSampleOrder = tab === "sample_order";
+  const isSampleOrder = (tab as string) === "sample_order";
   const isStockTransfer = tab === "stock_transfer";
   const colSpan = isSalesOrder ? 8 : isStockTransfer ? 8 : 7;
 
@@ -375,6 +378,7 @@ function PendingInvoicesTable({
     );
   }
 
+  /*
   if (isSampleOrder) {
     return (
       <AccountsTable minWidth={1040}>
@@ -431,6 +435,9 @@ function PendingInvoicesTable({
       </AccountsTable>
     );
   }
+  */
+
+
 
   return (
     <AccountsTable minWidth={1180}>
@@ -494,21 +501,73 @@ export default function PendingTaxInvoicesClient() {
   const [tabState, setTabState] = useState<Record<PendingInvoiceTabId, TabCache>>({
     sales_order: createEmptyTabCache(),
     stock_transfer: createEmptyTabCache(),
-    sample_order: createEmptyTabCache(),
+    // sample_order: createEmptyTabCache(),
   });
 
   const filterKey = `${financialYearId}|${dateFrom}|${dateTo}|${branches.join(",")}`;
   const prevFilterKey = useRef(filterKey);
 
-  const fetchTab = useCallback((tab: PendingInvoiceTabId) => {
+  const fetchTab = useCallback(async (tab: PendingInvoiceTabId) => {
     setTabState((prev) => ({
       ...prev,
       [tab]: { ...prev[tab], loading: true, error: null },
     }));
     try {
-      // Drop any cached pending-invoice snapshot so post-generate refreshes see fresh data
-      accountsDataService.invalidate();
-      const rows = listPendingInvoicesByTab(tab);
+      const sourceType = tab === "sales_order" ? "normal_sales" : "stock_transfer";
+      
+      const queryParams: any = {
+        source_type: sourceType,
+        page: 1,
+        page_size: 1000,
+      };
+
+      if (dateFrom) {
+        queryParams.from_date = new Date(dateFrom).toISOString();
+      }
+      if (dateTo) {
+        queryParams.to_date = new Date(dateTo).toISOString();
+      }
+
+      const res = await pendingInvoicesService.list(queryParams);
+
+      const rows: PendingInvoiceListRow[] = res.data.map((item: any) => {
+        const generateParams = new URLSearchParams();
+        generateParams.set("dispatchId", item.dispatch_id);
+        generateParams.set("dispatch", item.dispatch_no);
+        generateParams.set("sourceType", tab);
+        
+        return {
+          id: item.dispatch_id,
+          sourceType: tab,
+          sourceRecordId: null,
+          invoiceId: null,
+          dispatchId: item.dispatch_id,
+          dispatchNo: item.dispatch_no,
+          sourceNo: item.source_order_no,
+          partyName: item.customer_name,
+          dispatchDate: item.dispatch_date ? item.dispatch_date.split("T")[0] : "—",
+          branch: item.branch,
+          taxableValue: item.invoice_value,
+          gstAmount: 0,
+          invoiceValue: item.invoice_value,
+          status: "Ready for Dispatch",
+          generatedBy: null,
+          schemeLabel: null,
+          settlementLabel: null,
+          orderDate: item.dispatch_date ? item.dispatch_date.split("T")[0] : "—",
+          customerCode: item.customer_gstin || "",
+          salesperson: "—",
+          itemCount: 0,
+          qty: item.total_qty,
+          fromWarehouse: tab === "stock_transfer" ? item.branch : "",
+          toWarehouse: tab === "stock_transfer" ? item.customer_name : "",
+          totalAmount: item.invoice_value,
+          generateHref: `/accounts/transactions/invoices/new?${generateParams.toString()}`,
+          detailHref: null,
+          printHref: null,
+        };
+      });
+
       setTabState((prev) => ({
         ...prev,
         [tab]: {
@@ -531,7 +590,7 @@ export default function PendingTaxInvoicesClient() {
         },
       }));
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
   // Load default tab first; other tabs load on open
   useEffect(() => {
@@ -655,7 +714,7 @@ export default function PendingTaxInvoicesClient() {
     const counts: Record<PendingInvoiceTabId, number | null> = {
       sales_order: null,
       stock_transfer: null,
-      sample_order: null,
+      // sample_order: null,
     };
     if (!mounted) return counts;
     (Object.keys(counts) as PendingInvoiceTabId[]).forEach((tab) => {
@@ -723,10 +782,10 @@ export default function PendingTaxInvoicesClient() {
 
   const getCellValue = useCallback((row: PendingInvoiceListRow, key: string) => {
     if (key === "invoiceValue") {
-      return formatMoney(activeTab === "sample_order" ? 0 : row.invoiceValue);
+      return formatMoney((activeTab as string) === "sample_order" ? 0 : row.invoiceValue);
     }
     if (key === "totalAmount") {
-      return formatMoney(activeTab === "sample_order" ? 0 : row.totalAmount);
+      return formatMoney((activeTab as string) === "sample_order" ? 0 : row.totalAmount);
     }
     return (row as unknown as Record<string, unknown>)[key];
   }, [activeTab]);
@@ -742,7 +801,7 @@ export default function PendingTaxInvoicesClient() {
           invoiceValue: { type: "amount" },
           branch: { type: "text" },
         }
-      : activeTab === "sample_order"
+      : (activeTab as string) === "sample_order"
         ? {
             dispatchDate: { type: "date" },
             dispatchNo: { type: "text" },

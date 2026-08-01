@@ -22,6 +22,33 @@ export async function getDispatches(payload: any = {}) {
   return response.data;
 }
 
+export interface DispatchDropdownItem {
+  id: string;
+  dispatch_number: string;
+  source_type: string;
+  source_id: string | null;
+  source_document_no: string;
+  status: string;
+  customer_id: string | null;
+  customer_name: string;
+  customer_code?: string;
+  warehouse_id: string | null;
+  warehouse_name: string;
+  label: string;
+}
+
+/** Lightweight dispatch options for form selects (prefer over list API). */
+export async function getDispatchDropdown(params?: {
+  source_type?: string;
+  status?: string;
+}): Promise<DispatchDropdownItem[]> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DROPDOWN, {
+    params: params || {},
+  });
+  const data = response.data?.data;
+  return Array.isArray(data) ? data : [];
+}
+
 export async function getDispatchById(id: string) {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DETAILS(id));
   return response.data?.data;
@@ -63,8 +90,41 @@ export async function revertDispatch(id: string) {
   return response.data;
 }
 
-export async function downloadDeliveryChallan(id: string): Promise<void> {
-  const { blob, fileName } = await fetchDeliveryChallanPdf(id);
+export async function allocateDeliveryChallanNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_DC(id));
+  const data = response.data?.data;
+  return (
+    data?.challan_number ||
+    response.data?.challan_number ||
+    ""
+  );
+}
+
+export async function allocateSalesInvoiceNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_SI(id));
+  const data = response.data?.data;
+  return (
+    data?.invoice_no ||
+    response.data?.invoice_no ||
+    ""
+  );
+}
+
+export async function allocateStockTransferInvoiceNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_ST(id));
+  const data = response.data?.data;
+  return (
+    data?.invoice_no ||
+    response.data?.invoice_no ||
+    ""
+  );
+}
+
+export async function downloadDeliveryChallan(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<void> {
+  const { blob, fileName } = await fetchDeliveryChallanPdf(id, options);
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -77,22 +137,33 @@ export async function downloadDeliveryChallan(id: string): Promise<void> {
 
 export async function fetchDeliveryChallanPdf(
   id: string,
+  options: { withGoodsValue?: boolean } = {},
 ): Promise<{ blob: Blob; fileName: string }> {
-  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id), {
-    responseType: "blob",
-  });
+  const withGoodsValue = options.withGoodsValue !== false;
+  const response = await api.get(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id),
+    {
+      responseType: "blob",
+      params: { withGoodsValue },
+    },
+  );
   const blob = response.data as Blob;
   const disposition = response.headers?.["content-disposition"] as string | undefined;
   const matched = disposition?.match(/filename="?([^"]+)"?/i);
   return {
     blob,
-    fileName: matched?.[1] || `delivery-challan-${id}.pdf`,
+    fileName:
+      matched?.[1] ||
+      `delivery-challan-${withGoodsValue ? "with-value" : "without-value"}-${id}.pdf`,
   };
 }
 
 /** Open official server PDF in a new tab for printing. */
-export async function printDeliveryChallan(id: string): Promise<void> {
-  const { blob } = await fetchDeliveryChallanPdf(id);
+export async function printDeliveryChallan(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<void> {
+  const { blob } = await fetchDeliveryChallanPdf(id, options);
   const url = window.URL.createObjectURL(blob);
   const popup = window.open(url, "_blank");
   if (!popup) {

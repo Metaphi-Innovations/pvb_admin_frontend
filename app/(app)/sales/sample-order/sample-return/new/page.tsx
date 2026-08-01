@@ -8,7 +8,11 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
-import { getDispatches, getDispatchById } from "@/app/(app)/warehouse/dispatch/services";
+import {
+  getDispatchDropdown,
+  getDispatchById,
+  type DispatchDropdownItem,
+} from "@/app/(app)/warehouse/dispatch/services";
 import { SampleReturnService } from "@/services/sample-return.service";
 
 import { DispatchDetailsPanel } from "../../../orders/components/DispatchDetailsPanel";
@@ -19,17 +23,10 @@ import {
   SalesReturnProductForm,
   type BatchReturnInput,
 } from "../../../orders/components/SalesReturnProductForm";
-import { PIECES_PER_CASE } from "../../../orders/sales-return-data";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 
 function sanitizeNumericInput(value: string): string {
   return value.replace(/\D/g, "");
-}
-
-function parseQty(value?: string): number {
-  if (!value) return 0;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
@@ -107,7 +104,7 @@ export default function NewSampleReturnPage() {
   const [returnRemarks, setReturnRemarks] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const [deliveredDispatches, setDeliveredDispatches] = useState<any[]>([]);
+  const [deliveredDispatches, setDeliveredDispatches] = useState<DispatchDropdownItem[]>([]);
   const [loadingDispatches, setLoadingDispatches] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -115,14 +112,11 @@ export default function NewSampleReturnPage() {
     async function fetchDispatches() {
       try {
         setLoadingDispatches(true);
-        const res = await getDispatches({
-          filters: { source_type: "sample" },
-          page: 1,
-          page_size: 1000
+        const rows = await getDispatchDropdown({
+          source_type: "sample",
+          status: "DISPATCHED,DELIVERED",
         });
-        const allDispatches = res?.data || [];
-        const eligible = allDispatches.filter((d: any) => d.status === "DELIVERED" || d.status === "DISPATCHED");
-        setDeliveredDispatches(eligible);
+        setDeliveredDispatches(rows);
       } catch (err) {
         console.error("Failed to fetch delivered dispatches:", err);
       } finally {
@@ -135,10 +129,9 @@ export default function NewSampleReturnPage() {
   const salesOrderOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const item of deliveredDispatches) {
-      const soNo = item.sample_order?.sample_order_no || item.source_document_no || "";
+      const soNo = item.source_document_no || "";
       if (!soNo || seen.has(soNo)) continue;
-      const customerName = item.customer?.customer_name || item.customer_name || (typeof item.customer === 'string' ? item.customer : "");
-      seen.set(soNo, customerName);
+      seen.set(soNo, item.customer_name || "");
     }
     return Array.from(seen.entries())
       .sort(([left], [right]) => left.localeCompare(right))
@@ -151,10 +144,10 @@ export default function NewSampleReturnPage() {
   const dispatchOptions = useMemo(() => {
     if (!selectedSalesOrderNo) return [];
     return deliveredDispatches
-      .filter((item: any) => (item.sample_order?.sample_order_no || item.source_document_no || "") === selectedSalesOrderNo)
-      .map((item: any) => ({
+      .filter((item) => item.source_document_no === selectedSalesOrderNo)
+      .map((item) => ({
         value: item.id,
-        label: `${item.dispatch_number || item.dispatchNumber || item.dispatch_no}${item.customer || item.customer_name ? ` - ${item.customer || item.customer_name}` : ""}`,
+        label: item.label || item.dispatch_number,
       }));
   }, [deliveredDispatches, selectedSalesOrderNo]);
 
@@ -223,42 +216,18 @@ export default function NewSampleReturnPage() {
   };
 
   const handleCaseQtyChange = (batchKey: string, value: string) => {
-    updateEntry(batchKey, { returnCaseQty: sanitizeNumericInput(value) });
+    updateEntry(batchKey, {
+      quantityType: "Case",
+      returnCaseQty: sanitizeNumericInput(value),
+      returnLooseQty: "",
+    });
   };
 
   const handleLooseQtyChange = (batchKey: string, value: string) => {
-    const sanitized = sanitizeNumericInput(value);
-    setReturnEntries((current) => {
-      const existing = current[batchKey] ?? { returnCaseQty: "", returnLooseQty: "", quantityType: "Piece" as const };
-      if (!sanitized) {
-        return { ...current, [batchKey]: { ...existing, returnLooseQty: "" } };
-      }
-
-      const sku = batchKey.split("::")[1];
-      const prod = dispatch?.products.find((p: any) => p.sku === sku);
-      const uKey = prod?.unitPerPacking || 10;
-
-      const looseQty = parseQty(sanitized);
-      const caseQty = parseQty(existing.returnCaseQty);
-      if (looseQty >= uKey) {
-        const totalPieces = caseQty * uKey + looseQty;
-        return {
-          ...current,
-          [batchKey]: {
-            ...existing,
-            returnCaseQty: String(Math.floor(totalPieces / uKey)),
-            returnLooseQty: String(totalPieces % uKey),
-          },
-        };
-      }
-
-      return {
-        ...current,
-        [batchKey]: {
-          ...existing,
-          returnLooseQty: sanitized,
-        },
-      };
+    updateEntry(batchKey, {
+      quantityType: "Piece",
+      returnCaseQty: "",
+      returnLooseQty: sanitizeNumericInput(value),
     });
   };
 
@@ -290,7 +259,7 @@ export default function NewSampleReturnPage() {
           throw new Error(`Could not find dispatch item for SKU: ${retItem.sku}, Batch: ${retItem.batchNo}`);
         }
 
-        const returnedQty = (retItem as any).quantityType === "Piece"
+        const returnedQty = retItem.quantityType === "Piece"
           ? retItem.returnTotalPieces
           : retItem.returnCaseQty || 0;
 
@@ -306,7 +275,7 @@ export default function NewSampleReturnPage() {
           unit_price: matchedItem.unit_price || matchedItem.unit_rate || matchedItem.product?.unit_price || 0,
           return_amount: retItem.lineAmount,
           remarks: returnRemarks || "",
-          quantity_type: (retItem as any).quantityType,
+          quantity_type: retItem.quantityType,
         };
       });
 

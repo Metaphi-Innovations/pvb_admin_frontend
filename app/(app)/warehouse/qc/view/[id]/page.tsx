@@ -98,7 +98,6 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
           { label: "Total Received", value: totalReceived },
           { label: "Accepted Qty", value: totalAccepted },
           { label: "Rejected Qty", value: totalRejected },
-          { label: "Hold Qty", value: totalHold },
           { label: "Products", value: qc.items.length },
         ],
         quickActions: canInspect
@@ -159,8 +158,8 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
             Product QC Summary
           </h2>
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
+          <div className="border border-border rounded-lg overflow-x-auto w-full">
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
@@ -168,7 +167,6 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Qty Type</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-28">Accepted Qty</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-28">Rejected Qty</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-amber-800 w-28">Hold Qty</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,9 +188,6 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
                       <td className="px-4 py-2 text-xs text-center tabular-nums text-red-700">
                         {isCase ? `${Number((it.rejectedQty / divisor).toFixed(4))} Cs` : `${it.rejectedQty} Pcs`}
                       </td>
-                      <td className="px-4 py-2 text-xs text-center tabular-nums text-amber-700">
-                        {isCase ? `${Number(((it.holdQty ?? 0) / divisor).toFixed(4))} Cs` : `${it.holdQty ?? 0} Pcs`}
-                      </td>
                     </tr>
                   );
                 })}
@@ -209,8 +204,8 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
                 Accepted Stocks Allocation
               </h2>
               {acceptedStock.length === 0 ? null : (
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <table className="w-full">
+                <div className="border border-border rounded-lg overflow-x-auto w-full">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="bg-emerald-50/20 border-b border-border">
                         <th className="px-4 py-2 text-left text-[11px] font-semibold text-emerald-800">Product</th>
@@ -238,8 +233,8 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
                 Rejected Stocks Details
               </h2>
               {rejectedStock.length === 0 ? null : (
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <table className="w-full">
+                <div className="border border-border rounded-lg overflow-x-auto w-full">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="bg-red-50/10 border-b border-border">
                         <th className="px-4 py-2 text-left text-[11px] font-semibold text-red-800">Product</th>

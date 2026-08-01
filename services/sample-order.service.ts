@@ -185,8 +185,18 @@ function buildBackendWriteBody(
 }
 
 export const SampleOrderService = {
-  async getNextNumber(signal?: AbortSignal): Promise<string> {
-    const response = await axiosInstance.get(API_ENDPOINTS.SALES.SAMPLE_ORDER.NEXT_NUMBER, { signal });
+  async getNextNumber(
+    warehouseId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SAMPLE_ORDER.NEXT_NUMBER,
+      {
+        signal,
+        params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+        headers: { "Cache-Control": "no-cache" },
+      },
+    );
     return response.data?.data?.order_no || "";
   },
 

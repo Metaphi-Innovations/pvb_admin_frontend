@@ -174,7 +174,6 @@ export function PurchaseView({ id }: { id: string }) {
         summary: [
           { label: "PO Number", value: grn.poNumber || "—", highlight: true },
           { label: "Supplier", value: grn.vendorName || "—" },
-          { label: "Delivery Challan", value: grn.deliveryChallan ?? "—" },
           { label: "Items", value: grn.items.length },
           { label: "Total Ordered", value: totalOrdered },
           { label: "Total Received", value: totalReceived },
@@ -218,11 +217,6 @@ export function PurchaseView({ id }: { id: string }) {
               label="Purchase Order"
               value={docStatus.purchaseOrder.label}
               done={docStatus.purchaseOrder.value === "linked"}
-            />
-            <DocumentStatusRow
-              label="Delivery Challan"
-              value={docStatus.deliveryChallan.label}
-              done={docStatus.deliveryChallan.value === "uploaded"}
             />
             <DocumentStatusRow
               label="Supplier Invoice"

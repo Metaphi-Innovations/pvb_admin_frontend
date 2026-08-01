@@ -21,6 +21,11 @@ export type InvoiceExtractionResult = {
   total_amount: number | null;
   items: InvoiceExtractionItem[];
   warnings: string[];
+  /** Whether PO supplier was found in OCR text; null if PO id was not sent. */
+  supplier_match: boolean | null;
+  /** PO supplier name that failed to match OCR text. */
+  unmatched_supplier: string | null;
+  errors: string[];
   success: boolean;
 };
 
@@ -81,7 +86,15 @@ function mapExtractionPayload(raw: unknown): InvoiceExtractionResult {
       ? (body.data as Record<string, unknown>)
       : body;
 
-  if (body.success === false) {
+  const looksLikeExtractionResult =
+    "invoice_number" in payload ||
+    "supplier_match" in payload ||
+    "supplierMatch" in payload ||
+    Array.isArray(payload.items);
+
+  // Only treat envelope API failures as hard throws — supplier mismatch returns
+  // success:false with warnings and must still be mapped for the UI.
+  if (body.success === false && !looksLikeExtractionResult) {
     throw new Error(
       asString(body.message) ||
         asString(body.error) ||
@@ -98,6 +111,16 @@ function mapExtractionPayload(raw: unknown): InvoiceExtractionResult {
     total_amount: asNumber(payload.total_amount ?? payload.totalAmount),
     items: asItems(payload.items ?? payload.lineItems ?? payload.tables),
     warnings: asWarnings(payload.warnings),
+    supplier_match:
+      typeof payload.supplier_match === "boolean"
+        ? payload.supplier_match
+        : typeof payload.supplierMatch === "boolean"
+          ? payload.supplierMatch
+          : null,
+    errors: asWarnings(payload.errors),
+    unmatched_supplier: asString(
+      payload.unmatched_supplier ?? payload.unmatchedSupplier,
+    ),
     success: payload.success !== false,
   };
 }
@@ -147,15 +170,21 @@ export function normalizeExtractionDate(
 export const InvoiceExtractionService = {
   /**
    * POST /api/invoice-extraction/extract
-   * multipart field name: `file`
+   * multipart fields: `file`, optional `purchase_order_id`
    */
-  async extractInvoice(file: File): Promise<InvoiceExtractionResult> {
+  async extractInvoice(
+    file: File,
+    purchaseOrderId?: string | null,
+  ): Promise<InvoiceExtractionResult> {
     if (!file) {
       throw new Error("Please select an invoice file to extract.");
     }
 
     const formData = new FormData();
     formData.append("file", file);
+    if (purchaseOrderId?.trim()) {
+      formData.append("purchase_order_id", purchaseOrderId.trim());
+    }
 
     const response = await axiosInstance.post(
       API_ENDPOINTS.INVOICE_EXTRACTION.EXTRACT,

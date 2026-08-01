@@ -61,6 +61,7 @@ import {
 } from "./coa-master-linked-form-bridge";
 import { AccountsMasterLinkedLedgerForm } from "./components/AccountsMasterLinkedLedgerForm";
 import { registerCoaBankFormHandler } from "./coa-bank-form-bridge";
+import { registerCoaEditLedgerHandler } from "./coa-edit-ledger-bridge";
 import { CoaListingTable } from "./components/CoaListingTable";
 import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
@@ -171,7 +172,6 @@ const HIGHLIGHT_MS = 4000;
 /** Ledger detail view for posting ledgers only (TDS/TCS statutory nodes excluded). */
 function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
   if (!isPostingLedger(node, records)) return false;
-  if (node.bankGroupFlag) return false;
   if (isTdsCoaNode(node, records)) return false;
   if (isStatutoryTaxPayableParent(node)) return false;
   if (isStatutoryTaxSectionProjection(node)) return false;
@@ -321,6 +321,23 @@ export default function ChartOfAccountsPageClient() {
         selectNode(parent);
       }
     });
+    registerCoaEditLedgerHandler((ledgerId) => {
+      const list = records.length > 0 ? records : [];
+      const ledger = list.find((r) => r.id === ledgerId);
+      if (ledger && (ledger.masterType === "bank" || ledger.masterType === "BANK")) {
+        const bankGroupId = ledger.parentAccountId;
+        if (bankGroupId != null) {
+          const parent = list.find((r) => r.id === bankGroupId);
+          setBankFormEditAccountId(Number(ledger.masterId) || undefined);
+          setBankFormParentId(bankGroupId);
+          if (parent) {
+            const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
+            ensureExpanded([...ancestorIds, parent.id]);
+            selectNode(parent);
+          }
+        }
+      }
+    });
     return () => {
       registerSundryDebtorCustomerFormHandler(null);
       registerSundryCreditorVendorFormHandler(null);
@@ -328,6 +345,7 @@ export default function ChartOfAccountsPageClient() {
       registerTdsLedgerFormHandler(null);
       registerCoaMasterLinkedFormHandler(null);
       registerCoaBankFormHandler(null);
+      registerCoaEditLedgerHandler(null);
     };
   }, [records, ensureExpanded, selectNode]);
 
@@ -375,12 +393,13 @@ export default function ChartOfAccountsPageClient() {
       : (selectedNode?.id ?? null);
 
   useEffect(() => {
-    const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY.id);
+    if (!selectedFY?.id) return;
+    const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY);
     setPreset(initialPreset);
     setDateFrom(from);
     setDateTo(to);
     setDatesReady(true);
-  }, [selectedFY.id]);
+  }, [selectedFY]);
 
   useEffect(() => {
     if (selectedNode) setShowRoot(false);

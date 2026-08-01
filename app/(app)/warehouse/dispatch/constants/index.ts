@@ -18,8 +18,11 @@ export const TRANSPORTER_OPTIONS = [
 
 export const DELIVERY_STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> = {
   "Pending Dispatch": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending Dispatch" },
+  "Available for Dispatch": { bg: "bg-violet-50 text-violet-700 border-violet-200", label: "Available for Dispatch" },
+  "Ready for Dispatch": { bg: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", label: "Ready for Dispatch" },
   "Ready to Dispatch": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Ready to Dispatch" },
   "Ready For Dispatch": { bg: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", label: "Ready For Dispatch" },
+  "Partially Ready for Dispatch": { bg: "bg-purple-50 text-purple-700 border-purple-200", label: "Partially Ready for Dispatch" },
   "In Transit": { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "In Transit" },
   "Delivered": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Delivered" },
   "Dispatched": { bg: "bg-teal-50 text-teal-700 border-teal-200", label: "Dispatched" },

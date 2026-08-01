@@ -42,6 +42,7 @@ export interface QcRecord {
   poNumber?: string;
   vendorName: string;
   warehouse: string;
+  warehouseId?: string;
   sourceType?: QcSourceType;
   stockTransferNo?: string;
   fromWarehouse?: string;

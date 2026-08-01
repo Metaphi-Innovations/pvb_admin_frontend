@@ -8,7 +8,61 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FINANCIAL_YEARS, FY_STATUS_CONFIG, type FinancialYear, type FYStatus } from "@/lib/fy-store";
+import { FY_STATUS_CONFIG, type FinancialYear, type FYStatus } from "@/lib/fy-store";
+
+/** Demo-only sample years for the design template (not connected to backend). */
+const DEMO_FINANCIAL_YEARS: FinancialYear[] = [
+  {
+    id: "demo-2024-25",
+    code: "2024-25",
+    label: "FY 2024-25",
+    start: "1 Apr 2024",
+    end: "31 Mar 2025",
+    startDate: "2024-04-01",
+    endDate: "2025-03-31",
+    status: "closed",
+    isCurrent: false,
+    isClosed: true,
+  },
+  {
+    id: "demo-2025-26",
+    code: "2025-26",
+    label: "FY 2025-26",
+    start: "1 Apr 2025",
+    end: "31 Mar 2026",
+    startDate: "2025-04-01",
+    endDate: "2026-03-31",
+    status: "closed",
+    isCurrent: false,
+    isClosed: true,
+  },
+  {
+    id: "demo-2026-27",
+    code: "2026-27",
+    label: "FY 2026-27",
+    start: "1 Apr 2026",
+    end: "31 Mar 2027",
+    startDate: "2026-04-01",
+    endDate: "2027-03-31",
+    status: "live",
+    isCurrent: true,
+    isClosed: false,
+  },
+  {
+    id: "demo-2027-28",
+    code: "2027-28",
+    label: "FY 2027-28",
+    start: "1 Apr 2027",
+    end: "31 Mar 2028",
+    startDate: "2027-04-01",
+    endDate: "2028-03-31",
+    status: "upcoming",
+    isCurrent: false,
+    isClosed: false,
+  },
+];
+
+const FINANCIAL_YEARS = DEMO_FINANCIAL_YEARS;
 
 // ── Reusable sub-components ───────────────────────────────────────────────────
 function FYStatusBadge({
@@ -241,7 +295,7 @@ export default function FinancialYearSection() {
   };
 
   const statusIcons: Record<FYStatus, React.ElementType> = {
-    live: Zap, upcoming: Clock, closed: Check, archived: Archive,
+    live: Zap, open: Check, upcoming: Clock, closed: Lock, archived: Archive,
   };
 
   return (

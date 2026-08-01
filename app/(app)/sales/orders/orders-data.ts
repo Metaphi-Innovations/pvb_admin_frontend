@@ -27,7 +27,10 @@ export type OrderStatus =
   | "delivered"
   | "Ready For Packing"
   | "Fully Packed"
-  | "Partially Packed";
+  | "Partially Packed"
+  | "Available for Dispatch"
+  | "Ready for Dispatch"
+  | "Partially Ready for Dispatch";
 
 export type PackingStatus =
   | "draft"
@@ -56,12 +59,13 @@ export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
 ];
 
 export interface ProductCatalogItem {
-  id: number;
+  id: number | string;
   code: string;
   name: string;
   uom: string;
   gstRate: string;
   sellingPrice: number;
+  costPrice?: number;
   stock: number;
   status: "active" | "inactive" | "archived";
   packSize?: number;
@@ -69,7 +73,7 @@ export interface ProductCatalogItem {
 
 export interface SalesOrderLineItem {
   id: string;
-  productId: number | null;
+  productId: number | string | null;
   productCode: string;
   productName: string;
   availableStock: number;
@@ -1024,7 +1028,7 @@ function clearLineSchemeFields(dealerPrice: number): Pick<
 }
 
 export function getEligibleSchemesForSalesOrderLine(
-  productId: number,
+  productId: number | string,
   context: SalesOrderPricingContext,
 ): EligibleProductDiscountSchemeOffer[] {
   return lookupEligibleSchemesForSalesOrder({

@@ -120,24 +120,23 @@ function formatExpiryLabel(value?: string) {
 
 function getBatchComputation(batch: SalesReturnBatchRow, entry?: BatchReturnInput): BatchReturnComputation {
   const uKey = batch.unitPerPacking || 10;
-  const caseQty = parseQty(entry?.returnCaseQty);
-  const looseQty = parseQty(entry?.returnLooseQty);
-  const totalPieces = caseQty * uKey + looseQty;
+  const qtyType = entry?.quantityType || "Piece";
+  const caseQty = qtyType === "Case" ? parseQty(entry?.returnCaseQty) : 0;
+  const looseQty = qtyType === "Piece" ? parseQty(entry?.returnLooseQty) : 0;
+  // Case → base units via conversion; Piece → entered value is already base/piece qty
+  const totalPieces = qtyType === "Case" ? caseQty * uKey : looseQty;
   const maxPieces = batch.dispatchedQtyCases * uKey;
   const prevReturned = batch.returnedQtyPieces || 0;
   const remainingPieces = Math.max(0, maxPieces - prevReturned);
   const errors: string[] = [];
 
-  if (looseQty > uKey - 1) {
-    errors.push(`Loose qty must be between 0 and ${uKey - 1}.`);
-  }
   if (totalPieces > remainingPieces) {
     errors.push("Return quantity cannot exceed remaining batch quantity.");
   }
 
   return {
-    caseQty,
-    looseQty,
+    caseQty: qtyType === "Case" ? caseQty : Math.floor(totalPieces / uKey),
+    looseQty: qtyType === "Piece" ? looseQty % uKey : 0,
     totalPieces,
     amount: calcReturnLineAmount(totalPieces, batch.unitRate ?? 0),
     errors,
@@ -335,8 +334,12 @@ export function flattenSelectedBatchReturns(packingGroups: SalesReturnPackingGro
   return packingGroups.flatMap((packingGroup) =>
     packingGroup.products.flatMap((product) =>
       product.batches.flatMap((batch) => {
-        const computation = getBatchComputation(batch, returnEntries[batch.key]);
+        const entry = returnEntries[batch.key];
+        const computation = getBatchComputation(batch, entry);
         if (computation.totalPieces <= 0 || computation.errors.length > 0) return [];
+        const quantityType = entry?.quantityType || "Piece";
+        const enteredCaseQty = quantityType === "Case" ? parseQty(entry?.returnCaseQty) : 0;
+        const enteredPieceQty = quantityType === "Piece" ? parseQty(entry?.returnLooseQty) : 0;
         return [{
           product: product.productName,
           sku: product.sku,
@@ -348,11 +351,11 @@ export function flattenSelectedBatchReturns(packingGroups: SalesReturnPackingGro
           batchExpiryDate: batch.expiry,
           packingNumber: packingGroup.packingNumber,
           packingDate: packingGroup.packingDate,
-          returnCaseQty: computation.caseQty,
-          returnLooseQty: computation.looseQty,
+          returnCaseQty: enteredCaseQty,
+          returnLooseQty: enteredPieceQty,
           returnTotalPieces: computation.totalPieces,
           lineAmount: computation.amount,
-          quantityType: returnEntries[batch.key]?.quantityType || "Piece",
+          quantityType,
         }];
       }),
     ),

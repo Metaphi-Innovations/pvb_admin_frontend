@@ -68,6 +68,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const batch = raw.batch_snapshot || {};
   const unitsPerPacking = asNumber(prod.conversion_qty || 1);
   const totalQty = asNumber(raw.transfer_base_qty);
+  const costPrice = asNumber(raw.cp_price ?? prod.cost_price ?? raw.product?.cost_price ?? 0);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
 
@@ -88,13 +89,13 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
     quantityType: quantityType as "Case" | "Piece",
-    unitPrice: asNumber(raw.cp_price),
-    dealerPrice: asNumber(raw.cp_price),
+    unitPrice: costPrice,
+    dealerPrice: costPrice,
     discount: 0,
     discountValue: 0,
     schemeDiscountPercent: 0,
     schemeDiscountAmount: 0,
-    finalRate: asNumber(raw.cp_price),
+    finalRate: costPrice,
     schemeApplied: "No" as const,
     gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount),
     lineTotal: asNumber(raw.total_amount),
