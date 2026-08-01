@@ -137,6 +137,7 @@ export function AutocompleteSelect({
           className={cn(
             "flex w-full min-w-0 cursor-pointer items-center justify-between border border-border bg-white text-left shadow-sm",
             "transition-colors select-none text-left focus:outline-none",
+            "focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-200",
             isDense ? "px-1.5 py-0" : "px-3 py-2",
             !className?.includes("h-") && "h-9",
             !className?.includes("text-") && "text-xs",

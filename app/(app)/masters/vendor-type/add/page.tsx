@@ -2,24 +2,23 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Save, XCircle } from "lucide-react";
+import { Save } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   VendorTypeForm,
   DEFAULT_VENDOR_TYPE_FORM,
   validateVendorTypeForm,
   type VendorTypeFormValues,
 } from "../components/VendorTypeForm";
-import { useCreateSupplierType } from "@/hooks/masters";
-import { SupplierTypeListService } from "@/services/supplier-type.service";
+import { useCreateSupplierType } from "@/hooks/masters/use-supplier-types";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { showToast } from "@/lib/toast";
 
 export default function AddVendorTypePage() {
   const router = useRouter();
   const [form, setForm] = useState<VendorTypeFormValues>(DEFAULT_VENDOR_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const createMutation = useCreateSupplierType();
 
@@ -31,11 +30,11 @@ export default function AddVendorTypePage() {
     });
 
   const handleSave = () => {
+    if (createMutation.isPending) return;
     const validation = validateVendorTypeForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
-      setToast({ msg: "Please fix the errors before saving.", type: "error" });
-      setTimeout(() => setToast(null), 3200);
+      showToast("Please fix the errors before saving.", "error");
       return;
     }
 
@@ -48,16 +47,11 @@ export default function AddVendorTypePage() {
       },
       {
         onSuccess: () => {
-          setToast({ msg: "Supplier type added successfully.", type: "success" });
-          router.push("/masters/vendor-type");
+          showToast("Supplier type added successfully.", "success");
+          router.replace("/masters/vendor-type");
         },
         onError: (err) => {
-          const msg =
-            err instanceof Error
-              ? err.message
-              : SupplierTypeListService.extractErrorMessage(err, "Failed to save supplier type.");
-          setToast({ msg, type: "error" });
-          setTimeout(() => setToast(null), 4000);
+          showToast(getErrorMessage(err, "Failed to save supplier type."), "error");
         },
       },
     );
@@ -70,7 +64,12 @@ export default function AddVendorTypePage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+            disabled={createMutation.isPending}
+          >
             Discard
           </Button>
           <Button
@@ -78,7 +77,8 @@ export default function AddVendorTypePage() {
             onClick={handleSave}
             disabled={createMutation.isPending}
           >
-            <Save className="w-4 h-4" /> Save Supplier Type
+            <Save className="w-4 h-4" />
+            {createMutation.isPending ? "Saving..." : "Save Supplier Type"}
           </Button>
         </div>
       }
@@ -89,18 +89,6 @@ export default function AddVendorTypePage() {
         errors={errors}
         onClearError={clearErr}
       />
-
-      {toast && (
-        <div
-          className={cn(
-            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-          )}
-        >
-          {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-          {toast.msg}
-        </div>
-      )}
     </FormContainer>
   );
 }

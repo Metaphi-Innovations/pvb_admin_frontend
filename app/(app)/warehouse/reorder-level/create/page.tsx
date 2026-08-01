@@ -9,6 +9,8 @@ import { Activity, Info, Warehouse } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReorderLevelService } from "../services";
 import { ReorderFormData } from "../types";
+import { showToast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 function CreateReorderLevelForm() {
   const router = useRouter();
@@ -16,12 +18,10 @@ function CreateReorderLevelForm() {
 
   // from=overview → OVERALL reorder type (product-level), hide warehouse selector
   const fromOverview = searchParams.get("from") === "overview";
-  const prefilledWarehouse = fromOverview ? "All" : (searchParams.get("warehouse") || "");
+  const prefilledWarehouse = fromOverview ? "" : (searchParams.get("warehouse") || "");
 
-  const [selectedWarehouse, setSelectedWarehouse] = useState(prefilledWarehouse || "All");
-  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([
-    { value: "All", label: "All Warehouses" },
-  ]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState(prefilledWarehouse);
+  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [productOptions, setProductOptions] = useState<
     Array<{ value: string; label: string; productCode: string; category: string; unit: string }>
   >([]);
@@ -37,7 +37,11 @@ function CreateReorderLevelForm() {
   useEffect(() => {
     ReorderLevelService.warehouseDropdown()
       .then((items) => {
-        setWarehouseOptions([{ value: "All", label: "All Warehouses" }, ...items]);
+        setWarehouseOptions(items);
+        setSelectedWarehouse((prev) => {
+          if (prev && items.some((w) => w.value === prev)) return prev;
+          return items[0]?.value || "";
+        });
       })
       .catch(() => undefined);
     ReorderLevelService.productDropdown()
@@ -61,43 +65,53 @@ function CreateReorderLevelForm() {
   const parseQty = (raw: string): number | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
-    if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+    if (!/^\d+$/.test(trimmed)) return null;
     const qty = Number(trimmed);
-    if (!Number.isFinite(qty) || qty <= 0) return null;
+    if (!Number.isInteger(qty) || qty <= 0) return null;
     return qty;
   };
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
+    if (!fromOverview && !selectedWarehouse) e.warehouse = "Warehouse is required.";
     if (!productId) e.product = "Product is required.";
-    if (parseQty(reorderLevelQty) == null) e.reorderLevelQty = "Must be greater than 0.";
+    if (parseQty(reorderLevelQty) == null) {
+      e.reorderLevelQty = "Must be a whole number greater than 0.";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleSave = async () => {
-    if (!validate()) return;
+    if (!validate()) {
+      showToast("Please fix the errors before saving.", "error");
+      return;
+    }
     if (saving) return;
     const qty = parseQty(reorderLevelQty);
     if (qty == null) return;
-    const isOverall = fromOverview || selectedWarehouse === "All";
     const data: ReorderFormData = {
       master_item_id: productId,
-      reorder_type: isOverall ? "OVERALL" : "WAREHOUSE",
-      warehouse_id: isOverall ? null : selectedWarehouse,
+      reorder_type: fromOverview ? "OVERALL" : "WAREHOUSE",
+      warehouse_id: fromOverview ? null : selectedWarehouse,
       reorder_level: qty,
       remark: remark.trim() || undefined,
     };
     try {
       setSaving(true);
       await ReorderLevelService.create(data);
+      showToast("Reorder level created successfully.", "success");
       router.push("/warehouse/reorder-level");
+    } catch (err) {
+      showToast(
+        getErrorMessage(err, "Failed to create reorder level."),
+        "error",
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  const isAllWarehouses = selectedWarehouse === "All";
   return (
     <FormContainer
       title={fromOverview ? "Set Overall Reorder Level" : "Set Reorder Level"}
@@ -108,7 +122,7 @@ function CreateReorderLevelForm() {
       actions={
         <Button size="sm" className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={handleSave}>
           <Activity className="w-3.5 h-3.5" />
-          {saving ? "Saving..." : fromOverview || isAllWarehouses ? "Save Overall Reorder Level" : "Save Reorder Level"}
+          {saving ? "Saving..." : fromOverview ? "Save Overall Reorder Level" : "Save Reorder Level"}
         </Button>
       }
       noCard={true}
@@ -127,20 +141,15 @@ function CreateReorderLevelForm() {
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">Warehouse *</p>
                 <AutocompleteSelect
-                  options={[
-                    {
-                      value: "All",
-                      label: "All Warehouses",
-                      icon: <Warehouse className="w-3.5 h-3.5 text-brand-500" />,
-                    },
-                    ...warehouseOptions.filter((item) => item.value !== "All"),
-                  ]}
+                  options={warehouseOptions}
                   value={selectedWarehouse}
                   onChange={setSelectedWarehouse}
                   placeholder="Select warehouse"
                   searchPlaceholder="Search warehouse..."
+                  error={!!errors.warehouse}
                   className="h-8 text-xs rounded-lg border-border bg-white"
                 />
+                {errors.warehouse && <p className="text-[10px] text-red-500 font-semibold mt-1">{errors.warehouse}</p>}
               </div>
             ) : (
               <div>
@@ -167,15 +176,15 @@ function CreateReorderLevelForm() {
               {errors.product && <p className="text-[10px] text-red-500 font-semibold mt-1">{errors.product}</p>}
             </div>
 
-            {/* Reorder Level Qty — text input avoids mouse-wheel changing type=number values */}
+            {/* Reorder Level Qty — integers only */}
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">Reorder Level Qty *</p>
               <Input
                 type="text"
-                inputMode="decimal"
+                inputMode="numeric"
                 value={reorderLevelQty}
                 onChange={(e) => {
-                  const next = e.target.value.replace(/[^\d.]/g, "");
+                  const next = e.target.value.replace(/\D/g, "");
                   setReorderLevelQty(next);
                 }}
                 placeholder="e.g. 100"
@@ -210,8 +219,8 @@ function CreateReorderLevelForm() {
             </div>
           </div>
 
-          {/* Info banner */}
-          {(isAllWarehouses || fromOverview) && (
+          {/* Info banner — overall flow only */}
+          {fromOverview && (
             <div className="flex items-start gap-2 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2.5">
               <Info className="w-3.5 h-3.5 text-brand-500 mt-0.5 flex-shrink-0" />
               <p className="text-[11px] text-brand-700 font-semibold leading-snug">

@@ -109,6 +109,7 @@ function buildListFilters(filters: Record<string, unknown> | undefined): Record<
     if (value === undefined || value === null || value === "") return;
 
     if (key === "product") mapped.product_name = value;
+    else if (key === "masterItemId") mapped.master_item_id = value;
     else if (key === "productCode") mapped.product_code = value;
     else if (key === "category") mapped.category_name = value;
     else if (key === "unit") mapped.unit_name = value;

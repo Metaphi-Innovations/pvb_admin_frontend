@@ -22,6 +22,8 @@ export interface IndianRupeeInputProps {
   max?: number;
   /** When set, values below this are clamped up on commit. */
   min?: number;
+  /** Called after the value is committed on blur. */
+  onBlur?: () => void;
 }
 
 function clampMoney(value: number, min?: number, max?: number): number {
@@ -41,6 +43,7 @@ export function IndianRupeeInput({
   "aria-label": ariaLabel,
   max,
   min = 0,
+  onBlur,
 }: IndianRupeeInputProps) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
@@ -84,6 +87,7 @@ export function IndianRupeeInput({
         const numeric = clampMoney(parseIndianRupeeInput(draft), min, max);
         onChange(numeric);
         setDraft(formatIndianRupeeDisplay(numeric));
+        onBlur?.();
       }}
       onChange={(e) => {
         const next = e.target.value;

@@ -17,10 +17,8 @@ import { ProductOverviewListing } from "./product-overview/ProductOverviewListin
 
 export default function ReorderLevelPage() {
   const [activeTab, setActiveTab] = useState("warehouse-wise");
-  const [selectedWarehouse, setSelectedWarehouse] = useState("All");
-  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([
-    { value: "All", label: "All Warehouses" },
-  ]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [summary, setSummary] = useState<ReorderSummary>({ total: 0, inStock: 0, lowStock: 0 });
 
   useEffect(() => {
@@ -28,7 +26,11 @@ export default function ReorderLevelPage() {
     ReorderLevelService.warehouseDropdown()
       .then((items) => {
         if (!mounted) return;
-        setWarehouseOptions([{ value: "All", label: "All Warehouses" }, ...items]);
+        setWarehouseOptions(items);
+        setSelectedWarehouse((prev) => {
+          if (prev && items.some((w) => w.value === prev)) return prev;
+          return items[0]?.value || "";
+        });
       })
       .catch(() => undefined);
     return () => {
@@ -39,9 +41,15 @@ export default function ReorderLevelPage() {
   useEffect(() => {
     let active = true;
     const isOverview = activeTab === "product-overview";
+    if (!isOverview && !selectedWarehouse) {
+      setSummary({ total: 0, inStock: 0, lowStock: 0 });
+      return () => {
+        active = false;
+      };
+    }
     ReorderLevelService.summary({
       reorder_type: isOverview ? "OVERALL" : "WAREHOUSE",
-      warehouse_id: isOverview || selectedWarehouse === "All" ? undefined : selectedWarehouse,
+      warehouse_id: isOverview ? undefined : selectedWarehouse,
     })
       .then((data) => {
         if (!active) return;
@@ -90,9 +98,7 @@ export default function ReorderLevelPage() {
       }
     >
       <TabsContent value="warehouse-wise" className="mt-0 outline-none">
-        <WarehouseWiseListing
-          selectedWarehouseId={selectedWarehouse === "All" ? undefined : selectedWarehouse}
-        />
+        <WarehouseWiseListing selectedWarehouseId={selectedWarehouse || undefined} />
       </TabsContent>
 
       <TabsContent value="product-overview" className="mt-0 outline-none">
