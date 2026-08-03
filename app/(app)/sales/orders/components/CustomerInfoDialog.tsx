@@ -107,7 +107,6 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
             <InfoRow label="Address" value={customer.address} />
             <InfoRow label="State" value={customer.stateName} />
             <InfoRow label="District" value={customer.districtName} />
-            <InfoRow label="Territory" value={customer.territoryName} />
             <InfoRow label="Pin Code" value={customer.pincode} mono />
           </Block>
 
