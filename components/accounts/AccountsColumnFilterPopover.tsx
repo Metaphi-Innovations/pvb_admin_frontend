@@ -17,6 +17,7 @@ import type {
 } from "@/lib/accounts/column-filter-types";
 import { isColumnFilterActive } from "@/lib/accounts/column-filter-engine";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 
 const BOOLEAN_OPTIONS: ColumnValueOption[] = [
   { value: "yes", count: 0 },
@@ -96,6 +97,7 @@ export function AccountsColumnFilterPopover({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const listOptions = useMemo((): ColumnValueOption[] => {
     if (filterType === "boolean") return BOOLEAN_OPTIONS;
@@ -121,13 +123,13 @@ export function AccountsColumnFilterPopover({
   const active = isColumnFilterActive(value);
 
   const filteredOptions = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return listOptions;
     return listOptions.filter((o) => {
       const display = formatOptionLabel(o.value, filterType, optionLabels);
       return display.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
     });
-  }, [listOptions, search, optionLabels, filterType]);
+  }, [listOptions, debouncedSearch, optionLabels, filterType]);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 

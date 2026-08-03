@@ -10,6 +10,8 @@ export interface PendingInvoiceDto {
   source_type: "normal_sales" | "stock_transfer" | string;
   customer_name: string;
   customer_gstin: string;
+  customer_code: string;
+  customer_id: string;
   total_qty: number;
   invoice_value: number;
   branch: string;
@@ -21,9 +23,12 @@ export interface ListPendingInvoicesQuery {
   from_date?: string;
   to_date?: string;
   branch_id?: string;
+  branch_names?: string;
+  search?: string;
   page?: number;
   page_size?: number;
   ordering?: string;
+  filters?: string;
 }
 
 export interface ListPendingInvoicesResponse {
@@ -42,9 +47,12 @@ export const pendingInvoicesService = {
     if (query.from_date) params.set("from_date", query.from_date);
     if (query.to_date) params.set("to_date", query.to_date);
     if (query.branch_id) params.set("branch_id", query.branch_id);
+    if (query.branch_names) params.set("branch_names", query.branch_names);
+    if (query.search) params.set("search", query.search);
     if (query.page) params.set("page", String(query.page));
     if (query.page_size) params.set("page_size", String(query.page_size));
     if (query.ordering) params.set("ordering", query.ordering);
+    if (query.filters) params.set("filters", query.filters);
 
     const response = await axiosInstance.get<ApiResponse<ListPendingInvoicesResponse>>(
       `${API_ENDPOINTS.ACCOUNTS.PENDING_INVOICES.LIST}?${params.toString()}`
@@ -86,6 +94,19 @@ export const pendingInvoicesService = {
     );
     if (!response.data?.success || !response.data?.data) {
       throw new Error(response.data?.message || "Failed to generate invoice.");
+    }
+    return response.data.data;
+  },
+
+  async getFilterDropdown(fieldName: string, sourceType?: string): Promise<Array<{ [key: string]: string }>> {
+    const params = new URLSearchParams();
+    params.set("field_name", fieldName);
+    if (sourceType) params.set("source_type", sourceType);
+    const response = await axiosInstance.get<ApiResponse<Array<{ [key: string]: string }>>>(
+      `${API_ENDPOINTS.ACCOUNTS.PENDING_INVOICES.FILTER_DROPDOWN}?${params.toString()}`
+    );
+    if (!response.data?.success || !response.data?.data) {
+      throw new Error(response.data?.message || "Failed to load filter options.");
     }
     return response.data.data;
   }

@@ -47,6 +47,14 @@ export function AccountsInvoiceDateRangeFilter({
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
 }) {
+  React.useEffect(() => {
+    if (preset === "custom") return;
+    const { from, to } = resolveDateRangePreset(preset);
+    if (dateFrom !== from || dateTo !== to) {
+      onPresetChange("custom");
+    }
+  }, [dateFrom, dateTo, preset, onPresetChange]);
+
   const handlePresetChange = (value: DateRangePresetId) => {
     onPresetChange(value);
     if (value !== "custom") {

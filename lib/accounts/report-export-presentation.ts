@@ -1,5 +1,6 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { formatMoney, formatMoneyNumber, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { writeHtmlAndPrint } from "@/lib/pdf/paramverse/shell";
 
 /** Standard company name for all accounting report exports. */
 export const ACCOUNTS_COMPANY_NAME = "Dharitri Sutra Agri Solutions Pvt Ltd";
@@ -598,7 +599,9 @@ export function downloadReportExcelHtml(html: string, filename: string): void {
 }
 
 export function exportReportToPdf(options: ReportDocumentOptions): void {
-  openReportPrintWindow(buildReportDocumentHtml(options));
+  const html = buildReportDocumentHtml(options);
+  const filename = `${options.header.reportTitle.replace(/\s+/g, "_")}_${todayExportDateSuffix()}.pdf`;
+  void writeHtmlAndPrint(html, null, filename);
 }
 
 export function exportReportToExcelHtml(options: ReportDocumentOptions, filename: string): void {
