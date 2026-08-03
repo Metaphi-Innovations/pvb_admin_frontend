@@ -46,6 +46,10 @@ interface AutocompleteSelectProps {
   /** Extra classes on the dropdown panel (e.g. min-w for narrow table cells). */
   popoverClassName?: string;
   renderTriggerLabel?: (selectedOptions: AutocompleteOption | AutocompleteOption[]) => React.ReactNode;
+  onBlur?: () => void;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+  "data-pr-field"?: string;
 }
 
 export function AutocompleteSelect({
@@ -60,6 +64,10 @@ export function AutocompleteSelect({
   className,
   popoverClassName,
   renderTriggerLabel,
+  onBlur,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  "data-pr-field": dataPrField,
 }: AutocompleteSelectProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -68,6 +76,15 @@ export function AutocompleteSelect({
     const haystack = `${opt.label} ${opt.sublabel ?? ""} ${opt.searchText ?? ""}`.toLowerCase();
     return haystack.includes(q.toLowerCase());
   });
+
+  const handleOpenChange = (next: boolean) => {
+    if (disabled) return;
+    setOpen(next);
+    if (!next) {
+      setQ("");
+      onBlur?.();
+    }
+  };
 
   const handleSelect = (val: string) => {
     if (multiple) {
@@ -129,11 +146,14 @@ export function AutocompleteSelect({
   const isDense = Boolean(className?.includes("h-6") || className?.includes("h-7"));
 
   return (
-    <Popover open={open} onOpenChange={(o) => { if (!disabled) setOpen(o); if (!o) setQ(""); }}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
           disabled={disabled}
+          aria-invalid={ariaInvalid ?? (error ? true : undefined)}
+          aria-describedby={ariaDescribedBy}
+          data-pr-field={dataPrField}
           className={cn(
             "flex w-full min-w-0 cursor-pointer items-center justify-between border border-border bg-white text-left shadow-sm",
             "transition-colors select-none text-left focus:outline-none",

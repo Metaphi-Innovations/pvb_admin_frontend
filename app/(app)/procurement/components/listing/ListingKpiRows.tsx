@@ -2,7 +2,6 @@
 
 import {
   CheckCircle2,
-  Clock,
   FileCheck2,
   FileText,
   IndianRupee,
@@ -19,10 +18,9 @@ import { SalesStyleKpiCard, SalesStyleKpiGrid } from "./SalesStyleKpiRow";
 
 export function PRListingKpiRow({ kpis }: { kpis: PRListingKpis }) {
   return (
-    <SalesStyleKpiGrid cols={5}>
+    <SalesStyleKpiGrid cols={4}>
       <SalesStyleKpiCard label="Total PR" value={kpis.total} icon={FileText} accent />
-      <SalesStyleKpiCard label="Pending Approval" value={kpis.pendingApproval} icon={Clock} />
-      <SalesStyleKpiCard label="Approved" value={kpis.approved} icon={CheckCircle2} />
+      <SalesStyleKpiCard label="Approval" value={kpis.approved} icon={CheckCircle2} />
       <SalesStyleKpiCard label="Rejected" value={kpis.rejected} icon={XCircle} />
       <SalesStyleKpiCard label="Closed" value={kpis.closed} icon={FileCheck2} />
     </SalesStyleKpiGrid>
