@@ -100,7 +100,7 @@ export function inferTdsLedgerKind(
 
 export function inheritedSpecializedGroupType(
   records: ChartOfAccount[],
-  parentGroupId: number | null,
+  parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId | null,
 ): CoaSpecializedGroupType | undefined {
   if (parentGroupId == null) return undefined;
   const parent = records.find((r) => r.id === parentGroupId);

@@ -17,6 +17,8 @@ import {
   type BalanceAmount,
   type ChronologicalSortable,
 } from "@/lib/accounts/running-balance";
+import { resolveOpeningSide } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+import { roundMoney } from "@/lib/accounts/money-format";
 
 type CoaMovementRow = Omit<
   CoaTransactionRow,
@@ -37,24 +39,54 @@ function parseFyStartYear(fyId: string): number {
   return parseInt(fyId.split("-")[0], 10);
 }
 
-/** Indian FY: Apr 1 – Mar 31 */
-export function financialYearIsoRange(fyId: string): LedgerDateRange {
-  const y = parseFyStartYear(fyId);
+type FyRangeInput =
+  | string
+  | {
+      id?: string;
+      code?: string;
+      startDate?: string;
+      endDate?: string;
+    }
+  | null
+  | undefined;
+
+/** Indian FY: Apr 1 – Mar 31 (or explicit dates from Working FY object). */
+export function financialYearIsoRange(fy: FyRangeInput): LedgerDateRange {
+  if (fy && typeof fy === "object") {
+    if (fy.startDate && fy.endDate) {
+      return {
+        from: String(fy.startDate).slice(0, 10),
+        to: String(fy.endDate).slice(0, 10),
+      };
+    }
+    const code = fy.code || fy.id || "";
+    const y = parseFyStartYear(code);
+    if (Number.isFinite(y) && y > 1900) {
+      return { from: `${y}-04-01`, to: `${y + 1}-03-31` };
+    }
+  }
+
+  const y = parseFyStartYear(String(fy ?? ""));
+  if (!Number.isFinite(y) || y < 1900) {
+    const now = new Date();
+    const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    return { from: `${startYear}-04-01`, to: `${startYear + 1}-03-31` };
+  }
   return { from: `${y}-04-01`, to: `${y + 1}-03-31` };
 }
 
 /** Default ledger transaction view: selected FY from Apr 1 through today (capped at FY end). */
 export function resolveLedgerDefaultDateRange(
-  fyId: string,
+  fy: FyRangeInput,
   today = new Date().toISOString().slice(0, 10),
 ): LedgerDateRange {
-  const fy = financialYearIsoRange(fyId);
-  const to = today < fy.to ? today : fy.to;
-  return { from: fy.from, to: to < fy.from ? fy.from : to };
+  const range = financialYearIsoRange(fy);
+  const to = today < range.to ? today : range.to;
+  return { from: range.from, to: to < range.from ? range.from : to };
 }
 
-export function defaultLedgerDateRangeState(fyId: string): LedgerDateRangeState {
-  const { from, to } = resolveLedgerDefaultDateRange(fyId);
+export function defaultLedgerDateRangeState(fy: FyRangeInput): LedgerDateRangeState {
+  const { from, to } = resolveLedgerDefaultDateRange(fy);
   return { preset: "custom", from, to };
 }
 
@@ -100,13 +132,14 @@ export function computeClosingFromPeriodOpening(
   return fromSignedBalance(signed);
 }
 
-/** Closing = ledger opening + net movement in the selected period (display only). */
+/** Closing = opening (with corrected Dr/Cr side) + net movement in the selected period. */
 export function computePeriodClosingBalance(
   ledger: ChartOfAccount,
   totalDebit: number,
   totalCredit: number,
 ): BalanceAmount {
-  const signed = openingSignedBalance(ledger) + totalDebit - totalCredit;
+  const openingSide = resolveOpeningSide(ledger);
+  const signed = toSignedBalance(roundMoney(ledger.openingBalance), openingSide) + totalDebit - totalCredit;
   return fromSignedBalance(signed);
 }
 
@@ -117,7 +150,9 @@ export function computePeriodOpeningBalance(
   from: string,
 ): BalanceAmount {
   const prior = sortChronological(allTransactions.filter((r) => r.date < from));
-  const signed = signedBalanceAfterMovements(openingSignedBalance(ledger), prior);
+  const openingSide = resolveOpeningSide(ledger);
+  const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
+  const signed = signedBalanceAfterMovements(openingSigned, prior);
   return fromSignedBalance(signed);
 }
 
@@ -164,8 +199,11 @@ export function buildCoaTransactionsForDateRange(
 export function ledgerMovementMapForRange(
   from: string,
   to: string,
-): Map<number, { totalDebit: number; totalCredit: number }> {
-  const map = new Map<number, { totalDebit: number; totalCredit: number }>();
+): Map<import("@/app/(app)/accounts/data").CoaNodeId, { totalDebit: number; totalCredit: number }> {
+  const map = new Map<
+    import("@/app/(app)/accounts/data").CoaNodeId,
+    { totalDebit: number; totalCredit: number }
+  >();
 
   loadVouchers()
     .filter((v) => isLedgerMovementVoucherStatus(v.status) && v.date >= from && v.date <= to)

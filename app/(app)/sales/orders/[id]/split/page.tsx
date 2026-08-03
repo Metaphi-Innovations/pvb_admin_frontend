@@ -15,65 +15,156 @@ import SalesOrderForm, {
 import {
   type SalesOrder,
   type ProductCatalogItem,
-  getOrderById,
   hydrateOrderLineItems,
-  loadProductCatalog,
-  splitSalesOrderFromForm,
   canSplitOrder,
-  generateOrderNumber,
-  loadOrders,
-  getCustomersForTransactionDropdown,
-  getSalesmenForOrders,
+  setDynamicProducts,
+  orderToFormValues,
 } from "../../orders-data";
+import {
+  mapProductPricingDropdownRecords,
+  setDynamicPricingRecords,
+} from "@/app/(app)/masters/pricing/pricing-data";
 import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
 import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
 import CreditLimitExceededDialog from "../../components/CreditLimitExceededDialog";
+import {
+  useSalesOrder,
+  useSplitSalesOrder,
+  useCustomersDropdown,
+  useSalesmenDropdown,
+  useProductsDropdown,
+  useProductPricingDropdown,
+  useNextSoNumber,
+} from "@/hooks/sales/use-sales-orders";
 
 export default function SplitSalesOrderPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const id = params.id as string;
 
   const [originalOrder, setOriginalOrder] = useState<SalesOrder | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesmen, setSalesmen] = useState<Employee[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
-  const [orderNumber, setOrderNumber] = useState("");
   const [form, setForm] = useState<SalesOrderFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [creditDialog, setCreditDialog] = useState<CustomerCreditSummary | null>(null);
 
+  const { data: nextOrderNumber } = useNextSoNumber(
+    form?.warehouseId ?? originalOrder?.warehouseId,
+    Boolean(form?.warehouseId ?? originalOrder?.warehouseId),
+  );
+  const { data: loadedOrder, isLoading: loadingOrder } = useSalesOrder(id);
+  const { data: customerData } = useCustomersDropdown();
+  const { data: salesmanData } = useSalesmenDropdown();
+  const { data: productData } = useProductsDropdown();
+  const { data: pricingData } = useProductPricingDropdown();
+
+  const splitMutation = useSplitSalesOrder();
+
+  const orderNumber = nextOrderNumber || "SO-2026-0001";
+
+  // Map dropdown data
   useEffect(() => {
-    setCustomers(getCustomersForTransactionDropdown());
-    setSalesmen(getSalesmenForOrders());
-    setProducts(loadProductCatalog());
-    setOrderNumber(generateOrderNumber(loadOrders()));
+    if (customerData) {
+      const mapped = customerData.map((c: any) => ({
+        id: c.customer_id,
+        customerCode: c.customer_code,
+        customerName: c.customer_name,
+        customerType: c.customer_type?.customer_type_name || "",
+        status: c.is_active ? "active" : "inactive",
+        mobile: c.mobile_no || "",
+        email: c.email || "",
+        gstApplicable: c.gst_applicable,
+        gstin: c.gstin_no || "",
+        registeredLegalName: c.registered_legal_name || "",
+        registeredAddress: c.registered_gst_address || "",
+        pan: c.pan_no || "",
+        paymentType: c.payment_type || "Credit",
+        creditLimit: Number(c.credit_limit || 0),
+        creditDays: Number(c.credit_days || 0),
+        branches: [],
+      }));
+      setCustomers(mapped as any);
+    }
+  }, [customerData]);
 
-    const loaded = getOrderById(id);
-    if (!loaded) return;
+  useEffect(() => {
+    if (salesmanData) {
+      const mapped = salesmanData.map((s: any) => ({
+        id: s.user_id,
+        employeeId: s.employee_id || s.username || "",
+        employeeCode: s.employee_id || s.username || "",
+        firstName: s.first_name || "",
+        lastName: s.last_name || "",
+        fullName: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "",
+        email: s.email || "",
+        role: s.role?.role_name || s.role_type || "",
+      }));
+      setSalesmen(mapped as any);
+    }
+  }, [salesmanData]);
 
-    if (!canSplitOrder(loaded)) {
+  useEffect(() => {
+    if (productData) {
+      const mapped = productData.map((p: any) => ({
+        id: p.product_id,
+        code: p.product_code,
+        name: p.product_name,
+        sku: p.sku || "",
+        stock: Number(p.pack_size || 1000), // fallback stock
+        sellingPrice: Number(p.mrp || 0),
+        gstRate: String(p.gst_rate?.gstPercentage || 18),
+        category: p.category?.categoryName || "",
+        segment: p.segment?.segment_name || "",
+        packSize: Number(p.unit_per_packing || 1),
+      }));
+      setProducts(mapped as any);
+      setDynamicProducts(mapped as any);
+    } else {
+      setDynamicProducts(null);
+    }
+  }, [productData]);
+
+  useEffect(() => {
+    if (pricingData && pricingData.length > 0) {
+      setDynamicPricingRecords(mapProductPricingDropdownRecords(pricingData));
+    } else {
+      setDynamicPricingRecords(null);
+    }
+  }, [pricingData]);
+
+  // Load and hydrate original order
+  useEffect(() => {
+    if (!loadedOrder) return;
+
+    if (!canSplitOrder(loadedOrder)) {
       setToast({ msg: "This order cannot be split.", type: "error" });
       setTimeout(() => router.push(`/sales/orders/${id}`), 1200);
       return;
     }
 
-    const hydrated = hydrateOrderLineItems(loaded);
+    const hydrated = hydrateOrderLineItems(loadedOrder);
     setOriginalOrder(hydrated);
+
+    const baseForm = orderToFormValues(hydrated);
     setForm({
-      orderDate: hydrated.orderDate,
-      customerId: hydrated.customerId,
-      salesManId: hydrated.salesManId,
-      deliveryDate: hydrated.deliveryDate,
+      ...baseForm,
       status: hydrated.status === "draft" ? "draft" : "confirmed",
-      lineItems: [],
+      lineItems:
+        hydrated.lineItems.length > 0
+          ? hydrated.lineItems.map((item) => ({
+              ...item,
+              id: `line-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              splitSourceLineId: item.id,
+              maxSplitQty: item.quantity,
+            }))
+          : [],
       additionalExpenses: [],
-      warehouseId: hydrated.warehouseId ?? null,
-      warehouseName: hydrated.warehouseName ?? "",
       remarks: "",
     });
-  }, [id, router]);
+  }, [loadedOrder, id, router]);
 
   useEffect(() => {
     if (!toast) return;
@@ -98,24 +189,34 @@ export default function SplitSalesOrderPage() {
       return;
     }
 
-    const result = splitSalesOrderFromForm(originalOrder.id, form, orderNumber, asDraft);
-    if ("error" in result) {
-      setToast({ msg: result.error, type: "error" });
-      return;
-    }
-
-    setToast({
-      msg: asDraft
-        ? "Split order saved as draft."
-        : result.newOrder.requiresApproval
-          ? "Split order submitted for approval."
-          : `Split order ${result.newOrder.soNumber} created successfully.`,
-      type: "success",
-    });
-    setTimeout(() => router.push("/sales/orders"), 1000);
+    splitMutation.mutate(
+      {
+        id: originalOrder.id,
+        form,
+        options: {
+          status: asDraft ? "draft" : form.status || "confirmed",
+          reason: form.remarks || "Quantity split",
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: "Split order created successfully.",
+            type: "success",
+          });
+          setTimeout(() => router.push("/sales/orders"), 1000);
+        },
+        onError: (err: any) => {
+          setToast({
+            msg: err.response?.data?.message || "Failed to split sales order.",
+            type: "error",
+          });
+        },
+      }
+    );
   };
 
-  if (!form || !originalOrder) {
+  if (loadingOrder || !form || !originalOrder) {
     return (
       <AppLayout>
         <p className="text-sm text-muted-foreground p-4">Loading order…</p>
@@ -139,7 +240,7 @@ export default function SplitSalesOrderPage() {
             variant="outline"
             size="sm"
             className="h-8 text-xs"
-            onClick={() => router.push(`/sales/orders/${id}`)}
+            onClick={() => router.push(`/sales/orders`)}
           >
             Cancel
           </Button>
@@ -147,8 +248,9 @@ export default function SplitSalesOrderPage() {
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}
+            disabled={splitMutation.isPending}
           >
-            <Split className="w-3.5 h-3.5" /> Create Split Order
+            <Split className="w-3.5 h-3.5" /> {splitMutation.isPending ? "Splitting..." : "Create Split Order"}
           </Button>
         </div>
 

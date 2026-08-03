@@ -34,6 +34,7 @@ export function ensureGoodsWe008DemoCustomer(): Customer | undefined {
   const list = loadCustomers();
   const customer: Customer = {
     id: nextCustomerId(list),
+    customerUuid: "goods-we008-demo-customer-uuid",
     customerCode: "CUST-REL-AGRI",
     customerName: GOODS_WE008_CUSTOMER,
     customerType: "distributor",

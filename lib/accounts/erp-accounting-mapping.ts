@@ -142,7 +142,7 @@ function applyVendorMeta(ledgerId: number, v: Vendor, existing?: LedgerExtendedM
 /** Create or update customer ledger from Customer Master. */
 export function syncCustomerLedger(
   customer: Customer,
-  options?: { parentGroupId?: number | null },
+  options?: { parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null },
 ): ChartOfAccount | null {
   const name = customer.customerName.trim();
   if (!name || customer.status === "draft") return null;
@@ -244,7 +244,7 @@ export function syncCustomerLedger(
 /** Create or update vendor ledger from Supplier Master. */
 export function syncVendorLedger(
   vendor: Vendor,
-  options?: { parentGroupId?: number | null },
+  options?: { parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null },
 ): ChartOfAccount | null {
   const name = vendor.vendorName.trim();
   if (!name || vendor.status !== "active") return null;
@@ -357,6 +357,12 @@ export function resolveProductAccountingDefaults(): {
   };
 }
 
+function toNullableNumericId(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function getProductAccountingConfig(product: Product): ProductAccountingConfig {
   const defaults = resolveProductAccountingDefaults();
   const missingFields: string[] = [];
@@ -371,8 +377,8 @@ export function getProductAccountingConfig(product: Product): ProductAccountingC
     cogsAccount: product.cogsAccount ?? defaults.cogsAccount,
     hsnCode: product.hsnCode ?? "",
     gstRate: product.gstRate ?? "",
-    gstId: product.gstId ?? null,
-    hsnId: product.hsnId ?? null,
+    gstId: toNullableNumericId(product.gstId),
+    hsnId: toNullableNumericId(product.hsnId),
     isComplete: missingFields.length === 0,
     missingFields,
   };

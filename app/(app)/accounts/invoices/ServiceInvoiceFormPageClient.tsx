@@ -223,7 +223,7 @@ export default function ServiceInvoiceFormPageClient() {
     }
     setSaving(true);
     try {
-      const rec = createInvoice({
+      const rec = await createInvoice({
         invoiceDate,
         dueDate: dueDate || computeDueDate(invoiceDate, creditDays),
         referenceNo: referenceNo.trim(),

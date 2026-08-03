@@ -25,6 +25,9 @@ export const ACCOUNTS_PERMISSIONS = {
   VOUCHER_TYPE_CONFIGURE: "accounts.voucher_type.configure",
   COST_CENTER_MANAGE: "accounts.cost_center.manage",
   BANK_ACCOUNT_MANAGE: "accounts.bank_account.manage",
+  BANK_ACCOUNT_VIEW: "accounts.bank_account.view",
+  BANK_ACCOUNT_CREATE: "accounts.bank_account.create",
+  BANK_ACCOUNT_UPDATE: "accounts.bank_account.update",
   SETTINGS_MANAGE: "accounts.settings.manage",
 
   // Reports
@@ -61,6 +64,9 @@ export const ROLE_PERMISSION_PRESETS: Record<string, AccountsPermissionCode[]> =
     ACCOUNTS_PERMISSIONS.RECEIVABLES_VIEW,
     ACCOUNTS_PERMISSIONS.PAYABLES_VIEW,
     ACCOUNTS_PERMISSIONS.BANK_RECONCILE,
+    ACCOUNTS_PERMISSIONS.BANK_ACCOUNT_VIEW,
+    ACCOUNTS_PERMISSIONS.BANK_ACCOUNT_CREATE,
+    ACCOUNTS_PERMISSIONS.BANK_ACCOUNT_UPDATE,
   ],
   accounts_clerk: [
     ACCOUNTS_PERMISSIONS.COA_VIEW,

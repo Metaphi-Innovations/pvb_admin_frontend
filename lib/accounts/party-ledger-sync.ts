@@ -4,6 +4,31 @@ import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { syncCustomerLedger, syncVendorLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { resolveMappingLedger } from "@/lib/accounts/ledger-mappings";
 
+/** Fields syncCustomerLedger/applyCustomerMeta actually read — narrower than the full mock Customer type. */
+export type CustomerLedgerInput = Pick<
+  Customer,
+  | "id"
+  | "customerUuid"
+  | "customerName"
+  | "customerCode"
+  | "status"
+  | "gstApplicable"
+  | "gstin"
+  | "pan"
+  | "tdsApplicable"
+  | "creditLimit"
+  | "paymentTerms"
+  | "address"
+  | "districtName"
+  | "stateName"
+  | "pincode"
+  | "branches"
+  | "salesManName"
+  | "mobile"
+  | "countryCode"
+  | "email"
+>;
+
 /** @deprecated Use syncCustomerLedger(customer) — kept for name-only callers */
 export function ensureCustomerLedger(customerName: string): ChartOfAccount | null {
   const name = customerName.trim();
@@ -12,8 +37,8 @@ export function ensureCustomerLedger(customerName: string): ChartOfAccount | nul
 }
 
 /** Full customer → ledger sync with metadata and stable ERP link */
-export function ensureCustomerLedgerFromMaster(customer: Customer): ChartOfAccount | null {
-  return syncCustomerLedger(customer);
+export function ensureCustomerLedgerFromMaster(customer: CustomerLedgerInput): ChartOfAccount | null {
+  return syncCustomerLedger(customer as Customer);
 }
 
 /** @deprecated Use syncVendorLedger(vendor) — kept for name-only callers */

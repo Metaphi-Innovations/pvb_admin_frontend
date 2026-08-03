@@ -8,67 +8,50 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import {
+  ApiFinancialYear,
+  FinancialYearApiService,
+} from "@/services/financial-year.service";
+import { getStoredFYId, setStoredFYId } from "@/lib/fy-storage";
+
+export { getStoredFYId, setStoredFYId } from "@/lib/fy-storage";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-export type FYStatus = "upcoming" | "live" | "closed" | "archived";
+export type FYStatus = "upcoming" | "live" | "open" | "closed" | "archived";
 
 export interface FinancialYear {
+  /** Backend UUID — Working FY id sent as x-financial-year-id */
   id: string;
+  code: string;
   label: string;
+  /** Display range */
   start: string;
   end: string;
+  /** ISO dates from API */
+  startDate: string;
+  endDate: string;
   status: FYStatus;
+  isCurrent: boolean;
+  isClosed: boolean;
 }
-
-// ── Mock Financial Years ───────────────────────────────────────────────────────
-export const FINANCIAL_YEARS: FinancialYear[] = [
-  {
-    id: "2022-23",
-    label: "FY 2022-23",
-    start: "Apr 1, 2022",
-    end: "Mar 31, 2023",
-    status: "archived",
-  },
-  {
-    id: "2023-24",
-    label: "FY 2023-24",
-    start: "Apr 1, 2023",
-    end: "Mar 31, 2024",
-    status: "closed",
-  },
-  {
-    id: "2024-25",
-    label: "FY 2024-25",
-    start: "Apr 1, 2024",
-    end: "Mar 31, 2025",
-    status: "closed",
-  },
-  {
-    id: "2025-26",
-    label: "FY 2025-26",
-    start: "Apr 1, 2025",
-    end: "Mar 31, 2026",
-    status: "closed",
-  },
-  {
-    id: "2026-27",
-    label: "FY 2026-27",
-    start: "Apr 1, 2026",
-    end: "Mar 31, 2027",
-    status: "live",
-  },
-];
 
 export const FY_STATUS_CONFIG: Record<
   FYStatus,
   { label: string; bg: string; color: string; dot: string; border: string }
 > = {
   live: {
-    label: "Live",
+    label: "Current",
     bg: "bg-green-50",
     color: "text-green-700",
     dot: "bg-green-500",
     border: "border-green-200",
+  },
+  open: {
+    label: "Open",
+    bg: "bg-emerald-50",
+    color: "text-emerald-700",
+    dot: "bg-emerald-500",
+    border: "border-emerald-200",
   },
   upcoming: {
     label: "Upcoming",
@@ -93,88 +76,166 @@ export const FY_STATUS_CONFIG: Record<
   },
 };
 
-const FY_STORAGE_KEY = "dharitrisutra_selected_fy";
-
-const DEFAULT_FY =
-  FINANCIAL_YEARS.find((f) => f.status === "live") ?? FINANCIAL_YEARS[0];
-
-function readStoredFY(): FinancialYear {
-  if (typeof window === "undefined") return DEFAULT_FY;
-  try {
-    const stored = localStorage.getItem(FY_STORAGE_KEY);
-    if (!stored) return DEFAULT_FY;
-    return FINANCIAL_YEARS.find((f) => f.id === stored) ?? DEFAULT_FY;
-  } catch {
-    return DEFAULT_FY;
-  }
+function formatDisplayDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+export function mapApiFinancialYear(row: ApiFinancialYear): FinancialYear {
+  const startDate = String(row.startDate);
+  const endDate = String(row.endDate);
+  const isClosed = Boolean(row.isClosed);
+  const isCurrent = Boolean(row.isCurrent);
+  const today = startOfLocalDay(new Date());
+  const start = startOfLocalDay(new Date(startDate));
+
+  let status: FYStatus;
+  if (isClosed) {
+    status = "closed";
+  } else if (isCurrent) {
+    status = "live";
+  } else if (start > today) {
+    status = "upcoming";
+  } else {
+    status = "open";
+  }
+
+  const code = row.code || row.name;
+  return {
+    id: row.financialYearId,
+    code,
+    label: row.name?.startsWith("FY") ? row.name : `FY ${code}`,
+    start: formatDisplayDate(startDate),
+    end: formatDisplayDate(endDate),
+    startDate,
+    endDate,
+    status,
+    isCurrent,
+    isClosed,
+  };
+}
+
+/** Placeholder until API years load — never sent as x-financial-year-id (empty id). */
+const PLACEHOLDER_FY: FinancialYear = {
+  id: "",
+  code: "",
+  label: "Loading…",
+  start: "—",
+  end: "—",
+  startDate: "",
+  endDate: "",
+  status: "upcoming",
+  isCurrent: false,
+  isClosed: false,
+};
 
 // ── Context ───────────────────────────────────────────────────────────────────
 interface FYContextType {
   selectedFY: FinancialYear;
   setSelectedFY: (fy: FinancialYear) => void;
   allFYs: FinancialYear[];
+  isLoading: boolean;
+  error: string | null;
+  refreshFinancialYears: () => Promise<void>;
 }
 
 const FYContext = createContext<FYContextType | null>(null);
 
-// ── Provider — single render tree (no mount gate that remounts children) ───────
+function pickInitialSelection(
+  years: FinancialYear[],
+  storedId: string | null,
+): FinancialYear {
+  if (!years.length) return PLACEHOLDER_FY;
+  if (storedId) {
+    const stored = years.find((y) => y.id === storedId);
+    if (stored) return stored;
+  }
+  return years.find((y) => y.isCurrent) ?? years.find((y) => y.status === "live") ?? years[0];
+}
+
 export function FYProvider({ children }: { children: React.ReactNode }) {
-  const [selectedFY, setSelectedFYState] = useState<FinancialYear>(DEFAULT_FY);
+  const [allFYs, setAllFYs] = useState<FinancialYear[]>([]);
+  const [selectedFY, setSelectedFYState] = useState<FinancialYear>(PLACEHOLDER_FY);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setSelectedFYState(readStoredFY());
-  }, []);
-
-  const setSelectedFY = useCallback((fy: FinancialYear) => {
-    setSelectedFYState(fy);
+  const refreshFinancialYears = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      localStorage.setItem(FY_STORAGE_KEY, fy.id);
-    } catch {
-      // ignore
+      const rows = await FinancialYearApiService.list(true);
+      const mapped = rows.map(mapApiFinancialYear);
+      setAllFYs(mapped);
+      setSelectedFYState((prev) => {
+        const storedId = prev?.id || getStoredFYId();
+        const next = pickInitialSelection(mapped, storedId);
+        if (next.id) setStoredFYId(next.id);
+        return next;
+      });
+    } catch (err: any) {
+      setError(err?.message || "Failed to load financial years");
+      setAllFYs([]);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
+  useEffect(() => {
+    void refreshFinancialYears();
+  }, [refreshFinancialYears]);
+
+  const setSelectedFY = useCallback((fy: FinancialYear) => {
+    setSelectedFYState(fy);
+    if (fy.id) setStoredFYId(fy.id);
+  }, []);
+
   const value = useMemo(
-    () => ({ selectedFY, setSelectedFY, allFYs: FINANCIAL_YEARS }),
-    [selectedFY, setSelectedFY],
+    () => ({
+      selectedFY,
+      setSelectedFY,
+      allFYs,
+      isLoading,
+      error,
+      refreshFinancialYears,
+    }),
+    [selectedFY, setSelectedFY, allFYs, isLoading, error, refreshFinancialYears],
   );
 
   return <FYContext.Provider value={value}>{children}</FYContext.Provider>;
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
 export function useFY(): FYContextType {
   const ctx = useContext(FYContext);
   if (!ctx) throw new Error("useFY must be used within a FYProvider");
   return ctx;
 }
 
-// ── Standalone read (no context required, e.g. login page) ────────────────────
-export function getStoredFYId(): string | null {
-  try {
-    return localStorage.getItem(FY_STORAGE_KEY);
-  } catch {
-    return null;
+/**
+ * Opening date YYYY-MM-DD for a Financial Year.
+ * Prefer passing the FY object (UUID ids are not parseable as year codes).
+ */
+export function fyOpeningDateIso(fyOrId: FinancialYear | string): string {
+  if (typeof fyOrId === "object" && fyOrId?.startDate) {
+    return String(fyOrId.startDate).slice(0, 10);
   }
-}
 
-export function setStoredFYId(id: string): void {
-  try {
-    localStorage.setItem(FY_STORAGE_KEY, id);
-  } catch {
-    // ignore
+  const id = String(fyOrId);
+  const y = parseInt(id.split("-")[0], 10);
+  if (Number.isFinite(y) && y > 1900) {
+    return `${y}-04-01`;
   }
-}
 
-/** Indian FY opening date as YYYY-MM-DD from FY id (e.g. "2025-26" → "2025-04-01"). */
-export function fyOpeningDateIso(fyId: string): string {
-  const y = parseInt(String(fyId).split("-")[0], 10);
-  if (!Number.isFinite(y)) {
-    const now = new Date();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-    return `${month >= 3 ? year : year - 1}-04-01`;
-  }
-  return `${y}-04-01`;
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  return `${month >= 3 ? year : year - 1}-04-01`;
 }

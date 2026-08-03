@@ -1,0 +1,140 @@
+"use client";
+
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+    SupplierListService,
+    type SupplierCreatePayload,
+    type SupplierExportParams,
+    type SupplierFilterField,
+    type SupplierListParams,
+    type SupplierUpdatePayload,
+    type SupplierDropdownItem,
+} from "@/services/supplier-list.service";
+import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
+
+function toListParams(params: MasterListKeyParams): SupplierListParams {
+    return {
+        page: params.page,
+        pageSize: params.pageSize,
+        search: params.search,
+        ordering: params.ordering,
+        status: params.status,
+        apiFilters: params.apiFilters,
+    };
+}
+
+export function useSuppliers(params: MasterListKeyParams) {
+    return useQuery({
+        queryKey: masterKeys.suppliers.list(params),
+        queryFn: ({ signal }: { signal: AbortSignal }) => SupplierListService.list({ ...toListParams(params), signal }),
+        placeholderData: keepPreviousData,
+    });
+}
+
+export interface SupplierSummary {
+    total: number;
+    active: number;
+    inactive: number;
+}
+
+export function useSupplierSummary() {
+    return useQuery({
+        queryKey: masterKeys.suppliers.summary(),
+        queryFn: async (): Promise<SupplierSummary> => {
+            const response = await SupplierListService.getSummary();
+            return response;
+        },
+        staleTime: 30_000,
+    });
+}
+
+export function useSupplier(id: string | null | undefined) {
+    return useQuery({
+        queryKey: masterKeys.suppliers.detail(id ?? ""),
+        queryFn: () => SupplierListService.view(id!),
+        enabled: Boolean(id),
+    });
+}
+
+export function useCreateSupplier() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: SupplierCreatePayload) => SupplierListService.create(payload),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.lists() }),
+                queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.dropdown() }),
+            ]);
+        },
+    });
+}
+
+export function useUpdateSupplier() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, payload }: { id: string; payload: SupplierUpdatePayload }) =>
+            SupplierListService.update(id, payload),
+        onSuccess: async (_data: void, variables: { id: string; payload: SupplierUpdatePayload }) => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.lists() }),
+                queryClient.invalidateQueries({
+                    queryKey: masterKeys.suppliers.detail(variables.id),
+                }),
+                queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.dropdown() }),
+            ]);
+        },
+    });
+}
+
+export function useToggleSupplierStatus() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+            SupplierListService.updateStatus(id, isActive),
+        onSuccess: async (_data: void, variables: { id: string; isActive: boolean }) => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.lists() }),
+                queryClient.invalidateQueries({
+                    queryKey: masterKeys.suppliers.detail(variables.id),
+                }),
+                queryClient.invalidateQueries({ queryKey: masterKeys.suppliers.dropdown() }),
+            ]);
+        },
+    });
+}
+
+export function useSuppliersDropdown() {
+    return useQuery({
+        queryKey: masterKeys.suppliers.dropdown(),
+        queryFn: () => SupplierListService.dropdown(),
+        staleTime: 60_000,
+    });
+}
+
+export function useSupplierPreviewNumber(supplierTypeId?: string, enabled = false) {
+    return useQuery({
+        queryKey: masterKeys.suppliers.previewNumber(supplierTypeId),
+        queryFn: () => SupplierListService.previewNumber(supplierTypeId),
+        enabled: enabled && Boolean(supplierTypeId),
+        staleTime: 0,
+    });
+}
+
+export function useExportSuppliers() {
+    return useMutation({
+        mutationFn: (params: SupplierExportParams) => SupplierListService.export(params),
+    });
+}
+
+export function useSupplierFilterDropdown(
+    fieldName: SupplierFilterField,
+    options?: FilterDropdownQueryOptions,
+) {
+    return useQuery({
+        queryKey: masterKeys.suppliers.filterDropdown(fieldName),
+        queryFn: ({ signal }) => SupplierListService.getFilterDropdown(fieldName, signal),
+        staleTime: 5 * 60 * 1000,
+        enabled: options?.enabled ?? true,
+    });
+}

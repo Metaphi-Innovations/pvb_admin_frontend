@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,29 +13,28 @@ import {
 } from "lucide-react";
 import {
   type SalesOrder,
-  attachPackingListToOrder,
   hydrateOrderLineItems,
-  getOrderById,
 } from "../../../orders-data";
 import {
-  type PackingList,
   type PackingListLine,
-  getActiveWarehousesForPacking,
-  buildAllPackingListLines,
-  createPackingList,
-  savePackingList,
-  validatePackingListLines,
+  getProductPackingConfig,
   CartonAllocation,
   InventoryType,
 } from "../../../packing-list-data";
+import {
+  useSalesOrder,
+  useWarehousesDropdown,
+  useCreatePackingList,
+} from "@/hooks/sales/use-sales-orders";
+import { SalesOrderService } from "@/services/sales-order.service";
 
 export default function NewPackingListPage() {
   const params = useParams();
   const router = useRouter();
-  const orderId = Number(params.id);
+  const orderId = params.id as string;
 
   const [order, setOrder] = useState<SalesOrder | null>(null);
-  const [warehouseId, setWarehouseId] = useState<number | null>(null);
+  const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [warehouseCode, setWarehouseCode] = useState("");
   const [warehouseName, setWarehouseName] = useState("");
   const [lines, setLines] = useState<PackingListLine[]>([]);
@@ -43,44 +42,134 @@ export default function NewPackingListPage() {
   const [whOpen, setWhOpen] = useState(false);
   const [checkedAllocations, setCheckedAllocations] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [loadingBatches, setLoadingBatches] = useState(false);
 
-  const warehouses = getActiveWarehousesForPacking();
+  const { data: loadedOrder, isLoading: loadingOrder } = useSalesOrder(orderId);
+  const { data: warehouseData } = useWarehousesDropdown();
+  const createPackingListMutation = useCreatePackingList();
+
+  const warehouses = useMemo(() => {
+    if (!warehouseData) return [];
+    return warehouseData.map((w: any) => ({
+      id: w.warehouse_id,
+      warehouseCode: w.warehouse_code || `WH-${String(w.sr_no).padStart(4, "0")}`,
+      warehouseName: w.warehouse_name,
+    }));
+  }, [warehouseData]);
 
   useEffect(() => {
-    const o = getOrderById(orderId);
-    if (o) {
-      setOrder(hydrateOrderLineItems(o));
+    if (loadedOrder) {
+      setOrder(hydrateOrderLineItems(loadedOrder));
     }
-  }, [orderId]);
+  }, [loadedOrder]);
 
+  // Auto-select warehouse when order and warehouse list are loaded
   useEffect(() => {
-    if (!order || !warehouseCode) {
+    if (order?.warehouseId && warehouses.length > 0) {
+      const match = warehouses.find(w => w.id === order.warehouseId);
+      if (match) {
+        setWarehouseId(match.id);
+        setWarehouseCode(match.warehouseCode);
+        setWarehouseName(match.warehouseName);
+      }
+    }
+  }, [order, warehouses]);
+
+  // Fetch live batches from backend when order and warehouse are selected
+  useEffect(() => {
+    if (!order || !warehouseId) {
       setLines([]);
       setCheckedAllocations({});
       setExpandedSections({});
       return;
     }
-    const allLines = buildAllPackingListLines(order, warehouseCode);
-    setLines(allLines);
 
-    const initialChecked: Record<string, boolean> = {};
-    const initialExpanded: Record<string, boolean> = {};
-    for (const line of allLines) {
-      initialExpanded[line.lineItemId] = true;
-      for (const alloc of line.allocations) {
-        if (alloc.allocatedBaseQty > 0) {
-          initialChecked[`${line.lineItemId}-${alloc.cartonId}`] = true;
+    const fetchAllBatches = async () => {
+      setLoadingBatches(true);
+      setError("");
+      try {
+        const packingLines: PackingListLine[] = [];
+        const initialChecked: Record<string, boolean> = {};
+        const initialExpanded: Record<string, boolean> = {};
+
+        for (const line of order.lineItems) {
+          if (!line.productId || line.quantity <= 0) continue;
+
+          // Fetch available inventory batches from the backend
+          const batches = await SalesOrderService.getBatches(line.productId, warehouseId, line.quantityType);
+
+          const config = getProductPackingConfig(Number(line.productId)) || {
+            packingUnit: "Unit",
+            baseUnit: "Unit",
+          };
+          const unitsPerPacking = (line as any).packSize || (config as any).unitsPerPackingUnit || 1;
+
+          let remaining = line.quantity;
+
+          const allocations = batches.map((b: any) => {
+            const availQty = Number(b.available_qty || 0);
+            
+            const neededBase = remaining;
+            const takeBase = Math.min(neededBase, availQty);
+            const takePacking = line.quantityType === "Case" ? Math.floor(takeBase / unitsPerPacking) : takeBase;
+
+            if (takeBase > 0) {
+              initialChecked[`${line.id}-${b.available_inventory_id}`] = true;
+              remaining -= takeBase;
+            }
+
+            return {
+              cartonId: b.available_inventory_id,
+              batchNumber: b.batch_code || "N/A",
+              expiryDate: b.expiry_date || "N/A",
+              cartonNumber: b.batch_code || "N/A",
+              packingUnit: config.packingUnit,
+              baseUnit: config.baseUnit,
+              unitsPerPackingUnit: unitsPerPacking,
+              availablePackingQty: line.quantityType === "Case" ? Math.floor(availQty / unitsPerPacking) : availQty,
+              availableBaseQty: availQty,
+              inventoryType: "original" as InventoryType,
+              suggestedPackingQty: takePacking,
+              suggestedBaseQty: takeBase,
+              allocatedPackingQty: takePacking,
+              allocatedBaseQty: takeBase,
+            };
+          });
+
+          initialExpanded[line.id] = true;
+
+          packingLines.push({
+            lineItemId: line.id,
+            productId: Number(line.productId),
+            productCode: line.productCode || "",
+            productName: line.productName || "",
+            packingUnit: config.packingUnit,
+            baseUnit: config.baseUnit,
+            unitsPerPackingUnit: unitsPerPacking,
+            orderedBaseQty: line.quantity,
+            hasPackingConfig: true,
+            allocations,
+            quantityType: line.quantityType,
+          });
         }
+
+        setLines(packingLines);
+        setCheckedAllocations(initialChecked);
+        setExpandedSections(initialExpanded);
+      } catch (err: any) {
+        console.error("Error fetching batches", err);
+        setError("Failed to load inventory batches for the selected warehouse.");
+      } finally {
+        setLoadingBatches(false);
       }
-    }
-    setCheckedAllocations(initialChecked);
-    setExpandedSections(initialExpanded);
-    setError("");
-  }, [order, warehouseCode]);
+    };
 
-  if (!order) return <div className="p-8">Order not found.</div>;
+    fetchAllBatches();
+  }, [order, warehouseId]);
 
-  const selectWarehouse = (id: number, code: string, name: string) => {
+  if (loadingOrder || !order) return <div className="p-8">Loading order…</div>;
+
+  const selectWarehouse = (id: string, code: string, name: string) => {
     setWarehouseId(id);
     setWarehouseCode(code);
     setWarehouseName(name);
@@ -108,13 +197,16 @@ export default function NewPackingListPage() {
             .reduce((sum, x) => sum + x.allocatedBaseQty, 0);
 
           const pending = Math.max(0, line.orderedBaseQty - totalAlreadyAllocated);
-          const autoFillBase = Math.min(a.availableBaseQty, pending);
-          const autoFillPacking = Math.floor(autoFillBase / a.unitsPerPackingUnit);
+          
+          const availBase = a.availableBaseQty;
+
+          const takeBase = Math.min(pending, availBase);
+          const takePacking = line.quantityType === "Case" ? Math.floor(takeBase / a.unitsPerPackingUnit) : takeBase;
 
           return {
             ...a,
-            allocatedPackingQty: autoFillPacking,
-            allocatedBaseQty: autoFillBase
+            allocatedPackingQty: takePacking,
+            allocatedBaseQty: takeBase
           };
         }
       });
@@ -127,10 +219,10 @@ export default function NewPackingListPage() {
   const updateAllocation = (
     lineItemId: string,
     cartonId: string,
-    field: "cases" | "loose",
     value: string,
   ) => {
-    const numValue = parseInt(value, 10) || 0;
+    let numValue = parseInt(value, 10);
+    if (isNaN(numValue)) numValue = 0;
     const key = `${lineItemId}-${cartonId}`;
     
     setLines(prev =>
@@ -141,19 +233,18 @@ export default function NewPackingListPage() {
           allocations: line.allocations.map(alloc => {
             if (alloc.cartonId !== cartonId) return alloc;
             
-            let c = alloc.allocatedPackingQty;
-            let p = alloc.allocatedBaseQty - (c * alloc.unitsPerPackingUnit);
-
-            if (field === "cases") {
-              c = numValue;
+            const maxBaseQty = alloc.availableBaseQty;
+            let newBaseQty = 0;
+            
+            if (line.quantityType === "Case") {
+              newBaseQty = Math.min(numValue * alloc.unitsPerPackingUnit, maxBaseQty);
             } else {
-              p = numValue;
+              newBaseQty = Math.min(numValue, maxBaseQty);
             }
+            
+            setCheckedAllocations(prevChecks => ({ ...prevChecks, [key]: newBaseQty > 0 }));
 
-            const totalBase = (c * alloc.unitsPerPackingUnit) + p;
-            setCheckedAllocations(prevChecks => ({ ...prevChecks, [key]: totalBase > 0 }));
-
-            return { ...alloc, allocatedPackingQty: c, allocatedBaseQty: totalBase };
+            return { ...alloc, allocatedPackingQty: numValue, allocatedBaseQty: newBaseQty };
           }),
         };
       }),
@@ -167,7 +258,9 @@ export default function NewPackingListPage() {
       return;
     }
 
-    // Validation
+    const productsToSubmit: any[] = [];
+
+    // Validation & build submit products array
     for (const line of lines) {
       let productSelectedTotal = 0;
       for (const alloc of line.allocations) {
@@ -182,6 +275,14 @@ export default function NewPackingListPage() {
             return;
           }
           productSelectedTotal += alloc.allocatedBaseQty;
+
+          productsToSubmit.push({
+            source_item_id: line.lineItemId,
+            batch_code: alloc.batchNumber,
+            order_qty: alloc.allocatedBaseQty,
+            available_inventory_id: alloc.cartonId,
+            quantity_type: line.quantityType,
+          });
         }
       }
       if (productSelectedTotal > line.orderedBaseQty) {
@@ -190,34 +291,28 @@ export default function NewPackingListPage() {
       }
     }
 
-    const finalLines = lines.map(line => ({
-      ...line,
-      allocations: line.allocations.filter(alloc => checkedAllocations[`${line.lineItemId}-${alloc.cartonId}`])
-    }));
-
-    const validationError = validatePackingListLines(finalLines, warehouseCode);
-    if (validationError) {
-      setError(validationError);
+    if (productsToSubmit.length === 0) {
+      setError("At least one product and batch must be allocated for packing.");
       return;
     }
 
-    const list = createPackingList(order, finalLines, warehouseId, warehouseCode, warehouseName);
-    savePackingList(list);
-
-    const attachResult = attachPackingListToOrder(
-      order.id,
-      list.id,
-      list.packingListNumber,
-      warehouseId,
-      warehouseName,
-      list.status,
+    createPackingListMutation.mutate(
+      {
+        source_type: "normal_sales",
+        source_id: order.id as unknown as string,
+        warehouse_id: warehouseId as string,
+        remarks: "Generate packing list from UI",
+        products: productsToSubmit,
+      },
+      {
+        onSuccess: () => {
+          router.push(`/sales/orders`);
+        },
+        onError: (err: any) => {
+          setError(err.response?.data?.message || "Failed to generate packing list.");
+        },
+      }
     );
-    if ("error" in attachResult) {
-      setError(attachResult.error);
-      return;
-    }
-
-    router.push(`/sales/orders`);
   };
 
   const formatInventoryType = (type: InventoryType) => {
@@ -284,10 +379,11 @@ export default function NewPackingListPage() {
               </PopoverContent>
             </Popover>
           </div>
-
         </div>
 
-        {warehouseCode && lines.map(line => {
+        {loadingBatches && <p className="text-xs text-muted-foreground">Loading available batches…</p>}
+
+        {!loadingBatches && warehouseCode && lines.map(line => {
           const visibleAllocations = line.allocations;
 
           if (visibleAllocations.length === 0) return null;
@@ -297,7 +393,6 @@ export default function NewPackingListPage() {
             return sum + (isChecked ? a.allocatedBaseQty : 0);
           }, 0);
           const insufficient = allocated < line.orderedBaseQty;
-
           const isExpanded = !!expandedSections[line.lineItemId];
           const selectedCount = line.allocations.filter(a => !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`]).length;
 
@@ -316,11 +411,17 @@ export default function NewPackingListPage() {
                   <div className="flex items-center gap-4">
                     <div className="text-right text-sm">
                       <span className="text-muted-foreground">Ordered: </span>
-                      <span className="font-semibold">{line.orderedBaseQty} {line.baseUnit}</span>
+                      <span className="font-semibold">
+                        {line.quantityType?.toUpperCase() === "CASE" 
+                          ? `${Math.floor(line.orderedBaseQty / line.unitsPerPackingUnit)} Case` 
+                          : `${line.orderedBaseQty} Unit`}
+                      </span>
                       <span className="mx-3 text-muted-foreground">|</span>
                       <span className="text-muted-foreground">Allocated: </span>
                       <span className={cn("font-semibold", insufficient && "text-amber-600")}>
-                        {allocated} {line.baseUnit}
+                        {line.quantityType?.toUpperCase() === "CASE" 
+                          ? `${Math.floor(allocated / line.unitsPerPackingUnit)} Case` 
+                          : `${allocated} Unit`}
                       </span>
                       {!isExpanded && selectedCount > 0 && (
                         <span className="ml-2 text-muted-foreground">({selectedCount} batch{selectedCount !== 1 ? "es" : ""} selected)</span>
@@ -328,11 +429,6 @@ export default function NewPackingListPage() {
                     </div>
                     {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-4 mt-2 text-xs text-muted-foreground">
-                  <span>Packing: <span className="font-medium text-foreground">{line.packingUnit}</span></span>
-                  <span>Base: <span className="font-medium text-foreground">{line.baseUnit}</span></span>
-                  <span>Conversion: <span className="font-medium text-foreground">1 {line.packingUnit} = {line.unitsPerPackingUnit} {line.baseUnit}</span></span>
                 </div>
               </button>
 
@@ -342,14 +438,11 @@ export default function NewPackingListPage() {
                     <thead>
                       <tr className="bg-muted/10 border-b border-border">
                         <th className="px-4 py-2.5 text-left w-12">Select</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold">Inventory Type</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold">Quantity Type</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Batch</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold">Box/Carton</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Cases</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Loose</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Cases</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Loose ({line.baseUnit})</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Available Qty</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-32">Pack Qty</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total (Base)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -366,36 +459,23 @@ export default function NewPackingListPage() {
                               />
                             </td>
                             <td className="px-3 py-2.5">
-                              <span className={cn(
-                                "text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
-                                alloc.inventoryType === "original" ? "bg-emerald-100 text-emerald-700" :
-                                alloc.inventoryType === "sales_return" ? "bg-amber-100 text-amber-700" :
-                                "bg-blue-100 text-blue-700"
-                              )}>
-                                {formatInventoryType(alloc.inventoryType)}
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap bg-blue-100 text-blue-700">
+                                {line.quantityType?.toUpperCase() || "PIECE"}
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-xs font-mono text-brand-700">{alloc.batchNumber}</td>
-                            <td className="px-3 py-2.5 text-xs font-mono">{alloc.cartonNumber}</td>
-                            <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)}</td>
-                            <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{alloc.availableBaseQty % alloc.unitsPerPackingUnit}</td>
-                            <td className="px-3 py-2.5">
-                              <Input
-                                type="number"
-                                min="0"
-                                value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "cases", e.target.value)}
-                                className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
-                                placeholder="0"
-                                disabled={!isChecked}
-                              />
+                            <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">
+                              {line.quantityType === "Case" 
+                                ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) 
+                                : alloc.availableBaseQty}
                             </td>
                             <td className="px-3 py-2.5">
                               <Input
                                 type="number"
                                 min="0"
-                                value={isChecked ? alloc.allocatedBaseQty - (alloc.allocatedPackingQty * alloc.unitsPerPackingUnit) : (isChecked ? 0 : "")}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "loose", e.target.value)}
+                                max={line.quantityType === "Case" ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) : alloc.availableBaseQty}
+                                value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
+                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, e.target.value)}
                                 className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
                                 placeholder="0"
                                 disabled={!isChecked}
@@ -429,9 +509,9 @@ export default function NewPackingListPage() {
           <Button
             className="gap-2 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
-            disabled={!warehouseCode}
+            disabled={!warehouseCode || createPackingListMutation.isPending}
           >
-            <Save className="w-4 h-4" /> Save Packing List
+            <Save className="w-4 h-4" /> {createPackingListMutation.isPending ? "Generating..." : "Save Packing List"}
           </Button>
         </div>
       </div>

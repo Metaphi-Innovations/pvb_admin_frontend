@@ -1,4 +1,3 @@
-import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import type { PurchaseOrder, POLineItem, POStatus } from "./po-data";
 
 export type ShortCloseReason =
@@ -25,7 +24,7 @@ export function shortCloseReasonLabel(reason: ShortCloseReason): string {
 export interface POShortCloseInfo {
   closeType: "short_close";
   quantity: number;
-  reason: ShortCloseReason;
+  reason: string;
   remarks: string;
   shortClosedBy: string;
   shortClosedDate: string;
@@ -39,28 +38,18 @@ export interface POQtySummary {
   pendingQty: number;
 }
 
-export function getLineReceivedQty(po: PurchaseOrder, line: POLineItem): number {
-  const grns = getGrnRecords().filter((g) => g.poNumber === po.poNumber);
-  let fromGrn = 0;
-  for (const g of grns) {
-    for (const it of g.items) {
-      if (it.productCode === line.productCode) {
-        fromGrn += it.receivedQty ?? 0;
-      }
-    }
-  }
-  if (fromGrn > 0) return fromGrn;
+export function getLineReceivedQty(_po: PurchaseOrder, line: POLineItem): number {
   return line.receivedQty ?? 0;
 }
 
 export function getLinePendingQty(po: PurchaseOrder, line: POLineItem): number {
   const received = getLineReceivedQty(po, line);
   const shortClosed = line.shortClosedQty ?? 0;
-  return Math.max(0, line.orderedQty - received - shortClosed);
+  return Math.max(0, (line.orderedQtyPack || 0) - received - shortClosed);
 }
 
 export function getPOQtySummary(po: PurchaseOrder): POQtySummary {
-  const orderedQty = po.lines.reduce((s, l) => s + l.orderedQty, 0);
+  const orderedQty = po.lines.reduce((s, l) => s + (l.orderedQtyPack || 0), 0);
   const receivedQty = po.lines.reduce((s, l) => s + getLineReceivedQty(po, l), 0);
   const shortClosedQty = po.lines.reduce((s, l) => s + (l.shortClosedQty ?? 0), 0);
   const pendingQty = Math.max(0, orderedQty - receivedQty - shortClosedQty);
@@ -68,7 +57,9 @@ export function getPOQtySummary(po: PurchaseOrder): POQtySummary {
 }
 
 export function canShortClosePO(po: PurchaseOrder): boolean {
-  if (!["approved", "invoice_uploaded"].includes(po.status)) return false;
+  if (!["approved", "invoice_uploaded", "partially_received", "received"].includes(po.status)) {
+    return false;
+  }
   return getPOQtySummary(po).pendingQty > 0;
 }
 

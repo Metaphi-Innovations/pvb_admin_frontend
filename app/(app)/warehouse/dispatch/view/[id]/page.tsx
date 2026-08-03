@@ -2,90 +2,230 @@
 
 import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { Button } from "@/components/ui/button";
-import { Truck, Package, Building, User, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useRouter, useParams } from "next/navigation";
-import { getDispatchById } from "../../services";
-import { DispatchRecord } from "../../types";
-import { DELIVERY_STATUS_BADGE_CONFIG } from "../../constants";
-import { NearExpirySchemeBadge } from "../../components/NearExpirySchemeBadge";
-import { NearExpirySchemeInfoPanel } from "../../components/NearExpirySchemeInfoPanel";
-import { formatBatchExpiryDate } from "../../near-expiry-dispatch";
+import { Truck, Package, Building, User, Calendar, FileText, Download } from "lucide-react";
+import { useParams } from "next/navigation";
+import { getDispatchById, allocateSalesInvoiceNumber, allocateStockTransferInvoiceNumber } from "../../services";
+import {
+  openDeliveryChallanPreviewForDispatch,
+} from "../../dc-pdf/deliveryChallanPdf";
+import {
+  mapDispatchToTaxInvoice,
+  openEditableTaxInvoicePreview,
+} from "../../tax-invoice-pdf/taxInvoicePdf";
+import {
+  mapDispatchToStockTransfer,
+  openEditableStockTransferPreview,
+} from "../../stock-transfer-pdf/stockTransferPdf";
+import { axiosInstance } from "@/api/axios";
+import { API_ENDPOINTS } from "@/api/endpoints";
 
 export default function ViewDispatchPage() {
-  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
 
-  const [record, setRecord] = useState<DispatchRecord | null>(null);
+  const [record, setRecord] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [downloadingChallan, setDownloadingChallan] = useState<
+    null | "with" | "without"
+  >(null);
+  const [downloadingTaxInvoice, setDownloadingTaxInvoice] = useState(false);
+  const [downloadingStockTransfer, setDownloadingStockTransfer] = useState(false);
 
   useEffect(() => {
-    if (id) setRecord(getDispatchById(id) || null);
+    if (id) {
+      setLoading(true);
+      getDispatchById(id)
+        .then((data) => setRecord(data))
+        .catch((err) => {
+          console.error(err);
+          alert("Failed to load dispatch details");
+        })
+        .finally(() => setLoading(false));
+    }
   }, [id]);
 
-  if (!record) {
+  if (loading || !record) {
     return (
       <RecordDetailPage
         listHref="/warehouse/dispatch"
         listLabel="Dispatch"
         recordName="Dispatch Details"
-        statusLabel="Loading"
+        statusLabel={loading ? "Loading" : "Not Found"}
         statusVariant="neutral"
       >
-        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading dispatch record...</div>
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+          {loading ? "Loading dispatch record..." : "Dispatch record not found"}
+        </div>
       </RecordDetailPage>
     );
   }
 
-  const statusConfig = DELIVERY_STATUS_BADGE_CONFIG[record.deliveryStatus] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: record.deliveryStatus };
   const statusVariant =
-    record.deliveryStatus === "Delivered" ? "active" :
-    record.deliveryStatus === "Cancelled" || record.deliveryStatus === "Returned" ? "blocked" :
-    record.deliveryStatus === "Pending Dispatch" ? "draft" : "neutral";
+    record.status === "DISPATCHED" || record.status === "Ready for Dispatch" ? "active" :
+    record.status === "DRAFT" ? "draft" : "neutral";
 
-  const schemeEntriesBySku = (record.nearExpirySchemes ?? []).reduce<
-    Record<string, NonNullable<DispatchRecord["nearExpirySchemes"]>>
-  >((map, entry) => {
-    if (!map[entry.sku]) map[entry.sku] = [];
-    map[entry.sku]!.push(entry);
-    return map;
-  }, {});
+  const isSample =
+    String(record.source_type || "").toLowerCase() === "sample_order" ||
+    String(record.source_type || "").toLowerCase() === "sample";
+  const isStockTransfer =
+    String(record.source_type || "").toLowerCase() === "stock_transfer";
+  const canDownloadInvoiceLike =
+    String(record.status || "").toUpperCase() === "DISPATCHED" ||
+    String(record.status || "").toUpperCase() === "DELIVERED" ||
+    String(record.status || "").toUpperCase() === "CLOSED";
+
+  const handleDownloadChallan = async (withGoodsValue: boolean) => {
+    setDownloadingChallan(withGoodsValue ? "with" : "without");
+    try {
+      await openDeliveryChallanPreviewForDispatch(id, { withGoodsValue });
+      const refreshed = await getDispatchById(id);
+      if (refreshed) setRecord(refreshed);
+    } catch (err) {
+      console.error(err);
+      alert(
+        withGoodsValue
+          ? "Failed to download delivery challan"
+          : "Failed to download challan without goods value",
+      );
+    } finally {
+      setDownloadingChallan(null);
+    }
+  };
+
+  const handleDownloadTaxInvoice = async () => {
+    setDownloadingTaxInvoice(true);
+    try {
+      let salesOrder: Record<string, unknown> | null = null;
+      const sourceId = record.source_id;
+      const sourceType = String(record.source_type || "").toLowerCase();
+      if (sourceId && (sourceType === "normal_sales" || sourceType === "sales_order")) {
+        try {
+          const soRes = await axiosInstance.get(
+            API_ENDPOINTS.SALES.SALES_ORDER.DETAILS(String(sourceId)),
+          );
+          salesOrder = (soRes.data?.data || null) as Record<string, unknown> | null;
+        } catch {
+          salesOrder = null;
+        }
+      }
+      let allocatedInvoiceNo: string | null = null;
+      try {
+        const allocated = await allocateSalesInvoiceNumber(String(record.id || id));
+        allocatedInvoiceNo = allocated || null;
+      } catch {
+        allocatedInvoiceNo = null;
+      }
+      await openEditableTaxInvoicePreview(
+        mapDispatchToTaxInvoice(record, salesOrder, allocatedInvoiceNo),
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download tax invoice");
+    } finally {
+      setDownloadingTaxInvoice(false);
+    }
+  };
+
+  const handleDownloadStockTransfer = async () => {
+    setDownloadingStockTransfer(true);
+    try {
+      let stockTransfer: Record<string, unknown> | null =
+        (record.stock_transfer as Record<string, unknown>) || null;
+      const sourceId = record.source_id;
+      if (!stockTransfer && sourceId) {
+        try {
+          const stRes = await axiosInstance.get(
+            API_ENDPOINTS.SALES.STOCK_TRANSFER.DETAILS(String(sourceId)),
+          );
+          stockTransfer = (stRes.data?.data || null) as Record<
+            string,
+            unknown
+          > | null;
+        } catch {
+          stockTransfer = null;
+        }
+      }
+      let allocatedInvoiceNo: string | null = null;
+      try {
+        const allocated = await allocateStockTransferInvoiceNumber(String(record.id || id));
+        allocatedInvoiceNo = allocated || null;
+      } catch {
+        allocatedInvoiceNo = null;
+      }
+      await openEditableStockTransferPreview(
+        mapDispatchToStockTransfer(record, stockTransfer, allocatedInvoiceNo),
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download stock transfer PDF");
+    } finally {
+      setDownloadingStockTransfer(false);
+    }
+  };
 
   return (
     <RecordDetailPage
       listHref="/warehouse/dispatch"
       listLabel="Dispatch"
-      recordName={record.dispatchNumber}
-      recordCode={record.salesOrderNumber}
-      statusLabel={statusConfig.label}
+      recordName={record.dispatch_number}
+      recordCode={record.packing_done?.packing_done_no || ""}
+      statusLabel={record.status}
       statusVariant={statusVariant}
       metaItems={[
-        { 
-          icon: record.sourceDocumentType === "Stock Transfer" ? Building : User, 
-          label: record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer 
-        },
-        { icon: Building, label: record.warehouse },
-        { icon: Calendar, label: record.dispatchDate },
+        { icon: User, label: record.customer?.customer_name || record.source_type },
+        { icon: Building, label: record.warehouse?.warehouse_name },
+        { icon: Calendar, label: record.created_at ? new Date(record.created_at).toLocaleDateString() : "" },
       ]}
-      onEdit={record.deliveryStatus !== "Delivered" ? () => router.push(`/warehouse/dispatch/edit/${record.id}`) : undefined}
       sidebar={{
         summary: [
-          { label: "Vehicle", value: record.vehicleNumber, highlight: true },
-          { label: "Driver", value: record.driverName },
-          { label: "Transporter", value: record.transporterName || "—" },
-          { label: "Products", value: record.products.length },
+          { label: "Challan No", value: record.challan_number || "Assigned on download", highlight: true },
+          { label: "Vehicle", value: record.vehicle_number, highlight: true },
+          { label: "Driver", value: record.driver_name },
+          { label: "Transporter", value: record.transporter || "—" },
+          { label: "Products", value: record.items?.length || 0 },
         ],
-        quickActions:
-          record.deliveryStatus !== "Delivered"
-            ? [
-                {
-                  label: "Edit Dispatch",
-                  icon: Truck,
-                  variant: "primary" as const,
-                  onClick: () => router.push(`/warehouse/dispatch/edit/${record.id}`),
-                },
-              ]
-            : [],
+        quickActions: isSample
+          ? []
+          : [
+              {
+                label:
+                  downloadingChallan === "with"
+                    ? "Downloading…"
+                    : "Download Challan (With Value)",
+                icon: downloadingChallan === "with" ? Download : FileText,
+                onClick: () => handleDownloadChallan(true),
+              },
+              {
+                label:
+                  downloadingChallan === "without"
+                    ? "Downloading…"
+                    : "Download Challan (Without Value)",
+                icon: downloadingChallan === "without" ? Download : FileText,
+                onClick: () => handleDownloadChallan(false),
+              },
+              ...(canDownloadInvoiceLike && !isStockTransfer
+                ? [
+                    {
+                      label: downloadingTaxInvoice
+                        ? "Downloading…"
+                        : "Download Tax Invoice",
+                      icon: downloadingTaxInvoice ? Download : FileText,
+                      onClick: handleDownloadTaxInvoice,
+                    },
+                  ]
+                : []),
+              ...(canDownloadInvoiceLike && isStockTransfer
+                ? [
+                    {
+                      label: downloadingStockTransfer
+                        ? "Downloading…"
+                        : "Download Stock Transfer",
+                      icon: downloadingStockTransfer ? Download : FileText,
+                      onClick: handleDownloadStockTransfer,
+                    },
+                  ]
+                : []),
+            ],
       }}
     >
       <div className="space-y-6">
@@ -94,21 +234,21 @@ export default function ViewDispatchPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { 
-              label: record.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No" : "Sales Order No", 
-              value: record.salesOrderNumber, 
+              label: "Packing No", 
+              value: record.packing_done?.packing_done_no || "—", 
               icon: Package 
             },
             { 
-              label: record.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", 
-              value: record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer, 
-              icon: record.sourceDocumentType === "Stock Transfer" ? Building : User 
+              label: "Customer / Destination", 
+              value: record.customer?.customer_name || record.source_type, 
+              icon: User 
             },
             { 
-              label: record.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse", 
-              value: record.warehouse, 
+              label: "Warehouse", 
+              value: record.warehouse?.warehouse_name, 
               icon: Building 
             },
-            { label: "Dispatch Date", value: record.dispatchDate, icon: Calendar },
+            { label: "Dispatch Date", value: record.dispatch_date ? new Date(record.dispatch_date).toLocaleDateString() : new Date(record.created_at).toLocaleDateString(), icon: Calendar },
           ].map(card => (
             <div key={card.label} className="bg-white border border-border rounded-xl p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
@@ -127,15 +267,16 @@ export default function ViewDispatchPage() {
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5 mb-4">
             <Truck className="w-4 h-4 text-brand-600" /> Vehicle & Transport Details
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
             {[
-              { label: "Vehicle Number", value: record.vehicleNumber },
-              { label: "Driver Name", value: record.driverName },
-              { label: "Transporter Name", value: record.transporterName || "—" },
+              { label: "Vehicle Number", value: record.vehicle_number },
+              { label: "Driver Name", value: record.driver_name },
+              { label: "Transporter Name", value: record.transporter || "—" },
+              { label: "LR Number", value: record.lr_number || "—" },
             ].map(item => (
               <div key={item.label}>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{item.label}</p>
-                <p className="text-sm font-bold text-foreground mt-1">{item.value}</p>
+                <p className="text-sm font-bold text-foreground mt-1">{item.value || "—"}</p>
               </div>
             ))}
           </div>
@@ -152,82 +293,37 @@ export default function ViewDispatchPage() {
                 <tr className="border-b border-border bg-slate-50/60">
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Batch</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Dispatch Qty</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Scheme</th>
                 </tr>
               </thead>
               <tbody>
-                {record.products.map((p, i) => (
+                {record.items?.map((p: any, i: number) => {
+                  const packSize = Number(p.product?.unit_per_packing || p.product?.conversion_rate || 1);
+                  const baseQty = Number(p.dispatched_base_qty || 0);
+                  const cases = Math.floor(baseQty / packSize);
+                  return (
                   <tr key={i} className="border-b border-border/60 hover:bg-slate-50/40">
-                    <td className="py-3 px-3 text-xs font-bold">{p.product}</td>
-                    <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
-                    <td className="py-3 px-3 text-xs font-bold text-center">{p.packedQty}</td>
-                    <td className="py-3 px-3 text-[10px] text-muted-foreground font-mono">
-                      {p.batchNo ? (
-                        <div>
-                          {p.batchNo}
-                          {p.batchExpiryDate ? ` · ${formatBatchExpiryDate(p.batchExpiryDate)}` : ""}
-                        </div>
-                      ) : (
-                        "—"
+                    <td className="py-3 px-3 text-xs font-bold">{p.product?.product_name || "—"}</td>
+                    <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.product?.product_code || "—"}</td>
+                    <td className="py-3 px-3 text-xs text-center">
+                      {p.inventory_batch?.batch_no || "—"}
+                      {p.packing_done_product?.quantity_type && p.packing_done_product?.quantity_type !== "N/A" && (
+                        <span className="ml-1.5 font-mono text-[10px] bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded">
+                          {p.packing_done_product?.quantity_type}
+                        </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty}</td>
-                    <td className="py-3 px-3">
-                      <NearExpirySchemeBadge entries={schemeEntriesBySku[p.sku] ?? []} />
+                    <td className="py-3 px-3 text-xs font-bold text-center">
+                      <span className="text-emerald-700">{cases > 0 ? cases : baseQty} {cases > 0 && packSize > 1 ? "Cases" : "Units"}</span>
+                      {packSize > 1 && cases > 0 && <span className="text-muted-foreground ml-1 text-[10px]">({baseQty} Units)</span>}
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
         </div>
-
-        {record.nearExpirySchemes && record.nearExpirySchemes.length > 0 && (
-          <NearExpirySchemeInfoPanel entries={record.nearExpirySchemes} />
-        )}
-
-        {/* Delivery Details (if delivered) */}
-        {record.deliveryDetails && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-            <h2 className="text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-200 pb-2 flex items-center gap-1.5 mb-4">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Delivery Confirmation
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-              <div>
-                <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">Delivery Date</p>
-                <p className="text-sm font-bold text-emerald-900 mt-1">{record.deliveryDetails.deliveryDate}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">Received By</p>
-                <p className="text-sm font-bold text-emerald-900 mt-1">{record.deliveryDetails.receiverName}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">Remarks</p>
-                <p className="text-sm font-bold text-emerald-900 mt-1">{record.deliveryDetails.remarks || "—"}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Packing References */}
-        {record.packingNumbers?.length > 0 && (
-          <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
-            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5 mb-4">
-              <AlertTriangle className="w-4 h-4 text-brand-600" /> Linked Packing References
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {record.packingNumbers.map(pn => (
-                <span key={pn} className="inline-flex items-center text-xs font-mono font-bold px-3 py-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700">
-                  {pn}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
       </div>
     </RecordDetailPage>
   );

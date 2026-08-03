@@ -10,48 +10,42 @@ import React, {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ChartOfAccount, CoaNodeId } from "@/app/(app)/accounts/data";
 import {
   getAllExpandableIds,
   getAncestorPath,
-  getSearchMatchingNodes,
-  getSearchVisibleIds,
   hasChildLedgers,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
-import {
-  loadChartOfAccounts,
-  loadChartOfAccountsCore,
-} from "@/app/(app)/accounts/data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
-import { GENERAL_LEDGER_HREF, buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
-import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
+import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
 import { resolveCoaTreeSelectionNode } from "@/lib/accounts/coa-tree-children";
 import { getCoaSidebarExpandableIds } from "@/lib/accounts/coa-sidebar-tree";
-import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import {
   buildTdsPartyWiseReportHref,
   isTdsCoaNode,
 } from "@/lib/accounts/tds-coa-utils";
-import { ensureTdsAccountingLedgers } from "@/lib/accounts/tds-accounting";
-import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
-import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
-import { ACCOUNTS_SECTION_SEEDED_EVENT } from "@/lib/accounts/accounts-section-seed";
-import { enrichCoaRecordsWithStatutoryTaxSections } from "@/lib/accounts/coa-statutory-tax-display";
+import {
+  chartOfAccountsKeys,
+  useChartOfAccountsTree,
+} from "@/hooks/accounts/use-chart-of-accounts";
 import { useAccountsAccordion } from "./AccountsAccordionContext";
+
+const TREE_SEARCH_DEBOUNCE_MS = 350;
 
 /**
  * Sidebar starts with primary heads only expanded — groups open on user click (ERP style).
  */
-function defaultExpandedIds(records: ChartOfAccount[]): Set<number> {
+function defaultExpandedIds(records: ChartOfAccount[]): Set<CoaNodeId> {
   return new Set(records.filter((r) => r.nodeLevel === "primary_head").map((r) => r.id));
 }
 
 /** Expand ancestor path so a selected/deep node remains visible without preloading the full tree. */
 function expandAncestorsOf(
   records: ChartOfAccount[],
-  nodeId: number,
-  prev: Set<number>,
-): Set<number> {
+  nodeId: CoaNodeId,
+  prev: Set<CoaNodeId>,
+): Set<CoaNodeId> {
   const path = getAncestorPath(records, nodeId);
   if (path.length <= 1) return prev;
   const next = new Set(prev);
@@ -63,24 +57,6 @@ function expandAncestorsOf(
     }
   }
   return changed ? next : prev;
-}
-
-/** Module-level: prevent Strict Mode remount from scheduling a second idle backfill. */
-let coaIdleBackfillScheduled = false;
-
-function readCoaRecords(full = false): ChartOfAccount[] {
-  if (typeof window === "undefined") return [];
-  const loaded = full ? loadChartOfAccounts() : loadChartOfAccountsCore();
-  // COA UI only — project active TDS/TCS master sections under Payable parents.
-  return enrichCoaRecordsWithStatutoryTaxSections(loaded);
-}
-
-function scheduleOnIdle(fn: () => void, timeoutMs: number): void {
-  if (typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(fn, { timeout: timeoutMs });
-  } else {
-    window.setTimeout(fn, Math.min(timeoutMs, 500));
-  }
 }
 
 function routeNeedsCoaData(pathname: string): boolean {
@@ -98,24 +74,44 @@ function readClientSearchParam(key: string): string | null {
   return new URLSearchParams(window.location.search).get(key);
 }
 
+/** Resolve ?node= / ?ledger= against API UUIDs or legacy numeric ids. */
+function resolveNodeIdParam(
+  param: string,
+  records: ChartOfAccount[],
+): CoaNodeId | null {
+  const byString = records.find((r) => String(r.id) === param);
+  if (byString) return byString.id;
+  const asNumber = Number(param);
+  if (!Number.isNaN(asNumber)) {
+    const byNumber = records.find((r) => r.id === asNumber);
+    if (byNumber) return byNumber.id;
+    return asNumber;
+  }
+  return null;
+}
+
 interface CoaNavigationContextValue {
   records: ChartOfAccount[];
   setRecords: React.Dispatch<React.SetStateAction<ChartOfAccount[]>>;
-  selectedId: number | null;
+  selectedId: CoaNodeId | null;
   selectedNode: ChartOfAccount | null;
-  expandedIds: Set<number>;
+  expandedIds: Set<CoaNodeId>;
   treeSearchTerm: string;
   setTreeSearchTerm: (value: string) => void;
+  /** Debounced term sent to the COA tree API */
+  treeSearchQuery: string;
+  isTreeSearching: boolean;
   selectNode: (node: ChartOfAccount) => void;
-  toggleExpand: (id: number) => void;
+  toggleExpand: (id: CoaNodeId) => void;
   expandAll: () => void;
   collapseAll: () => void;
   refreshRecords: () => void;
   isCoaRoute: boolean;
   coaReady: boolean;
-  highlightedLedgerId: number | null;
-  setHighlightedLedgerId: React.Dispatch<React.SetStateAction<number | null>>;
-  ensureExpanded: (ids: number | number[]) => void;
+  coaError: string | null;
+  highlightedLedgerId: CoaNodeId | null;
+  setHighlightedLedgerId: React.Dispatch<React.SetStateAction<CoaNodeId | null>>;
+  ensureExpanded: (ids: CoaNodeId | CoaNodeId[]) => void;
 }
 
 const CoaNavigationContext = createContext<CoaNavigationContextValue | null>(null);
@@ -125,128 +121,83 @@ export function CoaNavigationProvider({
   initMode = "full",
 }: {
   children: React.ReactNode;
-  /** tree-only: sidebar COA tree without ERP/TDS backfill (fast). full: deferred backfill. */
+  /** Kept for call-site compatibility; COA tree always loads from the Accounts API. */
   initMode?: "full" | "tree-only";
 }) {
+  void initMode;
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { activeAccountsSection } = useAccountsAccordion();
-  const initRef = useRef(false);
-  const backfillRef = useRef(false);
   const recordsRef = useRef<ChartOfAccount[]>([]);
 
-  const [records, setRecords] = useState<ChartOfAccount[]>([]);
-  const [coaReady, setCoaReady] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
+  const [selectedId, setSelectedId] = useState<CoaNodeId | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<CoaNodeId>>(() => new Set());
   const [treeSearchTerm, setTreeSearchTerm] = useState("");
-  const [highlightedLedgerId, setHighlightedLedgerId] = useState<number | null>(null);
+  const [treeSearchQuery, setTreeSearchQuery] = useState("");
+  const [highlightedLedgerId, setHighlightedLedgerId] = useState<CoaNodeId | null>(null);
+  /** Local override after create/delete while an API refetch is in flight. */
+  const [localRecords, setLocalRecords] = useState<ChartOfAccount[] | null>(null);
 
   const isCoaRoute = pathname.startsWith(CHART_OF_ACCOUNTS_HREF);
   const needsCoaData =
     routeNeedsCoaData(pathname) || activeAccountsSection === "coa";
 
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setTreeSearchQuery(treeSearchTerm.trim());
+    }, TREE_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [treeSearchTerm]);
+
+  const {
+    data: apiRecords,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useChartOfAccountsTree({
+    enabled: needsCoaData,
+    includeLedgers: true,
+    search: treeSearchQuery || undefined,
+  });
+
+  const records = localRecords ?? apiRecords ?? [];
   recordsRef.current = records;
 
-  useEffect(() => {
-    if (!needsCoaData) return;
+  const isTreeSearching =
+    treeSearchTerm.trim() !== treeSearchQuery ||
+    (Boolean(treeSearchQuery) && isFetching);
 
-    let cancelled = false;
-
-    const showTree = (full = false) => {
-      if (cancelled) return;
-      const loaded = readCoaRecords(full);
-      setRecords(loaded);
-      setExpandedIds((prev) => {
-        const next = defaultExpandedIds(loaded);
-        for (const id of prev) next.add(id);
-        return next;
-      });
-      setCoaReady(true);
-    };
-
-    if (!initRef.current) {
-      initRef.current = true;
-      // Load immediately — deferred rAF left the sidebar blank for multiple frames/clicks.
-      showTree(false);
-
-      if (initMode === "full" && !backfillRef.current && !coaIdleBackfillScheduled) {
-        backfillRef.current = true;
-        coaIdleBackfillScheduled = true;
-
-        scheduleOnIdle(() => {
-          if (cancelled) return;
-          showTree(true);
-        }, 3500);
-
-        scheduleOnIdle(() => {
-          if (cancelled) return;
-          backfillErpPartyLedgers();
-          backfillCoaMasterLinks();
-          ensureTdsAccountingLedgers();
-          showTree(true);
-        }, 12000);
-      }
-    } else if (!coaReady) {
-      showTree(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [needsCoaData, initMode, coaReady]);
+  const coaReady = needsCoaData && !isLoading && (apiRecords != null || isError);
+  const coaError = isError
+    ? error instanceof Error
+      ? error.message
+      : "Failed to load chart of accounts"
+    : null;
 
   useEffect(() => {
-    if (!needsCoaData) return;
-    const onCoaSeeded = (e: Event) => {
-      const groupId = (e as CustomEvent<{ groupId: string }>).detail?.groupId;
-      if (groupId !== "coa") return;
-      const loaded = readCoaRecords(true);
-      if (loaded.length === 0) return;
-      setRecords(loaded);
-      setExpandedIds((prev) => {
-        const next = defaultExpandedIds(loaded);
-        for (const id of prev) next.add(id);
-        return next;
-      });
-      setCoaReady(true);
-    };
-    window.addEventListener(ACCOUNTS_SECTION_SEEDED_EVENT, onCoaSeeded);
-    return () => window.removeEventListener(ACCOUNTS_SECTION_SEEDED_EVENT, onCoaSeeded);
-  }, [needsCoaData]);
+    if (!apiRecords) return;
+    setLocalRecords(null);
+    setExpandedIds((prev) => {
+      const next = defaultExpandedIds(apiRecords);
+      for (const id of prev) next.add(id);
+      return next;
+    });
+  }, [apiRecords]);
 
   const refreshRecords = useCallback(() => {
-    if (!initRef.current) return;
-    const loaded = readCoaRecords(true);
-    setRecords(loaded);
+    void queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+    void refetch();
+  }, [queryClient, refetch]);
+
+  const setRecords = useCallback((action: React.SetStateAction<ChartOfAccount[]>) => {
+    setLocalRecords((prev) => {
+      const base = prev ?? recordsRef.current;
+      return typeof action === "function" ? action(base) : action;
+    });
   }, []);
-
-  useEffect(() => {
-    if (!coaReady || !needsCoaData) return;
-    return subscribeCoaChanged(refreshRecords);
-  }, [coaReady, needsCoaData, refreshRecords]);
-
-  /** Re-project TDS/TCS section children when Masters change (COA does not store them). */
-  useEffect(() => {
-    if (!coaReady || !needsCoaData) return;
-    const onMasterChanged = () => refreshRecords();
-    window.addEventListener("ds_tds_master_changed", onMasterChanged);
-    window.addEventListener("ds_tcs_master_changed", onMasterChanged);
-    return () => {
-      window.removeEventListener("ds_tds_master_changed", onMasterChanged);
-      window.removeEventListener("ds_tcs_master_changed", onMasterChanged);
-    };
-  }, [coaReady, needsCoaData, refreshRecords]);
-
-  const setRecordsWithTaxProjections = useCallback(
-    (action: React.SetStateAction<ChartOfAccount[]>) => {
-      setRecords((prev) => {
-        const next = typeof action === "function" ? action(prev) : action;
-        return enrichCoaRecordsWithStatutoryTaxSections(next);
-      });
-    },
-    [],
-  );
 
   const selectedNode = useMemo(
     () => (selectedId != null ? records.find((r) => r.id === selectedId) ?? null : null),
@@ -271,11 +222,9 @@ export function CoaNavigationProvider({
         }
         return next;
       });
-      const href = `${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`;
+      const href = `${CHART_OF_ACCOUNTS_HREF}?node=${encodeURIComponent(String(resolved.id))}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
-      } else if (resolved.nodeLevel === "ledger") {
-        router.push(href);
       } else {
         router.push(href);
       }
@@ -292,21 +241,21 @@ export function CoaNavigationProvider({
       if (isCoaRoute) {
         const nodeParam = readClientSearchParam("node");
         if (nodeParam) {
-          const id = Number(nodeParam);
-          if (!Number.isNaN(id)) {
-            const node = currentRecords.find((r) => r.id === id);
-            if (node) {
-              const resolved = resolveCoaTreeSelectionNode(currentRecords, node);
-              setSelectedId((prev) => (prev === resolved.id ? prev : resolved.id));
-              setExpandedIds((prev) => expandAncestorsOf(currentRecords, resolved.id, prev));
-              if (resolved.id !== id) {
-                router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`, {
-                  scroll: false,
-                });
-              }
-            } else {
-              setSelectedId((prev) => (prev === id ? prev : id));
+          const id = resolveNodeIdParam(nodeParam, currentRecords);
+          if (id == null) return;
+          const node = currentRecords.find((r) => r.id === id);
+          if (node) {
+            const resolved = resolveCoaTreeSelectionNode(currentRecords, node);
+            setSelectedId((prev) => (prev === resolved.id ? prev : resolved.id));
+            setExpandedIds((prev) => expandAncestorsOf(currentRecords, resolved.id, prev));
+            if (String(resolved.id) !== nodeParam) {
+              router.replace(
+                `${CHART_OF_ACCOUNTS_HREF}?node=${encodeURIComponent(String(resolved.id))}`,
+                { scroll: false },
+              );
             }
+          } else {
+            setSelectedId((prev) => (prev === id ? prev : id));
           }
           return;
         }
@@ -317,8 +266,8 @@ export function CoaNavigationProvider({
       if (pathname.startsWith(GENERAL_LEDGER_HREF)) {
         const ledgerParam = readClientSearchParam("ledger");
         if (ledgerParam) {
-          const id = Number(ledgerParam);
-          if (!Number.isNaN(id)) {
+          const id = resolveNodeIdParam(ledgerParam, currentRecords);
+          if (id != null) {
             setSelectedId((prev) => (prev === id ? prev : id));
           }
         }
@@ -331,31 +280,22 @@ export function CoaNavigationProvider({
     syncFromUrl();
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
-  }, [isCoaRoute, pathname, router, needsCoaData, coaReady]);
+  }, [isCoaRoute, pathname, router, needsCoaData, coaReady, apiRecords]);
 
-  /** Tree search: expand ancestors of matches only — never change selection or URL. */
+  /** Backend search returns a pruned tree — expand all returned branches so matches are visible. */
   useEffect(() => {
-    if (!treeSearchTerm.trim() || !coaReady) return;
+    if (!treeSearchQuery || !coaReady || records.length === 0) return;
 
-    const matching = getSearchMatchingNodes(records, treeSearchTerm);
-    if (matching.length === 0) return;
+    setExpandedIds(
+      new Set(
+        isCoaRoute || activeAccountsSection === "coa"
+          ? getCoaSidebarExpandableIds(records)
+          : getAllExpandableIds(records),
+      ),
+    );
+  }, [treeSearchQuery, records, coaReady, isCoaRoute, activeAccountsSection]);
 
-    const visible = getSearchVisibleIds(records, treeSearchTerm);
-
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      visible.forEach((id) => {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [treeSearchTerm, records, coaReady]);
-
-  const toggleExpand = useCallback((id: number) => {
+  const toggleExpand = useCallback((id: CoaNodeId) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -364,7 +304,7 @@ export function CoaNavigationProvider({
     });
   }, []);
 
-  const ensureExpanded = useCallback((ids: number | number[]) => {
+  const ensureExpanded = useCallback((ids: CoaNodeId | CoaNodeId[]) => {
     const list = Array.isArray(ids) ? ids : [ids];
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -398,12 +338,14 @@ export function CoaNavigationProvider({
   const value = useMemo(
     () => ({
       records,
-      setRecords: setRecordsWithTaxProjections,
+      setRecords,
       selectedId,
       selectedNode,
       expandedIds,
       treeSearchTerm,
       setTreeSearchTerm,
+      treeSearchQuery,
+      isTreeSearching,
       selectNode,
       toggleExpand,
       expandAll,
@@ -411,17 +353,20 @@ export function CoaNavigationProvider({
       refreshRecords,
       isCoaRoute,
       coaReady,
+      coaError,
       highlightedLedgerId,
       setHighlightedLedgerId,
       ensureExpanded,
     }),
     [
       records,
-      setRecordsWithTaxProjections,
+      setRecords,
       selectedId,
       selectedNode,
       expandedIds,
       treeSearchTerm,
+      treeSearchQuery,
+      isTreeSearching,
       selectNode,
       toggleExpand,
       expandAll,
@@ -429,6 +374,7 @@ export function CoaNavigationProvider({
       refreshRecords,
       isCoaRoute,
       coaReady,
+      coaError,
       highlightedLedgerId,
       ensureExpanded,
     ],

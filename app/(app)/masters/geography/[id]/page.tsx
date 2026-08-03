@@ -10,12 +10,11 @@ import {
   RecordSectionCard,
   RecordStatusPill,
 } from "@/components/record-detail";
-import { ChevronRight, Clock, MapPin, Pencil, Trash2, Users } from "lucide-react";
+import { ChevronRight, Clock, MapPin, Pencil, Users } from "lucide-react";
 import {
   type GeoNode, loadGeoNodes, getAncestorPath, getChildren,
 } from "../geo-data";
 import { LevelBadge } from "../components/LevelBadge";
-import { GeographyDeleteDialog } from "../components/GeographyDeleteDialog";
 
 export default function GeographyViewPage() {
   const router = useRouter();
@@ -25,8 +24,6 @@ export default function GeographyViewPage() {
 
   const [nodes, setNodes] = useState<GeoNode[]>([]);
   const [node, setNode] = useState<GeoNode | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
   useEffect(() => {
     const all = loadGeoNodes();
     setNodes(all);
@@ -189,11 +186,6 @@ export default function GeographyViewPage() {
             onClick: () => router.push(`/masters/geography/${node.id}/edit`),
             variant: "primary",
           },
-          {
-            label: "Delete",
-            icon: Trash2,
-            onClick: () => setDeleteOpen(true),
-          },
         ],
         summary: [
           { label: "Level", value: node.level, highlight: true },
@@ -207,14 +199,6 @@ export default function GeographyViewPage() {
       }}
     >
       {renderTabContent()}
-
-      <GeographyDeleteDialog
-        node={node}
-        nodes={nodes}
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onDeleted={() => router.push("/masters/geography")}
-      />
     </RecordDetailPage>
   );
 }

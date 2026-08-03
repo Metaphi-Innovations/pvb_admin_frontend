@@ -4,6 +4,7 @@ export type CategoryStatus = "active" | "inactive";
 
 export interface Category {
   id: number;
+  categoryId: string;
   categoryName: string;
   description: string;
   status: CategoryStatus;
@@ -18,6 +19,7 @@ const STORAGE_KEY = "pvb_categories_v2";
 const SEED: Category[] = [
   {
     id: 1,
+    categoryId: "",
     categoryName: "Fertilizers",
     description: "Chemical and organic fertilizers",
     status: "active",
@@ -28,6 +30,7 @@ const SEED: Category[] = [
   },
   {
     id: 2,
+    categoryId: "",
     categoryName: "Pesticides",
     description: "Insecticides, fungicides and herbicides",
     status: "active",
@@ -38,6 +41,7 @@ const SEED: Category[] = [
   },
   {
     id: 3,
+    categoryId: "",
     categoryName: "Seeds",
     description: "Crop seeds and planting material",
     status: "inactive",
@@ -55,6 +59,7 @@ export function todayStr() {
 function normalize(items: Partial<Category>[]): Category[] {
   return items.map((item, idx) => ({
     id: item.id ?? idx + 1,
+    categoryId: item.categoryId ?? "",
     categoryName: item.categoryName ?? "",
     description: item.description ?? "",
     status: item.status === "inactive" ? "inactive" : "active",

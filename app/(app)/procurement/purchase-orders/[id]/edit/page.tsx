@@ -2,91 +2,144 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CURRENT_USER } from "@/lib/procurement/config";
-import { PurchaseOrderForm, poToFormValues, type POFormValues } from "../../components/PurchaseOrderForm";
+import {
+  PurchaseOrderForm,
+  poToFormValues,
+  validatePOForm,
+  focusFirstPOError,
+  type POFormValues,
+  type POFormErrors,
+} from "../../components/PurchaseOrderForm";
 import { POFormLayout } from "../../components/POFormLayout";
 import { POFormFooter } from "../../components/POFormFooter";
-import { getPOById, loadPurchaseOrders, savePurchaseOrders, recalcPO, submitPO } from "../../po-data";
-import { todayStr } from "@/lib/procurement/utils";
+import { POFormPageSkeleton } from "../../components/POSkeletons";
+import { usePurchaseOrder, useUpdatePurchaseOrder } from "@/hooks/procurement";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 const EDITABLE_STATUSES = ["draft", "rejected"] as const;
 
 export default function EditPOPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const id = String(params.id ?? "");
+  const detailQuery = usePurchaseOrder(id);
+  const updateMutation = useUpdatePurchaseOrder();
   const [form, setForm] = useState<POFormValues | null>(null);
-  const [po, setPo] = useState(getPOById(id));
-  const [poNumber, setPoNumber] = useState("");
-  const [status, setStatus] = useState("draft");
-  const [submittedDate, setSubmittedDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<POFormErrors>({});
+
+  const po = detailQuery.data;
 
   useEffect(() => {
-    const record = getPOById(id);
-    setPo(record);
-    if (!record) return;
-    if (!EDITABLE_STATUSES.includes(record.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!po) return;
+    if (
+      !EDITABLE_STATUSES.includes(
+        po.status as (typeof EDITABLE_STATUSES)[number],
+      )
+    ) {
       router.replace(`/procurement/purchase-orders/${id}`);
       return;
     }
-    setForm(poToFormValues(record));
-    setPoNumber(record.poNumber);
-    setStatus(record.status);
-    const submitted = record.activity.find((a) => a.action.toLowerCase().includes("submit"));
-    setSubmittedDate(submitted?.date ?? record.updatedDate);
-  }, [id, router]);
+    setForm(poToFormValues(po));
+  }, [po, id, router]);
 
   const canEdit = useMemo(
-    () => !!po && EDITABLE_STATUSES.includes(po.status as (typeof EDITABLE_STATUSES)[number]),
+    () =>
+      !!po &&
+      EDITABLE_STATUSES.includes(
+        po.status as (typeof EDITABLE_STATUSES)[number],
+      ),
     [po],
   );
 
-  if (!form || !po) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+  if (detailQuery.isLoading || !form || !po) {
+    return <POFormPageSkeleton />;
+  }
+
+  if (detailQuery.isError) {
+    return (
+      <div className="p-8 text-sm text-muted-foreground">
+        {getErrorMessage(detailQuery.error, "Purchase order not found.")}
+      </div>
+    );
   }
 
   if (!canEdit) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">This purchase order cannot be edited.</div>
+      <div className="p-8 text-sm text-muted-foreground">
+        This purchase order cannot be edited.
+      </div>
     );
   }
 
+  const handleFormChange = (next: POFormValues) => {
+    setForm(next);
+    if (Object.keys(errors).length > 0) setErrors({});
+  };
+
   const save = (submit = false) => {
-    let updated = recalcPO({
-      ...po,
-      ...form,
-      updatedBy: CURRENT_USER,
-      updatedDate: todayStr(),
-      activity: [...po.activity, { date: todayStr(), action: "Updated", by: CURRENT_USER }],
-    });
-    if (submit) updated = submitPO(updated);
-    savePurchaseOrders(loadPurchaseOrders().map((p) => (p.id === id ? updated : p)));
-    router.push(`/procurement/purchase-orders?toast=${submit ? "po-submitted" : "po-saved"}`);
+    setError(null);
+    if (submit) {
+      const validationErrors = validatePOForm(form);
+      setErrors(validationErrors);
+      if (Object.keys(validationErrors).length > 0) {
+        setError("Please fix the required fields before submitting.");
+        requestAnimationFrame(() => focusFirstPOError(validationErrors));
+        return;
+      }
+    } else {
+      setErrors({});
+    }
+    updateMutation.mutate(
+      {
+        id: po.id,
+        form,
+        poNumber: po.poNumber,
+        status: submit
+          ? "approved"
+          : po.status === "rejected"
+            ? "draft"
+            : po.status,
+      },
+      {
+        onSuccess: () => {
+          router.push(
+            `/procurement/purchase-orders?toast=${submit ? "po-submitted" : "po-saved"}`,
+          );
+        },
+        onError: (err) => {
+          setError(getErrorMessage(err, "Failed to update purchase order."));
+        },
+      },
+    );
   };
 
   return (
     <POFormLayout
       mode="edit"
-      poNumber={poNumber}
-      status={status}
-      backHref={`/procurement/purchase-orders/${id}`}
+      poNumber={po.poNumber}
+      status={po.status}
+      backHref="/procurement/purchase-orders"
       onSave={() => save(false)}
       footer={
         <POFormFooter
-          onCancel={() => router.push(`/procurement/purchase-orders/${id}`)}
+          onCancel={() => router.push("/procurement/purchase-orders")}
           onSaveDraft={() => save(false)}
           onSubmit={() => save(true)}
-          showSubmit={["draft", "rejected"].includes(status)}
+          showSubmit={["draft", "rejected"].includes(po.status)}
           saveLabel="Update Purchase Order"
+          saving={updateMutation.isPending}
         />
       }
     >
+      {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
       <PurchaseOrderForm
         form={form}
-        onChange={setForm}
-        poNumber={poNumber}
-        status={status}
-        submittedDate={submittedDate}
+        onChange={handleFormChange}
+        poNumber={po.poNumber}
+        status={po.status}
+        submittedDate={po.updatedDate}
+        errors={errors}
       />
     </POFormLayout>
   );

@@ -17,6 +17,7 @@ export interface DualAddressSectionProps {
   onSameAsCurrentChange: (checked: boolean) => void;
   currentErrors?: Partial<Record<keyof StructuredAddress, string>>;
   permanentErrors?: Partial<Record<keyof StructuredAddress, string>>;
+  usePincodeApi?: boolean;
 }
 
 export function DualAddressSection({
@@ -28,6 +29,7 @@ export function DualAddressSection({
   onSameAsCurrentChange,
   currentErrors,
   permanentErrors,
+  usePincodeApi = false,
 }: DualAddressSectionProps) {
   const handleSameAsChange = (checked: boolean) => {
     onSameAsCurrentChange(checked);
@@ -51,6 +53,7 @@ export function DualAddressSection({
         onChange={handleCurrentChange}
         errors={currentErrors}
         required
+        usePincodeApi={usePincodeApi}
       />
       <div>
         <div className="flex items-center justify-between mb-3 min-h-[20px]">
@@ -72,6 +75,7 @@ export function DualAddressSection({
             disabled={sameAsCurrent}
             errors={permanentErrors}
             required
+            usePincodeApi={usePincodeApi}
           />
         </div>
       </div>

@@ -31,7 +31,7 @@ import {
 export interface TdsLedgerFormValues {
   tdsMasterId: number | null;
   ledgerName: string;
-  parentGroupId: number | null;
+  parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId | null;
   openingBalance: string;
   balanceType: "Debit" | "Credit";
   status: "active" | "inactive";
@@ -49,7 +49,7 @@ export const DEFAULT_TDS_LEDGER_FORM: TdsLedgerFormValues = {
 };
 
 export function buildDefaultTdsLedgerForm(
-  parentGroupId: number,
+  parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId,
   records: ChartOfAccount[],
 ): TdsLedgerFormValues {
   const parent = records.find((r) => r.id === parentGroupId);

@@ -19,7 +19,10 @@ import { cn } from "@/lib/utils";
 interface StockPositionFiltersBarProps {
   filters: StockPositionFilters;
   onChange: (patch: Partial<StockPositionFilters>) => void;
+  warehouses?: { value: string; label: string }[];
   products: { value: string; label: string }[];
+  onApply?: () => void;
+  onReset?: () => void;
   onExport: () => void;
   exportDisabled?: boolean;
   dateLabel?: string;
@@ -32,7 +35,10 @@ const fieldClass =
 export function StockPositionFiltersBar({
   filters,
   onChange,
+  warehouses = WAREHOUSE_OPTIONS,
   products,
+  onApply,
+  onReset,
   onExport,
   exportDisabled,
   dateLabel,
@@ -42,8 +48,8 @@ export function StockPositionFiltersBar({
   const isCustom = filters.datePreset === "custom";
 
   const periodOptions = useMemo(
-    () => buildStockDatePresetOptions(selectedFY.id, today, allFYs),
-    [selectedFY.id, today, allFYs],
+    () => buildStockDatePresetOptions(selectedFY, today, allFYs),
+    [selectedFY, today, allFYs],
   );
 
   const activeFilters: { key: string; label: string; clear: () => void }[] = [];
@@ -65,7 +71,7 @@ export function StockPositionFiltersBar({
   }
 
   const handlePeriodChange = (presetId: string) => {
-    const resolved = resolveStockDatePreset(presetId, today, selectedFY.id, allFYs);
+    const resolved = resolveStockDatePreset(presetId, today, selectedFY, allFYs);
     if (resolved) {
       onChange({ datePreset: presetId, ...resolved });
     } else {
@@ -110,6 +116,16 @@ export function StockPositionFiltersBar({
             <Download className="w-3.5 h-3.5" />
             Export
           </Button>
+          {onReset ? (
+            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={onReset}>
+              Reset
+            </Button>
+          ) : null}
+          {onApply ? (
+            <Button type="button" size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={onApply}>
+              Apply
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -152,7 +168,7 @@ export function StockPositionFiltersBar({
           <div className="space-y-1 min-w-[160px] flex-1">
             <label className="text-xs font-medium text-foreground">Warehouse</label>
             <AutocompleteSelect
-              options={[{ value: "All", label: "All Warehouses" }, ...WAREHOUSE_OPTIONS]}
+              options={[{ value: "All", label: "All Warehouses" }, ...warehouses]}
               value={filters.warehouse}
               onChange={(v) => onChange({ warehouse: v })}
               placeholder="All Warehouses"
@@ -195,7 +211,10 @@ export function StockPositionFiltersBar({
             ))}
             <button
               type="button"
-              onClick={() => onChange({ warehouse: "All", product: "" })}
+              onClick={() => {
+                if (onReset) onReset();
+                else onChange({ warehouse: "All", product: "" });
+              }}
               className={cn("text-xs text-brand-600 hover:underline font-medium ml-1")}
             >
               Clear all

@@ -1,161 +1,258 @@
-import { DispatchRecord, DeliveryDetails } from "../types";
-import { getDispatchRecords, saveDispatchRecords } from "../mock-data";
-import { PackingRecord } from "../../packing/types";
-import { getPackingRecordsList } from "../../packing/services";
-import { getPackingRecords, savePackingRecords } from "../../packing/mock-data";
-import {
-  getStockTransferByDocumentNo,
-  loadTransfers,
-  saveTransfers,
-} from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
-import { markStockTransferDispatched } from "@/app/(app)/sales/stock-transfer/stock-movement-sync";
-import { downloadStockTransferChallan } from "@/app/(app)/sales/stock-transfer/transfer-challan-document";
-import {
-  getSampleOrderByDocumentNo,
-} from "@/app/(app)/sales/sample-order/packing-sync";
-import { markSampleOrderDispatched } from "@/app/(app)/sales/sample-order/stock-movement-sync";
-import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
-import { markPurchaseReturnReturned } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
-import { getPurchaseReturnByReturnNumber } from "@/app/(app)/procurement/purchase-returns/purchase-return-packing-sync";
+import { axiosInstance as api } from "@/api/axios";
+import { API_ENDPOINTS } from "@/api/endpoints";
 
-export function getDispatchesByWarehouse(warehouse: string = "All"): DispatchRecord[] {
-  const dispatches = getDispatchRecords();
-  if (warehouse === "All") return dispatches;
-  return dispatches.filter(d => d.warehouse === warehouse);
+export async function getPreviewNumber(warehouseId?: string | null): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.PREVIEW_NUMBER, {
+    params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+    headers: { "Cache-Control": "no-cache" },
+  });
+  const data = response.data?.data;
+  return typeof data === "string" ? data : data?.dispatchNumber || data?.dispatch_number || "";
 }
 
-export function getDispatchById(id: string): DispatchRecord | undefined {
-  return getDispatchRecords().find(d => d.id === id);
+export async function getDispatches(payload: any = {}) {
+  const { page, page_size, search, ordering, filters } = payload;
+  const params: any = {};
+  if (page) params.page = page;
+  if (page_size) params.page_size = page_size;
+  if (search) params.search = search;
+  if (ordering) params.ordering = ordering;
+  
+  const response = await api.post(API_ENDPOINTS.WAREHOUSE.DISPATCH.LIST, { filters: filters || {} }, { params });
+  return response.data;
 }
 
-export function getPackedOrdersByWarehouse(warehouse: string = "All"): PackingRecord[] {
-  const packings = getPackingRecordsList();
-  const filtered = warehouse === "All" ? packings : packings.filter(p => p.warehouse === warehouse || p.sourceWarehouse === warehouse);
-  // Only return "Packed" status orders (not yet dispatched)
-  return filtered.filter(p => p.status === "Packed");
+export interface DispatchDropdownItem {
+  id: string;
+  dispatch_number: string;
+  source_type: string;
+  source_id: string | null;
+  source_document_no: string;
+  status: string;
+  customer_id: string | null;
+  customer_name: string;
+  customer_code?: string;
+  warehouse_id: string | null;
+  warehouse_name: string;
+  label: string;
 }
 
-export function saveDispatch(record: DispatchRecord): void {
-  const dispatches = getDispatchRecords();
-  const idx = dispatches.findIndex(d => d.id === record.id);
-  const isNew = idx === -1;
-  if (isNew) {
-    dispatches.push(record);
-
-    // Mark packing record(s) as Dispatched
-    if (record.packingNumbers && record.packingNumbers.length > 0) {
-      const packingList = getPackingRecords();
-      const transfers = loadTransfers();
-      let packingUpdated = false;
-      let transfersUpdated = false;
-
-      record.packingNumbers.forEach(pNo => {
-        // Check standard packing records
-        const pIdx = packingList.findIndex(p => p.packingNo === pNo);
-        if (pIdx !== -1) {
-          packingList[pIdx].status = "Dispatched";
-          packingUpdated = true;
-        }
-
-        // Check stock transfers
-        const tIdx = transfers.findIndex(t => t.packingListNumber === pNo);
-        if (tIdx !== -1) {
-          transfers[tIdx].packingStatus = "Dispatched";
-          transfersUpdated = true;
-        }
-      });
-
-      if (packingUpdated) savePackingRecords(packingList);
-      if (transfersUpdated) saveTransfers(transfers);
-    }
-
-    const isSampleDispatch =
-      record.source_type === "sample_order" ||
-      record.sourceDocumentType === "Sample Order";
-    const isFinalDispatch =
-      record.dispatch_status !== "Pending Dispatch" &&
-      record.deliveryStatus !== "Pending Dispatch";
-
-    if (isSampleDispatch && isFinalDispatch) {
-      const docNos = (record.source_document_no || record.salesOrderNumber || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const docNo of docNos) {
-        const order = getSampleOrderByDocumentNo(docNo);
-        if (order) {
-          const dispatched = markSampleOrderDispatched(order.id);
-          if (!("error" in dispatched)) {
-            downloadProformaInvoice(dispatched);
-          }
-        }
-      }
-    }
-
-    const isStockTransferDispatch =
-      record.source_type === "stock_transfer" ||
-      record.sourceDocumentType === "Stock Transfer";
-    if (isStockTransferDispatch && isFinalDispatch) {
-      const docNo = (record.source_document_no || record.salesOrderNumber || "")
-        .split(",")[0]
-        ?.trim();
-      if (docNo) {
-        const transfer = getStockTransferByDocumentNo(docNo);
-        if (transfer) {
-          markStockTransferDispatched(transfer.id, record.dispatchNumber);
-          downloadStockTransferChallan(transfer, record.dispatchNumber);
-        }
-      }
-    }
-
-    const isPurchaseReturnDispatch =
-      record.source_type === "purchase_return" ||
-      record.sourceDocumentType === "Purchase Return";
-    if (isPurchaseReturnDispatch && isFinalDispatch) {
-      const docNos = (record.source_document_no || record.salesOrderNumber || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const docNo of docNos) {
-        const pret = getPurchaseReturnByReturnNumber(docNo);
-        if (pret && pret.status === "issued_for_packing") {
-          markPurchaseReturnReturned(pret);
-        }
-      }
-    }
-  } else {
-    dispatches[idx] = record;
-  }
-  saveDispatchRecords(dispatches);
+/** Lightweight dispatch options for form selects (prefer over list API). */
+export async function getDispatchDropdown(params?: {
+  source_type?: string;
+  status?: string;
+}): Promise<DispatchDropdownItem[]> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DROPDOWN, {
+    params: params || {},
+  });
+  const data = response.data?.data;
+  return Array.isArray(data) ? data : [];
 }
 
-export function revertDispatch(id: string): boolean {
-  const dispatches = getDispatchRecords();
-  const idx = dispatches.findIndex(d => d.id === id);
-  if (idx === -1) return false;
-
-  if (dispatches[idx].deliveryStatus === "Delivered") return false;
-
-  dispatches.splice(idx, 1);
-  saveDispatchRecords(dispatches);
-  return true;
+export async function getDispatchById(id: string) {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DETAILS(id));
+  return response.data?.data;
 }
 
-export function markAsDelivered(id: string, deliveryDetails: DeliveryDetails): boolean {
-  const dispatches = getDispatchRecords();
-  const idx = dispatches.findIndex(d => d.id === id);
-  if (idx === -1) return false;
+export async function createDispatch(payload: any) {
+  const response = await api.post(API_ENDPOINTS.WAREHOUSE.DISPATCH.CREATE, payload);
+  return response.data;
+}
 
-  dispatches[idx] = {
-    ...dispatches[idx],
-    deliveryStatus: "Delivered",
-    deliveryDetails,
+export async function updateDispatch(id: string, payload: any) {
+  const response = await api.patch(`/warehouse/dispatch/${id}`, payload);
+  return response.data;
+}
+
+export async function updateDispatchStatus(id: string, status: string) {
+  const response = await api.patch(`/warehouse/dispatch/${id}/status`, { status });
+  return response.data;
+}
+
+export async function getDispatchFilterDropdown(
+  fieldName: string,
+  sourceType?: string,
+  options?: {
+    status?: string;
+    excludeExistingStGrn?: boolean;
+  },
+) {
+  const params: any = { field_name: fieldName };
+  if (sourceType) params.source_type = sourceType;
+  if (options?.status) params.status = options.status;
+  if (options?.excludeExistingStGrn) params.exclude_existing_st_grn = "true";
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.FILTER_DROPDOWN, { params });
+  return response.data?.data || [];
+}
+
+export async function revertDispatch(id: string) {
+  const response = await api.post(API_ENDPOINTS.WAREHOUSE.DISPATCH.REVERT(id));
+  return response.data;
+}
+
+export async function allocateDeliveryChallanNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_DC(id));
+  const data = response.data?.data;
+  return (
+    data?.challan_number ||
+    response.data?.challan_number ||
+    ""
+  );
+}
+
+export async function allocateSalesInvoiceNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_SI(id));
+  const data = response.data?.data;
+  return (
+    data?.invoice_no ||
+    response.data?.invoice_no ||
+    ""
+  );
+}
+
+export async function allocateStockTransferInvoiceNumber(id: string): Promise<string> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.ALLOCATE_ST(id));
+  const data = response.data?.data;
+  return (
+    data?.invoice_no ||
+    response.data?.invoice_no ||
+    ""
+  );
+}
+
+export async function downloadDeliveryChallan(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<void> {
+  const { blob, fileName } = await fetchDeliveryChallanPdf(id, options);
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function fetchDeliveryChallanPdf(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<{ blob: Blob; fileName: string }> {
+  const withGoodsValue = options.withGoodsValue !== false;
+  const response = await api.get(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.DOWNLOAD_CHALLAN(id),
+    {
+      responseType: "blob",
+      params: { withGoodsValue },
+    },
+  );
+  const blob = response.data as Blob;
+  const disposition = response.headers?.["content-disposition"] as string | undefined;
+  const matched = disposition?.match(/filename="?([^"]+)"?/i);
+  return {
+    blob,
+    fileName:
+      matched?.[1] ||
+      `delivery-challan-${withGoodsValue ? "with-value" : "without-value"}-${id}.pdf`,
   };
-  saveDispatchRecords(dispatches);
-  return true;
 }
 
-export function generateDispatchNumber(): string {
-  const dispatches = getDispatchRecords();
-  return `DSP-2026-${String(dispatches.length + 1).padStart(3, "0")}`;
+/** Open official server PDF in a new tab for printing. */
+export async function printDeliveryChallan(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<void> {
+  const { blob } = await fetchDeliveryChallanPdf(id, options);
+  const url = window.URL.createObjectURL(blob);
+  const popup = window.open(url, "_blank");
+  if (!popup) {
+    window.URL.revokeObjectURL(url);
+    throw new Error("Popup blocked. Allow popups to print the delivery challan.");
+  }
+  const revoke = () => window.URL.revokeObjectURL(url);
+  popup.addEventListener("load", () => {
+    try {
+      popup.focus();
+      popup.print();
+    } finally {
+      setTimeout(revoke, 60_000);
+    }
+  });
+  // Fallback revoke
+  setTimeout(revoke, 120_000);
+}
+
+export async function getFilterDropdown(fieldName: string, sourceType?: string) {
+  const params: any = { field_name: fieldName };
+  if (sourceType) params.source_type = sourceType;
+  
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.FILTER_DROPDOWN, { params });
+  return response.data?.data || [];
+}
+
+export async function getPackingDoneList(payload: any = {}) {
+  const response = await api.post(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.LIST, payload);
+  return response.data;
+}
+
+export async function getPackingDoneById(id: string) {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.PACKING_DONE.DETAILS(id));
+  return response.data?.data;
+}
+
+export interface PackedOrderDropdownItem {
+  order_id: string;
+  order_number: string;
+  order_status: string | null;
+  source_type: string;
+  label: string;
+  packing_list: {
+    packing_list_id: string;
+    packing_number: string;
+    status: string;
+    warehouse_id: string;
+    warehouse_name: string;
+    customer_name: string;
+    order_amount: number;
+    order_date: string | null;
+    expected_delivery_date: string | null;
+    customer_snapshot: unknown;
+    remarks: string | null;
+    generated_at: string | null;
+    created_at: string;
+    packing_dones: Array<{
+      packing_done_id: string;
+      packing_done_no: string;
+      status: string;
+      packing_date: string | null;
+      warehouse_id: string | null;
+    }>;
+    products: Array<{
+      packing_list_product_id: string;
+      source_item_id: string | null;
+      product_id: string;
+      product_code: string | null;
+      product_name: string | null;
+      product_snapshot: unknown;
+      batch_code: string | null;
+      batch_snapshot: unknown;
+      order_base_qty: number;
+      packed_base_qty: number;
+      pending_base_qty: number;
+      quantity_type: string | null;
+      remarks: string | null;
+    }>;
+  };
+}
+
+export async function getPackedOrdersDropdown(params?: {
+  source_type?: string;
+  warehouse_id?: string;
+}): Promise<PackedOrderDropdownItem[]> {
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.PACKING_LIST.ORDERS_DROPDOWN, {
+    params: params || {},
+  });
+  const data = response.data?.data;
+  return Array.isArray(data) ? data : [];
 }

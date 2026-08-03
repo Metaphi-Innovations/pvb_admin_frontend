@@ -3,7 +3,11 @@
 import React, { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
-import type { ChartOfAccount } from "../../../data";
+import { useQueryClient } from "@tanstack/react-query";
+import { LedgerService } from "@/services/ledger.service";
+import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
+import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
+import type { ChartOfAccount, CoaNodeId } from "../../../data";
 import {
   canAddLedgerUnder,
   canAddSubGroupUnder,
@@ -72,20 +76,20 @@ interface TreeNodeProps {
   depth: number;
   isFirstRoot?: boolean;
   records: ChartOfAccount[];
-  expandedIds: Set<number>;
-  selectedId: number | null;
-  visibleIds: Set<number> | null;
+  expandedIds: Set<CoaNodeId>;
+  selectedId: CoaNodeId | null;
+  visibleIds: Set<CoaNodeId> | null;
   searchQuery: string;
   variant: "panel" | "sidebar";
   canCreate?: boolean;
   canEdit?: boolean;
-  highlightedLedgerId?: number | null;
-  onToggle: (id: number) => void;
+  highlightedLedgerId?: CoaNodeId | null;
+  onToggle: (id: CoaNodeId) => void;
   onSelect: (node: ChartOfAccount) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
-  onDeleteLedger?: (ledgerId: number) => void;
+  onAddLedger?: (parentGroupId: CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: CoaNodeId) => void;
+  onDeleteLedger?: (ledgerId: CoaNodeId) => void;
 }
 
 const TreeNode = memo(function TreeNodeComponent({
@@ -331,17 +335,20 @@ const TreeNode = memo(function TreeNodeComponent({
 interface CoaExplorerTreeProps {
   variant?: "panel" | "sidebar";
   records: ChartOfAccount[];
-  selectedId: number | null;
-  expandedIds: Set<number>;
+  selectedId: CoaNodeId | null;
+  expandedIds: Set<CoaNodeId>;
+  /** Client-side visibility filter. Leave empty when the tree is already server-filtered. */
   search: string;
+  /** Optional highlight term (e.g. API search query) when `search` is empty. */
+  highlightQuery?: string;
   canCreate?: boolean;
   canEdit?: boolean;
-  highlightedLedgerId?: number | null;
+  highlightedLedgerId?: CoaNodeId | null;
   onSelect: (node: ChartOfAccount) => void;
-  onToggle: (id: number) => void;
+  onToggle: (id: CoaNodeId) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: CoaNodeId) => void;
   onRecordsChange?: (records: ChartOfAccount[]) => void;
 }
 
@@ -351,6 +358,7 @@ export function CoaExplorerTree({
   selectedId,
   expandedIds,
   search,
+  highlightQuery = "",
   canCreate = false,
   canEdit = false,
   highlightedLedgerId = null,
@@ -361,11 +369,13 @@ export function CoaExplorerTree({
   onAddSubGroup,
   onRecordsChange,
 }: CoaExplorerTreeProps) {
+  const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<ChartOfAccount | null>(null);
   const [deleteBlockReason, setDeleteBlockReason] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const isSidebar = variant === "sidebar";
 
-  const handleDeleteLedger = (ledgerId: number) => {
+  const handleDeleteLedger = (ledgerId: CoaNodeId) => {
     const ledger = records.find((r) => r.id === ledgerId);
     if (!ledger || !canCoaSidebarDeleteNode(ledger, records)) return;
     const block = getLedgerDeleteBlockReason(ledger, records);
@@ -383,17 +393,40 @@ export function CoaExplorerTree({
     setDeleteBlockReason(null);
   };
 
-  const confirmDeleteLedger = () => {
-    if (!deleteTarget) return;
+  const confirmDeleteLedger = async () => {
+    if (!deleteTarget || isDeleting) return;
     const block = getLedgerDeleteBlockReason(deleteTarget, records);
     if (block) {
       setDeleteBlockReason(block);
       return;
     }
 
+    // API-backed ledgers: call the backend DELETE API
+    if (deleteTarget.apiNodeId) {
+      setIsDeleting(true);
+      try {
+        await LedgerService.delete(String(deleteTarget.apiNodeId));
+        await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+        dispatchCoaChanged();
+        dispatchAccountsDataChanged("ledgers", {
+          operation: "delete",
+          recordId: deleteTarget.id,
+        });
+        closeDeleteDialog();
+      } catch (err: any) {
+        const msg = err?.message || "Failed to delete ledger.";
+        setDeleteBlockReason(msg);
+      } finally {
+        setIsDeleting(false);
+      }
+      return;
+    }
+
     const link = resolveCoaMasterLink(deleteTarget, records);
     if (link && (link.category === "customer" || link.category === "vendor")) {
-      removeErpPartyLink(link.sourceModule, link.sourceId);
+      if (typeof link.sourceId === "number") {
+        removeErpPartyLink(link.sourceModule, link.sourceId);
+      }
     }
     deleteLedgerMeta(deleteTarget.id);
 
@@ -408,10 +441,12 @@ export function CoaExplorerTree({
   };
 
   const roots = useMemo(
-    () =>
-      records
+    () => {
+      const order: Record<string, number> = { AST: 1, LIA: 2, INC: 3, EXP: 4 };
+      return records
         .filter((r) => r.nodeLevel === "primary_head")
-        .sort((a, b) => a.accountCode.localeCompare(b.accountCode)),
+        .sort((a, b) => (order[a.accountCode] ?? 99) - (order[b.accountCode] ?? 99));
+    },
     [records],
   );
 
@@ -455,7 +490,7 @@ export function CoaExplorerTree({
                 expandedIds={expandedIds}
                 selectedId={selectedId}
                 visibleIds={visibleIds}
-                searchQuery={search}
+                searchQuery={highlightQuery.trim() || search}
                 variant={variant}
                 canCreate={canCreate}
                 canEdit={canEdit}
@@ -528,8 +563,9 @@ export function CoaExplorerTree({
                     size="sm"
                     className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
                     onClick={confirmDeleteLedger}
+                    disabled={isDeleting}
                   >
-                    Delete
+                    {isDeleting ? "Deleting…" : "Delete"}
                   </Button>
                 </>
               )}

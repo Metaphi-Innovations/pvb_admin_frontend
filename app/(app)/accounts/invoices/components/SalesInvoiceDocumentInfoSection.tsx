@@ -194,7 +194,11 @@ function SalesInvoiceDocumentInfoSectionInner({
           <InvoiceFormInput
             disabled
             className="bg-slate-50 text-slate-700 font-mono"
-            value={displayInvoiceNo}
+            value={
+              isEdit
+                ? invoiceNo
+                : invoiceNo || "Loading preview…"
+            }
           />
         </InvoiceFormField>
         <InvoiceFormField label="Invoice Date" required={invoiceDateRequired}>

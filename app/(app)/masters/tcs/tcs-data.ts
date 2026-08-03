@@ -1,93 +1,113 @@
 "use client";
 
-/**
- * TCS Master — section definitions (source of truth for COA TCS Payable children).
- * Chart of Accounts only projects active sections; it does not store them separately.
- */
+import type { MasterStatus } from "@/lib/masters/common";
 
-import {
-  MASTER_CURRENT_USER,
-  masterToday,
-  type MasterStatus,
-} from "@/lib/masters/common";
-
-export interface TCSMaster {
+export interface TcsApiRecord {
   id: number;
-  sectionCode: string;
+  tcsUuid: string;
   sectionName: string;
-  /** Numeric rate (e.g. "1", "0.1") or "As per slab" */
   tcsRate: string;
-  description?: string;
+  applicableTo: string;
+  description: string;
   status: MasterStatus;
   createdBy: string;
-  createdDate: string;
+  createdAt: string;
   updatedBy: string;
-  updatedDate: string;
+  updatedAt: string;
 }
 
-const STORAGE_KEY = "ds_tcs_masters_v1";
+export interface TcsApiForm {
+  sectionName: string;
+  tcsRate: string;
+  applicableTo: string;
+  description: string;
+}
 
-export const TCS_SEED: TCSMaster[] = [
-  {
-    id: 1,
-    sectionCode: "206C(1H)",
-    sectionName: "Sale of Goods",
-    tcsRate: "0.1",
-    description: "TCS on sale of goods exceeding threshold",
-    status: "active",
-    createdBy: MASTER_CURRENT_USER,
-    createdDate: "2024-01-10",
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: "2024-01-10",
-  },
-  {
-    id: 2,
-    sectionCode: "206C(1F)",
-    sectionName: "Motor Vehicle",
-    tcsRate: "1",
-    description: "TCS on sale of motor vehicle",
-    status: "active",
-    createdBy: MASTER_CURRENT_USER,
-    createdDate: "2024-01-12",
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: "2024-01-12",
-  },
-  {
-    id: 3,
-    sectionCode: "206C",
-    sectionName: "Scrap / Timber",
-    tcsRate: "1",
-    description: "TCS on scrap and timber",
-    status: "active",
-    createdBy: MASTER_CURRENT_USER,
-    createdDate: "2024-01-15",
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: "2024-01-15",
-  },
-];
+export const DEFAULT_TCS_API_FORM: TcsApiForm = {
+  sectionName: "",
+  tcsRate: "",
+  applicableTo: "",
+  description: "",
+};
 
-export function loadTCSMasters(): TCSMaster[] {
-  if (typeof window === "undefined") return TCS_SEED;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return TCS_SEED;
-    const parsed = JSON.parse(raw) as TCSMaster[];
-    return Array.isArray(parsed) ? parsed : TCS_SEED;
-  } catch {
-    return TCS_SEED;
+export function tcsApiToForm(record: TcsApiRecord): TcsApiForm {
+  return {
+    sectionName: record.sectionName,
+    tcsRate: record.tcsRate,
+    applicableTo: record.applicableTo,
+    description: record.description,
+  };
+}
+
+export function validateTcsApiForm(form: TcsApiForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const rate = form.tcsRate.trim().replace(/%$/, "");
+  const num = Number(rate);
+
+  if (!rate) {
+    errors.tcsRate = "TCS rate is required.";
+  } else if (!Number.isFinite(num) || num <= 0) {
+    errors.tcsRate = "Enter a valid TCS rate greater than zero.";
+  } else if (rate.includes(".") && rate.split(".")[1]?.length > 2) {
+    errors.tcsRate = "TCS rate can have at most 2 decimal places.";
   }
+
+  return errors;
 }
 
-export function saveTCSMasters(data: TCSMaster[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  window.dispatchEvent(new CustomEvent("ds_tcs_master_changed"));
+export function formatTcsRateDisplay(value: string): string {
+  const trimmed = value.trim().replace(/%$/, "");
+  if (!trimmed) return "—";
+  const num = Number(trimmed);
+  if (!Number.isFinite(num)) return trimmed;
+  return `${num}%`;
 }
 
-export function getTcsSectionCode(record: TCSMaster): string {
-  return (record.sectionCode ?? "").trim();
+export function formatApplicableToLabel(value: string): string {
+  const trimmed = value.trim();
+  return trimmed || "—";
 }
 
-export function getActiveTCSMasters(): TCSMaster[] {
-  return loadTCSMasters().filter((t) => t.status === "active");
+export function sanitizeTcsRateInput(value: string): string {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const parts = cleaned.split(".");
+  if (parts.length <= 1) return cleaned;
+  return `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`;
+}
+
+export function showTcsRatePercentSuffix(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.length > 0 && !trimmed.endsWith(".");
+}
+
+export type ApplicableToSelectOption = { label: string; value: string };
+
+export function mergeApplicableToSelectOptions(
+  categories: { categoryName: string }[],
+  currentValue?: string,
+  extraFromApi?: ApplicableToSelectOption[],
+): ApplicableToSelectOption[] {
+  const seen = new Set<string>();
+  const options: ApplicableToSelectOption[] = [];
+
+  const push = (value: string, label?: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    options.push({ value: trimmed, label: label?.trim() || trimmed });
+  };
+
+  for (const category of categories) push(category.categoryName);
+  if (currentValue) push(currentValue);
+  for (const option of extraFromApi ?? []) push(option.value, option.label);
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function getActiveTCSMasters(): TcsApiRecord[] {
+  return [];
+}
+
+export function getTcsSectionCode(record: TcsApiRecord): string {
+  return record.sectionName || "";
 }

@@ -190,7 +190,7 @@ export function computeLineMatchStatus(
 }
 
 export function computeThreeWayMatch(po: PurchaseOrder): ThreeWayMatchResult {
-  const invoices = listPurchaseInvoicesByPO(po.id);
+  const invoices = listPurchaseInvoicesByPO(Number(po.id));
   const invoice = invoices.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const grns = getGrnRecords().filter((g) => g.poNumber === po.poNumber);
   const grnNos = grns.map((g) => g.grnNo);

@@ -1,19 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  buildProductApiAssets,
+  collectNewProductImageFiles,
   loadProducts,
-  nextProductId,
   resolveProductCodeForSave,
-  saveProducts,
-  todayStr,
   type ProductImage,
   type ProductUrl,
+  getProductApiValidationToastMessage,
+  isProductApiValidationError,
+  mapProductApiErrorsToFormFields,
 } from "../product-data";
 import {
   DEFAULT_PRODUCT_FORM,
@@ -22,6 +24,17 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../components/ProductForm";
+import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
+import { ProductListService } from "@/services/product-list.service";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function toUuidOrNull(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw || !UUID_RE.test(raw)) return null;
+  return raw;
+}
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -30,13 +43,16 @@ export default function NewProductPage() {
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
+  const { data: previewNumber } = useProductPreviewNumber();
+  // console.log("Asdadsd", previewNumber);
   const clearErr = (key: string) =>
     setErrors((prev) => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
+
+  const createMutation = useCreateProduct();
 
   const handleSave = () => {
     const list = loadProducts();
@@ -58,26 +74,83 @@ export default function NewProductPage() {
       return;
     }
 
-    try {
-      const today = todayStr();
-      const record = formValuesToProduct(resolvedForm, {
-        id: nextProductId(list),
-        productImages,
-        productUrls,
-        createdBy: "Admin",
-        createdDate: today,
-      });
+    const parseNum = (val: string) => {
+      const trimmed = val.trim();
+      if (!trimmed) return null;
+      const num = Number(trimmed);
+      return Number.isFinite(num) ? num : null;
+    };
 
-      saveProducts([...list, record]);
-      setToast({ msg: "Product created successfully.", type: "success" });
-      setTimeout(() => router.push("/masters/products"), 900);
-    } catch {
-      setToast({
-        msg: "Failed to save product. Storage may be full — try fewer/larger uploads.",
-        type: "error",
-      });
-      setTimeout(() => setToast(null), 4000);
-    }
+    const payload = {
+      product_code: resolvedForm.productCode,
+      product_name: resolvedForm.productName,
+      scientific_name: resolvedForm.scientificName || null,
+      sku: resolvedForm.sku,
+      supplier_id: toUuidOrNull(resolvedForm.supplier),
+      supplier_code: resolvedForm.supplierCode || null,
+      hsn_id: toUuidOrNull(resolvedForm.hsnId || resolvedForm.hsnCode),
+      gst_rate_id: toUuidOrNull(resolvedForm.gstId),
+      category_id: toUuidOrNull(resolvedForm.categoryId),
+      segment_id: toUuidOrNull(resolvedForm.segmentId),
+      formulation_id: toUuidOrNull(resolvedForm.formId),
+      cfu_id: toUuidOrNull(resolvedForm.cfuId),
+      authority: resolvedForm.authority || null,
+      pack_size: parseNum(resolvedForm.packSize),
+      base_unit: resolvedForm.baseUnit,
+      unit: resolvedForm.baseUnit,
+      mou: resolvedForm.mou || null,
+      unit_per_packing: parseNum(resolvedForm.unitPerCase),
+      packing_unit: resolvedForm.packagingUnit,
+      net_weight: parseNum(resolvedForm.netWeightPerPackagingUnit),
+      gross_weight: parseNum(resolvedForm.grossWeight),
+      mrp: parseNum(resolvedForm.mrp),
+      cost_price: parseNum(resolvedForm.costPrice),
+      is_active: resolvedForm.status === "active",
+      status: resolvedForm.status === "active" ? "Active" : "Inactive",
+      assets: buildProductApiAssets(productImages, productUrls),
+    };
+
+    createMutation.mutate(
+      {
+        payload,
+        images: collectNewProductImageFiles(productImages),
+      },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: "Product created successfully.",
+            type: "success",
+          });
+          setTimeout(() => router.push("/masters/products"), 900);
+        },
+        onError: (err) => {
+          if (isProductApiValidationError(err)) {
+            const apiFieldErrors = mapProductApiErrorsToFormFields(err);
+            if (Object.keys(apiFieldErrors).length > 0) {
+              setErrors((prev) => ({ ...prev, ...apiFieldErrors }));
+            }
+            setToast({
+              msg: getProductApiValidationToastMessage(
+                err,
+                "Please fix the validation errors.",
+              ),
+              type: "error",
+            });
+            setTimeout(() => setToast(null), 5000);
+            return;
+          }
+
+          setToast({
+            msg: ProductListService.extractErrorMessage(
+              err,
+              "Failed to save product.",
+            ),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 4000);
+        },
+      }
+    );
   };
 
   return (
@@ -94,6 +167,7 @@ export default function NewProductPage() {
             type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={createMutation.isPending}
           >
             <Save className="w-4 h-4" /> Save
           </Button>
@@ -106,6 +180,7 @@ export default function NewProductPage() {
         errors={errors}
         onClearError={clearErr}
         productImages={productImages}
+        previewNumber={previewNumber}
         productUrls={productUrls}
         onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
         onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}
@@ -117,12 +192,16 @@ export default function NewProductPage() {
       {toast && (
         <div
           className={cn(
-            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "fixed top-5 right-5 z-[100] flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium max-w-md",
             toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
           )}
         >
-          {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-          {toast.msg}
+          {toast.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          ) : (
+            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          )}
+          <span className="leading-snug whitespace-pre-wrap">{toast.msg}</span>
         </div>
       )}
     </FormContainer>

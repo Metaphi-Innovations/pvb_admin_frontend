@@ -138,17 +138,22 @@ export const COA_LEDGER_BEHAVIOR_RULES: readonly CoaLedgerBehaviorRule[] = [
   },
 ] as const;
 
-function ancestorPath(records: ChartOfAccount[], nodeId: number): ChartOfAccount[] {
-  const byId = new Map(records.map((record) => [record.id, record]));
+function ancestorPath(
+  records: ChartOfAccount[],
+  nodeId: import("@/app/(app)/accounts/data").CoaNodeId,
+): ChartOfAccount[] {
+  const byId = new Map(records.map((record) => [String(record.id), record]));
   const path: ChartOfAccount[] = [];
-  const visited = new Set<number>();
-  let current = byId.get(nodeId);
+  const visited = new Set<string>();
+  let current = byId.get(String(nodeId));
 
-  while (current && !visited.has(current.id)) {
-    visited.add(current.id);
+  while (current && !visited.has(String(current.id))) {
+    visited.add(String(current.id));
     path.unshift(current);
     current =
-      current.parentAccountId == null ? undefined : byId.get(current.parentAccountId);
+      current.parentAccountId == null
+        ? undefined
+        : byId.get(String(current.parentAccountId));
   }
 
   return path;
@@ -204,7 +209,7 @@ export function resolveCoaLedgerBehavior(
 }
 
 export function resolveCoaLedgerBehaviorById(
-  parentGroupId: number,
+  parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId,
   records: ChartOfAccount[],
 ): CoaLedgerBehavior {
   const parent = records.find((record) => record.id === parentGroupId);

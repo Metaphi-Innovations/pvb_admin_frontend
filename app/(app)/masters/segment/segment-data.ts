@@ -8,6 +8,8 @@ import {
 export const SEGMENT_STORAGE_KEY = "ds_master_segment_v2";
 
 export interface SegmentRecord extends BaseMasterRecord {
+  /** Backend UUID for API routes */
+  segmentUuid?: string;
   segmentName: string;
   segmentCode: string;
   description: string;
@@ -17,15 +19,23 @@ export interface SegmentForm {
   segmentName: string;
   segmentCode: string;
   description: string;
-  status: MasterStatus;
+  /** @deprecated Status is managed via list toggle API, not create/update */
+  status?: MasterStatus;
 }
 
 export const DEFAULT_SEGMENT_FORM: SegmentForm = {
   segmentName: "",
   segmentCode: "",
   description: "",
-  status: "active",
 };
+
+export function validateSegmentApiForm(form: SegmentForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.segmentName.trim()) {
+    errors.segmentName = "Segment name is required.";
+  }
+  return errors;
+}
 
 export const SEGMENT_SEED: SegmentRecord[] = [
   {
@@ -68,7 +78,6 @@ export function segmentToForm(r: SegmentRecord): SegmentForm {
     segmentName: r.segmentName,
     segmentCode: r.segmentCode,
     description: r.description,
-    status: r.status,
   };
 }
 
@@ -83,7 +92,7 @@ export function formToSegment(
     segmentName: form.segmentName.trim(),
     segmentCode: form.segmentCode.trim().toUpperCase(),
     description: form.description.trim(),
-    status: form.status,
+    status: existing?.status ?? "active",
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
     updatedBy: "Admin User",
     createdAt: existing?.createdAt ?? now,

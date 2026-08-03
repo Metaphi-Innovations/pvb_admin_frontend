@@ -108,7 +108,7 @@ export function computeLedgerBalanceBreakdown(ledger: ChartOfAccount): LedgerBal
  * Trust stored balanceType, but recover common seed mistakes where Liability /
  * Income / Equity openings were stored as Debit (or Asset / Expense as Credit).
  */
-function resolveOpeningSide(ledger: ChartOfAccount): "Debit" | "Credit" {
+export function resolveOpeningSide(ledger: ChartOfAccount): "Debit" | "Credit" {
   const type = ledger.accountType;
   const stored = ledger.balanceType;
   const creditNormal =

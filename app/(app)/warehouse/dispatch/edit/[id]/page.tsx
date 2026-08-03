@@ -1,42 +1,113 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { ArrowLeft, Truck, Package, Save } from "lucide-react";
+import { Pencil, CheckSquare } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
-import { getDispatchById, saveDispatch } from "../../services";
-import { DispatchRecord } from "../../types";
-import { WAREHOUSE_OPTIONS, DELIVERY_STATUS_OPTIONS } from "../../constants";
+import {
+  getDispatchById,
+  updateDispatch,
+  getPackedOrdersDropdown,
+  type PackedOrderDropdownItem,
+} from "../../services";
 
 export default function EditDispatchPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
 
-  const [record, setRecord] = useState<DispatchRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [dispatchNumber, setDispatchNumber] = useState("");
+  const [orderNumber, setOrderNumber] = useState("");
+  const [orderId, setOrderId] = useState("");
+  const [packingListing, setPackingListing] = useState("");
+  const [dispatchDate, setDispatchDate] = useState("");
+  const [packingList, setPackingList] = useState<PackedOrderDropdownItem["packing_list"] | null>(null);
 
   useEffect(() => {
-    if (id) setRecord(getDispatchById(id) || null);
+    if (!id) return;
+    setInitialLoading(true);
+
+    Promise.all([getDispatchById(id), getPackedOrdersDropdown().catch(() => [] as PackedOrderDropdownItem[])])
+      .then(([data, orderRows]) => {
+        setDispatchNumber(data.dispatch_no || data.dispatchNumber || data.dispatch_number || "");
+        const packingDoneNo =
+          data.packing_done?.packing_done_no ||
+          data.packingDoneNo ||
+          data.packing_done_no ||
+          "";
+        setPackingListing(packingDoneNo);
+        if (data.dispatch_date || data.dispatchDate) {
+          setDispatchDate(
+            new Date(data.dispatch_date || data.dispatchDate).toISOString().split("T")[0],
+          );
+        }
+
+        const sourceId = data.source_id || "";
+        const sourceDocNo = data.source_document_no || "";
+        setOrderId(sourceId);
+        setOrderNumber(sourceDocNo);
+
+        const packingListId =
+          data.packing_done?.packing_list_id ||
+          data.packing_list_id ||
+          null;
+
+        const matched =
+          orderRows.find((r) => packingListId && r.packing_list.packing_list_id === packingListId) ||
+          orderRows.find((r) => sourceId && r.order_id === sourceId) ||
+          null;
+
+        if (matched) {
+          setOrderNumber(matched.order_number || sourceDocNo);
+          setOrderId(matched.order_id || sourceId);
+          setPackingList(matched.packing_list);
+          if (!packingDoneNo && matched.packing_list.packing_number) {
+            setPackingListing(matched.packing_list.packing_number);
+          }
+        }
+      })
+      .catch(console.error)
+      .finally(() => setInitialLoading(false));
   }, [id]);
 
-  const handleChange = (field: keyof DispatchRecord, value: string) => {
-    if (!record) return;
-    setRecord({ ...record, [field]: value });
+  const handleSubmit = async () => {
+    if (!dispatchDate) {
+      alert("Dispatch Date is required.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateDispatch(id, {
+        dispatch_date: new Date(dispatchDate).toISOString(),
+      });
+      alert("Dispatch updated successfully");
+      router.push("/warehouse/dispatch");
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Failed to update Dispatch");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = () => {
-    if (!record) return;
-    saveDispatch(record);
-    router.push("/warehouse/dispatch");
-  };
+  const products = useMemo(() => packingList?.products || [], [packingList]);
 
-  if (!record) {
+  if (initialLoading) {
     return (
-      <FormContainer title="Edit Dispatch" onBack={() => router.push("/warehouse/dispatch")}>
-        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading dispatch record...</div>
+      <FormContainer
+        title="Edit Dispatch"
+        description="Loading dispatch details..."
+        onBack={() => router.push("/warehouse/dispatch")}
+        onCancel={() => router.push("/warehouse/dispatch")}
+        cancelLabel="Cancel"
+      >
+        <div className="h-40 flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">Loading...</p>
+        </div>
       </FormContainer>
     );
   }
@@ -44,113 +115,157 @@ export default function EditDispatchPage() {
   return (
     <FormContainer
       title="Edit Dispatch"
-      description={`Update details for dispatch note ${record.dispatchNumber}`}
+      description={`Update dispatch: ${dispatchNumber}`}
       onBack={() => router.push("/warehouse/dispatch")}
       onCancel={() => router.push("/warehouse/dispatch")}
       cancelLabel="Cancel"
       actions={
-        <Button size="sm" onClick={handleSubmit} className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5">
-          <Save className="w-3.5 h-3.5" /> Save Changes
+        <Button
+          size="sm"
+          disabled={!dispatchDate || loading}
+          onClick={handleSubmit}
+          className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+        >
+          <Pencil className="w-3.5 h-3.5" /> {loading ? "Updating..." : "Update Dispatch"}
         </Button>
       }
       noCard={false}
     >
       <div className="space-y-6">
-        {/* Dispatch Header Fields */}
         <div className="space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-            <Truck className="w-4 h-4 text-brand-600" /> Header Details
+            <Pencil className="w-4 h-4 text-brand-600" /> Dispatch Details
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Number</p>
-              <Input value={record.dispatchNumber} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
-            </div>
-            <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                {record.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No" : "Sales Order No"}
+                Dispatch Number
               </p>
-              <Input value={record.salesOrderNumber} disabled className="h-8 text-xs bg-slate-50 font-mono mt-1.5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                {record.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer"}
-              </p>
-              <Input 
-                value={record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer} 
-                disabled 
-                className="h-8 text-xs bg-slate-50 mt-1.5" 
+              <Input
+                value={dispatchNumber}
+                disabled
+                className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5"
               />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Date *</p>
-              <Input type="date" value={record.dispatchDate} onChange={e => handleChange("dispatchDate", e.target.value)} className="h-8 text-xs mt-1.5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Vehicle Number *</p>
-              <Input value={record.vehicleNumber} onChange={e => handleChange("vehicleNumber", e.target.value)} className="h-8 text-xs mt-1.5" placeholder="e.g. MH-12-AB-1234" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Driver Name *</p>
-              <Input value={record.driverName} onChange={e => handleChange("driverName", e.target.value)} className="h-8 text-xs mt-1.5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Transporter Name</p>
-              <Input value={record.transporterName} onChange={e => handleChange("transporterName", e.target.value)} className="h-8 text-xs mt-1.5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
-              <AutocompleteSelect
-                options={WAREHOUSE_OPTIONS}
-                value={record.warehouse}
-                onChange={v => handleChange("warehouse", v)}
-                placeholder="Select warehouse"
-                searchPlaceholder="Search warehouse..."
-                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                Order
+              </p>
+              <Input
+                value={orderNumber || orderId || "—"}
+                disabled
+                className="h-8 text-xs bg-slate-50 font-mono mt-1.5"
               />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Status</p>
-              <AutocompleteSelect
-                options={DELIVERY_STATUS_OPTIONS}
-                value={record.deliveryStatus}
-                onChange={v => handleChange("deliveryStatus", v)}
-                placeholder="Select status"
-                searchPlaceholder="Search status..."
-                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                Packing Listing
+              </p>
+              <Input
+                value={
+                  packingList?.packing_number
+                    ? `${packingList.packing_number}${packingListing ? ` → ${packingListing}` : ""}`
+                    : packingListing || "—"
+                }
+                disabled
+                className="h-8 text-xs bg-slate-50 font-mono mt-1.5"
+              />
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                Dispatch Date *
+              </p>
+              <Input
+                type="date"
+                value={dispatchDate}
+                onChange={(e) => setDispatchDate(e.target.value)}
+                className="h-8 text-xs mt-1.5"
               />
             </div>
           </div>
         </div>
 
-        {/* Product View (Read-only) */}
-        <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
-          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-            <Package className="w-4 h-4 text-brand-600" /> Products (Read-only)
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-slate-50/60">
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Dispatch Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {record.products.map((p, i) => (
-                  <tr key={i} className="border-b border-border/60 hover:bg-slate-50/40">
-                    <td className="py-3 px-3 text-xs font-bold">{p.product}</td>
-                    <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
-                    <td className="py-3 px-3 text-xs font-bold text-center">{p.packedQty}</td>
-                    <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {packingList && (
+          <div className="border-t border-border/80 pt-6 space-y-4">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
+              <CheckSquare className="w-4 h-4 text-brand-600" /> Related Packing List
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-border">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Packing Number
+                </p>
+                <p className="text-sm font-bold text-foreground font-mono">
+                  {packingList.packing_number}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Status
+                </p>
+                <p className="text-sm font-bold text-foreground">{packingList.status}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Customer
+                </p>
+                <p className="text-sm font-bold text-foreground">
+                  {packingList.customer_name || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Warehouse
+                </p>
+                <p className="text-sm font-bold text-foreground">
+                  {packingList.warehouse_name || "—"}
+                </p>
+              </div>
+            </div>
+
+            {products.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Packing List Products
+                </p>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-border">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground">Product</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground">Batch</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Order Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Packed Qty</th>
+                        <th className="px-3 py-2 font-semibold text-muted-foreground text-right">Pending Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {products.map((product) => (
+                        <tr key={product.packing_list_product_id}>
+                          <td className="px-3 py-2 font-medium">
+                            {product.product_name || product.product_code || product.product_id}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[10px]">
+                            {product.batch_code || "—"}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right font-mono">
+                            {product.order_base_qty}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right font-mono font-bold">
+                            {product.packed_base_qty}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right font-mono">
+                            {product.pending_base_qty}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </FormContainer>
   );

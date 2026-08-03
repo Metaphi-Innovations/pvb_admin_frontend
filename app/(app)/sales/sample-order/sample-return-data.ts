@@ -8,6 +8,10 @@ export interface SampleReturnProduct {
   batchNo?: string;
   lineAmount: number;
   remarks?: string;
+  quantityType?: string;
+  returnTotalPieces?: number;
+  returnCaseQty?: number;
+  returnLooseQty?: number;
 }
 
 export interface SampleReturnRecord {

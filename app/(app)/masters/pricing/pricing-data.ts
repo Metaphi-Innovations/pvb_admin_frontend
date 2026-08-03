@@ -7,6 +7,12 @@ import {
 import { loadMasterRecords, saveMasterRecords } from "@/lib/masters/common";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { loadProducts, type Product } from "../products/product-data";
+import type { ProductListRecord } from "@/services/product-list.service";
+import type {
+  PricingCreatePayload,
+  PricingListRecord,
+  PricingUpdatePayload,
+} from "@/services/pricing-list.service";
 
 export { formatIndianRupeeDisplay };
 
@@ -35,6 +41,7 @@ export type DiscountType = "" | "percentage" | "flat";
 
 export interface ProductPricingSnapshot {
   id: number;
+  productUuid: string;
   productCode: string;
   sku: string;
   productName: string;
@@ -138,6 +145,9 @@ const PRODUCT_REFERENCE_DEALER_PRICE: Record<number, number> = {
 };
 
 export interface PricingRecord extends BaseMasterRecord {
+  pricingUuid?: string;
+  productUuid?: string;
+  customerTypeId?: string;
   productId: number;
   productCode: string;
   sku: string;
@@ -375,9 +385,17 @@ export function getSellingPriceLabel(customerType: PricingCustomerType | ""): st
   }
 }
 
-export function getSellingPriceFromRecord(record: PricingRecord): number {
+export function getSellingPriceFromRecord(record: {
+  dealerPrice: number;
+  customerType: string;
+  netSellingPrice: number;
+  distributorPrice: number;
+  retailPrice: number;
+  farmerPrice: number;
+  specialPrice: number;
+}): number {
   if (record.dealerPrice > 0) return record.dealerPrice;
-  const key = getSellingPriceFieldKey(record.customerType);
+  const key = getSellingPriceFieldKey(record.customerType as PricingScopeCustomerType | "");
   if (key) return record[key];
   return record.netSellingPrice;
 }
@@ -433,11 +451,16 @@ function migratePricingRecord(raw: Partial<PricingRecord>): PricingRecord {
     raw.distributorPrice ?? raw.retailPrice ?? raw.dealerPrice ?? raw.farmerPrice ?? 0;
 
   const product = raw.productId
-    ? loadProducts().find((p) => p.id === raw.productId)
-    : undefined;
+    ? loadProducts().find((p) => p.id === raw.productId || String(p.id) === raw.productUuid)
+    : raw.productUuid
+      ? loadProducts().find((p) => String(p.id) === raw.productUuid)
+      : undefined;
 
   const record: PricingRecord = {
     id: raw.id ?? 0,
+    pricingUuid: raw.pricingUuid,
+    productUuid: raw.productUuid,
+    customerTypeId: raw.customerTypeId,
     productId: raw.productId ?? 0,
     productCode: raw.productCode ?? product?.productCode ?? raw.sku ?? "",
     sku: raw.sku ?? product?.sku ?? "",
@@ -462,7 +485,7 @@ function migratePricingRecord(raw: Partial<PricingRecord>): PricingRecord {
     effectiveTo,
     priceListName:
       raw.priceListName ?? generatePriceListName(state, customerType),
-    costPrice: raw.costPrice ?? resolveProductCostPrice(raw.productId ?? 0),
+    costPrice: raw.costPrice ?? 0,
     mrp: raw.mrp ?? product?.mrp ?? 0,
     distributorPrice: raw.distributorPrice ?? sellingPrice,
     dealerPrice: raw.dealerPrice ?? 0,
@@ -932,7 +955,59 @@ export function ensurePricingDemoSeed(): void {
   localStorage.setItem(PRICING_SEED_VERSION_KEY, PRICING_DEMO_SEED_VERSION);
 }
 
+let dynamicPricingRecords: PricingRecord[] | null = null;
+
+export function setDynamicPricingRecords(records: PricingRecord[] | null) {
+  dynamicPricingRecords = records;
+}
+
+export function mapProductPricingDropdownItem(pr: Record<string, unknown>): Partial<PricingRecord> {
+  const product = (pr.product ?? {}) as Record<string, unknown>;
+  const customerType = (pr.customer_type ?? {}) as Record<string, unknown>;
+  const productUuid = String(pr.product_id ?? product.product_id ?? "");
+  const pricingUuid = String(pr.id ?? "");
+  // Keep numeric productId only when backend still sends a numeric id (legacy demo data).
+  const numericProductId =
+    typeof pr.product_id === "number"
+      ? pr.product_id
+      : Number.isFinite(Number(pr.product_id)) && String(pr.product_id).trim() !== "" && !productUuid.includes("-")
+        ? Number(pr.product_id)
+        : 0;
+  const numericId =
+    typeof pr.id === "number"
+      ? pr.id
+      : Number.isFinite(Number(pr.id)) && String(pr.id).trim() !== "" && !pricingUuid.includes("-")
+        ? Number(pr.id)
+        : 0;
+
+  return {
+    id: numericId,
+    pricingUuid: pricingUuid || undefined,
+    productUuid: productUuid || undefined,
+    productId: numericProductId,
+    productCode: String(product.product_code ?? ""),
+    sku: String(product.product_code ?? product.sku ?? ""),
+    productName: String(product.product_name ?? ""),
+    state: String(pr.state_name ?? ""),
+    customerType: (String(customerType.customer_type_name ?? "") || "Distributor") as PricingCustomerType,
+    customerTypeId: String(pr.customer_type_id ?? customerType.id ?? "") || undefined,
+    status: pr.is_active === false ? "inactive" : "active",
+    dealerPrice: Number(pr.dealer_price ?? 0),
+    costPrice: Number(pr.cost_price ?? product.cost_price ?? 0),
+    distributorPrice: Number(pr.dealer_price ?? 0),
+  };
+}
+
+export function mapProductPricingDropdownRecords(
+  records: Record<string, unknown>[],
+): PricingRecord[] {
+  return records.map((record) => migratePricingRecord(mapProductPricingDropdownItem(record)));
+}
+
 export function loadPricingRecords(): PricingRecord[] {
+  if (dynamicPricingRecords) {
+    return dynamicPricingRecords.map((r) => migratePricingRecord(r));
+  }
   ensurePricingDemoSeed();
   const records = loadMasterRecords<PricingRecord>(PRICING_STORAGE_KEY, PRICING_SEED);
   return records.map((r) => migratePricingRecord(r));
@@ -973,6 +1048,7 @@ export function resolveProductMrp(product: Product): number {
 export function buildProductPricingSnapshot(product: Product): ProductPricingSnapshot {
   return {
     id: product.id,
+    productUuid: "",
     productCode: product.productCode,
     sku: product.sku,
     productName: product.productName,
@@ -1032,7 +1108,26 @@ export function getMrpInlineError(mrp: number): string | undefined {
 export function syncPricingProductLines(
   form: PricingForm,
   selectedIds: string[],
+  catalog: ProductListRecord[] = [],
 ): PricingForm {
+  if (catalog.length > 0) {
+    const preserved = new Map(
+      form.productLines.map((line) => [line.productUuid || String(line.id), line]),
+    );
+    const productLines = selectedIds
+      .map((id) => {
+        const product = catalog.find((p) => p.productUuid === id);
+        if (!product) return null;
+        const existing = preserved.get(id);
+        return existing
+          ? mergePreservedPricingLineFromApi(existing, product)
+          : buildBulkPricingLineFromApi(product);
+      })
+      .filter((line): line is BulkPricingLine => line !== null);
+
+    return { ...form, productLines };
+  }
+
   const activeProducts = loadActiveProducts();
   const preserved = new Map(form.productLines.map((line) => [String(line.id), line]));
   const productLines = selectedIds
@@ -1334,19 +1429,27 @@ export function findDuplicateActivePricing(
 
 export function findActivePricingForStock(
   sku: string,
-  productName: string,
+  productName?: string | null,
 ): PricingRecord | undefined {
   const records = loadPricingRecords().filter((r) => r.status === "active");
-  const norm = (s: string) => s.trim().toLowerCase();
+  const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+  const normalizedSku = norm(sku);
+  const normalizedName = norm(productName);
 
-  const bySku = records.find((r) => r.sku === sku);
-  if (bySku) return bySku;
+  if (normalizedSku) {
+    const bySku = records.find((r) => norm(r.sku) === normalizedSku);
+    if (bySku) return bySku;
+  }
 
-  const byName = records.find((r) => norm(r.productName) === norm(productName));
-  if (byName) return byName;
+  if (normalizedName) {
+    const byName = records.find((r) => norm(r.productName) === normalizedName);
+    if (byName) return byName;
+  }
 
   const product = loadProducts().find(
-    (p) => p.sku === sku || norm(p.productName) === norm(productName),
+    (p) =>
+      (normalizedSku && norm(p.sku) === normalizedSku) ||
+      (normalizedName && norm(p.productName) === normalizedName),
   );
   if (product) {
     return records.find((r) => r.productId === product.id);
@@ -1407,16 +1510,12 @@ export function computePricingDashboardStats(
 
 export function getPricingProductLineInlineErrors(
   line: BulkPricingLine,
-): { costPrice?: string; dealerPrice?: string; mrp?: string } {
-  const fieldErrors: { costPrice?: string; dealerPrice?: string; mrp?: string } = {};
+): { dealerPrice?: string; mrp?: string } {
+  const fieldErrors: { dealerPrice?: string; mrp?: string } = {};
 
   const mrpError = getMrpInlineError(line.mrp);
   if (mrpError) {
     fieldErrors.mrp = mrpError;
-  }
-
-  if (line.costPrice < 0) {
-    fieldErrors.costPrice = "Cost Price cannot be negative.";
   }
 
   const dealerError = getDealerPriceInlineError(line.dealerPrice, line.mrp);
@@ -1442,14 +1541,8 @@ export function getDealerPriceInlineError(
 
 function getPricingProductLineSaveErrors(
   line: BulkPricingLine,
-): { costPrice?: string; dealerPrice?: string; mrp?: string } {
+): { dealerPrice?: string; mrp?: string } {
   const fieldErrors = getPricingProductLineInlineErrors(line);
-
-  if (!fieldErrors.costPrice) {
-    if (!line.costPrice || line.costPrice <= 0) {
-      fieldErrors.costPrice = "Cost Price is required.";
-    }
-  }
 
   if (!fieldErrors.dealerPrice) {
     if (!line.dealerPrice || line.dealerPrice <= 0) {
@@ -1496,9 +1589,6 @@ function validateAddPricingForm(
     if (lineErrors.mrp) {
       errors[`line_${idx}_mrp`] = lineErrors.mrp;
     }
-    if (lineErrors.costPrice) {
-      errors[`line_${idx}_costPrice`] = lineErrors.costPrice;
-    }
     if (lineErrors.dealerPrice) {
       errors[`line_${idx}_dealerPrice`] = lineErrors.dealerPrice;
     }
@@ -1519,10 +1609,12 @@ function validateEditPricingForm(
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
-  if (form.costPrice < 0) {
-    errors.costPrice = "Cost Price cannot be negative.";
-  } else if (!form.costPrice || form.costPrice <= 0) {
-    errors.costPrice = "Cost Price is required.";
+  if (!form.state.trim()) {
+    errors.state = "State is required.";
+  }
+
+  if (!form.customerType) {
+    errors.customerType = "Customer type is required.";
   }
 
   if (form.dealerPrice < 0) {
@@ -1588,3 +1680,170 @@ function findScopeDuplicateMessage(
 
   return undefined;
 }
+
+export function buildBulkPricingLineFromApi(product: ProductListRecord): BulkPricingLine {
+  const packSize =
+    product.packSize != null
+      ? String(product.packSize)
+      : "";
+
+  return {
+    id: product.id,
+    productUuid: product.productUuid,
+    productCode: product.productCode,
+    sku: product.sku,
+    productName: product.productName,
+    supplierName: product.supplier ?? "",
+    supplierCode: product.supplierCode ?? "",
+    segment: product.segment ?? "",
+    category: product.category ?? "",
+    baseUnit: product.baseUnit ?? "",
+    mou: product.mou ?? "",
+    unit: product.baseUnit ?? "",
+    packagingUnit: product.packagingUnit ?? "",
+    packSize,
+    unitsPerCase: product.unitPerCase ?? 1,
+    hsnCode: product.hsnCode ?? "",
+    gstPct: product.gstRate ?? "",
+    costPrice: product.costPrice ?? 0,
+    productDealerPrice: 0,
+    mrp: product.mrp ?? 0,
+    dealerPrice: 0,
+    discountType: "",
+    discountValue: 0,
+    netSellingPrice: 0,
+    status: "active",
+  };
+}
+
+function mergePreservedPricingLineFromApi(
+  existing: BulkPricingLine,
+  product: ProductListRecord,
+): BulkPricingLine {
+  const next = buildBulkPricingLineFromApi(product);
+  return {
+    ...next,
+    costPrice: existing.costPrice,
+    dealerPrice: existing.dealerPrice,
+    netSellingPrice: existing.dealerPrice,
+    status: existing.status,
+  };
+}
+
+export function mapProductCatalogToOptions(products: ProductListRecord[]) {
+  return products.map((p) => {
+    const meta = [
+      p.sku ? `SKU: ${p.sku}` : "",
+      p.productCode ? `Code: ${p.productCode}` : "",
+      p.category ? `Category: ${p.category}` : "",
+      p.supplier ? `Supplier: ${p.supplier}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    return {
+      value: p.productUuid,
+      label: p.productName,
+      sublabel: meta || undefined,
+      searchText: [
+        p.productCode,
+        p.productName,
+        p.sku,
+        p.supplier,
+        p.supplierCode,
+        p.hsnCode,
+        p.category,
+        p.segment,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase(),
+    };
+  });
+}
+
+export function apiPricingToForm(record: PricingListRecord): PricingForm {
+  return {
+    productId: record.productUuid,
+    productCode: record.productCode,
+    productName: record.productName,
+    sku: record.sku,
+    supplierName: record.supplierName,
+    supplierCode: record.supplierCode,
+    segment: record.segment,
+    category: record.category,
+    baseUnit: record.baseUnit,
+    mou: record.mou,
+    unit: record.unit,
+    uom: record.uom,
+    packSize: record.packSize,
+    unitsPerCase: record.unitsPerCase,
+    hsnCode: record.hsnCode,
+    gstPct: record.gstPct,
+    productDealerPrice: record.productDealerPrice,
+    customerType: (record.customerType || "") as PricingScopeCustomerType | "",
+    state: record.state,
+    states: [record.state],
+    customerTypes: record.customerType ? [record.customerType as PricingCustomerType] : [],
+    applyToAllStates: false,
+    applyToAllCustomerTypes: false,
+    costPrice: record.costPrice,
+    mrp: record.mrp,
+    distributorPrice: record.distributorPrice,
+    dealerPrice: record.dealerPrice,
+    retailPrice: record.retailPrice,
+    farmerPrice: record.farmerPrice,
+    specialPrice: record.specialPrice,
+    discountType: record.discountType,
+    discountValue: record.discountValue,
+    netSellingPrice: record.netSellingPrice,
+    status: record.status,
+    productLines: [],
+  };
+}
+
+export function buildPricingUpdatePayload(
+  form: PricingForm,
+  record: PricingListRecord,
+  customerTypeIdByName: Record<string, string>,
+): PricingUpdatePayload {
+  const customerTypeId =
+    customerTypeIdByName[form.customerType] ?? record.customerTypeId;
+
+  return {
+    product_id: record.productUuid,
+    state_name: form.state.trim(),
+    customer_type_id: customerTypeId,
+    dealer_price: form.dealerPrice,
+    is_active: form.status === "active",
+  };
+}
+
+export function buildPricingCreatePayloads(
+  form: PricingForm,
+  customerTypeIdByName: Record<string, string>,
+): PricingCreatePayload[] {
+  const states = resolveFormStates(form);
+  const customerTypes = resolveFormCustomerTypes(form);
+  const payloads: PricingCreatePayload[] = [];
+
+  for (const line of form.productLines) {
+    if (!line.productUuid) continue;
+    for (const state of states) {
+      for (const customerType of customerTypes) {
+        const customerTypeId = customerTypeIdByName[customerType];
+        if (!customerTypeId) continue;
+        payloads.push({
+          product_id: line.productUuid,
+          state_name: state,
+          customer_type_id: customerTypeId,
+          dealer_price: line.dealerPrice,
+          is_active: form.status === "active",
+        });
+      }
+    }
+  }
+
+  return payloads;
+}
+

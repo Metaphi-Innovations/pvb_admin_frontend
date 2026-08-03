@@ -8,5 +8,5 @@ export default async function EditBankAccountPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <BankAccountFormClient accountId={Number(id)} />;
+  return <BankAccountFormClient mode="edit" ledgerId={id} />;
 }

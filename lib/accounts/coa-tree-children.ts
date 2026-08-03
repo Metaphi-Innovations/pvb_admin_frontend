@@ -3,7 +3,7 @@
  * Bank name containers (bankGroupFlag) stay in data for posting but are flattened out of the tree.
  */
 
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
+import type { ChartOfAccount, CoaNodeId } from "@/app/(app)/accounts/data";
 import {
   getAncestorPath,
   getDirectChildren,
@@ -19,7 +19,7 @@ import {
 /** Ancestor path for breadcrumbs — skips internal bank name container nodes. */
 export function getCoaDisplayPath(
   records: ChartOfAccount[],
-  nodeId: number,
+  nodeId: CoaNodeId,
 ): ChartOfAccount[] {
   return getAncestorPath(records, nodeId).filter((n) => !n.bankGroupFlag);
 }
@@ -27,7 +27,7 @@ export function getCoaDisplayPath(
 /** Cheap expandability check — avoids allocating the children array until expand. */
 export function coaTreeNodeHasChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): boolean {
   const parent = records.find((r) => r.id === parentId);
   if (!parent) return false;
@@ -44,7 +44,7 @@ export function coaTreeNodeHasChildren(
 /** Tree children — bank account ledgers appear directly under Bank Accounts (no 5th level). */
 export function getCoaTreeChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): ChartOfAccount[] {
   const parent = records.find((r) => r.id === parentId);
   if (!parent) return [];

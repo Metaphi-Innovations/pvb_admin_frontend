@@ -148,7 +148,10 @@ function buildDemoBillWiseView(ledger: ChartOfAccount): BillWiseOutstandingView 
     ledgerName: ledger.accountName,
     ledgerCode: ledger.accountCode,
     partyKind: "customer",
-    partyId: ledger.erpSourceId ?? matchedCustomer?.id ?? -1,
+    partyId:
+      typeof ledger.erpSourceId === "number"
+        ? ledger.erpSourceId
+        : matchedCustomer?.id ?? -1,
     partyName: ledger.accountName,
     partyCode: ledger.accountCode,
     currentOutstanding,
@@ -162,10 +165,16 @@ function resolvePartyFromLedger(
   ledger: ChartOfAccount,
   records: ChartOfAccount[],
 ): { partyKind: BillWisePartyKind; partyId: number } | null {
-  if (ledger.erpSourceModule === "customer_master" && ledger.erpSourceId != null) {
+  if (
+    ledger.erpSourceModule === "customer_master" &&
+    typeof ledger.erpSourceId === "number"
+  ) {
     return { partyKind: "customer", partyId: ledger.erpSourceId };
   }
-  if (ledger.erpSourceModule === "vendor_master" && ledger.erpSourceId != null) {
+  if (
+    ledger.erpSourceModule === "vendor_master" &&
+    typeof ledger.erpSourceId === "number"
+  ) {
     return { partyKind: "supplier", partyId: ledger.erpSourceId };
   }
 
@@ -303,7 +312,7 @@ export function getBillWiseOutstandingForLedger(
       ledgerName: ledger.accountName,
       ledgerCode: ledger.accountCode,
       partyKind,
-      partyId: ledger.erpSourceId ?? -1,
+      partyId: typeof ledger.erpSourceId === "number" ? ledger.erpSourceId : -1,
       partyName: ledger.accountName,
       partyCode: ledger.accountCode,
       currentOutstanding: 0,

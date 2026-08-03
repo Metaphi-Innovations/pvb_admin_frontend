@@ -27,19 +27,20 @@ import {
 	Ban,
 	UserCheck,
 	UserX,
-	CircleDashed,
-	Ban as BanIcon,
+	AlertTriangle,
 } from "lucide-react";
 import {
-	type Customer,
-	type CustomerStatus,
-	loadCustomers,
-	saveCustomers,
-	todayStr,
-	CUSTOMER_TYPE_LABELS,
-	formatMobile,
-	formatCreditLimit,
-} from "./customer-data";
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
+	useCustomers,
+	useExportCustomers,
+	useToggleCustomerStatus,
+} from "@/hooks/masters/use-customers";
 import { readCustomerPermissions } from "./customer-permissions";
 
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -51,6 +52,9 @@ import {
 	ActionItemConfig,
 } from "@/components/listing/types";
 import { ListingAuditCell } from "@/components/listing";
+import { sortStateToOrdering, type CustomerListRecord } from "@/services/customer-list.service";
+import { formatCreditLimit, formatMobile } from "./customer-data";
+import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
 
 function KpiCard({
 	label,
@@ -91,21 +95,34 @@ function KpiCard({
 		</div>
 	);
 }
+type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
 
-function StatusBadge({ status }: { status: CustomerStatus }) {
+function StatusBadge({
+	status,
+}: {
+	status: CustomerStatus;
+}) {
 	const cfg = {
-		active: { className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-		inactive: { className: "border-slate-200 bg-slate-100 text-slate-700" },
-		draft: { className: "border-amber-200 bg-amber-50 text-amber-700" },
-		blocked: { className: "border-red-200 bg-red-50 text-red-700" },
-	}[status];
+		active: {
+			className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+		},
+		inactive: {
+			className: "border-slate-200 bg-slate-100 text-slate-700",
+		},
+		draft: {
+			className: "border-amber-200 bg-amber-50 text-amber-700",
+		},
+		blocked: {
+			className: "border-red-200 bg-red-50 text-red-700",
+		},
+	};
 
 	return (
 		<Badge
-			variant='outline'
+			variant="outline"
 			className={cn(
 				"rounded-full px-2.5 py-0.5 text-[11px] font-medium",
-				cfg.className,
+				cfg[status].className
 			)}
 		>
 			{status.charAt(0).toUpperCase() + status.slice(1)}
@@ -115,7 +132,11 @@ function StatusBadge({ status }: { status: CustomerStatus }) {
 
 export default function CustomersPage() {
 	const router = useRouter();
-	const [records, setRecords] = useState<Customer[]>([]);
+	const exportCustomers = useExportCustomers();
+	const { data: customerTypes = [] } = useCustomerTypeDropdown();
+	// const customerTypeQuery = useCustomerTypeDropdown();
+
+	// console.log("sdfghj:", customerTypeQuery);
 	const [filters, setFilters] = useState<FilterState>({});
 	const [sort, setSort] = useState<SortState>({
 		key: "customerName",
@@ -125,12 +146,12 @@ export default function CustomersPage() {
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
+	const [confirmDeactivate, setConfirmDeactivate] = useState<CustomerListRecord | null>(null);
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
 	const [perms, setPerms] = useState(readCustomerPermissions);
 
 	useEffect(() => {
-		setRecords(loadCustomers());
 		setPerms(readCustomerPermissions());
 	}, []);
 
@@ -139,50 +160,134 @@ export default function CustomersPage() {
 		setTimeout(() => setToast(null), 3200);
 	};
 
-	const updateStatus = (
-		customerId: number,
-		status: CustomerStatus,
-		blockReason = "",
-	) => {
-		const today = todayStr();
-		const updated = records.map((r) => {
-			if (r.id !== customerId) return r;
-			return {
-				...r,
-				status,
-				blockReason: status === "blocked" ? blockReason : "",
-				updatedBy: "Admin",
-				updatedDate: today,
-				lastStatusChange: today,
-				statusHistory: [
-					...r.statusHistory,
-					{
-						date: today,
-						from: r.status,
-						to: status,
-						by: "Admin",
-						reason:
-							status === "blocked"
-								? blockReason
-								: `Status changed to ${status}`,
-					},
-				],
-			};
-		});
-		setRecords(updated);
-		saveCustomers(updated);
-		showToast("Status updated.");
-	};
+	// const updateStatus = (
+	// 	customerId: number,
+	// 	status: CustomerStatus,
+	// 	blockReason = "",
+	// ) => {
+	// 	const today = todayStr();
+	// 	const updated = records.map((r) => {
+	// 		if (r.id !== customerId) return r;
+	// 		return {
+	// 			...r,
+	// 			status,
+	// 			blockReason: status === "blocked" ? blockReason : "",
+	// 			updatedBy: "Admin",
+	// 			updatedDate: today,
+	// 			lastStatusChange: today,
+	// 			statusHistory: [
+	// 				...r.statusHistory,
+	// 				{
+	// 					date: today,
+	// 					from: r.status,
+	// 					to: status,
+	// 					by: "Admin",
+	// 					reason:
+	// 						status === "blocked"
+	// 							? blockReason
+	// 							: `Status changed to ${status}`,
+	// 				},
+	// 			],
+	// 		};
+	// 	});
+	// 	setRecords(updated);
+	// 	saveCustomers(updated);
+	// 	showToast("Status updated.");
+	// };
 
-	const markDraft = (customerId: number) => updateStatus(customerId, "draft");
+	const toggleStatus = useToggleCustomerStatus();
 
-	const columns: ColumnConfig<Customer>[] = [
+	const {
+		data,
+		isLoading,
+		isFetching,
+	} = useCustomers({
+		page,
+		pageSize,
+		search: String(filters.search ?? ""),
+		ordering: sortStateToOrdering(sort.key, sort.direction),
+		status: "all",
+		apiFilters: filters,
+	});
+
+	const records = data?.items ?? [];
+	const total = data?.total ?? 0;
+
+	const toOptions = (values: Array<string | number | null | undefined>) =>
+		Array.from(
+			new Set(
+				values
+					.map((v) => String(v ?? "").trim())
+					.filter(Boolean),
+			),
+		)
+			.sort((a, b) => a.localeCompare(b))
+			.map((v) => ({ label: v, value: v }));
+
+	const customerCodeOptions = useMemo(
+		() => toOptions(records.map((r) => r.customerCode)),
+		[records],
+	);
+	const customerNameOptions = useMemo(
+		() => toOptions(records.map((r) => r.customerName)),
+		[records],
+	);
+	const mobileOptions = useMemo(
+		() =>
+			toOptions(
+				records.map((r) => formatMobile(r.countryCode, r.mobileNo)),
+			),
+		[records],
+	);
+	const emailOptions = useMemo(
+		() => toOptions(records.map((r) => r.email)),
+		[records],
+	);
+	const gstinOptions = useMemo(
+		() => toOptions(records.map((r) => r.gstinNo)),
+		[records],
+	);
+	const addressOptions = useMemo(
+		() => {
+			const seen = new Set<string>();
+			const opts: Array<{ label: string; value: string }> = [];
+			for (const row of records) {
+				const label = String(row.address ?? "").trim();
+				if (!label) continue;
+				const value = label.split(",")[0]?.trim() || label;
+				if (!value || seen.has(value)) continue;
+				seen.add(value);
+				opts.push({ label, value });
+			}
+			return opts.sort((a, b) => a.label.localeCompare(b.label));
+		},
+		[records],
+	);
+	const stateOptions = useMemo(
+		() => toOptions(records.map((r) => r.stateName)),
+		[records],
+	);
+	const creditLimitOptions = useMemo(
+		() => toOptions(records.map((r) => formatCreditLimit(r.creditLimit ?? 0))),
+		[records],
+	);
+	const createdByOptions = useMemo(
+		() => toOptions(records.map((r) => r.createdBy)),
+		[records],
+	);
+	const updatedByOptions = useMemo(
+		() => toOptions(records.map((r) => r.updatedBy)),
+		[records],
+	);
+
+	const columns: ColumnConfig<CustomerListRecord>[] = [
 		{
 			key: "customerCode",
 			header: "Customer Code",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: customerCodeOptions,
 			width: "130px",
 			render: (val, row) => (
 				<span className='font-mono text-xs text-brand-700'>
@@ -195,7 +300,8 @@ export default function CustomersPage() {
 			header: "Customer Name",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: customerNameOptions,
 			width: "190px",
 			render: (val, row) => (
 				<div>
@@ -223,11 +329,12 @@ export default function CustomersPage() {
 			header: "Mobile Number",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: mobileOptions,
 			width: "150px",
 			render: (val, row) => (
 				<span className='font-mono'>
-					{formatMobile(row.countryCode, row.mobile)}
+					{formatMobile(row.countryCode, row.mobileNo)}
 				</span>
 			),
 		},
@@ -236,7 +343,8 @@ export default function CustomersPage() {
 			header: "Email Address",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: emailOptions,
 			width: "190px",
 			render: (val, row) => row.email || "—",
 		},
@@ -245,10 +353,11 @@ export default function CustomersPage() {
 			header: "GSTIN",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: gstinOptions,
 			width: "150px",
 			render: (val, row) => (
-				<span className='font-mono'>{row.gstin || "—"}</span>
+				<span className='font-mono'>{row.gstinNo || "—"}</span>
 			),
 		},
 		{
@@ -257,58 +366,52 @@ export default function CustomersPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
-			filterOptions: Object.entries(CUSTOMER_TYPE_LABELS).map(([k, v]) => ({
-				label: v,
-				value: k,
+			filterOptions: customerTypes.map(type => ({
+				label: type.customerType,
+				value: type.id,
 			})),
 			width: "130px",
-			render: (val, row) =>
-				CUSTOMER_TYPE_LABELS[row.customerType] ?? row.customerType,
+			render: (_, row) => row.customerType || "—",
 		},
 		{
 			key: "address",
 			header: "Address",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: addressOptions,
 			width: "240px",
-			render: (val, row) => row.address || "—",
+			render: (_val, row) => {
+				const address = (row.address || "").trim() || "—";
+				return (
+					<span
+						className="block max-w-[240px] truncate"
+						title={address !== "—" ? address : undefined}
+					>
+						{address}
+					</span>
+				);
+			},
 		},
 		{
 			key: "stateName",
 			header: "State",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: stateOptions,
 			width: "130px",
 			render: (val, row) => row.stateName || "—",
-		},
-		{
-			key: "districtName",
-			header: "District",
-			sortable: true,
-			filterable: true,
-			filterType: "text",
-			width: "130px",
-			render: (val, row) => row.districtName || "—",
-		},
-		{
-			key: "territoryName",
-			header: "Territory",
-			sortable: true,
-			filterable: true,
-			filterType: "text",
-			width: "130px",
-			render: (val, row) => row.territoryName || "—",
 		},
 		{
 			key: "creditLimit",
 			header: "Credit Limit",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "dropdown",
+			filterOptions: creditLimitOptions,
 			width: "110px",
-			render: (val, row) => formatCreditLimit(row.creditLimit),
+			render: (val, row) => formatCreditLimit(row.creditLimit ?? 0),
 		},
 		{
 			key: "status",
@@ -317,8 +420,8 @@ export default function CustomersPage() {
 			filterable: true,
 			filterType: "dropdown",
 			filterOptions: [
-				{ label: "Active", value: "active" },
-				{ label: "Inactive", value: "inactive" },
+				{ label: "Active", value: "Active" },
+				{ label: "Inactive", value: "Inactive" },
 				{ label: "Draft", value: "draft" },
 				{ label: "Blocked", value: "blocked" },
 			],
@@ -345,41 +448,25 @@ export default function CustomersPage() {
 						{row.status === "active" ? (
 							<DropdownMenuItem
 								className='gap-2 text-xs cursor-pointer'
-								onClick={() => updateStatus(row.id, "inactive")}
+								onClick={() => setConfirmDeactivate(row)}
 							>
 								<UserX className='w-3.5 h-3.5' /> Deactivate
 							</DropdownMenuItem>
 						) : row.status === "inactive" ? (
 							<DropdownMenuItem
 								className='gap-2 text-xs cursor-pointer'
-								onClick={() => updateStatus(row.id, "active")}
+								onClick={() => toggleStatus.mutate({ id: String(row.customerUuid), isActive: true })}
 							>
 								<UserCheck className='w-3.5 h-3.5' /> Activate
 							</DropdownMenuItem>
 						) : row.status === "draft" ? (
 							<DropdownMenuItem
 								className='gap-2 text-xs cursor-pointer'
-								onClick={() => updateStatus(row.id, "active")}
+								onClick={() => showToast("Draft status is not implemented yet", "error")}
 							>
 								<UserCheck className='w-3.5 h-3.5' /> Activate
 							</DropdownMenuItem>
 						) : null}
-						{row.status !== "draft" && row.status !== "blocked" && (
-							<DropdownMenuItem
-								className='gap-2 text-xs cursor-pointer'
-								onClick={() => updateStatus(row.id, "blocked")}
-							>
-								<BanIcon className='w-3.5 h-3.5' /> Block Customer
-							</DropdownMenuItem>
-						)}
-						{row.status !== "blocked" && (
-							<DropdownMenuItem
-								className='gap-2 text-xs cursor-pointer'
-								onClick={() => markDraft(row.id)}
-							>
-								<CircleDashed className='w-3.5 h-3.5' /> Mark as Draft
-							</DropdownMenuItem>
-						)}
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -389,10 +476,11 @@ export default function CustomersPage() {
 			header: "Created",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "audit",
+			auditUserOptions: createdByOptions,
 			width: "120px",
 			render: (val, row) => (
-				<ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
+				<ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
 			),
 		},
 		{
@@ -400,22 +488,23 @@ export default function CustomersPage() {
 			header: "Updated",
 			sortable: true,
 			filterable: true,
-			filterType: "text",
+			filterType: "audit",
+			auditUserOptions: updatedByOptions,
 			width: "120px",
 			render: (val, row) => (
-				<ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
+				<ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
 			),
 		},
 	];
 
 	const actions = useMemo(() => {
-		const list: ActionItemConfig<Customer>[] = [];
+		const list: ActionItemConfig<CustomerListRecord>[] = [];
 		if (perms.canView) {
 			list.push({
 				label: "View",
 				action: "view",
 				icon: Eye,
-				onClick: (row) => router.push(`/masters/customers/${row.id}`),
+				onClick: (row) => router.push(`/masters/customers/${row.customerUuid}`),
 			});
 		}
 		if (perms.canEdit) {
@@ -423,111 +512,121 @@ export default function CustomersPage() {
 				label: "Edit",
 				action: "edit",
 				icon: Edit2,
-				onClick: (row) => router.push(`/masters/customers/${row.id}/edit`),
+				onClick: (row) => router.push(`/masters/customers/${row.customerUuid}/edit`),
 			});
 		}
 		return list;
 	}, [perms, router]);
 
-	const filtered = useMemo(() => {
-		let result = [...records];
+	// const filtered = useMemo(() => {
+	// 	let result = [...records];
 
-		// Search filter
-		if (filters.search) {
-			const q = String(filters.search).trim().toLowerCase();
-			result = result.filter(
-				(r) =>
-					r.customerName.toLowerCase().includes(q) ||
-					r.customerCode.toLowerCase().includes(q) ||
-					r.mobile.includes(q) ||
-					r.email.toLowerCase().includes(q) ||
-					r.gstin.toLowerCase().includes(q) ||
-					r.address.toLowerCase().includes(q) ||
-					r.stateName.toLowerCase().includes(q) ||
-					r.districtName.toLowerCase().includes(q) ||
-					r.territoryName.toLowerCase().includes(q),
-			);
-		}
+	// 	// Search filter
+	// 	if (filters.search) {
+	// 		const q = String(filters.search).trim().toLowerCase();
+	// 		result = result.filter(
+	// 			(r) =>
+	// 				r.customerName.toLowerCase().includes(q) ||
+	// 				r.customerCode.toLowerCase().includes(q) ||
+	// 				r.mobile.includes(q) ||
+	// 				r.email.toLowerCase().includes(q) ||
+	// 				r.gstin.toLowerCase().includes(q) ||
+	// 				r.address.toLowerCase().includes(q) ||
+	// 				r.stateName.toLowerCase().includes(q) ||
+	// 				r.districtName.toLowerCase().includes(q) ||
+	// 				r.territoryName.toLowerCase().includes(q),
+	// 		);
+	// 	}
 
-		// Apply column filters
-		result = applyFilters(result, filters);
+	// 	// Apply column filters
+	// 	result = applyFilters(result, filters);
 
-		// Sorting
-		if (sort.key && sort.direction !== "none") {
-			result.sort((a, b) => {
-				if (sort.key === "creditLimit") {
-					const diff = a.creditLimit - b.creditLimit;
-					return sort.direction === "asc" ? diff : -diff;
-				}
-				const aVal = String(a[sort.key as keyof Customer] ?? "").toLowerCase();
-				const bVal = String(b[sort.key as keyof Customer] ?? "").toLowerCase();
-				return sort.direction === "asc"
-					? aVal.localeCompare(bVal)
-					: bVal.localeCompare(aVal);
-			});
-		}
+	// 	// Sorting
+	// 	if (sort.key && sort.direction !== "none") {
+	// 		result.sort((a, b) => {
+	// 			if (sort.key === "creditLimit") {
+	// 				const diff = a.creditLimit - b.creditLimit;
+	// 				return sort.direction === "asc" ? diff : -diff;
+	// 			}
+	// 			const aVal = String(a[sort.key as keyof Customer] ?? "").toLowerCase();
+	// 			const bVal = String(b[sort.key as keyof Customer] ?? "").toLowerCase();
+	// 			return sort.direction === "asc"
+	// 				? aVal.localeCompare(bVal)
+	// 				: bVal.localeCompare(aVal);
+	// 		});
+	// 	}
 
-		return result;
-	}, [records, filters, sort]);
+	// 	return result;
+	// }, [records, filters, sort]);
 
-	const paginated = useMemo(() => {
-		const startOffset = (page - 1) * pageSize;
-		return filtered.slice(startOffset, startOffset + pageSize);
-	}, [filtered, page, pageSize]);
+	// const paginated = useMemo(() => {
+	// 	const startOffset = (page - 1) * pageSize;
+	// 	return filtered.slice(startOffset, startOffset + pageSize);
+	// }, [filtered, page, pageSize]);
 
-	const handleExport = () => {
-		const rows = filtered.map((row) => ({
-			"Customer Name": row.customerName,
-			"Customer Code": row.customerCode,
-			"Mobile Number": formatMobile(row.countryCode, row.mobile),
-			"Email Address": row.email || "",
-			GSTIN: row.gstin || "",
-			"Customer Type":
-				CUSTOMER_TYPE_LABELS[row.customerType] ?? row.customerType,
-			Address: row.address || "",
-			State: row.stateName || "",
-			District: row.districtName || "",
-			Territory: row.territoryName || "",
-			"Credit Limit": formatCreditLimit(row.creditLimit),
-			Status: row.status,
-			"Created By": row.createdBy || "",
-			"Updated By": row.updatedBy || "",
-		}));
+	// const handleExport = () => {
+	// 	const rows = filtered.map((row) => ({
+	// 		"Customer Name": row.customerName,
+	// 		"Customer Code": row.customerCode,
+	// 		"Mobile Number": formatMobile(row.countryCode, row.mobile),
+	// 		"Email Address": row.email || "",
+	// 		GSTIN: row.gstin || "",
+	// 		"Customer Type":
+	// 			CUSTOMER_TYPE_LABELS[row.customerType] ?? row.customerType,
+	// 		Address: row.address || "",
+	// 		State: row.stateName || "",
+	// 		District: row.districtName || "",
+	// 		Territory: row.territoryName || "",
+	// 		"Credit Limit": formatCreditLimit(row.creditLimit),
+	// 		Status: row.status,
+	// 		"Created By": row.createdBy || "",
+	// 		"Updated By": row.updatedBy || "",
+	// 	}));
 
-		const headers = Object.keys(rows[0] || {});
-		const csv = [
-			headers.join(","),
-			...rows.map((row) =>
-				headers
-					.map((header) => {
-						const value = String(row[header as keyof typeof row] ?? "");
-						return `"${value.replace(/"/g, '""')}"`;
-					})
-					.join(","),
-			),
-		].join("\n");
+	// 	const headers = Object.keys(rows[0] || {});
+	// 	const csv = [
+	// 		headers.join(","),
+	// 		...rows.map((row) =>
+	// 			headers
+	// 				.map((header) => {
+	// 					const value = String(row[header as keyof typeof row] ?? "");
+	// 					return `"${value.replace(/"/g, '""')}"`;
+	// 				})
+	// 				.join(","),
+	// 		),
+	// 	].join("\n");
 
-		const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `customer-master-${todayStr()}.csv`;
-		a.click();
-		URL.revokeObjectURL(url);
-	};
+	// 	const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+	// 	const url = URL.createObjectURL(blob);
+	// 	const a = document.createElement("a");
+	// 	a.href = url;
+	// 	a.download = `customer-master-${todayStr()}.csv`;
+	// 	a.click();
+	// 	URL.revokeObjectURL(url);
+	// };
 
 	useEffect(() => {
 		setPage(1);
 	}, [filters, sort, pageSize]);
 
+	const handleExport = () => {
+		exportCustomers.mutate({
+			search: String(filters.search ?? ""),
+			ordering: sortStateToOrdering(sort.key, sort.direction),
+			status: "all",
+			apiFilters: filters,
+		});
+	};
+
 	const handleAdd = () => {
 		router.push("/masters/customers/new");
 	};
 
-	const total = records.length;
-	const active = records.filter((r) => r.status === "active").length;
-	const inactive = records.filter((r) => r.status === "inactive").length;
-	const blocked = records.filter((r) => r.status === "blocked").length;
+	const active = records.filter(r => r.status === "active").length;
+	const inactive = records.filter(r => r.status === "inactive").length;
+	const blocked = 0;
+	const draft = 0;
+	// const blocked = records.filter((r) => r.status === "blocked").length;
 
 	if (!perms.canView) {
 		return (
@@ -572,18 +671,19 @@ export default function CustomersPage() {
 						icon={XCircle}
 						color='bg-slate-100'
 					/>
-					<KpiCard
+					{/* <KpiCard
 						label='Blocked'
 						value={blocked}
 						icon={Ban}
 						color='bg-red-50'
-					/>
+					/> */}
 				</div>
 
-				<MasterListing<Customer>
+				<MasterListing<CustomerListRecord>
 					columns={columns}
-					data={paginated}
-					totalRecords={filtered.length}
+					data={records}
+					totalRecords={total}
+					loading={isLoading || isFetching}
 					page={page}
 					pageSize={pageSize}
 					onPageChange={setPage}
@@ -601,10 +701,67 @@ export default function CustomersPage() {
 				/>
 			</div>
 
+			{confirmDeactivate && (
+				<Dialog
+					open={true}
+					onOpenChange={(open) => {
+						if (!open) setConfirmDeactivate(null);
+					}}
+				>
+					<DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">
+						<DialogHeader>
+							<DialogTitle className="flex items-center gap-2 text-base">
+								<div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border rounded-lg bg-amber-50 border-amber-200">
+									<AlertTriangle className="w-4 h-4 text-amber-500" />
+								</div>
+								Deactivate Customer?
+							</DialogTitle>
+							<DialogDescription className="pt-1">
+								This will mark &quot;{confirmDeactivate.customerName}&quot; as inactive.
+								You can activate the customer again later.
+							</DialogDescription>
+						</DialogHeader>
+						<div className="flex items-center justify-end gap-2 pt-2">
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-8 text-xs"
+								onClick={() => setConfirmDeactivate(null)}
+							>
+								Cancel
+							</Button>
+							<Button
+								size="sm"
+								className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+								disabled={toggleStatus.isPending}
+								onClick={() => {
+									toggleStatus.mutate(
+										{ id: String(confirmDeactivate.customerUuid), isActive: false },
+										{
+											onSuccess: () => {
+												setConfirmDeactivate(null);
+												showToast("Customer deactivated successfully.");
+											},
+											onError: () => {
+												setConfirmDeactivate(null);
+												showToast("Failed to deactivate customer.", "error");
+											},
+										},
+									);
+								}}
+							>
+								Confirm
+							</Button>
+						</div>
+					</DialogContent>
+				</Dialog>
+			)}
+
 			{toast && (
 				<div
 					className={cn(
-						"fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600",
+						"fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+						toast.type === "error" ? "bg-red-600" : "bg-emerald-600",
 					)}
 				>
 					{toast.msg}

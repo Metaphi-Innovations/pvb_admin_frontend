@@ -1,5 +1,4 @@
 import type { GrnBatch } from "@/app/(app)/warehouse/grn/types";
-import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import {
   applyTaxSupplyToRates,
   calcLineAmounts,
@@ -23,10 +22,7 @@ import type { PurchaseReturn, PurchaseReturnItem } from "./purchase-return-data"
 export function resolveTaxSupplyForPO(po: PurchaseOrder): TaxSupplyType {
   const billToAddresses = getPOBillToAddresses();
   const billToAddress = findPOAddressById(billToAddresses, po.billToAddressId ?? "");
-  const warehouseState =
-    (po.warehouseId ? loadWarehouses().find((w) => w.id === po.warehouseId)?.state : null) ??
-    po.state ??
-    "";
+  const warehouseState = po.state ?? po.shipping?.shipToLocation ?? "";
   const billToState = billToAddress?.state ?? po.billing?.state ?? "";
   return resolveTaxSupplyType(warehouseState, billToState);
 }
@@ -138,7 +134,8 @@ export function recalcPurchaseReturn(
   record: PurchaseReturn,
   po?: PurchaseOrder,
 ): PurchaseReturn {
-  const taxSupplyType = po ? resolveTaxSupplyForPO(po) : "intra";
+  const taxSupplyType =
+    record.taxSupplyType ?? (po ? resolveTaxSupplyForPO(po) : "intra");
   const additionalCharges = record.additionalCharges ?? [];
 
   const items = record.items.map((it) => {

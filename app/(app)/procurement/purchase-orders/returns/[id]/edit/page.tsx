@@ -1,53 +1,89 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { PReturnFormLayout } from "../../../../purchase-returns/components/PReturnFormLayout";
-import { PReturnFormFooter } from "../../../../purchase-returns/components/PReturnFormFooter";
-import { PurchaseReturnForm } from "../../../../purchase-returns/components/PurchaseReturnForm";
+import { PReturnFormLayout } from "@/app/(app)/procurement/purchase-returns/components/PReturnFormLayout";
+import { PReturnFormFooter } from "@/app/(app)/procurement/purchase-returns/components/PReturnFormFooter";
+import { PurchaseReturnForm } from "@/app/(app)/procurement/purchase-returns/components/PurchaseReturnForm";
+import type { PurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 import {
-  getPurchaseReturnById,
-  savePurchaseReturnDraft,
-  submitPurchaseReturn,
-  type PurchaseReturn,
-} from "../../../../purchase-returns/purchase-return-data";
-import { getPOById } from "../../../po-data";
-import { recalcPurchaseReturn } from "../../../../purchase-returns/purchase-return-calc";
-import {
-  buildReturnableLinesForPO,
-  canEditPurchaseReturn,
+  isPurchaseReturnLocked,
+  mergeReturnItemsForEdit,
+  parsePurchaseReturnNavSource,
   purchaseReturnListHref,
-  purchaseReturnRoutes,
-  validateReturnBalance,
+  resolvePurchaseReturnBackHref,
+  resolvePurchaseReturnRedirectWithToast,
   validateReturnItems,
-} from "../../../../purchase-returns/purchase-return-utils";
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import { recalcPurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-calc";
+import {
+  useEligiblePurchaseReturnItems,
+  usePurchaseReturn,
+  useUpdatePurchaseReturn,
+} from "@/hooks/procurement";
 
 export default function EditPurchaseReturnPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+      <EditPurchaseReturnContent />
+    </Suspense>
+  );
+}
+
+function EditPurchaseReturnContent() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const searchParams = useSearchParams();
+  const id = String(params.id);
+  const from = parsePurchaseReturnNavSource(searchParams.get("from"));
+  const backHref = resolvePurchaseReturnBackHref(from);
   const [record, setRecord] = useState<PurchaseReturn | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [mergedOnce, setMergedOnce] = useState(false);
+
+  const detailQuery = usePurchaseReturn(id);
+  const detail = detailQuery.data;
+
+  const eligibleItemsQuery = useEligiblePurchaseReturnItems(
+    detail?.poId ? String(detail.poId) : null,
+    undefined,
+    id,
+  );
+  const updateMutation = useUpdatePurchaseReturn();
+
+  const locked = useMemo(
+    () => (detail ? isPurchaseReturnLocked(detail) : true),
+    [detail],
+  );
 
   useEffect(() => {
-    const existing = getPurchaseReturnById(id);
-    if (!existing || !canEditPurchaseReturn(existing)) return;
-    const po = getPOById(existing.poId);
-    if (!po) {
-      setRecord(existing);
+    if (!detail) return;
+
+    // Locked / packed: keep dedicated Edit page in read-only mode (do not redirect to View).
+    if (locked) {
+      setRecord(detail);
+      setMergedOnce(true);
       return;
     }
-    const freshLines = buildReturnableLinesForPO(po, existing.id, existing.items);
-    setRecord(recalcPurchaseReturn({ ...existing, items: freshLines }, po));
+
+    if (!eligibleItemsQuery.data || mergedOnce) return;
+
+    const mergedItems = mergeReturnItemsForEdit(detail.items, eligibleItemsQuery.data);
+    setRecord(recalcPurchaseReturn({ ...detail, items: mergedItems }));
+    setMergedOnce(true);
+  }, [detail, eligibleItemsQuery.data, locked, mergedOnce]);
+
+  useEffect(() => {
+    setMergedOnce(false);
+    setRecord(null);
   }, [id]);
 
+  if (detailQuery.isLoading || (!record && eligibleItemsQuery.isFetching)) {
+    return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+  }
+
   if (!record) {
-    const existing = getPurchaseReturnById(id);
-    if (existing && !canEditPurchaseReturn(existing)) {
-      router.replace(purchaseReturnRoutes.detail(id));
-      return null;
-    }
     return (
       <div className="p-8 text-sm text-muted-foreground">
         Purchase return not found.{" "}
@@ -58,41 +94,59 @@ export default function EditPurchaseReturnPage() {
     );
   }
 
+  const readOnly = locked;
+
   const handleSubmit = () => {
+    if (readOnly) return;
     const e = validateReturnItems(record.items);
     if (Object.keys(e).length > 0) {
       setErrors(e);
       return;
     }
     setErrors({});
-    submitPurchaseReturn(record);
-    router.push(`${purchaseReturnListHref()}&toast=pret-submitted`);
-  };
-
-  const handleSaveDraft = () => {
-    const balanceErrors = validateReturnBalance(record.items);
-    if (Object.keys(balanceErrors).length > 0) {
-      setErrors(balanceErrors);
-      return;
-    }
-    setErrors({});
-    savePurchaseReturnDraft(record);
-    router.push(`${purchaseReturnListHref()}&toast=pret-draft`);
+    updateMutation.mutate(
+      { id: String(record.id), record },
+      {
+        onSuccess: () =>
+          router.push(resolvePurchaseReturnRedirectWithToast(from, "pret-submitted")),
+      },
+    );
   };
 
   return (
     <PReturnFormLayout
       mode="edit"
       returnNumber={record.returnNumber}
+      backHref={backHref}
       footer={
         <PReturnFormFooter
-          onCancel={() => router.push(purchaseReturnListHref())}
-          onSaveDraft={handleSaveDraft}
-          onSubmit={handleSubmit}
+          readOnly={readOnly}
+          onCancel={() => router.push(backHref)}
+          onSaveDraft={readOnly ? undefined : handleSubmit}
+          onSubmit={readOnly ? undefined : handleSubmit}
+          showSubmit={!readOnly}
         />
       }
     >
-      <PurchaseReturnForm record={record} onChange={setRecord} errors={errors} />
+      {readOnly && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-semibold text-amber-800">
+            {record.packingDone || record.packingListStatus
+              ? "This purchase return cannot be edited because packing is done / packing has progressed."
+              : "This purchase return is already packed or completed and cannot be modified."}
+          </p>
+          <p className="mt-0.5 text-[11px] text-amber-700">
+            Quantities, products, and GRN lines are read-only. Use View for full details.
+          </p>
+        </div>
+      )}
+      <PurchaseReturnForm
+        record={record}
+        onChange={setRecord}
+        readOnly={readOnly}
+        errors={errors}
+        editMode={!readOnly}
+      />
     </PReturnFormLayout>
   );
 }

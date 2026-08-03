@@ -23,12 +23,24 @@ const MONTH_NAMES = [
   "December",
 ];
 
-function parseFyStartYear(fyId: string): number {
-  return parseInt(fyId.split("-")[0], 10);
+function parseFyStartYear(codeOrId: string): number {
+  return parseInt(codeOrId.split("-")[0], 10);
 }
 
-function fyIsoRange(fyId: string): { from: string; to: string } {
-  const y = parseFyStartYear(fyId);
+function fyIsoRange(fy: FinancialYear | string): { from: string; to: string } {
+  if (typeof fy === "object" && fy.startDate && fy.endDate) {
+    return {
+      from: String(fy.startDate).slice(0, 10),
+      to: String(fy.endDate).slice(0, 10),
+    };
+  }
+  const key = typeof fy === "object" ? fy.code || fy.id : fy;
+  const y = parseFyStartYear(key);
+  if (!Number.isFinite(y) || y < 1900) {
+    const now = new Date();
+    const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    return { from: `${startYear}-04-01`, to: `${startYear + 1}-03-31` };
+  }
   return { from: `${y}-04-01`, to: `${y + 1}-03-31` };
 }
 
@@ -43,14 +55,14 @@ function monthLabel(yearMonth: string): string {
 }
 
 /** Months in selected FY from Apr through today (newest first). */
-function monthsInFyUpToToday(fyId: string, today: string): { value: string; label: string }[] {
-  const fy = fyIsoRange(fyId);
-  const end = today < fy.to ? today : fy.to;
-  if (end < fy.from) return [];
+function monthsInFyUpToToday(fy: FinancialYear, today: string): { value: string; label: string }[] {
+  const range = fyIsoRange(fy);
+  const end = today < range.to ? today : range.to;
+  if (end < range.from) return [];
 
   const result: { value: string; label: string }[] = [];
-  let y = parseInt(fy.from.slice(0, 4), 10);
-  let m = parseInt(fy.from.slice(5, 7), 10);
+  let y = parseInt(range.from.slice(0, 4), 10);
+  let m = parseInt(range.from.slice(5, 7), 10);
   const endY = parseInt(end.slice(0, 4), 10);
   const endM = parseInt(end.slice(5, 7), 10);
 
@@ -67,20 +79,24 @@ function monthsInFyUpToToday(fyId: string, today: string): { value: string; labe
   return result.reverse();
 }
 
-function previousFyId(selectedFyId: string, allFYs: FinancialYear[]): string | null {
+function previousFy(selectedFyId: string, allFYs: FinancialYear[]): FinancialYear | null {
   const idx = allFYs.findIndex((f) => f.id === selectedFyId);
   if (idx <= 0) return null;
-  return allFYs[idx - 1].id;
+  return allFYs[idx - 1];
 }
 
-export function buildStockDatePresetOptions(fyId: string, today: string, allFYs: FinancialYear[]) {
+export function buildStockDatePresetOptions(
+  selectedFY: FinancialYear,
+  today: string,
+  allFYs: FinancialYear[],
+) {
   const options: { value: string; label: string }[] = [
     { value: "today", label: "Today's Position" },
-    ...monthsInFyUpToToday(fyId, today),
+    ...monthsInFyUpToToday(selectedFY, today),
     { value: "current_fy", label: "Current Financial Year" },
   ];
 
-  if (previousFyId(fyId, allFYs)) {
+  if (previousFy(selectedFY.id, allFYs)) {
     options.push({ value: "previous_fy", label: "Previous Financial Year" });
   }
 
@@ -98,7 +114,7 @@ export function getStockDatePresetLabel(
 export function resolveStockDatePreset(
   presetId: string,
   today: string,
-  selectedFyId: string,
+  selectedFY: FinancialYear,
   allFYs: FinancialYear[],
 ): Pick<StockPositionFilters, "dateMode" | "asOnDate" | "fromDate" | "toDate"> | null {
   if (presetId === "custom") return null;
@@ -108,15 +124,15 @@ export function resolveStockDatePreset(
   }
 
   if (presetId === "current_fy") {
-    const fy = fyIsoRange(selectedFyId);
+    const fy = fyIsoRange(selectedFY);
     const toDate = today < fy.to ? today : fy.to;
     return { dateMode: "range", asOnDate: toDate, fromDate: fy.from, toDate };
   }
 
   if (presetId === "previous_fy") {
-    const prevId = previousFyId(selectedFyId, allFYs);
-    if (!prevId) return null;
-    const fy = fyIsoRange(prevId);
+    const prev = previousFy(selectedFY.id, allFYs);
+    if (!prev) return null;
+    const fy = fyIsoRange(prev);
     return { dateMode: "range", asOnDate: fy.to, fromDate: fy.from, toDate: fy.to };
   }
 

@@ -37,6 +37,8 @@ export function MasterListingSheets({
   viewDrawer,
   formContent,
   formError,
+  saving = false,
+  hideFormDescription = false,
   statusActive,
   onStatusChange,
 }: {
@@ -53,6 +55,8 @@ export function MasterListingSheets({
   >;
   formContent: React.ReactNode;
   formError?: string;
+  saving?: boolean;
+  hideFormDescription?: boolean;
   statusActive?: boolean;
   onStatusChange?: (active: boolean) => void;
 }) {
@@ -76,7 +80,9 @@ export function MasterListingSheets({
               </div>
               <div>
                 <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                <SheetDescription className="text-xs">Compact master form</SheetDescription>
+                {!hideFormDescription ? (
+                  <SheetDescription className="text-xs">Compact master form</SheetDescription>
+                ) : null}
               </div>
             </div>
           </SheetHeader>
@@ -105,8 +111,9 @@ export function MasterListingSheets({
               size="sm"
               className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
               onClick={onSave}
+              disabled={saving}
             >
-              Save
+              {saving ? "Saving..." : "Save"}
             </Button>
           </SheetFooter>
         </SheetContent>

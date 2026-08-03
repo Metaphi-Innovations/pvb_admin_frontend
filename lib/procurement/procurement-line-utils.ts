@@ -1,4 +1,4 @@
-import type { Product } from "@/app/(app)/masters/products/product-data";
+import { loadProducts, type Product } from "@/app/(app)/masters/products/product-data";
 import { findProductRef, getStandardMrp, resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { applyTaxSupplyToRates, round2, type TaxSupplyType } from "@/lib/procurement/utils";
 import {
@@ -30,6 +30,8 @@ export interface ProcurementAdditionalCharge {
   chargeName: string;
   amount: number;
   remarks?: string;
+  /** Backend GST master UUID (dropdown selection). */
+  gstId?: string;
   gstMasterId?: number;
   cgstPct?: number;
   sgstPct?: number;
@@ -55,11 +57,13 @@ export function migrateAdditionalCharge(charge: ProcurementAdditionalCharge): Re
     (charge.cgstPct ?? 0) + (charge.sgstPct ?? 0) + (charge.igstPct ?? 0);
   const gstMasterId =
     charge.gstMasterId ??
-    findGstMasterIdByTotalPct(totalGst || DEFAULT_CHARGE_GST_PCT) ??
+    (charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null
+      ? findGstMasterIdByTotalPct(totalGst)
+      : undefined) ??
+    findGstMasterIdByTotalPct(0) ??
     getDefaultGstMasterId();
   const hasRates =
-    totalGst > 0 &&
-    (charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null);
+    charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null;
   if (hasRates) {
     return {
       ...charge,
@@ -140,7 +144,8 @@ export function newAdditionalCharge(
   partial?: Partial<ProcurementAdditionalCharge>,
   taxSupplyType: TaxSupplyType = "intra",
 ): ProcurementAdditionalCharge {
-  const gstMasterId = partial?.gstMasterId ?? getDefaultGstMasterId();
+  const defaultGstId = findGstMasterIdByTotalPct(0) ?? getDefaultGstMasterId();
+  const gstMasterId = partial?.gstMasterId ?? defaultGstId;
   const rates = applyGstMasterToTaxRates(gstMasterId, taxSupplyType);
   return {
     uid: `chg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -177,7 +182,7 @@ export function calcTotalQtyBase(
 }
 
 export interface EnrichedProductLine {
-  productId: number;
+  productId: number | string;
   productCode: string;
   productName: string;
   sku: string;
@@ -192,7 +197,63 @@ export interface EnrichedProductLine {
   description: string;
 }
 
-export function enrichProductForProcurement(productId: number): EnrichedProductLine | null {
+import type { ProductDropdownItem } from "@/services/product-dropdown.service";
+import type { PriceSource } from "@/lib/pricing/resolve-pricing";
+
+export function resolvePOLineCostPrice(
+  productId: string | number,
+  dbProducts?: ProductDropdownItem[],
+  vendorId?: number,
+): { amount: number; source: PriceSource } {
+  const vendorPrice = resolvePurchaseCostPrice(productId, vendorId);
+  if (vendorPrice.source === "vendor_override") {
+    return { amount: vendorPrice.amount, source: vendorPrice.source };
+  }
+
+  const dbProd = (dbProducts || []).find((p) => String(p.product_id) === String(productId));
+  if (dbProd?.cost_price != null && dbProd.cost_price !== "") {
+    return { amount: Number(dbProd.cost_price) || 0, source: "pricing_master" };
+  }
+
+  return { amount: vendorPrice.amount, source: vendorPrice.source };
+}
+
+export function enrichProductFromDropdown(
+  productId: string | number,
+  dbProducts?: ProductDropdownItem[],
+): EnrichedProductLine | null {
+  if (!productId) return null;
+
+  // 1. Try to find in dbProducts (API list)
+  const dbProd = (dbProducts || []).find((p) => String(p.product_id) === String(productId));
+  if (dbProd) {
+    return {
+      productId: dbProd.product_id,
+      productCode: dbProd.product_code || dbProd.sku || "",
+      productName: dbProd.product_name,
+      sku: dbProd.sku || "",
+      baseUnit: dbProd.unit || "Unit",
+      packagingUnit: dbProd.packing_unit || "Box",
+      conversionQty: Number(dbProd.unit_per_packing) || 1,
+      segment: dbProd.segment?.segment_name || "",
+      category: dbProd.category?.categoryName || "",
+      hsnCode: (dbProd.hsn as any)?.hsnCode || (dbProd.hsn as any)?.hsn_code || dbProd.hsn?.hsnDescription || "",
+      mrp: 0,
+      ratePerSku: 0,
+      description: dbProd.scientific_name || "",
+    };
+  }
+
+  // 2. Fall back to static mock data
+  const staticWh = loadProducts().find((w) => String(w.id) === String(productId));
+  if (staticWh) {
+    return productLineFromMaster(staticWh);
+  }
+
+  return null;
+}
+
+export function enrichProductForProcurement(productId: number | string): EnrichedProductLine | null {
   const p = findProductRef(productId);
   if (!p) return null;
   return productLineFromMaster(p);

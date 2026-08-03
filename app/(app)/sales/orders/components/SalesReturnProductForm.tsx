@@ -31,6 +31,8 @@ export interface SalesReturnBatchRow {
   expiry?: string;
   dispatchedQtyCases: number;
   unitRate: number;
+  returnedQtyPieces?: number;
+  unitPerPacking?: number;
 }
 
 export interface SalesReturnProductGroup {
@@ -96,9 +98,9 @@ function parseQty(value?: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function formatStatusQuantity(totalPieces: number) {
-  const caseQty = Math.floor(totalPieces / PIECES_PER_CASE);
-  const looseQty = totalPieces % PIECES_PER_CASE;
+function formatStatusQuantity(totalPieces: number, unitPerPacking: number = 10) {
+  const caseQty = Math.floor(totalPieces / unitPerPacking);
+  const looseQty = totalPieces % unitPerPacking;
   return formatCaseLooseQuantity(caseQty, looseQty);
 }
 
@@ -117,22 +119,24 @@ function formatExpiryLabel(value?: string) {
 }
 
 function getBatchComputation(batch: SalesReturnBatchRow, entry?: BatchReturnInput): BatchReturnComputation {
-  const caseQty = parseQty(entry?.returnCaseQty);
-  const looseQty = parseQty(entry?.returnLooseQty);
-  const totalPieces = caseQty * PIECES_PER_CASE + looseQty;
-  const maxPieces = batch.dispatchedQtyCases * PIECES_PER_CASE;
+  const uKey = batch.unitPerPacking || 10;
+  const qtyType = entry?.quantityType || "Piece";
+  const caseQty = qtyType === "Case" ? parseQty(entry?.returnCaseQty) : 0;
+  const looseQty = qtyType === "Piece" ? parseQty(entry?.returnLooseQty) : 0;
+  // Case → base units via conversion; Piece → entered value is already base/piece qty
+  const totalPieces = qtyType === "Case" ? caseQty * uKey : looseQty;
+  const maxPieces = batch.dispatchedQtyCases * uKey;
+  const prevReturned = batch.returnedQtyPieces || 0;
+  const remainingPieces = Math.max(0, maxPieces - prevReturned);
   const errors: string[] = [];
 
-  if (looseQty > PIECES_PER_CASE - 1) {
-    errors.push("Loose qty must be between 0 and 9.");
-  }
-  if (totalPieces > maxPieces) {
-    errors.push("Return quantity cannot exceed dispatched batch quantity.");
+  if (totalPieces > remainingPieces) {
+    errors.push("Return quantity cannot exceed remaining batch quantity.");
   }
 
   return {
-    caseQty,
-    looseQty,
+    caseQty: qtyType === "Case" ? caseQty : Math.floor(totalPieces / uKey),
+    looseQty: qtyType === "Piece" ? looseQty % uKey : 0,
     totalPieces,
     amount: calcReturnLineAmount(totalPieces, batch.unitRate ?? 0),
     errors,
@@ -193,7 +197,7 @@ function resolveDispatchProductMeta(dispatch: DispatchRecord) {
   });
 }
 
-function buildBatchRows(dispatchProduct: DispatchProduct, packingNumber: string, packingDate: string | undefined, packingKey: string, productKey: string, rowIndex: number, packingProduct?: PackedProduct): SalesReturnBatchRow[] {
+function buildBatchRows(dispatchProduct: DispatchProduct & { returnedQtyPieces?: number; unitPerPacking?: number }, packingNumber: string, packingDate: string | undefined, packingKey: string, productKey: string, rowIndex: number, packingProduct?: PackedProduct): SalesReturnBatchRow[] {
   const batchAllocations = dispatchProduct.batchAllocations?.length
     ? dispatchProduct.batchAllocations
     : packingProduct?.batchAllocations?.length
@@ -201,7 +205,7 @@ function buildBatchRows(dispatchProduct: DispatchProduct, packingNumber: string,
       : [];
 
   if (batchAllocations.length > 0) {
-    return batchAllocations.map((allocation: PackedBatchAllocation, allocationIndex) => ({
+    return batchAllocations.map((allocation: PackedBatchAllocation & { returnedQtyPieces?: number; unitPerPacking?: number }, allocationIndex) => ({
       key: `${packingKey}::${dispatchProduct.sku}::${allocation.batchNumber || allocationIndex}::${rowIndex}::${allocationIndex}`,
       packingKey,
       packingNumber,
@@ -213,6 +217,8 @@ function buildBatchRows(dispatchProduct: DispatchProduct, packingNumber: string,
       expiry: allocation.expiryDate || dispatchProduct.batchExpiryDate,
       dispatchedQtyCases: allocation.allocatedQty,
       unitRate: dispatchProduct.unitRate ?? 0,
+      returnedQtyPieces: allocation.returnedQtyPieces ?? dispatchProduct.returnedQtyPieces ?? 0,
+      unitPerPacking: allocation.unitPerPacking ?? dispatchProduct.unitPerPacking ?? 10,
     }));
   }
 
@@ -229,6 +235,8 @@ function buildBatchRows(dispatchProduct: DispatchProduct, packingNumber: string,
       expiry: dispatchProduct.batchExpiryDate,
       dispatchedQtyCases: dispatchProduct.dispatchQty,
       unitRate: dispatchProduct.unitRate ?? 0,
+      returnedQtyPieces: dispatchProduct.returnedQtyPieces ?? 0,
+      unitPerPacking: dispatchProduct.unitPerPacking ?? 10,
     }];
   }
 
@@ -326,8 +334,12 @@ export function flattenSelectedBatchReturns(packingGroups: SalesReturnPackingGro
   return packingGroups.flatMap((packingGroup) =>
     packingGroup.products.flatMap((product) =>
       product.batches.flatMap((batch) => {
-        const computation = getBatchComputation(batch, returnEntries[batch.key]);
+        const entry = returnEntries[batch.key];
+        const computation = getBatchComputation(batch, entry);
         if (computation.totalPieces <= 0 || computation.errors.length > 0) return [];
+        const quantityType = entry?.quantityType || "Piece";
+        const enteredCaseQty = quantityType === "Case" ? parseQty(entry?.returnCaseQty) : 0;
+        const enteredPieceQty = quantityType === "Piece" ? parseQty(entry?.returnLooseQty) : 0;
         return [{
           product: product.productName,
           sku: product.sku,
@@ -339,10 +351,11 @@ export function flattenSelectedBatchReturns(packingGroups: SalesReturnPackingGro
           batchExpiryDate: batch.expiry,
           packingNumber: packingGroup.packingNumber,
           packingDate: packingGroup.packingDate,
-          returnCaseQty: computation.caseQty,
-          returnLooseQty: computation.looseQty,
+          returnCaseQty: enteredCaseQty,
+          returnLooseQty: enteredPieceQty,
           returnTotalPieces: computation.totalPieces,
           lineAmount: computation.amount,
+          quantityType,
         }];
       }),
     ),
@@ -544,6 +557,8 @@ export function SalesReturnProductForm({
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Batch No.</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Expiry</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Dispatched Qty</th>
+                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Prev. Returned</th>
+                                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Remaining Qty</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Type</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cases</th>
                                           <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pieces</th>
@@ -561,13 +576,30 @@ export function SalesReturnProductForm({
                                           const qtyType = entry.quantityType || "Piece";
                                           const isCaseType = qtyType === "Case";
 
+                                          const uKey = batch.unitPerPacking || 10;
+
                                           const dispatchedQty = batch.dispatchedQtyCases;
                                           const dispatchedCases = Math.floor(dispatchedQty);
-                                          const dispatchedPieces = Math.round((dispatchedQty - dispatchedCases) * PIECES_PER_CASE);
+                                          const dispatchedPieces = Math.round((dispatchedQty - dispatchedCases) * uKey);
 
                                           const dispatchDisplay = dispatchedPieces > 0
                                             ? `${dispatchedCases} Case${dispatchedCases !== 1 ? "s" : ""} ${dispatchedPieces} Piece${dispatchedPieces !== 1 ? "s" : ""}`
                                             : `${dispatchedCases} Case${dispatchedCases !== 1 ? "s" : ""}`;
+
+                                          const prevReturnedPieces = batch.returnedQtyPieces || 0;
+                                          const prevReturnedCases = Math.floor(prevReturnedPieces / uKey);
+                                          const prevReturnedLoose = prevReturnedPieces % uKey;
+                                          const prevReturnedDisplay = prevReturnedPieces > 0
+                                            ? formatCaseLooseQuantity(prevReturnedCases, prevReturnedLoose)
+                                            : "0";
+
+                                          const maxPieces = batch.dispatchedQtyCases * uKey;
+                                          const remainingPieces = Math.max(0, maxPieces - prevReturnedPieces);
+                                          const remainingCases = Math.floor(remainingPieces / uKey);
+                                          const remainingLoose = remainingPieces % uKey;
+                                          const remainingDisplay = remainingPieces > 0
+                                            ? formatCaseLooseQuantity(remainingCases, remainingLoose)
+                                            : "0";
 
                                           return (
                                             <tr key={batch.key} className="border-b border-border/70 align-top">
@@ -579,6 +611,8 @@ export function SalesReturnProductForm({
                                               </td>
                                               <td className="px-3 py-3 text-xs text-muted-foreground">{formatExpiryLabel(batch.expiry)}</td>
                                               <td className="px-3 py-3 text-center text-xs font-semibold text-foreground">{dispatchDisplay}</td>
+                                              <td className="px-3 py-3 text-center text-xs font-semibold text-foreground">{prevReturnedDisplay}</td>
+                                              <td className="px-3 py-3 text-center text-xs font-semibold text-foreground">{remainingDisplay}</td>
                                               <td className="px-2 py-2 w-[90px]">
                                                 <Select
                                                   value={qtyType}
@@ -594,7 +628,7 @@ export function SalesReturnProductForm({
                                                 </Select>
                                               </td>
                                               <td className="px-2 py-2 w-20">
-                                                <Input value={entry.returnCaseQty || ""} onChange={(event) => onCaseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full" placeholder="0" />
+                                                <Input disabled={!isCaseType} value={!isCaseType ? "" : (entry.returnCaseQty || "")} onChange={(event) => onCaseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />
                                               </td>
                                               <td className="px-2 py-2 w-20">
                                                 <Input disabled={isCaseType} value={isCaseType ? "" : (entry.returnLooseQty || "")} onChange={(event) => onLooseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />

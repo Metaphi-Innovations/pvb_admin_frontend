@@ -16,6 +16,7 @@ export interface EmployeeDocument {
   expiryDate?: string;
   fileName?: string;
   fileUrl?: string;
+  file?: File;
   fileSize?: number;
   mimeType?: string;
   /** @deprecated simplified upload flow no longer uses status workflow */

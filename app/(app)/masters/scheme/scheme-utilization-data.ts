@@ -19,7 +19,7 @@ export interface SchemeUtilizationRecord {
   customerCode: string;
   customerType: string;
   state: string;
-  productId: number;
+  productId: number | string;
   productCode: string;
   productName: string;
   quantity: number;

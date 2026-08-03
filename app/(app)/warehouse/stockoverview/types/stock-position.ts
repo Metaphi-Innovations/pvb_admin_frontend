@@ -13,7 +13,14 @@ export type StockMovementType =
   | "Negative Adjustment";
 
 /** Inventory line status — only stock post-QC acceptance appears on this dashboard. */
-export type StockLineStatus = "Available" | "Hold" | "Near Expiry" | "Expired";
+export type StockLineStatus =
+  | "Available"
+  | "Hold"
+  | "Near Expiry"
+  | "Expired"
+  | "Low Stock"
+  | "Reserved"
+  | "Out Of Stock";
 
 export type StockDateMode = "single" | "range";
 

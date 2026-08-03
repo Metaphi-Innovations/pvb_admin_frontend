@@ -14,7 +14,7 @@ import {
   LEGACY_GST_LEDGER_NAMES,
 } from "./coa-statutory-ledgers";
 
-function ancestorNames(records: ChartOfAccount[], nodeId: number): string[] {
+function ancestorNames(records: ChartOfAccount[], nodeId: import("../../data").CoaNodeId): string[] {
   const names: string[] = [];
   let current = records.find((r) => r.id === nodeId);
   while (current?.parentAccountId != null) {
