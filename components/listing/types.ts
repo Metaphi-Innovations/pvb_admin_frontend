@@ -47,6 +47,8 @@ export interface ActionItemConfig<T = any> {
   variant?: "default" | "destructive";
   disabled?: (row: T) => boolean;
   hide?: (row: T) => boolean;
+  /** Nested submenu items (e.g. Download Challan → With/Without Goods Value). */
+  children?: Omit<ActionItemConfig<T>, "children">[];
 }
 
 export interface MasterListingProps<T = any> {

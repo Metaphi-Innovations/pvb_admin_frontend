@@ -1,9 +1,15 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Clock, FileText, LayoutList, Shield, Zap } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, FileText, LayoutList, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { RecordApprovalItem, RecordDetailSidebarProps } from "./types";
 
 function SidebarPanel({
@@ -50,6 +56,47 @@ export function RecordDetailSidebar({
             {quickActions.map((action) => {
               const Icon = action.icon;
               const isPrimary = action.variant === "primary";
+              const children = action.children ?? [];
+
+              if (children.length > 0) {
+                return (
+                  <DropdownMenu key={action.label}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant={isPrimary ? "default" : "outline"}
+                        size="sm"
+                        className={cn(
+                          "h-8 w-full justify-between text-xs gap-2",
+                          isPrimary && "bg-brand-600 hover:bg-brand-700 text-white",
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-2 min-w-0">
+                          {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
+                          <span className="truncate">{action.label}</span>
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="z-[200] w-[var(--radix-dropdown-menu-trigger-width)] min-w-[200px] rounded-xl p-1.5 border border-border bg-white shadow-md"
+                    >
+                      {children.map((child) => (
+                        <DropdownMenuItem
+                          key={child.label}
+                          disabled={child.disabled}
+                          onClick={() => !child.disabled && child.onClick()}
+                          className="text-xs gap-2 cursor-pointer py-2 px-2.5 rounded-lg font-medium"
+                        >
+                          {child.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              }
+
               return (
                 <Button
                   key={action.label}

@@ -184,26 +184,24 @@ export default function ViewDispatchPage() {
           { label: "Transporter", value: record.transporter || "—" },
           { label: "Products", value: record.items?.length || 0 },
         ],
-        quickActions: isSample
-          ? []
-          : [
+        quickActions: [
               {
-                label:
-                  downloadingChallan === "with"
-                    ? "Downloading…"
-                    : "Download Challan (With Value)",
-                icon: downloadingChallan === "with" ? Download : FileText,
-                onClick: () => handleDownloadChallan(true),
+                label: downloadingChallan ? "Downloading…" : "Download Challan",
+                icon: downloadingChallan ? Download : FileText,
+                children: [
+                  {
+                    label: "With Goods Value",
+                    onClick: () => handleDownloadChallan(true),
+                    disabled: Boolean(downloadingChallan),
+                  },
+                  {
+                    label: "Without Goods Value",
+                    onClick: () => handleDownloadChallan(false),
+                    disabled: Boolean(downloadingChallan),
+                  },
+                ],
               },
-              {
-                label:
-                  downloadingChallan === "without"
-                    ? "Downloading…"
-                    : "Download Challan (Without Value)",
-                icon: downloadingChallan === "without" ? Download : FileText,
-                onClick: () => handleDownloadChallan(false),
-              },
-              ...(canDownloadInvoiceLike && !isStockTransfer
+              ...(!isSample && canDownloadInvoiceLike && !isStockTransfer
                 ? [
                     {
                       label: downloadingTaxInvoice
@@ -214,7 +212,7 @@ export default function ViewDispatchPage() {
                     },
                   ]
                 : []),
-              ...(canDownloadInvoiceLike && isStockTransfer
+              ...(!isSample && canDownloadInvoiceLike && isStockTransfer
                 ? [
                     {
                       label: downloadingStockTransfer
