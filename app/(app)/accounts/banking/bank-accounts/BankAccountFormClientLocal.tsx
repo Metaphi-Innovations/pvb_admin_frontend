@@ -217,6 +217,7 @@ export default function BankAccountFormClient({
     <AccountsFormLayout
       title={pageTitle}
       fullWidth
+      onBackClick={handleCancel}
       breadcrumb={
         fromCoa
           ? [

@@ -2,8 +2,8 @@ import type {
   BankAccountApiAccountType,
   BankAccountApiStatus,
   BankAccountOpeningBalanceType,
-  CompleteBankAccountDetailsPayload,
   CreateBankAccountPayload,
+  UpdateBankAccountPayload,
 } from "@/services/bank-accounts-list.service";
 
 export const IFSC_CODE_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -67,76 +67,144 @@ export function normalizeOpeningBalance(value: string): string {
   return trimmed;
 }
 
+export type BankAccountFormMode = "create" | "edit" | "complete";
+
+/** Fields that support blur / full-form validation. */
+export type BankAccountValidatedField =
+  | "ledgerName"
+  | "alias"
+  | "description"
+  | "openingBalance"
+  | "openingBalanceType"
+  | "bankName"
+  | "accountHolderName"
+  | "accountNumber"
+  | "confirmAccountNumber"
+  | "ifscCode"
+  | "branchName"
+  | "accountType";
+
+const VALIDATED_FIELDS: BankAccountValidatedField[] = [
+  "ledgerName",
+  "alias",
+  "description",
+  "openingBalance",
+  "openingBalanceType",
+  "bankName",
+  "accountHolderName",
+  "accountNumber",
+  "confirmAccountNumber",
+  "ifscCode",
+  "branchName",
+  "accountType",
+];
+
+/** Validate a single field (blur). Returns error message or empty string when valid. */
+export function validateBankAccountField(
+  form: BankAccountFormValues,
+  field: BankAccountValidatedField,
+  _mode: BankAccountFormMode,
+): string {
+  switch (field) {
+    case "ledgerName": {
+      const ledgerName = form.ledgerName.trim();
+      if (!ledgerName) return "Ledger name is required.";
+      if (ledgerName.length > 255) return "Ledger name must be at most 255 characters.";
+      return "";
+    }
+    case "alias": {
+      if (form.alias.trim().length > 255) return "Alias must be at most 255 characters.";
+      return "";
+    }
+    case "description": {
+      if (form.description.trim().length > 5000) {
+        return "Description must be at most 5000 characters.";
+      }
+      return "";
+    }
+    case "openingBalance": {
+      const opening = normalizeOpeningBalance(form.openingBalance);
+      if (!OPENING_BALANCE_RE.test(opening)) {
+        return "Opening balance must be zero or a positive amount with up to 2 decimals.";
+      }
+      return "";
+    }
+    case "openingBalanceType": {
+      const opening = normalizeOpeningBalance(form.openingBalance);
+      if (OPENING_BALANCE_RE.test(opening) && Number(opening) > 0 && !form.openingBalanceType) {
+        return "Opening balance type is required when opening balance is greater than zero.";
+      }
+      return "";
+    }
+    case "bankName": {
+      if (!form.bankName.trim()) return "Bank name is required.";
+      if (form.bankName.trim().length > 255) {
+        return "Bank name must be at most 255 characters.";
+      }
+      return "";
+    }
+    case "accountHolderName": {
+      if (!form.accountHolderName.trim()) return "Account holder name is required.";
+      if (form.accountHolderName.trim().length > 255) {
+        return "Account holder name must be at most 255 characters.";
+      }
+      return "";
+    }
+    case "accountNumber": {
+      const accountNumber = stripAccountNumber(form.accountNumber);
+      if (!accountNumber) return "Account number is required.";
+      if (
+        accountNumber.length < ACCOUNT_NUMBER_MIN ||
+        accountNumber.length > ACCOUNT_NUMBER_MAX
+      ) {
+        return `Account number must be ${ACCOUNT_NUMBER_MIN}–${ACCOUNT_NUMBER_MAX} characters.`;
+      }
+      return "";
+    }
+    case "confirmAccountNumber": {
+      const accountNumber = stripAccountNumber(form.accountNumber);
+      const confirmAccountNumber = stripAccountNumber(form.confirmAccountNumber);
+      if (!confirmAccountNumber) return "Confirm account number is required.";
+      if (accountNumber !== confirmAccountNumber) return "Account numbers do not match.";
+      return "";
+    }
+    case "ifscCode": {
+      const ifsc = normalizeIfsc(form.ifscCode);
+      if (!ifsc) return "IFSC code is required.";
+      if (!IFSC_CODE_RE.test(ifsc)) {
+        return "IFSC must match format AAAA0XXXXXX (e.g. HDFC0001234).";
+      }
+      return "";
+    }
+    case "branchName": {
+      if (!form.branchName.trim()) return "Branch name is required.";
+      if (form.branchName.trim().length > 255) {
+        return "Branch name must be at most 255 characters.";
+      }
+      return "";
+    }
+    case "accountType": {
+      if (!form.accountType) return "Account type is required.";
+      return "";
+    }
+    default:
+      return "";
+  }
+}
+
 export function validateBankAccountForm(
   form: BankAccountFormValues,
-  mode: "create" | "complete",
+  mode: BankAccountFormMode,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
-
-  if (mode === "create") {
-    const ledgerName = form.ledgerName.trim();
-    if (!ledgerName) errors.ledgerName = "Ledger name is required.";
-    else if (ledgerName.length > 255) errors.ledgerName = "Ledger name must be at most 255 characters.";
-
-    if (form.alias.trim().length > 255) {
-      errors.alias = "Alias must be at most 255 characters.";
-    }
-    if (form.description.trim().length > 5000) {
-      errors.description = "Description must be at most 5000 characters.";
-    }
-
-    const opening = normalizeOpeningBalance(form.openingBalance);
-    if (!OPENING_BALANCE_RE.test(opening)) {
-      errors.openingBalance =
-        "Opening balance must be zero or a positive amount with up to 2 decimals.";
-    }
+  for (const field of VALIDATED_FIELDS) {
+    const message = validateBankAccountField(form, field, mode);
+    if (message) errors[field] = message;
   }
-
-  if (!form.bankName.trim()) errors.bankName = "Bank name is required.";
-  else if (form.bankName.trim().length > 255) {
-    errors.bankName = "Bank name must be at most 255 characters.";
-  }
-
-  if (!form.accountHolderName.trim()) {
-    errors.accountHolderName = "Account holder name is required.";
-  } else if (form.accountHolderName.trim().length > 255) {
-    errors.accountHolderName = "Account holder name must be at most 255 characters.";
-  }
-
-  const accountNumber = stripAccountNumber(form.accountNumber);
-  const confirmAccountNumber = stripAccountNumber(form.confirmAccountNumber);
-
-  if (!accountNumber) errors.accountNumber = "Account number is required.";
-  else if (
-    accountNumber.length < ACCOUNT_NUMBER_MIN ||
-    accountNumber.length > ACCOUNT_NUMBER_MAX
-  ) {
-    errors.accountNumber = `Account number must be ${ACCOUNT_NUMBER_MIN}–${ACCOUNT_NUMBER_MAX} characters.`;
-  }
-
-  if (!confirmAccountNumber) {
-    errors.confirmAccountNumber = "Confirm account number is required.";
-  } else if (accountNumber !== confirmAccountNumber) {
-    errors.confirmAccountNumber = "Account numbers do not match.";
-  }
-
-  const ifsc = normalizeIfsc(form.ifscCode);
-  if (!ifsc) errors.ifscCode = "IFSC code is required.";
-  else if (!IFSC_CODE_RE.test(ifsc)) {
-    errors.ifscCode = "IFSC must match format AAAA0XXXXXX (e.g. HDFC0001234).";
-  }
-
-  if (!form.branchName.trim()) errors.branchName = "Branch name is required.";
-  else if (form.branchName.trim().length > 255) {
-    errors.branchName = "Branch name must be at most 255 characters.";
-  }
-
-  if (!form.accountType) errors.accountType = "Account type is required.";
-
   return errors;
 }
 
-export function buildCreateBankAccountPayload(
+function buildBankAccountPayload(
   form: BankAccountFormValues,
 ): CreateBankAccountPayload {
   const opening = normalizeOpeningBalance(form.openingBalance);
@@ -173,21 +241,22 @@ export function buildCreateBankAccountPayload(
   return payload;
 }
 
-export function buildCompleteBankAccountDetailsPayload(
+export function buildCreateBankAccountPayload(
   form: BankAccountFormValues,
-): CompleteBankAccountDetailsPayload {
-  return {
-    bankName: form.bankName.trim(),
-    accountHolderName: form.accountHolderName.trim(),
-    accountNumber: stripAccountNumber(form.accountNumber),
-    confirmAccountNumber: stripAccountNumber(form.confirmAccountNumber),
-    ifscCode: normalizeIfsc(form.ifscCode),
-    branchName: form.branchName.trim(),
-    accountType: form.accountType,
-    currencyCode: (form.currencyCode.trim() || "INR").toUpperCase(),
-    reconciliationEnabled: form.reconciliationEnabled,
-    defaultForReceipts: form.defaultForReceipts,
-    defaultForPayments: form.defaultForPayments,
-    warehouseIds: [...new Set(form.warehouseIds.filter(Boolean))],
-  };
+): CreateBankAccountPayload {
+  return buildBankAccountPayload(form);
+}
+
+/** Full update/upsert payload for PUT .../ledger/:ledgerId (edit + PENDING). */
+export function buildUpdateBankAccountPayload(
+  form: BankAccountFormValues,
+): UpdateBankAccountPayload {
+  return buildBankAccountPayload(form);
+}
+
+/** True when account number looks masked / unusable for re-submit. */
+export function isMaskedAccountNumber(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  if (!v) return true;
+  return /^X{2,}/i.test(v) || /\*{2,}/.test(v);
 }

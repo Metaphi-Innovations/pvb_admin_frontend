@@ -53,6 +53,7 @@ export interface BankAccountListRow {
   /** Display alias used by existing Account Name column key. */
   accountNickname: string;
   bankName: string;
+  accountHolderName: string;
   accountNumber: string;
   maskedAccountNumber: string;
   ifsc: string;
@@ -61,7 +62,7 @@ export interface BankAccountListRow {
   accountTypeRaw: BankAccountApiAccountType | "";
   openingBalance: number;
   balanceType: "Debit" | "Credit";
-  /** Not provided by listing API — always null for display as em dash. */
+  /** Optional — listing may omit; show em dash when null. */
   currentBalance: number | null;
   mappedWarehouseNames: string[];
   mappedWarehousesLabel: string;
@@ -97,20 +98,8 @@ export interface CreateBankAccountPayload {
   warehouseIds?: string[];
 }
 
-export interface CompleteBankAccountDetailsPayload {
-  bankName: string;
-  accountHolderName: string;
-  accountNumber: string;
-  confirmAccountNumber: string;
-  ifscCode: string;
-  branchName: string;
-  accountType: BankAccountApiAccountType;
-  currencyCode?: string;
-  reconciliationEnabled?: boolean;
-  defaultForReceipts?: boolean;
-  defaultForPayments?: boolean;
-  warehouseIds?: string[];
-}
+/** Edit/upsert body — same shape as create; backend treats fields as optional. */
+export type UpdateBankAccountPayload = CreateBankAccountPayload;
 
 export interface BankAccountDetail {
   ledgerId: string;
@@ -257,6 +246,12 @@ export function mapBankAccountListItem(
   const warehouses = mapWarehouses(row.warehouses);
   const warehouseNames = warehouses.map((w) => w.name).filter(Boolean);
 
+  const currentBalanceRaw = row.currentBalance ?? row.current_balance;
+  const currentBalance =
+    currentBalanceRaw == null || currentBalanceRaw === ""
+      ? null
+      : asNumber(currentBalanceRaw);
+
   return {
     ledgerId: asString(row.ledgerId),
     bankAccountId: asNullableString(row.bankAccountId),
@@ -265,6 +260,7 @@ export function mapBankAccountListItem(
     alias,
     accountNickname: alias || ledgerName,
     bankName: asString(row.bankName),
+    accountHolderName: asString(row.accountHolderName),
     accountNumber: masked,
     maskedAccountNumber: masked,
     ifsc: asString(row.ifscCode ?? row.ifsc),
@@ -273,7 +269,7 @@ export function mapBankAccountListItem(
     accountTypeRaw: accountType.raw,
     openingBalance: asNumber(row.openingBalance),
     balanceType: mapBalanceType(row.openingBalanceType),
-    currentBalance: null,
+    currentBalance,
     mappedWarehouseNames: warehouseNames,
     mappedWarehousesLabel: warehouseNames.join(", "),
     bankDetailsStatus: mapDetailsStatus(row.bankDetailsStatus),
@@ -454,20 +450,50 @@ export const BankAccountsListService = {
     );
   },
 
-  async completeDetails(
+  /**
+   * Edit / upsert bank account by ledgerId.
+   * Used for both completed accounts and PENDING ledgers (upserts bank details).
+   * Sends x-financial-year-id only when openingBalance > 0.
+   */
+  async update(
     ledgerId: string,
-    payload: CompleteBankAccountDetailsPayload,
+    payload: UpdateBankAccountPayload,
     options?: { financialYearId?: string | null },
   ): Promise<BankAccountMutationResult> {
+    const openingRaw = payload.openingBalance;
+    const openingNum =
+      openingRaw == null || openingRaw === "" ? 0 : Number(openingRaw);
+    const sendFyHeader = Number.isFinite(openingNum) && openingNum > 0;
+
     const response = await axiosInstance.put(
-      API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.COMPLETE_DETAILS(ledgerId),
+      API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.BY_LEDGER(ledgerId),
       payload,
-      { headers: fyHeaders(options?.financialYearId) },
+      {
+        headers: sendFyHeader
+          ? fyHeaders(options?.financialYearId)
+          : undefined,
+      },
     );
     return extractMutationResult(
       response.data as Record<string, unknown>,
-      "Bank account details saved successfully",
+      "Bank account updated successfully",
     );
+  },
+
+  async updateStatus(
+    bankAccountId: string,
+    status: BankAccountApiStatus,
+  ): Promise<void> {
+    const response = await axiosInstance.patch(
+      API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.STATUS_UPDATE(bankAccountId),
+      { status },
+    );
+    const body = response.data as Record<string, unknown>;
+    if (body.success === false) {
+      throw new Error(
+        asString(body.message) || "Failed to update bank account status.",
+      );
+    }
   },
 
   extractErrorMessage: extractBankAccountErrorMessage,

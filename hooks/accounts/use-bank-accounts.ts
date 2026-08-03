@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BankAccountsListService,
-  type CompleteBankAccountDetailsPayload,
   type CreateBankAccountPayload,
+  type UpdateBankAccountPayload,
 } from "@/services/bank-accounts-list.service";
 import { accountsKeys } from "@/lib/accounts/accounts-query-keys";
 
@@ -44,7 +44,8 @@ export function useCreateBankAccount() {
   });
 }
 
-export function useCompleteBankAccountDetails() {
+/** Edit / upsert by ledgerId — also used for PENDING complete-details. */
+export function useUpdateBankAccount() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -53,10 +54,10 @@ export function useCompleteBankAccountDetails() {
       financialYearId,
     }: {
       ledgerId: string;
-      payload: CompleteBankAccountDetailsPayload;
+      payload: UpdateBankAccountPayload;
       financialYearId?: string | null;
     }) =>
-      BankAccountsListService.completeDetails(ledgerId, payload, {
+      BankAccountsListService.update(ledgerId, payload, {
         financialYearId,
       }),
     onSuccess: async (result, variables) => {
@@ -69,6 +70,34 @@ export function useCompleteBankAccountDetails() {
           queryKey: accountsKeys.bankAccounts.detail(result.data.ledgerId),
         }),
       ]);
+    },
+  });
+}
+
+export function useUpdateBankAccountStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bankAccountId,
+      status,
+    }: {
+      bankAccountId: string;
+      status: "ACTIVE" | "INACTIVE";
+      /** Used only to invalidate detail cache when known. */
+      ledgerId?: string;
+    }) => BankAccountsListService.updateStatus(bankAccountId, status),
+    onSuccess: async (_result, variables) => {
+      const tasks = [
+        queryClient.invalidateQueries({ queryKey: accountsKeys.bankAccounts.lists() }),
+      ];
+      if (variables.ledgerId) {
+        tasks.push(
+          queryClient.invalidateQueries({
+            queryKey: accountsKeys.bankAccounts.detail(variables.ledgerId),
+          }),
+        );
+      }
+      await Promise.all(tasks);
     },
   });
 }

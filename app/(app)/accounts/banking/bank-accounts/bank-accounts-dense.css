@@ -164,6 +164,11 @@
   max-width: 11.5rem;
 }
 
+.bank-accounts-dense .bank-accounts-status-cell,
+.bank-accounts-dense .bank-accounts-status-cell .accounts-table-td-inner {
+  overflow: visible;
+}
+
 .bank-accounts-dense .bank-accounts-wh-trigger {
   display: block;
   width: 100%;
