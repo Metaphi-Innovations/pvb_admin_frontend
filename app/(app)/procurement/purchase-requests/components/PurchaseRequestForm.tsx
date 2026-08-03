@@ -18,7 +18,6 @@ import {
   enrichProductFromDropdown,
   type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
-import { stateSelectOptions } from "@/lib/procurement/warehouse-filter";
 import {
   enrichPRLineItem,
   type PRAttachment,
@@ -28,8 +27,11 @@ import {
 import type { PRPriority } from "@/lib/procurement/config";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import { useProductDropdown } from "@/hooks/masters/use-products";
-import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
 import type { ProductDropdownItem } from "@/services/product-dropdown.service";
+import {
+  downloadPrAttachment,
+  resolvePrAttachmentUrl,
+} from "@/services/purchase-request.service";
 import {
   type PRFormErrors,
   type PRFormFieldKey,
@@ -254,17 +256,6 @@ export function PurchaseRequestForm({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const { data: dbProducts } = useProductDropdown();
-  const { data: warehouses } = useWarehouseDropdown(form.state || undefined);
-
-  const stateOptions = useMemo(() => stateSelectOptions(), []);
-  const warehouseOptions = useMemo(
-    () =>
-      (warehouses ?? []).map((w) => ({
-        value: w.warehouse_id,
-        label: w.warehouse_name,
-      })),
-    [warehouses],
-  );
 
   const productOptions = useMemo(
     () =>
@@ -279,10 +270,9 @@ export function PurchaseRequestForm({
 
   const set = <K extends keyof PRFormValues>(k: K, v: PRFormValues[K]) => {
     onChange({ ...form, [k]: v });
-    if (k === "prDate" || k === "department" || k === "priority" || k === "state" || k === "requiredByDate") {
+    if (k === "prDate" || k === "department" || k === "priority" || k === "requiredByDate") {
       clearErr(k);
     }
-    if (k === "warehouseId" || k === "warehouseName") clearErr("warehouseId");
     if (k === "lines") clearErr("lines");
   };
 
@@ -338,27 +328,6 @@ export function PurchaseRequestForm({
     });
     if (patch.requestedQty !== undefined) clearErr(`lineQty:${uid}`);
     clearErr("lines");
-  };
-
-  const onStateChange = (state: string) => {
-    onChange({
-      ...form,
-      state,
-      warehouseId: null,
-      warehouseName: "",
-    });
-    clearErr("state");
-    clearErr("warehouseId");
-  };
-
-  const onWarehouseChange = (val: string) => {
-    const wh = (warehouses ?? []).find((w) => w.warehouse_id === val);
-    onChange({
-      ...form,
-      warehouseId: wh ? wh.warehouse_id : null,
-      warehouseName: wh?.warehouse_name ?? "",
-    });
-    clearErr("warehouseId");
   };
 
   const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -484,49 +453,6 @@ export function PurchaseRequestForm({
               <FieldError id="pr-err-priority" msg={errors.priority} />
             </div>
             <div className="space-y-1">
-              <FieldLabel required>State</FieldLabel>
-              {readOnly ? (
-                <ReadOnlyField value={form.state} />
-              ) : (
-                <AutocompleteSelect
-                  options={stateOptions}
-                  value={form.state}
-                  onChange={(v) => onStateChange(String(v))}
-                  onBlur={() => blurField("state")}
-                  placeholder="Select state"
-                  error={Boolean(errors.state)}
-                  aria-invalid={Boolean(errors.state)}
-                  aria-describedby="pr-err-state"
-                  data-pr-field="state"
-                  className={cn(inputCls, errors.state && errorInputCls)}
-                />
-              )}
-              <FieldError id="pr-err-state" msg={errors.state} />
-            </div>
-            <div className="space-y-1">
-              <FieldLabel required>Warehouse</FieldLabel>
-              {readOnly ? (
-                <ReadOnlyField value={form.warehouseName} />
-              ) : (
-                <AutocompleteSelect
-                  options={warehouseOptions}
-                  value={form.warehouseId ?? ""}
-                  onChange={(v) => onWarehouseChange(String(v))}
-                  onBlur={() => blurField("warehouseId")}
-                  disabled={!form.state}
-                  placeholder={
-                    form.state ? "Select warehouse" : "Select state first"
-                  }
-                  error={Boolean(errors.warehouseId)}
-                  aria-invalid={Boolean(errors.warehouseId)}
-                  aria-describedby="pr-err-warehouseId"
-                  data-pr-field="warehouseId"
-                  className={cn(inputCls, errors.warehouseId && errorInputCls)}
-                />
-              )}
-              <FieldError id="pr-err-warehouseId" msg={errors.warehouseId} />
-            </div>
-            <div className="space-y-1">
               <FieldLabel required htmlFor="pr-requiredByDate">
                 Required By Date
               </FieldLabel>
@@ -649,7 +575,9 @@ export function PurchaseRequestForm({
                 </p>
               ) : (
                 <ul className="space-y-1.5">
-                  {form.existingAttachments.map((a) => (
+                  {form.existingAttachments.map((a) => {
+                    const resolvedUrl = resolvePrAttachmentUrl(a.url);
+                    return (
                     <li
                       key={a.uid}
                       className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
@@ -658,19 +586,41 @@ export function PurchaseRequestForm({
                         {a.name}
                       </span>
                       <span className="text-muted-foreground">{a.size}</span>
-                      {a.url ? (
+                      {resolvedUrl ? (
                         <a
-                          href={a.url}
+                          href={resolvedUrl}
                           target="_blank"
                           rel="noreferrer"
+                          title="View"
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </a>
                       ) : (
-                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground/40" />
                       )}
-                      <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                      {resolvedUrl ? (
+                        <button
+                          type="button"
+                          title="Download"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            void downloadPrAttachment(resolvedUrl, a.name).catch(
+                              () => {
+                                window.open(
+                                  resolvedUrl,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              },
+                            );
+                          }}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <Download className="h-3.5 w-3.5 text-muted-foreground/40" />
+                      )}
                       {!readOnly && (
                         <button
                           type="button"
@@ -689,7 +639,8 @@ export function PurchaseRequestForm({
                         </button>
                       )}
                     </li>
-                  ))}
+                    );
+                  })}
                   {form.attachmentFiles.map((file, index) => (
                     <li
                       key={`new-${file.name}-${index}`}

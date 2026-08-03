@@ -219,6 +219,12 @@ export function useFY(): FYContextType {
   return ctx;
 }
 
+/** True once Working FY id is available for x-financial-year-id. */
+export function useIsFinancialYearReady(): boolean {
+  const { selectedFY } = useFY();
+  return Boolean(selectedFY.id || getStoredFYId());
+}
+
 /**
  * Opening date YYYY-MM-DD for a Financial Year.
  * Prefer passing the FY object (UUID ids are not parseable as year codes).

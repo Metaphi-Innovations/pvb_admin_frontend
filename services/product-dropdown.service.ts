@@ -22,6 +22,8 @@ export interface ProductDropdownItem {
   } | null;
   hsn?: {
     id: string;
+    hsnCode?: string | null;
+    hsn_code?: string | null;
     hsnDescription: string;
   } | null;
   gst_rate?: {

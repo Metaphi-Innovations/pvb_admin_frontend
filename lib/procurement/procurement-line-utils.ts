@@ -237,9 +237,9 @@ export function enrichProductFromDropdown(
       conversionQty: Number(dbProd.unit_per_packing) || 1,
       segment: dbProd.segment?.segment_name || "",
       category: dbProd.category?.categoryName || "",
-      hsnCode: (dbProd.hsn as any)?.hsnCode || (dbProd.hsn as any)?.hsn_code || dbProd.hsn?.hsnDescription || "",
+      hsnCode: dbProd.hsn?.hsnCode || dbProd.hsn?.hsn_code || "",
       mrp: 0,
-      ratePerSku: 0,
+      ratePerSku: Number(dbProd.cost_price) || 0,
       description: dbProd.scientific_name || "",
     };
   }

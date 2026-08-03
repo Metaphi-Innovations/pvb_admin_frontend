@@ -24,9 +24,8 @@ import {
 } from "@/lib/procurement/procurement-line-utils";
 import { useProductDropdown } from "@/hooks/masters/use-products";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
-import type { PurchaseRequest } from "../../purchase-requests/pr-data";
 import type { POLineItem } from "../po-data";
-import type { POFormValues } from "./PurchaseOrderForm";
+import type { LinkedPurchaseRequest, POFormValues } from "./PurchaseOrderForm";
 import { emptyPOLine } from "./PurchaseOrderForm";
 import type { ProductDropdownItem } from "@/services/product-dropdown.service";
 import {
@@ -136,7 +135,7 @@ interface POLineItemsSectionProps {
   readOnly?: boolean;
   poType: "pr" | "direct";
   previewLines: POLineItem[];
-  linkedPr: PurchaseRequest | null;
+  linkedPr: LinkedPurchaseRequest | null;
   taxSupplyType?: TaxSupplyType;
   supplierState?: string;
   linesError?: string;

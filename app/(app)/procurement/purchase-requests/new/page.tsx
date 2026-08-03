@@ -10,6 +10,7 @@ import {
 } from "../components/PurchaseRequestForm";
 import { PRFormFooter } from "../components/PRFormFooter";
 import { useAuth } from "@/lib/auth";
+import { useFY, getStoredFYId } from "@/lib/fy-store";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   useCreatePurchaseRequest,
@@ -27,6 +28,7 @@ import {
 export default function NewPRPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { selectedFY, isLoading: fyLoading } = useFY();
   const [form, setForm] = useState<PRFormValues | null>(null);
   const [errors, setErrors] = useState<PRFormErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +75,15 @@ export default function NewPRPage() {
 
     if (!form.requestedById) {
       setError("Please sign in again — requester could not be resolved.");
+      return;
+    }
+
+    if (!selectedFY.id && !getStoredFYId()) {
+      setError(
+        fyLoading
+          ? "Financial year is still loading. Please wait a moment and try again."
+          : "Select a financial year from the header before saving.",
+      );
       return;
     }
 

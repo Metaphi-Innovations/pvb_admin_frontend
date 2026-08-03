@@ -9,6 +9,7 @@ import {
 } from "../../components/PurchaseRequestForm";
 import { PRFormFooter } from "../../components/PRFormFooter";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { useFY, getStoredFYId } from "@/lib/fy-store";
 import {
   detailToFormValues,
   usePurchaseRequest,
@@ -30,6 +31,7 @@ export default function EditPRPage() {
   const params = useParams();
   const router = useRouter();
   const id = String(params.id ?? "");
+  const { selectedFY, isLoading: fyLoading } = useFY();
   const detailQuery = usePurchaseRequest(id);
   const updateMutation = useUpdatePurchaseRequest();
   const [form, setForm] = useState<PRFormValues | null>(null);
@@ -105,6 +107,15 @@ export default function EditPRPage() {
   const persist = (asSubmit: boolean) => {
     if (updateMutation.isPending) return;
     setError(null);
+
+    if (!selectedFY.id && !getStoredFYId()) {
+      setError(
+        fyLoading
+          ? "Financial year is still loading. Please wait a moment and try again."
+          : "Select a financial year from the header before saving.",
+      );
+      return;
+    }
 
     const mode = asSubmit ? "submit" : "draft";
     const nextErrors = validatePRForm(form, mode);

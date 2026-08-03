@@ -4,8 +4,6 @@ export type PRFormFieldKey =
   | "prDate"
   | "department"
   | "priority"
-  | "state"
-  | "warehouseId"
   | "requiredByDate"
   | "lines";
 
@@ -15,8 +13,6 @@ export const PR_FIELD_ORDER: PRFormFieldKey[] = [
   "prDate",
   "department",
   "priority",
-  "state",
-  "warehouseId",
   "requiredByDate",
   "lines",
 ];
@@ -69,18 +65,6 @@ export function validatePRField(
     }
     case "priority": {
       if (!(form.priority?.trim() ?? "")) {
-        return requireAll ? PR_MSG.select : undefined;
-      }
-      return undefined;
-    }
-    case "state": {
-      if (!(form.state?.trim() ?? "")) {
-        return requireAll ? PR_MSG.select : undefined;
-      }
-      return undefined;
-    }
-    case "warehouseId": {
-      if (!form.warehouseId) {
         return requireAll ? PR_MSG.select : undefined;
       }
       return undefined;

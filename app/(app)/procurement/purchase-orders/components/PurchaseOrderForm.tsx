@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Info,
 	Upload,
@@ -10,6 +10,8 @@ import { COMPANY_BILLING, PAYMENT_TYPE_OPTIONS } from "@/lib/procurement/config"
 import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
+	enrichProductFromDropdown,
+	resolvePOLineCostPrice,
 } from "@/lib/procurement/procurement-line-utils";
 import {
 	applyTaxSupplyToRates,
@@ -17,16 +19,26 @@ import {
 	resolveTaxSupplyType,
 	type TaxSupplyType,
 } from "@/lib/procurement/utils";
-import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
 import { useSupplierDropdown, useSupplierDetail } from "@/hooks/masters/use-suppliers";
 import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
-import { usePurchaseOrderPreviewNumber } from "@/hooks/procurement";
+import { useProductDropdown } from "@/hooks/masters/use-products";
+import {
+	usePurchaseOrderPreviewNumber,
+	usePurchaseRequest,
+	usePurchaseRequestList,
+} from "@/hooks/procurement";
 import { axiosInstance } from "@/api/axios";
-import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
+import type { PRLineItem } from "../../purchase-requests/pr-data";
+import type {
+	PurchaseRequestDetail,
+} from "@/services/purchase-request.service";
+import type { ProductDropdownItem } from "@/services/product-dropdown.service";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
 import { applyTaxSupplyToPOLines, enrichPOLineItem, recalcPO } from "../po-data";
+import { loadProducts } from "@/app/(app)/masters/products/product-data";
+import { findProductRef } from "@/lib/pricing/resolve-pricing";
 import {
 	getDefaultPOBillShipIds,
 	getPOBillToAddresses,
@@ -43,6 +55,11 @@ import {
 	preventInvalidNumberKeys,
 	sanitizeIntegerInput,
 } from "./number-input-guards";
+
+/** Minimal PR shape needed by line items (PR Qty column). */
+export type LinkedPurchaseRequest = {
+	lines: PRLineItem[];
+};
 
 const INDIAN_STATES = [
 	"Maharashtra",
@@ -180,42 +197,117 @@ export function emptyPOLine(): POLineItem {
 	};
 }
 
-export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
-	const pr = sourcePrId ? getPRById(sourcePrId) : null;
+export function resolveProductGstPct(
+	productId: number | string,
+	dbProducts?: ProductDropdownItem[],
+): number {
+	const dbProd = (dbProducts || []).find(
+		(x) => String(x.product_id) === String(productId),
+	);
+	if (dbProd?.gst_rate?.gstPercentage != null && dbProd.gst_rate.gstPercentage !== "") {
+		const n = Number(dbProd.gst_rate.gstPercentage);
+		if (Number.isFinite(n)) return n;
+	}
+	const local = loadProducts().find((p) => String(p.id) === String(productId));
+	if (local?.gstRate) {
+		const n = parseFloat(String(local.gstRate).replace(/%/g, ""));
+		if (Number.isFinite(n)) return n;
+	}
+	const ref = findProductRef(productId);
+	if (ref?.gstRate) {
+		const n = parseFloat(String(ref.gstRate).replace(/%/g, ""));
+		if (Number.isFinite(n)) return n;
+	}
+	return 18;
+}
 
-	const lines =
-		pr?.lines.map((l) => {
-			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, undefined);
+export function mapPRLinesToPOLines(
+	lines: PRLineItem[],
+	supplierId?: number | string,
+	dbProducts?: ProductDropdownItem[],
+	taxSupplyType: TaxSupplyType = "intra",
+): POLineItem[] {
+	const localSupplierId =
+		typeof supplierId === "number"
+			? supplierId
+			: Number(supplierId) || undefined;
+
+	return lines
+		.filter((l) => l.productId && String(l.productId) !== "0")
+		.map((l) => {
+			const info =
+				enrichProductFromDropdown(l.productId, dbProducts) ??
+				enrichProductForProcurement(l.productId);
+			const fromPrRate = Number(l.ratePerSku) || 0;
+			const cp = resolvePOLineCostPrice(
+				l.productId,
+				dbProducts,
+				localSupplierId,
+			);
+			const unitPrice =
+				fromPrRate > 0
+					? fromPrRate
+					: info?.ratePerSku && info.ratePerSku > 0
+						? info.ratePerSku
+						: cp.amount;
+			const gstPct = resolveProductGstPct(l.productId, dbProducts);
+			const taxRates = applyTaxSupplyToRates(gstPct, taxSupplyType);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
-			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
+			const orderedQty =
+				l.totalQtyBase ??
+				calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? l.conversionQty ?? 1);
 			return {
 				...emptyPOLine(),
 				uid: `pl-${l.uid}`,
 				productId: l.productId,
 				productCode: info?.productCode ?? l.productCode,
 				productName: info?.productName ?? l.productName,
-				description: l.description,
-				sku: info?.sku ?? l.sku,
+				description: l.description || info?.description || "",
+				sku: info?.sku || l.sku,
 				category: info?.category ?? l.category,
-				hsnCode: info?.hsnCode ?? l.hsnCode,
-				baseUnit: info?.baseUnit ?? "Unit",
-				packagingUnit: info?.packagingUnit ?? "Box",
-				conversionQty: info?.conversionQty ?? 1,
+				hsnCode: info?.hsnCode || l.hsnCode,
+				baseUnit: info?.baseUnit ?? l.baseUnit ?? "Unit",
+				packagingUnit: info?.packagingUnit ?? l.packagingUnit ?? "Box",
+				conversionQty: info?.conversionQty ?? l.conversionQty ?? 1,
 				orderUom,
 				orderedQtyPack,
 				uom: orderUom,
 				orderedQty,
-				unitPrice: cp.amount,
-				cpSource: cp.source,
+				unitPrice,
+				cpSource: fromPrRate > 0 || (info?.ratePerSku ?? 0) > 0 ? "pricing_master" : cp.source,
 				remarks: l.remarks ?? "",
 				prLineUid: l.uid,
+				...taxRates,
 			};
-		}) ?? [];
+		});
+}
 
-	const hasWarehouse = Boolean(pr?.warehouseId);
+/** Apply live PR detail onto a PO form (lines + reference fields). */
+export function applyPurchaseRequestDetailToForm(
+	form: POFormValues,
+	detail: PurchaseRequestDetail,
+	dbProducts?: ProductDropdownItem[],
+	taxSupplyType: TaxSupplyType = "intra",
+): POFormValues {
+	return {
+		...form,
+		sourcePrId: detail.id,
+		sourcePrNumber: detail.prNumber,
+		notes: detail.remarks || form.notes,
+		deliveryTerms: detail.requestedBy
+			? `From ${detail.requestedBy}${detail.prDate ? ` (${detail.prDate})` : ""}`
+			: form.deliveryTerms,
+		lines: mapPRLinesToPOLines(
+			detail.lines,
+			form.supplierId,
+			dbProducts,
+			taxSupplyType,
+		),
+	};
+}
 
+export function defaultPOForm(sourcePrId: string | null = null): POFormValues {
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
 		supplierId: "",
@@ -232,15 +324,15 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		creditDays: 30,
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
-		state: pr?.state ?? "Maharashtra",
-		warehouseId: pr?.warehouseId ?? null,
-		warehouseName: pr?.warehouseName ?? "",
+		state: "Maharashtra",
+		warehouseId: null,
+		warehouseName: "",
 		deliveryAddress: "",
-		notes: pr?.remarks ?? "",
-		sourcePrId: pr?.id ?? null,
-		sourcePrNumber: pr?.prNumber ?? "",
-		billToAddressId: hasWarehouse ? `bill-wh-${pr!.warehouseId}` : "",
-		shipToAddressId: hasWarehouse ? `ship-wh-${pr!.warehouseId}` : "",
+		notes: "",
+		sourcePrId,
+		sourcePrNumber: "",
+		billToAddressId: "",
+		shipToAddressId: "",
 		billing: {
 			companyName: COMPANY_BILLING.companyName,
 			billingAddress: "",
@@ -250,14 +342,14 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 			pincode: "",
 		},
 		shipping: {
-			shipToLocation: pr?.warehouseName ?? "",
+			shipToLocation: "",
 			branch: "",
 			address: "",
 			contactPerson: "",
 			contactNumber: "",
 			sameAsBilling: false,
 		},
-		lines,
+		lines: [],
 		terms: [],
 		attachments: [],
 		existingAttachments: [],
@@ -348,6 +440,7 @@ export function PurchaseOrderForm({
 
 	const { data: dbSuppliers } = useSupplierDropdown();
 	const suppliers = dbSuppliers || [];
+	const { data: dbProducts } = useProductDropdown();
 	const isDbSupplier = Boolean(form.supplierId && typeof form.supplierId === "string" && !/^\d+$/.test(form.supplierId));
 	const { data: dbSupplierDetail } = useSupplierDetail(
 		isDbSupplier ? String(form.supplierId) : null
@@ -369,11 +462,33 @@ export function PurchaseOrderForm({
 		if (!shouldPreviewPoNumber || !onPoNumberChange) return;
 		onPoNumberChange(fetchedPoNumber);
 	}, [shouldPreviewPoNumber, fetchedPoNumber, onPoNumberChange]);
-	const prList = loadPurchaseRequests().filter((p) =>
-		["approved", "partially_converted"].includes(p.status),
+
+	const appliedPrIdRef = useRef<string | null>(null);
+	const formRef = useRef(form);
+	formRef.current = form;
+
+	const [forcePrMode, setForcePrMode] = useState(() => Boolean(form.sourcePrId));
+
+	const { data: prListResult } = usePurchaseRequestList(
+		{
+			page: 1,
+			pageSize: 100,
+			search: "",
+			ordering: "-created_at",
+			apiFilters: { status: "Approved" },
+		},
+		!readOnly,
 	);
 
-	const poType: "pr" | "direct" = form.sourcePrId ? "pr" : "direct";
+	const sourcePrIdStr = form.sourcePrId ? String(form.sourcePrId) : null;
+	const { data: prDetail } = usePurchaseRequest(sourcePrIdStr);
+
+	const poType: "pr" | "direct" =
+		form.sourcePrId || forcePrMode ? "pr" : "direct";
+
+	useEffect(() => {
+		if (form.sourcePrId) setForcePrMode(true);
+	}, [form.sourcePrId]);
 
 	const preview = useMemo(
 		() =>
@@ -412,69 +527,30 @@ export function PurchaseOrderForm({
 	const setType = (next: "pr" | "direct") => {
 		if (readOnly) return;
 		if (next === "direct") {
+			setForcePrMode(false);
+			appliedPrIdRef.current = null;
 			patch({ sourcePrId: null, sourcePrNumber: "", lines: [] });
 			return;
 		}
-		const pr = prList[0];
-		if (pr) loadFromPR(pr.id);
+		setForcePrMode(true);
 	};
 
-	const loadFromPR = (prId: number) => {
-		const pr = getPRById(prId);
-		if (!pr) return;
-		const lines = pr.lines.map((l) => {
-			const info = enrichProductForProcurement(l.productId);
-			const localSupplierId =
-				typeof form.supplierId === "number" ? form.supplierId : Number(form.supplierId) || undefined;
-			const cp = resolvePurchaseCostPrice(l.productId, localSupplierId);
-			const orderUom = l.requestUom ?? "Unit";
-			const orderedQtyPack = l.requestedQty;
-			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
-			return {
-				...emptyPOLine(),
-				uid: `pl-${l.uid}`,
-				productId: l.productId,
-				productCode: info?.productCode ?? l.productCode,
-				productName: info?.productName ?? l.productName,
-				description: l.description,
-				sku: info?.sku ?? l.sku,
-				category: info?.category ?? l.category,
-				hsnCode: info?.hsnCode ?? l.hsnCode,
-				baseUnit: info?.baseUnit ?? "Unit",
-				packagingUnit: info?.packagingUnit ?? "Box",
-				conversionQty: info?.conversionQty ?? 1,
-				orderUom,
-				orderedQtyPack,
-				uom: orderUom,
-				orderedQty,
-				unitPrice: cp.amount,
-				cpSource: cp.source,
-				remarks: l.remarks ?? "",
-				prLineUid: l.uid,
-			};
-		});
+	const selectPR = (prId: string) => {
+		if (readOnly || !prId) return;
+		appliedPrIdRef.current = null;
+		const match = (prListResult?.items ?? []).find((p) => p.id === prId);
 		patch({
-			sourcePrId: pr.id,
-			sourcePrNumber: pr.prNumber,
-			state: pr.state,
-			warehouseId: pr.warehouseId,
-			warehouseName: pr.warehouseName,
-			billToAddressId: pr.warehouseId ? `bill-wh-${pr.warehouseId}` : "",
-			shipToAddressId: pr.warehouseId ? `ship-wh-${pr.warehouseId}` : "",
-			notes: pr.remarks,
-			lines,
-			deliveryTerms: `From ${pr.requestedBy} (${pr.prDate})`,
+			sourcePrId: prId,
+			sourcePrNumber: match?.prNumber ?? "",
+			lines: [],
 		});
 	};
 
 	const previewLines = preview.lines;
 
-	const linkedPr =
-		form.sourcePrId && typeof form.sourcePrId === "number"
-			? getPRById(form.sourcePrId) ?? null
-			: form.sourcePrId && /^\d+$/.test(String(form.sourcePrId))
-				? getPRById(Number(form.sourcePrId)) ?? null
-				: null;
+	const linkedPr: LinkedPurchaseRequest | null = prDetail
+		? { lines: prDetail.lines }
+		: null;
 	const displayPoNo = poNumberLoading && !poNumber
 		? "Generating…"
 		: poNumber || "Auto-generated";
@@ -583,6 +659,92 @@ export function PurchaseOrderForm({
 		const supplierState = selectedSupplier?.state ?? "";
 		return resolveTaxSupplyType(warehouseState, supplierState);
 	}, [selectedWarehouse, selectedSupplier, form.state]);
+
+	useEffect(() => {
+		if (readOnly || !prDetail || !sourcePrIdStr) return;
+		if (prDetail.id !== sourcePrIdStr) return;
+		if (appliedPrIdRef.current === prDetail.id) return;
+
+		const current = formRef.current;
+		// Edit / already-hydrated: keep existing lines, just mark applied
+		if (current.lines.length > 0 && current.sourcePrNumber) {
+			appliedPrIdRef.current = prDetail.id;
+			return;
+		}
+
+		appliedPrIdRef.current = prDetail.id;
+		onChange(
+			applyPurchaseRequestDetailToForm(
+				current,
+				prDetail,
+				dbProducts,
+				taxSupplyType,
+			),
+		);
+	}, [
+		prDetail,
+		sourcePrIdStr,
+		readOnly,
+		onChange,
+		dbProducts,
+		taxSupplyType,
+	]);
+
+	// Backfill rate / HSN / SKU / GST from product master for PR-sourced lines
+	useEffect(() => {
+		if (readOnly || !dbProducts?.length || !form.sourcePrId) return;
+		const needsEnrich = form.lines.some((l) => {
+			if (!l.prLineUid) return false;
+			const gstPct = resolveProductGstPct(l.productId, dbProducts);
+			const expected = applyTaxSupplyToRates(gstPct, taxSupplyType);
+			const gstMismatch =
+				Math.abs((l.cgstPct ?? 0) - expected.cgstPct) > 0.001 ||
+				Math.abs((l.sgstPct ?? 0) - expected.sgstPct) > 0.001 ||
+				Math.abs((l.igstPct ?? 0) - expected.igstPct) > 0.001;
+			return (
+				!l.unitPrice ||
+				l.unitPrice <= 0 ||
+				!l.hsnCode ||
+				!l.sku ||
+				gstMismatch
+			);
+		});
+		if (!needsEnrich) return;
+
+		const nextLines = form.lines.map((l) => {
+			if (!l.prLineUid) return l;
+			const info = enrichProductFromDropdown(l.productId, dbProducts);
+			const cp = resolvePOLineCostPrice(l.productId, dbProducts);
+			const gstPct = resolveProductGstPct(l.productId, dbProducts);
+			const taxRates = applyTaxSupplyToRates(gstPct, taxSupplyType);
+			return {
+				...l,
+				sku: l.sku || info?.sku || "",
+				hsnCode: l.hsnCode || info?.hsnCode || "",
+				unitPrice:
+					l.unitPrice > 0
+						? l.unitPrice
+						: info && info.ratePerSku > 0
+							? info.ratePerSku
+							: cp.amount,
+				cpSource: l.unitPrice > 0 ? l.cpSource : "pricing_master",
+				...taxRates,
+			};
+		});
+		const changed = nextLines.some((l, i) => {
+			const prev = form.lines[i];
+			return (
+				l.unitPrice !== prev.unitPrice ||
+				l.hsnCode !== prev.hsnCode ||
+				l.sku !== prev.sku ||
+				l.cgstPct !== prev.cgstPct ||
+				l.sgstPct !== prev.sgstPct ||
+				l.igstPct !== prev.igstPct
+			);
+		});
+		if (changed) onChange({ ...form, lines: nextLines });
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [dbProducts, form.sourcePrId, readOnly, taxSupplyType]);
 
 	useEffect(() => {
 		if (!form.supplierId) return;
@@ -799,9 +961,10 @@ export function PurchaseOrderForm({
 		e.target.value = "";
 	};
 
-	const prOptions = prList.map((p) => ({
-		value: String(p.id),
+	const prOptions = (prListResult?.items ?? []).map((p) => ({
+		value: p.id,
 		label: p.prNumber,
+		sublabel: p.requestedBy || undefined,
 	}));
 	const supplierOptions = (suppliers || []).map((s: any) => ({
 		value: String(s.supplier_id || s.id || ""),
@@ -828,8 +991,6 @@ export function PurchaseOrderForm({
 
 				{!readOnly && (
 					<div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-						<span className="font-medium text-foreground">Direct Purchase Order</span>
-						{/* Phase 1: PO type selector disabled — direct PO only for now
 						<label className="flex items-center gap-2 cursor-pointer font-medium text-foreground">
 							<input
 								type="radio"
@@ -846,7 +1007,6 @@ export function PurchaseOrderForm({
 							/>
 							Direct Purchase Order
 						</label>
-						*/}
 					</div>
 				)}
 
@@ -868,7 +1028,7 @@ export function PurchaseOrderForm({
 								)}
 							/>
 						</div>
-						{/* <div className="space-y-1">
+						<div className="space-y-1">
 							<Label className="text-xs font-medium">PR Reference</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.sourcePrNumber} />
@@ -876,14 +1036,14 @@ export function PurchaseOrderForm({
 								<AutocompleteSelect
 									options={prOptions}
 									value={form.sourcePrId ? String(form.sourcePrId) : ""}
-									onChange={(v) => v && loadFromPR(Number(v))}
+									onChange={(v) => v && selectPR(String(v))}
 									placeholder="Select PR..."
 									searchPlaceholder="Search PR..."
 									disabled={poType === "direct"}
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
-						</div> */}
+						</div>
 						<div id="po-field-supplierId" className="space-y-1">
 							<Label className="text-xs font-medium">
 								Supplier <span className="text-red-500">*</span>
