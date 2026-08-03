@@ -11,14 +11,20 @@ import { TabsContent } from "@/components/ui/tabs";
 
 import { ReorderSummary } from "./types";
 import { ReorderLevelService } from "./services";
+import {
+  ALL_WAREHOUSE_FILTER_OPTION,
+  ALL_WAREHOUSE_FILTER_VALUE,
+} from "./constants";
 
 import { WarehouseWiseListing } from "./warehouse-wise/WarehouseWiseListing";
 import { ProductOverviewListing } from "./product-overview/ProductOverviewListing";
 
 export default function ReorderLevelPage() {
   const [activeTab, setActiveTab] = useState("warehouse-wise");
-  const [selectedWarehouse, setSelectedWarehouse] = useState("");
-  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState(ALL_WAREHOUSE_FILTER_VALUE);
+  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([
+    ALL_WAREHOUSE_FILTER_OPTION,
+  ]);
   const [summary, setSummary] = useState<ReorderSummary>({ total: 0, inStock: 0, lowStock: 0 });
 
   useEffect(() => {
@@ -26,10 +32,11 @@ export default function ReorderLevelPage() {
     ReorderLevelService.warehouseDropdown()
       .then((items) => {
         if (!mounted) return;
-        setWarehouseOptions(items);
+        setWarehouseOptions([ALL_WAREHOUSE_FILTER_OPTION, ...items]);
         setSelectedWarehouse((prev) => {
+          if (prev === ALL_WAREHOUSE_FILTER_VALUE) return prev;
           if (prev && items.some((w) => w.value === prev)) return prev;
-          return items[0]?.value || "";
+          return ALL_WAREHOUSE_FILTER_VALUE;
         });
       })
       .catch(() => undefined);
@@ -41,15 +48,14 @@ export default function ReorderLevelPage() {
   useEffect(() => {
     let active = true;
     const isOverview = activeTab === "product-overview";
-    if (!isOverview && !selectedWarehouse) {
-      setSummary({ total: 0, inStock: 0, lowStock: 0 });
-      return () => {
-        active = false;
-      };
-    }
+    const warehouseId =
+      !isOverview && selectedWarehouse !== ALL_WAREHOUSE_FILTER_VALUE
+        ? selectedWarehouse
+        : undefined;
+
     ReorderLevelService.summary({
       reorder_type: isOverview ? "OVERALL" : "WAREHOUSE",
-      warehouse_id: isOverview ? undefined : selectedWarehouse,
+      warehouse_id: warehouseId,
     })
       .then((data) => {
         if (!active) return;
@@ -98,7 +104,7 @@ export default function ReorderLevelPage() {
       }
     >
       <TabsContent value="warehouse-wise" className="mt-0 outline-none">
-        <WarehouseWiseListing selectedWarehouseId={selectedWarehouse || undefined} />
+        <WarehouseWiseListing selectedWarehouseId={selectedWarehouse} />
       </TabsContent>
 
       <TabsContent value="product-overview" className="mt-0 outline-none">
