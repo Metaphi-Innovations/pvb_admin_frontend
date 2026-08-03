@@ -29,12 +29,12 @@ interface ParentGroupTreeNodeProps {
   isFirstRoot?: boolean;
   isLastSibling: boolean;
   records: ChartOfAccount[];
-  expandedIds: Set<number>;
-  selectedId: number | null;
-  selectableIds: Set<number>;
-  visibleIds: Set<number> | null;
-  onToggle: (id: number) => void;
-  onSelect: (id: number) => void;
+  expandedIds: Set<import("../../../data").CoaNodeId>;
+  selectedId: import("../../../data").CoaNodeId | null;
+  selectableIds: Set<import("../../../data").CoaNodeId>;
+  visibleIds: Set<import("../../../data").CoaNodeId> | null;
+  onToggle: (id: import("../../../data").CoaNodeId) => void;
+  onSelect: (id: import("../../../data").CoaNodeId) => void;
 }
 
 const ParentGroupTreeNode = memo(function ParentGroupTreeNodeComponent({
@@ -190,11 +190,11 @@ const ParentGroupTreeNode = memo(function ParentGroupTreeNodeComponent({
 
 export interface CoaParentGroupTreeListProps {
   records: ChartOfAccount[];
-  selectedId: number | null;
-  selectableIds: Set<number>;
+  selectedId: import("../../../data").CoaNodeId | null;
+  selectableIds: Set<import("../../../data").CoaNodeId>;
   search: string;
   emptyMessage?: string;
-  onSelect: (id: number) => void;
+  onSelect: (id: import("../../../data").CoaNodeId) => void;
 }
 
 export function CoaParentGroupTreeList({
@@ -205,15 +205,17 @@ export function CoaParentGroupTreeList({
   emptyMessage = "No ledger groups found.",
   onSelect,
 }: CoaParentGroupTreeListProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(
+  const [expandedIds, setExpandedIds] = useState<Set<import("../../../data").CoaNodeId>>(
     () => new Set(records.filter((r) => r.nodeLevel === "primary_head").map((r) => r.id)),
   );
 
   const roots = useMemo(
-    () =>
-      records
+    () => {
+      const order: Record<string, number> = { AST: 1, LIA: 2, INC: 3, EXP: 4 };
+      return records
         .filter((r) => r.nodeLevel === "primary_head")
-        .sort((a, b) => a.accountCode.localeCompare(b.accountCode)),
+        .sort((a, b) => (order[a.accountCode] ?? 99) - (order[b.accountCode] ?? 99));
+    },
     [records],
   );
 
@@ -222,7 +224,7 @@ export function CoaParentGroupTreeList({
     [records, search],
   );
 
-  const toggle = useCallback((id: number) => {
+  const toggle = useCallback((id: import("../../../data").CoaNodeId) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);

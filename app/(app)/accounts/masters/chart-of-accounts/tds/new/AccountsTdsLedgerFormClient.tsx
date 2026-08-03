@@ -96,9 +96,12 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 }
 
 export interface AccountsTdsLedgerFormProps {
-  parentGroupId: number;
+  parentGroupId: import("../../../../data").CoaNodeId;
   onClose: () => void;
-  onSaved?: (ledgerId: number, parentGroupId: number | null) => void;
+  onSaved?: (
+    ledgerId: import("../../../../data").CoaNodeId,
+    parentGroupId: import("../../../../data").CoaNodeId | null,
+  ) => void;
 }
 
 export default function AccountsTdsLedgerFormClient({

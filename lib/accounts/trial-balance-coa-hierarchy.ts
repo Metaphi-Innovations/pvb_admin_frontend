@@ -18,7 +18,7 @@ export interface TrialBalanceLedgerCoaPlacement {
 }
 
 export function resolveTrialBalanceLedgerCoaPlacement(
-  ledgerId: number,
+  ledgerId: import("@/app/(app)/accounts/data").CoaNodeId,
   records?: ChartOfAccount[],
 ): TrialBalanceLedgerCoaPlacement | null {
   const list = records ?? loadChartOfAccounts();
@@ -42,10 +42,11 @@ export function resolveTrialBalanceLedgerCoaPlacement(
 
   if (!subGroup) {
     let current: ChartOfAccount | undefined = ledger;
-    const visited = new Set<number>();
+    const visited = new Set<import("@/app/(app)/accounts/data").CoaNodeId>();
     while (current && !visited.has(current.id)) {
       visited.add(current.id);
-      const parentId: number | null | undefined = current.parentAccountId;
+      const parentId: import("@/app/(app)/accounts/data").CoaNodeId | null =
+        current.parentAccountId;
       if (parentId == null) break;
       const parent: ChartOfAccount | undefined = list.find((r) => r.id === parentId);
       if (!parent) break;

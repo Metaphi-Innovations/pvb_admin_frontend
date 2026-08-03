@@ -8,20 +8,20 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { AlertTriangle, AlertCircle } from "lucide-react";
-import { type SalesOrder, cancelSalesOrder } from "../orders-data";
+import { type SalesOrder } from "../orders-data";
 
 interface CancelOrderDialogProps {
   order: SalesOrder | null;
   open: boolean;
   onClose: () => void;
-  onSuccess: (order: SalesOrder) => void;
+  onConfirm: (reason: string) => void;
 }
 
 export default function CancelOrderDialog({
   order,
   open,
   onClose,
-  onSuccess,
+  onConfirm,
 }: CancelOrderDialogProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -34,12 +34,11 @@ export default function CancelOrderDialog({
 
   const handleConfirm = () => {
     if (!order) return;
-    const result = cancelSalesOrder(order.id, reason);
-    if ("error" in result) {
-      setError(result.error);
+    if (!reason.trim()) {
+      setError("Cancellation reason is required");
       return;
     }
-    onSuccess(result);
+    onConfirm(reason);
     setReason("");
     setError("");
     onClose();

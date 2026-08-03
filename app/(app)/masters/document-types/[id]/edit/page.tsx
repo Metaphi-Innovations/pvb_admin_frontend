@@ -7,13 +7,11 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useDocumentType, useUpdateDocumentType } from "@/hooks/masters";
 import {
-  loadDocumentTypes,
-  saveDocumentTypes,
-  generateNextDocumentTypeCode,
-  todayStr,
-  type DocumentTypeMaster,
-} from "../../document-type-data";
+  getErrorMessage,
+  getMasterDetailErrorMessage,
+} from "@/lib/masters/master-query-errors";
 import {
   DocumentTypeForm,
   type DocumentTypeFormValues,
@@ -27,16 +25,26 @@ export default function EditDocumentTypePage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const detailQuery = useDocumentType(id);
+  const updateMutation = useUpdateDocumentType();
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "Document type not found.",
+        "Failed to load document type.",
+      )
+    : null;
+  const saving = updateMutation.isPending;
+
   useEffect(() => {
-    const list = loadDocumentTypes();
-    const found = list.find((d) => d.id === id);
-    if (!found) return;
+    if (!detailQuery.data) return;
     setForm({
-      documentTypeCode: found.documentTypeCode || generateNextDocumentTypeCode(list),
-      title: found.title,
-      description: found.description || "",
+      documentTypeCode: "",
+      title: detailQuery.data.title,
+      description: detailQuery.data.description || "",
     });
-  }, [id]);
+  }, [detailQuery.data]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -46,7 +54,7 @@ export default function EditDocumentTypePage() {
     });
 
   const handleSave = () => {
-    if (!form) return;
+    if (!form || !id) return;
     const validation = validateDocumentTypeForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -55,29 +63,42 @@ export default function EditDocumentTypePage() {
       return;
     }
 
-    const list = loadDocumentTypes();
-    const updated = list.map((d) =>
-      d.id === id
-        ? {
-            ...d,
-            documentTypeCode: form.documentTypeCode,
-            title: form.title.trim(),
-            description: form.description.trim(),
-            updatedBy: "Admin",
-            updatedDate: todayStr(),
-          }
-        : d
+    updateMutation.mutate(
+      {
+        id,
+        payload: {
+          title: form.title,
+          description: form.description,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Document Type updated successfully", type: "success" });
+          setTimeout(() => router.push("/masters/document-types"), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update document type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
     );
-
-    saveDocumentTypes(updated);
-    setToast({ msg: "Document Type updated successfully", type: "success" });
-    setTimeout(() => router.push("/masters/document-types"), 900);
   };
 
-  if (!form) {
+  if (loading) {
     return (
       <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Document Type not found.</p>
+        <p className="text-sm text-muted-foreground">Loading document type...</p>
+      </div>
+    );
+  }
+
+  if (!form || loadError) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">{loadError || "Document Type not found."}</p>
         <Link href="/masters/document-types" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
           Back to listing
         </Link>
@@ -92,14 +113,20 @@ export default function EditDocumentTypePage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+            disabled={saving}
+          >
             Discard
           </Button>
           <Button
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={saving}
           >
-            <Save className="w-4 h-4" /> Update Document Type
+            <Save className="w-4 h-4" /> {saving ? "Updating..." : "Update Document Type"}
           </Button>
         </div>
       }

@@ -46,6 +46,7 @@ import {
 	nextSampleOrderProformaNo,
 	nextServiceInvoiceNo,
 } from "@/lib/accounts/invoice-type";
+import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
 import {
   mergeSalesInvoiceSeed,
   buildSalesInvoiceSeed,
@@ -1020,7 +1021,9 @@ export function findExistingSalesOrderInvoiceForDispatch(
 	});
 }
 
-export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
+/** True when a non-cancelled Sales Order invoice already exists for this dispatch. */
+
+export async function createInvoice(input: InvoiceFormInput): Promise<InvoiceRecord> {
 	for (const line of input.lineItems) {
 		if (!line.productId) continue;
 		if (input.sourceType === "service") continue;
@@ -1079,14 +1082,26 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	const invoiceType = isSampleOrder
 		? "sample_order"
 		: (input.invoiceType ?? "sales");
-	const invoiceNo =
-		input.sourceType === "service"
-			? nextServiceInvoiceNo(all, input.invoiceDate)
-			: input.sourceType === "sales_order"
-				? nextPvbSalesOrderInvoiceNo(all, input.invoiceDate)
-				: isSampleOrder
-					? nextSampleOrderProformaNo(all, input.invoiceDate)
-					: nextInvoiceNo(all, invoiceType === "sample_order" ? "sales" : invoiceType, input.invoiceDate);
+
+	const stateForNumber =
+		input.state?.trim() || input.placeOfSupply?.trim() || "Maharashtra";
+	let invoiceNo: string;
+	try {
+		const allocated = await SalesInvoiceNumberService.allocateNumber({
+			state: stateForNumber,
+		});
+		invoiceNo =
+			allocated.invoice_no || nextInvoiceNo(all, invoiceType, input.invoiceDate);
+	} catch {
+		invoiceNo =
+			input.sourceType === "service"
+				? nextServiceInvoiceNo(all, input.invoiceDate)
+				: input.sourceType === "sales_order"
+					? nextPvbSalesOrderInvoiceNo(all, input.invoiceDate)
+					: isSampleOrder
+						? nextSampleOrderProformaNo(all, input.invoiceDate)
+						: nextInvoiceNo(all, invoiceType === "sample_order" ? "sales" : invoiceType, input.invoiceDate);
+	}
 	const zeroedLines = isSampleOrder
 		? input.lineItems.map((l) => {
 				const sku = resolveSku(l.productName, l.productCode);
@@ -1110,6 +1125,7 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 				};
 			})
 		: input.lineItems;
+
 	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
 		? input.nearExpirySchemeSettlements.map((entry) => ({
 				...entry,

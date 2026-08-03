@@ -1,29 +1,20 @@
 import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
-import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
-import type { PurchaseReturn } from "./purchase-return-data";
-import { loadPurchaseReturns } from "./purchase-return-data";
-import { getPOById } from "../purchase-orders/po-data";
+import type { PurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
 
 const PACKING_QUEUE_KEY = "ds_pret_packing_queue_v1";
 
-function loadPackingQueueIds(): number[] {
-  if (typeof window === "undefined") return [];
+function clearPackingQueueLocalStorage(): void {
+  if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem(PACKING_QUEUE_KEY);
-    return raw ? (JSON.parse(raw) as number[]) : [];
+    localStorage.removeItem(PACKING_QUEUE_KEY);
   } catch {
-    return [];
+    // ignore quota / private-mode errors
   }
 }
 
-function savePackingQueueIds(ids: number[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(PACKING_QUEUE_KEY, JSON.stringify(ids));
-}
-
 export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOrderRecord {
-  const po = getPOById(record.poId);
-  const warehouse = po?.warehouseName ?? "Central Warehouse";
+  clearPackingQueueLocalStorage();
+  const warehouse = record.warehouseName || "Central Warehouse";
   const activeItems = record.items.filter((it) => it.selected && it.returnQty > 0);
 
   return {
@@ -45,6 +36,14 @@ export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOr
       orderedQty: it.returnQty,
       packedQty: 0,
       pendingQty: it.returnQty,
+      ordered_base_qty: it.returnQty,
+      ordered_cases: 0,
+      pending_base_qty: it.returnQty,
+      pending_cases: 0,
+      orderBaseQty: it.returnQty,
+      packedBaseQty: 0,
+      pendingBaseQty: it.returnQty,
+      packSize: 1,
       batchNumber: it.batchNumber,
       grnNo: it.grnNo,
       mfgDate: it.mfgDate,
@@ -63,37 +62,25 @@ export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOr
   };
 }
 
-export function removePurchaseReturnFromPackingQueue(returnId: number): void {
-  const ids = loadPackingQueueIds().filter((id) => id !== returnId);
-  savePackingQueueIds(ids);
+export function removePurchaseReturnFromPackingQueue(_returnId: number): void {
+  clearPackingQueueLocalStorage();
 }
 
-export function getPurchaseReturnByReturnNumber(returnNumber: string): PurchaseReturn | undefined {
-  return loadPurchaseReturns().find((r) => r.returnNumber === returnNumber);
+export function getPurchaseReturnByReturnNumber(_returnNumber: string): PurchaseReturn | undefined {
+  clearPackingQueueLocalStorage();
+  return undefined;
 }
 
 export function getPurchaseReturnsForPacking(): SalesOrderRecord[] {
-  const ids = new Set(loadPackingQueueIds());
-  const packedIds = new Set(
-    getPackingRecords()
-      .filter((p) => p.id.startsWith("pret-pkg-") && p.status === "Packed")
-      .map((p) => Number(p.id.replace("pret-pkg-", ""))),
-  );
-  return loadPurchaseReturns()
-    .filter(
-      (r) =>
-        (r.status === "issued_for_packing" || ids.has(r.id)) && !packedIds.has(r.id),
-    )
-    .map(mapPurchaseReturnToPackingOrder);
+  clearPackingQueueLocalStorage();
+  return [];
 }
 
-export function addPurchaseReturnToPackingQueue(record: PurchaseReturn): void {
-  const ids = loadPackingQueueIds();
-  if (!ids.includes(record.id)) {
-    savePackingQueueIds([...ids, record.id]);
-  }
+export function addPurchaseReturnToPackingQueue(_record: PurchaseReturn): void {
+  clearPackingQueueLocalStorage();
 }
 
-export function isPurchaseReturnInPackingQueue(returnId: number): boolean {
-  return loadPackingQueueIds().includes(returnId);
+export function isPurchaseReturnInPackingQueue(_returnId: number): boolean {
+  clearPackingQueueLocalStorage();
+  return false;
 }

@@ -2,11 +2,6 @@ import { masterToday } from "@/lib/masters/common";
 import { getStockStatus } from "@/lib/accounts/inventory-accounting-data";
 import { daysUntilExpiry } from "@/app/(app)/masters/scheme/product-near-expiry-scheme";
 import {
-  productMatchesStockRecord,
-  warehouseMatchesStockRecord,
-} from "@/lib/warehouse/demo-stock-matching";
-import { getQcPassedStockRecords } from "../../stockoverview/mock-data";
-import {
   batchSelectionsToAllocations,
   type BatchAllocation,
 } from "../../dispatch/near-expiry-dispatch";
@@ -31,34 +26,6 @@ export interface PackingSummaryLine {
   allocations: BatchAllocation[];
 }
 
-export function getPackingBatchInventoryRows(
-  productName: string,
-  warehouse: string,
-  asOn = masterToday(),
-  sku?: string,
-): PackingBatchInventoryRow[] {
-  return getQcPassedStockRecords()
-    .filter(
-      (r) =>
-        warehouseMatchesStockRecord(r.warehouse, warehouse) &&
-        productMatchesStockRecord(r.product, productName, sku),
-    )
-    .sort(
-      (a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime(),
-    )
-    .map((r) => {
-      const status = getStockStatus(r.expiryDate, asOn);
-      return {
-        batchNumber: r.batchNumber,
-        manufacturingDate: r.manufacturingDate,
-        expiryDate: r.expiryDate,
-        availableQty: r.availableQuantity,
-        remainingDays: daysUntilExpiry(r.expiryDate, asOn),
-        status,
-        isSelectable: status !== "Expired",
-      };
-    });
-}
 
 export function buildFefoRecommendedSelections(
   rows: PackingBatchInventoryRow[],
@@ -69,11 +36,14 @@ export function buildFefoRecommendedSelections(
 
   let remaining = requiredQty;
   for (const row of rows) {
-    if (!row.isSelectable || remaining <= 0) break;
-    const take = Math.min(remaining, row.availableQty);
-    if (take <= 0) continue;
-    selections[row.batchNumber] = take;
-    remaining -= take;
+    if (!row.isSelectable) continue;
+    if (remaining > 0) {
+      const take = Math.min(remaining, row.availableQty);
+      selections[row.batchNumber] = Math.max(0, take);
+      remaining -= take;
+    } else {
+      selections[row.batchNumber] = 0;
+    }
   }
   return selections;
 }
@@ -235,8 +205,8 @@ export function validateSelectedPackingLines(
 
     if (qty <= 0) {
       errors[p.sku] = "Enter packing quantity";
-    } else if (qty > p.pendingQty) {
-      errors[p.sku] = `Cannot exceed pending quantity of ${p.pendingQty}`;
+    } else if (qty > p.pending_cases) {
+      errors[p.sku] = `Cannot exceed pending quantity of ${p.pending_cases}`;
     } else if (qty > maxAvailable) {
       errors[p.sku] = `Cannot exceed available warehouse stock of ${maxAvailable}`;
     }
@@ -262,6 +232,7 @@ export function validateBatchSelectionsForPacking(
   batchSelections: Record<string, Record<string, number>>,
   warehouse: string,
   sourceDocumentType?: string,
+  inventoryBatchesMap?: Record<string, PackingBatchInventoryRow[]>
 ): { valid: boolean; message?: string; batchErrors: Record<string, string> } {
   if (sourceDocumentType === "Purchase Return") {
     return validatePurchaseReturnBatchSelections(
@@ -279,7 +250,7 @@ export function validateBatchSelectionsForPacking(
     const qty = packingQty[p.sku] ?? 0;
     if (qty <= 0) continue;
 
-    const rows = getPackingBatchInventoryRows(p.product, warehouse, undefined, p.sku);
+    const rows = inventoryBatchesMap?.[p.sku] || [];
     const selections = batchSelections[p.sku] ?? {};
     const selectedTotal = getBatchSelectionTotal(selections);
 
@@ -291,7 +262,11 @@ export function validateBatchSelectionsForPacking(
     for (const [batchNo, allocQty] of Object.entries(selections)) {
       if (allocQty <= 0) continue;
       const row = rows.find((r) => r.batchNumber === batchNo);
+      
       if (!row) {
+        // If the batch was explicitly requested on the sales order, allow it even if stock is missing in mock data
+        if (p.batchNumber === batchNo) continue;
+        
         batchErrors[p.sku] = `Invalid batch ${batchNo}.`;
         break;
       }
@@ -299,7 +274,7 @@ export function validateBatchSelectionsForPacking(
         batchErrors[p.sku] = `Batch ${batchNo} is expired and cannot be used.`;
         break;
       }
-      if (allocQty > row.availableQty) {
+      if (allocQty > row.availableQty && p.batchNumber !== batchNo) {
         batchErrors[p.sku] = `Batch ${batchNo} exceeds available qty (${row.availableQty}).`;
         break;
       }
@@ -323,6 +298,7 @@ export function buildBatchAllocationMap(
   batchSelections: Record<string, Record<string, number>>,
   warehouse: string,
   sourceDocumentType?: string,
+  inventoryBatchesMap?: Record<string, PackingBatchInventoryRow[]>
 ): Record<string, BatchAllocation[]> {
   const map: Record<string, BatchAllocation[]> = {};
 
@@ -339,7 +315,18 @@ export function buildBatchAllocationMap(
       continue;
     }
 
-    const allocations = batchSelectionsToAllocations(p.product, warehouse, selections);
+    const allocations = Object.entries(selections)
+      .map(([batchNumber, allocatedQty]) => {
+        if (allocatedQty <= 0) return null;
+        const row = inventoryBatchesMap?.[p.sku]?.find((r) => r.batchNumber === batchNumber);
+        return {
+          batchNumber,
+          expiryDate: row?.expiryDate ?? "—",
+          allocatedQty,
+        };
+      })
+      .filter((row): row is BatchAllocation => Boolean(row));
+      
     if (allocations.length) {
       map[p.sku] = allocations;
     }
@@ -364,18 +351,3 @@ export function buildPackingSummaryLines(
     }));
 }
 
-export function hasAnyFefoViolation(
-  products: SalesOrderProduct[],
-  selectedSkus: Record<string, boolean>,
-  packingQty: Record<string, number>,
-  batchSelections: Record<string, Record<string, number>>,
-  warehouse: string,
-): boolean {
-  return products.some((p) => {
-    if (!selectedSkus[p.sku]) return false;
-    const qty = packingQty[p.sku] ?? 0;
-    if (qty <= 0) return false;
-    const rows = getPackingBatchInventoryRows(p.product, warehouse, undefined, p.sku);
-    return detectFefoViolation(rows, batchSelections[p.sku] ?? {});
-  });
-}

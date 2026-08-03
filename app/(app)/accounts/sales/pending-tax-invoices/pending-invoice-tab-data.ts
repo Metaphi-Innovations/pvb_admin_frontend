@@ -5,8 +5,9 @@
  */
 
 import { loadInvoices } from "@/app/(app)/accounts/invoices/invoices-data";
-import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+
+const getDispatchRecords = (): DispatchRecord[] => [];
 import {
   resolveWarehouseOrderType,
   type WarehouseOrderDocType,
@@ -28,7 +29,7 @@ import { loadTransfers } from "@/app/(app)/sales/stock-transfer/stock-transfer-d
 import { loadOrders as loadSampleOrders, type OrderStatus as SampleOrderStatus } from "@/app/(app)/sales/sample-order/orders-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 
-export type PendingInvoiceTabId = "sales_order" | "stock_transfer" | "sample_order";
+export type PendingInvoiceTabId = "sales_order" | "stock_transfer"/* | "sample_order"*/;
 
 export const PENDING_INVOICE_TAB_META: Record<
   PendingInvoiceTabId,
@@ -54,6 +55,7 @@ export const PENDING_INVOICE_TAB_META: Record<
     exportFileName: "stock-transfer-pending-invoices.xlsx",
     emptyMessage: "No stock transfer dispatches pending invoice generation.",
   },
+  /*
   sample_order: {
     label: "Sample Order Invoices",
     sourceNoLabel: "Sample Order No.",
@@ -61,6 +63,7 @@ export const PENDING_INVOICE_TAB_META: Record<
     exportFileName: "sample-order-pending-invoices.xlsx",
     emptyMessage: "No sample order dispatches pending invoice generation.",
   },
+  */
 };
 
 /** Common display row — retains source identity and correct action routes. */
@@ -126,7 +129,7 @@ const INVOICE_READY_STATUSES = new Set<DispatchRecord["deliveryStatus"]>([
 const TAB_TO_WAREHOUSE_TYPE: Record<PendingInvoiceTabId, WarehouseOrderDocType> = {
   sales_order: "sales_order",
   stock_transfer: "stock_transfer",
-  sample_order: "sample_order",
+  // sample_order: "sample_order",
 };
 
 function isDispatchInvoiced(dispatchNo: string): boolean {
@@ -139,7 +142,7 @@ function resolveSourceTypeFromDispatch(d: Pick<DispatchRecord, "sourceDocumentTy
   const type = resolveWarehouseOrderType(d);
   if (type === "sales_order") return "sales_order";
   if (type === "stock_transfer") return "stock_transfer";
-  if (type === "sample_order") return "sample_order";
+  // if (type === "sample_order") return "sample_order";
   return null;
 }
 
@@ -150,13 +153,13 @@ function resolveSourceTypeFromSeedRow(row: PendingTaxInvoiceRow): PendingInvoice
     if (fromDispatch) return fromDispatch;
   }
   if (row.invoiceType === "stock_transfer") return "stock_transfer";
-  if (
-    row.dispatchId === PENDING_SEED_DISPATCH_IDS.sm003 ||
-    row.soNumber.startsWith("SM-") ||
-    row.soNumber.startsWith("SMP-")
-  ) {
-    return "sample_order";
-  }
+  // if (
+  //   row.dispatchId === PENDING_SEED_DISPATCH_IDS.sm003 ||
+  //   row.soNumber.startsWith("SM-") ||
+  //   row.soNumber.startsWith("SMP-")
+  // ) {
+  //   return "sample_order";
+  // }
   return "sales_order";
 }
 
@@ -176,8 +179,9 @@ function findSourceRecordId(
     );
     return transfer?.id ?? null;
   }
-  const sample = loadSampleOrders().find((o) => o.soNumber === sourceNo);
-  return sample?.id ?? null;
+  // const sample = loadSampleOrders().find((o) => o.soNumber === sourceNo);
+  // return sample?.id ?? null;
+  return null;
 }
 
 function buildGenerateHref(row: {
@@ -196,10 +200,10 @@ function buildGenerateHref(row: {
   if (row.sourceType === "stock_transfer") {
     params.set("sourceType", "stock_transfer");
   }
-  if (row.sourceType === "sample_order") {
-    params.set("sourceType", "sample_order");
-    if (row.sourceRecordId != null) params.set("sampleOrderId", String(row.sourceRecordId));
-  }
+  // if (row.sourceType === "sample_order") {
+  //   params.set("sourceType", "sample_order");
+  //   if (row.sourceRecordId != null) params.set("sampleOrderId", String(row.sourceRecordId));
+  // }
   return `/accounts/transactions/invoices/new?${params.toString()}`;
 }
 
@@ -210,7 +214,8 @@ function buildDetailHref(
   if (sourceRecordId == null) return null;
   if (sourceType === "sales_order") return `/sales/orders/${sourceRecordId}`;
   if (sourceType === "stock_transfer") return `/sales/stock-transfer/${sourceRecordId}`;
-  return `/sales/sample-order/${sourceRecordId}`;
+  // return `/sales/sample-order/${sourceRecordId}`;
+  return null;
 }
 
 interface SalesOrderMeta {
@@ -434,6 +439,7 @@ function mapSeedToListRow(row: PendingTaxInvoiceRow, sourceType: PendingInvoiceT
       : null;
   if (salesMeta?.inactive) return null;
 
+  /*
   const sampleMeta =
     sourceType === "sample_order"
       ? resolveSampleOrderMeta(
@@ -445,6 +451,8 @@ function mapSeedToListRow(row: PendingTaxInvoiceRow, sourceType: PendingInvoiceT
         )
       : null;
   if (sampleMeta?.inactive) return null;
+  */
+  const sampleMeta: any = null;
 
   const stockMeta =
     sourceType === "stock_transfer" && seedDispatch
@@ -466,9 +474,9 @@ function mapSeedToListRow(row: PendingTaxInvoiceRow, sourceType: PendingInvoiceT
     partyName: salesMeta?.customerName ?? sampleMeta?.customerName ?? row.customerName,
     dispatchDate: row.dispatchDate,
     branch: row.branch,
-    taxableValue: sourceType === "sample_order" ? 0 : row.taxableValue,
-    gstAmount: sourceType === "sample_order" ? 0 : row.gstAmount,
-    invoiceValue: sourceType === "sample_order" ? 0 : row.invoiceValue,
+    taxableValue: (sourceType as string) === "sample_order" ? 0 : row.taxableValue,
+    gstAmount: (sourceType as string) === "sample_order" ? 0 : row.gstAmount,
+    invoiceValue: (sourceType as string) === "sample_order" ? 0 : row.invoiceValue,
     interstate: row.interstate,
     status: row.status,
     generatedBy: null,
@@ -483,7 +491,7 @@ function mapSeedToListRow(row: PendingTaxInvoiceRow, sourceType: PendingInvoiceT
     fromWarehouse: stockMeta?.fromWarehouse ?? "",
     toWarehouse: stockMeta?.toWarehouse ?? "",
     totalAmount:
-      sourceType === "sample_order"
+      (sourceType as string) === "sample_order"
         ? 0
         : sourceType === "sales_order"
           ? (salesMeta?.totalAmount ?? row.invoiceValue)
@@ -528,6 +536,7 @@ function mapWarehouseToListRow(d: DispatchRecord, sourceType: PendingInvoiceTabI
       : null;
   if (salesMeta?.inactive) return null;
 
+  /*
   const sampleMeta =
     sourceType === "sample_order"
       ? resolveSampleOrderMeta(
@@ -539,6 +548,8 @@ function mapWarehouseToListRow(d: DispatchRecord, sourceType: PendingInvoiceTabI
         )
       : null;
   if (sampleMeta?.inactive) return null;
+  */
+  const sampleMeta: any = null;
 
   const stockMeta =
     sourceType === "stock_transfer"
@@ -561,9 +572,9 @@ function mapWarehouseToListRow(d: DispatchRecord, sourceType: PendingInvoiceTabI
     partyName: salesMeta?.customerName ?? sampleMeta?.customerName ?? partyName,
     dispatchDate: d.dispatchDate,
     branch: d.warehouse || d.source_warehouse_name || "—",
-    taxableValue: sourceType === "sample_order" ? 0 : totals.taxableValue,
-    gstAmount: sourceType === "sample_order" ? 0 : totals.gstAmount,
-    invoiceValue: sourceType === "sample_order" ? 0 : totals.invoiceValue,
+    taxableValue: (sourceType as string) === "sample_order" ? 0 : totals.taxableValue,
+    gstAmount: (sourceType as string) === "sample_order" ? 0 : totals.gstAmount,
+    invoiceValue: (sourceType as string) === "sample_order" ? 0 : totals.invoiceValue,
     interstate: false,
     status: d.deliveryStatus,
     generatedBy: null,
@@ -579,7 +590,7 @@ function mapWarehouseToListRow(d: DispatchRecord, sourceType: PendingInvoiceTabI
     fromWarehouse: stockMeta?.fromWarehouse ?? "",
     toWarehouse: stockMeta?.toWarehouse ?? "",
     totalAmount:
-      sourceType === "sample_order"
+      (sourceType as string) === "sample_order"
         ? 0
         : sourceType === "sales_order"
           ? (salesMeta?.totalAmount ?? totals.invoiceValue)
@@ -624,14 +635,16 @@ export function listPendingStockTransferInvoices(): PendingInvoiceListRow[] {
   return listPendingInvoicesForTab("stock_transfer");
 }
 
+/*
 export function listPendingSampleOrderInvoices(): PendingInvoiceListRow[] {
-  return listPendingInvoicesForTab("sample_order");
+  return listPendingInvoicesForTab("sample_order" as any);
 }
+*/
 
 export function listPendingInvoicesByTab(tab: PendingInvoiceTabId): PendingInvoiceListRow[] {
   if (tab === "sales_order") return listPendingSalesOrderInvoices();
   if (tab === "stock_transfer") return listPendingStockTransferInvoices();
-  return listPendingSampleOrderInvoices();
+  return []; // listPendingSampleOrderInvoices();
 }
 
 export function getPendingInvoiceBranchOptions(tab: PendingInvoiceTabId): string[] {

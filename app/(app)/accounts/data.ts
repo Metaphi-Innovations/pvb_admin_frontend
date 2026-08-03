@@ -21,6 +21,9 @@ export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity
 
 export type CoaNodeLevel = "primary_head" | "account_group" | "ledger";
 
+/** Internal COA node id used across the legacy frontend state graph. */
+export type CoaNodeId = number;
+
 /** Stable specialization for group-to-form routing and TDS/GST inheritance. */
 export type CoaSpecializedGroupType =
   | "tds_payable"
@@ -52,13 +55,16 @@ export type ErpUsageModule =
 export type CoaLedgerKind = "SYSTEM" | "MASTER" | "GENERIC";
 
 export interface ChartOfAccount {
-  id: number;
+  id: CoaNodeId;
+  /** Raw backend UUID/string id for Accounts API records. */
+  apiNodeId?: string;
   accountCode: string;
   accountName: string;
   alias: string;
   accountType: AccountType;
   nodeLevel: CoaNodeLevel;
-  parentAccountId: number | null;
+  parentAccountId: CoaNodeId | null;
+  apiParentNodeId?: string | null;
   parentAccount: string;
   description: string;
   status: "active" | "inactive";
@@ -91,12 +97,13 @@ export interface ChartOfAccount {
   ledgerKind?: CoaLedgerKind;
   /** When ledgerKind is MASTER: customer | vendor | bank | product | warehouse | employee | gst | tds | … */
   masterType?: string | null;
-  /** When ledgerKind is MASTER: foreign key into the source master */
-  masterId?: number | null;
+  /** When ledgerKind is MASTER: foreign key into the source master (numeric legacy or UUID) */
+  masterId?: number | string | null;
   /** ERP auto-created ledger — edit via source master only */
   isSystemGenerated?: boolean;
   erpSourceModule?: string;
-  erpSourceId?: number;
+  /** Legacy numeric id or backend UUID of the linked master entity */
+  erpSourceId?: number | string;
   /** Inherited specialization for TDS/GST/party groups — sub-groups inherit from ancestors. */
   specializedGroupType?: CoaSpecializedGroupType;
   createdBy: string;
@@ -254,7 +261,7 @@ function isRemovedSeedLedger(record: ChartOfAccount): boolean {
   if (record.nodeLevel !== "ledger") return false;
   // Master-linked / ERP-sourced ledgers are never obsolete seeds — preserve by ownership, not name.
   if (hasStableMasterOrErpLink(record)) return false;
-  if (REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
+  if (typeof record.id === "number" && REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
   return REMOVED_SEED_LEDGER_NAMES.has(record.accountName.trim().toLowerCase());
 }
 
@@ -348,7 +355,7 @@ export function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccou
   );
 
   const userGroups: ChartOfAccount[] = [];
-  const groupById = new Map<number, ChartOfAccount>();
+  const groupById = new Map<CoaNodeId, ChartOfAccount>();
   let remainingGroups = [...rawUserGroups];
 
   function resolveStructuralParent(r: ChartOfAccount): ChartOfAccount | undefined {
@@ -395,7 +402,7 @@ export function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccou
   }
 
   const userLedgers: ChartOfAccount[] = [];
-  const ledgerById = new Map<number, ChartOfAccount>();
+  const ledgerById = new Map<CoaNodeId, ChartOfAccount>();
   let remaining = [...rawUserLedgers];
 
   function resolveParent(r: ChartOfAccount): ChartOfAccount | undefined {
@@ -590,7 +597,7 @@ export function getCoaLedgers(): ChartOfAccount[] {
 /** Posting ledgers: active leaf ledgers only (no groups or parent grouping ledgers). */
 export function getPostableCoaAccounts(records?: ChartOfAccount[]): ChartOfAccount[] {
   const list = records ?? loadChartOfAccounts();
-  const groupingLedgerIds = new Set<number>();
+  const groupingLedgerIds = new Set<CoaNodeId>();
   for (const r of list) {
     if (r.nodeLevel === "ledger" && r.parentAccountId != null) {
       groupingLedgerIds.add(r.parentAccountId);
@@ -611,8 +618,11 @@ export const saveLedgers = (list: Ledger[]) => save(LEDGER_KEY, list);
 export const loadAccountTxns = () => getOrSeed(TXN_KEY, TXN_SEED);
 export const saveAccountTxns = (list: AccountTxn[]) => save(TXN_KEY, list);
 
-export function nextId<T extends { id: number }>(list: T[]) {
-  return list.length ? Math.max(...list.map((x) => x.id)) + 1 : 1;
+export function nextId<T extends { id: CoaNodeId }>(list: T[]) {
+  const nums = list
+    .map((item) => item.id)
+    .filter((id): id is number => typeof id === "number" && Number.isFinite(id));
+  return nums.length ? Math.max(...nums) + 1 : 1;
 }
 
 export function postEntryAfterApproval(input: {

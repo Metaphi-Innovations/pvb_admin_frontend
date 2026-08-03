@@ -1,5 +1,84 @@
-// Unit Master - data types, seed data & localStorage helpers
+// Unit Master - API types and legacy localStorage helpers
 
+export interface UnitRecord {
+  id: number;
+  unitUuid?: string;
+  unitName: string;
+  shortName: string;
+  uomId: string | null;
+  parentUomName: string;
+  conversionFactor: string;
+  status: "active" | "inactive";
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface UnitForm {
+  unitName: string;
+  shortName: string;
+  uomId: string;
+  conversionFactor: string;
+}
+
+export const DEFAULT_UNIT_FORM: UnitForm = {
+  unitName: "",
+  shortName: "",
+  uomId: "",
+  conversionFactor: "1",
+};
+
+export function unitToForm(record: UnitRecord): UnitForm {
+  return {
+    unitName: record.unitName,
+    shortName: record.shortName,
+    uomId: record.uomId ?? "",
+    conversionFactor: record.conversionFactor || "1",
+  };
+}
+
+export function validateUnitApiForm(form: UnitForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.unitName.trim()) errors.unitName = "Unit name is required.";
+  if (!form.shortName.trim()) errors.shortName = "Short name is required.";
+
+  const rate = form.conversionFactor.trim().replace(/,/g, "");
+  if (!rate) {
+    errors.conversionFactor = "Conversion factor is required.";
+  } else if (!/^\d+(\.\d{1,6})?$/.test(rate)) {
+    errors.conversionFactor =
+      "Enter a valid conversion factor (number, up to 6 decimal places).";
+  } else {
+    const num = Number(rate);
+    if (!Number.isFinite(num) || num <= 0) {
+      errors.conversionFactor = "Conversion factor must be greater than zero.";
+    } else if (num > 1_000_000_000) {
+      errors.conversionFactor = "Conversion factor is too large.";
+    }
+  }
+
+  if (form.uomId.trim() && !rate) {
+    errors.conversionFactor =
+      "Conversion factor is required when a parent UOM is selected.";
+  }
+
+  return errors;
+}
+
+/** Sanitize conversion factor input: digits and at most one decimal, max 6 fraction digits. */
+export function sanitizeConversionFactorInput(value: string): string {
+  let cleaned = value.replace(/[^\d.]/g, "");
+  const dot = cleaned.indexOf(".");
+  if (dot !== -1) {
+    const whole = cleaned.slice(0, dot);
+    const fraction = cleaned.slice(dot + 1).replace(/\./g, "").slice(0, 6);
+    cleaned = `${whole}.${fraction}`;
+  }
+  return cleaned;
+}
+
+/** @deprecated legacy localStorage type */
 export interface UOMMaster {
   id: number;
   uomId: string;           // Auto Generated, e.g. "UOM-0001"

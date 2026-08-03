@@ -46,8 +46,9 @@ import { AccountsTablePagination } from "@/components/accounts/AccountsTableList
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 
-function fyStartIso(fyLabel: string): string {
-  const match = fyLabel.match(/(\d{4})/);
+function fyStartIso(fy: { startDate?: string; id?: string; label?: string; code?: string }): string {
+  if (fy.startDate) return String(fy.startDate).slice(0, 10);
+  const match = String(fy.code || fy.label || fy.id || "").match(/(\d{4})/);
   if (!match) return new Date().toISOString().slice(0, 10);
   return `${match[1]}-04-01`;
 }
@@ -100,7 +101,7 @@ export default function StockOpeningPageClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const [date, setDate] = useState(() => fyStartIso(selectedFY.id));
+  const [date, setDate] = useState(() => fyStartIso(selectedFY));
   const [warehouse, setWarehouse] = useState(WAREHOUSE_OPTIONS[0]);
   const [itemSku, setItemSku] = useState(items[0]?.sku ?? "");
   const [qty, setQty] = useState(0);
@@ -110,8 +111,8 @@ export default function StockOpeningPageClient() {
   const [remarks, setRemarks] = useState("");
 
   useEffect(() => {
-    setDate(fyStartIso(selectedFY.id));
-  }, [selectedFY.id]);
+    setDate(fyStartIso(selectedFY));
+  }, [selectedFY]);
 
   const warehouseOptions = useMemo(
     () => WAREHOUSE_OPTIONS.map((w) => ({ value: w, label: w })),
@@ -134,7 +135,7 @@ export default function StockOpeningPageClient() {
   );
 
   const resetEntryFields = () => {
-    setDate(fyStartIso(selectedFY.id));
+    setDate(fyStartIso(selectedFY));
     setWarehouse(WAREHOUSE_OPTIONS[0]);
     setItemSku(items[0]?.sku ?? "");
     setQty(0);

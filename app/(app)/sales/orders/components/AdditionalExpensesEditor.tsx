@@ -43,7 +43,9 @@ export default function AdditionalExpensesEditor({
 
 	const [showWarning, setShowWarning] = React.useState(false);
 
-	const hasUnfilled = expenses.some((e) => !e.expenseName.trim() || e.amount <= 0);
+	const hasUnfilled = expenses.some(
+		(e) => !(e.expenseName ?? "").trim() || e.amount <= 0,
+	);
 
 	const handleAddExpense = () => {
 		if (hasUnfilled) {

@@ -38,6 +38,16 @@ export interface ProductAsset {
   previewUrl?: string;
 }
 
+export interface ApiProductAsset {
+  product_asset_id: string;
+  asset_type: "MEDIA" | "LINK";
+  file_name: string;
+  file_size: string;
+  file_url: string | null;
+  link_url: string | null;
+  status: string;
+}
+
 export type ProductMediaItem = ProductAsset;
 
 export interface ProductImage {
@@ -50,6 +60,7 @@ export interface ProductImage {
   mimeType?: string;
   uploaded?: boolean;
   createdAt?: string;
+  file?: File;
 }
 
 export interface ProductUrl {
@@ -68,11 +79,11 @@ export const PRODUCT_DOCUMENT_KINDS: {
   kind: ProductDocumentKind;
   label: string;
 }[] = [
-  { kind: "technical_datasheet", label: "Technical Datasheet" },
-  { kind: "product_brochure", label: "Product Brochure" },
-  { kind: "msds", label: "MSDS" },
-  { kind: "label_artwork", label: "Label Artwork" },
-];
+    { kind: "technical_datasheet", label: "Technical Datasheet" },
+    { kind: "product_brochure", label: "Product Brochure" },
+    { kind: "msds", label: "MSDS" },
+    { kind: "label_artwork", label: "Label Artwork" },
+  ];
 
 export interface ProductDocument {
   id: string;
@@ -233,6 +244,7 @@ export async function createProductImageFromFile(file: File): Promise<ProductIma
     mimeType: file.type,
     uploaded: true,
     createdAt: todayStr(),
+    file,
   };
 }
 
@@ -351,8 +363,91 @@ export function getProductUrls(product: Pick<Product, "productUrls" | "assets" |
     .filter((item): item is ProductUrl => item !== null);
 }
 
+function resolveBackendAssetUrl(path: string): string {
+  const raw = path.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
+    return raw;
+  }
+
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+  const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+
+  return `${origin}${normalizedPath}`;
+}
+
+/** Resolve `/uploads/...` paths to the backend host from `NEXT_PUBLIC_API_URL`. */
+export function resolveProductAssetUrl(path: string): string {
+  return resolveBackendAssetUrl(path);
+}
+
+/** Keep API payload paths relative (`/uploads/...`) even if UI holds absolute URLs. */
+export function toRelativeUploadPath(path: string): string {
+  const raw = path.trim();
+  if (!raw || raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+  if (raw.startsWith("/uploads/")) return raw;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.pathname.startsWith("/uploads/")) return parsed.pathname;
+  } catch {
+    /* ignore invalid URLs */
+  }
+  return raw;
+}
+
+export function mapApiMediaAssetToProductImage(asset: ApiProductAsset): ProductImage {
+  const rawUrl = asset.file_url ?? "";
+  return {
+    id: asset.product_asset_id ?? crypto.randomUUID(),
+    name: asset.file_name ?? "image",
+    url: rawUrl,
+    previewUrl: resolveBackendAssetUrl(rawUrl),
+    size: asset.file_size ?? undefined,
+  };
+}
+
 export function getImagePreviewUrl(image: ProductImage): string {
-  return image.previewUrl ?? image.url;
+  return resolveBackendAssetUrl(image.previewUrl ?? image.url);
+}
+
+export type ProductApiAssetPayload = {
+  asset_type: "MEDIA" | "LINK";
+  file_name?: string | null;
+  file_url?: string | null;
+  file_size?: string | null;
+  link_url?: string | null;
+  status?: string;
+};
+
+/** JSON assets for create/update: links + existing server media (not new file blobs). */
+export function buildProductApiAssets(
+  productImages: ProductImage[],
+  productUrls: ProductUrl[],
+): ProductApiAssetPayload[] {
+  const linkAssets: ProductApiAssetPayload[] = productUrls.map((item) => ({
+    asset_type: "LINK",
+    link_url: item.url,
+  }));
+
+  const existingMediaAssets: ProductApiAssetPayload[] = productImages
+    .filter((image) => !image.file && image.url.trim())
+    .map((image) => ({
+      asset_type: "MEDIA",
+      file_name: image.name,
+      file_url: toRelativeUploadPath(image.url),
+      file_size: image.size ?? null,
+      status: "Active",
+    }));
+
+  return [...linkAssets, ...existingMediaAssets];
+}
+
+/** New uploads only — sent as binary `product_image` parts in multipart/form-data. */
+export function collectNewProductImageFiles(productImages: ProductImage[]): File[] {
+  return productImages
+    .filter((image): image is ProductImage & { file: File } => image.file instanceof File)
+    .map((image) => image.file);
 }
 
 export interface Product {
@@ -364,17 +459,21 @@ export interface Product {
   productName: string;
   scientificName?: string;
   segment: string;
+  segmentId?: string;
   category: string;
-  subCategory: string;
+  categoryId?: string;
+  subCategory?: string;
   form: string;
+  formId?: string;
   cfu?: string;
+  cfuId?: string;
   authority?: string;
   /** User-entered SKU (separate from product code). */
   sku: string;
   hsnCode: string;
-  hsnId?: number;
+  hsnId?: number | string;
   gstRate: string;
-  gstId?: number;
+  gstId?: number | string;
   packSize?: number;
   baseUnit?: string;
   /** Measure of Unit (MoU) */
@@ -387,6 +486,8 @@ export interface Product {
   grossWeight?: number;
   /** Product-level MRP (not linked to Pricing Master). */
   mrp?: number;
+  /** Product-level cost price used by Pricing Master. */
+  costPrice?: number;
   status: ProductStatus;
   createdBy: string;
   createdDate: string;
@@ -420,6 +521,7 @@ export interface Product {
   boxWidth?: number;
   boxHeight?: number;
   cft?: number;
+  hsnuuid?: string;
   inventoryAccount?: string;
   salesAccount?: string;
   purchaseAccount?: string;
@@ -608,308 +710,308 @@ export const PRODUCT_STATUS_OPTIONS = [
 const STORAGE_KEY = "ds_products";
 
 const SEED_PRODUCTS: Product[] = [
-  {
-    id: 1,
-    productId: "PRD-0001",
-    supplier: "Agro Chem Distributors",
-    supplierCode: "CG-001",
-    productName: "Dharitri Hybrid Corn Gold",
-    scientificName: "Zea mays",
-    category: "Seeds",
-    subCategory: "",
-    segment: "Rakshak",
-    form: "Granules",
-    hsnCode: "1209",
-    gstRate: "0%",
-    sku: "SEED-CORN-001",
-    productCode: "SEED-000001",
-    packSize: 1,
-    mou: "KG",
-    unitPerCase: 25,
-    unitPerPackagingUnit: 25,
-    netWeightPerPackagingUnit: 25,
-    mrp: 1250,
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-01-10",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-12",
-    baseUnit: "KG",
-    packagingUnit: "Bag",
-    conversionQuantity: 25,
-    unitSize: 1,
-    netWeight: 25,
-    grossWeight: 25,
-    productImages: [
-      {
-        id: "prd-1-media-1",
-        name: "dharitri-hybrid-corn-gold.jpg",
-        url: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
-        previewUrl: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
-        size: "245 KB",
-        uploaded: true,
-        createdAt: "2026-06-03",
-      },
-      {
-        id: "prd-1-media-2",
-        name: "dharitri-pack-shot.jpg",
-        url: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
-        previewUrl: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
-        size: "198 KB",
-        uploaded: true,
-        createdAt: "2026-06-03",
-      },
-    ],
-    productUrls: [
-      {
-        id: "prd-1-link-1",
-        url: "https://example.com/products/dharitri-hybrid-corn-gold",
-        createdAt: "2026-06-03",
-      },
-    ],
-  },
-  {
-    id: 2,
-    productId: "PRD-0002",
-    productName: "NutriGrow WS 19:19:19",
-    scientificName: "NPK 19:19:19",
-    category: "Fertilizers",
-    subCategory: "",
-    segment: "Poshak",
-    form: "Wettable Powder",
-    hsnCode: "3105",
-    gstRate: "5%",
-    sku: "FERT-000001",
-    productCode: "FERT-000001",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-01-18",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-18",
-    baseUnit: "KG",
-    packagingUnit: "Box",
-    conversionQuantity: 10,
-    unitSize: 1,
-    netWeight: 10,
-    grossWeight: 10,
-    mrp: 980,
-    productImages: [
-      {
-        id: "prd-2-media-1",
-        name: "nutrigrow-wsf-191919.jpg",
-        url: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
-        previewUrl: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
-        size: "210 KB",
-        uploaded: true,
-        createdAt: "2026-06-03",
-      },
-    ],
-    productUrls: [],
-  },
-  {
-    id: 3,
-    productId: "PRD-0003",
-    productName: "Shield EC Crop Guard",
-    scientificName: "Cypermethrin 10% EC",
-    category: "Pesticides",
-    subCategory: "",
-    segment: "Rakshak",
-    form: "Liquid",
-    hsnCode: "3808",
-    gstRate: "18%",
-    sku: "PEST-000001",
-    productCode: "PEST-000001",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-02-03",
-    updatedBy: "Admin",
-    updatedDate: "2026-04-05",
-    baseUnit: "Liter",
-    packagingUnit: "Drum",
-    conversionQuantity: 200,
-    unitSize: 1,
-    netWeight: 200,
-    grossWeight: 200,
-    mrp: 1250,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 4,
-    productId: "PRD-0004",
-    productName: "BioRoot Vital Suspension",
-    scientificName: "Trichoderma viride",
-    category: "Bio Products",
-    subCategory: "",
-    segment: "Amritam",
-    form: "Suspension",
-    cfu: "1×10⁸ cells/ml",
-    hsnCode: "3002",
-    gstRate: "12%",
-    sku: "BIO-000001",
-    productCode: "BIO-000001",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-02-16",
-    updatedBy: "Admin",
-    updatedDate: "2026-04-22",
-    baseUnit: "Gram",
-    packagingUnit: "Packet",
-    conversionQuantity: 50,
-    mrp: 720,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 5,
-    productId: "PRD-0005",
-    productName: "Urea 50kg",
-    scientificName: "Urea",
-    category: "Fertilizers",
-    subCategory: "",
-    segment: "Poshak",
-    form: "Granules",
-    hsnCode: "3102",
-    gstRate: "5%",
-    sku: "FERT-000002",
-    productCode: "FERT-000002",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-03-01",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-01",
-    baseUnit: "KG",
-    packagingUnit: "Bag",
-    conversionQuantity: 50,
-    mrp: 620,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 6,
-    productId: "PRD-0006",
-    productName: "NPK 10:26:26",
-    scientificName: "NPK 10:26:26",
-    category: "Fertilizers",
-    subCategory: "",
-    segment: "Poshak",
-    form: "Granules",
-    hsnCode: "3105",
-    gstRate: "5%",
-    sku: "FERT-000003",
-    productCode: "FERT-000003",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-03-01",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-01",
-    baseUnit: "KG",
-    packagingUnit: "Bag",
-    conversionQuantity: 50,
-    mrp: 890,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 7,
-    productId: "PRD-0007",
-    productName: "DAP 50kg",
-    scientificName: "Diammonium Phosphate",
-    category: "Fertilizers",
-    subCategory: "",
-    segment: "Poshak",
-    form: "Granules",
-    hsnCode: "3105",
-    gstRate: "5%",
-    sku: "FERT-000004",
-    productCode: "FERT-000004",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-03-01",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-01",
-    baseUnit: "KG",
-    packagingUnit: "Bag",
-    conversionQuantity: 50,
-    mrp: 1150,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 8,
-    productId: "PRD-0008",
-    productName: "Zinc Sulphate 21%",
-    scientificName: "Zinc Sulphate",
-    category: "Fertilizers",
-    subCategory: "",
-    segment: "Poshak",
-    form: "Powder",
-    hsnCode: "2833",
-    gstRate: "5%",
-    sku: "FERT-000005",
-    productCode: "FERT-000005",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-03-01",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-01",
-    baseUnit: "KG",
-    packagingUnit: "Bag",
-    conversionQuantity: 25,
-    mrp: 580,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 9,
-    productId: "PRD-0009",
-    productName: "Hybrid Maize Seed",
-    scientificName: "Zea mays",
-    category: "Seeds",
-    subCategory: "",
-    segment: "Rakshak",
-    form: "Seeds",
-    hsnCode: "1209",
-    gstRate: "0%",
-    sku: "SEED-000002",
-    productCode: "SEED-000002",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-03-01",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-01",
-    baseUnit: "KG",
-    packagingUnit: "Bag",
-    conversionQuantity: 25,
-    mrp: 1050,
-    productImages: [],
-    productUrls: [],
-  },
-  {
-    id: 10,
-    productId: "PRD-0010",
-    productName: "Bio Fertilizer A",
-    scientificName: "Bio Fertilizer A",
-    category: "Bio Products",
-    subCategory: "",
-    segment: "Amritam",
-    form: "Liquid",
-    hsnCode: "3101",
-    gstRate: "5%",
-    sku: "BIO-000001",
-    productCode: "BIO-000001",
-    status: "active",
-    createdBy: "Admin",
-    createdDate: "2026-03-01",
-    updatedBy: "Admin",
-    updatedDate: "2026-03-01",
-    baseUnit: "L",
-    packagingUnit: "Bottle",
-    conversionQuantity: 1,
-    mrp: 650,
-    productImages: [],
-    productUrls: [],
-  },
+  // {
+  //   id: 1,
+  //   productId: "PRD-0001",
+  //   supplier: "Agro Chem Distributors",
+  //   supplierCode: "CG-001",
+  //   productName: "Dharitri Hybrid Corn Gold",
+  //   scientificName: "Zea mays",
+  //   category: "Seeds",
+  //   subCategory: "",
+  //   segment: "Rakshak",
+  //   form: "Granules",
+  //   hsnCode: "1209",
+  //   gstRate: "0%",
+  //   sku: "SEED-CORN-001",
+  //   productCode: "SEED-000001",
+  //   packSize: 1,
+  //   mou: "KG",
+  //   unitPerCase: 25,
+  //   unitPerPackagingUnit: 25,
+  //   netWeightPerPackagingUnit: 25,
+  //   mrp: 1250,
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-01-10",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-12",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Bag",
+  //   conversionQuantity: 25,
+  //   unitSize: 1,
+  //   netWeight: 25,
+  //   grossWeight: 25,
+  //   productImages: [
+  //     {
+  //       id: "prd-1-media-1",
+  //       name: "dharitri-hybrid-corn-gold.jpg",
+  //       url: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
+  //       previewUrl: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
+  //       size: "245 KB",
+  //       uploaded: true,
+  //       createdAt: "2026-06-03",
+  //     },
+  //     {
+  //       id: "prd-1-media-2",
+  //       name: "dharitri-pack-shot.jpg",
+  //       url: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
+  //       previewUrl: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
+  //       size: "198 KB",
+  //       uploaded: true,
+  //       createdAt: "2026-06-03",
+  //     },
+  //   ],
+  //   productUrls: [
+  //     {
+  //       id: "prd-1-link-1",
+  //       url: "https://example.com/products/dharitri-hybrid-corn-gold",
+  //       createdAt: "2026-06-03",
+  //     },
+  //   ],
+  // },
+  // {
+  //   id: 2,
+  //   productId: "PRD-0002",
+  //   productName: "NutriGrow WS 19:19:19",
+  //   scientificName: "NPK 19:19:19",
+  //   category: "Fertilizers",
+  //   subCategory: "",
+  //   segment: "Poshak",
+  //   form: "Wettable Powder",
+  //   hsnCode: "3105",
+  //   gstRate: "5%",
+  //   sku: "FERT-000001",
+  //   productCode: "FERT-000001",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-01-18",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-18",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Box",
+  //   conversionQuantity: 10,
+  //   unitSize: 1,
+  //   netWeight: 10,
+  //   grossWeight: 10,
+  //   mrp: 980,
+  //   productImages: [
+  //     {
+  //       id: "prd-2-media-1",
+  //       name: "nutrigrow-wsf-191919.jpg",
+  //       url: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
+  //       previewUrl: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
+  //       size: "210 KB",
+  //       uploaded: true,
+  //       createdAt: "2026-06-03",
+  //     },
+  //   ],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 3,
+  //   productId: "PRD-0003",
+  //   productName: "Shield EC Crop Guard",
+  //   scientificName: "Cypermethrin 10% EC",
+  //   category: "Pesticides",
+  //   subCategory: "",
+  //   segment: "Rakshak",
+  //   form: "Liquid",
+  //   hsnCode: "3808",
+  //   gstRate: "18%",
+  //   sku: "PEST-000001",
+  //   productCode: "PEST-000001",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-02-03",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-04-05",
+  //   baseUnit: "Liter",
+  //   packagingUnit: "Drum",
+  //   conversionQuantity: 200,
+  //   unitSize: 1,
+  //   netWeight: 200,
+  //   grossWeight: 200,
+  //   mrp: 1250,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 4,
+  //   productId: "PRD-0004",
+  //   productName: "BioRoot Vital Suspension",
+  //   scientificName: "Trichoderma viride",
+  //   category: "Bio Products",
+  //   subCategory: "",
+  //   segment: "Amritam",
+  //   form: "Suspension",
+  //   cfu: "1×10⁸ cells/ml",
+  //   hsnCode: "3002",
+  //   gstRate: "12%",
+  //   sku: "BIO-000001",
+  //   productCode: "BIO-000001",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-02-16",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-04-22",
+  //   baseUnit: "Gram",
+  //   packagingUnit: "Packet",
+  //   conversionQuantity: 50,
+  //   mrp: 720,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 5,
+  //   productId: "PRD-0005",
+  //   productName: "Urea 50kg",
+  //   scientificName: "Urea",
+  //   category: "Fertilizers",
+  //   subCategory: "",
+  //   segment: "Poshak",
+  //   form: "Granules",
+  //   hsnCode: "3102",
+  //   gstRate: "5%",
+  //   sku: "FERT-000002",
+  //   productCode: "FERT-000002",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-03-01",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-01",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Bag",
+  //   conversionQuantity: 50,
+  //   mrp: 620,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 6,
+  //   productId: "PRD-0006",
+  //   productName: "NPK 10:26:26",
+  //   scientificName: "NPK 10:26:26",
+  //   category: "Fertilizers",
+  //   subCategory: "",
+  //   segment: "Poshak",
+  //   form: "Granules",
+  //   hsnCode: "3105",
+  //   gstRate: "5%",
+  //   sku: "FERT-000003",
+  //   productCode: "FERT-000003",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-03-01",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-01",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Bag",
+  //   conversionQuantity: 50,
+  //   mrp: 890,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 7,
+  //   productId: "PRD-0007",
+  //   productName: "DAP 50kg",
+  //   scientificName: "Diammonium Phosphate",
+  //   category: "Fertilizers",
+  //   subCategory: "",
+  //   segment: "Poshak",
+  //   form: "Granules",
+  //   hsnCode: "3105",
+  //   gstRate: "5%",
+  //   sku: "FERT-000004",
+  //   productCode: "FERT-000004",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-03-01",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-01",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Bag",
+  //   conversionQuantity: 50,
+  //   mrp: 1150,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 8,
+  //   productId: "PRD-0008",
+  //   productName: "Zinc Sulphate 21%",
+  //   scientificName: "Zinc Sulphate",
+  //   category: "Fertilizers",
+  //   subCategory: "",
+  //   segment: "Poshak",
+  //   form: "Powder",
+  //   hsnCode: "2833",
+  //   gstRate: "5%",
+  //   sku: "FERT-000005",
+  //   productCode: "FERT-000005",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-03-01",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-01",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Bag",
+  //   conversionQuantity: 25,
+  //   mrp: 580,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 9,
+  //   productId: "PRD-0009",
+  //   productName: "Hybrid Maize Seed",
+  //   scientificName: "Zea mays",
+  //   category: "Seeds",
+  //   subCategory: "",
+  //   segment: "Rakshak",
+  //   form: "Seeds",
+  //   hsnCode: "1209",
+  //   gstRate: "0%",
+  //   sku: "SEED-000002",
+  //   productCode: "SEED-000002",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-03-01",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-01",
+  //   baseUnit: "KG",
+  //   packagingUnit: "Bag",
+  //   conversionQuantity: 25,
+  //   mrp: 1050,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
+  // {
+  //   id: 10,
+  //   productId: "PRD-0010",
+  //   productName: "Bio Fertilizer A",
+  //   scientificName: "Bio Fertilizer A",
+  //   category: "Bio Products",
+  //   subCategory: "",
+  //   segment: "Amritam",
+  //   form: "Liquid",
+  //   hsnCode: "3101",
+  //   gstRate: "5%",
+  //   sku: "BIO-000001",
+  //   productCode: "BIO-000001",
+  //   status: "active",
+  //   createdBy: "Admin",
+  //   createdDate: "2026-03-01",
+  //   updatedBy: "Admin",
+  //   updatedDate: "2026-03-01",
+  //   baseUnit: "L",
+  //   packagingUnit: "Bottle",
+  //   conversionQuantity: 1,
+  //   mrp: 650,
+  //   productImages: [],
+  //   productUrls: [],
+  // },
 ];
 
 function migrateProduct(raw: Record<string, unknown>): Product {
@@ -983,6 +1085,7 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     category: p.category ?? "",
     subCategory: p.subCategory ?? "",
     segment: p.segment ?? "",
+    segmentId: p.segmentId ?? "",
     form: p.form ?? p.formulation ?? "",
     cfu: p.cfu ?? "",
     authority: p.authority ?? "",
@@ -1000,6 +1103,7 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     netWeightPerPackagingUnit,
     grossWeight,
     mrp: p.mrp !== undefined ? Number(p.mrp) : undefined,
+    costPrice: p.costPrice !== undefined ? Number(p.costPrice) : undefined,
     manufacturerProductCode: p.manufacturerProductCode ?? "",
     vendorProductCode: p.vendorProductCode ?? "",
     barcode: p.barcode ?? "",
@@ -1037,7 +1141,16 @@ function migrateProduct(raw: Record<string, unknown>): Product {
   };
 }
 
+let dynamicProducts: Product[] | null = null;
+
+export function setDynamicProducts(products: Product[] | null) {
+  dynamicProducts = products;
+}
+
 export function loadProducts(): Product[] {
+  if (dynamicProducts) {
+    return dynamicProducts;
+  }
   if (typeof window === "undefined") return SEED_PRODUCTS;
   ensureProductDemoSeed();
   return loadProductsRaw();
@@ -1290,4 +1403,112 @@ export function formatMoney(value: number): string {
     currency: "INR",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+// ---------------------------------------------------------------------------
+// API validation error mapping (create / update)
+// ---------------------------------------------------------------------------
+
+export type ProductApiValidationError = {
+  status?: number;
+  message?: string;
+  validation_errors?: Array<{ path?: string; message?: string }>;
+};
+
+/** Maps API snake_case paths → ProductForm field keys (for inline errors). */
+export const PRODUCT_API_FIELD_MAP: Record<string, string> = {
+  product_code: "productCode",
+  product_name: "productName",
+  scientific_name: "scientificName",
+  sku: "sku",
+  supplier_id: "supplier",
+  supplier_code: "supplierCode",
+  hsn_id: "hsnCode",
+  hsn_code: "hsnCode",
+  gst_rate_id: "gstRate",
+  gst_id: "gstRate",
+  category_id: "category",
+  segment_id: "segment",
+  formulation_id: "form",
+  cfu_id: "cfu",
+  authority: "authority",
+  pack_size: "packSize",
+  base_unit: "baseUnit",
+  unit: "baseUnit",
+  mou: "mou",
+  unit_per_packing: "unitPerCase",
+  packing_unit: "packagingUnit",
+  net_weight: "netWeightPerPackagingUnit",
+  gross_weight: "grossWeight",
+  mrp: "mrp",
+  cost_price: "costPrice",
+  status: "status",
+  is_active: "status",
+};
+
+export function isProductApiValidationError(error: unknown): boolean {
+  const status = (error as ProductApiValidationError | undefined)?.status;
+  return status === 400 || status === 422;
+}
+
+function mapProductApiPathToFormField(path: string): string | null {
+  if (!path) return null;
+  const normalized = path.replace(/\[\d+\]/g, "").replace(/\./g, "_");
+  return (
+    PRODUCT_API_FIELD_MAP[path] ??
+    PRODUCT_API_FIELD_MAP[normalized] ??
+    null
+  );
+}
+
+/** Maps 400/422 product API errors to ProductForm field keys. */
+export function mapProductApiErrorsToFormFields(
+  error: unknown,
+): Record<string, string> {
+  const err = error as ProductApiValidationError;
+  if (!isProductApiValidationError(err)) return {};
+
+  const mapped: Record<string, string> = {};
+
+  const add = (field: string | null, message: string) => {
+    const trimmed = message.trim();
+    if (!field || !trimmed || mapped[field]) return;
+    mapped[field] = trimmed;
+  };
+
+  if (Array.isArray(err.validation_errors)) {
+    for (const issue of err.validation_errors) {
+      const path = String(issue.path ?? "").trim();
+      const message = String(issue.message ?? err.message ?? "Validation failed.").trim();
+      add(mapProductApiPathToFormField(path) ?? "_form", message);
+    }
+  }
+
+  const topMessage = err.message?.trim();
+  if (!Object.keys(mapped).length && topMessage) {
+    add("_form", topMessage);
+  }
+
+  return mapped;
+}
+
+/** Toast text from validation_errors (all messages) or top-level API message. */
+export function getProductApiValidationToastMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  const err = error as ProductApiValidationError;
+  const messages: string[] = [];
+
+  if (Array.isArray(err?.validation_errors)) {
+    for (const issue of err.validation_errors) {
+      const msg = String(issue?.message ?? "").trim();
+      if (msg && !messages.includes(msg)) messages.push(msg);
+    }
+  }
+
+  if (messages.length > 0) return messages.join(" • ");
+
+  const top = String(err?.message ?? "").trim();
+  return top || fallback;
 }

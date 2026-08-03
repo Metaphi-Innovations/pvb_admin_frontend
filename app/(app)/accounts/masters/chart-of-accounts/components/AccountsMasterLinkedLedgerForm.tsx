@@ -101,9 +101,12 @@ export function AccountsMasterLinkedLedgerForm({
   onSaved,
 }: {
   kind: CoaMasterLinkedFormKind;
-  parentGroupId: number;
+  parentGroupId: import("../../../data").CoaNodeId;
   onClose: () => void;
-  onSaved: (ledgerId: number, parentGroupId: number) => void;
+  onSaved: (
+    ledgerId: import("../../../data").CoaNodeId,
+    parentGroupId: import("../../../data").CoaNodeId,
+  ) => void;
 }) {
   const config = CONFIG[kind];
   const records = loadChartOfAccounts();

@@ -9,6 +9,10 @@ import { AlertCircle } from "lucide-react";
 import { hydratePostalMaster } from "@/lib/geography/postal-master-store";
 import { type StructuredAddress } from "@/lib/address/types";
 import { getTownsForPincode, lookupPostalPincode } from "@/lib/address/postal-lookup";
+import {
+  getTownsForPincodeFromApi,
+  lookupPincodeFromApi,
+} from "@/lib/address/pincode-api-lookup";
 
 function Field({
   label,
@@ -56,6 +60,7 @@ export interface AddressBlockProps {
   errors?: Partial<Record<keyof StructuredAddress, string>>;
   warnings?: Partial<Record<keyof StructuredAddress, string>>;
   required?: boolean;
+  usePincodeApi?: boolean;
 }
 
 export function AddressBlock({
@@ -66,11 +71,18 @@ export function AddressBlock({
   errors = {},
   warnings = {},
   required = false,
+  usePincodeApi = false,
 }: AddressBlockProps) {
-  const [postalReady, setPostalReady] = useState(false);
+  const [postalReady, setPostalReady] = useState(usePincodeApi);
   const [townOptions, setTownOptions] = useState<string[]>([]);
+  const [pincodeLookupReady, setPincodeLookupReady] = useState(false);
 
   useEffect(() => {
+    if (usePincodeApi) {
+      setPostalReady(true);
+      return;
+    }
+
     let active = true;
     hydratePostalMaster().then(() => {
       if (active) setPostalReady(true);
@@ -78,25 +90,68 @@ export function AddressBlock({
     return () => {
       active = false;
     };
-  }, []);
-
-  const pincodeResolved = useMemo(() => {
-    if (!postalReady || value.pincode.length !== 6) return null;
-    return lookupPostalPincode(value.pincode, value.town);
-  }, [postalReady, value.pincode, value.town]);
+  }, [usePincodeApi]);
 
   useEffect(() => {
     if (!postalReady || value.pincode.length !== 6) {
       setTownOptions([]);
+      setPincodeLookupReady(false);
       return;
     }
-    setTownOptions(getTownsForPincode(value.pincode));
-  }, [postalReady, value.pincode]);
+
+    let active = true;
+
+    const loadTowns = async () => {
+      const towns = usePincodeApi
+        ? await getTownsForPincodeFromApi(value.pincode)
+        : getTownsForPincode(value.pincode);
+
+      if (!active) return;
+      setTownOptions(towns);
+      setPincodeLookupReady(true);
+    };
+
+    void loadTowns();
+
+    return () => {
+      active = false;
+    };
+  }, [postalReady, usePincodeApi, value.pincode]);
+
+  const pincodeResolved = useMemo(() => {
+    if (!postalReady || value.pincode.length !== 6) return null;
+    if (usePincodeApi) {
+      if (!pincodeLookupReady) return null;
+      if (value.state || value.district || value.town || value.city) {
+        return {
+          pincode: value.pincode,
+          city: value.city,
+          town: value.town,
+          district: value.district,
+          state: value.state,
+        };
+      }
+      return null;
+    }
+    return lookupPostalPincode(value.pincode, value.town);
+  }, [
+    postalReady,
+    pincodeLookupReady,
+    usePincodeApi,
+    value.pincode,
+    value.town,
+    value.city,
+    value.district,
+    value.state,
+  ]);
 
   const pincodeWarning =
     warnings.pincode ||
-    (value.pincode.length === 6 && postalReady && !pincodeResolved
-      ? "Pincode not found in Postal Master."
+    (value.pincode.length === 6 &&
+    postalReady &&
+    pincodeLookupReady &&
+    !pincodeResolved
+      ? "Pincode not found."
       : undefined);
 
   const geographyLocked = Boolean(pincodeResolved);
@@ -105,7 +160,29 @@ export function AddressBlock({
     onChange({ ...value, ...partial });
   };
 
-  const applyPostalLocation = (digits: string, preferredTown?: string) => {
+  const applyPostalLocation = async (digits: string, preferredTown?: string) => {
+    if (usePincodeApi) {
+      const loc = await lookupPincodeFromApi(digits, preferredTown);
+      if (loc) {
+        return {
+          ...value,
+          pincode: digits,
+          city: loc.city,
+          town: loc.town,
+          district: loc.district,
+          state: loc.state,
+        };
+      }
+      return {
+        ...value,
+        pincode: digits,
+        city: "",
+        town: "",
+        district: "",
+        state: "",
+      };
+    }
+
     const loc = lookupPostalPincode(digits, preferredTown);
     if (loc) {
       return {
@@ -130,7 +207,7 @@ export function AddressBlock({
   const handlePincodeChange = (raw: string) => {
     const digits = raw.replace(/\D/g, "").slice(0, 6);
     if (digits.length === 6 && postalReady) {
-      onChange(applyPostalLocation(digits));
+      void applyPostalLocation(digits).then((next) => onChange(next));
     } else if (digits.length < 6) {
       onChange({
         ...value,
@@ -140,6 +217,7 @@ export function AddressBlock({
         district: "",
         state: "",
       });
+      setPincodeLookupReady(false);
     } else {
       patch({ pincode: digits });
     }
@@ -150,7 +228,7 @@ export function AddressBlock({
       patch({ town });
       return;
     }
-    onChange(applyPostalLocation(value.pincode, town));
+    void applyPostalLocation(value.pincode, town).then((next) => onChange(next));
   };
 
   const inp = (key: keyof StructuredAddress) =>

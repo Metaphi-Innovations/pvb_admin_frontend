@@ -79,11 +79,14 @@ export function AppShell({ children }: AppShellProps) {
         <NavRoutePrefetch />
         <NavigationProgress />
         <div className="min-h-screen bg-background flex flex-col">
+          {/* 56px — sticky, z-50 — persists across all navigations */}
           <TopNavbar />
+
+          {/* 48px — sticky below navbar — does not re-render on route change */}
           <AppHeader />
-          <main className="flex-1 min-h-0 w-full overflow-hidden flex flex-col bg-muted/30">
-            {children}
-          </main>
+
+          {/* Page content area — only this part swaps on navigation */}
+          <main className="flex-1 min-h-0 w-full bg-muted/30">{children}</main>
         </div>
       </NavigationPendingProvider>
     </FYProvider>

@@ -3,17 +3,27 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
+import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { loadCustomerTypes, saveCustomerTypes, validateCustomerTypeInitialCode, resolveCustomerTypeCode, validateCustomerTypeCodeUnique, type CustomerTypeRecord } from "../../customer-type-data";
-import { normalizeInitialCode } from "@/lib/masters/code-generation";
+import { useCustomerType, useUpdateCustomerType } from "@/hooks/masters";
+import {
+  getErrorMessage,
+  getMasterDetailErrorMessage,
+} from "@/lib/masters/master-query-errors";
 import {
   CustomerTypeForm,
   type CustomerTypeFormValues,
   validateCustomerTypeForm,
 } from "../../components/CustomerTypeForm";
+import type { CustomerTypeDocument } from "../../customer-type-data";
+
+function extractDocumentTypeIds(documents: CustomerTypeDocument[]): string[] {
+  return documents
+    .map((doc) => doc.documentTypeId)
+    .filter((id): id is string => Boolean(id));
+}
 
 export default function EditCustomerTypePage() {
   const router = useRouter();
@@ -23,19 +33,34 @@ export default function EditCustomerTypePage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const detailQuery = useCustomerType(id);
+  const updateMutation = useUpdateCustomerType();
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "Customer type not found.",
+        "Failed to load customer type.",
+      )
+    : null;
+  const saving = updateMutation.isPending;
+
   useEffect(() => {
-    const list = loadCustomerTypes();
-    const found = list.find((c) => c.id === Number(id));
-    if (!found) return;
-    setOriginalInitialCode(found.initialCode);
+    if (!detailQuery.data) return;
+    const detail = detailQuery.data;
+    setOriginalInitialCode(detail.initialCode);
     setForm({
-      customerTypeCode: found.customerTypeCode,
-      initialCode: found.initialCode,
-      customerType: found.customerType,
-      description: found.description,
-      documentTypes: found.documentTypes || [],
+      customerTypeCode: detail.initialCode,
+      initialCode: detail.initialCode,
+      customerType: detail.customerType,
+      description: detail.description || "",
+      documentTypes: detail.documents.map((doc, idx) => ({
+        id: `DOC-${idx + 1}`,
+        documentTypeId: doc.id,
+        documentName: doc.title,
+      })),
     });
-  }, [id]);
+  }, [detailQuery.data]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -44,20 +69,13 @@ export default function EditCustomerTypePage() {
       return next;
     });
 
-  const handleSave = () => {
-    if (!form) return;
+  const handleSave = async () => {
+    if (!form || !id) return;
     const validation = validateCustomerTypeForm(form);
-    const list = loadCustomerTypes();
-    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list, Number(id));
-    if (initialErr) validation.initialCode = initialErr;
-    const existing = list.find((c) => c.id === Number(id));
-    const customerTypeCode = resolveCustomerTypeCode(form.initialCode, list, {
-      recordId: Number(id),
-      existingCode: existing?.customerTypeCode,
-      originalInitialCode,
-    });
-    const codeErr = validateCustomerTypeCodeUnique(customerTypeCode, list, Number(id));
-    if (codeErr) validation.customerTypeCode = codeErr;
+    const documentTypeIds = extractDocumentTypeIds(form.documentTypes || []);
+    if ((form.documentTypes || []).length > 0 && documentTypeIds.length === 0) {
+      validation.documentTypes = "Select document types from the list";
+    }
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -65,32 +83,43 @@ export default function EditCustomerTypePage() {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const updated = list.map((c) =>
-      c.id === Number(id)
-          ? {
-            ...c,
-            customerTypeCode,
-            initialCode: normalizeInitialCode(form.initialCode),
-            customerType: form.customerType.trim(),
-            description: form.description.trim(),
-            documentTypes: form.documentTypes || [],
-            status: c.status,
-            updatedBy: "Admin",
-            updatedDate: today,
-          }
-        : c,
+    updateMutation.mutate(
+      {
+        id,
+        payload: {
+          customerTypeName: form.customerType,
+          description: form.description,
+          documentTypeIds,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Customer Type updated successfully.", type: "success" });
+          setTimeout(() => router.push(`/masters/customer-types/${id}`), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update customer type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
     );
-
-    saveCustomerTypes(updated);
-    setToast({ msg: "Customer Type updated successfully.", type: "success" });
-    setTimeout(() => router.push(`/masters/customer-types/${id}`), 900);
   };
 
-  if (!form) {
+  if (loading) {
     return (
       <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Customer Type not found.</p>
+        <p className="text-sm text-muted-foreground">Loading customer type...</p>
+      </div>
+    );
+  }
+
+  if (!form || loadError) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">{loadError || "Customer Type not found."}</p>
         <Link href="/masters/customer-types" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
           Back to listing
         </Link>
@@ -105,14 +134,20 @@ export default function EditCustomerTypePage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+            disabled={saving}
+          >
             Discard
           </Button>
           <Button
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={saving}
           >
-            <Save className="w-4 h-4" /> Update Customer Type
+            <Save className="w-4 h-4" /> {saving ? "Updating..." : "Update Customer Type"}
           </Button>
         </div>
       }
@@ -127,8 +162,8 @@ export default function EditCustomerTypePage() {
         }
         errors={errors}
         onClearError={clearErr}
-        recordId={Number(id)}
         originalInitialCode={originalInitialCode}
+        readOnlyInitialCode
         triggerToast={(msg, type) => {
           setToast({ msg, type });
           setTimeout(() => setToast(null), 3200);

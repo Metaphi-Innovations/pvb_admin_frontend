@@ -7,28 +7,33 @@ import {
   RecordDetailPage,
   RecordKvRow,
   RecordSectionCard,
-  RecordMiniTable,
   OVERVIEW_TAB,
 } from "@/components/record-detail";
-import { Calendar, Clock, Globe, Shield, Users } from "lucide-react";
-import { loadRoles, MOCK_USER_COUNTS, type Role } from "../roles-data";
+import { Calendar, Clock, Globe, Shield } from "lucide-react";
+import { useRole } from "@/hooks/user-management";
+import { toRoleRecord } from "../role-api-data";
 
-function statusVariant(status: Role["status"]): "active" | "inactive" | "draft" | "blocked" | "neutral" {
+function statusVariant(status: string): "active" | "inactive" | "neutral" {
   if (status === "active") return "active";
   if (status === "inactive") return "inactive";
-  if (status === "archived") return "blocked";
   return "neutral";
 }
 
 export default function RoleViewPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [role, setRole] = useState<Role | null>(null);
+  const roleQuery = useRole(id);
   const [activeTab, setActiveTab] = useState("overview");
 
-  useEffect(() => {
-    setRole(loadRoles().find((r) => r.id === Number(id)) ?? null);
-  }, [id]);
+  const role = roleQuery.data ? toRoleRecord(roleQuery.data) : null;
+
+  if (roleQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">
+        Loading role…
+      </div>
+    );
+  }
 
   if (!role) {
     return (
@@ -52,12 +57,6 @@ export default function RoleViewPage() {
     );
   }
 
-  const userCount = MOCK_USER_COUNTS[role.id] ?? 0;
-  const tabs = [
-    OVERVIEW_TAB,
-    { value: "approval", label: "Approval Chain", count: role.approvalChain.length },
-  ];
-
   return (
     <RecordDetailPage
       listHref="/user-management/roles"
@@ -70,28 +69,17 @@ export default function RoleViewPage() {
         { label: role.geoLevel, icon: Globe },
       ]}
       kpis={[
-        { icon: Users, iconBg: "#FFF4E6", iconColor: "#D96A10", value: String(userCount), label: "Users" },
-        { icon: Shield, iconBg: "#E6F7EF", iconColor: "#1E9E61", value: String(role.approvalChain.length), label: "Approval Steps" },
         { icon: Globe, iconBg: "#E8F4FD", iconColor: "#1554B4", value: role.geoLevel, label: "Geo Level" },
         { icon: Calendar, iconBg: "#F3EEFF", iconColor: "#7C5CBF", value: role.createdDate, label: "Created" },
       ]}
-      tabs={tabs}
+      tabs={[OVERVIEW_TAB]}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      onEdit={() => router.push(`/user-management/roles/${role.id}/edit`)}
+      onEdit={() => router.push(`/user-management/roles/${role.roleUuid}/edit`)}
       sidebar={{
-        quickActions: [
-          {
-            label: "View Permissions",
-            icon: Shield,
-            onClick: () => router.push(`/user-management/permissions/${role.id}`),
-            variant: "primary",
-          },
-        ],
         summary: [
           { label: "Department", value: role.department, highlight: true },
           { label: "Geo Level", value: role.geoLevel },
-          { label: "Users Assigned", value: String(userCount) },
           { label: "Created", value: role.createdDate },
           { label: "Updated", value: role.updatedDate },
         ],
@@ -111,41 +99,20 @@ export default function RoleViewPage() {
         ],
       }}
     >
-      {activeTab === "overview" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <RecordSectionCard title="Role Information" icon={Shield} accent="blue">
-            <RecordKvRow label="Role Name" value={role.roleName} highlight />
-            <RecordKvRow label="Department" value={role.department} />
-            <RecordKvRow label="Geo Level" value={role.geoLevel} isLast />
-          </RecordSectionCard>
-          <RecordSectionCard title="Audit" icon={Clock} accent="slate">
-            <RecordKvRow label="Created By" value={role.createdBy} muted />
-            <RecordKvRow label="Created Date" value={role.createdDate} mono />
-            <RecordKvRow label="Updated By" value={role.updatedBy} muted />
-            <RecordKvRow label="Updated Date" value={role.updatedDate} mono isLast />
-          </RecordSectionCard>
-        </div>
-      ) : (
-        <RecordSectionCard title="Approval Chain" icon={Shield} accent="orange">
-          {role.approvalChain.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">No approval chain configured.</p>
-          ) : (
-            <RecordMiniTable
-              columns={[
-                {
-                  key: "step",
-                  header: "Step",
-                  render: (r) => (
-                    <span>{role.approvalChain.findIndex((x) => x.uid === r.uid) + 1}</span>
-                  ),
-                },
-                { key: "role", header: "Approver Role", render: (r) => r.roleName },
-              ]}
-              rows={role.approvalChain}
-            />
-          )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <RecordSectionCard title="Role Information" icon={Shield} accent="blue">
+          <RecordKvRow label="Role Name" value={role.roleName} highlight />
+          <RecordKvRow label="Department" value={role.department} />
+          <RecordKvRow label="Geo Level" value={role.geoLevel} />
+          <RecordKvRow label="Description" value={role.description || "—"} isLast />
         </RecordSectionCard>
-      )}
+        <RecordSectionCard title="Audit" icon={Clock} accent="slate">
+          <RecordKvRow label="Created By" value={role.createdBy} muted />
+          <RecordKvRow label="Created Date" value={role.createdDate} mono />
+          <RecordKvRow label="Updated By" value={role.updatedBy} muted />
+          <RecordKvRow label="Updated Date" value={role.updatedDate} mono isLast />
+        </RecordSectionCard>
+      </div>
     </RecordDetailPage>
   );
 }

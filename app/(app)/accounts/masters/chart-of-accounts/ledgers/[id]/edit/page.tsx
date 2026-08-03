@@ -5,9 +5,7 @@ import AccountsGenericLedgerFormClient from "../../AccountsGenericLedgerFormClie
 
 export default function EditGenericLedgerPage() {
   const { id } = useParams<{ id: string }>();
-  const ledgerId = Number(id);
-
-  if (!Number.isFinite(ledgerId)) {
+  if (!id?.trim()) {
     return (
       <div className="py-16 text-center">
         <p className="text-sm text-muted-foreground">Invalid ledger.</p>
@@ -15,5 +13,6 @@ export default function EditGenericLedgerPage() {
     );
   }
 
+  const ledgerId = /^\d+$/.test(id) ? Number(id) : id;
   return <AccountsGenericLedgerFormClient mode="edit" ledgerId={ledgerId} />;
 }

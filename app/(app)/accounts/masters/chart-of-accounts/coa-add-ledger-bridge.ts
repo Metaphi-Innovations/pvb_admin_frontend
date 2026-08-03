@@ -1,8 +1,10 @@
 /** Lets the COA sidebar tree open add/edit ledgers via CoaAddLedgerHost. */
 
+import type { CoaNodeId } from "../../data";
+
 type CoaAddLedgerHandlers = {
-  addUnderParent: ((parentGroupId: number) => void) | null;
-  openGlobal: ((preferredParentId?: number | null) => void) | null;
+  addUnderParent: ((parentGroupId: CoaNodeId) => void) | null;
+  openGlobal: ((preferredParentId?: CoaNodeId | null) => void) | null;
 };
 
 let handlers: CoaAddLedgerHandlers = {
@@ -11,8 +13,8 @@ let handlers: CoaAddLedgerHandlers = {
 };
 
 type PendingAddLedger =
-  | { kind: "under"; parentGroupId: number }
-  | { kind: "global"; preferredParentId?: number | null };
+  | { kind: "under"; parentGroupId: CoaNodeId }
+  | { kind: "global"; preferredParentId?: CoaNodeId | null };
 
 let pending: PendingAddLedger | null = null;
 
@@ -36,7 +38,7 @@ export function registerCoaAddLedgerHandlers(next: CoaAddLedgerHandlers): void {
 
 /** @deprecated Use registerCoaAddLedgerHandlers */
 export function registerCoaAddLedgerHandler(
-  handler: ((parentGroupId: number) => void) | null,
+  handler: ((parentGroupId: CoaNodeId) => void) | null,
 ): void {
   handlers = { ...handlers, addUnderParent: handler };
   flushPendingAddLedger();
@@ -47,11 +49,11 @@ export function registerCoaAddLedgerHandler(
  * CoaAddLedgerHost via resolveCoaLedgerBehavior — this stub must stay import-light
  * to avoid circular/heavy module graphs that block the COA page chunk.
  */
-export function requestCoaSpecializedLedgerForm(_parentId: number): boolean {
+export function requestCoaSpecializedLedgerForm(_parentId: CoaNodeId): boolean {
   return false;
 }
 
-export function requestCoaAddLedger(parentGroupId: number): void {
+export function requestCoaAddLedger(parentGroupId: CoaNodeId): void {
   if (handlers.addUnderParent) {
     handlers.addUnderParent(parentGroupId);
     return;
@@ -60,7 +62,7 @@ export function requestCoaAddLedger(parentGroupId: number): void {
   flushPendingAddLedger();
 }
 
-export function requestCoaGlobalAddLedger(preferredParentId?: number | null): void {
+export function requestCoaGlobalAddLedger(preferredParentId?: CoaNodeId | null): void {
   if (handlers.openGlobal) {
     handlers.openGlobal(preferredParentId);
     return;

@@ -31,12 +31,14 @@ export function SubCategoryForm({
   errors,
   onClearError,
   categoryOptions,
+  categoryLoading,
 }: {
   form: SubCategoryFormValues;
   onChange: (form: SubCategoryFormValues) => void;
   errors: Record<string, string>;
   onClearError: (key: string) => void;
   categoryOptions: { label: string; value: string }[];
+  categoryLoading?: boolean;
 }) {
   const set = <K extends keyof SubCategoryFormValues>(key: K, value: SubCategoryFormValues[K]) => {
     onChange({ ...form, [key]: value });
@@ -73,9 +75,13 @@ export function SubCategoryForm({
           <Label className="text-xs font-medium">
             Category <span className="text-red-500">*</span>
           </Label>
-          <Select value={form.categoryName} onValueChange={(value) => set("categoryName", value)}>
+          <Select
+            value={form.categoryName}
+            onValueChange={(value) => set("categoryName", value)}
+            disabled={categoryLoading}
+          >
             <SelectTrigger className={cn(inputCls("categoryName"), "bg-muted/30")}>
-              <SelectValue placeholder="Select category" />
+              <SelectValue placeholder={categoryLoading ? "Loading categories..." : "Select category"} />
             </SelectTrigger>
             <SelectContent>
               {categoryOptions.map((option) => (

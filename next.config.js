@@ -1,4 +1,7 @@
 /** @type {import('next').NextConfig} */
+const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const backendOrigin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -23,6 +26,15 @@ const nextConfig = {
       "tailwind-merge",
       "class-variance-authority",
     ],
+  },
+
+  async rewrites() {
+    return [
+      {
+        source: "/uploads/:path*",
+        destination: `${backendOrigin}/uploads/:path*`,
+      },
+    ];
   },
 
   async redirects() {

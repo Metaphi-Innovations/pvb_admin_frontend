@@ -22,6 +22,7 @@ import { isCoaSidebarLevel3Subgroup } from "@/lib/accounts/coa-sidebar-tree";
 import {
   type AccountType,
   type ChartOfAccount,
+  type CoaNodeId,
   type CoaNodeLevel,
   type ErpUsageModule,
   loadChartOfAccounts,
@@ -91,7 +92,7 @@ export interface LedgerFormValues {
   ledgerName: string;
   alias: string;
   description: string;
-  parentGroupId: number | null;
+  parentGroupId: CoaNodeId | null;
   openingBalance: string;
   balanceType: "Debit" | "Credit";
   costCenterApplicable: boolean;
@@ -136,7 +137,7 @@ export const DEFAULT_LEDGER_FORM: LedgerFormValues = {
 export interface GroupFormValues {
   groupName: string;
   description: string;
-  parentGroupId: number | null;
+  parentGroupId: CoaNodeId | null;
   status: "active" | "inactive";
 }
 
@@ -153,19 +154,19 @@ export function accountTypeToPrimaryLabel(type: AccountType): string {
 
 export function resolveParentName(
   records: ChartOfAccount[],
-  parentId: number | null,
+  parentId: CoaNodeId | null,
 ): string {
-  if (!parentId) return "";
+  if (parentId == null) return "";
   return records.find((r) => r.id === parentId)?.accountName ?? "";
 }
 
 export function getAncestorPath(
   records: ChartOfAccount[],
-  nodeId: number,
+  nodeId: CoaNodeId,
 ): ChartOfAccount[] {
   const byId = coaIdMap(records);
   const path: ChartOfAccount[] = [];
-  const visited = new Set<number>();
+  const visited = new Set<CoaNodeId>();
   let current = byId.get(nodeId);
   while (current) {
     if (visited.has(current.id)) {
@@ -183,7 +184,7 @@ export function getAncestorPath(
 /** 1-based hierarchy depth for a node (path length from root). */
 export function getCoaHierarchyLevel(
   records: ChartOfAccount[],
-  nodeId: number,
+  nodeId: CoaNodeId,
 ): number {
   return getAncestorPath(records, nodeId).length;
 }
@@ -215,9 +216,9 @@ export function showCoaMaxHierarchyMessage(
   return isAtCoaMaxHierarchyLevel(node, records);
 }
 
-let coaPathMapCache: { key: string; map: Map<number, ChartOfAccount> } | null = null;
+let coaPathMapCache: { key: string; map: Map<CoaNodeId, ChartOfAccount> } | null = null;
 
-function coaIdMap(records: ChartOfAccount[]): Map<number, ChartOfAccount> {
+function coaIdMap(records: ChartOfAccount[]): Map<CoaNodeId, ChartOfAccount> {
   const key = `${records.length}:${records[0]?.id ?? 0}:${records[records.length - 1]?.id ?? 0}`;
   if (coaPathMapCache?.key === key) return coaPathMapCache.map;
   const map = new Map(records.map((r) => [r.id, r]));
@@ -231,7 +232,7 @@ export function invalidateCoaPathCache(): void {
 
 export function getDirectChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): ChartOfAccount[] {
   const order: Record<CoaNodeLevel, number> = {
     primary_head: 0,
@@ -247,29 +248,29 @@ export function getDirectChildren(
     });
 }
 
-export function getChildGroups(records: ChartOfAccount[], nodeId: number): ChartOfAccount[] {
+export function getChildGroups(records: ChartOfAccount[], nodeId: CoaNodeId): ChartOfAccount[] {
   return getDirectChildren(records, nodeId).filter((c) => c.nodeLevel !== "ledger");
 }
 
-export function getChildLedgers(records: ChartOfAccount[], nodeId: number): ChartOfAccount[] {
+export function getChildLedgers(records: ChartOfAccount[], nodeId: CoaNodeId): ChartOfAccount[] {
   return getDirectChildren(records, nodeId).filter((c) => c.nodeLevel === "ledger");
 }
 
-export function hasChildAccountGroups(records: ChartOfAccount[], nodeId: number): boolean {
+export function hasChildAccountGroups(records: ChartOfAccount[], nodeId: CoaNodeId): boolean {
   return records.some((r) => r.parentAccountId === nodeId && r.nodeLevel === "account_group");
 }
 
-export function hasChildLedgers(records: ChartOfAccount[], nodeId: number): boolean {
+export function hasChildLedgers(records: ChartOfAccount[], nodeId: CoaNodeId): boolean {
   return records.some((r) => r.parentAccountId === nodeId && r.nodeLevel === "ledger");
 }
 
 /** @deprecated Use hasChildAccountGroups */
-export function hasSubGroups(records: ChartOfAccount[], nodeId: number): boolean {
+export function hasSubGroups(records: ChartOfAccount[], nodeId: CoaNodeId): boolean {
   return hasChildAccountGroups(records, nodeId);
 }
 
 /** @deprecated Use hasChildAccountGroups */
-export function hasChildSubGroups(records: ChartOfAccount[], nodeId: number): boolean {
+export function hasChildSubGroups(records: ChartOfAccount[], nodeId: CoaNodeId): boolean {
   return hasChildAccountGroups(records, nodeId);
 }
 
@@ -363,7 +364,7 @@ export function describeInvalidLedgerParentMessage(
 
 export { COA_MAX_HIERARCHY_MESSAGE } from "@/lib/accounts/coa-hierarchy-constants";
 
-export function countChildGroups(records: ChartOfAccount[], nodeId: number): number {
+export function countChildGroups(records: ChartOfAccount[], nodeId: CoaNodeId): number {
   return getChildGroups(records, nodeId).length;
 }
 
@@ -407,7 +408,7 @@ export function getValidLedgerParents(records: ChartOfAccount[]): ChartOfAccount
 }
 
 export interface LedgerParentOption {
-  id: number;
+  id: CoaNodeId;
   node: ChartOfAccount;
   path: ChartOfAccount[];
   breadcrumb: string;
@@ -416,7 +417,9 @@ export interface LedgerParentOption {
 
 /** Pre-indexed valid ledger parents for fast combobox search */
 export function buildLedgerParentOptions(records: ChartOfAccount[]): LedgerParentOption[] {
-  return getValidLedgerParents(records).map((node) => {
+  return getValidLedgerParents(records)
+    .filter((node) => node.nodeLevel === "account_group")
+    .map((node) => {
     const path = getAncestorPath(records, node.id);
     const names = path.map((n) => n.accountName);
     const codes = path.map((n) => n.accountCode);
@@ -485,7 +488,8 @@ export function groupLedgerParentOptionsByHead(
     }));
 }
 
-export function parentGroupLabel(records: ChartOfAccount[], parentId: number): string {
+export function parentGroupLabel(records: ChartOfAccount[], parentId: CoaNodeId | null): string {
+  if (parentId == null) return "";
   return getAncestorPath(records, parentId)
     .map((n) => n.accountName)
     .join(" › ");
@@ -503,7 +507,7 @@ export function generateLedgerCode(records: ChartOfAccount[]): string {
   return `LED-${String(next).padStart(3, "0")}`;
 }
 
-export function generateGroupCode(records: ChartOfAccount[], parentId: number): string {
+export function generateGroupCode(records: ChartOfAccount[], parentId: CoaNodeId): string {
   const parent = records.find((r) => r.id === parentId);
   const prefix = parent?.accountCode?.replace(/\s+/g, "") ?? "GRP";
   const siblings = records.filter(
@@ -522,7 +526,7 @@ export function generateGroupCode(records: ChartOfAccount[], parentId: number): 
 /** Accounting nature inherited from the root primary head — read-only in forms */
 export function resolveInheritedAccountType(
   records: ChartOfAccount[],
-  parentGroupId: number | null,
+  parentGroupId: CoaNodeId | null,
 ): AccountType {
   if (parentGroupId == null) return "Asset";
   const { primaryHead } = resolveHierarchyPath(records, parentGroupId);
@@ -540,7 +544,7 @@ export function groupToForm(record: ChartOfAccount): GroupFormValues {
 
 export function formToGroup(
   form: GroupFormValues,
-  id: number,
+  id: CoaNodeId,
   accountCode: string,
   records: ChartOfAccount[],
   existing?: ChartOfAccount,
@@ -642,7 +646,7 @@ export function ledgerToForm(record: ChartOfAccount): LedgerFormValues {
 
 export function formToLedger(
   form: LedgerFormValues,
-  id: number,
+  id: CoaNodeId,
   accountCode: string,
   records: ChartOfAccount[],
   existing?: ChartOfAccount,
@@ -698,7 +702,7 @@ export function formToLedger(
 export function validateLedgerForm(
   form: LedgerFormValues,
   records: ChartOfAccount[],
-  editingId?: number,
+  editingId?: CoaNodeId,
 ): string | null {
   if (!form.ledgerName.trim()) return "Ledger name is required.";
   if (!form.parentGroupId) return "Please select a Parent Group.";
@@ -739,7 +743,8 @@ export function validateLedgerForm(
   return null;
 }
 
-export function ledgerHasVoucherPostings(ledgerId: number): boolean {
+export function ledgerHasVoucherPostings(ledgerId: CoaNodeId): boolean {
+  if (typeof ledgerId !== "number") return false;
   return voucherLedgerHasPostings(ledgerId);
 }
 
@@ -799,7 +804,7 @@ export function canCreateCoaNodeAtLevel(level: CoaNodeLevel): boolean {
   return canUserCreateAtLevel(level);
 }
 
-export function getAllExpandableIds(records: ChartOfAccount[]): number[] {
+export function getAllExpandableIds(records: ChartOfAccount[]): CoaNodeId[] {
   return records
     .filter(
       (r) =>
@@ -809,7 +814,7 @@ export function getAllExpandableIds(records: ChartOfAccount[]): number[] {
     .map((r) => r.id);
 }
 
-export function countLedgersUnder(records: ChartOfAccount[], nodeId: number): number {
+export function countLedgersUnder(records: ChartOfAccount[], nodeId: CoaNodeId): number {
   return getDirectChildren(records, nodeId).reduce(
     (sum, c) =>
       sum + (c.nodeLevel === "ledger" ? 1 : countLedgersUnder(records, c.id)),
@@ -819,7 +824,7 @@ export function countLedgersUnder(records: ChartOfAccount[], nodeId: number): nu
 
 export function defaultBalanceTypeForParent(
   records: ChartOfAccount[],
-  parentId: number | null,
+  parentId: CoaNodeId | null,
 ): "Debit" | "Credit" {
   const parent = parentId ? records.find((r) => r.id === parentId) : null;
   if (!parent) return "Debit";
@@ -874,7 +879,7 @@ export function resolveSearchFocusNode(
   const ledgers = matching.filter((n) => n.nodeLevel === "ledger");
   if (ledgers.length > 0) {
     const parentIds = new Set(
-      ledgers.map((l) => l.parentAccountId).filter((id): id is number => id != null),
+      ledgers.map((l) => l.parentAccountId).filter((id): id is CoaNodeId => id != null),
     );
     if (parentIds.size === 1) {
       const parentId = [...parentIds][0]!;
@@ -896,7 +901,7 @@ export function resolveSearchFocusNode(
 
 export function formatCoaHierarchyPath(
   records: ChartOfAccount[],
-  nodeId: number,
+  nodeId: CoaNodeId,
 ): string {
   return getAncestorPath(records, nodeId)
     .map((n) => n.accountName)
@@ -906,14 +911,14 @@ export function formatCoaHierarchyPath(
 export function getSearchVisibleIds(
   records: ChartOfAccount[],
   query: string,
-): Set<number> {
-  const visible = new Set<number>();
+): Set<CoaNodeId> {
+  const visible = new Set<CoaNodeId>();
   if (!query.trim()) return visible;
 
   const matching = getSearchMatchingNodes(records, query);
   for (const node of matching) {
     getCoaDisplayPath(records, node.id).forEach((a) => visible.add(a.id));
-    const collectDesc = (id: number) => {
+    const collectDesc = (id: CoaNodeId) => {
       getCoaTreeChildren(records, id).forEach((c) => {
         visible.add(c.id);
         if (c.nodeLevel !== "ledger" || ledgerHasChildLedgers(c.id, records)) {
@@ -929,14 +934,14 @@ export function getSearchVisibleIds(
 /** Full COA tree children for parent-group picker (groups + ledgers; ledgers are display-only). */
 export function getParentGroupTreeChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): ChartOfAccount[] {
   return getCoaTreeChildren(records, parentId);
 }
 
 export function parentGroupNodeHasChildren(
   records: ChartOfAccount[],
-  parentId: number,
+  parentId: CoaNodeId,
 ): boolean {
   const parent = records.find((r) => r.id === parentId);
   if (!parent) return false;
@@ -947,6 +952,6 @@ export function parentGroupNodeHasChildren(
 export function getParentGroupSearchVisibleIds(
   records: ChartOfAccount[],
   query: string,
-): Set<number> {
+): Set<CoaNodeId> {
   return getSearchVisibleIds(records, query);
 }

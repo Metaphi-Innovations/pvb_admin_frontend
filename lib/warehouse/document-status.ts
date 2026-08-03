@@ -1,4 +1,3 @@
-import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
 import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 
 export type DocumentStatusValue = "linked" | "pending" | "uploaded" | "completed" | "in_progress";
@@ -17,22 +16,13 @@ export function getGrnDocumentStatus(grn: GrnRecord): GrnDocumentStatus {
   const hasInvoice =
     (grn.supplierInvoices?.length ?? 0) > 0 ||
     (grn.invoiceFileNames?.length ?? 0) > 0 ||
+    Boolean(grn.invoiceNumber) ||
     Boolean(grn.invoiceFileName);
   const ocrDone =
     grn.ocrExtractionCompleted ||
     (grn.ocrExtractedInvoices?.length ?? 0) > 0;
 
-  const qcForGrn = getQcRecords().find((q) => q.grnNo === grn.grnNo);
-  let qcLabel: GrnDocumentStatus["qcStatus"]["label"] = "Pending QC";
-  let qcValue: DocumentStatusValue = "pending";
-
-  if (grn.status === "qc_completed" || qcForGrn?.status === "completed") {
-    qcLabel = "Completed";
-    qcValue = "completed";
-  } else {
-    qcLabel = "Pending QC";
-    qcValue = "pending";
-  }
+  const qcCompleted = grn.status === "qc_completed";
 
   return {
     purchaseOrder: {
@@ -52,8 +42,8 @@ export function getGrnDocumentStatus(grn: GrnRecord): GrnDocumentStatus {
       value: ocrDone ? "completed" : "pending",
     },
     qcStatus: {
-      label: qcLabel,
-      value: qcValue,
+      label: qcCompleted ? "Completed" : "Pending QC",
+      value: qcCompleted ? "completed" : "pending",
     },
   };
 }

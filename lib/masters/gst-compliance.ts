@@ -65,9 +65,10 @@ export function deriveGstRegistered(
 	gstin?: string,
 	gstCategory?: string,
 ): boolean {
+	if (gstApplicable === false) return false;
+	if (gstApplicable === true) return true;
 	if (gstCategory) return isGstCategoryRegistered(gstCategory);
-	if (gstApplicable === false && !gstin?.trim()) return false;
-	return !!(gstApplicable || gstin?.trim());
+	return !!gstin?.trim();
 }
 
 export function buildGstCategory(
@@ -84,6 +85,7 @@ export function deriveGstCategory(
 	gstin?: string,
 	existing?: string,
 ): string {
+	if (gstApplicable === false) return GST_CATEGORY_UNREGISTERED;
 	if (existing) return existing;
 	if (!gstApplicable && !gstin?.trim()) return GST_CATEGORY_UNREGISTERED;
 	return GST_REGISTRATION_TYPE_DEFAULT;

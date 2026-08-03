@@ -56,7 +56,7 @@ export function findWarehouseCoaLedger(warehouseId: number): ChartOfAccount | un
  */
 export function createWarehouseCoaLedger(
   warehouse: WarehouseMaster,
-  parentGroupId?: number | null,
+  parentGroupId?: import("@/app/(app)/accounts/data").CoaNodeId | null,
 ): CreateWarehouseCoaLedgerResult {
   const existing = findWarehouseCoaLedger(warehouse.id);
   if (existing) {

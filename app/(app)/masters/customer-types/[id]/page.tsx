@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -9,20 +9,78 @@ import {
   RecordSectionCard,
 } from "@/components/record-detail";
 import { FileText, Pencil, User } from "lucide-react";
-import { loadCustomerTypes, type CustomerTypeRecord } from "../customer-type-data";
+import { useCustomerType } from "@/hooks/masters";
+import { getMasterDetailErrorMessage } from "@/lib/masters/master-query-errors";
+import type { CustomerTypeRecord } from "../customer-type-data";
+
+function toCustomerTypeRecord(detail: {
+  id: number;
+  customerTypeId: string;
+  initialCode: string;
+  customerType: string;
+  description: string;
+  status: "active" | "inactive";
+  documents: { id: string; title: string }[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}): CustomerTypeRecord {
+  return {
+    id: detail.id,
+    customerTypeId: detail.customerTypeId,
+    customerTypeCode: detail.initialCode,
+    initialCode: detail.initialCode,
+    customerType: detail.customerType,
+    description: detail.description,
+    documentTypes: detail.documents.map((doc, idx) => ({
+      id: `DOC-${idx + 1}`,
+      documentTypeId: doc.id,
+      documentName: doc.title,
+    })),
+    status: detail.status,
+    createdBy: detail.createdBy || "—",
+    createdDate: detail.createdAt ? detail.createdAt.slice(0, 10) : "",
+    updatedBy: detail.updatedBy || "—",
+    updatedDate: detail.updatedAt ? detail.updatedAt.slice(0, 10) : "",
+  };
+}
 
 export default function CustomerTypeDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [customerType, setCustomerType] = useState<CustomerTypeRecord | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-	useEffect(() => {
-		const list = loadCustomerTypes();
-		setCustomerType(list.find((c) => c.id === Number(id)) ?? null);
-	}, [id]);
+  const detailQuery = useCustomerType(id);
+  const customerType = detailQuery.data
+    ? toCustomerTypeRecord(detailQuery.data)
+    : null;
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "Customer type not found.",
+        "Failed to load customer type.",
+      )
+    : null;
 
-  if (!customerType) {
+  if (loading) {
+    return (
+      <RecordDetailPage
+        listHref="/masters/customer-types"
+        listLabel="Customer Types"
+        recordName="Loading..."
+        statusLabel="—"
+        statusVariant="neutral"
+      >
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">Loading customer type...</p>
+        </div>
+      </RecordDetailPage>
+    );
+  }
+
+  if (!customerType || loadError) {
     return (
       <RecordDetailPage
         listHref="/masters/customer-types"
@@ -32,7 +90,7 @@ export default function CustomerTypeDetailPage() {
         statusVariant="neutral"
       >
         <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">Customer Type not found.</p>
+          <p className="text-sm text-muted-foreground">{loadError || "Customer Type not found."}</p>
           <Link href="/masters/customer-types" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
             Back to listing
           </Link>
@@ -41,6 +99,7 @@ export default function CustomerTypeDetailPage() {
     );
   }
 
+  const routeId = customerType.customerTypeId || id;
   const tabs = [{ value: "overview", label: "Overview" }];
   const docCount = customerType.documentTypes?.length ?? 0;
 
@@ -50,7 +109,6 @@ export default function CustomerTypeDetailPage() {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <RecordSectionCard title="Customer Type Info" icon={User} accent="blue">
-          <RecordKvRow label="Customer Type ID" value={String(customerType.id)} mono />
           <RecordKvRow label="Customer Type" value={customerType.customerType} />
           <RecordKvRow label="Initial Code" value={customerType.initialCode} mono copy highlight />
           <RecordKvRow label="Description" value={customerType.description} isLast />
@@ -95,13 +153,13 @@ export default function CustomerTypeDetailPage() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      onEdit={() => router.push(`/masters/customer-types/${customerType.id}/edit`)}
+      onEdit={() => router.push(`/masters/customer-types/${routeId}/edit`)}
       sidebar={{
         quickActions: [
           {
             label: "Edit Customer Type",
             icon: Pencil,
-            onClick: () => router.push(`/masters/customer-types/${customerType.id}/edit`),
+            onClick: () => router.push(`/masters/customer-types/${routeId}/edit`),
             variant: "primary",
           },
         ],

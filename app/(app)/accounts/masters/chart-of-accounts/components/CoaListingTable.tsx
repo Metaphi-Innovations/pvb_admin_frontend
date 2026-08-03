@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo } from "react";
-import { Eye } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -51,11 +51,11 @@ interface CoaHierarchyListingTableProps {
   ledgerRows?: never;
   records: ChartOfAccount[];
   canCreate: boolean;
-  highlightedLedgerId?: number | null;
+  highlightedLedgerId?: import("../../../data").CoaNodeId | null;
   isSearchMode?: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   canEdit?: boolean;
   emptyMessage?: string;
 }
@@ -66,10 +66,11 @@ interface CoaLedgerListingTableProps {
   rows?: never;
   records?: ChartOfAccount[];
   canCreate?: boolean;
-  highlightedLedgerId?: number | null;
+  highlightedLedgerId?: import("../../../data").CoaNodeId | null;
   isSearchMode?: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onDeleteLedger?: (ledger: ChartOfAccount) => void;
   emptyMessage?: string;
 }
 
@@ -90,6 +91,7 @@ export function CoaListingTable(props: CoaListingTableProps) {
         highlightedLedgerId={highlightedLedgerId}
         isSearchMode={isSearchMode}
         onSelectLedger={onDrillInto}
+        onDeleteLedger={props.onDeleteLedger}
         emptyMessage={emptyMessage}
       />
     );
@@ -140,11 +142,11 @@ function CoaHierarchyListingTable({
   records: ChartOfAccount[];
   canCreate: boolean;
   canEdit?: boolean;
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   isSearchMode: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
 }) {
   const getCellValue = useCallback((row: CoaListingRow, key: string) => {
     switch (key) {
@@ -222,11 +224,11 @@ function CoaHierarchyTableContent({
   records: ChartOfAccount[];
   canCreate: boolean;
   canEdit?: boolean;
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   isSearchMode: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
-  onAddLedger?: (parentGroupId: number) => void;
-  onAddSubGroup?: (parentGroupId: number) => void;
+  onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   minWidth: number;
 }) {
   const visible = useAccountsFilteredRows<CoaListingRow>([]);
@@ -363,12 +365,14 @@ function CoaLedgerListingTableBody({
   highlightedLedgerId,
   isSearchMode,
   onSelectLedger,
+  onDeleteLedger,
   emptyMessage,
 }: {
   ledgerRows: CoaLedgerListingRow[];
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   isSearchMode: boolean;
   onSelectLedger: (ledger: ChartOfAccount) => void;
+  onDeleteLedger?: (ledger: ChartOfAccount) => void;
   emptyMessage: string;
 }) {
   if (ledgerRows.length === 0) {
@@ -389,6 +393,7 @@ function CoaLedgerListingTableBody({
       ledgerRows={ledgerRows}
       highlightedLedgerId={highlightedLedgerId}
       onSelectLedger={onSelectLedger}
+      onDeleteLedger={onDeleteLedger}
     />
   );
 }
@@ -397,10 +402,12 @@ function CoaLedgerListingTableInner({
   ledgerRows,
   highlightedLedgerId,
   onSelectLedger,
+  onDeleteLedger,
 }: {
   ledgerRows: CoaLedgerListingRow[];
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   onSelectLedger: (ledger: ChartOfAccount) => void;
+  onDeleteLedger?: (ledger: ChartOfAccount) => void;
 }) {
   const getCellValue = useCallback((row: CoaLedgerListingRow, key: string) => {
     switch (key) {
@@ -441,6 +448,7 @@ function CoaLedgerListingTableInner({
       <CoaLedgerTableContent
         highlightedLedgerId={highlightedLedgerId}
         onSelectLedger={onSelectLedger}
+        onDeleteLedger={onDeleteLedger}
       />
     </AccountsColumnFilterProvider>
   );
@@ -449,9 +457,11 @@ function CoaLedgerListingTableInner({
 function CoaLedgerTableContent({
   highlightedLedgerId,
   onSelectLedger,
+  onDeleteLedger,
 }: {
-  highlightedLedgerId: number | null;
+  highlightedLedgerId: import("../../../data").CoaNodeId | null;
   onSelectLedger: (ledger: ChartOfAccount) => void;
+  onDeleteLedger?: (ledger: ChartOfAccount) => void;
 }) {
   const visible = useAccountsFilteredRows<CoaLedgerListingRow>([]);
 
@@ -515,17 +525,34 @@ function CoaLedgerTableContent({
                     )}
                   </AccountsTableCell>
                   <AccountsTableCell align="center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          aria-label="View Ledger Transactions"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover:bg-brand-50 group-hover:text-brand-700"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">View Ledger Transactions</TooltipContent>
-                    </Tooltip>
+                    <div className="flex items-center justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            aria-label="View Ledger Transactions"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover:bg-brand-50 group-hover:text-brand-700"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">View Ledger Transactions</TooltipContent>
+                      </Tooltip>
+                      {onDeleteLedger && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              aria-label="Delete Ledger"
+                              role="button"
+                              onClick={(e) => { e.stopPropagation(); onDeleteLedger(ledger); }}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Delete Ledger</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   </AccountsTableCell>
                 </AccountsTableRow>
               );

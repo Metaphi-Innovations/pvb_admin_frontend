@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/masters/warehouse/components/WarehouseForm";
 import {
   type WarehouseMaster,
+  type WarehouseStatus,
   loadWarehouses,
   saveWarehouses,
   nextWarehouseId,
@@ -29,9 +30,12 @@ interface ToastState {
 }
 
 export interface AccountsWarehouseFormProps {
-  parentGroupId: number;
+  parentGroupId: import("../../../../data").CoaNodeId;
   onClose: () => void;
-  onSaved?: (ledgerId: number, parentGroupId: number | null) => void;
+  onSaved?: (
+    ledgerId: import("../../../../data").CoaNodeId,
+    parentGroupId: import("../../../../data").CoaNodeId | null,
+  ) => void;
 }
 
 /**
@@ -82,10 +86,12 @@ export default function AccountsWarehouseFormClient({
     try {
       const current = loadWarehouses();
       const nextIdVal = nextWarehouseId(current);
+      const fields = warehouseFormToRecordFields(form);
       const newRecord: WarehouseMaster = {
         id: nextIdVal,
         warehouseCode: generateWarehouseCode(nextIdVal),
-        ...warehouseFormToRecordFields(form),
+        ...fields,
+        status: (fields.status?.toLowerCase() || "active") as WarehouseStatus,
         createdBy: "Admin",
         createdDate: todayStr(),
         updatedBy: "Admin",

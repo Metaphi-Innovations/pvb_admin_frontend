@@ -116,8 +116,6 @@ export function BulkPricingGrid({ lines, onChange, errors, onRemoveLine }: BulkP
             {lines.map((line, idx) => {
               const inlineErrors = getPricingProductLineInlineErrors(line);
               const mrpError = inlineErrors.mrp || errors[`line_${idx}_mrp`];
-              const costPriceError =
-                inlineErrors.costPrice || errors[`line_${idx}_costPrice`];
               const dealerPriceError =
                 inlineErrors.dealerPrice || errors[`line_${idx}_dealerPrice`];
 
@@ -151,11 +149,9 @@ export function BulkPricingGrid({ lines, onChange, errors, onRemoveLine }: BulkP
                     </div>
                   </td>
                   <td className="px-2 py-1.5 align-top text-right">
-                    <PriceFieldCell
-                      value={line.costPrice}
-                      onChange={(v) => onChange(updateLine(lines, idx, { costPrice: v }))}
-                      error={costPriceError}
-                    />
+                    <span className="inline-block tabular-nums text-muted-foreground">
+                      {formatIndianRupeeDisplay(line.costPrice)}
+                    </span>
                   </td>
                   <td className="px-2 py-1.5 align-top text-right">
                     <PriceFieldCell

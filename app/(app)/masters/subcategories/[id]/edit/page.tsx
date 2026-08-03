@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCategoryDropdown } from "@/hooks/masters/use-categories";
+import { toCategoryNameSelectOptions } from "@/services/category-list.service";
 import { DEFAULT_SUBCATEGORY_FORM, SubCategoryForm, type SubCategoryFormValues, validateSubCategoryForm } from "../../components/SubCategoryForm";
-import { getCategoryOptions, loadSubCategories, saveSubCategories, todayStr, type SubCategory } from "../../subcategory-data";
+import { loadSubCategories, saveSubCategories, todayStr, type SubCategory } from "../../subcategory-data";
 
 interface ToastState {
   msg: string;
@@ -29,6 +31,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 export default function EditSubCategoryPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
+  const categoryQuery = useCategoryDropdown();
   const [record, setRecord] = useState<SubCategory | null>(null);
   const [form, setForm] = useState<SubCategoryFormValues>(DEFAULT_SUBCATEGORY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -61,6 +64,11 @@ export default function EditSubCategoryPage() {
       delete next[key];
       return next;
     });
+
+  const categoryOptions = useMemo(
+    () => toCategoryNameSelectOptions(categoryQuery.data ?? [], form.categoryName),
+    [categoryQuery.data, form.categoryName],
+  );
 
   const persist = () => {
     const errs = validateSubCategoryForm(form);
@@ -132,7 +140,14 @@ export default function EditSubCategoryPage() {
 
         {/* Form Body */}
         <div className="flex-1 px-5 py-4 overflow-y-auto bg-muted/10">
-          <SubCategoryForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} categoryOptions={getCategoryOptions()} />
+          <SubCategoryForm
+            form={form}
+            onChange={setForm}
+            errors={errors}
+            onClearError={clearErr}
+            categoryOptions={categoryOptions}
+            categoryLoading={categoryQuery.isFetching}
+          />
         </div>
       </div>
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

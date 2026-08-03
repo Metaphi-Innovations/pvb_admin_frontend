@@ -6,61 +6,43 @@ import { Truck, FileText, CheckCircle2, Clock, Package, RotateCcw, XCircle } fro
 import { useRouter } from "next/navigation";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Button } from "@/components/ui/button";
-
-import { DispatchRecord } from "./types";
-import { getDispatchesByWarehouse } from "./services";
-import { WAREHOUSE_OPTIONS } from "./constants";
+import { getDispatches } from "./services";
 import { DispatchListing } from "./DispatchListing";
+import { axiosInstance as api } from "@/api/axios";
+import { API_ENDPOINTS } from "@/api/endpoints";
 
 export default function DispatchManagementPage() {
   const router = useRouter();
-
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>("All");
-  const [rawDispatches, setRawDispatches] = useState<DispatchRecord[]>([]);
-
-  const reload = useCallback(() => {
-    setRawDispatches(getDispatchesByWarehouse(selectedWarehouse));
-  }, [selectedWarehouse]);
+  const [warehouses, setWarehouses] = useState<{value: string, label: string}[]>([]);
 
   useEffect(() => {
-    reload();
-  }, [reload]);
-
-  // KPIs
-  const stats = useMemo(() => {
-    const all = rawDispatches;
-    return {
-      total: all.length,
-      pending: all.filter(d => d.deliveryStatus === "Pending Dispatch").length,
-      inTransit: all.filter(d => d.deliveryStatus === "In Transit").length,
-      delivered: all.filter(d => d.deliveryStatus === "Delivered").length,
-      returned: all.filter(d => d.deliveryStatus === "Returned").length,
-      cancelled: all.filter(d => d.deliveryStatus === "Cancelled").length,
-    };
-  }, [rawDispatches]);
+    async function fetchWarehouses() {
+      try {
+        const response = await api.get(API_ENDPOINTS.MASTER.WAREHOUSE.DROPDOWN);
+        const opts = (response.data?.data || []).map((w: any) => ({
+          value: w.warehouse_id || w.id || w.value,
+          label: w.warehouse_name || w.name || w.label
+        }));
+        setWarehouses(opts);
+      } catch (err) {
+        console.error("Failed to fetch warehouses", err);
+      }
+    }
+    fetchWarehouses();
+  }, []);
 
   return (
     <ListingContainer
       title="Dispatch Management"
       titleIcon={Truck}
-      metrics={
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <MiniKPICard label="Total Dispatches" value={stats.total} icon={Truck} accent={true} />
-          <MiniKPICard label="Pending Dispatch" value={stats.pending} icon={Clock} accent={false} />
-          <MiniKPICard label="In Transit" value={stats.inTransit} icon={Package} accent={false} />
-          <MiniKPICard label="Delivered" value={stats.delivered} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Returned" value={stats.returned} icon={RotateCcw} accent={false} />
-          <MiniKPICard label="Cancelled" value={stats.cancelled} icon={XCircle} accent={false} />
-        </div>
-      }
       actions={
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
           <AutocompleteSelect
             options={[
               { value: "All", label: "All Warehouses" },
-              ...WAREHOUSE_OPTIONS
+              ...warehouses
             ]}
             value={selectedWarehouse}
             onChange={setSelectedWarehouse}
@@ -71,10 +53,7 @@ export default function DispatchManagementPage() {
         </div>
       }
     >
-      <DispatchListing 
-        rawDispatches={rawDispatches} 
-        reload={reload} 
-      />
+      <DispatchListing selectedWarehouse={selectedWarehouse} />
     </ListingContainer>
   );
 }

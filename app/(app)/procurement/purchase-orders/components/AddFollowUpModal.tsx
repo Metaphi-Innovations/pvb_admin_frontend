@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import UnderlineExtension from "@tiptap/extension-underline";
+import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold,
   Italic,
@@ -18,7 +22,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Popover,
   PopoverContent,
@@ -35,70 +38,155 @@ import {
 } from "../po-followup-data";
 import { FollowUpActivityFeed, PanelTitle } from "./FollowUpActivityFeed";
 
+type RemarkListAction = "bullet" | "number";
+
+/** Split soft line breaks inside the selection into separate paragraphs. */
+function splitHardBreaksInSelection(editor: Editor): void {
+  const { state, view } = editor;
+  const { from, to } = state.selection;
+  const breaks: number[] = [];
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name === "hardBreak") breaks.push(pos);
+  });
+
+  if (breaks.length === 0) return;
+
+  let tr = state.tr;
+  breaks.sort((a, b) => b - a);
+
+  for (const pos of breaks) {
+    tr = tr.delete(pos, pos + 1);
+    const mappedPos = tr.mapping.map(pos);
+    const $pos = tr.doc.resolve(mappedPos);
+    if ($pos.parent.type.name === "paragraph" && $pos.parentOffset > 0) {
+      tr = tr.split(mappedPos);
+    }
+  }
+
+  view.dispatch(tr);
+}
+
+/** Expand selection to fully include every text block in range. */
+function expandSelectionToTextblocks(editor: Editor): void {
+  const { state } = editor;
+  const { from, to } = state.selection;
+  if (from === to) return;
+
+  let blockFrom = from;
+  let blockTo = to;
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isTextblock) {
+      blockFrom = Math.min(blockFrom, pos);
+      blockTo = Math.max(blockTo, pos + node.nodeSize);
+    }
+  });
+
+  if (blockFrom !== from || blockTo !== to) {
+    editor.commands.setTextSelection({ from: blockFrom, to: blockTo });
+  }
+}
+
+function applyListFormat(editor: Editor, listType: RemarkListAction): void {
+  const { empty } = editor.state.selection;
+
+  if (empty) {
+    if (listType === "bullet") editor.chain().focus().toggleBulletList().run();
+    else editor.chain().focus().toggleOrderedList().run();
+    return;
+  }
+
+  splitHardBreaksInSelection(editor);
+  expandSelectionToTextblocks(editor);
+
+  if (listType === "bullet") editor.chain().focus().toggleBulletList().run();
+  else editor.chain().focus().toggleOrderedList().run();
+}
+
 function RemarkToolbar({
   onAction,
+  isActive,
+  disabled = false,
 }: {
   onAction: (action: "bold" | "italic" | "underline" | "strike" | "bullet" | "number") => void;
+  isActive: (action: "bold" | "italic" | "underline" | "strike" | "bullet" | "number") => boolean;
+  disabled?: boolean;
 }) {
-  const btn =
-    "h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors";
+  const btn = (active: boolean) =>
+    cn(
+      "h-7 w-7 inline-flex items-center justify-center rounded-md transition-colors",
+      active
+        ? "bg-brand-50 text-brand-700"
+        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      disabled && "pointer-events-none opacity-50",
+    );
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-border bg-muted/20 px-2 py-1.5">
-      <button type="button" className={btn} onClick={() => onAction("bold")} title="Bold">
+      <button
+        type="button"
+        className={btn(isActive("bold"))}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("bold")}
+        title="Bold"
+        aria-pressed={isActive("bold")}
+      >
         <Bold className="h-3.5 w-3.5" />
       </button>
-      <button type="button" className={btn} onClick={() => onAction("italic")} title="Italic">
+      <button
+        type="button"
+        className={btn(isActive("italic"))}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("italic")}
+        title="Italic"
+        aria-pressed={isActive("italic")}
+      >
         <Italic className="h-3.5 w-3.5" />
       </button>
-      <button type="button" className={btn} onClick={() => onAction("underline")} title="Underline">
+      <button
+        type="button"
+        className={btn(isActive("underline"))}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("underline")}
+        title="Underline"
+        aria-pressed={isActive("underline")}
+      >
         <Underline className="h-3.5 w-3.5" />
       </button>
-      <button type="button" className={btn} onClick={() => onAction("strike")} title="Strikethrough">
+      <button
+        type="button"
+        className={btn(isActive("strike"))}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("strike")}
+        title="Strikethrough"
+        aria-pressed={isActive("strike")}
+      >
         <Strikethrough className="h-3.5 w-3.5" />
       </button>
       <span className="mx-1 h-4 w-px bg-border" />
-      <button type="button" className={btn} onClick={() => onAction("bullet")} title="Bullet list">
+      <button
+        type="button"
+        className={btn(isActive("bullet"))}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("bullet")}
+        title="Bullet list"
+        aria-pressed={isActive("bullet")}
+      >
         <List className="h-3.5 w-3.5" />
       </button>
-      <button type="button" className={btn} onClick={() => onAction("number")} title="Numbered list">
+      <button
+        type="button"
+        className={btn(isActive("number"))}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("number")}
+        title="Numbered list"
+        aria-pressed={isActive("number")}
+      >
         <ListOrdered className="h-3.5 w-3.5" />
       </button>
     </div>
   );
-}
-
-function applyRemarkFormat(
-  value: string,
-  selectionStart: number,
-  selectionEnd: number,
-  action: "bold" | "italic" | "underline" | "strike" | "bullet" | "number",
-): { next: string; cursor: number } {
-  const selected = value.slice(selectionStart, selectionEnd);
-  const before = value.slice(0, selectionStart);
-  const after = value.slice(selectionEnd);
-
-  if (action === "bullet") {
-    const line = selected || "List item";
-    const next = `${before}• ${line}${after}`;
-    return { next, cursor: before.length + line.length + 2 };
-  }
-  if (action === "number") {
-    const line = selected || "List item";
-    const next = `${before}1. ${line}${after}`;
-    return { next, cursor: before.length + line.length + 3 };
-  }
-
-  const wrappers: Record<string, [string, string]> = {
-    bold: ["**", "**"],
-    italic: ["_", "_"],
-    underline: ["<u>", "</u>"],
-    strike: ["~~", "~~"],
-  };
-  const [open, close] = wrappers[action];
-  const inner = selected || "text";
-  const next = `${before}${open}${inner}${close}${after}`;
-  return { next, cursor: before.length + open.length + inner.length + close.length };
 }
 
 export function AddFollowUpModal({
@@ -107,25 +195,26 @@ export function AddFollowUpModal({
   po,
   onSubmit,
   readOnly = false,
+  entries: entriesProp = [],
+  submitting = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   po: PurchaseOrder | null;
   onSubmit: (input: AddFollowUpInput) => void;
   readOnly?: boolean;
+  entries?: ReturnType<typeof loadFollowUpsForPO>;
+  submitting?: boolean;
 }) {
-  const remarkRef = useRef<HTMLTextAreaElement>(null);
+  const remarkRef = useRef<HTMLDivElement>(null);
   const [followUpType, setFollowUpType] = useState<POFollowUpType | "">("");
   const [typeOpen, setTypeOpen] = useState(false);
   const [followUpAt, setFollowUpAt] = useState(nowDateTimeLocal());
   const [nextFollowUpAt, setNextFollowUpAt] = useState("");
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState("");
-  const [entries, setEntries] = useState<ReturnType<typeof loadFollowUpsForPO>>([]);
-
-  const refreshEntries = useCallback(() => {
-    if (po) setEntries(loadFollowUpsForPO(po.id));
-  }, [po]);
+  const [, setEditorTick] = useState(0);
+  const entries = entriesProp;
 
   const resetForm = useCallback(() => {
     setFollowUpType("");
@@ -138,32 +227,86 @@ export function AddFollowUpModal({
   useEffect(() => {
     if (open && po) {
       resetForm();
-      refreshEntries();
     }
-  }, [open, po?.id, resetForm, refreshEntries]);
+  }, [open, po?.id, resetForm]);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        code: false,
+        codeBlock: false,
+        blockquote: false,
+        horizontalRule: false,
+      }),
+      UnderlineExtension,
+      Placeholder.configure({
+        placeholder: "Add follow-up notes…",
+      }),
+    ],
+    content: remarks || "",
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class:
+          "min-h-[140px] px-3 py-2 text-xs focus:outline-none [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-foreground [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
+      },
+    },
+    onUpdate: ({ editor: activeEditor }) => {
+      setRemarks(activeEditor.getHTML());
+      setError("");
+    },
+    onSelectionUpdate: () => {
+      setEditorTick((prev) => prev + 1);
+    },
+    onTransaction: () => {
+      setEditorTick((prev) => prev + 1);
+    },
+  });
+
+  useEffect(() => {
+    if (!editor) return;
+    const current = editor.getHTML();
+    if (remarks !== current) {
+      editor.commands.setContent(remarks || "");
+    }
+  }, [editor, remarks]);
 
   if (!po) return null;
 
   const handleRemarkAction = (
     action: "bold" | "italic" | "underline" | "strike" | "bullet" | "number",
   ) => {
-    const el = remarkRef.current;
-    if (!el) return;
-    const { selectionStart, selectionEnd } = el;
-    const { next, cursor } = applyRemarkFormat(remarks, selectionStart, selectionEnd, action);
-    setRemarks(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(cursor, cursor);
-    });
+    if (!editor) return;
+    const chain = editor.chain().focus();
+    if (action === "bold") chain.toggleBold().run();
+    if (action === "italic") chain.toggleItalic().run();
+    if (action === "underline") chain.toggleUnderline().run();
+    if (action === "strike") chain.toggleStrike().run();
+    if (action === "bullet") applyListFormat(editor, "bullet");
+    if (action === "number") applyListFormat(editor, "number");
+  };
+
+  const isRemarkActionActive = (
+    action: "bold" | "italic" | "underline" | "strike" | "bullet" | "number",
+  ) => {
+    if (!editor) return false;
+    if (action === "bold") return editor.isActive("bold");
+    if (action === "italic") return editor.isActive("italic");
+    if (action === "underline") return editor.isActive("underline");
+    if (action === "strike") return editor.isActive("strike");
+    if (action === "bullet") return editor.isActive("bulletList");
+    if (action === "number") return editor.isActive("orderedList");
+    return false;
   };
 
   const submit = () => {
+    const remarkText = editor?.getText().trim() ?? "";
     if (!followUpType) {
       setError("Follow-up type is required.");
       return;
     }
-    if (!remarks.trim()) {
+    if (!remarkText) {
       setError("Remark is required.");
       return;
     }
@@ -175,7 +318,6 @@ export function AddFollowUpModal({
       remarks: remarks.trim(),
     });
     resetForm();
-    refreshEntries();
   };
 
   const typeLabel =
@@ -277,17 +419,14 @@ export function AddFollowUpModal({
                     Remark <span className="text-red-500">*</span>
                   </Label>
                   <div className="overflow-hidden rounded-lg border border-border">
-                    <RemarkToolbar onAction={handleRemarkAction} />
-                    <Textarea
-                      ref={remarkRef}
-                      value={remarks}
-                      onChange={(e) => {
-                        setRemarks(e.target.value);
-                        setError("");
-                      }}
-                      placeholder="Add follow-up notes…"
-                      className="min-h-[140px] resize-none rounded-none border-0 text-xs focus-visible:ring-0"
+                    <RemarkToolbar
+                      onAction={handleRemarkAction}
+                      isActive={isRemarkActionActive}
+                      disabled={!editor}
                     />
+                    <div ref={remarkRef} className="rounded-none border-0">
+                      <EditorContent editor={editor} />
+                    </div>
                   </div>
                 </div>
 
@@ -301,6 +440,7 @@ export function AddFollowUpModal({
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => onOpenChange(false)}
+                disabled={submitting}
               >
                 Cancel
               </Button>
@@ -308,8 +448,9 @@ export function AddFollowUpModal({
                 size="sm"
                 className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
                 onClick={submit}
+                disabled={submitting}
               >
-                Save
+                {submitting ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>

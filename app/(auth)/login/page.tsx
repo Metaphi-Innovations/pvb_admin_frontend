@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FINANCIAL_YEARS, FY_STATUS_CONFIG, setStoredFYId, type FinancialYear } from "@/lib/fy-store";
-import { AuthService } from "@/services/auth.service";
+import { FY_STATUS_CONFIG, setStoredFYId, mapApiFinancialYear, type FinancialYear } from "@/lib/fy-store";
+import { FinancialYearApiService } from "@/services/financial-year.service";
+import { useAuth } from "@/lib/auth/auth-context";
 import { LoginRequest } from "@/types/api.types";
-import { error } from "console";
+import { FY_PENDING_KEY } from "@/components/auth/GuestGate";
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ type IdentifierType = "email" | "mobile" | "unknown";
 function detectType(val: string): IdentifierType {
   const trimmed = val.trim();
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return "email";
-  if (/^[6-9]\d{9}$/.test(trimmed)) return "mobile";
+  if (/^\d{10}$/.test(trimmed)) return "mobile";
   return "unknown";
 }
 
@@ -187,6 +188,7 @@ function LeftPanel() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LoginPage() {
   // ── State ──────────────────────────────────────────────────────────────────
+  const { login } = useAuth();
   const [step, setStep] = useState<Step>("credentials");
   const [identifier, setIdentifier] = useState("");
   const [idError, setIdError] = useState("");
@@ -200,14 +202,37 @@ export default function LoginPage() {
   const [forgotVal, setForgotVal] = useState("");
   const [resendSecs, setResendSecs] = useState(0);
   const [selectedFY, setSelectedFY] = useState<FinancialYear | null>(null);
+  const [fyOptions, setFyOptions] = useState<FinancialYear[]>([]);
+  const [fyLoadError, setFyLoadError] = useState<string | null>(null);
 
   const idType = detectType(identifier);
 
-  // pre-select live FY
   useEffect(() => {
-    const live = FINANCIAL_YEARS.find((f) => f.status === "live");
-    if (live) setSelectedFY(live);
-  }, []);
+    if (step !== "fy-select") return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setFyLoadError(null);
+      try {
+        const rows = await FinancialYearApiService.list(true);
+        if (cancelled) return;
+        const mapped = rows.map(mapApiFinancialYear);
+        setFyOptions(mapped);
+        const current = mapped.find((f) => f.isCurrent) ?? mapped.find((f) => f.status === "live") ?? mapped[0] ?? null;
+        setSelectedFY(current);
+      } catch (err: any) {
+        if (!cancelled) {
+          setFyLoadError(err?.message || "Failed to load financial years");
+          setFyOptions([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const simulate = (fn: () => void, ms = 1400) => {
@@ -260,26 +285,17 @@ export default function LoginPage() {
         payload.email = identifier.trim();
       }
 
-      // const response = await AuthService.login(payload);
-
-      // temporary hardcoded response
-      const response = {
-        success: true,
-        message: "Login successful",
-        data: {
-          access_token: "dummy-token",
-          refresh_token: "dummy-refresh-token",
-        },
-      };
-
-      if (response.success) {
-        setStep("fy-select");
-      } else {
-        // setPwError(response.error || "Login failed. Please check your credentials.");
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(FY_PENDING_KEY, "1");
       }
+      await login(payload);
+      setStep("fy-select");
     } catch (err: any) {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(FY_PENDING_KEY);
+      }
       console.error("Login integration error:", err);
-      setPwError(err.error || err.message || "An unexpected error occurred.");
+      setPwError(err?.message || err?.error || "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
@@ -293,6 +309,9 @@ export default function LoginPage() {
   const handleFYContinue = () => {
     if (!selectedFY) return;
     setStoredFYId(selectedFY.id);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(FY_PENDING_KEY);
+    }
     window.location.href = "/dashboard";
   };
 
@@ -467,7 +486,12 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-2">
-          {FINANCIAL_YEARS.filter((fy) => fy.status !== "archived").map((fy) => (
+          {fyLoadError && (
+            <p className="text-xs text-red-500 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {fyLoadError}
+            </p>
+          )}
+          {fyOptions.filter((fy) => fy.status !== "archived").map((fy) => (
             <button
               key={fy.id}
               onClick={() => setSelectedFY(fy)}
@@ -487,7 +511,12 @@ export default function LoginPage() {
                   : <Calendar className="w-4 h-4 text-muted-foreground" />}
               </div>
               <div className="flex-1 text-left">
-                <p className="text-sm font-semibold text-foreground">{fy.label}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {fy.label}
+                  {fy.isCurrent ? (
+                    <span className="ml-1.5 text-[10px] font-medium text-green-600">Current</span>
+                  ) : null}
+                </p>
                 <p className="text-xs text-muted-foreground mt-0.5">{fy.start} – {fy.end}</p>
               </div>
               <FYStatusBadge status={fy.status} />

@@ -176,7 +176,7 @@ function makeDemoLedger(
   };
 }
 
-function ledgerKey(parentId: number, name: string): string {
+function ledgerKey(parentId: import("../../data").CoaNodeId, name: string): string {
   return `${parentId}|${name.trim().toLowerCase()}`;
 }
 

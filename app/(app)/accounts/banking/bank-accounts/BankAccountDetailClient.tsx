@@ -1,64 +1,170 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { SectionTabs, StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
-import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
-import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
-import { getBankAccountById, getMappedWarehouseLabels } from "@/lib/accounts/bank-accounts-data";
-import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
-import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { formatMoney } from "@/lib/accounts/money-format";
+import { useFY } from "@/lib/fy-store";
+import { usePermissionsOptional } from "@/lib/auth";
+import { useBankAccountByLedgerId } from "@/hooks/accounts/use-bank-accounts";
 import {
-  buildLedgerStatement,
-  collectLedgerTransactions,
-} from "@/lib/accounts/ledger-detail-utils";
+  ACCOUNT_TYPE_OPTIONS,
+  extractBankAccountErrorMessage,
+  type BankAccountApiAccountType,
+  type BankAccountDetail,
+} from "@/services/bank-accounts-list.service";
+import { isActiveStatus } from "@/components/listing";
+import { BankAccountToggle } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
+import { cn } from "@/lib/utils";
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "transactions", label: "Transactions" },
-  { id: "bankbook", label: "Bank Book" },
-  { id: "reconciliation", label: "Reconciliation" },
-  { id: "statement", label: "Ledger Statement" },
-];
+function accountTypeLabel(raw: BankAccountApiAccountType | ""): string {
+  if (!raw) return "—";
+  return ACCOUNT_TYPE_OPTIONS.find((o) => o.value === raw)?.label ?? raw;
+}
 
-export default function BankAccountDetailClient({ accountId }: { accountId: number }) {
+function formatAuditUser(user: BankAccountDetail["createdBy"]): string {
+  if (!user) return "—";
+  return user.username || user.user_id || "—";
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function SectionBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+      <div className="px-3 py-1.5 border-b border-border bg-muted/30">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          {title}
+        </p>
+      </div>
+      <div className="px-3 divide-y divide-border/60">{children}</div>
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-1.5 min-w-0">
+      <span className="text-[11px] text-muted-foreground flex-shrink-0 pt-0.5">
+        {label}
+      </span>
+      <div
+        className={cn(
+          "text-xs font-medium text-foreground text-right break-words min-w-0",
+          mono && "font-mono font-semibold text-brand-700",
+        )}
+      >
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+function KpiChip({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-white px-2.5 py-1.5 shadow-sm min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-0.5">{children}</div>
+    </div>
+  );
+}
+
+export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string }) {
   const router = useRouter();
-  const [tab, setTab] = useState("overview");
+  const { selectedFY } = useFY();
+  const permissions = usePermissionsOptional();
 
-  const account = useMemo(() => getBankAccountById(accountId), [accountId]);
-  const ledger = useMemo(() => {
-    if (!account) return null;
-    return loadChartOfAccounts().find((r) => r.id === account.coaLedgerId) ?? null;
-  }, [account]);
+  const canUpdate =
+    !permissions || permissions.isLoading
+      ? true
+      : permissions.canEdit("accounts", "bank_account");
 
-  const balance = useMemo(
-    () => (ledger ? computeLedgerCurrentBalance(ledger) : { amount: 0, balanceType: "Debit" as const }),
-    [ledger],
-  );
+  const detailQuery = useBankAccountByLedgerId(ledgerId, {
+    financialYearId: selectedFY?.id ?? null,
+  });
 
-  const transactions = useMemo(
-    () => (ledger ? collectLedgerTransactions(ledger.id) : []),
-    [ledger],
-  );
+  const account = detailQuery.data;
+  const loading = detailQuery.isLoading;
+  const error = detailQuery.isError
+    ? extractBankAccountErrorMessage(
+        detailQuery.error,
+        "Unable to load bank account details.",
+      )
+    : null;
 
-  const statement = useMemo(
-    () => (ledger ? buildLedgerStatement(ledger, transactions) : []),
-    [ledger, transactions],
-  );
-
-  if (!account || !ledger) {
+  if (loading) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts", "/accounts/banking/bank-accounts")}
-        title="Account not found"
-        description="This bank account may have been removed."
+        breadcrumbs={accountsBreadcrumb(
+          "Banking",
+          "Bank Accounts",
+          "/accounts/banking/bank-accounts",
+        )}
+        title="Bank Account"
+        description="Loading…"
+        layout="split"
       >
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          <Link href="/accounts/banking/bank-accounts" className="text-brand-600 hover:underline">
+        <div className="p-4 text-xs text-muted-foreground">Loading bank account…</div>
+      </AccountsPageShell>
+    );
+  }
+
+  if (error || !account) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb(
+          "Banking",
+          "Bank Accounts",
+          "/accounts/banking/bank-accounts",
+        )}
+        title="Account not found"
+        description="This bank account could not be loaded."
+        layout="split"
+      >
+        <div className="p-6 text-center space-y-2">
+          <p className="text-xs text-red-600">{error || "Bank account not found."}</p>
+          <Link
+            href="/accounts/banking/bank-accounts"
+            className="text-xs text-brand-600 hover:underline"
+          >
             Back to Bank Accounts
           </Link>
         </div>
@@ -66,137 +172,148 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
     );
   }
 
+  const openingAmount = Number(account.openingBalance) || 0;
+  const openingSide =
+    account.openingBalanceType === "CREDIT" ? ("Credit" as const) : ("Debit" as const);
+  const editHref =
+    account.bankDetailsStatus === "PENDING"
+      ? `/accounts/banking/bank-accounts/${account.ledgerId}/complete`
+      : `/accounts/banking/bank-accounts/${account.ledgerId}/edit`;
+
+  const warehouseLabel =
+    account.warehouses.length === 0
+      ? "—"
+      : account.warehouses.map((w) => w.name).filter(Boolean).join(", ");
+
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts", "/accounts/banking/bank-accounts")}
-      title={formatBankAccountMaster(account)}
-      description={account.bankName}
+      breadcrumbs={accountsBreadcrumb(
+        "Banking",
+        "Bank Accounts",
+        "/accounts/banking/bank-accounts",
+      )}
+      title={account.ledgerName || "Bank Account"}
+      description={
+        [account.ledgerCode, account.bankName || null].filter(Boolean).join(" · ") ||
+        "Bank account details"
+      }
       actions={
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => router.push(`/accounts/banking/bank-accounts/${accountId}/edit`)}
-            className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40"
+          {canUpdate && account.editable !== false ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() => router.push(editHref)}
+            >
+              {account.bankDetailsStatus === "PENDING" ? "Complete details" : "Edit"}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => router.push("/accounts/banking/bank-accounts")}
           >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              router.push(`/accounts/masters/chart-of-accounts?node=${ledger.id}`)
-            }
-            className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40"
-          >
-            Open in COA
-          </button>
+            Back to list
+          </Button>
         </div>
       }
       layout="split"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
-          <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-xs uppercase text-muted-foreground">Current Balance</p>
-            <MoneyAmount amount={balance.amount} side={balance.balanceType} className="text-sm font-semibold mt-1" />
-          </div>
-          <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-xs uppercase text-muted-foreground">Opening Balance</p>
-            <p className="text-sm font-semibold mt-1 tabular-nums">{formatMoney(account.openingBalance)}</p>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-xs uppercase text-muted-foreground">Reconciliation</p>
-            <p className="text-sm font-semibold mt-1 capitalize">{account.reconciliationStatus}</p>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-xs uppercase text-muted-foreground">Status</p>
-            <div className="mt-1"><StatusBadge status={account.status} /></div>
-          </div>
-        </div>
-        <div className="flex-shrink-0 px-4 border-b border-border/60">
-          <SectionTabs tabs={TABS} active={tab} onChange={setTab} />
-        </div>
-        <div className="flex-1 overflow-auto min-h-0">
-          {tab === "overview" && (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl">
-              {[
-                ["Bank Name", account.bankName],
-                ["Account Nickname", account.accountNickname],
-                ["Account Number", account.accountNumber],
-                ["IFSC", account.ifsc || "—"],
-                ["Branch", account.branchName || "—"],
-                ["Account Type", account.accountType],
-                ["COA Ledger", ledger.accountName],
-                ["Mapped Warehouses", getMappedWarehouseLabels(account).join(", ") || "—"],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-border/40 bg-slate-50/40 px-3 py-2.5">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-                  <p className="text-sm mt-1">{value}</p>
-                </div>
-              ))}
+        <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-2 px-3 py-2 border-b border-border bg-muted/20">
+          <KpiChip label="Opening Balance">
+            <MoneyAmount
+              amount={openingAmount}
+              side={openingSide}
+              className="text-xs font-semibold"
+            />
+          </KpiChip>
+          <KpiChip label="Current Balance">
+            <p className="text-xs font-semibold text-muted-foreground">—</p>
+          </KpiChip>
+          <KpiChip label="Details">
+            <StatusBadge
+              status={account.bankDetailsStatus === "PENDING" ? "pending" : "completed"}
+            />
+          </KpiChip>
+          <KpiChip label="Status">
+            <div className="pt-0.5">
+              <BankAccountToggle
+                checked={isActiveStatus(account.status)}
+                disabled
+                onCheckedChange={() => undefined}
+              />
             </div>
-          )}
-          {(tab === "transactions" || tab === "bankbook") && (
-            <table className="accounts-table w-full min-w-[720px]">
-              <thead className="border-b">
-                <tr>
-                  {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((row) => (
-                  <tr key={row.id} className="accounts-table-row">
-                    <td className="px-3 py-2">{row.date}</td>
-                    <td className="px-3 py-2">{row.voucherType}</td>
-                    <td className="px-3 py-2">{row.voucherNo}</td>
-                    <td className="px-3 py-2">{row.particulars}</td>
-                    <MoneyCell amount={row.debit} dashIfZero className="px-3 py-2" />
-                    <MoneyCell amount={row.credit} dashIfZero className="px-3 py-2" />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {tab === "reconciliation" && (
-            <div className="p-6 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Reconciliation status: <span className="font-medium capitalize text-foreground">{account.reconciliationStatus}</span>
-              </p>
-              <Link
-                href="/accounts/banking/reconciliation"
-                className="inline-flex h-8 items-center px-3 text-xs border border-border rounded-lg hover:bg-muted/40 text-brand-700"
-              >
-                Open Bank Reconciliation →
-              </Link>
-            </div>
-          )}
-          {tab === "statement" && (
-            <table className="accounts-table w-full min-w-[800px]">
-              <thead className="border-b">
-                <tr>
-                  {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit", "Running Balance"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {statement.map((row, i) => (
-                  <tr key={i} className="accounts-table-row">
-                    <td className="px-3 py-2">{row.date}</td>
-                    <td className="px-3 py-2">{row.voucherType}</td>
-                    <td className="px-3 py-2">{row.voucherNo}</td>
-                    <td className="px-3 py-2">{row.particulars}</td>
-                    <MoneyCell amount={row.debit} dashIfZero className="px-3 py-2" />
-                    <MoneyCell amount={row.credit} dashIfZero className="px-3 py-2" />
-                    <td className="px-3 py-2 text-right font-medium">
-                      {formatMoney(row.runningBalance)} {balanceSideLabel(row.balanceType)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          </KpiChip>
+        </div>
+
+        <div className="flex-1 overflow-auto min-h-0 bg-muted/15">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <SectionBlock title="Ledger (COA)">
+              <InfoRow label="Ledger Name" value={account.ledgerName} />
+              <InfoRow label="Ledger Code" value={account.ledgerCode} mono />
+              <InfoRow label="Alias" value={account.alias || "—"} />
+              <InfoRow label="Description" value={account.description || "—"} />
+              <InfoRow
+                label="Status"
+                value={
+                  <StatusBadge
+                    status={account.status === "ACTIVE" ? "active" : "inactive"}
+                  />
+                }
+              />
+              <InfoRow label="Parent Path" value={account.parentPath || "—"} />
+            </SectionBlock>
+
+            <SectionBlock title="Bank Information">
+              <InfoRow label="Bank Name" value={account.bankName || "—"} />
+              <InfoRow
+                label="Account Holder"
+                value={account.accountHolderName || "—"}
+              />
+              <InfoRow
+                label="Account Number"
+                value={account.maskedAccountNumber || account.accountNumber || "—"}
+                mono
+              />
+              <InfoRow label="IFSC Code" value={account.ifscCode || "—"} mono />
+              <InfoRow label="Branch Name" value={account.branchName || "—"} />
+              <InfoRow
+                label="Account Type"
+                value={accountTypeLabel(account.accountType)}
+              />
+              <InfoRow label="Currency" value={account.currencyCode || "INR"} />
+            </SectionBlock>
+
+            <SectionBlock title="Accounting & Defaults">
+              <InfoRow
+                label="Opening Balance"
+                value={`${formatMoney(openingAmount)} (${openingSide})`}
+              />
+              <InfoRow
+                label="Reconciliation"
+                value={account.reconciliationEnabled ? "Enabled" : "Disabled"}
+              />
+              <InfoRow
+                label="Default for Receipts"
+                value={account.defaultForReceipts ? "Yes" : "No"}
+              />
+              <InfoRow
+                label="Default for Payments"
+                value={account.defaultForPayments ? "Yes" : "No"}
+              />
+              <InfoRow label="Mapped Warehouses" value={warehouseLabel} />
+            </SectionBlock>
+
+            <SectionBlock title="Audit">
+              <InfoRow label="Created By" value={formatAuditUser(account.createdBy)} />
+              <InfoRow label="Created At" value={formatDateTime(account.createdAt)} />
+              <InfoRow label="Updated By" value={formatAuditUser(account.updatedBy)} />
+              <InfoRow label="Updated At" value={formatDateTime(account.updatedAt)} />
+            </SectionBlock>
+          </div>
         </div>
       </div>
     </AccountsPageShell>

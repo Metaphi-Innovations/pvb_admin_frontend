@@ -1,5 +1,25 @@
 /* Sales Order Pending → Generate Invoice only (module-scoped). */
 
+/* Prevent double scrollbars when compact layout is rendered by hiding parent panel overflow */
+body:has(.sales-order-invoice-form-compact),
+html:has(.sales-order-invoice-form-compact) {
+  overflow: hidden !important;
+}
+
+div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
+  overflow: hidden !important;
+}
+
+.accounts-module-main:has(.sales-order-invoice-form-compact) {
+  overflow: hidden !important;
+}
+
+.accounts-module-main:has(.sales-order-invoice-form-compact) > div {
+  overflow: hidden !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
 .sales-order-invoice-form-compact {
   --so-ctrl-h: 32px;
   --so-label-gap: 4px;

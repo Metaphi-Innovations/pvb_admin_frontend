@@ -297,10 +297,16 @@ export function resolveAutoPartyFromLedger(
   }
 
   if (ledger.erpSourceModule === "customer_master" && ledger.erpSourceId) {
-    return { contactId: ledger.erpSourceId, contactName: partyName };
+    return {
+      contactId: typeof ledger.erpSourceId === "number" ? ledger.erpSourceId : null,
+      contactName: partyName,
+    };
   }
   if (ledger.erpSourceModule === "vendor_master" && ledger.erpSourceId) {
-    return { contactId: ledger.erpSourceId, contactName: partyName };
+    return {
+      contactId: typeof ledger.erpSourceId === "number" ? ledger.erpSourceId : null,
+      contactName: partyName,
+    };
   }
 
   if (isCustomerReceivableLedger(ledger, path)) {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -8,44 +8,318 @@ import {
   RecordKvRow,
   RecordSectionCard,
   RecordStatusPill,
-  RecordMiniTable,
 } from "@/components/record-detail";
-import { Clock, Mail, MapPin, Pencil, Phone, User, Warehouse, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
-	type WarehouseMaster,
-	type WarehouseStatus,
-	type WarehouseDocument,
-	loadWarehouses,
-	formatStatus,
-} from "../warehouse-data";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Clock, Download, Eye, ExternalLink, MapPin, Pencil, Phone, User, Warehouse, FileText } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { useWarehouse } from "@/hooks/masters";
+import {
+  downloadWarehouseDocument,
+  getWarehouseDocumentPreviewUrl,
+  isWarehouseDocumentLink,
+  isWarehouseImageDocument,
+  openWarehouseDocument,
+  type WarehouseDocumentPayload,
+  type WarehouseListRecord,
+} from "@/services/warehouse-list.service";
 
-const STATUS_LABEL: Record<WarehouseStatus, string> = {
-  active: "Active",
-  inactive: "Inactive",
-  under_maintenance: "Under Maintenance",
-  closed: "Closed",
-};
+function formatStatus(status: string): string {
+  if (status === "Under Maintenance" || status === "under_maintenance") return "Under Maintenance";
+  if (status === "Closed" || status === "closed") return "Closed";
+  if (status === "Active" || status === "active") return "Active";
+  if (status === "Inactive" || status === "inactive") return "Inactive";
+  return status;
+}
 
-const STATUS_VARIANT: Record<WarehouseStatus, "active" | "inactive" | "neutral" | "blocked"> = {
+const STATUS_VARIANT: Record<string, "active" | "inactive" | "neutral" | "blocked"> = {
+  Active: "active",
   active: "active",
+  Inactive: "inactive",
   inactive: "inactive",
+  "Under Maintenance": "neutral",
   under_maintenance: "neutral",
+  Closed: "blocked",
   closed: "blocked",
 };
+
+function formatDocumentDate(value?: string): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10) || "—";
+  return parsed.toLocaleDateString();
+}
+
+function WarehouseDocumentsSection({
+  documents,
+}: {
+  documents: WarehouseDocumentPayload[];
+}) {
+  const [previewDoc, setPreviewDoc] = useState<WarehouseDocumentPayload | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadInFlight = useRef<Set<string>>(new Set());
+
+  const fileDocuments = documents.filter((doc) => !isWarehouseDocumentLink(doc));
+  const linkDocuments = documents.filter((doc) => isWarehouseDocumentLink(doc));
+
+  const getDocumentKey = (doc: WarehouseDocumentPayload) =>
+    doc.warehouse_document_id || `${doc.document_name}-${doc.file_name}`;
+
+  const handleDownload = async (doc: WarehouseDocumentPayload) => {
+    const docKey = getDocumentKey(doc);
+    if (downloadInFlight.current.has(docKey)) return;
+    downloadInFlight.current.add(docKey);
+    setDownloadError(null);
+    try {
+      await downloadWarehouseDocument(doc);
+    } catch {
+      setDownloadError("Failed to download document. Please try again.");
+    } finally {
+      downloadInFlight.current.delete(docKey);
+    }
+  };
+
+  const openDocument = async (doc: WarehouseDocumentPayload) => {
+    if (isWarehouseImageDocument(doc)) {
+      const url = getWarehouseDocumentPreviewUrl(doc);
+      if (!url) {
+        setDownloadError("Document URL is missing or invalid.");
+        return;
+      }
+      setPreviewDoc(doc);
+      return;
+    }
+    setDownloadError(null);
+    try {
+      await openWarehouseDocument(doc);
+    } catch {
+      setDownloadError("Failed to open document. Please try again.");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {downloadError && (
+        <p className="text-xs text-red-600">{downloadError}</p>
+      )}
+      <RecordSectionCard title="Uploaded Documents" icon={FileText} accent="purple">
+        {fileDocuments.length === 0 ? (
+          <p className="py-4 text-sm text-muted-foreground">No documents uploaded.</p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="px-3 py-2 text-left font-semibold">Document Type</th>
+                    <th className="px-3 py-2 text-left font-semibold">File Name</th>
+                    <th className="px-3 py-2 text-left font-semibold">Uploaded On</th>
+                    <th className="px-3 py-2 text-left font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fileDocuments.map((doc) => {
+                    const previewUrl = getWarehouseDocumentPreviewUrl(doc);
+                    const isImage = isWarehouseImageDocument(doc);
+                    const docKey = getDocumentKey(doc);
+
+                    return (
+                      <tr
+                        key={docKey}
+                        className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                      >
+                        <td className="px-3 py-2">{doc.document_name || "—"}</td>
+                        <td className="px-3 py-2 font-mono">{doc.file_name || "—"}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatDocumentDate(doc.created_at)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {previewUrl ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-[10px]"
+                                  onClick={() => openDocument(doc)}
+                                >
+                                  <Eye className="mr-1 w-3 h-3" />
+                                  {isImage ? "View" : "Open"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[10px] font-medium text-brand-700 hover:text-brand-800"
+                                  onClick={() => handleDownload(doc)}
+                                >
+                                  <Download className="mr-1 w-3 h-3" />
+                                  Download
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </RecordSectionCard>
+
+      {linkDocuments.length > 0 && (
+        <RecordSectionCard title="Document Links" icon={ExternalLink} accent="blue">
+          <div className="overflow-hidden rounded-lg border border-border/60">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground">
+                    Document Type
+                  </th>
+                  <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground">
+                    URL
+                  </th>
+                  <th className="w-16 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground">
+                    Open
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkDocuments.map((doc) => {
+                  const url = getWarehouseDocumentPreviewUrl(doc);
+                  const docKey = doc.warehouse_document_id || `${doc.document_name}-${url}`;
+
+                  return (
+                    <tr key={docKey} className="border-b border-border/40 last:border-0">
+                      <td className="px-2 py-2">{doc.document_name || "—"}</td>
+                      <td className="max-w-md truncate px-2 py-2" title={url}>
+                        {url}
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        {url ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="w-7 h-7"
+                            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </RecordSectionCard>
+      )}
+
+      {fileDocuments.some((doc) => isWarehouseImageDocument(doc) && getWarehouseDocumentPreviewUrl(doc)) && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-foreground">Image Preview</p>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+            {fileDocuments
+              .filter((doc) => isWarehouseImageDocument(doc) && getWarehouseDocumentPreviewUrl(doc))
+              .map((doc) => {
+                const previewUrl = getWarehouseDocumentPreviewUrl(doc);
+                const docKey = doc.warehouse_document_id || `${doc.document_name}-${doc.file_name}`;
+
+                return (
+                  <div
+                    key={docKey}
+                    className="flex flex-col overflow-hidden border rounded-lg border-border/60 bg-white"
+                  >
+                    <button
+                      type="button"
+                      className="relative h-[88px] w-full bg-muted/20"
+                      onClick={() => setPreviewDoc(doc)}
+                    >
+                      <img
+                        src={previewUrl}
+                        alt={doc.file_name || doc.document_name}
+                        className="object-cover w-full h-full"
+                      />
+                    </button>
+                    <div className="px-2 py-1.5 border-t border-border/40">
+                      <p className="truncate text-[10px] font-medium text-foreground">
+                        {doc.document_name}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      <Dialog open={!!previewDoc} onOpenChange={(open) => !open && setPreviewDoc(null)}>
+        <DialogContent className="max-w-3xl p-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm truncate">
+              {previewDoc?.document_name || previewDoc?.file_name || "Document Preview"}
+            </DialogTitle>
+          </DialogHeader>
+          {previewDoc && (
+            <img
+              src={getWarehouseDocumentPreviewUrl(previewDoc)}
+              alt={previewDoc.file_name || previewDoc.document_name}
+              className="max-h-[70vh] w-full object-contain"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 export default function WarehouseDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [warehouse, setWarehouse] = useState<WarehouseMaster | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-	useEffect(() => {
-		const list = loadWarehouses();
-		setWarehouse(list.find((w) => w.id === Number(id)) ?? null);
-	}, [id]);
+  const { data: warehouse, isLoading, isError } = useWarehouse(id);
 
-  if (!warehouse) {
+  const documentCount = warehouse?.documents?.length ?? 0;
+
+  const tabs = useMemo(
+    () => [
+      { value: "overview", label: "Overview" },
+      {
+        value: "documents",
+        label: "Documents",
+        count: documentCount || undefined,
+      },
+    ],
+    [documentCount],
+  );
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">Loading warehouse details...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (isError || !warehouse) {
     return (
       <RecordDetailPage
         listHref="/masters/warehouse"
@@ -56,10 +330,7 @@ export default function WarehouseDetailPage() {
       >
         <div className="py-16 text-center">
           <p className="text-sm text-muted-foreground">Warehouse not found.</p>
-          <Link
-            href="/masters/warehouse"
-            className="inline-block mt-2 text-xs text-brand-600 hover:underline"
-          >
+          <Link href="/masters/warehouse" className="inline-block mt-2 text-xs text-brand-600 hover:underline">
             Back to listing
           </Link>
         </div>
@@ -67,30 +338,15 @@ export default function WarehouseDetailPage() {
     );
   }
 
-  const contacts = warehouse.contacts?.length
-     ? warehouse.contacts
-     : [
-         {
-           id: "CON-1",
-           contactPerson: warehouse.contactPerson,
-           mobileNumber: warehouse.mobileNumber,
-           emailAddress: warehouse.emailAddress,
-           isPrimary: true,
-         },
-       ];
-
-  const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
-  const designation =
-    primaryContact?.designation?.trim() || warehouse.manager || "—";
-
-  const tabs = [{ value: "overview", label: "Overview" }];
+  const primaryContact = warehouse.contacts?.[0];
+  const designation = primaryContact?.designation?.trim() || "—";
 
   const kpis = [
     {
       icon: Warehouse,
       iconBg: "#EEF3FB",
       iconColor: "#0C3F8A",
-      value: warehouse.operatedBy,
+      value: warehouse.operatedBy || "—",
       label: "Operated By",
     },
     {
@@ -109,196 +365,117 @@ export default function WarehouseDetailPage() {
     },
   ];
 
-  const renderTabContent = () => {
-    if (activeTab !== "overview") return null;
+  const renderOverview = (record: WarehouseListRecord) => (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <RecordSectionCard title="Basic Details" icon={Warehouse} accent="blue">
+        <RecordKvRow label="Warehouse Name" value={record.warehouseName} highlight />
+        <RecordKvRow label="Operated By" value={record.operatedBy || "—"} />
+        <RecordKvRow
+          label="Status"
+          value={
+            <RecordStatusPill
+              label={formatStatus(record.status)}
+              variant={STATUS_VARIANT[record.status] ?? "neutral"}
+            />
+          }
+          isLast
+        />
+      </RecordSectionCard>
 
-    return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecordSectionCard title="Basic Details" icon={Warehouse} accent="blue">
-          <RecordKvRow label="Warehouse Name" value={warehouse.warehouseName} highlight />
-          <RecordKvRow label="Operated By" value={warehouse.operatedBy} />
-          {warehouse.operatedBy === "C&F Agent" && (
-            <RecordKvRow label="C&F Agent" value={warehouse.customerType} />
-          )}
-          <RecordKvRow
-            label="Status"
-            value={
-              <RecordStatusPill
-                label={STATUS_LABEL[warehouse.status]}
-                variant={STATUS_VARIANT[warehouse.status]}
-              />
-            }
-            isLast
-          />
-        </RecordSectionCard>
-
-        <RecordSectionCard title="Contact Persons" icon={Phone} accent="green">
-          {contacts.map((c, idx) => (
-            <React.Fragment key={c.id || idx}>
+      <RecordSectionCard title="Contact Persons" icon={Phone} accent="green">
+        {record.contacts && record.contacts.length > 0 ? (
+          record.contacts.map((c, idx) => (
+            <React.Fragment key={idx}>
               <RecordKvRow
-                label={c.isPrimary ? "Primary Contact" : `Contact ${idx + 1}`}
-                value={c.contactPerson || "—"}
+                label={c.is_primary ? "Primary Contact" : `Contact ${idx + 1}`}
+                value={c.contact_person || "—"}
                 highlight
               />
-              {(c.designation || warehouse.manager) && (
-                <RecordKvRow
-                  label="Designation"
-                  value={c.designation || (c.isPrimary ? warehouse.manager : "—") || "—"}
-                />
-              )}
+              {c.designation && <RecordKvRow label="Designation" value={c.designation} />}
               <RecordKvRow
                 label="Mobile"
-                value={c.mobileNumber}
+                value={c.mobile_number}
                 mono
                 link
-                href={c.mobileNumber ? `tel:${c.mobileNumber}` : undefined}
+                href={c.mobile_number ? `tel:${c.mobile_number}` : undefined}
               />
-              {c.alternateContact && (
+              {c.alternate_contact && (
                 <RecordKvRow
                   label="Alternate Contact"
-                  value={c.alternateContact}
+                  value={c.alternate_contact}
                   mono
                   link
-                  href={`tel:${c.alternateContact}`}
+                  href={`tel:${c.alternate_contact}`}
                 />
               )}
               <RecordKvRow
                 label="Email"
-                value={c.emailAddress || "—"}
-                link={!!c.emailAddress}
-                href={c.emailAddress ? `mailto:${c.emailAddress}` : undefined}
-                isLast={idx === contacts.length - 1}
+                value={c.email_address || "—"}
+                link={!!c.email_address}
+                href={c.email_address ? `mailto:${c.email_address}` : undefined}
+                isLast={idx === (record.contacts?.length ?? 1) - 1}
               />
             </React.Fragment>
-          ))}
+          ))
+        ) : (
+          <RecordKvRow label="No contacts" value="—" isLast />
+        )}
+      </RecordSectionCard>
+
+      <RecordSectionCard title="Address Details" icon={MapPin} accent="purple">
+        <RecordKvRow label="Address Line 1" value={record.address || "—"} />
+        {record.address1 && <RecordKvRow label="Address Line 2" value={record.address1} />}
+        <RecordKvRow label="Pin Code" value={record.pincode} mono />
+        <RecordKvRow label="District" value={record.district || "—"} />
+        <RecordKvRow label="City" value={record.city || "—"} />
+        <RecordKvRow label="Town" value={record.town || "—"} />
+        <RecordKvRow label="State" value={record.state || "—"} isLast />
+      </RecordSectionCard>
+
+      <RecordSectionCard title="GST & Tax Details" icon={FileText} accent="orange">
+        <RecordKvRow
+          label="GST Applicable"
+          value={record.gstApplicable ? "Yes" : "No"}
+          isLast={!record.gstApplicable}
+        />
+        {record.gstApplicable && (
+          <>
+            <RecordKvRow label="Registration Type" value={record.registrationType || "—"} />
+            <RecordKvRow label="GSTIN" value={record.gstNumber} mono copy />
+            <RecordKvRow label="Registered Legal Name" value={record.registeredLegalName || "—"} />
+            <RecordKvRow label="Registered GST Address" value={record.registeredGstAddress || "—"} isLast />
+          </>
+        )}
+      </RecordSectionCard>
+
+      <RecordSectionCard title="Bank Details" icon={FileText} accent="blue">
+        <RecordKvRow label="Account Holder Name" value={record.accountHolderName || "—"} />
+        <RecordKvRow label="Bank Name" value={record.bankName || "—"} />
+        <RecordKvRow label="Branch Name" value={record.branchName || "—"} />
+        <RecordKvRow label="Account Number" value={record.accountNumber || "—"} mono />
+        <RecordKvRow label="IFSC Code" value={record.ifscCode || "—"} mono />
+        <RecordKvRow label="SWIFT Code" value={record.swiftCode || "—"} mono isLast />
+      </RecordSectionCard>
+
+      <div className="lg:col-span-2">
+        <RecordSectionCard title="Audit Details" icon={Clock} accent="slate">
+          <RecordKvRow label="Created By" value={record.createdBy} />
+          <RecordKvRow label="Created Date" value={record.createdAt} />
+          <RecordKvRow label="Updated By" value={record.updatedBy} />
+          <RecordKvRow label="Updated Date" value={record.updatedAt} isLast />
         </RecordSectionCard>
-
-        <RecordSectionCard title="Address Details" icon={MapPin} accent="purple">
-          <RecordKvRow label="Address Line 1" value={warehouse.address || "—"} />
-          {warehouse.addressLine2 ? (
-            <RecordKvRow label="Address Line 2" value={warehouse.addressLine2} />
-          ) : null}
-          <RecordKvRow label="Pin Code" value={warehouse.pincode} mono />
-          <RecordKvRow label="District" value={warehouse.district || "—"} />
-          <RecordKvRow label="City" value={warehouse.city || "—"} />
-          <RecordKvRow label="Town" value={warehouse.town || "—"} />
-          <RecordKvRow label="State" value={warehouse.state || "—"} isLast />
-        </RecordSectionCard>
-
-        <RecordSectionCard title="GST & Tax Details" icon={FileText} accent="orange">
-          <RecordKvRow
-            label="GST Applicable"
-            value={warehouse.gstApplicable ? "Yes" : "No"}
-            isLast={!warehouse.gstApplicable}
-          />
-          {warehouse.gstApplicable && (
-            <>
-              <RecordKvRow
-                label="Registration Type"
-                value={warehouse.gstRegistrationType || "—"}
-              />
-              <RecordKvRow label="GSTIN" value={warehouse.gstNumber} mono copy />
-              <RecordKvRow
-                label="Registered Legal Name"
-                value={warehouse.registeredLegalName || "—"}
-              />
-              <RecordKvRow
-                label="Registered GST Address"
-                value={warehouse.registeredAddress || "—"}
-                isLast
-              />
-            </>
-          )}
-        </RecordSectionCard>
-
-        <RecordSectionCard title="Bank Details" icon={FileText} accent="blue">
-          <RecordKvRow
-            label="Account Holder Name"
-            value={warehouse.accountHolderName || "—"}
-          />
-          <RecordKvRow label="Bank Name" value={warehouse.bankName || "—"} />
-          <RecordKvRow label="Branch Name" value={warehouse.branch || "—"} />
-          <RecordKvRow
-            label="Account Number"
-            value={warehouse.accountNumber || "—"}
-            mono
-          />
-          <RecordKvRow
-            label="IFSC Code"
-            value={warehouse.ifscCode || "—"}
-            mono
-          />
-          <RecordKvRow
-            label="SWIFT Code"
-            value={warehouse.swiftCode || "—"}
-            mono
-            isLast
-          />
-        </RecordSectionCard>
-
-        <div className="lg:col-span-2">
-          <RecordSectionCard title="Warehouse Documents" icon={FileText} accent="blue">
-            {(!warehouse.documents || warehouse.documents.length === 0) ? (
-              <div className="py-6 text-center text-xs text-muted-foreground">
-                No documents uploaded.
-              </div>
-            ) : (
-              <RecordMiniTable
-                columns={[
-                  {
-                    key: "documentName",
-                    header: "Document Name",
-                    render: (r: WarehouseDocument) => <span className="font-medium">{r.documentName}</span>,
-                  },
-                  {
-                    key: "fileName",
-                    header: "File Name",
-                    render: (r: WarehouseDocument) =>
-                      r.fileName ? (
-                        <button
-                          type="button"
-                          className="text-brand-600 hover:underline text-left font-mono text-[11px]"
-                          onClick={() => {
-                            const url = r.fileUrl;
-                            if (!url) return;
-                            const trimmedUrl = url.trim();
-                            if (!trimmedUrl) return;
-                            const isAbsolute =
-                              /^https?:\/\//i.test(trimmedUrl) ||
-                              /^blob:/i.test(trimmedUrl) ||
-                              /^data:/i.test(trimmedUrl);
-                            const safeUrl = isAbsolute ? trimmedUrl : `https://${trimmedUrl}`;
-                            window.open(safeUrl, "_blank", "noopener,noreferrer");
-                          }}
-                        >
-                          {r.fileName}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      ),
-                  },
-                  {
-                    key: "uploadedAt",
-                    header: "Uploaded At",
-                    render: (r: WarehouseDocument) => <span className="text-muted-foreground">{r.uploadedAt || "—"}</span>,
-                  },
-                ]}
-                rows={warehouse.documents}
-              />
-            )}
-          </RecordSectionCard>
-        </div>
-
-        <div className="lg:col-span-2">
-          <RecordSectionCard title="Audit Details" icon={Clock} accent="slate">
-            <RecordKvRow label="Created By" value={warehouse.createdBy} />
-            <RecordKvRow label="Created Date" value={warehouse.createdDate} />
-            <RecordKvRow label="Updated By" value={warehouse.updatedBy} />
-            <RecordKvRow label="Updated Date" value={warehouse.updatedDate} isLast />
-          </RecordSectionCard>
-        </div>
       </div>
-    );
+    </div>
+  );
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "documents":
+        return <WarehouseDocumentsSection documents={warehouse.documents ?? []} />;
+      case "overview":
+      default:
+        return renderOverview(warehouse);
+    }
   };
 
   return (
@@ -306,42 +483,28 @@ export default function WarehouseDetailPage() {
       listHref="/masters/warehouse"
       listLabel="Warehouses"
       recordName={warehouse.warehouseName}
-      statusLabel={STATUS_LABEL[warehouse.status]}
-      statusVariant={STATUS_VARIANT[warehouse.status]}
-      metaItems={[
-        {
-          label: warehouse.contactPerson,
-          icon: User,
-        },
-        {
-          label: warehouse.mobileNumber,
-          icon: Phone,
-          href: `tel:${warehouse.mobileNumber}`,
-        },
-        ...(warehouse.emailAddress
-          ? [{ label: warehouse.emailAddress, icon: Mail, href: `mailto:${warehouse.emailAddress}` }]
-          : []),
-      ]}
+      statusLabel={formatStatus(warehouse.status)}
+      statusVariant={STATUS_VARIANT[warehouse.status] ?? "neutral"}
       kpis={kpis}
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      onEdit={() => router.push(`/masters/warehouse/${warehouse.id}/edit`)}
+      onEdit={() => router.push(`/masters/warehouse/${warehouse.warehouseUuid}/edit`)}
       sidebar={{
         quickActions: [
           {
             label: "Edit Warehouse",
             icon: Pencil,
-            onClick: () => router.push(`/masters/warehouse/${warehouse.id}/edit`),
+            onClick: () => router.push(`/masters/warehouse/${warehouse.warehouseUuid}/edit`),
             variant: "primary",
           },
         ],
         summary: [
-          { label: "Operated By", value: warehouse.operatedBy, highlight: true },
-          { label: "Designation", value: designation },
+          { label: "Operated By", value: warehouse.operatedBy || "—", highlight: true },
           { label: "City", value: warehouse.city || "—" },
-          { label: "Created", value: warehouse.createdDate },
-          { label: "Updated", value: warehouse.updatedDate },
+          { label: "Documents", value: String(documentCount) },
+          { label: "Created", value: warehouse.createdAt },
+          { label: "Updated", value: warehouse.updatedAt },
         ],
       }}
     >

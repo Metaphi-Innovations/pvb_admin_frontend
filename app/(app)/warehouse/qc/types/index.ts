@@ -9,13 +9,30 @@ export interface QcItem {
   acceptedQty: number;
   rejectedQty: number;
   holdQty: number;
+  quantityType?: string | null;
+  acceptedInput?: string;
+  rejectedInput?: string;
+  holdInput?: string;
+  
+  // Case conversion fields
+  receivedCases?: number;
+  receivedLooseQty?: number;
+  acceptedCases?: number;
+  acceptedLooseQty?: number;
+  rejectedCases?: number;
+  rejectedLooseQty?: number;
+  holdCases?: number;
+  holdLooseQty?: number;
+  unitPerPacking?: number;
+
   qcResult?: QcResult;
   rejectionReason?: string;
+  grnBatchId?: string;
 }
 
 export type QcStatus = "pending" | "completed";
 
-export type QcSourceType = "purchase_order" | "stock_transfer";
+export type QcSourceType = "purchase" | "purchase_order" | "stock_transfer" | "sales_return" | "sample_return";
 
 export interface QcRecord {
   id: string;
@@ -25,6 +42,7 @@ export interface QcRecord {
   poNumber?: string;
   vendorName: string;
   warehouse: string;
+  warehouseId?: string;
   sourceType?: QcSourceType;
   stockTransferNo?: string;
   fromWarehouse?: string;
@@ -39,4 +57,5 @@ export interface QcRecord {
   qcResult?: QcResult;
   qcRemarks?: string;
   items: QcItem[];
+  isEditable?: boolean;
 }

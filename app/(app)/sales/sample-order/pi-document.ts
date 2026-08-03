@@ -4,6 +4,7 @@ import {
   SAMPLE_BILLING_DETAILS,
   SAMPLE_ORDER_LINE_DISCOUNT_PERCENT,
   type SalesOrder,
+  type SalesOrderLineItem,
   hydrateOrderLineItems,
   todayStr,
 } from "./orders-data";

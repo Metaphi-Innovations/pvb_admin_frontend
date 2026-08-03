@@ -128,7 +128,6 @@ export default function CategoryDetailPage() {
         listHref="/masters/categories"
         listLabel="Categories"
         recordName={category.categoryName}
-        recordCode={String(category.id)}
         statusLabel={category.status === "active" ? "Active" : "Inactive"}
         statusVariant={category.status}
         tabs={tabs}
@@ -147,7 +146,6 @@ export default function CategoryDetailPage() {
             },
           ],
           summary: [
-            { label: "ID", value: String(category.id), highlight: true },
             { label: "Description", value: category.description || "—" },
             { label: "Created", value: category.createdDate },
             { label: "Updated", value: category.updatedDate },

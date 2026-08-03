@@ -22,9 +22,10 @@ import {
 	Plus,
 } from "lucide-react";
 import {
-	WAREHOUSE_STATUSES,
+	// WAREHOUSE_STATUSES,
 	OPERATED_BY_OPTIONS,
-	type WarehouseStatus,
+	WarehouseType,
+	// type WarehouseStatus,
 	type OperatedBy,
 	type WarehouseContact,
 	type WarehouseDocument,
@@ -51,6 +52,8 @@ import {
 	fetchGstRegistrationDetailsAsync,
 	GST_REGISTRATION_TYPE_DEFAULT,
 } from "@/lib/masters/gst-compliance";
+import { useCfDropdown, usePincode } from "@/hooks/masters";
+import { normalizePlaceName } from "@/lib/geography/india-post-normalize";
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -111,6 +114,46 @@ function CountryCodePicker({
 	);
 }
 
+type ApiWarehouseStatus = "Active" | "Inactive" | "Under Maintenance" | "Closed";
+
+export interface ApiWarehouseMaster {
+	id: number;
+	warehouseCode: string; // Auto Generated, e.g. "WH-0001"
+	warehouseName: string;
+	warehouseType: WarehouseType;
+	gstApplicable: boolean;
+	gstNumber: string;
+	gstRegistrationType?: string;
+	registeredLegalName?: string;
+	registeredAddress?: string;
+	accountHolderName?: string;
+	bankName?: string;
+	branch?: string;
+	accountNumber?: string;
+	ifscCode?: string;
+	swiftCode?: string;
+	contactPerson: string;
+	mobileNumber: string;
+	emailAddress: string;
+	address: string; // Address Line 1
+	addressLine2?: string;
+	town?: string;
+	state: string;
+	district: string;
+	city: string;
+	pincode: string;
+	manager: string;
+	status: ApiWarehouseStatus;
+	operatedBy: OperatedBy;
+	customerType?: string;
+	contacts: WarehouseContact[];
+	documents: WarehouseDocument[];
+	createdBy: string;
+	createdDate: string;
+	updatedBy: string;
+	updatedDate: string;
+}
+
 export interface WarehouseFormValues {
 	warehouseName: string;
 	gstApplicable: boolean;
@@ -132,7 +175,7 @@ export interface WarehouseFormValues {
 	district: string;
 	city: string;
 	pincode: string;
-	status: WarehouseStatus;
+	status: ApiWarehouseStatus;
 	operatedBy: OperatedBy;
 	customerType: string;
 	contacts: WarehouseContact[];
@@ -160,7 +203,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	district: "",
 	city: "",
 	pincode: "",
-	status: "active",
+	status: "Active",
 	operatedBy: "Self",
 	customerType: "",
 	contacts: [
@@ -178,7 +221,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	documents: [],
 };
 
-export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormValues {
+export function warehouseRecordToForm(record: ApiWarehouseMaster): WarehouseFormValues {
 	let contacts = record.contacts;
 	if (!contacts || contacts.length === 0) {
 		contacts = [
@@ -227,7 +270,7 @@ export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormVal
 export function warehouseFormToRecordFields(
 	form: WarehouseFormValues,
 ): Pick<
-	WarehouseMaster,
+	ApiWarehouseMaster,
 	| "warehouseName"
 	| "warehouseType"
 	| "gstApplicable"
@@ -347,6 +390,63 @@ export function validateWarehouseForm(
 		});
 	}
 	return e;
+}
+
+export const WAREHOUSE_FORM_STEPS = [
+	{ id: "basic", label: "Basic Details" },
+	{ id: "contact", label: "Contact Details" },
+	{ id: "address", label: "Address" },
+	{ id: "gst", label: "GST & Tax" },
+	{ id: "bank", label: "Bank Details" },
+	{ id: "documents", label: "Documents" },
+] as const;
+
+export type WarehouseFormStepId = (typeof WAREHOUSE_FORM_STEPS)[number]["id"];
+
+export function validateWarehouseFormStep(
+	form: WarehouseFormValues,
+	stepId: WarehouseFormStepId,
+): Record<string, string> {
+	const all = validateWarehouseForm(form);
+	const e: Record<string, string> = {};
+
+	if (stepId === "basic") {
+		if (all.warehouseName) e.warehouseName = all.warehouseName;
+		if (all.customerType) e.customerType = all.customerType;
+		return e;
+	}
+	if (stepId === "contact") {
+		Object.keys(all).forEach((key) => {
+			if (
+				key === "contacts" ||
+				key.startsWith("contactPerson_") ||
+				key.startsWith("mobileNumber_") ||
+				key.startsWith("emailAddress_")
+			) {
+				e[key] = all[key];
+			}
+		});
+		return e;
+	}
+	if (stepId === "address") {
+		(["address", "pincode", "state", "city", "town", "district"] as const).forEach((key) => {
+			if (all[key]) e[key] = all[key];
+		});
+		return e;
+	}
+	if (stepId === "gst") {
+		(["gstRegistrationType", "gstin"] as const).forEach((key) => {
+			if (all[key]) e[key] = all[key];
+		});
+		return e;
+	}
+	if (stepId === "bank") {
+		(["confirmAccountNumber", "ifscCode"] as const).forEach((key) => {
+			if (all[key]) e[key] = all[key];
+		});
+		return e;
+	}
+	return {};
 }
 
 // ── Autocomplete (matches EmployeeForm AC) ────────────────────────────────────
@@ -784,11 +884,14 @@ export function WarehouseForm({
 	onChange,
 	errors,
 	onClearError,
+	activeStep,
 }: {
 	form: WarehouseFormValues;
 	onChange: (f: WarehouseFormValues) => void;
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
+	/** When set, only the matching section is rendered (Add wizard). */
+	activeStep?: WarehouseFormStepId;
 }) {
 	const [toast, setToast] = useState<{
 		msg: string;
@@ -832,6 +935,30 @@ export function WarehouseForm({
 			},
 		]);
 	};
+
+	const pincodeQuery = usePincode(
+		/^\d{6}$/.test(form.pincode.trim()) ? form.pincode.trim() : null,
+	);
+	const pincodeRecords = pincodeQuery.data ?? [];
+
+	useEffect(() => {
+		if (pincodeRecords.length === 0) return;
+
+		const first = pincodeRecords[0];
+
+		updateWarehouseAddress({
+			...warehouseAddress,
+			state: normalizePlaceName(first.statename || "") || warehouseAddress.state,
+			district: normalizePlaceName(first.district || "") || warehouseAddress.district,
+			...(pincodeRecords.length === 1
+				? {
+						town: normalizePlaceName(first.officename || "") || warehouseAddress.town,
+						city: normalizePlaceName(first.officename || "") || warehouseAddress.city,
+					}
+				: {}),
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pincodeRecords]);
 
 	const addSelectedDocumentTypes = () => {
 		if (bulkDocumentTypeIds.length === 0) return;
@@ -956,45 +1083,25 @@ export function WarehouseForm({
 		window.open(safeUrl, "_blank", "noopener,noreferrer");
 	};
 
+	const cfDropdownQuery = useCfDropdown();
+
 	const cfCustomers = useMemo(() => {
-		try {
-			const allCustomers = loadCustomers();
-			const filtered = allCustomers.filter((customer) => {
-				// Always include currently selected customer so it shows and prefills
-				if (form.customerType && customer.customerName === form.customerType) {
-					return true;
-				}
-				return isCustomerCf(customer);
-			});
+		const items = cfDropdownQuery.data ?? [];
 
-			const options = filtered.map((customer) => {
-				const suffix =
-					(customer.mobile || "").trim() || (customer.gstin || "").trim();
-				return {
-					value: customer.customerName,
-					label: suffix
-						? `${customer.customerName} — ${suffix}`
-						: customer.customerName,
-				};
-			});
+		const options = items.map((customer) => {
+			const suffix = (customer.mobile_no || "").trim();
+			return {
+				value: customer.customer_id,
+				label: suffix ? `${customer.customer_name} — ${suffix}` : customer.customer_name,
+			};
+		});
 
-			// If the currently selected customer is not in the list, force add it
-			if (
-				form.customerType &&
-				!options.some((o) => o.value === form.customerType)
-			) {
-				options.push({
-					value: form.customerType,
-					label: form.customerType,
-				});
-			}
-
-			return options;
-		} catch (e) {
-			console.error("Failed to load C&F customers:", e);
-			return [];
+		if (form.customerType && !options.some((o) => o.value === form.customerType)) {
+			options.push({ value: form.customerType, label: form.customerType });
 		}
-	}, [form.customerType]);
+
+		return options;
+	}, [cfDropdownQuery.data, form.customerType]);
 
 	const set = <K extends keyof WarehouseFormValues>(
 		key: K,
@@ -1168,9 +1275,13 @@ export function WarehouseForm({
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
 
+
+	const show = (stepId: WarehouseFormStepId) => !activeStep || activeStep === stepId;
+
 	return (
 		<div className='w-full space-y-3'>
 			{/* ── Section 1: Basic Details ─────────────────────────── */}
+			{show("basic") && (
 			<div>
 				<SectionHead
 					label='Warehouse Basic Details'
@@ -1229,8 +1340,10 @@ export function WarehouseForm({
 					)}
 				</div>
 			</div>
+			)}
 
 			{/* ── Section 2: Contact Details ────────────────────────── */}
+			{show("contact") && (
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Contact Details'
@@ -1297,19 +1410,26 @@ export function WarehouseForm({
 											/>
 											<Input
 												value={contact.mobileNumber}
-												onChange={(e) =>
-													updateContact(
-														index,
-														"mobileNumber",
-														e.target.value.replace(/\D/g, "").slice(0, 10),
-													)
-												}
+												onChange={(e) => {
+													const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+													updateContact(index, "mobileNumber", digits);
+												}}
+												onBeforeInput={(e) => {
+													const input = e.nativeEvent as InputEvent;
+													const data = input.data ?? "";
+													if (!data) return;
+													const el = e.currentTarget;
+													const selected = (el.selectionEnd ?? 0) - (el.selectionStart ?? 0);
+													const nextLen = el.value.length - selected + data.replace(/\D/g, "").length;
+													if (nextLen > 10) e.preventDefault();
+												}}
 												placeholder='10-digit mobile'
 												className={cn(
 													"flex-1 h-8 text-xs",
 													mobErr && "border-red-400 focus-visible:ring-red-300",
 												)}
 												inputMode='numeric'
+												maxLength={10}
 											/>
 										</div>
 										<FieldError msg={mobErr} />
@@ -1338,16 +1458,23 @@ export function WarehouseForm({
 										<Label className='text-xs font-medium'>Alternate Contact</Label>
 										<Input
 											value={contact.alternateContact || ""}
-											onChange={(e) =>
-												updateContact(
-													index,
-													"alternateContact",
-													e.target.value.replace(/\D/g, "").slice(0, 10),
-												)
-											}
+											onChange={(e) => {
+												const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+												updateContact(index, "alternateContact", digits);
+											}}
+											onBeforeInput={(e) => {
+												const input = e.nativeEvent as InputEvent;
+												const data = input.data ?? "";
+												if (!data) return;
+												const el = e.currentTarget;
+												const selected = (el.selectionEnd ?? 0) - (el.selectionStart ?? 0);
+												const nextLen = el.value.length - selected + data.replace(/\D/g, "").length;
+												if (nextLen > 10) e.preventDefault();
+											}}
 											placeholder='10-digit mobile'
 											className='h-8 text-xs'
 											inputMode='numeric'
+											maxLength={10}
 										/>
 									</div>
 
@@ -1394,6 +1521,7 @@ export function WarehouseForm({
 					</Button>
 				</div>
 			</div>
+			)}
 
 			{/* Toast */}
 			{toast && (
@@ -1414,6 +1542,7 @@ export function WarehouseForm({
 			)}
 
 			{/* ── Section 3: Address Details ────────────────────────── */}
+			{show("address") && (
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Address & Location Details'
@@ -1435,30 +1564,32 @@ export function WarehouseForm({
 					}}
 				/>
 			</div>
+			)}
 
 			{/* ── Section 4: GST & Tax Details ──────────────────────── */}
+			{show("gst") && (
 			<div className='pt-3 border-t border-border/60'>
 				<ErpFormSection
 					title='GST & Tax Details'
 					headerRight={
 						<div className='ml-auto'>
 							<GstRegisteredToggleControl
-							label='GST Applicable'
-							active={form.gstApplicable}
-							onChange={(yes) => {
-								onChange({
-									...form,
-									gstApplicable: yes,
-									gstRegistrationType: yes
-										? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
-										: GST_REGISTRATION_TYPE_DEFAULT,
-									gstin: yes ? form.gstin : "",
-									registeredLegalName: yes ? form.registeredLegalName : "",
-									registeredAddress: yes ? form.registeredAddress : "",
-								});
-								if (!yes) onClearError("gstin");
-							}}
-						/>
+								label='GST Applicable'
+								active={form.gstApplicable}
+								onChange={(yes) => {
+									onChange({
+										...form,
+										gstApplicable: yes,
+										gstRegistrationType: yes
+											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+											: GST_REGISTRATION_TYPE_DEFAULT,
+										gstin: yes ? form.gstin : "",
+										registeredLegalName: yes ? form.registeredLegalName : "",
+										registeredAddress: yes ? form.registeredAddress : "",
+									});
+									if (!yes) onClearError("gstin");
+								}}
+							/>
 						</div>
 					}
 				>
@@ -1489,8 +1620,10 @@ export function WarehouseForm({
 					/>
 				</ErpFormSection>
 			</div>
+			)}
 
 			{/* ── Section 5: Bank Details ─────────────────────────── */}
+			{show("bank") && (
 			<div className='pt-3 border-t border-border/60'>
 				<ErpFormSection title='Bank Details'>
 					<BankDetailsFields
@@ -1514,8 +1647,10 @@ export function WarehouseForm({
 					/>
 				</ErpFormSection>
 			</div>
+			)}
 
 			{/* ── Section 6: Documents ─────────────────────────────── */}
+			{show("documents") && (
 			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Warehouse Documents'
@@ -1644,6 +1779,7 @@ export function WarehouseForm({
 					)}
 				</div>
 			</div>
+			)}
 		</div>
 	);
 }

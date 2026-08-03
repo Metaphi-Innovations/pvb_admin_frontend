@@ -19,6 +19,10 @@ function FieldError({ msg }: { msg?: string }) {
 	return <p className="text-[11px] text-red-500 leading-tight">{msg}</p>;
 }
 
+const ADDRESS_LINE_MAX = 255;
+const ADDRESS_LINE_2_MAX = 255;
+const GEO_FIELD_MAX = 100;
+
 /** Branch address field order: Line 1 + Line 2 → Pincode → City → Town → State */
 export function BranchAddressFields({
 	address,
@@ -27,6 +31,8 @@ export function BranchAddressFields({
 	readOnly,
 	errors = {},
 	stateOptions = [],
+	townOptions: townOptionsProp,
+	forceGeographyLocked = false,
 	showTown = true,
 	showDistrict = false,
 }: {
@@ -37,6 +43,7 @@ export function BranchAddressFields({
 	readOnly?: boolean;
 	errors?: {
 		address?: string;
+		addressLine2?: string;
 		state?: string;
 		city?: string;
 		town?: string;
@@ -44,6 +51,10 @@ export function BranchAddressFields({
 		pincode?: string;
 	};
 	stateOptions?: { value: string; label: string }[];
+	/** When provided, overrides postal-master town options (e.g. pincode API). */
+	townOptions?: string[];
+	/** Force lock city/town/state after external pincode API resolution. */
+	forceGeographyLocked?: boolean;
 	/** When false, hides the Town field (e.g. vendor registered address). */
 	showTown?: boolean;
 	/** When true, shows District (auto-filled from pincode). */
@@ -54,6 +65,7 @@ export function BranchAddressFields({
 
 	const country = address.country ?? "India";
 	const isIndia = country === "India";
+	const hasTownOverride = Array.isArray(townOptionsProp);
 
 	useEffect(() => {
 		let active = true;
@@ -66,12 +78,16 @@ export function BranchAddressFields({
 	}, []);
 
 	useEffect(() => {
+		if (hasTownOverride) {
+			setTownOptions(townOptionsProp ?? []);
+			return;
+		}
 		if (!postalReady || address.pincode.length !== 6) {
 			setTownOptions([]);
 			return;
 		}
 		setTownOptions(getTownsForPincode(address.pincode));
-	}, [postalReady, address.pincode]);
+	}, [postalReady, address.pincode, hasTownOverride, townOptionsProp]);
 
 	// Resolve geography when postal master finishes loading after pincode entry
 	useEffect(() => {
@@ -118,11 +134,31 @@ export function BranchAddressFields({
 	const fieldClass = cn(ERP.input, "border-border/70 rounded-md bg-white");
 
 	const pincodeResolved = useMemo(() => {
+		// API-driven pincode flow owns geography; don't lock from postal master.
+		if (onPincodeChange) return null;
+		if (forceGeographyLocked && address.pincode.length === 6 && address.state) {
+			return {
+				pincode: address.pincode,
+				city: address.city,
+				town: address.town ?? "",
+				district: address.district ?? "",
+				state: address.state,
+			};
+		}
 		if (!postalReady || address.pincode.length !== 6) return null;
 		return lookupPostalPincode(address.pincode, address.town);
-	}, [postalReady, address.pincode, address.town]);
+	}, [
+		onPincodeChange,
+		forceGeographyLocked,
+		postalReady,
+		address.pincode,
+		address.town,
+		address.city,
+		address.district,
+		address.state,
+	]);
 
-	const geographyLocked = Boolean(pincodeResolved);
+	const geographyLocked = Boolean(pincodeResolved) || forceGeographyLocked;
 
 	const applyPostalLocation = (digits: string, preferredTown?: string) => {
 		const loc = lookupPostalPincode(digits, preferredTown);
@@ -139,10 +175,11 @@ export function BranchAddressFields({
 		return {
 			...address,
 			pincode: digits,
-			city: "",
-			town: "",
-			district: "",
-			state: "",
+			// Prefer keeping existing geo when a town was chosen but postal lookup missed.
+			city: preferredTown ? address.city : "",
+			town: preferredTown ?? "",
+			district: preferredTown ? (address.district ?? "") : "",
+			state: preferredTown ? address.state : "",
 		};
 	};
 
@@ -173,11 +210,26 @@ export function BranchAddressFields({
 	};
 
 	const handleTownChange = (town: string) => {
+		// API-backed pincode flow: only update town; parent reconciles city/state.
+		// Never call applyPostalLocation here — a miss would clear City/State.
+		if (onPincodeChange) {
+			set("town", town);
+			return;
+		}
 		if (!address.pincode || address.pincode.length !== 6) {
 			set("town", town);
 			return;
 		}
-		onChange(applyPostalLocation(address.pincode, town));
+		const next = applyPostalLocation(address.pincode, town);
+		// If postal lookup misses the town, keep existing City/State and still set Town.
+		if (!next.city && !next.state && (address.city || address.state)) {
+			onChange({
+				...address,
+				town,
+			});
+			return;
+		}
+		onChange({ ...next, town: town || next.town });
 	};
 
 	const townSelectOptions = useMemo(
@@ -205,6 +257,7 @@ export function BranchAddressFields({
 					onChange={(e) => set("address", e.target.value)}
 					disabled={readOnly}
 					placeholder="Building, street, area"
+					maxLength={ADDRESS_LINE_MAX}
 					className={cn(fieldClass, errors.address && "border-red-400")}
 				/>
 				<FieldError msg={errors.address} />
@@ -217,8 +270,10 @@ export function BranchAddressFields({
 					onChange={(e) => set("addressLine2", e.target.value)}
 					disabled={readOnly}
 					placeholder="Landmark, floor (optional)"
-					className={fieldClass}
+					maxLength={ADDRESS_LINE_2_MAX}
+					className={cn(fieldClass, errors.addressLine2 && "border-red-400")}
 				/>
+				<FieldError msg={errors.addressLine2} />
 			</div>
 
 			<div className={cn(ERP.field, pincodeCol)}>
@@ -244,6 +299,7 @@ export function BranchAddressFields({
 						disabled={readOnly || (geographyLocked && isIndia)}
 						value={address.district ?? ""}
 						onChange={(e) => set("district", e.target.value)}
+						maxLength={GEO_FIELD_MAX}
 						className={cn(fieldClass, errors.district && "border-red-400")}
 						placeholder={
 							address.pincode.length === 6 && !postalReady
@@ -265,6 +321,7 @@ export function BranchAddressFields({
 					disabled={readOnly || (geographyLocked && isIndia)}
 					value={address.city}
 					onChange={(e) => set("city", e.target.value)}
+					maxLength={GEO_FIELD_MAX}
 					className={cn(fieldClass, errors.city && "border-red-400")}
 					placeholder={
 						address.pincode.length === 6 && !postalReady
@@ -303,6 +360,7 @@ export function BranchAddressFields({
 							}
 							value={address.town ?? ""}
 							onChange={(e) => handleTownChange(e.target.value)}
+							maxLength={GEO_FIELD_MAX}
 							className={cn(fieldClass, errors.town && "border-red-400")}
 							placeholder={
 								address.pincode.length === 6 && !postalReady
@@ -324,7 +382,12 @@ export function BranchAddressFields({
 				{isIndia && stateOptions.length > 0 ? (
 					<AutocompleteSelect
 						disabled={readOnly || geographyLocked}
-						value={address.state}
+						value={
+							stateOptions.find(
+								(opt) =>
+									opt.value.toLowerCase() === address.state.trim().toLowerCase(),
+							)?.value || address.state
+						}
 						onChange={(value) => set("state", String(value))}
 						options={stateOptions}
 						placeholder="Select state..."
@@ -336,6 +399,7 @@ export function BranchAddressFields({
 						disabled={readOnly || geographyLocked}
 						value={address.state}
 						onChange={(e) => set("state", e.target.value)}
+						maxLength={GEO_FIELD_MAX}
 						className={cn(fieldClass, errors.state && "border-red-400")}
 						placeholder="State"
 					/>

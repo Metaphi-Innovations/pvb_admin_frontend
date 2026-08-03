@@ -6,6 +6,143 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
+/** API-backed TDS list/detail record (maps to backend snake_case fields). */
+export interface TdsApiRecord {
+  id: number;
+  tdsUuid: string;
+  sectionName: string;
+  tdsRate: string;
+  applicableTo: string;
+  description: string;
+  status: MasterStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface TdsApiForm {
+  sectionName: string;
+  tdsRate: string;
+  applicableTo: string;
+  description: string;
+}
+
+export const DEFAULT_TDS_API_FORM: TdsApiForm = {
+  sectionName: "",
+  tdsRate: "",
+  applicableTo: "",
+  description: "",
+};
+
+export function tdsApiToForm(record: TdsApiRecord): TdsApiForm {
+  return {
+    sectionName: record.sectionName,
+    tdsRate: record.tdsRate,
+    applicableTo: record.applicableTo,
+    description: record.description,
+  };
+}
+
+/** TDS rate is a percentage: greater than 0 and at most 100, max 2 decimals. */
+export const TDS_RATE_MIN = 0;
+export const TDS_RATE_MAX = 100;
+
+export function validateTdsApiForm(form: TdsApiForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const rate = form.tdsRate.trim().replace(/%$/, "");
+
+  if (!form.sectionName.trim()) {
+    errors.sectionName = "TDS section name is required.";
+  }
+
+  if (!rate) {
+    errors.tdsRate = "TDS rate is required.";
+  } else if (!/^\d+(\.\d{1,2})?$/.test(rate)) {
+    errors.tdsRate = "Enter a valid numeric TDS rate (max 2 decimal places).";
+  } else {
+    const num = Number(rate);
+    if (!Number.isFinite(num) || num <= TDS_RATE_MIN) {
+      errors.tdsRate = "TDS rate must be greater than zero.";
+    } else if (num > TDS_RATE_MAX) {
+      errors.tdsRate = "TDS rate cannot exceed 100%.";
+    }
+  }
+
+  return errors;
+}
+
+export function formatApplicableToLabel(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "—";
+  return (
+    TDS_APPLICABLE_TO_OPTIONS.find((o) => o.value === trimmed)?.label ?? trimmed
+  );
+}
+
+export type ApplicableToSelectOption = { label: string; value: string };
+
+/** Active category master values for create/edit dropdowns. */
+export function buildActiveCategorySelectOptions(
+  categories: { categoryName: string }[],
+  currentValue?: string,
+): ApplicableToSelectOption[] {
+  const seen = new Set<string>();
+  const options: ApplicableToSelectOption[] = [];
+
+  const add = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    options.push({ value: trimmed, label: trimmed });
+  };
+
+  for (const category of categories) {
+    add(category.categoryName);
+  }
+
+  if (currentValue) {
+    add(currentValue);
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Category master + legacy predefined values + existing DB values for create/edit dropdowns. */
+export function mergeApplicableToSelectOptions(
+  categories: { categoryName: string }[],
+  currentValue?: string,
+  extraFromApi?: ApplicableToSelectOption[],
+): ApplicableToSelectOption[] {
+  const seen = new Set<string>();
+  const options: ApplicableToSelectOption[] = [];
+
+  const add = (value: string, label: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    options.push({ value: trimmed, label: label.trim() || trimmed });
+  };
+
+  for (const category of categories) {
+    add(category.categoryName, category.categoryName);
+  }
+
+  for (const option of TDS_APPLICABLE_TO_OPTIONS) {
+    add(option.value, option.label);
+  }
+
+  for (const option of extraFromApi ?? []) {
+    add(option.value, option.label);
+  }
+
+  if (currentValue) {
+    add(currentValue, formatApplicableToLabel(currentValue));
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export interface TDSMaster {
   id: number;
   sectionCode: string;
@@ -267,7 +404,14 @@ export function formatApplicableToLabels(values: string[]): string {
 }
 
 export function sanitizeTdsRateInput(value: string): string {
-  return value.replace(/%/g, "");
+  let cleaned = value.replace(/%/g, "").replace(/[^\d.]/g, "");
+  const dotIndex = cleaned.indexOf(".");
+  if (dotIndex !== -1) {
+    const whole = cleaned.slice(0, dotIndex);
+    const fraction = cleaned.slice(dotIndex + 1).replace(/\./g, "").slice(0, 2);
+    cleaned = `${whole}.${fraction}`;
+  }
+  return cleaned;
 }
 
 export function showTdsRatePercentSuffix(rate: string): boolean {

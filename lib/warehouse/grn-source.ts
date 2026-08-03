@@ -51,5 +51,5 @@ export const ST_GRN_STATUS_BADGE: Record<
   "QC Completed": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed" },
 };
 
-/** Default destination warehouse for receipt users (demo context). */
-export const DEFAULT_DESTINATION_WAREHOUSE = "Central Warehouse";
+/** Default destination warehouse filter value for GRN listing tabs. */
+export const DEFAULT_DESTINATION_WAREHOUSE = "All";

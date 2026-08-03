@@ -75,7 +75,7 @@ function monthStart(): string {
   return new Date().toISOString().slice(0, 8) + "01";
 }
 
-export function collectDescendantLedgers(records: ChartOfAccount[], nodeId: number): ChartOfAccount[] {
+export function collectDescendantLedgers(records: ChartOfAccount[], nodeId: import("@/app/(app)/accounts/data").CoaNodeId): ChartOfAccount[] {
   const ids = new Set<number>();
   const queue = [nodeId];
   while (queue.length) {
