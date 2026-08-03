@@ -110,7 +110,10 @@ export default function ViewSalesOrderPage() {
     );
   }
 
-  const totals = calculateOrderTotalsSummary(order.lineItems);
+  const totals = calculateOrderTotalsSummary(
+    order.lineItems,
+    order.additionalExpenses ?? [],
+  );
   const packingList = order.packingListId ? getPackingListById(order.packingListId) : undefined;
 
   const editable = canEditOrder(order);
@@ -217,8 +220,7 @@ export default function ViewSalesOrderPage() {
       { label: "Order Date", value: order.orderDate },
       { label: "Delivery Date", value: order.deliveryDate || "—" },
       { label: "Salesman", value: order.salesManName || "—" },
-      { label: "Territory", value: order.territory || "—" },
-      { label: "Grand Total", value: formatRupee(order.totalAmount), highlight: true },
+      { label: "Grand Total", value: formatRupee(totals.grandTotal), highlight: true },
     ],
     approval: approvalItems,
   };
@@ -271,13 +273,13 @@ export default function ViewSalesOrderPage() {
         recordCode={order.soNumber}
         statusLabel={formatOrderStatus(order.status)}
         statusVariant={orderStatusVariant(order.status)}
-        metaItems={[{ label: order.territory || "—" }]}
+        metaItems={order.salesManName ? [{ label: order.salesManName }] : []}
         kpis={[
           {
             icon: IndianRupee,
             iconBg: "bg-emerald-100",
             iconColor: "text-emerald-700",
-            value: formatRupee(order.totalAmount),
+            value: formatRupee(totals.grandTotal),
             label: "Total Amount",
           },
           {
@@ -311,10 +313,9 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Customer" value={`${order.customerCode} — ${order.customerName}`} />
               <RecordKvRow label="Salesman ID" value={order.salesManId ?? "—"} />
               <RecordKvRow label="Salesman" value={order.salesManName} />
-              <RecordKvRow label="Territory" value={order.territory} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
-              <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount />
+              <RecordKvRow label="Total Amount" value={formatRupee(totals.grandTotal)} amount />
               <RecordKvRow label="Remarks" value={order.remarks?.trim() || "—"} isLast />
             </RecordSectionCard>
 
@@ -377,9 +378,18 @@ export default function ViewSalesOrderPage() {
                   {order.lineItems.map(line => {
                     const product = line.productId ? getProductById(Number(line.productId)) : undefined;
                     const hasScheme = isProductDiscountSchemeApplied(line);
-                    const packSize = product?.packSize || 1;
-                    const cases = Math.floor(line.quantity / packSize);
-                    const loose = line.quantity % packSize;
+                    const packSize = line.packSize || product?.packSize || 1;
+                    const qtyType = line.quantityType || "Piece";
+                    const cases = qtyType === "Case"
+                      ? (line.caseQuantity ?? Math.floor(line.quantity / packSize))
+                      : 0;
+                    const loose = qtyType === "Piece"
+                      ? (line.pieceQuantity ?? line.quantity)
+                      : 0;
+                    const gstRateLabel =
+                      line.gstPercentage != null
+                        ? `${line.gstPercentage}%`
+                        : product?.gstRate || "0%";
                     
                     return (
                       <tr key={line.id} className="border-b border-border/60">
@@ -418,7 +428,7 @@ export default function ViewSalesOrderPage() {
                         <td className="px-4 py-2 text-xs text-right tabular-nums font-medium">{formatSchemeRupee(line.finalRate)}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">
                           <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
+                            <span className="text-[10px] text-muted-foreground font-semibold">{gstRateLabel}</span>
                             <span>{formatRupee(line.gstAmount)}</span>
                           </div>
                         </td>
