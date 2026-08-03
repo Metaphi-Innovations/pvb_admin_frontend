@@ -118,7 +118,7 @@ export default function EditSalesOrderPage() {
 				sku: p.sku || "",
 				stock: Number(p.pack_size || 1000), // fallback stock
 				sellingPrice: Number(p.mrp || 0),
-				gstRate: String(p.gst_rate?.gstPercentage || 18),
+				gstRate: String(p.gst_rate?.gstPercentage ?? 18),
 				category: p.category?.categoryName || "",
 				segment: p.segment?.segment_name || "",
 				packSize: Number(p.unit_per_packing || 1),

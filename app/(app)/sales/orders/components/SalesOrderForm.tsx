@@ -913,6 +913,10 @@ export default function SalesOrderForm({
 												value: formatRupee(totalsSummary.igstTotal),
 											},
 										]),
+								{
+									label: "Total Tax:",
+									value: formatRupee(totalsSummary.totalGst),
+								},
 							].map((row) => (
 								<div
 									key={row.label}
