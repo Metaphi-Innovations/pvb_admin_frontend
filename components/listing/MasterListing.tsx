@@ -13,6 +13,7 @@ import { ActionMenu } from "./ActionMenu";
 import { Pagination } from "./Pagination";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
+import { ListingTruncateCell } from "./ListingTruncateCell";
 
 export function MasterListing<T = any>({
   columns,
@@ -185,7 +186,7 @@ export function MasterListing<T = any>({
       {/* Table Container */}
       <div className="master-listing-table-shell">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="w-full min-w-full border-collapse table-fixed">
             <thead>
               <tr className="master-listing-thead-row">
                 {columns.map((col) => {
@@ -196,7 +197,11 @@ export function MasterListing<T = any>({
                     <th
                       key={col.key}
                       onClick={() => col.sortable && handleSort(col.key)}
-                      style={{ width: col.width }}
+                      style={
+                        col.width
+                          ? { width: col.width, maxWidth: col.width, minWidth: 0 }
+                          : undefined
+                      }
                       className={cn(
                         "px-4 py-2.5 text-xs font-semibold text-foreground select-none whitespace-nowrap master-listing-th",
                         col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
@@ -300,24 +305,52 @@ export function MasterListing<T = any>({
                       {columns.map((col) => {
                         const cellVal = (row as any)[col.key];
                         const isSticky = col.sticky;
-                        
+                        const shouldTruncate =
+                          col.truncate ??
+                          (
+                            col.filterType !== "audit" &&
+                            !["status", "actions"].includes(col.key)
+                          );
+
+                        const rawContent = col.render ? (
+                          col.render(cellVal, row, index)
+                        ) : (
+                          <span className={cn(col.key === "code" && "font-mono font-semibold text-brand-700")}>
+                            {cellVal !== undefined && cellVal !== null ? String(cellVal) : "—"}
+                          </span>
+                        );
+
+                        const tooltipFromCol = col.tooltipText?.(cellVal, row, index);
+                        const tooltipFallback =
+                          !col.render &&
+                          cellVal !== undefined &&
+                          cellVal !== null &&
+                          (typeof cellVal === "string" || typeof cellVal === "number")
+                            ? String(cellVal)
+                            : undefined;
+
                         return (
                           <td
                             key={col.key}
-                            style={col.width ? { width: col.width, maxWidth: col.width } : undefined}
+                            style={
+                              col.width
+                                ? { width: col.width, maxWidth: col.width, minWidth: 0 }
+                                : { minWidth: 0 }
+                            }
                             className={cn(
                               "px-4 py-2.5 text-xs text-foreground whitespace-nowrap",
+                              shouldTruncate && "overflow-hidden",
                               col.align === "center" && "text-center",
                               col.align === "right" && "text-right",
                               isSticky && "master-listing-td-sticky",
                             )}
                           >
-                            {col.render ? (
-                              col.render(cellVal, row, index)
+                            {shouldTruncate ? (
+                              <ListingTruncateCell text={tooltipFromCol ?? tooltipFallback}>
+                                {rawContent}
+                              </ListingTruncateCell>
                             ) : (
-                              <span className={cn(col.key === "code" && "font-mono font-semibold text-brand-700")}>
-                                {cellVal !== undefined && cellVal !== null ? String(cellVal) : "—"}
-                              </span>
+                              rawContent
                             )}
                           </td>
                         );

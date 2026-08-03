@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
+import { ListingTruncateCell } from "@/components/listing/ListingTruncateCell";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { cn } from "@/lib/utils";
@@ -270,8 +271,11 @@ export default function SchemeMasterPage() {
       filterable: true,
       filterType: "text",
       width: "160px",
+      truncate: false,
       render: (_v, row) => (
-        <span className="text-[11px] font-medium line-clamp-2">{row.schemeName}</span>
+        <ListingTruncateCell text={row.schemeName} multiline>
+          <span className="text-[11px] font-medium line-clamp-2">{row.schemeName}</span>
+        </ListingTruncateCell>
       ),
     },
     {
@@ -289,8 +293,11 @@ export default function SchemeMasterPage() {
       key: "productCount",
       header: "Customer / Scope",
       width: "120px",
+      truncate: false,
       render: (_v, row) => (
-        <span className="text-[11px] line-clamp-2">{resolveScopeDisplay(row)}</span>
+        <ListingTruncateCell text={resolveScopeDisplay(row)} multiline>
+          <span className="text-[11px] line-clamp-2">{resolveScopeDisplay(row)}</span>
+        </ListingTruncateCell>
       ),
     },
     {
@@ -321,6 +328,7 @@ export default function SchemeMasterPage() {
         { label: "Inactive", value: "inactive" },
       ],
       width: "80px",
+      truncate: false,
       render: (_v, row) => renderOperationalStatusBadge(resolveSchemeOperationalStatus(row)),
     },
     {
@@ -328,6 +336,7 @@ export default function SchemeMasterPage() {
       header: "Approval",
       sortable: true,
       width: "100px",
+      truncate: false,
       render: (_v, row) => <SchemeApprovalBadge record={row} />,
     },
     {

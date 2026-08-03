@@ -13,6 +13,13 @@ export interface ColumnConfig<T = any> {
   sticky?: boolean; // e.g. for actions
   width?: string;
   align?: "left" | "center" | "right";
+  /**
+   * When true (default), overflowing cell text is truncated and the full value
+   * is shown in a tooltip. Set false for interactive widgets (status toggles, menus).
+   */
+  truncate?: boolean;
+  /** Optional explicit tooltip text; defaults to the cell's text content. */
+  tooltipText?: (value: any, row: T, index: number) => string | null | undefined;
   render?: (value: any, row: T, index: number) => React.ReactNode;
 }
 

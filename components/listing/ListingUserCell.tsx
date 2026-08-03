@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/components/record-detail/RecordEntityAvatar";
+import { ListingTruncateCell } from "./ListingTruncateCell";
 
 /** Display name for audit users — maps legacy short names to full labels */
 export function formatAuditUserName(name?: string): string {
@@ -24,7 +25,7 @@ export function ListingUserCell({
   }
 
   return (
-    <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-center gap-2 min-w-0 whitespace-normal">
       <div
         className={cn(
           "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0",
@@ -33,15 +34,18 @@ export function ListingUserCell({
       >
         {getInitials(displayName)}
       </div>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium text-foreground leading-tight truncate">
+      <div className="min-w-0 flex-1">
+        <ListingTruncateCell
+          text={displayName}
+          className="text-[11px] font-medium text-foreground leading-tight"
+        >
           {displayName}
-        </p>
-        {date && (
-          <p className="text-[10px] font-mono text-muted-foreground leading-tight mt-0.5">
+        </ListingTruncateCell>
+        {date ? (
+          <p className="text-[10px] font-mono text-muted-foreground leading-tight mt-0.5 truncate">
             {date}
           </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
