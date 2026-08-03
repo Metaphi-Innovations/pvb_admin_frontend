@@ -295,7 +295,7 @@ export default function SchemeMasterPage() {
       width: "120px",
       truncate: false,
       render: (_v, row) => (
-        <ListingTruncateCell text={resolveScopeDisplay(row)} multiline>
+        <ListingTruncateCell text={String(resolveScopeDisplay(row))} multiline>
           <span className="text-[11px] line-clamp-2">{resolveScopeDisplay(row)}</span>
         </ListingTruncateCell>
       ),
