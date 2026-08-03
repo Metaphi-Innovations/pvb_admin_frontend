@@ -505,7 +505,10 @@ export const API_ENDPOINTS = {
     },
      BANKING: {
       BANK_ACCOUNTS: {
-        LIST: "/accounts/banking/bank-accounts",
+        LIST: "/accounts/banking/bank-accounts/list",
+        FILTER: "/accounts/banking/bank-accounts/filter",
+        EXPORT: "/accounts/banking/bank-accounts/export",
+        OPTIONS: "/accounts/banking/bank-accounts/options",
         CREATE: "/accounts/banking/bank-accounts",
         BY_LEDGER: (ledgerId: string) =>
           `/accounts/banking/bank-accounts/ledger/${ledgerId}`,

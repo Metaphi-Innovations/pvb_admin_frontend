@@ -20,18 +20,58 @@ export type BankAccountsListSortBy =
 
 export type BankAccountsListSortOrder = "asc" | "desc";
 
+/** POST /list and /export query + body params (Sales Order style). */
 export interface BankAccountsListParams {
   page?: number;
+  pageSize?: number;
+  /** @deprecated use pageSize */
   limit?: number;
   search?: string;
-  status?: BankAccountApiStatus;
-  detailsStatus?: BankAccountDetailsStatus;
-  accountType?: BankAccountApiAccountType;
-  warehouseId?: string;
-  sortBy?: BankAccountsListSortBy;
-  sortOrder?: BankAccountsListSortOrder;
+  ordering?: string;
+  apiFilters?: Record<string, unknown>;
+  financialYearId?: string | null;
   signal?: AbortSignal;
 }
+
+export type BankAccountFilterField =
+  | "ledger_name"
+  | "bank_account__bank_name"
+  | "bank_account__account_holder_name"
+  | "bank_account__account_number"
+  | "bank_account__ifsc_code"
+  | "bank_account__account_type"
+  | "bank_account__warehouse_mappings__warehouse__warehouse_name"
+  | "opening_balances__opening_amount"
+  | "opening_balances__balance_type"
+  | "status";
+
+/** UI column key → GET /filter?field_name= */
+export const BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN: Record<string, BankAccountFilterField> = {
+  ledgerName: "ledger_name",
+  bankName: "bank_account__bank_name",
+  accountHolderName: "bank_account__account_holder_name",
+  accountNumber: "bank_account__account_number",
+  ifsc: "bank_account__ifsc_code",
+  accountType: "bank_account__account_type",
+  mappedWarehousesLabel: "bank_account__warehouse_mappings__warehouse__warehouse_name",
+  openingBalance: "opening_balances__opening_amount",
+  status: "status",
+};
+
+/** UI column key → ordering field (prefix `-` for desc). */
+export const BANK_ACCOUNT_ORDERING_BY_COLUMN: Record<string, string> = {
+  ledgerName: "ledger_name",
+  accountNickname: "ledger_name",
+  bankName: "bank_account__bank_name",
+  accountHolderName: "bank_account__account_holder_name",
+  accountNumber: "bank_account__account_number",
+  ifsc: "bank_account__ifsc_code",
+  accountType: "bank_account__account_type",
+  status: "status",
+  openingBalance: "opening_balances__opening_amount",
+  createdAt: "created_at",
+  updatedAt: "updated_at",
+};
 
 export interface BankAccountWarehouse {
   id: string;
@@ -54,16 +94,17 @@ export interface BankAccountListRow {
   accountNickname: string;
   bankName: string;
   accountHolderName: string;
+  /** Full unmasked account number (empty when bank details pending). */
   accountNumber: string;
-  maskedAccountNumber: string;
   ifsc: string;
   branchName: string;
   accountType: string;
   accountTypeRaw: BankAccountApiAccountType | "";
   openingBalance: number;
   balanceType: "Debit" | "Credit";
-  /** Optional — listing may omit; show em dash when null. */
+  /** Null when API omits / pending — show em dash. */
   currentBalance: number | null;
+  currentBalanceType: "Debit" | "Credit" | null;
   mappedWarehouseNames: string[];
   mappedWarehousesLabel: string;
   bankDetailsStatus: BankAccountDetailsStatus;
@@ -113,8 +154,8 @@ export interface BankAccountDetail {
   parentPath: string;
   bankName: string;
   accountHolderName: string;
+  /** Full unmasked account number. */
   accountNumber: string;
-  maskedAccountNumber: string;
   ifscCode: string;
   branchName: string;
   accountType: BankAccountApiAccountType | "";
@@ -130,6 +171,20 @@ export interface BankAccountDetail {
   updatedBy: BankAccountAuditUser | null;
   createdAt: string;
   updatedAt: string;
+  currentBalance: string | null;
+  currentBalanceType: BankAccountOpeningBalanceType | null;
+}
+
+/** Dropdown option from GET .../bank-accounts/options */
+export interface BankAccountOption {
+  ledgerId: string;
+  bankAccountId: string | null;
+  bankName: string;
+  accountNumber: string;
+  label: string;
+  ifscCode: string;
+  accountHolderName: string;
+  status: BankAccountApiStatus;
 }
 
 export interface BankAccountMutationResult {
@@ -233,15 +288,20 @@ function fyHeaders(financialYearId?: string | null): Record<string, string> | un
   return { "x-financial-year-id": id };
 }
 
+function mapBalanceTypeOrNull(raw: unknown): "Debit" | "Credit" | null {
+  if (raw == null || raw === "") return null;
+  const v = asString(raw).toUpperCase();
+  if (v === "CREDIT") return "Credit";
+  if (v === "DEBIT") return "Debit";
+  return null;
+}
+
 export function mapBankAccountListItem(
   row: Record<string, unknown>,
 ): BankAccountListRow {
   const ledgerName = asString(row.ledgerName);
   const alias = asString(row.alias);
-  const masked =
-    asNullableString(row.maskedAccountNumber) ??
-    asNullableString(row.accountNumber) ??
-    "";
+  const accountNumber = asNullableString(row.accountNumber) ?? "";
   const accountType = mapAccountType(row.accountType);
   const warehouses = mapWarehouses(row.warehouses);
   const warehouseNames = warehouses.map((w) => w.name).filter(Boolean);
@@ -261,8 +321,7 @@ export function mapBankAccountListItem(
     accountNickname: alias || ledgerName,
     bankName: asString(row.bankName),
     accountHolderName: asString(row.accountHolderName),
-    accountNumber: masked,
-    maskedAccountNumber: masked,
+    accountNumber,
     ifsc: asString(row.ifscCode ?? row.ifsc),
     branchName: asString(row.branchName),
     accountType: accountType.label,
@@ -270,6 +329,9 @@ export function mapBankAccountListItem(
     openingBalance: asNumber(row.openingBalance),
     balanceType: mapBalanceType(row.openingBalanceType),
     currentBalance,
+    currentBalanceType: mapBalanceTypeOrNull(
+      row.currentBalanceType ?? row.current_balance_type,
+    ),
     mappedWarehouseNames: warehouseNames,
     mappedWarehousesLabel: warehouseNames.join(", "),
     bankDetailsStatus: mapDetailsStatus(row.bankDetailsStatus),
@@ -281,6 +343,9 @@ export function mapBankAccountListItem(
 
 export function mapBankAccountDetail(row: Record<string, unknown>): BankAccountDetail {
   const accountType = mapAccountType(row.accountType);
+  const currentBalanceRaw = row.currentBalance ?? row.current_balance;
+  const currentBalanceTypeRaw =
+    row.currentBalanceType ?? row.current_balance_type;
   return {
     ledgerId: asString(row.ledgerId),
     bankAccountId: asNullableString(row.bankAccountId),
@@ -294,9 +359,6 @@ export function mapBankAccountDetail(row: Record<string, unknown>): BankAccountD
     bankName: asString(row.bankName),
     accountHolderName: asString(row.accountHolderName),
     accountNumber: asString(row.accountNumber),
-    maskedAccountNumber: asString(
-      row.maskedAccountNumber ?? row.accountNumber,
-    ),
     ifscCode: asString(row.ifscCode ?? row.ifsc),
     branchName: asString(row.branchName),
     accountType: accountType.raw,
@@ -312,28 +374,247 @@ export function mapBankAccountDetail(row: Record<string, unknown>): BankAccountD
     updatedBy: mapAuditUser(row.updatedBy),
     createdAt: asString(row.createdAt),
     updatedAt: asString(row.updatedAt),
+    currentBalance:
+      currentBalanceRaw == null || currentBalanceRaw === ""
+        ? null
+        : asString(currentBalanceRaw),
+    currentBalanceType:
+      currentBalanceTypeRaw == null || currentBalanceTypeRaw === ""
+        ? null
+        : mapOpeningBalanceType(currentBalanceTypeRaw),
   };
 }
 
-/** Map UI SortTh column keys to API sortBy when supported; null if client-only. */
+function mapBankAccountOption(row: Record<string, unknown>): BankAccountOption {
+  const bankName = asString(row.bankName);
+  const accountNumber = asString(row.accountNumber);
+  const labelFromApi = asNullableString(row.label);
+  return {
+    ledgerId: asString(row.ledgerId),
+    bankAccountId: asNullableString(row.bankAccountId),
+    bankName,
+    accountNumber,
+    label:
+      labelFromApi ??
+      (bankName && accountNumber
+        ? `${bankName} - ${accountNumber}`
+        : bankName || accountNumber || "—"),
+    ifscCode: asString(row.ifscCode ?? row.ifsc),
+    accountHolderName: asString(row.accountHolderName),
+    status: mapApiStatus(row.status),
+  };
+}
+
+/** Map UI SortTh column keys to API ordering string; null if unsupported. */
+export function mapUiSortToOrdering(
+  sortKey: string | null | undefined,
+  sortDir: "asc" | "desc" | null | undefined,
+): string | undefined {
+  if (!sortKey) return undefined;
+  const field = BANK_ACCOUNT_ORDERING_BY_COLUMN[sortKey];
+  if (!field) return undefined;
+  return sortDir === "desc" ? `-${field}` : field;
+}
+
+/** @deprecated Prefer mapUiSortToOrdering for POST /list. */
 export function mapUiSortToApi(
   sortKey: string | null | undefined,
   sortDir: "asc" | "desc" | null | undefined,
 ): { sortBy: BankAccountsListSortBy; sortOrder: BankAccountsListSortOrder } | null {
-  const order: BankAccountsListSortOrder = sortDir === "desc" ? "desc" : "asc";
-  switch (sortKey) {
-    case "accountNickname":
-    case "ledgerName":
-      return { sortBy: "ledgerName", sortOrder: order };
-    case "bankName":
-      return { sortBy: "bankName", sortOrder: order };
-    case "status":
-      return { sortBy: "status", sortOrder: order };
-    case "ledgerCode":
-      return { sortBy: "ledgerCode", sortOrder: order };
-    default:
-      return null;
+  const ordering = mapUiSortToOrdering(sortKey, sortDir);
+  if (!ordering) return null;
+  const desc = ordering.startsWith("-");
+  const field = desc ? ordering.slice(1) : ordering;
+  const sortBy =
+    field === "ledger_name"
+      ? "ledgerName"
+      : field === "bank_account__bank_name"
+        ? "bankName"
+        : field === "status"
+          ? "status"
+          : field === "created_at"
+            ? "createdAt"
+            : field === "updated_at"
+              ? "updatedAt"
+              : null;
+  if (!sortBy) return null;
+  return { sortBy, sortOrder: desc ? "desc" : "asc" };
+}
+
+/** Build POST body `filters` from Accounts Excel column filter state (multi-select arrays). */
+export function buildBankAccountApiFilters(
+  columnFilters: Record<string, { selectedValues?: string[] } | undefined>,
+): Record<string, unknown> {
+  const filters: Record<string, unknown> = {};
+  const bankAccount: Record<string, unknown> = {};
+
+  const selected = (key: string): string[] =>
+    (columnFilters[key]?.selectedValues ?? []).map((v) => String(v).trim()).filter(Boolean);
+
+  const ledgerName = selected("ledgerName");
+  if (ledgerName.length) filters.ledger_name = ledgerName;
+
+  const status = selected("status").map((v) =>
+    v.toUpperCase() === "INACTIVE" || v.toLowerCase() === "inactive" ? "INACTIVE" : "ACTIVE",
+  );
+  if (status.length) filters.status = [...new Set(status)];
+
+  const bankName = selected("bankName");
+  if (bankName.length) bankAccount.bank_name = bankName;
+
+  const holder = selected("accountHolderName");
+  if (holder.length) bankAccount.account_holder_name = holder;
+
+  const accountNumber = selected("accountNumber");
+  if (accountNumber.length) bankAccount.account_number = accountNumber;
+
+  const ifsc = selected("ifsc");
+  if (ifsc.length) bankAccount.ifsc_code = ifsc;
+
+  const accountType = selected("accountType").map((v) => {
+    const upper = v.toUpperCase().replace(/\s+/g, "_");
+    const byLabel = (
+      Object.entries(ACCOUNT_TYPE_LABELS) as [BankAccountApiAccountType, string][]
+    ).find(
+      ([value, label]) =>
+        label.toLowerCase() === v.toLowerCase() || value === upper,
+    );
+    return byLabel?.[0] ?? upper;
+  });
+  if (accountType.length) bankAccount.account_type = [...new Set(accountType)];
+
+  const warehouses = selected("mappedWarehousesLabel");
+  if (warehouses.length) {
+    bankAccount.warehouse_mappings = {
+      warehouse: { warehouse_name: warehouses },
+    };
   }
+
+  if (Object.keys(bankAccount).length > 0) {
+    filters.bank_account = bankAccount;
+  }
+
+  const openingAmount = selected("openingBalance");
+  if (openingAmount.length) {
+    filters.opening_balances = {
+      ...((filters.opening_balances as Record<string, unknown>) ?? {}),
+      opening_amount: openingAmount,
+    };
+  }
+
+  return filters;
+}
+
+/** Map GET /filter response rows → Excel filter value options (no counts — API returns distinct values). */
+export function mapBankAccountFilterOptions(
+  rows: unknown[],
+  fieldName: string,
+): { value: string; count: number }[] {
+  const values = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const obj = row as Record<string, unknown>;
+    const raw = obj[fieldName] ?? Object.values(obj)[0];
+    if (raw == null || raw === "") continue;
+    values.add(String(raw));
+  }
+  return [...values]
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, count: 0 }));
+}
+
+function parseFilenameFromDisposition(disposition: string | undefined, fallback: string): string {
+  if (!disposition) return fallback;
+  const utf8 = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(disposition);
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1].trim().replace(/^"|"$/g, ""));
+    } catch {
+      /* fall through */
+    }
+  }
+  const plain = /filename\s*=\s*("?)([^";]+)\1/i.exec(disposition);
+  if (plain?.[2]) return plain[2].trim();
+  return fallback;
+}
+
+async function downloadOrHandleEmptyExport(
+  response: { data: Blob; headers: Record<string, unknown> },
+  fallbackFilename: string,
+): Promise<"downloaded" | "empty"> {
+  const blob = response.data as Blob;
+  const contentType = String(
+    response.headers?.["content-type"] ?? response.headers?.["Content-Type"] ?? blob.type ?? "",
+  ).toLowerCase();
+
+  if (contentType.includes("application/json") || contentType.includes("text/json")) {
+    const text = await blob.text();
+    let parsed: { message?: string; data?: unknown } = {};
+    try {
+      parsed = JSON.parse(text) as { message?: string; data?: unknown };
+    } catch {
+      throw new Error(text || "Export failed.");
+    }
+    const msg = String(parsed.message ?? "");
+    if (
+      /no records found/i.test(msg) ||
+      (Array.isArray(parsed.data) && parsed.data.length === 0)
+    ) {
+      return "empty";
+    }
+    throw new Error(msg || "Export failed.");
+  }
+
+  // Some gateways return JSON with a generic blob type — sniff empty payload.
+  if (blob.size > 0 && blob.size < 512 && !contentType.includes("spreadsheet") && !contentType.includes("excel")) {
+    try {
+      const text = await blob.slice(0, 512).text();
+      if (text.trim().startsWith("{")) {
+        const parsed = JSON.parse(text) as { message?: string; data?: unknown };
+        if (
+          /no records found/i.test(String(parsed.message ?? "")) ||
+          (Array.isArray(parsed.data) && parsed.data.length === 0)
+        ) {
+          return "empty";
+        }
+      }
+    } catch {
+      /* treat as file */
+    }
+  }
+
+  const disposition = String(
+    response.headers?.["content-disposition"] ?? response.headers?.["Content-Disposition"] ?? "",
+  );
+  const filename = parseFilenameFromDisposition(disposition, fallbackFilename);
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+  return "downloaded";
+}
+
+function buildListQuery(params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  ordering?: string;
+  financialYearId?: string | null;
+}): string {
+  const query = new URLSearchParams();
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
+  query.set("page", String(page));
+  query.set("page_size", String(pageSize));
+  if (params.ordering?.trim()) query.set("ordering", params.ordering.trim());
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  const fy = params.financialYearId?.trim();
+  if (fy && UUID_RE.test(fy)) query.set("financialYearId", fy);
+  return query.toString();
 }
 
 function extractMutationResult(
@@ -378,24 +659,21 @@ export const ACCOUNT_TYPE_OPTIONS: {
 
 export const BankAccountsListService = {
   async list(params: BankAccountsListParams = {}): Promise<BankAccountsListResult> {
-    const page = Math.max(1, params.page ?? 1);
-    const limit = Math.min(100, Math.max(1, params.limit ?? 20));
+    const pageSize = params.pageSize ?? params.limit ?? 25;
+    const query = buildListQuery({
+      page: params.page,
+      pageSize,
+      search: params.search,
+      ordering: params.ordering,
+      financialYearId: params.financialYearId,
+    });
 
-    const response = await axiosInstance.get(
-      API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.LIST,
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.LIST}?${query}`,
+      { filters: params.apiFilters ?? {} },
       {
-        params: {
-          page,
-          limit,
-          ...(params.search?.trim() ? { search: params.search.trim() } : {}),
-          ...(params.status ? { status: params.status } : {}),
-          ...(params.detailsStatus ? { detailsStatus: params.detailsStatus } : {}),
-          ...(params.accountType ? { accountType: params.accountType } : {}),
-          ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
-          sortBy: params.sortBy ?? "ledgerName",
-          sortOrder: params.sortOrder ?? "asc",
-        },
         signal: params.signal,
+        headers: fyHeaders(params.financialYearId),
       },
     );
 
@@ -414,6 +692,64 @@ export const BankAccountsListService = {
     const total = Number.isFinite(totalRecords) ? totalRecords : items.length;
 
     return { items, total };
+  },
+
+  async getFilterDropdown(
+    fieldName: BankAccountFilterField | string,
+    signal?: AbortSignal,
+  ): Promise<unknown[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.FILTER,
+      {
+        params: { field_name: fieldName },
+        signal,
+      },
+    );
+    const payload = response.data as Record<string, unknown>;
+    return Array.isArray(payload.data) ? payload.data : [];
+  },
+
+  async getOptions(signal?: AbortSignal): Promise<BankAccountOption[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.OPTIONS,
+      { signal },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) return [];
+    return data.map((row) =>
+      mapBankAccountOption((row ?? {}) as Record<string, unknown>),
+    );
+  },
+
+  /**
+   * POST export with same filters/search/ordering as list (no page/page_size).
+   * Returns "empty" when API responds with JSON "No records found".
+   */
+  async export(params: {
+    search?: string;
+    ordering?: string;
+    apiFilters?: Record<string, unknown>;
+    financialYearId?: string | null;
+  }): Promise<"downloaded" | "empty"> {
+    const query = new URLSearchParams();
+    if (params.ordering?.trim()) query.set("ordering", params.ordering.trim());
+    if (params.search?.trim()) query.set("search", params.search.trim());
+    const fy = params.financialYearId?.trim();
+    if (fy && UUID_RE.test(fy)) query.set("financialYearId", fy);
+
+    const qs = query.toString();
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.EXPORT}${qs ? `?${qs}` : ""}`,
+      { filters: params.apiFilters ?? {} },
+      {
+        responseType: "blob",
+        headers: fyHeaders(params.financialYearId),
+      },
+    );
+
+    const today = new Date().toISOString().slice(0, 10);
+    return downloadOrHandleEmptyExport(response, `bank_accounts_${today}.xlsx`);
   },
 
   async getByLedgerId(

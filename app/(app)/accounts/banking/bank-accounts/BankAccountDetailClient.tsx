@@ -275,7 +275,7 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
               />
               <InfoRow
                 label="Account Number"
-                value={account.maskedAccountNumber || account.accountNumber || "—"}
+                value={account.accountNumber || "—"}
                 mono
               />
               <InfoRow label="IFSC Code" value={account.ifscCode || "—"} mono />
@@ -284,13 +284,22 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
                 label="Account Type"
                 value={accountTypeLabel(account.accountType)}
               />
-              <InfoRow label="Currency" value={account.currencyCode || "INR"} />
             </SectionBlock>
 
             <SectionBlock title="Accounting & Defaults">
               <InfoRow
                 label="Opening Balance"
                 value={`${formatMoney(openingAmount)} (${openingSide})`}
+              />
+              <InfoRow
+                label="Current Balance"
+                value={
+                  account.currentBalance != null && account.currentBalance !== ""
+                    ? `${formatMoney(Number(account.currentBalance) || 0)} (${
+                        account.currentBalanceType === "CREDIT" ? "Credit" : "Debit"
+                      })`
+                    : "—"
+                }
               />
               <InfoRow
                 label="Reconciliation"
