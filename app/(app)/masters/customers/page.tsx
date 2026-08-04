@@ -383,14 +383,7 @@ export default function CustomersPage() {
 			width: "240px",
 			render: (_val, row) => {
 				const address = (row.address || "").trim() || "—";
-				return (
-					<span
-						className="block max-w-[240px] truncate"
-						title={address !== "—" ? address : undefined}
-					>
-						{address}
-					</span>
-				);
+				return address;
 			},
 		},
 		{

@@ -27,6 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { EmptySearch, EmptyModuleState } from "@/components/ui/EmptyState";
 import { SkeletonRow } from "@/components/ui/Loaders";
+import { ListingTruncateCell } from "@/components/listing/ListingTruncateCell";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface Column<T = Record<string, unknown>> {
@@ -235,7 +236,7 @@ export function DataTable<T = Record<string, unknown>>({
 
       {/* Table */}
       <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-        <table className="w-full border-collapse">
+        <table className="w-full min-w-full border-collapse table-fixed">
           <thead className="sticky top-0 z-10 master-listing-thead-row">
             <tr>
               {bulkActions && (
@@ -258,7 +259,11 @@ export function DataTable<T = Record<string, unknown>>({
                     col.sortable && "cursor-pointer select-none hover:bg-muted/60",
                     sortKey === col.key && "master-listing-th-sorted",
                   )}
-                  style={col.width ? { width: col.width } : undefined}
+                  style={
+                    col.width
+                      ? { width: col.width, maxWidth: col.width, minWidth: 0 }
+                      : { minWidth: 0 }
+                  }
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
                   <span className="inline-flex items-center gap-1">
@@ -319,16 +324,40 @@ export function DataTable<T = Record<string, unknown>>({
                     )}
                     {visibleColumns.map(col => {
                       const val = (row as Record<string, unknown>)[col.key];
+                      const shouldTruncate = !["status", "actions"].includes(col.key);
+                      const rawContent = col.render
+                        ? col.render(val, row, idx)
+                        : String(val ?? "—");
+                      const tooltipFallback =
+                        !col.render &&
+                        val !== undefined &&
+                        val !== null &&
+                        (typeof val === "string" || typeof val === "number")
+                          ? String(val)
+                          : undefined;
+
                       return (
                         <td
                           key={col.key}
+                          style={
+                            col.width
+                              ? { width: col.width, maxWidth: col.width, minWidth: 0 }
+                              : { minWidth: 0 }
+                          }
                           className={cn(
-                            "px-4 py-3 text-table text-foreground",
+                            "px-4 py-3 text-table text-foreground whitespace-nowrap",
+                            shouldTruncate && "overflow-hidden",
                             col.align === "center" && "text-center",
                             col.align === "right" && "text-right",
                           )}
                         >
-                          {col.render ? col.render(val, row, idx) : String(val ?? "—")}
+                          {shouldTruncate ? (
+                            <ListingTruncateCell text={tooltipFallback}>
+                              {rawContent}
+                            </ListingTruncateCell>
+                          ) : (
+                            rawContent
+                          )}
                         </td>
                       );
                     })}

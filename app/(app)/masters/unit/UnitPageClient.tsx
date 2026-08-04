@@ -61,7 +61,7 @@ import {
   MASTER_CURRENT_USER,
   type MasterStatus,
 } from "@/lib/masters/common";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { ListingAuditCell, ListingStatusToggle, ListingTruncateCell, isActiveStatus } from "@/components/listing";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 type SortKey = "unitCode" | "unitName" | "symbol" | "description" | "status" | "createdBy" | "updatedBy";
@@ -500,17 +500,19 @@ export default function UnitMasterPage() {
                       onClick={() => openView(row)}
                       className="align-top transition-colors border-b cursor-pointer border-border/60 hover:bg-muted/20 group"
                     >
-                      <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">
-                        {row.unitCode}
+                      <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap max-w-[120px] overflow-hidden">
+                        <ListingTruncateCell text={row.unitCode}>{row.unitCode}</ListingTruncateCell>
                       </td>
-                      <td className="px-3 py-2.5 text-xs font-semibold text-foreground">
-                        {row.unitName}
+                      <td className="px-3 py-2.5 text-xs font-semibold text-foreground max-w-[220px] overflow-hidden">
+                        <ListingTruncateCell text={row.unitName}>{row.unitName}</ListingTruncateCell>
                       </td>
-                      <td className="px-3 py-2.5 text-xs font-semibold font-mono text-foreground">
-                        {row.symbol}
+                      <td className="px-3 py-2.5 text-xs font-semibold font-mono text-foreground max-w-[120px] overflow-hidden">
+                        <ListingTruncateCell text={row.symbol}>{row.symbol}</ListingTruncateCell>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
-                        {row.description || "—"}
+                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium max-w-[320px] overflow-hidden">
+                        <ListingTruncateCell text={row.description || "—"}>
+                          {row.description || "—"}
+                        </ListingTruncateCell>
                       </td>
                       <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />

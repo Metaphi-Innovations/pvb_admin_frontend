@@ -86,6 +86,7 @@ import {
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
+import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import {
   Dialog,
   DialogContent,
@@ -236,6 +237,7 @@ export default function ChartOfAccountsPageClient() {
 
   const [showRoot, setShowRoot] = useState(false);
   const [contentSearch, setContentSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(contentSearch, 300);
   const [exporting, setExporting] = useState(false);
   const [sundryDebtorFormParentId, setSundryDebtorFormParentId] = useState<CoaNodeId | null>(null);
   const [sundryDebtorEditCustomerId, setSundryDebtorEditCustomerId] = useState<
@@ -474,14 +476,14 @@ export default function ChartOfAccountsPageClient() {
       "chart-of-accounts",
       "search-results",
       selectedNode?.apiNodeId ?? selectedNode?.id ?? null,
-      contentSearch,
+      debouncedSearch,
     ],
-    enabled: Boolean(contentSearch.trim() && !isLedgerStatementView),
+    enabled: Boolean(debouncedSearch.trim() && !isLedgerStatementView),
     queryFn: async ({ signal }) => {
       const parentId = selectedNode?.apiNodeId ?? selectedNode?.id;
       const tree = await ChartOfAccountsService.getTree({
         includeLedgers: true,
-        search: contentSearch,
+        search: debouncedSearch,
         ...(parentId ? { parentId: String(parentId) } : {}),
         signal,
       });
@@ -489,27 +491,27 @@ export default function ChartOfAccountsPageClient() {
     },
   });
 
-  const effectiveRecords = contentSearch.trim() ? (backendSearchResults ?? []) : deferredRecords;
+  const effectiveRecords = debouncedSearch.trim() ? (backendSearchResults ?? []) : deferredRecords;
 
   const ledgerListingRows = useMemo(() => {
     if (!selectedNode || !isAccountingGroupLedgerListing) return [];
     const rows = buildCoaLedgerListingRows(effectiveRecords, selectedNode.id, {
-      search: contentSearch,
+      search: debouncedSearch,
     });
     return rows;
-  }, [effectiveRecords, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
+  }, [effectiveRecords, selectedNode, debouncedSearch, isAccountingGroupLedgerListing]);
 
   const listingRows = useMemo(() => {
     if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
     return buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
-      search: contentSearch,
+      search: debouncedSearch,
     });
   }, [
     effectiveRecords,
     tableParentId,
     dateFrom,
     dateTo,
-    contentSearch,
+    debouncedSearch,
     datesReady,
     isLedgerStatementView,
     isAccountingGroupLedgerListing,
@@ -544,7 +546,7 @@ export default function ChartOfAccountsPageClient() {
       showRoot,
       dateFrom,
       dateTo,
-      Boolean(contentSearch.trim()),
+      Boolean(debouncedSearch.trim()),
     );
   }, [
     effectiveRecords,
@@ -553,7 +555,7 @@ export default function ChartOfAccountsPageClient() {
     showRoot,
     dateFrom,
     dateTo,
-    contentSearch,
+    debouncedSearch,
     datesReady,
     ledgerAccounting,
     ledgerDataReady,

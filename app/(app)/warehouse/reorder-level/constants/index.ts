@@ -5,6 +5,13 @@ export const WAREHOUSE_OPTIONS = [
   { label: "West Zone Hub", value: "West Zone Hub" },
 ];
 
+/** Sentinel value for the reorder-level main page warehouse filter only. */
+export const ALL_WAREHOUSE_FILTER_VALUE = "__all__";
+export const ALL_WAREHOUSE_FILTER_OPTION = {
+  value: ALL_WAREHOUSE_FILTER_VALUE,
+  label: "All Warehouse",
+} as const;
+
 export const ALL_WAREHOUSE_VALUES = WAREHOUSE_OPTIONS.map(w => w.value);
 
 export const PRODUCT_OPTIONS = [

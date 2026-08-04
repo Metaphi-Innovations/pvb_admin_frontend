@@ -16,10 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { loadCustomers, type Customer } from "@/app/(app)/masters/customers/customer-data";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { SalesOrderService } from "@/services/sales-order.service";
 
 export interface CustomerPartyInfo {
+  customerId?: string;
   customerName: string;
   customerCode?: string;
   gstin?: string;
@@ -63,6 +65,7 @@ export function resolveCustomerPartyInfo(
 
   const branch = match?.branches?.[0];
   return {
+    customerId: extras?.customerId || match?.customerUuid || undefined,
     customerName: name || "—",
     customerCode: extras?.customerCode || match?.customerCode || "—",
     gstin: extras?.gstin || match?.gstin || branch?.billingAddress?.gstin || "—",
@@ -97,22 +100,99 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function formatPaymentTerms(paymentType?: string, creditDays?: number | string): string {
+  if (!paymentType) return "—";
+  const type = paymentType.toLowerCase();
+  if (type === "advance") return "Advance";
+  if (type === "credit") {
+    const days = creditDays ? Number(creditDays) : 30;
+    return `Net ${days}`;
+  }
+  return paymentType;
+}
+
 export function CustomerPartyInfoDialog({
   open,
   onClose,
-  info,
+  info: initialInfo,
 }: {
   open: boolean;
   onClose: () => void;
   info: CustomerPartyInfo | null;
 }) {
+  const [info, setInfo] = useState<CustomerPartyInfo | null>(initialInfo);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setInfo(initialInfo);
+    if (!open || !initialInfo) return;
+
+    const { customerId } = initialInfo;
+    if (!customerId) return;
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerId);
+    
+    if (isUuid) {
+      const fetchDetails = async () => {
+        setLoading(true);
+        try {
+          const res = await SalesOrderService.getCustomerDetails(customerId);
+          if (res) {
+            const mainBranch = res.branches?.find((b: any) => b.is_main_branch) || res.branches?.[0];
+            const billingAddress = mainBranch
+              ? [
+                  mainBranch.billing_address_line_1,
+                  mainBranch.billing_address_line_2,
+                  mainBranch.billing_city,
+                  mainBranch.billing_state,
+                  mainBranch.billing_pincode,
+                ].filter(Boolean).join(", ")
+              : "";
+              
+            const shippingAddress = mainBranch
+              ? [
+                  mainBranch.shipping_address_line_1,
+                  mainBranch.shipping_address_line_2,
+                  mainBranch.shipping_city,
+                  mainBranch.shipping_state,
+                  mainBranch.shipping_pincode,
+                ].filter(Boolean).join(", ")
+              : "";
+              
+            setInfo({
+              customerId: initialInfo.customerId,
+              customerName: res.customer_name || initialInfo.customerName,
+              customerCode: res.customer_code || initialInfo.customerCode,
+              gstin: res.gstin_no || initialInfo.gstin,
+              billingAddress: initialInfo.billingAddress && initialInfo.billingAddress !== "—" ? initialInfo.billingAddress : (billingAddress || "—"),
+              shippingAddress: initialInfo.shippingAddress && initialInfo.shippingAddress !== "—" ? initialInfo.shippingAddress : (shippingAddress || "—"),
+              placeOfSupply: initialInfo.placeOfSupply && initialInfo.placeOfSupply !== "—" ? initialInfo.placeOfSupply : (mainBranch?.billing_state || "—"),
+              paymentTerms: formatPaymentTerms(res.payment_type, res.credit_days) || initialInfo.paymentTerms || "—",
+              branch: initialInfo.branch,
+              creditLimit: res.credit_limit ? Number(res.credit_limit) : initialInfo.creditLimit,
+              customerType: res.customer_type?.customer_type_name || initialInfo.customerType,
+              salesperson: initialInfo.salesperson,
+            });
+          }
+        } catch (err) {
+          console.error("Failed to fetch customer details from backend:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchDetails();
+    }
+  }, [open, initialInfo]);
+
   if (!info) return null;
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sales-order-invoice-form-compact sales-order-invoice-dialog max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="so-dialog-title">{info.customerName}</DialogTitle>
-          <DialogDescription className="so-dialog-desc">Customer details</DialogDescription>
+          <DialogDescription className="so-dialog-desc">
+            {loading ? "Loading customer details..." : "Customer details"}
+          </DialogDescription>
         </DialogHeader>
         <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
           <InfoRow label="Customer Code" value={info.customerCode || "—"} />
@@ -149,6 +229,7 @@ export function CustomerPartyInfoDialog({
 
 /** Name + info icon that opens customer detail dialog. */
 export function CustomerPartyInfoButton({
+  customerId,
   customerName,
   customerCode,
   branch,
@@ -162,6 +243,7 @@ export function CustomerPartyInfoButton({
   salesperson,
   className,
 }: {
+  customerId?: string;
   customerName: string;
   customerCode?: string;
   branch?: string;
@@ -179,6 +261,7 @@ export function CustomerPartyInfoButton({
   const info = useMemo(
     () =>
       resolveCustomerPartyInfo(customerName, {
+        customerId,
         customerCode,
         branch,
         gstin,
@@ -191,6 +274,7 @@ export function CustomerPartyInfoButton({
         salesperson,
       }),
     [
+      customerId,
       customerName,
       customerCode,
       branch,
@@ -228,20 +312,24 @@ export function CustomerPartyInfoButton({
 
 /** Name + info icon that opens customer detail dialog. */
 export function CustomerPartyNameCell({
+  customerId,
   customerName,
   customerCode,
   branch,
+  gstin,
   className,
 }: {
+  customerId?: string;
   customerName: string;
   customerCode?: string;
   branch?: string;
+  gstin?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const info = useMemo(
-    () => resolveCustomerPartyInfo(customerName, { customerCode, branch }),
-    [customerName, customerCode, branch],
+    () => resolveCustomerPartyInfo(customerName, { customerCode, branch, gstin, customerId }),
+    [customerName, customerCode, branch, gstin, customerId],
   );
 
   return (

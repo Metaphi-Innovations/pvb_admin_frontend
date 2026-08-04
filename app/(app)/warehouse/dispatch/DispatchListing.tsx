@@ -390,46 +390,39 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
     {
-      label: "Download Challan (With Value)",
+      label: "Download Challan",
       action: "challan",
       icon: FileText,
-      onClick: async (row) => {
-        try {
-          await openDeliveryChallanPreviewForDispatch(row.id, {
-            withGoodsValue: true,
-          });
-        } catch (err) {
-          console.error(err);
-        }
-      },
-      hide: (row) =>
-        resolveWarehouseOrderType({
-          sourceDocumentType: row.sourceDocumentType,
-          source_type: row.source_type,
-          salesOrderNo: row.salesOrderNumber,
-          source_document_no: row.source_document_no,
-        }) === "sample_order",
-    },
-    {
-      label: "Download Challan (Without Value)",
-      action: "challan_wo_value",
-      icon: FileText,
-      onClick: async (row) => {
-        try {
-          await openDeliveryChallanPreviewForDispatch(row.id, {
-            withGoodsValue: false,
-          });
-        } catch (err) {
-          console.error(err);
-        }
-      },
-      hide: (row) =>
-        resolveWarehouseOrderType({
-          sourceDocumentType: row.sourceDocumentType,
-          source_type: row.source_type,
-          salesOrderNo: row.salesOrderNumber,
-          source_document_no: row.source_document_no,
-        }) === "sample_order",
+      children: [
+        {
+          label: "With Goods Value",
+          action: "challan_with_value",
+          icon: FileText,
+          onClick: async (row) => {
+            try {
+              await openDeliveryChallanPreviewForDispatch(row.id, {
+                withGoodsValue: true,
+              });
+            } catch (err) {
+              console.error(err);
+            }
+          },
+        },
+        {
+          label: "Without Goods Value",
+          action: "challan_wo_value",
+          icon: FileText,
+          onClick: async (row) => {
+            try {
+              await openDeliveryChallanPreviewForDispatch(row.id, {
+                withGoodsValue: false,
+              });
+            } catch (err) {
+              console.error(err);
+            }
+          },
+        },
+      ],
     },
     {
       label: "Download Tax Invoice",

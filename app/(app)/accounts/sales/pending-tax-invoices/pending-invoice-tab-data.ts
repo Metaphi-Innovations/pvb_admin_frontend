@@ -93,6 +93,8 @@ export interface PendingInvoiceListRow {
   orderDate: string;
   /** Sales Order tab: customer code from the Sales Order / customer master */
   customerCode: string;
+  gstin?: string;
+  customerId?: string;
   /** Sales Order tab: salesperson from the Sales Order mapping */
   salesperson: string;
   /** Distinct order line items count */

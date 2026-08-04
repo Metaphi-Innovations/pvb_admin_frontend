@@ -41,6 +41,7 @@ interface ProductItemDetailsSectionProps {
   noBorder?: boolean;
   title?: string;
   description?: string;
+  sectionRequired?: boolean;
   addButtonLabel?: string;
   showCasePieceBreakdown?: boolean;
   piecesPerCase?: number;
@@ -104,6 +105,7 @@ export function ProductItemDetailsSection({
   noBorder = false,
   title = "Product / Item Details",
   description = "Enter packaging quantity — total SKU qty and amount are auto-calculated from product master.",
+  sectionRequired = false,
   addButtonLabel = "Add Item",
   showCasePieceBreakdown,
   piecesPerCase = 10,
@@ -244,7 +246,7 @@ export function ProductItemDetailsSection({
   return (
     <div className={cn(!noBorder && "border-t border-border/60 pt-4")}>
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <SectionHead label={title} sub={description} />
+        <SectionHead label={title} sub={description} required={sectionRequired} />
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
             {filledLines.length} item{filledLines.length === 1 ? "" : "s"}

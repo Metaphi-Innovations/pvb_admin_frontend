@@ -31,6 +31,12 @@ export interface AccountsColumnHeaderProps {
   uniqueValues?: string[];
   statusOptions?: string[];
   optionLabels?: Record<string, string>;
+  /** Fired when the filter popover opens — use to lazy-load dropdown options. */
+  onFilterOpen?: () => void;
+  /** Show loading state while server filter options are fetching. */
+  optionsLoading?: boolean;
+  /** True once the lazy filter query for this column has been enabled. */
+  optionsReady?: boolean;
   className?: string;
 }
 
@@ -52,6 +58,9 @@ export function AccountsColumnHeader({
   uniqueValues: uniqueValuesProp,
   statusOptions: statusOptionsProp,
   optionLabels: optionLabelsProp,
+  onFilterOpen,
+  optionsLoading = false,
+  optionsReady = false,
   className,
 }: AccountsColumnHeaderProps) {
   const ctx = useAccountsColumnFilterContext();
@@ -136,6 +145,9 @@ export function AccountsColumnHeader({
             uniqueValues={uniqueValuesProp}
             statusOptions={statusOptions}
             optionLabels={optionLabels}
+            onOpen={onFilterOpen}
+            optionsLoading={optionsLoading}
+            optionsReady={optionsReady}
           />
         )}
       </div>

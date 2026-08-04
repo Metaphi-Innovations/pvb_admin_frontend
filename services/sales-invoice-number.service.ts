@@ -44,4 +44,29 @@ export const SalesInvoiceNumberService = {
         data.document_sequence_id || data.documentSequenceId || "",
     };
   },
+
+  async generatePdf(params: {
+    htmlContent: string;
+    filename: string;
+  }): Promise<Blob> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.PDF,
+      { htmlContent: params.htmlContent, filename: params.filename },
+      { responseType: "blob" },
+    );
+    return response.data as Blob;
+  },
+
+  async generateExcel(params: {
+    headers: string[];
+    rows: any[][];
+    filename: string;
+  }): Promise<Blob> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.EXCEL,
+      { headers: params.headers, rows: params.rows, filename: params.filename },
+      { responseType: "blob" },
+    );
+    return response.data as Blob;
+  },
 };

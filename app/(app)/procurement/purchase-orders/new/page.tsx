@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   PurchaseOrderForm,
   defaultPOForm,
@@ -26,7 +26,9 @@ export default function NewPOPage() {
 
 function NewPOContent() {
   const router = useRouter();
-  // Phase 1: direct PO only — ignore prId from URL until PR-based creation is enabled
+  const searchParams = useSearchParams();
+  const prId = searchParams.get("prId")?.trim() || null;
+
   const [form, setForm] = useState<POFormValues | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<POFormErrors>({});
@@ -34,10 +36,8 @@ function NewPOContent() {
   const createMutation = useCreatePurchaseOrder();
 
   useEffect(() => {
-    setForm(defaultPOForm(null));
-    // setForm(defaultPOForm(prId));
-  }, []);
-  // }, [prId]);
+    setForm(defaultPOForm(prId));
+  }, [prId]);
 
   const handlePoNumberChange = useCallback((next: string) => {
     setPoNumber(next);

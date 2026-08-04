@@ -254,30 +254,35 @@ export function PincodeMasterTab(props: {
         key: "stateName",
         header: "State",
         sortable: true,
+        width: "140px",
         render: (val) => <span className="text-xs">{val}</span>,
       },
       {
         key: "district",
         header: "District",
         sortable: true,
+        width: "140px",
         render: (val) => <span className="text-xs">{val}</span>,
       },
       {
         key: "city",
         header: "City",
         sortable: true,
+        width: "140px",
         render: (val) => <span className="text-xs">{val}</span>,
       },
       {
         key: "town",
         header: "Town",
         sortable: true,
+        width: "180px",
         render: (val) => <span className="text-xs font-medium">{val}</span>,
       },
       {
         key: "status",
         header: "Status",
         width: "120px",
+        truncate: false,
         render: (_val, row) => (
           <ListingStatusToggle
             active={isActiveStatus(row.status)}
@@ -288,23 +293,27 @@ export function PincodeMasterTab(props: {
       {
         key: "createdBy",
         header: "Created By",
+        width: "130px",
         render: (val) => <span className="text-xs">{val}</span>,
       },
       {
         key: "createdDate",
         header: "Created Date",
         sortable: true,
+        width: "120px",
         render: (val) => <span className="text-xs font-mono">{val}</span>,
       },
       {
         key: "updatedBy",
         header: "Updated By",
+        width: "130px",
         render: (val) => <span className="text-xs">{val}</span>,
       },
       {
         key: "updatedDate",
         header: "Updated Date",
         sortable: true,
+        width: "120px",
         render: (val) => <span className="text-xs font-mono">{val}</span>,
       },
     ],
