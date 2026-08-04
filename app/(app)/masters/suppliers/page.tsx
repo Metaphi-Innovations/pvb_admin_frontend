@@ -77,12 +77,12 @@ function TableTh({
   }, [open, selected]);
 
   return (
-    <th className={cn("h-11 px-3 text-left text-[13px] font-semibold select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}>
-      <div className="flex items-center justify-between gap-2">
-        <div className={cn("flex min-w-0 flex-1 items-center gap-1.5", sortable && "cursor-pointer")} onClick={() => sortable && onSort(colKey as SortKey)}>
+    <th className={cn("h-11 px-3 text-left text-[13px] font-semibold select-none group whitespace-nowrap", active && "bg-brand-50/60", className)} title={label}>
+      <div className="inline-flex items-center gap-1.5">
+        <div className={cn("inline-flex items-center gap-1.5", sortable && "cursor-pointer")} onClick={() => sortable && onSort(colKey as SortKey)}>
           <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
           {sortable &&
-            <span className="ml-auto inline-flex shrink-0 items-center gap-0.5">
+            <span className="inline-flex shrink-0 items-center gap-0.5">
               {active ? (
                 <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
               ) : (

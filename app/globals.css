@@ -141,7 +141,7 @@
   }
 
   .master-listing-th {
-    @apply bg-white;
+    @apply bg-white align-middle;
   }
 
   .master-listing-th-sorted {

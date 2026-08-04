@@ -72,11 +72,11 @@ export function AuditFilterPopover({
           type="button"
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            "p-1 rounded-md hover:bg-muted text-muted-foreground/50 hover:text-foreground transition-colors outline-none",
+            "inline-flex items-center justify-center w-5 h-5 flex-shrink-0 rounded-sm hover:bg-muted text-muted-foreground/50 hover:text-foreground transition-colors outline-none",
             isFiltered && "text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-700",
           )}
         >
-          <Filter className="w-3.5 h-3.5" />
+          <Filter className="w-3 h-3" />
         </button>
       </PopoverTrigger>
       <PopoverContent

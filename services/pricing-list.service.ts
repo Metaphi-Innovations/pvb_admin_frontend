@@ -84,6 +84,14 @@ export interface PricingSummary {
   bulkPriceLists: number;
 }
 
+export interface PricingExistingCombination {
+  productUuid: string;
+  state: string;
+  customerType: string;
+  customerTypeId: string;
+  status: "active" | "inactive";
+}
+
 export interface PricingProductDropdownItem {
   product_id: string;
   product_name: string;
@@ -391,6 +399,26 @@ export const PricingListService = {
     }
   },
 
+  async bulkCreate(items: PricingCreatePayload[]): Promise<{ createdCount: number }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.MASTER.PRICING.BULK_CREATE,
+      { items },
+    );
+
+    const body = response.data as Record<string, unknown>;
+    if (!body.success) {
+      throw new Error(
+        asString(body.message) || "Failed to create pricing records.",
+      );
+    }
+
+    const data = (body.data ?? {}) as Record<string, unknown>;
+    const createdCount = Number(data.createdCount);
+    return {
+      createdCount: Number.isFinite(createdCount) ? createdCount : items.length,
+    };
+  },
+
   async update(id: string, payload: PricingUpdatePayload): Promise<void> {
     const response = await axiosInstance.put(
       API_ENDPOINTS.MASTER.PRICING.UPDATE(id),
@@ -475,6 +503,36 @@ export const PricingListService = {
         product_id: asString(record.product_id),
         product_name: asString(record.product_name),
         product_code: asString(record.product_code),
+      };
+    });
+  },
+
+  async getExistingCombinations(
+    productId: string,
+    signal?: AbortSignal,
+  ): Promise<PricingExistingCombination[]> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.MASTER.PRICING.EXISTING_COMBINATIONS,
+      {
+        params: { product_id: productId },
+        signal,
+      },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map((row) => {
+      const record = (row ?? {}) as Record<string, unknown>;
+      return {
+        productUuid: asString(record.product_id),
+        state: asString(record.state_name),
+        customerType: asString(record.customer_type_name),
+        customerTypeId: asString(record.customer_type_id),
+        status: toStatus(record.is_active),
       };
     });
   },
