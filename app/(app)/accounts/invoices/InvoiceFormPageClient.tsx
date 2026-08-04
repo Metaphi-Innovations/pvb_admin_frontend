@@ -734,19 +734,37 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             customerName: dispatchObj.customer_name || customer?.customer_name || "",
             customerMobile: customer?.mobile_no || "",
             customerEmail: customer?.email || "",
-            customerGst: customer?.gstin_no || destWh?.gstNumber || "",
-            customerGstCategory: customer?.gst_category,
-            billingAddress: customer?.registered_gst_address || (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
-            shippingAddress: customer?.registered_gst_address || (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
-            pan: customer?.pan_no || "",
-            contactPerson: customer?.contact_person || "",
-            placeOfSupply: customer?.billing_state || customer?.shipping_state || destWh?.state || "",
-            state: customer?.billing_state || customer?.shipping_state || destWh?.state || "",
-            gstTreatment: customer?.gst_treatment || "registered",
-            receivableLedger: customer?.customer_name || "",
+            customerGst: customer?.gstin_no || matchedCust?.gstin || destWh?.gstNumber || "",
+            customerGstCategory: customer?.gst_category || matchedCust?.gstCategory,
+            billingAddress:
+              customer?.registered_gst_address ||
+              (matchedCust ? customerMasterToTransactionFields(matchedCust).billingAddress : "") ||
+              (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
+            shippingAddress:
+              customer?.registered_gst_address ||
+              (matchedCust ? customerMasterToTransactionFields(matchedCust).shippingAddress : "") ||
+              (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
+            pan: customer?.pan_no || matchedCust?.pan || "",
+            contactPerson: customer?.contact_person || matchedCust?.salesManName || "",
+            placeOfSupply:
+              customer?.billing_state ||
+              customer?.shipping_state ||
+              (customer?.branches?.find((b: any) => b.is_main_branch) || customer?.branches?.[0])?.billing_state ||
+              matchedCust?.stateName ||
+              destWh?.state ||
+              "",
+            state:
+              customer?.billing_state ||
+              customer?.shipping_state ||
+              (customer?.branches?.find((b: any) => b.is_main_branch) || customer?.branches?.[0])?.billing_state ||
+              matchedCust?.stateName ||
+              destWh?.state ||
+              "",
+            gstTreatment: customer?.gst_treatment || matchedCust?.gstCategory || "registered",
+            receivableLedger: customer?.customer_name || matchedCust?.customerName || "",
             billFrom: warehouse?.warehouse_name || "",
-            billTo: dispatchObj.customer_name || customer?.customer_name || "",
-            shipTo: dispatchObj.customer_name || customer?.customer_name || "",
+            billTo: dispatchObj.customer_name || customer?.customer_name || matchedCust?.customerName || "",
+            shipTo: dispatchObj.customer_name || customer?.customer_name || matchedCust?.customerName || "",
             dispatchQty: lineItems.reduce((acc: number, l: any) => acc + (l.qty || 0), 0),
             transportMode: "",
             transporterName: "",
@@ -775,7 +793,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             sourceWarehouseGstin: warehouse?.gst_number || "",
             destinationWarehouseGstin: customer?.gstin_no || destWh?.gstNumber || "",
             sourceWarehouseState: warehouse?.state || "",
-            destinationWarehouseState: customer?.billing_state || customer?.shipping_state || destWh?.state || "",
+            destinationWarehouseState:
+              customer?.billing_state ||
+              customer?.shipping_state ||
+              (customer?.branches?.find((b: any) => b.is_main_branch) || customer?.branches?.[0])?.billing_state ||
+              matchedCust?.stateName ||
+              destWh?.state ||
+              "",
           };
 
           applySalesInvoicePrefill(prefill);
@@ -1935,6 +1959,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     {customerName ? (
                       <CustomerPartyInfoButton
                         className="so-goods-info-btn"
+                        customerId={customerId}
                         customerName={customerName}
                         customerCode={customerCode}
                         branch={branch}
@@ -2016,7 +2041,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             }
             bankAccountHelper={
               soGen && bankPrintDetails
-                ? `${bankPrintDetails.bankName} · …${String(bankPrintDetails.accountNumber).slice(-4)}`
+                ? `${bankPrintDetails.bankName} · ${bankPrintDetails.accountNumber}`
                 : undefined
             }
             dispatchContext={
@@ -2061,8 +2086,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               />
               {bankPrintDetails && (
                 <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-                  {bankPrintDetails.bankName} · A/c ending{" "}
-                  {String(bankPrintDetails.accountNumber).slice(-4)} ·{" "}
+                  {bankPrintDetails.bankName} · A/c {bankPrintDetails.accountNumber} ·{" "}
                   {bankPrintDetails.branchName || "—"}
                 </p>
               )}

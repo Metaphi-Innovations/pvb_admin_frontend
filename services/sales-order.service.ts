@@ -1,9 +1,10 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import { calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
+import { calculateOrderTotalsSummary, resolveTaxSupplyType } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrder, SalesOrderLineItem, SalesOrderAdditionalExpense } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrderFormValues } from "@/app/(app)/sales/orders/components/SalesOrderForm";
 import { getCustomerAddressesForSalesOrder } from "@/app/(app)/sales/orders/sales-order-address-utils";
+import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,18 +89,29 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
   const snapshot = (raw.product_snapshot || {}) as Record<string, any>;
   const product = (raw.product || {}) as Record<string, any>;
   
-  const packSize = asNumber(product.unit_per_packing ?? snapshot.conversion_qty ?? 1);
+  const packSize = asNumber(product.unit_per_packing ?? snapshot.conversion_qty ?? snapshot.unit_per_packing ?? 1) || 1;
   
-  let quantityType = "Piece";
+  let quantityType: "Case" | "Piece" = "Piece";
   if (raw.quantity_type) {
     quantityType = String(raw.quantity_type).toUpperCase() === "CASE" ? "Case" : "Piece";
-  } else {
-    const isCaseType = (raw.per_case_qty && asNumber(raw.per_case_qty) > 0) || false;
-    quantityType = isCaseType ? "Case" : "Piece";
+  } else if (raw.per_case_qty && asNumber(raw.per_case_qty) > 0) {
+    quantityType = "Case";
   }
-  
-  const caseQuantity = Math.floor(quantity / packSize);
-  const pieceQuantity = quantity % packSize;
+
+  let caseQuantity = 0;
+  let pieceQuantity = 0;
+  if (quantityType === "Case") {
+    caseQuantity = packSize > 0 ? Math.floor(quantity / packSize) : 0;
+    pieceQuantity = 0;
+  } else {
+    caseQuantity = 0;
+    pieceQuantity = quantity;
+  }
+
+  const gstPercentage = asNumber(raw.gst_percentage);
+  const cgstPercentage = asNumber(raw.cgst_percentage);
+  const sgstPercentage = asNumber(raw.sgst_percentage);
+  const igstPercentage = asNumber(raw.igst_percentage);
 
   return {
     id: asString(raw.id || raw.sales_order_product_id || `line-${idx}`),
@@ -107,11 +119,11 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     productCode: asString(raw.product_code || product.product_code || product.code || (raw.product as any)?.product_code),
     productName: asString(raw.product_name || product.product_name || product.name || (raw.product as any)?.product_name),
     availableStock: asNumber(raw.available_stock ?? 0),
-    quantityType: quantityType as "Case" | "Piece",
-    caseQuantity: caseQuantity,
-    pieceQuantity: pieceQuantity,
-    packSize: packSize,
-    quantity: quantity,
+    quantityType,
+    caseQuantity,
+    pieceQuantity,
+    packSize,
+    quantity,
     dealerPrice: asNumber(raw.unit_price),
     unitPrice: asNumber(raw.unit_price),
     discount: asNumber(raw.discount_percentage ?? raw.discount),
@@ -124,6 +136,10 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     cgstAmount: asNumber(raw.cgst_amount),
     sgstAmount: asNumber(raw.sgst_amount),
     igstAmount: asNumber(raw.igst_amount),
+    cgstPercentage,
+    sgstPercentage,
+    igstPercentage,
+    gstPercentage: gstPercentage || cgstPercentage + sgstPercentage + igstPercentage,
     lineTotal: asNumber(raw.item_total ?? raw.lineTotal),
   };
 }
@@ -161,7 +177,6 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
     customerId: (toUuidOrNull(raw.customer_id) || customer.id) as any,
     customerName: asString(customer.customer_name || raw.customer_name),
     customerCode: asString(customer.customer_code || raw.customer_code),
-    territory: asString(customer.territory || raw.territory || "—"),
     salesManId: (toUuidOrNull(raw.salesman_id) || salesman.id) as any,
     salesManName: toDisplayName(salesman) || asString(raw.salesman_name),
     orderDate: asDateOnly(raw.order_date),
@@ -266,8 +281,25 @@ function buildBackendWriteBody(
   options: { soNumber: string; status: string },
   customerDetails?: any
 ): Record<string, unknown> {
-  const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses);
   const { billToObj, shipToObj } = resolveBillShipObjects(form, customerDetails);
+
+  const gstCategory =
+    customerDetails?.gst_category ||
+    customerDetails?.gstCategory ||
+    (customerDetails?.gst_applicable || customerDetails?.gstApplicable ? "regular" : "unregistered");
+  const sezLut = resolveSezLutSupply({
+    customerGstCategory: gstCategory,
+    transactionDate: form.orderDate,
+  });
+  const taxSupplyType = resolveTaxSupplyType(
+    customerDetails?.source_warehouse?.state || billToObj?.state || "",
+    shipToObj?.state || "",
+  );
+
+  const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses ?? [], {
+    sezLutApplies: sezLut.appliesLut,
+    taxSupplyType,
+  });
 
   return {
     so_number: options.soNumber,
@@ -309,7 +341,7 @@ function buildBackendWriteBody(
       discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
       discount_percentage: line.schemeDiscountPercent || 0,
       discount_amount: line.discountValue || 0,
-      gst_percentage: line.gstPercentage ?? 18,
+      gst_percentage: line.gstPercentage ?? 0,
       gst_amount: line.gstAmount,
       cgst_percentage: line.cgstPercentage ?? 0,
       cgst_amount: line.cgstAmount || 0,
@@ -483,7 +515,22 @@ export const SalesOrderService = {
   ): Promise<any> {
     const customerDetails = form.customerId ? await this.getCustomerDetails(String(form.customerId)) : null;
     const { billToObj, shipToObj } = resolveBillShipObjects(form, customerDetails);
-    const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses);
+    const gstCategory =
+      customerDetails?.gst_category ||
+      customerDetails?.gstCategory ||
+      (customerDetails?.gst_applicable || customerDetails?.gstApplicable ? "regular" : "unregistered");
+    const sezLut = resolveSezLutSupply({
+      customerGstCategory: gstCategory,
+      transactionDate: form.orderDate,
+    });
+    const taxSupplyType = resolveTaxSupplyType(
+      customerDetails?.source_warehouse?.state || billToObj?.state || "",
+      shipToObj?.state || "",
+    );
+    const totals = calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses ?? [], {
+      sezLutApplies: sezLut.appliesLut,
+      taxSupplyType,
+    });
     const body = {
       reason: options.reason || "Quantity not available",
       customer_id: form.customerId,
@@ -507,7 +554,7 @@ export const SalesOrderService = {
         discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
         discount_percentage: line.schemeDiscountPercent || 0,
         discount_amount: line.discountValue || 0,
-        gst_percentage: line.gstPercentage ?? 18,
+        gst_percentage: line.gstPercentage ?? 0,
         gst_amount: line.gstAmount,
         cgst_percentage: line.cgstPercentage ?? 0,
         cgst_amount: line.cgstAmount || 0,

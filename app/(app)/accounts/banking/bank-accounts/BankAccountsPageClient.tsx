@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./bank-accounts-dense.css";
 import { Button } from "@/components/ui/button";
@@ -38,20 +38,31 @@ import {
   AccountsColumnHeader,
   SortTh,
   useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { formatMoney } from "@/lib/accounts/money-format";
+import type {
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
 import {
+  ACCOUNT_TYPE_OPTIONS,
+  BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN,
+  buildBankAccountApiFilters,
   extractBankAccountErrorMessage,
-  mapUiSortToApi,
+  mapBankAccountFilterOptions,
+  mapUiSortToOrdering,
   type BankAccountListRow,
-  type BankAccountsListSortBy,
-  type BankAccountsListSortOrder,
 } from "@/services/bank-accounts-list.service";
-import { useBankAccountsList } from "@/hooks/accounts/use-bank-accounts-list";
+import {
+  useBankAccountFilterOptions,
+  useBankAccountsList,
+  useExportBankAccounts,
+} from "@/hooks/accounts/use-bank-accounts-list";
 import { useUpdateBankAccountStatus } from "@/hooks/accounts/use-bank-accounts";
 import { getMasterListErrorMessage } from "@/lib/masters/master-query-errors";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
+import { useFY } from "@/lib/fy-store";
 import {
   Tooltip,
   TooltipContent,
@@ -69,12 +80,24 @@ import { isActiveStatus } from "@/components/listing";
 import { BankAccountToggle } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_API_SORT: {
-  sortBy: BankAccountsListSortBy;
-  sortOrder: BankAccountsListSortOrder;
-} = { sortBy: "ledgerName", sortOrder: "asc" };
-
 const COL_SPAN = 11;
+const DEFAULT_ORDERING = "ledger_name";
+
+const ACCOUNT_TYPE_OPTION_LABELS: Record<string, string> = Object.fromEntries(
+  ACCOUNT_TYPE_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+const STATUS_OPTION_LABELS: Record<string, string> = {
+  ACTIVE: "Active",
+  INACTIVE: "Inactive",
+  active: "Active",
+  inactive: "Inactive",
+};
+
+type FilterOptionsByColumn = Partial<Record<string, ColumnValueOption[]>>;
+type FilterLoadingByColumn = Partial<Record<string, boolean>>;
+type FilterReadyByColumn = Partial<Record<string, boolean>>;
+
 
 function formatMappedWarehousesCompact(names: string[]): string {
   if (names.length === 0) return "—";
@@ -113,55 +136,19 @@ function MappedWarehousesCell({ names }: { names: string[] }) {
   );
 }
 
-function exportBankAccountsCsv(rows: BankAccountListRow[]) {
-  const headers = [
-    "Ledger Name",
-    "Ledger Code",
-    "Bank Name",
-    "Account Holder Name",
-    "Account No.",
-    "IFSC",
-    "Account Type",
-    "Opening Balance",
-    "Current Balance",
-    "Mapped Warehouses",
-    "Status",
-  ];
-  const lines = rows.map((r) =>
-    [
-      r.ledgerName || r.accountNickname,
-      r.ledgerCode,
-      r.bankName,
-      r.accountHolderName,
-      r.maskedAccountNumber,
-      r.ifsc,
-      r.accountType,
-      r.openingBalance,
-      r.currentBalance ?? "",
-      r.mappedWarehouseNames.join("; "),
-      r.status,
-    ]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(","),
-  );
-  const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "bank-accounts.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function BankAccountsExportToolbar({
   search,
   onSearchChange,
+  onExport,
+  exportDisabled,
+  exporting,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
+  onExport: () => void;
+  exportDisabled: boolean;
+  exporting: boolean;
 }) {
-  const visible = useAccountsFilteredRows<BankAccountListRow>([]);
-
   return (
     <AccountsTableToolbar
       className="bank-accounts-toolbar"
@@ -170,26 +157,30 @@ function BankAccountsExportToolbar({
         onChange: onSearchChange,
         placeholder: "Search bank, account no., IFSC…",
       }}
-      onExcel={() => exportBankAccountsCsv(visible)}
-      exportDisabled={visible.length === 0}
+      onExcel={onExport}
+      exportDisabled={exportDisabled || exporting}
     />
   );
 }
 
-function BankAccountsSummary({ totalRows }: { totalRows: number }) {
-  const visible = useAccountsFilteredRows<BankAccountListRow>([]);
+function BankAccountsSummary({
+  rows,
+  totalRows,
+}: {
+  rows: BankAccountListRow[];
+  totalRows: number;
+}) {
+  if (rows.length === 0) return null;
 
-  if (visible.length === 0) return null;
-
-  const openingTotal = visible.reduce((s, r) => s + r.openingBalance, 0);
-  const activeOnPage = visible.filter((r) => r.status === "active").length;
+  const openingTotal = rows.reduce((s, r) => s + r.openingBalance, 0);
+  const activeOnPage = rows.filter((r) => r.status === "active").length;
 
   return (
     <div className="bank-accounts-summary flex items-center justify-between px-2.5 py-1 border-b border-border/60 bg-muted/10 text-[11px] text-muted-foreground">
       <span className="truncate">
-        <span className="font-medium text-foreground">{visible.length}</span> of{" "}
+        <span className="font-medium text-foreground">{rows.length}</span> of{" "}
         <span className="font-medium text-foreground">{totalRows}</span> accounts
-        {activeOnPage !== visible.length && <span> · {activeOnPage} active</span>}
+        {activeOnPage !== rows.length && <span> · {activeOnPage} active</span>}
       </span>
       <span className="tabular-nums whitespace-nowrap flex-shrink-0 ml-2">
         Total opening balance:{" "}
@@ -207,38 +198,50 @@ function SortSync({
   const ctx = useAccountsColumnFilterContext();
 
   useEffect(() => {
-    if (!ctx?.sortKey) return;
-    onSortChange(ctx.sortKey, ctx.sortDir ?? "asc");
+    onSortChange(ctx?.sortKey ?? "", ctx?.sortDir ?? "asc");
   }, [ctx?.sortKey, ctx?.sortDir, onSortChange]);
 
   return null;
 }
 
+function FilterSync({
+  onFiltersChange,
+}: {
+  onFiltersChange: (filters: AccountsColumnFilters) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    onFiltersChange(ctx?.columnFilters ?? {});
+  }, [ctx?.columnFilters, onFiltersChange]);
+
+  return null;
+}
+
 function BankAccountsTable({
+  rows,
   loading,
-  onPageChange,
   search,
   onClearSearch,
   onRequestStatusChange,
   statusPendingBankAccountId,
+  filterOptionsByColumn,
+  filterLoadingByColumn,
+  filterReadyByColumn,
+  onOpenFilter,
 }: {
+  rows: BankAccountListRow[];
   loading: boolean;
-  onPageChange: (p: number) => void;
   search: string;
   onClearSearch: () => void;
   onRequestStatusChange: (account: BankAccountListRow) => void;
   statusPendingBankAccountId: string | null;
+  filterOptionsByColumn: FilterOptionsByColumn;
+  filterLoadingByColumn: FilterLoadingByColumn;
+  filterReadyByColumn: FilterReadyByColumn;
+  onOpenFilter: (columnKey: string) => void;
 }) {
   const router = useRouter();
-  const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<BankAccountListRow>([]);
-
-  // Server already paginates — Excel filters only narrow the current page.
-  const pagedRows = visible;
-
-  useEffect(() => {
-    onPageChange(1);
-  }, [ctx?.columnFilters, onPageChange]);
 
   const permissions = usePermissionsOptional();
   const canUpdate =
@@ -256,20 +259,99 @@ function BankAccountsTable({
     router.push(mode === "edit" ? `${base}/edit` : base);
   };
 
+  const opts = (colKey: string) => filterOptionsByColumn[colKey] ?? [];
+  const loadingOpts = (colKey: string) => Boolean(filterLoadingByColumn[colKey]);
+  const readyOpts = (colKey: string) => Boolean(filterReadyByColumn[colKey]);
+  const openFilter = (colKey: string) => () => onOpenFilter(colKey);
+
   return (
     <AccountsTable minWidth={1180}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <SortTh label="Ledger Name" colKey="ledgerName" />
-          <SortTh label="Bank Name" colKey="bankName" />
-          <SortTh label="Account Holder Name" colKey="accountHolderName" />
-          <SortTh label="Account No." colKey="accountNumber" />
-          <SortTh label="IFSC Code" colKey="ifsc" />
-          <SortTh label="Account Type" colKey="accountType" />
-          <SortTh label="Opening Balance" colKey="openingBalance" filterType="amount" align="right" />
-          <SortTh label="Current Balance" colKey="currentBalance" filterType="amount" align="right" />
-          <SortTh label="Mapped Warehouse" colKey="mappedWarehousesLabel" filterType="text" />
-          <SortTh label="Status" colKey="status" filterType="text" />
+          <SortTh
+            label="Ledger Name"
+            colKey="ledgerName"
+            valueOptions={opts("ledgerName")}
+            onFilterOpen={openFilter("ledgerName")}
+            optionsLoading={loadingOpts("ledgerName")}
+            optionsReady={readyOpts("ledgerName")}
+          />
+          <SortTh
+            label="Bank Name"
+            colKey="bankName"
+            valueOptions={opts("bankName")}
+            onFilterOpen={openFilter("bankName")}
+            optionsLoading={loadingOpts("bankName")}
+            optionsReady={readyOpts("bankName")}
+          />
+          <SortTh
+            label="Account Holder Name"
+            colKey="accountHolderName"
+            valueOptions={opts("accountHolderName")}
+            onFilterOpen={openFilter("accountHolderName")}
+            optionsLoading={loadingOpts("accountHolderName")}
+            optionsReady={readyOpts("accountHolderName")}
+          />
+          <SortTh
+            label="Account No."
+            colKey="accountNumber"
+            valueOptions={opts("accountNumber")}
+            onFilterOpen={openFilter("accountNumber")}
+            optionsLoading={loadingOpts("accountNumber")}
+            optionsReady={readyOpts("accountNumber")}
+          />
+          <SortTh
+            label="IFSC Code"
+            colKey="ifsc"
+            valueOptions={opts("ifsc")}
+            onFilterOpen={openFilter("ifsc")}
+            optionsLoading={loadingOpts("ifsc")}
+            optionsReady={readyOpts("ifsc")}
+          />
+          <SortTh
+            label="Account Type"
+            colKey="accountType"
+            valueOptions={opts("accountType")}
+            onFilterOpen={openFilter("accountType")}
+            optionsLoading={loadingOpts("accountType")}
+            optionsReady={readyOpts("accountType")}
+          />
+          <SortTh
+            label="Opening Balance"
+            colKey="openingBalance"
+            filterType="amount"
+            align="right"
+            valueOptions={opts("openingBalance")}
+            onFilterOpen={openFilter("openingBalance")}
+            optionsLoading={loadingOpts("openingBalance")}
+            optionsReady={readyOpts("openingBalance")}
+          />
+          <AccountsColumnHeader
+            label="Current Balance"
+            colKey="currentBalance"
+            filterType="amount"
+            align="right"
+            sortable={false}
+            filterable={false}
+          />
+          <SortTh
+            label="Mapped Warehouse"
+            colKey="mappedWarehousesLabel"
+            filterType="text"
+            valueOptions={opts("mappedWarehousesLabel")}
+            onFilterOpen={openFilter("mappedWarehousesLabel")}
+            optionsLoading={loadingOpts("mappedWarehousesLabel")}
+            optionsReady={readyOpts("mappedWarehousesLabel")}
+          />
+          <SortTh
+            label="Status"
+            colKey="status"
+            filterType="status"
+            valueOptions={opts("status")}
+            onFilterOpen={openFilter("status")}
+            optionsLoading={loadingOpts("status")}
+            optionsReady={readyOpts("status")}
+          />
           <AccountsColumnHeader
             label="Actions"
             colKey="_actions"
@@ -283,7 +365,7 @@ function BankAccountsTable({
       <AccountsTableBody>
         {loading ? (
           <AccountsListingTableSkeleton colSpan={COL_SPAN} rows={5} />
-        ) : visible.length === 0 ? (
+        ) : rows.length === 0 ? (
           <AccountsTableEmpty
             colSpan={COL_SPAN}
             message={
@@ -294,7 +376,7 @@ function BankAccountsTable({
             onClear={search ? onClearSearch : undefined}
           />
         ) : (
-          pagedRows.map((account) => {
+          rows.map((account) => {
             const titleParts = [
               account.ledgerName,
               account.ledgerCode ? `(${account.ledgerCode})` : "",
@@ -336,7 +418,7 @@ function BankAccountsTable({
                   </span>
                 </AccountsTableCell>
                 <AccountsTableCell mono className="font-semibold text-brand-700 whitespace-nowrap">
-                  {account.maskedAccountNumber || "—"}
+                  {account.accountNumber || "—"}
                 </AccountsTableCell>
                 <AccountsTableCell mono className="whitespace-nowrap">
                   {account.ifsc || "—"}
@@ -355,7 +437,11 @@ function BankAccountsTable({
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="whitespace-nowrap">
                   {account.currentBalance != null ? (
-                    <MoneyAmount amount={account.currentBalance} className="text-xs" />
+                    <MoneyAmount
+                      amount={account.currentBalance}
+                      side={account.currentBalanceType}
+                      className="text-xs"
+                    />
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -426,37 +512,177 @@ function BankAccountsTable({
 
 export default function BankAccountsPageClient() {
   const router = useRouter();
+  const { selectedFY } = useFY();
+  const financialYearId = selectedFY?.id ?? null;
   const permissions = usePermissionsOptional();
   const canCreate =
     !permissions || permissions.isLoading
       ? true
       : permissions.canCreate("accounts", "bank_account");
+
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
   const [uiSortKey, setUiSortKey] = useState("ledgerName");
   const [uiSortDir, setUiSortDir] = useState<"asc" | "desc">("asc");
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [statusTarget, setStatusTarget] = useState<BankAccountListRow | null>(null);
-  const lastServerSortRef = useRef(DEFAULT_API_SORT);
   const { toast, showToast, dismissToast } = useAccountsToast();
   const updateStatusMutation = useUpdateBankAccountStatus();
+  const exportMutation = useExportBankAccounts();
 
-  const apiSort = useMemo(() => {
-    const mapped = mapUiSortToApi(uiSortKey, uiSortDir);
-    if (mapped) {
-      lastServerSortRef.current = mapped;
-      return mapped;
-    }
-    return lastServerSortRef.current;
+  const ordering = useMemo(() => {
+    const mapped = mapUiSortToOrdering(uiSortKey, uiSortDir);
+    return mapped ?? DEFAULT_ORDERING;
   }, [uiSortKey, uiSortDir]);
+
+  const apiFilters = useMemo(
+    () => buildBankAccountApiFilters(columnFilters),
+    [columnFilters],
+  );
+
+  const apiFiltersKey = useMemo(() => JSON.stringify(apiFilters), [apiFilters]);
+
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
+
+  const ledgerNameFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.ledgerName,
+    isFilterOpen("ledgerName"),
+  );
+  const bankNameFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.bankName,
+    isFilterOpen("bankName"),
+  );
+  const holderFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.accountHolderName,
+    isFilterOpen("accountHolderName"),
+  );
+  const accountNumberFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.accountNumber,
+    isFilterOpen("accountNumber"),
+  );
+  const ifscFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.ifsc,
+    isFilterOpen("ifsc"),
+  );
+  const accountTypeFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.accountType,
+    isFilterOpen("accountType"),
+  );
+  const warehouseFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.mappedWarehousesLabel,
+    isFilterOpen("mappedWarehousesLabel"),
+  );
+  const openingBalanceFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.openingBalance,
+    isFilterOpen("openingBalance"),
+  );
+  const statusFilter = useBankAccountFilterOptions(
+    BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.status,
+    isFilterOpen("status"),
+  );
+
+  const filterOptionsByColumn = useMemo((): FilterOptionsByColumn => {
+    const map = (
+      data: unknown[] | undefined,
+      field: string,
+    ): ColumnValueOption[] => mapBankAccountFilterOptions(data ?? [], field);
+
+    return {
+      ledgerName: map(ledgerNameFilter.data, BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.ledgerName),
+      bankName: map(bankNameFilter.data, BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.bankName),
+      accountHolderName: map(
+        holderFilter.data,
+        BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.accountHolderName,
+      ),
+      accountNumber: map(
+        accountNumberFilter.data,
+        BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.accountNumber,
+      ),
+      ifsc: map(ifscFilter.data, BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.ifsc),
+      accountType: map(accountTypeFilter.data, BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.accountType),
+      mappedWarehousesLabel: map(
+        warehouseFilter.data,
+        BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.mappedWarehousesLabel,
+      ),
+      openingBalance: map(
+        openingBalanceFilter.data,
+        BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.openingBalance,
+      ),
+      status: map(statusFilter.data, BANK_ACCOUNT_FILTER_FIELD_BY_COLUMN.status),
+    };
+  }, [
+    ledgerNameFilter.data,
+    bankNameFilter.data,
+    holderFilter.data,
+    accountNumberFilter.data,
+    ifscFilter.data,
+    accountTypeFilter.data,
+    warehouseFilter.data,
+    openingBalanceFilter.data,
+    statusFilter.data,
+  ]);
+
+  const filterLoadingByColumn = useMemo((): FilterLoadingByColumn => {
+    const loading = (opened: boolean, query: { isFetching: boolean; data?: unknown }) =>
+      opened && query.isFetching && query.data === undefined;
+
+    return {
+      ledgerName: loading(isFilterOpen("ledgerName"), ledgerNameFilter),
+      bankName: loading(isFilterOpen("bankName"), bankNameFilter),
+      accountHolderName: loading(isFilterOpen("accountHolderName"), holderFilter),
+      accountNumber: loading(isFilterOpen("accountNumber"), accountNumberFilter),
+      ifsc: loading(isFilterOpen("ifsc"), ifscFilter),
+      accountType: loading(isFilterOpen("accountType"), accountTypeFilter),
+      mappedWarehousesLabel: loading(isFilterOpen("mappedWarehousesLabel"), warehouseFilter),
+      openingBalance: loading(isFilterOpen("openingBalance"), openingBalanceFilter),
+      status: loading(isFilterOpen("status"), statusFilter),
+    };
+  }, [
+    isFilterOpen,
+    ledgerNameFilter.isFetching,
+    ledgerNameFilter.data,
+    bankNameFilter.isFetching,
+    bankNameFilter.data,
+    holderFilter.isFetching,
+    holderFilter.data,
+    accountNumberFilter.isFetching,
+    accountNumberFilter.data,
+    ifscFilter.isFetching,
+    ifscFilter.data,
+    accountTypeFilter.isFetching,
+    accountTypeFilter.data,
+    warehouseFilter.isFetching,
+    warehouseFilter.data,
+    openingBalanceFilter.isFetching,
+    openingBalanceFilter.data,
+    statusFilter.isFetching,
+    statusFilter.data,
+  ]);
+
+  const filterReadyByColumn = useMemo(
+    (): FilterReadyByColumn => ({
+      ledgerName: isFilterOpen("ledgerName"),
+      bankName: isFilterOpen("bankName"),
+      accountHolderName: isFilterOpen("accountHolderName"),
+      accountNumber: isFilterOpen("accountNumber"),
+      ifsc: isFilterOpen("ifsc"),
+      accountType: isFilterOpen("accountType"),
+      mappedWarehousesLabel: isFilterOpen("mappedWarehousesLabel"),
+      openingBalance: isFilterOpen("openingBalance"),
+      status: isFilterOpen("status"),
+    }),
+    [isFilterOpen],
+  );
 
   const listQuery = useBankAccountsList({
     page,
-    limit: pageSize,
+    pageSize,
     search: debouncedSearch,
-    sortBy: apiSort.sortBy,
-    sortOrder: apiSort.sortOrder,
+    ordering,
+    apiFilters,
+    financialYearId,
   });
 
   const rows = listQuery.data?.items ?? [];
@@ -471,8 +697,12 @@ export default function BankAccountsPageClient() {
     : null;
 
   const handleSortChange = useCallback((sortKey: string, sortDir: "asc" | "desc") => {
-    setUiSortKey(sortKey);
+    setUiSortKey(sortKey || "ledgerName");
     setUiSortDir(sortDir);
+  }, []);
+
+  const handleFiltersChange = useCallback((filters: AccountsColumnFilters) => {
+    setColumnFilters(filters);
   }, []);
 
   const getCellValue = useCallback((row: BankAccountListRow, key: string) => {
@@ -481,7 +711,28 @@ export default function BankAccountsPageClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, pageSize, apiSort.sortBy, apiSort.sortOrder]);
+  }, [debouncedSearch, pageSize, ordering, apiFiltersKey]);
+
+  const handleExport = async () => {
+    try {
+      const result = await exportMutation.mutateAsync({
+        search: debouncedSearch,
+        ordering,
+        apiFilters,
+        financialYearId,
+      });
+      if (result === "empty") {
+        showToast("No records found to export.", "error");
+        return;
+      }
+      showToast("Export downloaded successfully.");
+    } catch (error) {
+      showToast(
+        extractBankAccountErrorMessage(error, "Failed to export bank accounts."),
+        "error",
+      );
+    }
+  };
 
   const confirmStatusChange = () => {
     if (!statusTarget?.bankAccountId) {
@@ -532,16 +783,22 @@ export default function BankAccountsPageClient() {
           accountHolderName: { type: "text" },
           accountNumber: { type: "text" },
           ifsc: { type: "text" },
-          accountType: { type: "text" },
+          accountType: {
+            type: "text",
+            optionLabels: ACCOUNT_TYPE_OPTION_LABELS,
+          },
           openingBalance: { type: "amount" },
-          currentBalance: { type: "amount" },
           mappedWarehousesLabel: { type: "text" },
-          status: { type: "text" },
+          status: {
+            type: "status",
+            optionLabels: STATUS_OPTION_LABELS,
+          },
         }}
         defaultSortKey="ledgerName"
         defaultSortDir="asc"
       >
         <SortSync onSortChange={handleSortChange} />
+        <FilterSync onFiltersChange={handleFiltersChange} />
         <div className="bank-accounts-dense h-full min-h-0 flex flex-col">
           <AccountsPageShell
             breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts")}
@@ -566,10 +823,18 @@ export default function BankAccountsPageClient() {
               <p className="mb-2 px-1 text-xs text-red-600">{listError}</p>
             ) : null}
             <AccountsTableListing
-              toolbar={<BankAccountsExportToolbar search={search} onSearchChange={setSearch} />}
+              toolbar={
+                <BankAccountsExportToolbar
+                  search={search}
+                  onSearchChange={setSearch}
+                  onExport={handleExport}
+                  exportDisabled={totalRecords === 0 && rows.length === 0}
+                  exporting={exportMutation.isPending}
+                />
+              }
               summary={
                 !loading && !listError ? (
-                  <BankAccountsSummary totalRows={totalRecords} />
+                  <BankAccountsSummary rows={rows} totalRows={totalRecords} />
                 ) : null
               }
               footer={
@@ -586,8 +851,8 @@ export default function BankAccountsPageClient() {
               }
             >
               <BankAccountsTable
+                rows={rows}
                 loading={loading}
-                onPageChange={setPage}
                 search={debouncedSearch}
                 onClearSearch={() => setSearch("")}
                 onRequestStatusChange={setStatusTarget}
@@ -596,6 +861,10 @@ export default function BankAccountsPageClient() {
                     ? statusTarget?.bankAccountId ?? null
                     : null
                 }
+                filterOptionsByColumn={filterOptionsByColumn}
+                filterLoadingByColumn={filterLoadingByColumn}
+                filterReadyByColumn={filterReadyByColumn}
+                onOpenFilter={handleOpenFilter}
               />
             </AccountsTableListing>
           </AccountsPageShell>

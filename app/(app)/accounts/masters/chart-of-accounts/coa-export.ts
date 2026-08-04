@@ -75,6 +75,15 @@ function downloadPdfBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function downloadExcelBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 
 
 const REPORT_NAME = "Chart of Accounts";
@@ -205,9 +214,10 @@ export async function exportCoaLedgerListingToExcel(
     r.ledger.status === "active" ? "Active" : "Inactive",
   ]);
 
-  const csv = buildCsv(headers, dataRows);
   const safeGroup = meta.groupName.replace(/[^\w]+/g, "_").slice(0, 40);
-  downloadCsv(csv, `COA_Ledgers_${safeGroup}_${todayExportDateSuffix()}.csv`);
+  const filename = `COA_Ledgers_${safeGroup}_${todayExportDateSuffix()}.xlsx`;
+  const excelBlob = await ChartOfAccountsService.generateCoaExcel({ headers, rows: dataRows, filename });
+  downloadExcelBlob(excelBlob, filename);
 
 }
 
@@ -316,8 +326,9 @@ export async function exportCoaListingToExcel(
     ];
   });
 
-  const csv = buildCsv(headers, dataRows);
-  downloadCsv(csv, `Chart_of_Accounts_${todayExportDateSuffix()}.csv`);
+  const filename = `Chart_of_Accounts_${todayExportDateSuffix()}.xlsx`;
+  const excelBlob = await ChartOfAccountsService.generateCoaExcel({ headers, rows: dataRows, filename });
+  downloadExcelBlob(excelBlob, filename);
 
 }
 
@@ -615,9 +626,10 @@ export async function exportCoaLedgerStatementToExcel(
     ];
   });
 
-  const csv = buildCsv(headers, dataRows);
   const safeName = meta.ledger.accountName.replace(/[^\w]+/g, "_").slice(0, 40);
-  downloadCsv(csv, `Ledger_${safeName}_${todayExportDateSuffix()}.csv`);
+  const filename = `Ledger_${safeName}_${todayExportDateSuffix()}.xlsx`;
+  const excelBlob = await ChartOfAccountsService.generateCoaExcel({ headers, rows: dataRows, filename });
+  downloadExcelBlob(excelBlob, filename);
 
 }
 

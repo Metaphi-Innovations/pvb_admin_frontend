@@ -437,12 +437,12 @@
   }
 
   .accounts-table-th-sorted {
-    @apply text-brand-700 bg-brand-50/80;
+    @apply text-brand-700 bg-brand-50;
     box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
   }
 
   .accounts-table-th-sticky.accounts-table-th-sorted {
-    @apply bg-brand-50/80;
+    @apply bg-brand-50;
   }
 
   .accounts-table-th-uppercase {

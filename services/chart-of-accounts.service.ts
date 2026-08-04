@@ -90,4 +90,17 @@ export const ChartOfAccountsService = {
     );
     return response.data as Blob;
   },
+
+  async generateCoaExcel(params: {
+    headers: string[];
+    rows: any[][];
+    filename: string;
+  }): Promise<Blob> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.ACCOUNTS.CHART_OF_ACCOUNTS.EXCEL,
+      { headers: params.headers, rows: params.rows, filename: params.filename },
+      { responseType: "blob" },
+    );
+    return response.data as Blob;
+  },
 };

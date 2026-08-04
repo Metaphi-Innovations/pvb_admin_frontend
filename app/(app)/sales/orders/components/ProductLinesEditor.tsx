@@ -31,6 +31,7 @@ import {
 	removeAppliedSchemeFromLine,
 	applyLineTaxFields,
 	computeLineTaxBreakdown,
+	recalculateLineItem,
 	repriceOrderLineItems,
 	isProductDiscountSchemeApplied,
 	getEligibleSchemesForSalesOrderLine,
@@ -305,7 +306,15 @@ export default function ProductLinesEditor({
 		[products],
 	);
 
-	const filledLines = lines.filter((l) => l.productId != null);
+	const displayLines = useMemo(
+		() =>
+			lines.map((line) =>
+				editingId && editDraft && line.id === editingId ? (editDraft as SalesOrderLineItem) : line,
+			),
+		[lines, editingId, editDraft],
+	);
+
+	const filledLines = displayLines.filter((l) => l.productId != null);
 	const totalQty = filledLines.reduce((sum, l) => sum + (l.quantity || 0), 0);
 	const totalAmount = filledLines.reduce((sum, l) => sum + (l.lineTotal || 0), 0);
 
@@ -435,15 +444,6 @@ export default function ProductLinesEditor({
 		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
 	};
 
-	const recalculateLineItem = (line: SalesOrderLineItem): SalesOrderLineItem => {
-		const finalRate = line.unitPrice - (line.schemeDiscountAmount || 0);
-		return {
-			...line,
-			finalRate,
-			lineTotal: Number((line.quantity * finalRate).toFixed(2))
-		};
-	};
-
 	const computeUpdatedLine = (line: SalesOrderLineItem, patch: Partial<SalesOrderLineItem>): SalesOrderLineItem => {
 		let next = { ...line, ...patch } as SalesOrderLineItem;
 
@@ -459,7 +459,7 @@ export default function ProductLinesEditor({
 			const product = next.productId
 				? getProductById(next.productId)
 				: undefined;
-			const packSize = product?.packSize || 1;
+			const packSize = product?.packSize || next.packSize || 1;
 
 			if (patch.quantityType === "Case") {
 				patch.pieceQuantity = 0;
@@ -472,17 +472,30 @@ export default function ProductLinesEditor({
 
 			// If user manually changed total quantity
 			if (patch.quantity !== undefined && patch.caseQuantity === undefined && patch.pieceQuantity === undefined && patch.quantityType === undefined) {
-				next.quantity = patch.quantity;
-				next.caseQuantity = Math.floor(next.quantity / packSize);
-				next.pieceQuantity = next.quantity % packSize;
+				next.quantity = Math.max(0, patch.quantity);
+				if (next.quantityType === "Case") {
+					next.caseQuantity = packSize > 0 ? Math.floor(next.quantity / packSize) : 0;
+					next.pieceQuantity = 0;
+				} else {
+					next.caseQuantity = 0;
+					next.pieceQuantity = next.quantity;
+				}
 			}
 			// If user changed case, piece, or type
 			else if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
-				const c = patch.caseQuantity !== undefined ? patch.caseQuantity : (next.caseQuantity || 0);
-				const p = patch.pieceQuantity !== undefined ? patch.pieceQuantity : (next.pieceQuantity || 0);
+				const c = patch.caseQuantity !== undefined ? Math.max(0, patch.caseQuantity) : (next.caseQuantity || 0);
+				const p = patch.pieceQuantity !== undefined ? Math.max(0, patch.pieceQuantity) : (next.pieceQuantity || 0);
 				next.caseQuantity = c;
 				next.pieceQuantity = p;
-				next.quantity = (c * packSize) + p;
+				if (next.quantityType === "Case") {
+					next.quantity = c * packSize;
+					next.pieceQuantity = 0;
+				} else if (next.quantityType === "Piece") {
+					next.quantity = p;
+					next.caseQuantity = 0;
+				} else {
+					next.quantity = (c * packSize) + p;
+				}
 			}
 
 			if (product) {
@@ -611,21 +624,25 @@ export default function ProductLinesEditor({
 			let newLine = createEmptyLineItem();
 			newLine.productId = prod.id;
 			const packSize = prod.packSize || 1;
+			newLine.packSize = packSize;
 			newLine.quantityType = topQuantityType;
 			const totalOverride = Number(topInputQty) || 0;
 
-			// If manual total is provided and no case/piece specified, use total
-			if (totalOverride > 0 && topCaseQuantity === 0 && topPieceQuantity === 0) {
-				newLine.quantity = totalOverride;
-				newLine.caseQuantity = Math.floor(newLine.quantity / packSize);
-				newLine.pieceQuantity = newLine.quantity % packSize;
-			} else {
-				// use case / piece
+			if (topQuantityType === "Case") {
+				const c = topCaseQuantity > 0 ? topCaseQuantity : (totalOverride > 0 ? totalOverride : 0);
+				newLine.caseQuantity = c;
+				newLine.pieceQuantity = 0;
+				newLine.quantity = c * packSize;
+			} else if (topCaseQuantity > 0 || topPieceQuantity > 0) {
 				const c = topCaseQuantity || 0;
 				const p = topPieceQuantity || 0;
-				newLine.caseQuantity = c;
-				newLine.pieceQuantity = p;
-				newLine.quantity = (c * packSize) + p;
+				newLine.caseQuantity = 0;
+				newLine.pieceQuantity = p > 0 ? p : (c * packSize);
+				newLine.quantity = newLine.pieceQuantity;
+			} else {
+				newLine.quantity = totalOverride;
+				newLine.caseQuantity = 0;
+				newLine.pieceQuantity = totalOverride;
 			}
 
 			if (newLine.quantity <= 0) {
@@ -648,7 +665,7 @@ export default function ProductLinesEditor({
 		setLocalError(null);
 	};
 
-	const totalQuantity = lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
+	const totalQuantity = totalQty;
 
 	return (
 		<div className="space-y-2">
@@ -805,16 +822,16 @@ export default function ProductLinesEditor({
 					lines.map((line) => {
 						const isEditing = editingId === line.id;
 						const draftLine = isEditing && editDraft ? (editDraft as SalesOrderLineItem) : line;
-						const product = line.productId
-							? getProductById(line.productId)
+						const product = draftLine.productId
+							? getProductById(draftLine.productId)
 							: undefined;
-						const hasScheme = isProductDiscountSchemeApplied(line);
-						const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(line);
+						const hasScheme = isProductDiscountSchemeApplied(draftLine);
+						const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(draftLine);
 						const hasEligibleScheme = eligibleSchemes.length > 0;
 						const taxBreakdown =
-							line.productId && product
+							draftLine.productId && product
 								? computeLineTaxBreakdown(
-									line,
+									draftLine,
 									product.gstRate,
 									taxSupplyType,
 									zeroGst,
@@ -1003,30 +1020,30 @@ export default function ProductLinesEditor({
 										{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
 									</span>
 								</td>
-								{line.productId && product && taxBreakdown ? (
+								{draftLine.productId && product && taxBreakdown ? (
 									taxSupplyType === "intra" ? (
 										<>
 											<td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
-												<span className="text-xs">{formatRupee(line.cgstAmount ?? 0)}</span>{" "}
+												<span className="text-xs">{formatRupee(draftLine.cgstAmount ?? 0)}</span>{" "}
 												<span className="text-[10px] text-muted-foreground">({taxBreakdown.cgstRate}%)</span>
 											</td>
 											<td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
-												<span className="text-xs">{formatRupee(line.sgstAmount ?? 0)}</span>{" "}
+												<span className="text-xs">{formatRupee(draftLine.sgstAmount ?? 0)}</span>{" "}
 												<span className="text-[10px] text-muted-foreground">({taxBreakdown.sgstRate}%)</span>
 											</td>
 											<td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
-												<span className="text-xs">{formatRupee(line.gstAmount ?? 0)}</span>{" "}
+												<span className="text-xs">{formatRupee(draftLine.gstAmount ?? 0)}</span>{" "}
 												<span className="text-[10px] text-muted-foreground">({taxBreakdown.cgstRate + taxBreakdown.sgstRate}%)</span>
 											</td>
 										</>
 									) : (
 										<>
 											<td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
-												<span className="text-xs">{formatRupee(line.igstAmount ?? 0)}</span>{" "}
+												<span className="text-xs">{formatRupee(draftLine.igstAmount ?? 0)}</span>{" "}
 												<span className="text-[10px] text-muted-foreground">({taxBreakdown.igstRate}%)</span>
 											</td>
 											<td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
-												<span className="text-xs">{formatRupee(line.gstAmount ?? 0)}</span>{" "}
+												<span className="text-xs">{formatRupee(draftLine.gstAmount ?? 0)}</span>{" "}
 												<span className="text-[10px] text-muted-foreground">({taxBreakdown.igstRate}%)</span>
 											</td>
 										</>
@@ -1045,7 +1062,7 @@ export default function ProductLinesEditor({
 								)}
 								<td className='px-2 py-1.5'>
 									<span className='text-xs font-semibold text-foreground tabular-nums'>
-										{formatRupee(line.lineTotal)}
+										{formatRupee(draftLine.lineTotal)}
 									</span>
 								</td>
 								<td className='px-2 py-1.5'>

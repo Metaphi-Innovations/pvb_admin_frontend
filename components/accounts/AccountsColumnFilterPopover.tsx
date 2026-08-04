@@ -17,6 +17,7 @@ import type {
 } from "@/lib/accounts/column-filter-types";
 import { isColumnFilterActive } from "@/lib/accounts/column-filter-engine";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 
 const BOOLEAN_OPTIONS: ColumnValueOption[] = [
   { value: "yes", count: 0 },
@@ -82,6 +83,9 @@ export function AccountsColumnFilterPopover({
   valueOptions = [],
   statusOptions = [],
   optionLabels = {},
+  onOpen,
+  optionsLoading = false,
+  optionsReady = false,
 }: {
   label: string;
   filterType: AccountsColumnFilterType;
@@ -92,10 +96,20 @@ export function AccountsColumnFilterPopover({
   uniqueValues?: string[];
   statusOptions?: string[];
   optionLabels?: Record<string, string>;
+  /** Fired when the filter popover opens — use to lazy-load dropdown options. */
+  onOpen?: () => void;
+  /** Show loading state while server filter options are fetching. */
+  optionsLoading?: boolean;
+  /**
+   * True once the parent has enabled/started the lazy filter query for this column.
+   * Used to avoid a brief “No matching values” flash before the fetch enables.
+   */
+  optionsReady?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const listOptions = useMemo((): ColumnValueOption[] => {
     if (filterType === "boolean") return BOOLEAN_OPTIONS;
@@ -106,28 +120,32 @@ export function AccountsColumnFilterPopover({
     return [];
   }, [valueOptions, filterType, statusOptions]);
 
+  const showOptionsLoading =
+    optionsLoading ||
+    Boolean(onOpen && open && !optionsReady && valueOptions.length === 0 && filterType !== "boolean");
+
   useEffect(() => {
     if (!open) return;
     const existing = value?.selectedValues;
     if (existing && existing.length > 0) {
       setSelected([...existing]);
-    } else {
-      // Excel default: all values selected when no filter is active
-      setSelected(listOptions.map((o) => o.value));
+    } else if (!showOptionsLoading) {
+      // Start unchecked — user must choose values (or Select All) before Apply
+      setSelected([]);
     }
     setSearch("");
-  }, [open, value, listOptions]);
+  }, [open, value, listOptions, showOptionsLoading]);
 
   const active = isColumnFilterActive(value);
 
   const filteredOptions = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return listOptions;
     return listOptions.filter((o) => {
       const display = formatOptionLabel(o.value, filterType, optionLabels);
       return display.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
     });
-  }, [listOptions, search, optionLabels, filterType]);
+  }, [listOptions, debouncedSearch, optionLabels, filterType]);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
@@ -180,13 +198,19 @@ export function AccountsColumnFilterPopover({
 
   const clear = () => {
     onChange(undefined);
-    setSelected(listOptions.map((o) => o.value));
+    setSelected([]);
     setSearch("");
     setOpen(false);
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (isOpen) onOpen?.();
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -213,6 +237,7 @@ export function AccountsColumnFilterPopover({
               placeholder="Search…"
               className="w-full h-8 pl-7 pr-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
               autoFocus
+              disabled={showOptionsLoading}
             />
           </div>
         </div>
@@ -226,28 +251,43 @@ export function AccountsColumnFilterPopover({
         </div>
 
         <div className="px-1.5 py-1.5 space-y-0.5 max-h-[220px] overflow-y-auto overscroll-contain">
-          {filteredOptions.map((opt) => (
-            <ValueCheckboxRow
-              key={opt.value}
-              label={formatOptionLabel(opt.value, filterType, optionLabels)}
-              count={opt.count > 0 ? opt.count : undefined}
-              checked={selectedSet.has(opt.value)}
-              onToggle={() => toggleValue(opt.value)}
-            />
-          ))}
-          {filteredOptions.length === 0 && (
-            <p className="text-[11px] text-muted-foreground py-3 text-center">No matching values</p>
+          {showOptionsLoading ? (
+            <p className="text-[11px] text-muted-foreground py-3 text-center">Loading…</p>
+          ) : (
+            <>
+              {filteredOptions.map((opt) => (
+                <ValueCheckboxRow
+                  key={opt.value}
+                  label={formatOptionLabel(opt.value, filterType, optionLabels)}
+                  count={opt.count > 0 ? opt.count : undefined}
+                  checked={selectedSet.has(opt.value)}
+                  onToggle={() => toggleValue(opt.value)}
+                />
+              ))}
+              {filteredOptions.length === 0 && (
+                <p className="text-[11px] text-muted-foreground py-3 text-center">
+                  No matching values
+                </p>
+              )}
+            </>
           )}
         </div>
 
         <div className="flex items-center justify-end gap-1.5 px-2.5 py-2 border-t border-border/70 bg-muted/10">
-          <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2" onClick={clear}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-[11px] px-2"
+            onClick={clear}
+            disabled={showOptionsLoading}
+          >
             Clear
           </Button>
           <Button
             size="sm"
             className="h-7 text-[11px] px-2.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={apply}
+            disabled={showOptionsLoading}
           >
             Apply
           </Button>

@@ -100,6 +100,7 @@ export interface SalesInvoiceListRow {
   dispatchNo: string;
   customerName: string;
   customerCode: string;
+  gstin?: string;
   fromWarehouse: string;
   toWarehouse: string;
   totalAmount: number;
@@ -343,6 +344,7 @@ function mapInvoiceToListRow(inv: InvoiceRecord): SalesInvoiceListRow {
     dispatchNo: inv.dispatchNo?.trim() || "—",
     customerName: inv.customerName || "—",
     customerCode: resolveCustomerCode(inv),
+    gstin: inv.customerGst || "",
     fromWarehouse,
     toWarehouse,
     totalAmount,
