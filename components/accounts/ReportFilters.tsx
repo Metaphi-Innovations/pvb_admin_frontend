@@ -24,6 +24,7 @@ import {
   VOUCHER_TYPE_LABELS,
   type VoucherTypeCode,
 } from "@/app/(app)/accounts/masters/masters-data";
+import { FinancialYearApiService } from "@/services/financial-year.service";
 import { DAY_BOOK_VOUCHER_TYPE_OPTIONS } from "@/lib/accounts/day-book-data";
 import { getActiveTDSMasters, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
@@ -169,6 +170,14 @@ export function ReportDateRangeFilter({
   /** When false, From/To fields are not rendered inline (use separate date filters). */
   inlineCustomDates?: boolean;
 }) {
+  React.useEffect(() => {
+    if (preset === "custom") return;
+    const { from, to } = resolveDateRangePreset(preset);
+    if (dateFrom !== from || dateTo !== to) {
+      onPresetChange("custom");
+    }
+  }, [dateFrom, dateTo, preset, onPresetChange]);
+
   const handlePresetChange = (value: DateRangePresetId) => {
     onPresetChange(value);
     if (value !== "custom") {
@@ -440,7 +449,30 @@ export function ReportFinancialYearFilter({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const years = loadFinancialYears();
+  const [years, setYears] = React.useState<{ id: string | number; name: string }[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    FinancialYearApiService.getDropdown()
+      .then((list) => {
+        if (!active) return;
+        const options = list.map((fy) => ({
+          id: fy.financialYearId,
+          name: fy.name,
+        }));
+        setYears(options);
+      })
+      .catch((err) => {
+        console.error("Failed to load financial years from API, falling back to local storage", err);
+        if (active) {
+          setYears(loadFinancialYears().map((fy) => ({ id: fy.id, name: fy.name })));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-0.5 min-w-[130px]">
       <span className={filterLabelClass}>Financial Year</span>

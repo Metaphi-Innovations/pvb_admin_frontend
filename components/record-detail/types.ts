@@ -25,8 +25,14 @@ export interface RecordMetaItem {
 export interface RecordSidebarAction {
   label: string;
   icon?: LucideIcon;
-  onClick: () => void;
+  onClick?: () => void;
   variant?: "default" | "primary" | "outline";
+  /** Nested dropdown items (e.g. Download Challan variants). */
+  children?: Array<{
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+  }>;
 }
 
 export interface RecordActivityItem {

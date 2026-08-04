@@ -1,4 +1,4 @@
-name: Frontend Deploy - pvb.uat.metaphi.in
+name: Frontend Deploy - pvb.dev.metaphi.in.
 on:
   push:
     branches:

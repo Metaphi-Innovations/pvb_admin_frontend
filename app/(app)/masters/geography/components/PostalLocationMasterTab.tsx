@@ -149,17 +149,17 @@ export function PostalLocationMasterTab(props: {
   }, [canManagePostal]);
 
   const columns = useMemo<ColumnConfig<PincodeRecord>[]>(() => [
-    { key: "pincode", header: "Pincode", sortable: true, render: (v) => <span className="font-mono text-xs font-semibold">{v}</span> },
-    { key: "stateName", header: "State", sortable: true, render: (v) => <span className="text-xs">{v}</span> },
-    { key: "district", header: "District", sortable: true, render: (v) => <span className="text-xs">{v}</span> },
-    { key: "city", header: "City", sortable: true, render: (v) => <span className="text-xs">{v}</span> },
-    { key: "town", header: "Town", sortable: true, render: (v) => <span className="text-xs font-medium">{v}</span> },
-    { key: "deliveryStatus", header: "Delivery", sortable: true, render: (v) => <span className="text-xs">{v}</span> },
-    { key: "status", header: "Status", width: "120px", render: (_v, row) => (
+    { key: "pincode", header: "Pincode", sortable: true, width: "100px", render: (v) => <span className="font-mono text-xs font-semibold">{v}</span> },
+    { key: "stateName", header: "State", sortable: true, width: "140px", render: (v) => <span className="text-xs">{v}</span> },
+    { key: "district", header: "District", sortable: true, width: "140px", render: (v) => <span className="text-xs">{v}</span> },
+    { key: "city", header: "City", sortable: true, width: "140px", render: (v) => <span className="text-xs">{v}</span> },
+    { key: "town", header: "Town", sortable: true, width: "180px", render: (v) => <span className="text-xs font-medium">{v}</span> },
+    { key: "deliveryStatus", header: "Delivery", sortable: true, width: "110px", render: (v) => <span className="text-xs">{v}</span> },
+    { key: "status", header: "Status", width: "120px", truncate: false, render: (_v, row) => (
       <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => setStatusConfirmTarget(row)} />
     ) },
-    { key: "createdDate", header: "Created Date", sortable: true, render: (v) => <span className="text-xs font-mono">{v}</span> },
-    { key: "updatedDate", header: "Updated Date", sortable: true, render: (v) => <span className="text-xs font-mono">{v}</span> },
+    { key: "createdDate", header: "Created Date", sortable: true, width: "120px", render: (v) => <span className="text-xs font-mono">{v}</span> },
+    { key: "updatedDate", header: "Updated Date", sortable: true, width: "120px", render: (v) => <span className="text-xs font-mono">{v}</span> },
   ], []);
 
   return (

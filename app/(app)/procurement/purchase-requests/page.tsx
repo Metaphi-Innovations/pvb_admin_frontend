@@ -66,8 +66,7 @@ type TabId = "all" | PRListStatus;
 const TABS: { value: TabId; label: string }[] = [
   { value: "all", label: "All" },
   { value: "draft", label: "Draft" },
-  { value: "pending_approval", label: "Pending Approval" },
-  { value: "approved", label: "Approved" },
+  { value: "approved", label: "Approval" },
   { value: "rejected", label: "Rejected" },
 ];
 
@@ -202,7 +201,6 @@ export default function PurchaseRequestsPage() {
     return {
       all: summary?.total,
       draft: summary?.draft,
-      pending_approval: summary?.pendingApproval,
       approved: summary?.approved,
       rejected: summary?.rejected,
     } as Partial<Record<TabId, number>>;

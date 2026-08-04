@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const FLASH_MESSAGES: Record<string, string> = {
-  "pr-submitted": "Purchase request submitted.",
+  "pr-submitted": "Purchase request created.",
   "pr-draft": "Draft saved.",
   "pr-saved": "Purchase request saved.",
   "po-submitted": "Purchase order submitted.",

@@ -468,9 +468,12 @@ export const API_ENDPOINTS = {
     SALES_INVOICE: {
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
+      PDF: "/accounts/sales-invoice/pdf",
+      EXCEL: "/accounts/sales-invoice/excel",
     },
     PENDING_INVOICES: {
       LIST: "/accounts/pending-invoices/list",
+      FILTER_DROPDOWN: "/accounts/pending-invoices/filter-dropdown",
       GENERATE: (dispatchId: string) => `/accounts/pending-invoices/${dispatchId}/generate-invoice`,
     },
     CHART_OF_ACCOUNTS: {
@@ -479,6 +482,7 @@ export const API_ENDPOINTS = {
       GROUPS: "/accounts/chart-of-accounts/groups",
       SUB_GROUPS: "/accounts/chart-of-accounts/sub-groups",
       PDF: "/accounts/chart-of-accounts/pdf",
+      EXCEL: "/accounts/chart-of-accounts/excel",
     },
     LEDGERS: {
       LIST: "/accounts/ledgers",
@@ -505,7 +509,10 @@ export const API_ENDPOINTS = {
     },
      BANKING: {
       BANK_ACCOUNTS: {
-        LIST: "/accounts/banking/bank-accounts",
+        LIST: "/accounts/banking/bank-accounts/list",
+        FILTER: "/accounts/banking/bank-accounts/filter",
+        EXPORT: "/accounts/banking/bank-accounts/export",
+        OPTIONS: "/accounts/banking/bank-accounts/options",
         CREATE: "/accounts/banking/bank-accounts",
         BY_LEDGER: (ledgerId: string) =>
           `/accounts/banking/bank-accounts/ledger/${ledgerId}`,

@@ -302,14 +302,15 @@ export function GeographyMasterTab() {
         key: "name",
         header: "Geography Name",
         sortable: true,
+        width: "220px",
         render: (val, row) => (
           <button
             type="button"
             onClick={() => openFolder(row.id)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:underline"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:underline max-w-full"
           >
             <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
-            {val}
+            <span className="truncate">{String(val ?? "")}</span>
           </button>
         ),
       },
@@ -317,12 +318,14 @@ export function GeographyMasterTab() {
         key: "geographyType",
         header: "Geography Type",
         sortable: true,
+        width: "140px",
         render: (val) => <span className="text-xs">{val}</span>,
       },
       {
         key: "parentName",
         header: "Parent Geography",
         sortable: true,
+        width: "180px",
         render: (_val, row) => (
           <span className="text-xs text-muted-foreground">
             {getParentName(row.parentId, records)}
@@ -333,6 +336,7 @@ export function GeographyMasterTab() {
         key: "coverageCount",
         header: "Coverage Count",
         sortable: true,
+        width: "120px",
         align: "right",
         render: (val) => <span className="text-xs font-mono">{val}</span>,
       },
@@ -340,6 +344,7 @@ export function GeographyMasterTab() {
         key: "assignedUsers",
         header: "Assigned Users",
         sortable: true,
+        width: "120px",
         align: "right",
         render: (val) => <span className="text-xs font-mono">{val}</span>,
       },
@@ -347,12 +352,14 @@ export function GeographyMasterTab() {
         key: "effectiveFrom",
         header: "Effective From",
         sortable: true,
+        width: "130px",
         render: (val) => <span className="text-xs font-mono">{val}</span>,
       },
       {
         key: "status",
         header: "Status",
         width: "120px",
+        truncate: false,
         render: (_val, row) => (
           <ListingStatusToggle
             active={isActiveStatus(row.status)}

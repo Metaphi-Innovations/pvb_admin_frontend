@@ -1535,10 +1535,14 @@ export function CustomerForm({
 						<SearchableSelect
 							value={form.tdsMasterId}
 							onChange={(value) => set("tdsMasterId", value)}
-							options={tdsDropdownItems.map((tds) => ({
-								value: tds.tdsUuid,
-								label: tds.sectionCode,
-							}))}
+							options={tdsDropdownItems.map((tds) => {
+								const section = tds.sectionName?.trim() || tds.sectionCode;
+								const rate = tds.tdsRate?.trim() || "0";
+								return {
+									value: tds.tdsUuid,
+									label: `${rate}% - ${section}`,
+								};
+							})}
 							placeholder="Select TDS..."
 							disabled={readOnly}
 							error={!!errors.tdsMasterId}

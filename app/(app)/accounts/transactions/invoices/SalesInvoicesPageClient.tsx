@@ -34,6 +34,13 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {
+  exportTabularReportToPdf,
+  buildReportDocumentHtml,
+  buildStandardReportTableHtml,
+  todayExportDateSuffix,
+} from "@/lib/accounts/report-export-presentation";
+import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
+import {
   AccountsEditAction,
   AccountsTableActionCell,
   AccountsViewAction,
@@ -136,7 +143,103 @@ function applyToolbarFilters(
   return list;
 }
 
-function exportSalesInvoiceTabCsv(tab: SalesInvoiceTabId, rows: SalesInvoiceListRow[]) {
+async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInvoiceListRow[]) {
+  const meta = SALES_INVOICE_TAB_META[tab];
+  let headers: string[];
+  let toRow: (r: SalesInvoiceListRow) => (string | number)[];
+
+  if (tab === "all") {
+    headers = [
+      "Invoice Date",
+      "Invoice No.",
+      "Invoice Type",
+      "Reference No.",
+      "Party / Transfer",
+      "Qty / Item Count",
+      "Total Amount",
+      "Status",
+      "E-Invoice Status",
+      "E-Way Bill Status",
+    ];
+    toRow = (r) => [
+      r.invoiceDate || "—",
+      r.invoiceNo,
+      r.invoiceTypeLabel,
+      [r.referencePrimary, r.referenceSecondary].filter(Boolean).join(" / "),
+      r.partyOrTransfer,
+      r.qtyOrItemCount,
+      r.sourceType === "sample_order" ? 0 : r.totalAmount,
+      r.invoiceStatus,
+      r.eInvoiceStatusLabel,
+      r.ewayBillStatusLabel,
+    ];
+  } else if (tab === "stock_transfer") {
+    headers = [
+      "Invoice Date",
+      "Invoice No.",
+      "Stock Transfer No.",
+      "Dispatch No.",
+      "From Warehouse",
+      "To Warehouse",
+      "Total Amount",
+      "Qty",
+      "Status",
+      "E-Invoice Status",
+      "E-Way Bill Status",
+    ];
+    toRow = (r) => [
+      r.invoiceDate || "—",
+      r.invoiceNo,
+      r.orderNo,
+      r.dispatchNo,
+      r.fromWarehouse || "—",
+      r.toWarehouse || "—",
+      r.totalAmount,
+      r.qtyOrItemCount,
+      r.invoiceStatus,
+      r.eInvoiceStatusLabel,
+      r.ewayBillStatusLabel,
+    ];
+  } else {
+    headers = [
+      "Invoice Date",
+      "Invoice No.",
+      tab === "sample_order" ? "Sample Order No." : "Sales Order No.",
+      "Dispatch No.",
+      "Customer",
+      "Total Amount",
+      "Qty",
+      "Status",
+      "E-Invoice Status",
+      "E-Way Bill Status",
+    ];
+    toRow = (r) => [
+      r.invoiceDate || "—",
+      r.invoiceNo,
+      r.orderNo,
+      r.dispatchNo,
+      r.customerName,
+      tab === "sample_order" ? 0 : r.totalAmount,
+      r.qtyOrItemCount,
+      r.invoiceStatus,
+      r.eInvoiceStatusLabel,
+      r.ewayBillStatusLabel,
+    ];
+  }
+
+  const dataRows = rows.map((r) => toRow(r));
+  const filename = meta.exportFileName;
+
+  const excelBlob = await SalesInvoiceNumberService.generateExcel({ headers, rows: dataRows, filename });
+  const url = URL.createObjectURL(excelBlob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoiceListRow[]) {
   const meta = SALES_INVOICE_TAB_META[tab];
   let headers: string[];
   let toRow: (r: SalesInvoiceListRow) => (string | number)[];
@@ -220,17 +323,41 @@ function exportSalesInvoiceTabCsv(tab: SalesInvoiceTabId, rows: SalesInvoiceList
     ];
   }
 
-  const lines = rows.map((r) =>
-    toRow(r)
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(","),
-  );
-  const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = meta.exportFileName;
-  a.click();
+  const columns = headers.map((h, i) => ({
+    label: h,
+    align: h === "Qty" || h === "Total Amount" || h === "Qty / Item Count" ? ("right" as const) : ("left" as const),
+    className: h === "Qty" || h === "Total Amount" || h === "Qty / Item Count" ? "num" : undefined,
+  }));
+
+  const bodyHtml = rows
+    .map((r) => {
+      const vals = toRow(r);
+      const cells = vals
+        .map((v, i) => {
+          const isNum = headers[i] === "Qty" || headers[i] === "Total Amount" || headers[i] === "Qty / Item Count";
+          return `<td class="${isNum ? "num" : ""}">${v}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+
+  const htmlContent = buildReportDocumentHtml({
+    title: meta.label,
+    header: {
+      reportTitle: meta.label,
+    },
+    bodyHtml: buildStandardReportTableHtml({ columns, bodyHtml }),
+    landscape: headers.length > 6,
+  });
+
+  const filename = `${meta.label.replace(/\s+/g, "_")}_${todayExportDateSuffix()}.pdf`;
+  const pdfBlob = await SalesInvoiceNumberService.generatePdf({ htmlContent, filename });
+  const url = URL.createObjectURL(pdfBlob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
@@ -400,6 +527,7 @@ function PartyCell({ row }: { row: SalesInvoiceListRow }) {
       customerName={row.customerName}
       customerCode={row.customerCode}
       branch={row.branch}
+      gstin={row.gstin}
     />
   );
 }
@@ -624,6 +752,7 @@ function SalesInvoicesTable({
                   customerName={r.customerName}
                   customerCode={r.customerCode}
                   branch={r.branch}
+                  gstin={r.gstin}
                 />
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="font-semibold">
@@ -980,8 +1109,8 @@ export default function SalesInvoicesPageClient() {
                     </Link>
                   </Button>
                   <AccountsExportMenu
-                    onExcel={() => exportSalesInvoiceTabCsv(activeTab, toolbarRows)}
-                    onPdf={() => exportSalesInvoiceTabCsv(activeTab, toolbarRows)}
+                    onExcel={() => exportSalesInvoiceTabExcel(activeTab, toolbarRows)}
+                    onPdf={() => exportSalesInvoiceTabPdf(activeTab, toolbarRows)}
                     disabled={toolbarRows.length === 0}
                   />
                 </div>

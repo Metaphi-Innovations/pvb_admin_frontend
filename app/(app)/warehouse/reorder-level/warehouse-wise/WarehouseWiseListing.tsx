@@ -15,6 +15,7 @@ import Link from "next/link";
 import { ReorderLevelService, toOrdering } from "../services";
 import { ListingStatusToggle } from "@/components/listing";
 import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { ALL_WAREHOUSE_FILTER_VALUE } from "../constants";
 
 const STOCK_STATUS_OPTIONS = [
   { label: "In Stock", value: "in stock" },
@@ -22,7 +23,15 @@ const STOCK_STATUS_OPTIONS = [
 ];
 
 interface WarehouseWiseListingProps {
+  /** Warehouse UUID, or `__all__` to include every warehouse. */
   selectedWarehouseId?: string;
+}
+
+function resolveWarehouseId(selectedWarehouseId?: string): string | undefined {
+  if (!selectedWarehouseId || selectedWarehouseId === ALL_WAREHOUSE_FILTER_VALUE) {
+    return undefined;
+  }
+  return selectedWarehouseId;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -59,16 +68,11 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
 
   useEffect(() => {
     setPage(1);
+    setFilterOptions({});
   }, [selectedWarehouseId]);
 
   useEffect(() => {
-    if (!selectedWarehouseId) {
-      setRecords([]);
-      setTotalRecords(0);
-      setLoading(false);
-      return;
-    }
-
+    const warehouseId = resolveWarehouseId(selectedWarehouseId);
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -79,7 +83,7 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
       search: String(appliedFilters.search ?? ""),
       ordering: toOrdering(sort.key, sort.direction),
       reorder_type: "WAREHOUSE",
-      warehouse_id: selectedWarehouseId,
+      warehouse_id: warehouseId,
       filters: appliedFilters,
       signal: controller.signal,
     })
@@ -225,7 +229,7 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
     setLoadingFilters((prev) => new Set(prev).add(columnKey));
     ReorderLevelService.filterDropdown(field, {
       reorder_type: "WAREHOUSE",
-      warehouse_id: selectedWarehouseId,
+      warehouse_id: resolveWarehouseId(selectedWarehouseId),
     })
       .then((options) => {
         setFilterOptions((prev) => ({ ...prev, [columnKey]: options }));
@@ -238,6 +242,13 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
         });
       });
   };
+
+  const createHref = (() => {
+    const warehouseId = resolveWarehouseId(selectedWarehouseId);
+    return warehouseId
+      ? `/warehouse/reorder-level/create?warehouse=${encodeURIComponent(warehouseId)}`
+      : "/warehouse/reorder-level/create";
+  })();
 
   return (
     <>
@@ -258,7 +269,7 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
           setPage(1);
         }}
         actions={actions}
-        onAdd={() => router.push(`/warehouse/reorder-level/create?warehouse=${encodeURIComponent(selectedWarehouseId || "")}`)}
+        onAdd={() => router.push(createHref)}
         addLabel="Set Reorder Level"
         emptyMessage=""
         searchPlaceholder="Search product or code..."
@@ -270,7 +281,7 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
             search: String(appliedFilters.search ?? ""),
             ordering: toOrdering(sort.key, sort.direction),
             reorder_type: "WAREHOUSE",
-            warehouse_id: selectedWarehouseId,
+            warehouse_id: resolveWarehouseId(selectedWarehouseId),
             export_type: "excel",
             filters: appliedFilters,
           })
