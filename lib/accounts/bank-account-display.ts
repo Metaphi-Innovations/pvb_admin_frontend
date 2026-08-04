@@ -1,20 +1,14 @@
-/** Mask account number as xxxx4499 (last 4 digits visible). */
-export function maskBankAccountLast4(accountNumber: string): string {
-  const digits = (accountNumber ?? "").replace(/\D/g, "");
-  if (digits.length < 4) return "xxxx";
-  return `xxxx${digits.slice(-4)}`;
-}
-
 /**
- * Standard display label: Account Name (xxxx4499)
- * e.g. HDFC Current A/c (xxxx4499)
+ * Standard display label: Account Name (fullAccountNumber)
+ * e.g. HDFC Current A/c (50200012345678)
+ * Do not mask account numbers on the frontend.
  */
 export function formatBankAccountLabel(accountName: string, accountNumber: string): string {
   const name = accountName.trim();
-  const masked = maskBankAccountLast4(accountNumber);
-  if (!name) return masked;
-  if (!accountNumber.trim()) return name;
-  return `${name} (${masked})`;
+  const number = (accountNumber ?? "").trim();
+  if (!name) return number || "—";
+  if (!number) return name;
+  return `${name} (${number})`;
 }
 
 export function formatBankAccountMaster(
@@ -28,4 +22,11 @@ export function formatReconciliationBankOption(acc: {
   accountNumber: string;
 }): string {
   return formatBankAccountLabel(acc.name, acc.accountNumber);
+}
+
+/** @deprecated Prefer full accountNumber display — kept for call-site migration only. */
+export function maskBankAccountLast4(accountNumber: string): string {
+  const digits = (accountNumber ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits;
 }

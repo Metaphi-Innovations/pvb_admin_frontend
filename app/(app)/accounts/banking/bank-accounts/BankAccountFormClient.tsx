@@ -24,8 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { isActiveStatus } from "@/components/listing";
 import {
+  BankAccountToggle,
   BankAccountToggleRow,
-  BankAccountYesNoField,
 } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
@@ -50,7 +50,6 @@ import {
   buildCreateBankAccountPayload,
   buildUpdateBankAccountPayload,
   EMPTY_BANK_ACCOUNT_FORM,
-  isMaskedAccountNumber,
   normalizeIfsc,
   type BankAccountFormMode,
   type BankAccountFormValues,
@@ -168,8 +167,7 @@ export default function BankAccountFormClient({
   useEffect(() => {
     if (!needsDetail || !detailQuery.data || hydrated) return;
     const d = detailQuery.data;
-    const rawAccountNumber = d.accountNumber || d.maskedAccountNumber;
-    const canPrefillAccountNumber = !isMaskedAccountNumber(rawAccountNumber);
+    const accountNumber = d.accountNumber?.trim() ?? "";
     const nextForm: BankAccountFormValues = {
       ...EMPTY_BANK_ACCOUNT_FORM,
       ledgerName: d.ledgerName,
@@ -180,8 +178,8 @@ export default function BankAccountFormClient({
       openingBalanceType: d.openingBalanceType,
       bankName: d.bankName,
       accountHolderName: d.accountHolderName,
-      accountNumber: canPrefillAccountNumber ? rawAccountNumber : "",
-      confirmAccountNumber: canPrefillAccountNumber ? rawAccountNumber : "",
+      accountNumber,
+      confirmAccountNumber: accountNumber,
       ifscCode: d.ifscCode,
       branchName: d.branchName,
       accountType: (d.accountType || "CURRENT") as BankAccountApiAccountType,
@@ -508,13 +506,13 @@ export default function BankAccountFormClient({
                       />
                       <FieldError message={errors.description} />
                     </div>
-                    <div className="flex items-end w-[11rem] shrink-0 pb-0">
-                      <div className="w-full">
-                        <BankAccountYesNoField
-                          label="Status"
+                    <div className="space-y-1.5 w-[7.5rem] shrink-0 self-start">
+                      <Label className="text-xs font-medium">Status</Label>
+                      <div className="h-9 flex items-center">
+                        <BankAccountToggle
                           checked={isActiveStatus(form.status)}
                           disabled={saving}
-                          onChange={(active) =>
+                          onCheckedChange={(active) =>
                             setField("status", active ? "ACTIVE" : "INACTIVE")
                           }
                         />
@@ -664,19 +662,6 @@ export default function BankAccountFormClient({
                         </SelectContent>
                       </Select>
                       <FieldError message={errors.accountType} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Currency</Label>
-                      <Input
-                        className="h-9 text-sm rounded-lg font-mono uppercase"
-                        value={form.currencyCode}
-                        onChange={(e) =>
-                          setField("currencyCode", e.target.value.toUpperCase())
-                        }
-                        placeholder="INR"
-                        disabled={saving}
-                        maxLength={3}
-                      />
                     </div>
                   </div>
                 </section>

@@ -38,6 +38,9 @@ export function SortTh({
   valueOptions: valueOptionsProp,
   statusOptions: statusOptionsProp,
   onRemoveSort: onRemoveSortProp,
+  onFilterOpen,
+  optionsLoading,
+  optionsReady,
   className,
 }: {
   label: string;
@@ -53,6 +56,9 @@ export function SortTh({
   valueOptions?: AccountsColumnHeaderProps["valueOptions"];
   statusOptions?: string[];
   onRemoveSort?: () => void;
+  onFilterOpen?: () => void;
+  optionsLoading?: boolean;
+  optionsReady?: boolean;
   className?: string;
 }) {
   const ctx = useAccountsColumnFilterContext();
@@ -75,6 +81,9 @@ export function SortTh({
       valueOptions={valueOptionsProp ?? fromCtx?.valueOptions}
       statusOptions={statusOptionsProp ?? fromCtx?.statusOptions}
       optionLabels={fromCtx?.optionLabels}
+      onFilterOpen={onFilterOpen}
+      optionsLoading={optionsLoading}
+      optionsReady={optionsReady}
       className={className}
     />
   );

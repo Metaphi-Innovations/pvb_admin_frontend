@@ -94,6 +94,36 @@
   contain: none;
 }
 
+/* Opaque sticky headers — never use alpha so scrolled rows can't show through */
+.bank-accounts-dense .accounts-table-th,
+.bank-accounts-dense .accounts-table-th-sticky,
+.bank-accounts-dense .accounts-table-th-sticky.accounts-table-th-sorted,
+.bank-accounts-dense .accounts-table > thead > tr > th {
+  background-color: #fff3e8; /* brand-50 — fully opaque */
+}
+
+/*
+ * Uniform body cell backgrounds — border-separate doesn't paint tr zebra onto cells,
+ * so sticky Actions (and any other cell) must use the same solid white as the rest.
+ */
+.bank-accounts-dense .accounts-table-body > .accounts-table-row > td,
+.bank-accounts-dense .accounts-table > tbody > tr > td {
+  background-color: #ffffff;
+}
+
+.bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even),
+.bank-accounts-dense .accounts-table > tbody > tr:nth-child(even) {
+  background-color: #ffffff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bank-accounts-dense .accounts-table-row:hover > td,
+  .bank-accounts-dense .accounts-table > tbody > tr:hover > td {
+    background-color: #f4f4f5;
+  }
+}
+
+/* Sticky Actions — stays on the right; same white/hover as other columns */
 .bank-accounts-dense .accounts-table th.accounts-col-actions,
 .bank-accounts-dense .accounts-table th.accounts-col-actions-wide {
   position: sticky;
@@ -132,12 +162,11 @@
   width: 100%;
 }
 
-/* Even-row striping — solid color (not translucent muted) */
 .bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even) > td.accounts-col-actions,
 .bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even) > td.accounts-col-actions-wide,
 .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions,
 .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions-wide {
-  background-color: #f4f4f5;
+  background-color: #ffffff;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -145,14 +174,7 @@
   .bank-accounts-dense .accounts-table-row:hover > td.accounts-col-actions-wide,
   .bank-accounts-dense .accounts-table > tbody > tr:hover > td.accounts-col-actions,
   .bank-accounts-dense .accounts-table > tbody > tr:hover > td.accounts-col-actions-wide {
-    background-color: #eeeeef;
-  }
-
-  .bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even):hover > td.accounts-col-actions,
-  .bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even):hover > td.accounts-col-actions-wide,
-  .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even):hover > td.accounts-col-actions,
-  .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even):hover > td.accounts-col-actions-wide {
-    background-color: #e8e8ea;
+    background-color: #f4f4f5;
   }
 }
 
@@ -209,6 +231,11 @@
 .bank-accounts-dense .accounts-pagination-footer [role="combobox"] {
   height: 1.375rem;
   min-height: 1.375rem;
+}
+
+.bank-accounts-dense .accounts-pagination-footer [role="combobox"] {
+  width: 4rem;
+  min-width: 4rem;
 }
 
 .bank-accounts-dense .accounts-listing-card {

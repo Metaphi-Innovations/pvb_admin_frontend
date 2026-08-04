@@ -1,11 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import {
-  BankAccountsListService,
-  type BankAccountsListSortBy,
-  type BankAccountsListSortOrder,
-} from "@/services/bank-accounts-list.service";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import {
   accountsKeys,
   type BankAccountsListKeyParams,
@@ -17,20 +13,44 @@ export function useBankAccountsList(params: BankAccountsListKeyParams) {
     queryFn: ({ signal }) =>
       BankAccountsListService.list({
         page: params.page,
-        limit: params.limit,
+        pageSize: params.pageSize,
         search: params.search,
-        sortBy: params.sortBy as BankAccountsListSortBy,
-        sortOrder: params.sortOrder as BankAccountsListSortOrder,
-        status: params.status as "ACTIVE" | "INACTIVE" | undefined,
-        detailsStatus: params.detailsStatus as "PENDING" | "COMPLETE" | undefined,
-        accountType: params.accountType as
-          | "CURRENT"
-          | "SAVINGS"
-          | "CASH_CREDIT"
-          | "OVERDRAFT"
-          | undefined,
-        warehouseId: params.warehouseId,
+        ordering: params.ordering,
+        apiFilters: params.apiFilters,
+        financialYearId: params.financialYearId,
         signal,
       }),
+  });
+}
+
+export function useBankAccountFilterOptions(fieldName: string, enabled = true) {
+  return useQuery({
+    queryKey: accountsKeys.bankAccounts.filterDropdown(fieldName),
+    queryFn: ({ signal }) =>
+      BankAccountsListService.getFilterDropdown(fieldName, signal),
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    enabled: Boolean(fieldName) && enabled,
+  });
+}
+
+export function useExportBankAccounts() {
+  return useMutation({
+    mutationFn: (params: {
+      search?: string;
+      ordering?: string;
+      apiFilters?: Record<string, unknown>;
+      financialYearId?: string | null;
+    }) => BankAccountsListService.export(params),
+  });
+}
+
+export function useBankAccountOptions(enabled = true) {
+  return useQuery({
+    queryKey: accountsKeys.bankAccounts.options(),
+    queryFn: ({ signal }) => BankAccountsListService.getOptions(signal),
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    enabled,
   });
 }

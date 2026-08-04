@@ -2041,7 +2041,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             }
             bankAccountHelper={
               soGen && bankPrintDetails
-                ? `${bankPrintDetails.bankName} · …${String(bankPrintDetails.accountNumber).slice(-4)}`
+                ? `${bankPrintDetails.bankName} · ${bankPrintDetails.accountNumber}`
                 : undefined
             }
             dispatchContext={
@@ -2086,8 +2086,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               />
               {bankPrintDetails && (
                 <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-                  {bankPrintDetails.bankName} · A/c ending{" "}
-                  {String(bankPrintDetails.accountNumber).slice(-4)} ·{" "}
+                  {bankPrintDetails.bankName} · A/c {bankPrintDetails.accountNumber} ·{" "}
                   {bankPrintDetails.branchName || "—"}
                 </p>
               )}
