@@ -69,6 +69,73 @@ function mapAttachments(raw: unknown): PRAttachment[] {
   });
 }
 
+/** Prefer same-origin `/uploads/...` so Next rewrites proxy to the backend. */
+export function resolvePrAttachmentUrl(path?: string | null): string {
+  const raw = asString(path).trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.startsWith("/uploads/")) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+      return raw;
+    } catch {
+      return raw;
+    }
+  }
+
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  if (normalized.startsWith("/uploads/")) return normalized;
+  if (normalized.includes("/uploads/")) {
+    return normalized.slice(normalized.indexOf("/uploads/"));
+  }
+  return `/uploads/${normalized.replace(/^\//, "")}`;
+}
+
+export async function downloadPrAttachment(
+  url: string,
+  fileName?: string,
+): Promise<void> {
+  const resolved = resolvePrAttachmentUrl(url);
+  if (!resolved) throw new Error("Attachment URL is missing.");
+
+  let blob: Blob | null = null;
+  try {
+    const response = await fetch(resolved, { credentials: "same-origin" });
+    if (response.ok) blob = await response.blob();
+  } catch {
+    blob = null;
+  }
+
+  if (!blob && resolved.startsWith("/uploads/")) {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+    ).trim();
+    const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+    const fallback = await fetch(`${origin}${resolved}`, {
+      credentials: "include",
+    });
+    if (!fallback.ok) throw new Error("Failed to download attachment.");
+    blob = await fallback.blob();
+  }
+
+  if (!blob) throw new Error("Failed to download attachment.");
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = (fileName || "attachment").trim() || "attachment";
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+}
+
 function mapLine(raw: Record<string, unknown>, index: number): PRLineItem {
   const product =
     raw.product && typeof raw.product === "object" && !Array.isArray(raw.product)
@@ -94,6 +161,29 @@ function mapLine(raw: Record<string, unknown>, index: number): PRLineItem {
     asNumber(raw.base_requested_qty) ||
     calcPackingToBaseQty(requestedQty, conversionQty);
 
+  const productHsn =
+    product.hsn && typeof product.hsn === "object" && !Array.isArray(product.hsn)
+      ? (product.hsn as Record<string, unknown>)
+      : {};
+  const snapshotHsn =
+    snapshot.hsn && typeof snapshot.hsn === "object" && !Array.isArray(snapshot.hsn)
+      ? (snapshot.hsn as Record<string, unknown>)
+      : {};
+
+  const hsnCode = asString(
+    productHsn.hsnCode ??
+      productHsn.hsn_code ??
+      product.hsn_code ??
+      product.hsnCode ??
+      snapshotHsn.hsnCode ??
+      snapshotHsn.hsn_code ??
+      snapshot.hsn_code ??
+      snapshot.hsnCode,
+  );
+
+  const ratePerSku =
+    asNumber(product.cost_price) || asNumber(snapshot.cost_price) || 0;
+
   return {
     uid: asString(raw.id) || `line-${index}`,
     productId: productId || 0,
@@ -114,9 +204,9 @@ function mapLine(raw: Record<string, unknown>, index: number): PRLineItem {
     totalQtyBase: baseQty,
     segment: "",
     category: "",
-    hsnCode: "",
-    mrp: 0,
-    ratePerSku: 0,
+    hsnCode,
+    mrp: asNumber(product.mrp) || asNumber(snapshot.mrp) || 0,
+    ratePerSku,
     uom: "Unit",
     remarks: asString(raw.remarks),
   };

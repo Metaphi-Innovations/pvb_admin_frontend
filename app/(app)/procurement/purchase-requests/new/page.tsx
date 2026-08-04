@@ -10,22 +10,32 @@ import {
 } from "../components/PurchaseRequestForm";
 import { PRFormFooter } from "../components/PRFormFooter";
 import { useAuth } from "@/lib/auth";
+import { useFY, getStoredFYId } from "@/lib/fy-store";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   useCreatePurchaseRequest,
   usePurchaseRequestPreviewNumber,
 } from "@/hooks/procurement";
+import {
+  focusPRField,
+  getFirstPRErrorField,
+  validatePRField,
+  validatePRForm,
+  type PRFormErrors,
+  type PRFormFieldKey,
+} from "../components/pr-form-validation";
 
 export default function NewPRPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { selectedFY, isLoading: fyLoading } = useFY();
   const [form, setForm] = useState<PRFormValues | null>(null);
+  const [errors, setErrors] = useState<PRFormErrors>({});
   const [error, setError] = useState<string | null>(null);
   const createMutation = useCreatePurchaseRequest();
 
   useEffect(() => {
-    const displayName =
-      user?.username || user?.email || "User";
+    const displayName = user?.username || user?.email || "User";
     setForm(
       defaultPRForm({
         requestedById: user?.user_id ?? "",
@@ -40,27 +50,58 @@ export default function NewPRPage() {
   );
   const prNumber = previewQuery.data ?? "";
 
-  const persist = (asSubmit: boolean) => {
+  const clearError = (key: string) =>
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+  const handleFieldBlur = (field: PRFormFieldKey) => {
     if (!form) return;
+    const msg = validatePRField(form, field, "submit");
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (msg) next[field] = msg;
+      else delete next[field];
+      return next;
+    });
+  };
+
+  const persist = (asSubmit: boolean) => {
+    if (!form || createMutation.isPending) return;
     setError(null);
+
     if (!form.requestedById) {
       setError("Please sign in again — requester could not be resolved.");
       return;
     }
-    if (asSubmit) {
-      if (!form.requiredByDate) {
-        setError("Required By Date is required to submit.");
-        return;
-      }
-      if (!form.lines.some((l) => l.productId && String(l.productId) !== "0")) {
-        setError("Add at least one product before submitting.");
-        return;
-      }
+
+    if (!selectedFY.id && !getStoredFYId()) {
+      setError(
+        fyLoading
+          ? "Financial year is still loading. Please wait a moment and try again."
+          : "Select a financial year from the header before saving.",
+      );
+      return;
     }
+
+    const mode = asSubmit ? "submit" : "draft";
+    const nextErrors = validatePRForm(form, mode);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      const first = getFirstPRErrorField(nextErrors);
+      if (first) {
+        requestAnimationFrame(() => focusPRField(first));
+      }
+      return;
+    }
+
     createMutation.mutate(
       {
         form,
-        status: asSubmit ? "pending_approval" : "draft",
+        status: asSubmit ? "approved" : "draft",
       },
       {
         onSuccess: () => {
@@ -102,7 +143,14 @@ export default function NewPRPage() {
           {error}
         </p>
       )}
-      <PurchaseRequestForm form={form} onChange={setForm} prNumber={prNumber} />
+      <PurchaseRequestForm
+        form={form}
+        onChange={setForm}
+        prNumber={prNumber}
+        errors={errors}
+        onClearError={clearError}
+        onFieldBlur={handleFieldBlur}
+      />
     </PRFormLayout>
   );
 }

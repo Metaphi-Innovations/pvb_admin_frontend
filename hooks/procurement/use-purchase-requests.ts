@@ -17,6 +17,7 @@ import {
 } from "@/lib/procurement/purchase-request-query-keys";
 import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 import type { PRListStatus } from "@/lib/procurement/pr-status";
+import { useIsFinancialYearReady } from "@/lib/fy-store";
 
 function toListParams(
   params: PurchaseRequestListKeyParams,
@@ -56,19 +57,22 @@ export function usePurchaseRequestList(
   params: PurchaseRequestListKeyParams,
   enabled = true,
 ) {
+  const fyReady = useIsFinancialYearReady();
   return useQuery({
     queryKey: purchaseRequestKeys.list(params),
     queryFn: ({ signal }) =>
       PurchaseRequestListService.list({ ...toListParams(params), signal }),
-    enabled,
+    enabled: enabled && fyReady,
     ...PR_LIVE_QUERY_OPTIONS,
   });
 }
 
 export function usePurchaseRequestSummary() {
+  const fyReady = useIsFinancialYearReady();
   return useQuery({
     queryKey: purchaseRequestKeys.summary(),
     queryFn: ({ signal }) => PurchaseRequestListService.getSummary(signal),
+    enabled: fyReady,
     ...PR_LIVE_QUERY_OPTIONS,
   });
 }
@@ -100,12 +104,13 @@ export function usePurchaseRequestPreviewNumber(
   state?: string | null,
   enabled = true,
 ) {
+  const fyReady = useIsFinancialYearReady();
   const resolvedState = (state?.trim() || "Maharashtra").trim();
   return useQuery({
     queryKey: purchaseRequestKeys.previewNumber(resolvedState),
     queryFn: ({ signal }) =>
       PurchaseRequestService.getPreviewNumber(resolvedState, signal),
-    enabled: Boolean(enabled && resolvedState),
+    enabled: Boolean(enabled && resolvedState && fyReady),
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: "always",
@@ -113,10 +118,11 @@ export function usePurchaseRequestPreviewNumber(
 }
 
 export function usePurchaseRequest(id: string | null | undefined) {
+  const fyReady = useIsFinancialYearReady();
   return useQuery({
     queryKey: purchaseRequestKeys.detail(id ?? ""),
     queryFn: ({ signal }) => PurchaseRequestService.getById(id!, signal),
-    enabled: Boolean(id),
+    enabled: Boolean(id && fyReady),
     ...PR_LIVE_QUERY_OPTIONS,
   });
 }

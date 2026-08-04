@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef } from "react";
-import { Download, Eye, Trash2, Upload } from "lucide-react";
+import { AlertCircle, Download, Eye, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,6 @@ import {
   enrichProductFromDropdown,
   type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
-import { stateSelectOptions } from "@/lib/procurement/warehouse-filter";
 import {
   enrichPRLineItem,
   type PRAttachment,
@@ -28,8 +27,15 @@ import {
 import type { PRPriority } from "@/lib/procurement/config";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import { useProductDropdown } from "@/hooks/masters/use-products";
-import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
 import type { ProductDropdownItem } from "@/services/product-dropdown.service";
+import {
+  downloadPrAttachment,
+  resolvePrAttachmentUrl,
+} from "@/services/purchase-request.service";
+import {
+  type PRFormErrors,
+  type PRFormFieldKey,
+} from "./pr-form-validation";
 
 export interface PRFormValues {
   prDate: string;
@@ -141,8 +147,43 @@ function SectionHead({
   );
 }
 
+function FieldLabel({
+  children,
+  required,
+  htmlFor,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  return (
+    <Label htmlFor={htmlFor} className="text-xs font-medium">
+      {children}
+      {required && <span className="text-red-500 ml-0.5">*</span>}
+    </Label>
+  );
+}
+
+function FieldError({ id, msg }: { id: string; msg?: string }) {
+  return (
+    <p
+      id={id}
+      role={msg ? "alert" : undefined}
+      className="mt-1 min-h-[16px] flex items-start gap-1 text-[11px] leading-4 text-red-500"
+    >
+      {msg ? (
+        <>
+          <AlertCircle className="mt-0.5 h-3 w-3 flex-shrink-0" aria-hidden />
+          <span>{msg}</span>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 const inputCls = "h-8 rounded-lg text-xs";
 const readOnlyCls = cn(inputCls, "bg-muted/30 text-foreground");
+const errorInputCls = "border-red-400 focus-visible:ring-red-300";
 
 function ReadOnlyField({ value }: { value: string }) {
   return <Input value={value || "—"} readOnly className={readOnlyCls} />;
@@ -201,25 +242,20 @@ export function PurchaseRequestForm({
   onChange,
   readOnly,
   prNumber = "",
+  errors = {},
+  onClearError,
+  onFieldBlur,
 }: {
   form: PRFormValues;
   onChange: (f: PRFormValues) => void;
   readOnly?: boolean;
   prNumber?: string;
+  errors?: PRFormErrors;
+  onClearError?: (key: string) => void;
+  onFieldBlur?: (field: PRFormFieldKey) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const { data: dbProducts } = useProductDropdown();
-  const { data: warehouses } = useWarehouseDropdown(form.state || undefined);
-
-  const stateOptions = useMemo(() => stateSelectOptions(), []);
-  const warehouseOptions = useMemo(
-    () =>
-      (warehouses ?? []).map((w) => ({
-        value: w.warehouse_id,
-        label: w.warehouse_name,
-      })),
-    [warehouses],
-  );
 
   const productOptions = useMemo(
     () =>
@@ -230,8 +266,17 @@ export function PurchaseRequestForm({
     [dbProducts],
   );
 
-  const set = <K extends keyof PRFormValues>(k: K, v: PRFormValues[K]) =>
+  const clearErr = (key: string) => onClearError?.(key);
+
+  const set = <K extends keyof PRFormValues>(k: K, v: PRFormValues[K]) => {
     onChange({ ...form, [k]: v });
+    if (k === "prDate" || k === "department" || k === "priority" || k === "requiredByDate") {
+      clearErr(k);
+    }
+    if (k === "lines") clearErr("lines");
+  };
+
+  const blurField = (field: PRFormFieldKey) => onFieldBlur?.(field);
 
   const onAddItem = (productIds: string[], qty: number, remarks: string) => {
     let nextLines = [...form.lines];
@@ -258,10 +303,13 @@ export function PurchaseRequestForm({
       }
     }
     onChange({ ...form, lines: nextLines });
+    clearErr("lines");
   };
 
   const onRemoveItem = (uid: string) => {
     onChange({ ...form, lines: form.lines.filter((l) => l.uid !== uid) });
+    clearErr("lines");
+    clearErr(`lineQty:${uid}`);
   };
 
   const onUpdateItem = (uid: string, patch: Partial<PRLineItem>) => {
@@ -278,24 +326,8 @@ export function PurchaseRequestForm({
         return next;
       }),
     });
-  };
-
-  const onStateChange = (state: string) => {
-    onChange({
-      ...form,
-      state,
-      warehouseId: null,
-      warehouseName: "",
-    });
-  };
-
-  const onWarehouseChange = (val: string) => {
-    const wh = (warehouses ?? []).find((w) => w.warehouse_id === val);
-    onChange({
-      ...form,
-      warehouseId: wh ? wh.warehouse_id : null,
-      warehouseName: wh?.warehouse_name ?? "",
-    });
+    if (patch.requestedQty !== undefined) clearErr(`lineQty:${uid}`);
+    clearErr("lines");
   };
 
   const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -333,7 +365,7 @@ export function PurchaseRequestForm({
           />
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
-              <Label className="text-xs font-medium">PR No.</Label>
+              <FieldLabel>PR No.</FieldLabel>
               <Input
                 value={prNumber || "Auto-generated"}
                 readOnly
@@ -342,30 +374,40 @@ export function PurchaseRequestForm({
                   "bg-muted/30 font-mono text-muted-foreground",
                 )}
               />
+              <FieldError id="pr-err-prNo" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">PR Date</Label>
+              <FieldLabel required htmlFor="pr-prDate">
+                PR Date
+              </FieldLabel>
               {readOnly ? (
                 <ReadOnlyField value={formatDisplayDate(form.prDate)} />
               ) : (
                 <Input
+                  id="pr-prDate"
                   type="date"
+                  data-pr-field="prDate"
                   value={form.prDate}
                   onChange={(e) => set("prDate", e.target.value)}
-                  className={inputCls}
+                  onBlur={() => blurField("prDate")}
+                  aria-invalid={Boolean(errors.prDate)}
+                  aria-describedby="pr-err-prDate"
+                  className={cn(inputCls, errors.prDate && errorInputCls)}
                 />
               )}
+              <FieldError id="pr-err-prDate" msg={errors.prDate} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">Requested By</Label>
+              <FieldLabel>Requested By</FieldLabel>
               <Input
                 value={form.requestedBy}
                 readOnly
                 className={cn(inputCls, "bg-muted/30 text-muted-foreground")}
               />
+              <FieldError id="pr-err-requestedBy" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">Department</Label>
+              <FieldLabel required>Department</FieldLabel>
               {readOnly ? (
                 <ReadOnlyField value={departmentLabel} />
               ) : (
@@ -376,13 +418,19 @@ export function PurchaseRequestForm({
                   }))}
                   value={form.department}
                   onChange={(v) => set("department", String(v))}
+                  onBlur={() => blurField("department")}
                   placeholder="Select department"
-                  className={inputCls}
+                  error={Boolean(errors.department)}
+                  aria-invalid={Boolean(errors.department)}
+                  aria-describedby="pr-err-department"
+                  data-pr-field="department"
+                  className={cn(inputCls, errors.department && errorInputCls)}
                 />
               )}
+              <FieldError id="pr-err-department" msg={errors.department} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">Priority</Label>
+              <FieldLabel required>Priority</FieldLabel>
               {readOnly ? (
                 <ReadOnlyField value={priorityLabel} />
               ) : (
@@ -393,54 +441,37 @@ export function PurchaseRequestForm({
                   }))}
                   value={form.priority}
                   onChange={(v) => set("priority", v as PRPriority)}
+                  onBlur={() => blurField("priority")}
                   placeholder="Select priority"
-                  className={inputCls}
+                  error={Boolean(errors.priority)}
+                  aria-invalid={Boolean(errors.priority)}
+                  aria-describedby="pr-err-priority"
+                  data-pr-field="priority"
+                  className={cn(inputCls, errors.priority && errorInputCls)}
                 />
               )}
+              <FieldError id="pr-err-priority" msg={errors.priority} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">State</Label>
-              {readOnly ? (
-                <ReadOnlyField value={form.state} />
-              ) : (
-                <AutocompleteSelect
-                  options={stateOptions}
-                  value={form.state}
-                  onChange={(v) => onStateChange(String(v))}
-                  placeholder="Select state"
-                  className={inputCls}
-                />
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Warehouse</Label>
-              {readOnly ? (
-                <ReadOnlyField value={form.warehouseName} />
-              ) : (
-                <AutocompleteSelect
-                  options={warehouseOptions}
-                  value={form.warehouseId ?? ""}
-                  onChange={(v) => onWarehouseChange(String(v))}
-                  disabled={!form.state}
-                  placeholder={
-                    form.state ? "Select warehouse" : "Select state first"
-                  }
-                  className={inputCls}
-                />
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Required By Date</Label>
+              <FieldLabel required htmlFor="pr-requiredByDate">
+                Required By Date
+              </FieldLabel>
               {readOnly ? (
                 <ReadOnlyField value={formatDisplayDate(form.requiredByDate)} />
               ) : (
                 <Input
+                  id="pr-requiredByDate"
                   type="date"
+                  data-pr-field="requiredByDate"
                   value={form.requiredByDate}
                   onChange={(e) => set("requiredByDate", e.target.value)}
-                  className={inputCls}
+                  onBlur={() => blurField("requiredByDate")}
+                  aria-invalid={Boolean(errors.requiredByDate)}
+                  aria-describedby="pr-err-requiredByDate"
+                  className={cn(inputCls, errors.requiredByDate && errorInputCls)}
                 />
               )}
+              <FieldError id="pr-err-requiredByDate" msg={errors.requiredByDate} />
             </div>
           </div>
           <div className="mt-2 space-y-1">
@@ -459,15 +490,26 @@ export function PurchaseRequestForm({
           </div>
         </div>
 
-        <ProductItemDetailsSection
-          mode="purchase_request"
-          products={productOptions}
-          items={form.lines}
-          onAddItem={onAddItem}
-          onRemoveItem={onRemoveItem}
-          onUpdateItem={onUpdateItem}
-          readOnly={readOnly}
-        />
+        <div data-pr-field="lines">
+          <ProductItemDetailsSection
+            mode="purchase_request"
+            products={productOptions}
+            items={form.lines}
+            onAddItem={onAddItem}
+            onRemoveItem={onRemoveItem}
+            onUpdateItem={onUpdateItem}
+            readOnly={readOnly}
+            title="Product / Item Details"
+            sectionRequired
+          />
+          <FieldError
+            id="pr-err-lines"
+            msg={
+              errors.lines ||
+              Object.entries(errors).find(([k]) => k.startsWith("lineQty:"))?.[1]
+            }
+          />
+        </div>
 
         <div className="border-t border-border/60 pt-3">
           <SectionHead
@@ -533,7 +575,9 @@ export function PurchaseRequestForm({
                 </p>
               ) : (
                 <ul className="space-y-1.5">
-                  {form.existingAttachments.map((a) => (
+                  {form.existingAttachments.map((a) => {
+                    const resolvedUrl = resolvePrAttachmentUrl(a.url);
+                    return (
                     <li
                       key={a.uid}
                       className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
@@ -542,19 +586,41 @@ export function PurchaseRequestForm({
                         {a.name}
                       </span>
                       <span className="text-muted-foreground">{a.size}</span>
-                      {a.url ? (
+                      {resolvedUrl ? (
                         <a
-                          href={a.url}
+                          href={resolvedUrl}
                           target="_blank"
                           rel="noreferrer"
+                          title="View"
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </a>
                       ) : (
-                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground/40" />
                       )}
-                      <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                      {resolvedUrl ? (
+                        <button
+                          type="button"
+                          title="Download"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            void downloadPrAttachment(resolvedUrl, a.name).catch(
+                              () => {
+                                window.open(
+                                  resolvedUrl,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              },
+                            );
+                          }}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <Download className="h-3.5 w-3.5 text-muted-foreground/40" />
+                      )}
                       {!readOnly && (
                         <button
                           type="button"
@@ -573,7 +639,8 @@ export function PurchaseRequestForm({
                         </button>
                       )}
                     </li>
-                  ))}
+                    );
+                  })}
                   {form.attachmentFiles.map((file, index) => (
                     <li
                       key={`new-${file.name}-${index}`}

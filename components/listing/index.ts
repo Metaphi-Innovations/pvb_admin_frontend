@@ -10,3 +10,4 @@ export * from "./LoadingState";
 export * from "./ListingAuditCell";
 export * from "./ListingUserCell";
 export * from "./ListingStatusToggle";
+export * from "./ListingTruncateCell";
