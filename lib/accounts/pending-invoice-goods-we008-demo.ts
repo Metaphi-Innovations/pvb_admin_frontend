@@ -127,7 +127,6 @@ export function ensureGoodsWe008DemoSalesOrder(customer: Customer): SalesOrder |
     customerId: customer.id,
     customerName: customer.customerName,
     customerCode: customer.customerCode,
-    territory: customer.territoryName || "West Zone",
     salesManId: customer.salesManId ?? 4,
     salesManName: customer.salesManName || "Neha Patel",
     orderDate: "2026-07-10",

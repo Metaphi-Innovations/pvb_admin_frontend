@@ -154,7 +154,6 @@ export interface SalesOrder {
   customerId: number;
   customerName: string;
   customerCode: string;
-  territory: string;
   salesManId: number | null;
   salesManName: string;
   orderDate: string;
@@ -230,18 +229,17 @@ const SEED_CUSTOMERS: {
   id: number;
   name: string;
   code: string;
-  territory: string;
 }[] = [
-    { id: 1, name: "Green Valley Agro", code: "CUST-001", territory: "North Zone" },
-    { id: 2, name: "Kisan Fertilizers Ltd", code: "CUST-002", territory: "South Zone" },
-    { id: 3, name: "Farmtech Solutions", code: "CUST-003", territory: "East Zone" },
-    { id: 4, name: "AgroPlus Distributors", code: "CUST-004", territory: "West Zone" },
-    { id: 5, name: "Sunrise Crops", code: "CUST-005", territory: "North Zone" },
-    { id: 6, name: "Rural Inputs Co.", code: "CUST-006", territory: "Central Zone" },
-    { id: 7, name: "BioGrow Agro", code: "CUST-007", territory: "South Zone" },
-    { id: 8, name: "Fertile Lands Ltd", code: "CUST-008", territory: "East Zone" },
-    { id: 9, name: "CropCare India", code: "CUST-009", territory: "West Zone" },
-    { id: 10, name: "Seeds & More", code: "CUST-010", territory: "North Zone" },
+    { id: 1, name: "Green Valley Agro", code: "CUST-001" },
+    { id: 2, name: "Kisan Fertilizers Ltd", code: "CUST-002" },
+    { id: 3, name: "Farmtech Solutions", code: "CUST-003" },
+    { id: 4, name: "AgroPlus Distributors", code: "CUST-004" },
+    { id: 5, name: "Sunrise Crops", code: "CUST-005" },
+    { id: 6, name: "Rural Inputs Co.", code: "CUST-006" },
+    { id: 7, name: "BioGrow Agro", code: "CUST-007" },
+    { id: 8, name: "Fertile Lands Ltd", code: "CUST-008" },
+    { id: 9, name: "CropCare India", code: "CUST-009" },
+    { id: 10, name: "Seeds & More", code: "CUST-010" },
   ];
 
 const SEED_SALESMEN: { id: number; name: string }[] = [
@@ -253,20 +251,20 @@ const SEED_SALESMEN: { id: number; name: string }[] = [
 ];
 
 const BASE_SEED_ORDERS: SalesOrder[] = [
-  { id: 1, soNumber: "SO-2024-001", customerId: 1, customerName: "Green Valley Agro", customerCode: "CUST-001", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-10", deliveryDate: "2024-01-17", status: "delivered", lineItems: [], totalAmount: 125000, requiresApproval: true, items: 5, createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10" },
-  { id: 2, soNumber: "SO-2024-002", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-12", deliveryDate: "2024-01-19", status: "dispatched", lineItems: [], totalAmount: 78500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12" },
-  { id: 3, soNumber: "SO-2024-003", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-14", deliveryDate: "2024-01-21", status: "confirmed", lineItems: [], totalAmount: 95000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-14", updatedBy: "Admin", updatedDate: "2024-01-14" },
-  { id: 4, soNumber: "SO-2024-004", customerId: 4, customerName: "AgroPlus Distributors", customerCode: "CUST-004", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-15", deliveryDate: "2024-01-22", status: "draft", lineItems: [], totalAmount: 45000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15" },
-  { id: 5, soNumber: "SO-2024-005", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-08", deliveryDate: "2024-01-15", status: "delivered", lineItems: [], totalAmount: 189000, requiresApproval: true, items: 6, createdBy: "Admin", createdDate: "2024-01-08", updatedBy: "Admin", updatedDate: "2024-01-08" },
-  { id: 6, soNumber: "SO-2024-006", customerId: 6, customerName: "Rural Inputs Co.", customerCode: "CUST-006", territory: "Central Zone", salesManId: 5, salesManName: "Vikram Das", orderDate: "2024-01-09", deliveryDate: "2024-01-16", status: "cancelled", lineItems: [], totalAmount: 92000, requiresApproval: true, items: 4, createdBy: "Admin", createdDate: "2024-01-09", updatedBy: "Admin", updatedDate: "2024-01-09" },
-  { id: 7, soNumber: "SO-2024-007", customerId: 7, customerName: "BioGrow Agro", customerCode: "CUST-007", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-16", deliveryDate: "2024-01-23", status: "confirmed", lineItems: [], totalAmount: 72000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-16", updatedBy: "Admin", updatedDate: "2024-01-16" },
-  { id: 8, soNumber: "SO-2024-008", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-17", deliveryDate: "2024-01-24", status: "dispatched", lineItems: [], totalAmount: 67500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-17", updatedBy: "Admin", updatedDate: "2024-01-17" },
-  { id: 9, soNumber: "SO-2024-009", customerId: 9, customerName: "CropCare India", customerCode: "CUST-009", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-05", deliveryDate: "2024-01-12", status: "delivered", lineItems: [], totalAmount: 445000, requiresApproval: true, items: 9, createdBy: "Admin", createdDate: "2024-01-05", updatedBy: "Admin", updatedDate: "2024-01-05" },
-  { id: 10, soNumber: "SO-2024-010", customerId: 10, customerName: "Seeds & More", customerCode: "CUST-010", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-18", deliveryDate: "2024-01-25", status: "draft", lineItems: [], totalAmount: 28000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18" },
-  { id: 11, soNumber: "SO-2024-011", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-19", deliveryDate: "2024-01-26", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 62000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-19", updatedBy: "Admin", updatedDate: "2024-01-19" },
-  { id: 12, soNumber: "SO-2024-012", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-20", deliveryDate: "2024-01-27", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 98000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-20", updatedBy: "Admin", updatedDate: "2024-01-20" },
-  { id: 13, soNumber: "SO-2024-013", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-06", deliveryDate: "2024-01-13", status: "approved", approvalStatus: "approved", approvedBy: "Admin", approvedDate: "2024-01-07", lineItems: [{ id: "line-13-ure", productId: 3, productCode: "PRD-003", productName: "Urea 46%", availableStock: 800, quantity: 5000, dealerPrice: 820, unitPrice: 820, discount: 0, discountValue: 0, schemeDiscountPercent: 0, schemeDiscountAmount: 0, finalRate: 820, schemeApplied: "No", gstAmount: 0, lineTotal: 4100000 }], totalAmount: 54000, requiresApproval: true, items: 1, createdBy: "Admin", createdDate: "2024-01-06", updatedBy: "Admin", updatedDate: "2024-01-07" },
-  { id: 14, soNumber: "SO-2024-014", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-04", deliveryDate: "2024-01-11", status: "rejected", approvalStatus: "rejected", rejectedBy: "Admin", rejectedDate: "2024-01-05", rejectionReason: "Discount exceeds approved limit for this customer tier.", lineItems: [], totalAmount: 112000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-04", updatedBy: "Admin", updatedDate: "2024-01-05" },
+  { id: 1, soNumber: "SO-2024-001", customerId: 1, customerName: "Green Valley Agro", customerCode: "CUST-001", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-10", deliveryDate: "2024-01-17", status: "delivered", lineItems: [], totalAmount: 125000, requiresApproval: true, items: 5, createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10" },
+  { id: 2, soNumber: "SO-2024-002", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-12", deliveryDate: "2024-01-19", status: "dispatched", lineItems: [], totalAmount: 78500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12" },
+  { id: 3, soNumber: "SO-2024-003", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-14", deliveryDate: "2024-01-21", status: "confirmed", lineItems: [], totalAmount: 95000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-14", updatedBy: "Admin", updatedDate: "2024-01-14" },
+  { id: 4, soNumber: "SO-2024-004", customerId: 4, customerName: "AgroPlus Distributors", customerCode: "CUST-004", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-15", deliveryDate: "2024-01-22", status: "draft", lineItems: [], totalAmount: 45000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15" },
+  { id: 5, soNumber: "SO-2024-005", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-08", deliveryDate: "2024-01-15", status: "delivered", lineItems: [], totalAmount: 189000, requiresApproval: true, items: 6, createdBy: "Admin", createdDate: "2024-01-08", updatedBy: "Admin", updatedDate: "2024-01-08" },
+  { id: 6, soNumber: "SO-2024-006", customerId: 6, customerName: "Rural Inputs Co.", customerCode: "CUST-006", salesManId: 5, salesManName: "Vikram Das", orderDate: "2024-01-09", deliveryDate: "2024-01-16", status: "cancelled", lineItems: [], totalAmount: 92000, requiresApproval: true, items: 4, createdBy: "Admin", createdDate: "2024-01-09", updatedBy: "Admin", updatedDate: "2024-01-09" },
+  { id: 7, soNumber: "SO-2024-007", customerId: 7, customerName: "BioGrow Agro", customerCode: "CUST-007", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-16", deliveryDate: "2024-01-23", status: "confirmed", lineItems: [], totalAmount: 72000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-16", updatedBy: "Admin", updatedDate: "2024-01-16" },
+  { id: 8, soNumber: "SO-2024-008", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-17", deliveryDate: "2024-01-24", status: "dispatched", lineItems: [], totalAmount: 67500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-17", updatedBy: "Admin", updatedDate: "2024-01-17" },
+  { id: 9, soNumber: "SO-2024-009", customerId: 9, customerName: "CropCare India", customerCode: "CUST-009", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-05", deliveryDate: "2024-01-12", status: "delivered", lineItems: [], totalAmount: 445000, requiresApproval: true, items: 9, createdBy: "Admin", createdDate: "2024-01-05", updatedBy: "Admin", updatedDate: "2024-01-05" },
+  { id: 10, soNumber: "SO-2024-010", customerId: 10, customerName: "Seeds & More", customerCode: "CUST-010", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-18", deliveryDate: "2024-01-25", status: "draft", lineItems: [], totalAmount: 28000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18" },
+  { id: 11, soNumber: "SO-2024-011", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-19", deliveryDate: "2024-01-26", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 62000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-19", updatedBy: "Admin", updatedDate: "2024-01-19" },
+  { id: 12, soNumber: "SO-2024-012", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-20", deliveryDate: "2024-01-27", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 98000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-20", updatedBy: "Admin", updatedDate: "2024-01-20" },
+  { id: 13, soNumber: "SO-2024-013", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-06", deliveryDate: "2024-01-13", status: "approved", approvalStatus: "approved", approvedBy: "Admin", approvedDate: "2024-01-07", lineItems: [{ id: "line-13-ure", productId: 3, productCode: "PRD-003", productName: "Urea 46%", availableStock: 800, quantity: 5000, dealerPrice: 820, unitPrice: 820, discount: 0, discountValue: 0, schemeDiscountPercent: 0, schemeDiscountAmount: 0, finalRate: 820, schemeApplied: "No", gstAmount: 0, lineTotal: 4100000 }], totalAmount: 54000, requiresApproval: true, items: 1, createdBy: "Admin", createdDate: "2024-01-06", updatedBy: "Admin", updatedDate: "2024-01-07" },
+  { id: 14, soNumber: "SO-2024-014", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-04", deliveryDate: "2024-01-11", status: "rejected", approvalStatus: "rejected", rejectedBy: "Admin", rejectedDate: "2024-01-05", rejectionReason: "Discount exceeds approved limit for this customer tier.", lineItems: [], totalAmount: 112000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-04", updatedBy: "Admin", updatedDate: "2024-01-05" },
 ];
 
 /** Bulk statuses for pagination testing — maps to existing OrderStatus values. */
@@ -335,7 +333,6 @@ function buildSeedOrder(id: number, status: OrderStatus): SalesOrder {
     customerId: customer.id,
     customerName: customer.name,
     customerCode: customer.code,
-    territory: customer.territory,
     salesManId: salesman.id,
     salesManName: salesman.name,
     orderDate,
@@ -1508,7 +1505,6 @@ export function buildOrderFromForm(
     customerId: customer.id,
     customerName: customer.customerName,
     customerCode: customer.customerCode,
-    territory: customer.territoryName || "—",
     salesManId: salesman.id,
     salesManName: salesman.fullName,
     orderDate: form.orderDate,

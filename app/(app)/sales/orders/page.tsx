@@ -160,6 +160,7 @@ export default function SalesOrdersPage() {
     const fieldMap: Record<string, string> = {
       soNumber: "so_number",
       customerName: "customer__customer_name",
+      items: "items",
       status: "status",
       orderDate: "order_date",
       totalAmount: "grand_total",
@@ -294,14 +295,6 @@ export default function SalesOrdersPage() {
           <p className="text-xs font-semibold text-foreground">{row.customerName}</p>
           <p className="text-[11px] text-muted-foreground">{row.customerCode}</p>
         </div>
-      )
-    },
-    {
-      key: "territory",
-      header: "Territory",
-      sortable: true,
-      render: (val, row) => (
-        <span className="text-xs text-muted-foreground">{row.territory}</span>
       )
     },
     {
