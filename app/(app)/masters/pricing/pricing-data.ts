@@ -1580,7 +1580,7 @@ function validateAddPricingForm(
   }
 
   if (form.productLines.length === 0) {
-    errors.productLines = "At least one product is required.";
+    errors.productLines = "Product is required.";
     return errors;
   }
 

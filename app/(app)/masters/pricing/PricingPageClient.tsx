@@ -10,7 +10,6 @@ import {
   Eye,
   IndianRupee,
   X,
-  Trash2,
   AlertTriangle,
   ListChecks,
   CalendarClock,
@@ -116,7 +115,7 @@ export default function PricingMasterPage() {
   const [active, setActive] = useState<PricingListRecord | null>(null);
   const [form, setForm] = useState<PricingForm>(DEFAULT_PRICING_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<PricingListRecord | null>(null);
+  const [statusTarget, setStatusTarget] = useState<PricingListRecord | null>(null);
 
   const ordering = useMemo(
     () => sortStateToOrdering(sort.key, sort.direction),
@@ -333,10 +332,20 @@ export default function PricingMasterPage() {
     setPage(1);
   };
 
-  const toggleStatus = (record: PricingListRecord) => {
-    const nextActive = record.status !== "active";
+  const requestStatusToggle = (record: PricingListRecord) => {
+    setStatusTarget(record);
+  };
+
+  const confirmStatusChange = () => {
+    if (!statusTarget?.pricingUuid) {
+      setToast({ msg: "Pricing id missing. Unable to update status.", type: "error" });
+      setStatusTarget(null);
+      return;
+    }
+
+    const nextActive = statusTarget.status !== "active";
     toggleStatusMutation.mutate(
-      { id: record.pricingUuid, isActive: nextActive },
+      { id: statusTarget.pricingUuid, isActive: nextActive },
       {
         onSuccess: () =>
           setToast({
@@ -348,6 +357,9 @@ export default function PricingMasterPage() {
             msg: getErrorMessage(error, "Failed to update pricing status."),
             type: "error",
           }),
+        onSettled: () => {
+          setStatusTarget(null);
+        },
       },
     );
   };
@@ -387,7 +399,7 @@ export default function PricingMasterPage() {
       {
         key: "supplierName",
         header: "Supplier Name",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: supplierNameOptions,
@@ -397,7 +409,7 @@ export default function PricingMasterPage() {
       {
         key: "supplierCode",
         header: "Supplier Code",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: supplierCodeOptions,
@@ -429,7 +441,7 @@ export default function PricingMasterPage() {
       {
         key: "category",
         header: "Category",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: categoryOptions,
@@ -439,7 +451,7 @@ export default function PricingMasterPage() {
       {
         key: "segment",
         header: "Segment",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: segmentOptions,
@@ -449,7 +461,7 @@ export default function PricingMasterPage() {
       {
         key: "packSize",
         header: "Pack Size",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: packSizeOptions,
@@ -459,7 +471,7 @@ export default function PricingMasterPage() {
       {
         key: "unit",
         header: "Unit",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: unitOptions,
@@ -471,7 +483,7 @@ export default function PricingMasterPage() {
       {
         key: "gstPct",
         header: "GST %",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: gstPctOptions,
@@ -494,7 +506,7 @@ export default function PricingMasterPage() {
       {
         key: "mrp",
         header: "MRP",
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: mrpOptions,
@@ -513,7 +525,7 @@ export default function PricingMasterPage() {
         render: (_val, row) => (
           <ListingStatusToggle
             active={isActiveStatus(row.status)}
-            onChange={() => toggleStatus(row)}
+            onChange={() => requestStatusToggle(row)}
           />
         ),
       },
@@ -593,29 +605,6 @@ export default function PricingMasterPage() {
             msg: getErrorMessage(error, "Failed to update pricing rule."),
             type: "error",
           }),
-      },
-    );
-  };
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    toggleStatusMutation.mutate(
-      { id: deleteTarget.pricingUuid, isActive: false },
-      {
-        onSuccess: () => {
-          setDeleteTarget(null);
-          setToast({
-            msg: `"${deleteTarget.productName}" marked as inactive`,
-            type: "success",
-          });
-        },
-        onError: (error) => {
-          setDeleteTarget(null);
-          setToast({
-            msg: getErrorMessage(error, "Failed to deactivate pricing rule."),
-            type: "error",
-          });
-        },
       },
     );
   };
@@ -834,6 +823,47 @@ export default function PricingMasterPage() {
           ) : null
         }
       />
+
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              {statusTarget?.status === "active" ? "Deactivate Pricing?" : "Activate Pricing?"}
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1">
+              {statusTarget && (
+                <>
+                  <strong className="text-foreground">
+                    {statusTarget.productName || "Pricing rule"}
+                  </strong>{" "}
+                  will be marked as{" "}
+                  {statusTarget.status === "active" ? "inactive" : "active"}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setStatusTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </ListingContainer>

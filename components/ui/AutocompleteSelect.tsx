@@ -42,6 +42,11 @@ interface AutocompleteSelectProps {
   disabled?: boolean;
   error?: boolean;
   multiple?: boolean;
+  /**
+   * When true, selection is held as a draft and only committed via the Done button.
+   * Closing the popover without Done discards draft changes.
+   */
+  confirmOnDone?: boolean;
   className?: string;
   /** Extra classes on the dropdown panel (e.g. min-w for narrow table cells). */
   popoverClassName?: string;
@@ -61,6 +66,7 @@ export function AutocompleteSelect({
   disabled = false,
   error = false,
   multiple = false,
+  confirmOnDone = false,
   className,
   popoverClassName,
   renderTriggerLabel,
@@ -71,6 +77,9 @@ export function AutocompleteSelect({
 }: AutocompleteSelectProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [draft, setDraft] = useState<string | string[]>(value);
+
+  const activeValue = confirmOnDone && open ? draft : value;
 
   const filtered = options.filter((opt) => {
     const haystack = `${opt.label} ${opt.sublabel ?? ""} ${opt.searchText ?? ""}`.toLowerCase();
@@ -79,36 +88,58 @@ export function AutocompleteSelect({
 
   const handleOpenChange = (next: boolean) => {
     if (disabled) return;
-    setOpen(next);
-    if (!next) {
-      setQ("");
-      onBlur?.();
+    if (next) {
+      setDraft(value);
+      setOpen(true);
+      return;
     }
+    setQ("");
+    setDraft(value);
+    setOpen(false);
+    onBlur?.();
   };
 
   const handleSelect = (val: string) => {
     if (multiple) {
-      const currentValues = Array.isArray(value) ? value : [];
-      if (currentValues.includes(val)) {
-        onChange(currentValues.filter((v) => v !== val));
+      const currentValues = Array.isArray(activeValue) ? activeValue : [];
+      const next = currentValues.includes(val)
+        ? currentValues.filter((v) => v !== val)
+        : [...currentValues, val];
+      if (confirmOnDone) {
+        setDraft(next);
       } else {
-        onChange([...currentValues, val]);
+        onChange(next);
       }
-    } else {
-      onChange(val);
-      setOpen(false);
-      setQ("");
+      return;
     }
+
+    if (confirmOnDone) {
+      setDraft(val);
+      return;
+    }
+
+    onChange(val);
+    setOpen(false);
+    setQ("");
+  };
+
+  const handleDone = () => {
+    if (confirmOnDone) {
+      onChange(draft);
+    }
+    setQ("");
+    setOpen(false);
+    onBlur?.();
   };
 
   const isSelected = (val: string) => {
     if (multiple) {
-      return Array.isArray(value) && value.includes(val);
+      return Array.isArray(activeValue) && activeValue.includes(val);
     }
-    return value === val;
+    return activeValue === val;
   };
 
-  // Get selected labels for display
+  // Get selected labels for display (always from committed value)
   const getSelectedLabel = () => {
     if (multiple) {
       const currentValues = Array.isArray(value) ? value : [];
@@ -144,6 +175,12 @@ export function AutocompleteSelect({
   };
 
   const isDense = Boolean(className?.includes("h-6") || className?.includes("h-7"));
+  const showDoneFooter = multiple || confirmOnDone;
+  const draftCount = Array.isArray(activeValue)
+    ? activeValue.length
+    : activeValue
+      ? 1
+      : 0;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -228,13 +265,19 @@ export function AutocompleteSelect({
                   <button
                     type="button"
                     onClick={() => {
-                      const allSelected = Array.isArray(value) && value.length === options.length;
-                      onChange(allSelected ? [] : options.map((o) => o.value));
+                      const allSelected =
+                        Array.isArray(activeValue) && activeValue.length === options.length;
+                      const next = allSelected ? [] : options.map((o) => o.value);
+                      if (confirmOnDone) {
+                        setDraft(next);
+                      } else {
+                        onChange(next);
+                      }
                     }}
                     className="w-full flex items-center gap-2 px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-muted/60 rounded-md"
                   >
                     <Checkbox
-                      checked={Array.isArray(value) && value.length === options.length}
+                      checked={Array.isArray(activeValue) && activeValue.length === options.length}
                       className="w-3.5 h-3.5"
                     />
                     Select All
@@ -285,14 +328,18 @@ export function AutocompleteSelect({
           )}
         </div>
 
-        {multiple && (
+        {showDoneFooter && (
           <div className="flex items-center justify-between border-t border-border px-2.5 py-2">
             <span className="text-[10px] text-muted-foreground">
-              {Array.isArray(value) ? value.length : 0} of {options.length} selected
+              {multiple
+                ? `${draftCount} of ${options.length} selected`
+                : draftCount
+                  ? "1 selected"
+                  : "None selected"}
             </span>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={handleDone}
               className="text-[11px] font-medium text-brand-600 hover:text-brand-700"
             >
               Done

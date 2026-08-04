@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -100,20 +101,40 @@ export function PricingScopeMultiSelect({
   disabled = false,
   error,
 }: PricingScopeMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>(selected);
+
   const isDisabled = disabled || applyToAll;
   const allSelected = selected.length === options.length && options.length > 0;
+  const allDraftSelected = draft.length === options.length && options.length > 0;
 
   const toggleValue = (value: string) => {
-    onChange(
-      selected.includes(value)
-        ? selected.filter((item) => item !== value)
-        : [...selected, value],
+    setDraft(
+      draft.includes(value)
+        ? draft.filter((item) => item !== value)
+        : [...draft, value],
     );
   };
 
-  const selectAll = () => onChange([...options]);
-  const clearAll = () => onChange([]);
+  const selectAll = () => setDraft([...options]);
+  const clearAll = () => setDraft([]);
   const removeChip = (value: string) => onChange(selected.filter((item) => item !== value));
+
+  const handleOpenChange = (next: boolean) => {
+    if (isDisabled) return;
+    if (next) {
+      setDraft(selected);
+      setOpen(true);
+      return;
+    }
+    setDraft(selected);
+    setOpen(false);
+  };
+
+  const handleDone = () => {
+    onChange(draft);
+    setOpen(false);
+  };
 
   return (
     <div className="space-y-1.5">
@@ -129,7 +150,7 @@ export function PricingScopeMultiSelect({
           isDisabled && "bg-muted/25",
         )}
       >
-        <Popover>
+        <Popover open={open} onOpenChange={handleOpenChange}>
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -171,7 +192,7 @@ export function PricingScopeMultiSelect({
               >
                 {selectAllLabel}
               </button>
-              {selected.length > 0 && (
+              {draft.length > 0 && (
                 <button
                   type="button"
                   onClick={clearAll}
@@ -183,7 +204,7 @@ export function PricingScopeMultiSelect({
             </div>
             <div className="max-h-52 overflow-y-auto p-1">
               {options.map((option) => {
-                const checked = selected.includes(option);
+                const checked = draft.includes(option);
                 return (
                   <button
                     key={option}
@@ -205,6 +226,19 @@ export function PricingScopeMultiSelect({
                   </button>
                 );
               })}
+            </div>
+            <div className="flex items-center justify-between border-t border-border px-2.5 py-2">
+              <span className="text-[10px] text-muted-foreground">
+                {draft.length} of {options.length} selected
+                {allDraftSelected ? " (all)" : ""}
+              </span>
+              <button
+                type="button"
+                onClick={handleDone}
+                className="text-[11px] font-medium text-brand-600 hover:text-brand-700"
+              >
+                Done
+              </button>
             </div>
           </PopoverContent>
         </Popover>
