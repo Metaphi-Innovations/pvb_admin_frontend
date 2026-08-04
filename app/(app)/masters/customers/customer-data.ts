@@ -2195,7 +2195,7 @@ export function validateGSTIN(v: string): boolean {
 export { validatePAN, validateTAN, validateMSMENumber } from "@/lib/masters/gst-compliance";
 
 export function validateMobile(v: string): boolean {
-	return /^[6-9][0-9]{9}$/.test(v.trim());
+	return /^[0-9]{10}$/.test(v.trim());
 }
 
 export function validateEmail(v: string): boolean {

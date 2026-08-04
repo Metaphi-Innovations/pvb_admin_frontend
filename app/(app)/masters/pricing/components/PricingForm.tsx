@@ -14,7 +14,6 @@ import {
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { BulkPricingGrid } from "./BulkPricingGrid";
-import { PricingProductMultiSelect } from "./PricingProductMultiSelect";
 import { PricingScopeMultiSelect } from "./PricingScopeMultiSelect";
 import {
   PRICING_CUSTOMER_TYPES,
@@ -96,7 +95,10 @@ export function PricingForm({
   onClearError,
 }: PricingFormProps) {
   const combinationCount = countPricingCombinations(form);
-  const selectedProductIds = form.productLines.map((line) => String(line.id));
+  const selectedProductId =
+    form.productLines.length > 0
+      ? form.productLines[0].productUuid || String(form.productLines[0].id)
+      : "";
   const hasProductsSelected = mode === "edit" ? Boolean(form.productId) : form.productLines.length > 0;
   const editDealerPriceError =
     errors.dealerPrice || getDealerPriceInlineError(form.dealerPrice, form.mrp);
@@ -112,7 +114,9 @@ export function PricingForm({
       return;
     }
 
-    const selectedIds = form.productLines.map((line) => String(line.id));
+    const selectedIds = form.productLines.map(
+      (line) => line.productUuid || String(line.id),
+    );
     const synced = syncPricingProductLines(form, selectedIds, productCatalog);
     const mrpChanged = synced.productLines.some(
       (line, index) => line.mrp !== form.productLines[index]?.mrp,
@@ -150,17 +154,27 @@ export function PricingForm({
     onChange(next);
   };
 
-  const handleProductSelectionChange = (selectedIds: string[]) => {
+  const handleProductSelectionChange = (selectedId: string) => {
+    const selectedIds = selectedId ? [selectedId] : [];
     const next = syncPricingProductLines(form, selectedIds, productCatalog);
-    onChange(next);
+    onChange({
+      ...next,
+      states: [],
+      customerTypes: [],
+      state: "",
+      customerType: "",
+      applyToAllStates: false,
+      applyToAllCustomerTypes: false,
+    });
     onClearError?.("productLines");
+    onClearError?.("states");
+    onClearError?.("customerTypes");
+    onClearError?.("state");
+    onClearError?.("customerType");
   };
 
-  const handleRemoveProductLine = (productId: number) => {
-    const nextIds = form.productLines
-      .map((line) => String(line.id))
-      .filter((id) => id !== String(productId));
-    handleProductSelectionChange(nextIds);
+  const handleRemoveProductLine = (_productId?: number) => {
+    handleProductSelectionChange("");
   };
 
   if (mode === "edit") {
@@ -286,14 +300,16 @@ export function PricingForm({
     <div className={pricingFormShellClass}>
       <PricingFormSection title="Product Selection">
         <div className="space-y-3">
-          <MasterField label="Products" required error={errors.productLines}>
-            <PricingProductMultiSelect
+          <MasterField label="Product" required error={errors.productLines}>
+            <AutocompleteSelect
               options={productOptions}
-              value={selectedProductIds}
+              value={selectedProductId}
               onChange={handleProductSelectionChange}
               placeholder="Search product code, name, or SKU..."
               searchPlaceholder="Search product code, name, SKU, supplier, or HSN..."
               error={Boolean(errors.productLines)}
+              confirmOnDone
+              className={cn(pricingInput(), errors.productLines && "border-red-400")}
             />
           </MasterField>
 
@@ -313,7 +329,7 @@ export function PricingForm({
         <PricingFormSection title="State and Customer Type">
           <p className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
             Select one or more states and customer types. Pricing records will be created for
-            every combination of selected products, states, and customer types.
+            every combination of the selected product, states, and customer types.
           </p>
           <PricingFormGrid>
             <div className="col-span-2 md:col-span-1">
