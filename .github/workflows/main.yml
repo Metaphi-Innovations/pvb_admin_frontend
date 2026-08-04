@@ -2,7 +2,7 @@ name: Frontend Deploy - pvb.dev.metaphi.in.
 on:
   push:
     branches:
-      - main
+      - staging
 
 jobs:
   deploy:
@@ -23,12 +23,12 @@ jobs:
           rsync -av --delete \
                     --exclude='.git' \
                     --exclude='.env' \
-                    ./ /var/www/pvb.uat.metaphi.in/ 
+                    ./ /var/www/pvb.dev.metaphi.in/ 
       - name: remove next and node_modules              
         run: rm -rf .next node_modules package-lock.json && npm cache clean --force           
-      - name: Install dependencies on pvb.uat.metaphi.in
-        working-directory: /var/www/pvb.uat.metaphi.in
+      - name: Install dependencies on pvb.dev.metaphi.in
+        working-directory: /var/www/pvb.dev.metaphi.in
         run: npm ci && npm run build
 
       - name: pm2 restart
-        run: pm2 restart pvb.uat.metaphi.in
+        run: pm2 restart pvb.dev.metaphi.in
