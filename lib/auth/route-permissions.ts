@@ -173,6 +173,10 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
     candidates: [{ module: "sales", submodule: "stock_transfers" }],
   },
   {
+    prefix: "/sales/scheme-progress",
+    candidates: [{ module: "sales", submodule: "scheme_progress" }],
+  },
+  {
     prefix: "/warehouse/grn",
     candidates: [
       { module: "warehouse", submodule: "grn" },
@@ -302,6 +306,7 @@ export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   ],
   "/sales/sample-order": [{ module: "sales", submodule: "sample_orders" }],
   "/sales/stock-transfer": [{ module: "sales", submodule: "stock_transfers" }],
+  "/sales/scheme-progress": [{ module: "sales", submodule: "scheme_progress" }],
   "/warehouse/grn": [{ module: "warehouse", submodule: "grn" }],
   "/warehouse/qc": [{ module: "warehouse", submodule: "qc" }],
   "/warehouse/packing": [{ module: "warehouse", submodule: "packing" }],
