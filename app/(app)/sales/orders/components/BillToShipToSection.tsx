@@ -235,6 +235,7 @@ export default function BillToShipToSection({
 	errors,
 	emptyHint = "Select a customer to load Bill To / Ship To addresses.",
 	readOnly = false,
+	shipLocked = false,
 	billAddress,
 	shipAddress,
 }: {
@@ -248,29 +249,32 @@ export default function BillToShipToSection({
 	errors?: { billToAddressId?: string; shipToAddressId?: string };
 	emptyHint?: string;
 	readOnly?: boolean;
+	/** When true (and not fully readOnly), Ship To is display-only while Bill To stays selectable. */
+	shipLocked?: boolean;
 	billAddress?: SalesOrderCustomerAddress | null;
 	shipAddress?: SalesOrderCustomerAddress | null;
 }) {
 	const billList = billOptions ?? addresses ?? [];
 	const shipList = shipOptions ?? addresses ?? [];
 
+	const resolvedShip =
+		shipAddress ??
+		(shipToAddressId ? shipList.find((a) => a.id === shipToAddressId) ?? null : null);
+
 	if (readOnly) {
 		const bill =
 			billAddress ??
 			(billToAddressId ? billList.find((a) => a.id === billToAddressId) ?? null : null);
-		const ship =
-			shipAddress ??
-			(shipToAddressId ? shipList.find((a) => a.id === shipToAddressId) ?? null : null);
 
 		return (
 			<div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
 				<ReadOnlyAddressCard label='Bill To' address={bill} />
-				<ReadOnlyAddressCard label='Ship To' address={ship} />
+				<ReadOnlyAddressCard label='Ship To' address={resolvedShip} />
 			</div>
 		);
 	}
 
-	if (billList.length === 0 && shipList.length === 0) {
+	if (billList.length === 0 && shipList.length === 0 && !resolvedShip) {
 		return (
 			<div className='rounded-lg border border-dashed border-border px-3 py-2.5 bg-muted/20'>
 				<p className='text-[11px] text-muted-foreground'>{emptyHint}</p>
@@ -289,15 +293,19 @@ export default function BillToShipToSection({
 				placeholder='Select bill to address…'
 				error={errors?.billToAddressId}
 			/>
-			<AddressSelector
-				label='Ship To'
-				required
-				value={shipToAddressId}
-				onChange={onShipToChange}
-				options={shipList}
-				placeholder='Select ship to address…'
-				error={errors?.shipToAddressId}
-			/>
+			{shipLocked ? (
+				<ReadOnlyAddressCard label='Ship To' address={resolvedShip} />
+			) : (
+				<AddressSelector
+					label='Ship To'
+					required
+					value={shipToAddressId}
+					onChange={onShipToChange}
+					options={shipList}
+					placeholder='Select ship to address…'
+					error={errors?.shipToAddressId}
+				/>
+			)}
 		</div>
 	);
 }
