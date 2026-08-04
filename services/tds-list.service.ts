@@ -59,6 +59,8 @@ export interface TdsFilterOption {
 export interface TdsDropdownItem {
   tdsUuid: string;
   sectionCode: string;
+  tdsRate: string;
+  sectionName: string;
 }
 
 export type TdsFilterField =
@@ -312,6 +314,8 @@ export const TdsListService = {
       return {
         tdsUuid: asString(record.tds_id),
         sectionCode: asString(record.tds_code),
+        tdsRate: formatRate(record.tds_rate),
+        sectionName: asString(record.tds_section_name),
       };
     });
   },
