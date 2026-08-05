@@ -291,8 +291,6 @@ function mapInvoices(raw: unknown): PurchaseOrder["activity"] {
 }
 
 export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
-
-  console.log("raw",raw)
   const supplier = asRecord(raw.supplier);
   const snapshot = asRecord(raw.supplier_snapshot);
   const supplierTypeFromSupplier = asString(

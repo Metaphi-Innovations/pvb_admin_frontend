@@ -72,6 +72,8 @@ export interface StockTransfer {
   targetWarehouseName: string;
   targetWarehouseCode: string;
   status: TransferStatus;
+  /** Warehouse packing/dispatch pipeline — separate from approval `status`. */
+  fulfillmentStatus?: string;
   requestedBy?: string;
   reasonPurpose?: string;
   transportDetails?: string;

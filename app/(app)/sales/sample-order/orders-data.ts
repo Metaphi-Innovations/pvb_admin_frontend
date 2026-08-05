@@ -62,6 +62,17 @@ export type OrderStatus =
   | "dispatched"
   | "delivered";
 
+/** Warehouse / logistics pipeline (mirrors SampleOrder.fulfillment_status). */
+export type FulfillmentStatus =
+  | "PENDING"
+  | "Ready For Packing"
+  | "Partially Packed"
+  | "Fully Packed"
+  | "Partially Dispatched"
+  | "Fully Dispatched"
+  | "CANCELLED"
+  | string;
+
 export type PackingStatus =
   | "draft"
   | "generated"
@@ -91,6 +102,15 @@ export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
   { value: "dispatched", label: "Dispatched" },
   { value: "delivered", label: "Delivered" },
   { value: "cancelled", label: "Cancelled" },
+];
+
+export const FULFILLMENT_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "PENDING", label: "Pending" },
+  { value: "Ready For Packing", label: "Ready For Packing" },
+  { value: "Partially Packed", label: "Partially Packed" },
+  { value: "Fully Packed", label: "Fully Packed" },
+  { value: "Partially Dispatched", label: "Partially Dispatched" },
+  { value: "Fully Dispatched", label: "Fully Dispatched" },
 ];
 
 export interface SalesOrderLineItem {
@@ -144,6 +164,8 @@ export interface SalesOrder {
   orderDate: string;
   deliveryDate: string;
   status: OrderStatus;
+  /** Warehouse pipeline — separate from approval `status`. */
+  fulfillmentStatus?: FulfillmentStatus;
   lineItems: SalesOrderLineItem[];
   additionalExpenses?: SalesOrderAdditionalExpense[];
   totalAmount: number;
@@ -320,6 +342,13 @@ export function calculateOrderTotalsSummary(
 export function formatOrderStatus(status: OrderStatus): string {
   const opt = ORDER_STATUS_OPTIONS.find((o) => o.value === status);
   return opt?.label ?? status;
+}
+
+export function formatFulfillmentStatus(status?: string | null): string {
+  if (!status) return "Pending";
+  const opt = FULFILLMENT_STATUS_OPTIONS.find((o) => o.value === status);
+  if (opt) return opt.label;
+  return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
 }
 
 export function resolveApprovalStatus(order: SalesOrder): ApprovalStatus {

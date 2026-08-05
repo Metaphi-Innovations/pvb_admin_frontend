@@ -38,6 +38,7 @@ import {
   type SalesOrder,
   type OrderStatus,
   formatOrderStatus,
+  formatFulfillmentStatus,
   calculateOrderTotalsSummary,
   canEditOrder,
   canSplitOrder,
@@ -56,7 +57,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSalesOrder, useApproveRejectSalesOrder, useCancelSalesOrder } from "@/hooks/sales/use-sales-orders";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (["approved", "confirmed", "delivered", "dispatched"].includes(status)) return "active";
+  if (["approved", "confirmed", "APPROVED"].includes(status)) return "active";
   if (status === "draft") return "draft";
   if (["rejected", "cancelled"].includes(status)) return "blocked";
   if (status === "pending_approval") return "neutral";
@@ -205,6 +206,11 @@ export default function ViewSalesOrderPage() {
       value: formatOrderStatus(order.status),
       tone: orderStatusVariant(order.status) === "active" ? "approved" : orderStatusVariant(order.status) === "blocked" ? "rejected" : "neutral",
     },
+    {
+      label: "Fulfillment",
+      value: formatFulfillmentStatus(order.fulfillmentStatus),
+      tone: "neutral",
+    },
   ];
   if (order.approvedBy) {
     approvalItems.push({ label: "Approved By", value: order.approvedBy, tone: "neutral" });
@@ -314,6 +320,7 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Salesman ID" value={order.salesManId ?? "—"} />
               <RecordKvRow label="Salesman" value={order.salesManName} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
+              <RecordKvRow label="Fulfillment Status" value={formatFulfillmentStatus(order.fulfillmentStatus)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
               <RecordKvRow label="Total Amount" value={formatRupee(totals.grandTotal)} amount />
               <RecordKvRow label="Remarks" value={order.remarks?.trim() || "—"} isLast />

@@ -17,7 +17,6 @@ export const CREDIT_UTILIZING_ORDER_STATUSES: OrderStatus[] = [
 	"pending_approval",
 	"approved",
 	"confirmed",
-	"dispatched",
 ];
 
 /** Available credit ≤ this fraction of total limit → amber "Near Credit Limit". */

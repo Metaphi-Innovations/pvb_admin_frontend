@@ -49,6 +49,8 @@ import {
   type OrderStatus,
   loadOrders,
   formatOrderStatus,
+  formatFulfillmentStatus,
+  FULFILLMENT_STATUS_OPTIONS,
   ORDER_STATUS_OPTIONS,
   canEditOrder,
   canCancelOrder,
@@ -124,6 +126,18 @@ function StatusPill({ status }: { status: string }) {
     <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
       {formatOrderStatus(status as OrderStatus)}
+    </span>
+  );
+}
+
+function FulfillmentPill({ status }: { status?: string | null }) {
+  const label = formatFulfillmentStatus(status);
+  const key = label.toLowerCase().replace(/\s+/g, "_");
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.draft;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+      {label}
     </span>
   );
 }
@@ -505,6 +519,15 @@ export default function SalesOrdersPage() {
           {row.packingListNumber && <p className="text-[10px] text-muted-foreground mt-0.5">{row.packingListNumber}</p>}
         </div>
       )
+    },
+    {
+      key: "fulfillmentStatus",
+      header: "Fulfillment",
+      sortable: false,
+      filterable: activeTab === "all",
+      filterType: "dropdown",
+      filterOptions: FULFILLMENT_STATUS_OPTIONS,
+      render: (_val, row) => <FulfillmentPill status={row.fulfillmentStatus} />,
     },
     {
       key: "orderDate",

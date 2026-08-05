@@ -33,6 +33,7 @@ import {
   canDownloadNote,
   canGeneratePackingList,
 } from "../stock-transfer-data";
+import { formatFulfillmentStatus } from "@/app/(app)/sales/orders/orders-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
 import CancelTransferDialog from "../components/CancelTransferDialog";
 import {
@@ -155,6 +156,11 @@ export default function ViewStockTransferPage() {
         value: formatTransferStatus(transfer.status),
         tone: (transfer.status === "approved" || transfer.status === "confirmed" || transfer.status === "received") ? "approved" : (transfer.status === "cancelled" || transfer.status === "rejected") ? "rejected" : transfer.status === "pending" ? "pending" : "neutral",
       },
+      {
+        label: "Fulfillment",
+        value: formatFulfillmentStatus(transfer.fulfillmentStatus),
+        tone: "neutral",
+      },
     ],
   };
 
@@ -210,6 +216,7 @@ export default function ViewStockTransferPage() {
               <RecordKvRow label="Source Warehouse" value={`${transfer.sourceWarehouseCode} — ${transfer.sourceWarehouseName}`} />
               <RecordKvRow label="Target Warehouse" value={`${transfer.targetWarehouseCode} — ${transfer.targetWarehouseName}`} />
               <RecordKvRow label="Status" value={formatTransferStatus(transfer.status)} />
+              <RecordKvRow label="Fulfillment Status" value={formatFulfillmentStatus(transfer.fulfillmentStatus)} />
               <RecordKvRow label="Total Amount" value={formatRupee(transfer.totalAmount)} isLast />
             </RecordSectionCard>
 

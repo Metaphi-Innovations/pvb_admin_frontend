@@ -41,6 +41,7 @@ import {
   canDownloadNote,
   canGeneratePackingList,
 } from "./stock-transfer-data";
+import { formatFulfillmentStatus, FULFILLMENT_STATUS_OPTIONS } from "@/app/(app)/sales/orders/orders-data";
 import { printTransferPackingList } from "./transfer-note-document";
 import CancelTransferDialog from "./components/CancelTransferDialog";
 import {
@@ -79,6 +80,18 @@ function StatusPill({ status }: { status: string }) {
     <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
       {formatTransferStatus(status as TransferStatus)}
+    </span>
+  );
+}
+
+function FulfillmentPill({ status }: { status?: string | null }) {
+  const label = formatFulfillmentStatus(status);
+  const key = label.toLowerCase().replace(/\s+/g, "_");
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.draft;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+      {label}
     </span>
   );
 }
@@ -365,6 +378,15 @@ export default function StockTransferPage() {
       render: (val, row) => (
         <StatusPill status={row.status} />
       )
+    },
+    {
+      key: "fulfillmentStatus",
+      header: "Fulfillment",
+      sortable: false,
+      filterable: activeTab === "all",
+      filterType: "dropdown",
+      filterOptions: FULFILLMENT_STATUS_OPTIONS,
+      render: (_val, row) => <FulfillmentPill status={row.fulfillmentStatus} />,
     },
     {
       key: "createdBy",
