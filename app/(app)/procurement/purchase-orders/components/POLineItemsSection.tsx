@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
+import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, round2, type TaxSupplyType } from "@/lib/procurement/utils";
 import {
   applyGstMasterToTaxRates,
   findGstMasterIdByTotalPct,
@@ -139,6 +139,8 @@ interface POLineItemsSectionProps {
   taxSupplyType?: TaxSupplyType;
   supplierState?: string;
   linesError?: string;
+  /** Show Received / Invoiced qty columns (3-way match adjustment edit). */
+  showReceiptContext?: boolean;
 }
 
 export function POLineItemsSection({
@@ -151,6 +153,7 @@ export function POLineItemsSection({
   taxSupplyType = "intra",
   supplierState,
   linesError,
+  showReceiptContext = false,
 }: POLineItemsSectionProps) {
   const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
   const [quickQty, setQuickQty] = useState("1");
@@ -326,8 +329,8 @@ export function POLineItemsSection({
             orderUom: base.orderUom,
           }),
       orderedQtyPack: packingQty,
-      unitPrice: Number(inlineEditDraft.unitPrice) || 0,
-      cpSource: "manual",
+      unitPrice: Number(inlineEditDraft.unitPrice) || existing?.unitPrice || 0,
+      cpSource: existing?.cpSource ?? "manual",
       discountType: "percentage",
       discountPct: 0,
       discountFlatAmount: 0,
@@ -341,8 +344,6 @@ export function POLineItemsSection({
     patch({ lines: form.lines.filter((l) => l.uid !== uid) });
     if (inlineEditUid === uid) cancelInlineEdit();
   };
-
-  const getPreviewLine = (uid: string) => previewLines.find((l) => l.uid === uid);
 
   const getRequestedQty = (line: POLineItem) => {
     if (!line.prLineUid || !linkedPr) return null;
@@ -473,6 +474,16 @@ export function POLineItemsSection({
                 )}
                 <th className="w-20 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Qty</th>
                 <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">SKU Qty</th>
+                {showReceiptContext && (
+                  <>
+                    <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">
+                      Received
+                    </th>
+                    <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">
+                      Invoiced
+                    </th>
+                  </>
+                )}
                 <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Rate/SKU</th>
                 <th className="w-16 px-3 py-2.5 text-right text-xs font-semibold text-foreground">GST %</th>
                 {taxSupplyType === "intra" ? (
@@ -497,7 +508,6 @@ export function POLineItemsSection({
                 const draftInfo = draft?.productId
                   ? enrichProductFromDropdown(draft.productId, dbProducts)
                   : null;
-                const calcLine = getPreviewLine(line.uid);
                 const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
                 const displayPackaging = draftInfo?.packagingUnit ?? line.packagingUnit;
                 const displayConversion = draftInfo?.conversionQty ?? line.conversionQty;
@@ -505,7 +515,7 @@ export function POLineItemsSection({
                   isEditing && draft
                     ? calcPackingToBaseQty(Number(draft.packingQty) || 0, displayConversion)
                     : line.orderedQty;
-                const displayRate = isEditing && draft ? Number(draft.unitPrice) || 0 : line.unitPrice;
+                const displayRate = line.unitPrice;
                 const draftTaxRates =
                   isEditing && draft
                     ? applyGstMasterToTaxRates(Number(draft.gstMasterId), taxSupplyType)
@@ -517,33 +527,24 @@ export function POLineItemsSection({
                       draftTaxRates.igstPct,
                     )
                   : totalGstPctFromRates(line.cgstPct, line.sgstPct, line.igstPct);
-                const lineTax = calcLine
-                  ? calcLineAmounts({
-                      orderedQty: line.orderedQty,
-                      unitPrice: isEditing && draft ? Number(draft.unitPrice) || 0 : line.unitPrice,
-                      discountType: "percentage",
-                      discountPct: 0,
-                      discountFlatAmount: 0,
-                      cgstPct: draftTaxRates?.cgstPct ?? line.cgstPct,
-                      sgstPct: draftTaxRates?.sgstPct ?? line.sgstPct,
-                      igstPct: draftTaxRates?.igstPct ?? line.igstPct,
-                    })
-                  : calcLineAmounts({
-                      orderedQty: line.orderedQty,
-                      unitPrice: line.unitPrice,
-                      discountType: "percentage",
-                      discountPct: 0,
-                      discountFlatAmount: 0,
-                      cgstPct: line.cgstPct,
-                      sgstPct: line.sgstPct,
-                      igstPct: line.igstPct,
-                    });
+                // Live totals while editing Qty — must use draft packing → SKU qty, not stale line
+                const liveOrderedQty = displaySkuQty;
+                const lineTax = calcLineAmounts({
+                  orderedQty: liveOrderedQty,
+                  unitPrice: displayRate,
+                  discountType: "percentage",
+                  discountPct: 0,
+                  discountFlatAmount: 0,
+                  cgstPct: draftTaxRates?.cgstPct ?? line.cgstPct,
+                  sgstPct: draftTaxRates?.sgstPct ?? line.sgstPct,
+                  igstPct: draftTaxRates?.igstPct ?? line.igstPct,
+                });
                 const displayCgstPct = draftTaxRates?.cgstPct ?? line.cgstPct;
                 const displaySgstPct = draftTaxRates?.sgstPct ?? line.sgstPct;
                 const displayIgstPct = draftTaxRates?.igstPct ?? line.igstPct;
-                const netAmt = calcLine?.netAmount ?? line.netAmount ?? 0;
+                const netAmt = lineTax.netAmount;
                 const canEditRow = !readOnly;
-                const canChangeProduct = poType === "direct";
+                const canChangeProduct = poType === "direct" && !showReceiptContext;
 
                 return (
                   <tr
@@ -636,21 +637,25 @@ export function POLineItemsSection({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums">{displaySkuQty}</td>
+                    {showReceiptContext && (
+                      <>
+                        <td className="px-3 py-2 text-right">
+                          <span className="text-xs tabular-nums text-emerald-700 font-medium">
+                            {line.receivedBaseQty ??
+                              round2(
+                                (line.receivedQty ?? 0) * (line.conversionQty || 1),
+                              )}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <span className="text-xs tabular-nums text-brand-700 font-medium">
+                            {line.invoicedQty ?? 0}
+                          </span>
+                        </td>
+                      </>
+                    )}
                     <td className="px-3 py-2 text-right">
-                    <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
-                      {/* {isEditing && draft ? (
-                        <IndianRupeeInput
-                          value={Number(draft.unitPrice) || 0}
-                          onChange={(n) =>
-                            setInlineEditDraft((prev) =>
-                              prev ? { ...prev, unitPrice: String(n) } : prev,
-                            )
-                          }
-                          className={cn(inputCls, "w-24 ml-auto")}
-                        />
-                      ) : (
-                        <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
-                      )} */}
+                      <span className="text-xs tabular-nums">{formatCurrency(displayRate)}</span>
                     </td>
                     <td className="px-3 py-2 text-right">
                     <span className="text-xs tabular-nums">{displayGstPct}%</span>

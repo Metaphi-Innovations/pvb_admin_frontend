@@ -427,6 +427,7 @@ export function PurchaseOrderForm({
 	status,
 	submittedDate,
 	errors = {},
+	showReceiptContext = false,
 }: {
 	form: POFormValues;
 	onChange: (f: POFormValues) => void;
@@ -438,6 +439,8 @@ export function PurchaseOrderForm({
 	status?: string;
 	submittedDate?: string;
 	errors?: POFormErrors;
+	/** Show Received / Invoiced qty per line (3-way match adjustment). */
+	showReceiptContext?: boolean;
 }) {
 	const fileRef = useRef<HTMLInputElement>(null);
 
@@ -1247,6 +1250,7 @@ export function PurchaseOrderForm({
 					taxSupplyType={taxSupplyType}
 					supplierState={selectedSupplier?.state}
 					linesError={errors.lines}
+					showReceiptContext={showReceiptContext}
 				/>
 
 				<div className="border-t border-border/60 pt-4">
