@@ -190,6 +190,8 @@ export default function AccountsGenericLedgerFormClient({
             gstApplicable: Boolean(detail.gstApplicable),
             tdsApplicable: Boolean(detail.tdsApplicable),
             defaultTdsSection: detail.tdsSectionId ?? "",
+            tcsApplicable: Boolean(detail.tcsApplicable),
+            defaultTcsSection: detail.tcsSection ?? "",
             costCenterApplicable: Boolean(detail.costCenterApplicable),
           });
           setPreviewCode(detail.ledgerCode || row.accountCode);
@@ -313,6 +315,8 @@ export default function AccountsGenericLedgerFormClient({
           gstApplicable: form.gstApplicable,
           tdsApplicable: form.tdsApplicable,
           tdsSectionId: form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
+          tcsApplicable: form.tcsApplicable,
+          tcsSection: form.tcsApplicable && form.defaultTcsSection ? form.defaultTcsSection : null,
           costCenterApplicable: form.costCenterApplicable,
           billWiseOutstanding: form.billWiseAccounting,
           openingBalance,
@@ -328,6 +332,8 @@ export default function AccountsGenericLedgerFormClient({
           gstApplicable: form.gstApplicable,
           tdsApplicable: form.tdsApplicable,
           tdsSectionId: form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
+          tcsApplicable: form.tcsApplicable,
+          tcsSection: form.tcsApplicable && form.defaultTcsSection ? form.defaultTcsSection : null,
           costCenterApplicable: form.costCenterApplicable,
           billWiseOutstanding: form.billWiseAccounting,
         });
