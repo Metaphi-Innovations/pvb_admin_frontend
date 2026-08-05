@@ -16,7 +16,7 @@ import type {
   ColumnValueOption,
 } from "@/lib/accounts/column-filter-types";
 import { isColumnFilterActive } from "@/lib/accounts/column-filter-engine";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatMoneyNumber } from "@/lib/accounts/money-format";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 
 const BOOLEAN_OPTIONS: ColumnValueOption[] = [
@@ -32,7 +32,7 @@ function formatOptionLabel(
   if (optionLabels[value]) return optionLabels[value];
   if (filterType === "amount" || filterType === "number") {
     const n = Number(String(value).replace(/[₹,\s]/g, ""));
-    if (Number.isFinite(n)) return formatMoney(n);
+    if (Number.isFinite(n)) return formatMoneyNumber(n);
   }
   return value;
 }
@@ -110,6 +110,8 @@ export function AccountsColumnFilterPopover({
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
+  const [dateFrom, setDateFrom] = useState(value?.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(value?.dateTo ?? "");
 
   const listOptions = useMemo((): ColumnValueOption[] => {
     if (filterType === "boolean") return BOOLEAN_OPTIONS;
@@ -134,6 +136,8 @@ export function AccountsColumnFilterPopover({
       setSelected([]);
     }
     setSearch("");
+    setDateFrom(value?.dateFrom ?? "");
+    setDateTo(value?.dateTo ?? "");
   }, [open, value, listOptions, showOptionsLoading]);
 
   const active = isColumnFilterActive(value);
@@ -170,6 +174,22 @@ export function AccountsColumnFilterPopover({
   };
 
   const apply = () => {
+    if (filterType === "date") {
+      if (!dateFrom && !dateTo) {
+        onChange(undefined);
+        setOpen(false);
+        return;
+      }
+      const next: AccountsColumnFilterState = {
+        type: "date",
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+      };
+      onChange(next);
+      setOpen(false);
+      return;
+    }
+
     // No values / nothing selectable → clear
     if (listOptions.length === 0 || selected.length === 0) {
       onChange(undefined);
@@ -200,6 +220,8 @@ export function AccountsColumnFilterPopover({
     onChange(undefined);
     setSelected([]);
     setSearch("");
+    setDateFrom("");
+    setDateTo("");
     setOpen(false);
   };
 
@@ -228,50 +250,75 @@ export function AccountsColumnFilterPopover({
         className="accounts-col-filter-popover w-[240px] p-0 z-[120]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-2 border-b border-border/60">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2 top-[7px] text-muted-foreground pointer-events-none" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="w-full h-8 pl-7 pr-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
-              autoFocus
-              disabled={showOptionsLoading}
-            />
+        {filterType === "date" ? (
+          <div className="p-3 space-y-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-500">From Date</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full h-8 px-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-500">To Date</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full h-8 px-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
+              />
+            </div>
           </div>
-        </div>
-
-        <div className="px-1.5 py-1.5 border-b border-border/60">
-          <ValueCheckboxRow
-            label="Select All"
-            checked={allFilteredSelected && filteredOptions.length > 0}
-            onToggle={toggleSelectAllFiltered}
-          />
-        </div>
-
-        <div className="px-1.5 py-1.5 space-y-0.5 max-h-[220px] overflow-y-auto overscroll-contain">
-          {showOptionsLoading ? (
-            <p className="text-[11px] text-muted-foreground py-3 text-center">Loading…</p>
-          ) : (
-            <>
-              {filteredOptions.map((opt) => (
-                <ValueCheckboxRow
-                  key={opt.value}
-                  label={formatOptionLabel(opt.value, filterType, optionLabels)}
-                  count={opt.count > 0 ? opt.count : undefined}
-                  checked={selectedSet.has(opt.value)}
-                  onToggle={() => toggleValue(opt.value)}
+        ) : (
+          <>
+            <div className="p-2 border-b border-border/60">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2 top-[7px] text-muted-foreground pointer-events-none" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full h-8 pl-7 pr-2 text-xs rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400"
+                  autoFocus
+                  disabled={showOptionsLoading}
                 />
-              ))}
-              {filteredOptions.length === 0 && (
-                <p className="text-[11px] text-muted-foreground py-3 text-center">
-                  No matching values
-                </p>
+              </div>
+            </div>
+
+            <div className="px-1.5 py-1.5 border-b border-border/60">
+              <ValueCheckboxRow
+                label="Select All"
+                checked={allFilteredSelected && filteredOptions.length > 0}
+                onToggle={toggleSelectAllFiltered}
+              />
+            </div>
+
+            <div className="px-1.5 py-1.5 space-y-0.5 max-h-[220px] overflow-y-auto overscroll-contain">
+              {showOptionsLoading ? (
+                <p className="text-[11px] text-muted-foreground py-3 text-center">Loading…</p>
+              ) : (
+                <>
+                  {filteredOptions.map((opt) => (
+                    <ValueCheckboxRow
+                      key={opt.value}
+                      label={formatOptionLabel(opt.value, filterType, optionLabels)}
+                      count={opt.count > 0 ? opt.count : undefined}
+                      checked={selectedSet.has(opt.value)}
+                      onToggle={() => toggleValue(opt.value)}
+                    />
+                  ))}
+                  {filteredOptions.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground py-3 text-center">
+                      No matching values
+                    </p>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
         <div className="flex items-center justify-end gap-1.5 px-2.5 py-2 border-t border-border/70 bg-muted/10">
           <Button

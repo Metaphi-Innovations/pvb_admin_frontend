@@ -330,6 +330,10 @@ function PendingInvoicesListing({
   sourceNoOptions,
   partyNameOptions,
   branchOptions,
+  dispatchDateOptions,
+  qtyOptions,
+  invoiceValueOptions,
+  toWarehouseOptions,
 }: {
   tab: PendingInvoiceTabId;
   mounted: boolean;
@@ -347,6 +351,10 @@ function PendingInvoicesListing({
   sourceNoOptions?: ColumnValueOption[];
   partyNameOptions?: ColumnValueOption[];
   branchOptions?: ColumnValueOption[];
+  dispatchDateOptions?: ColumnValueOption[];
+  qtyOptions?: ColumnValueOption[];
+  invoiceValueOptions?: ColumnValueOption[];
+  toWarehouseOptions?: ColumnValueOption[];
 }) {
   const visible = toolbarRows;
   return (
@@ -380,6 +388,10 @@ function PendingInvoicesListing({
         sourceNoOptions={sourceNoOptions}
         partyNameOptions={partyNameOptions}
         branchOptions={branchOptions}
+        dispatchDateOptions={dispatchDateOptions}
+        qtyOptions={qtyOptions}
+        invoiceValueOptions={invoiceValueOptions}
+        toWarehouseOptions={toWarehouseOptions}
       />
     </AccountsTableListing>
   );
@@ -401,6 +413,10 @@ function PendingInvoicesTable({
   sourceNoOptions,
   partyNameOptions,
   branchOptions,
+  dispatchDateOptions,
+  qtyOptions,
+  invoiceValueOptions,
+  toWarehouseOptions,
 }: {
   tab: PendingInvoiceTabId;
   mounted: boolean;
@@ -417,6 +433,10 @@ function PendingInvoicesTable({
   sourceNoOptions?: ColumnValueOption[];
   partyNameOptions?: ColumnValueOption[];
   branchOptions?: ColumnValueOption[];
+  dispatchDateOptions?: ColumnValueOption[];
+  qtyOptions?: ColumnValueOption[];
+  invoiceValueOptions?: ColumnValueOption[];
+  toWarehouseOptions?: ColumnValueOption[];
 }) {
   const meta = PENDING_INVOICE_TAB_META[tab];
   const ctx = useAccountsColumnFilterContext();
@@ -470,12 +490,12 @@ function PendingInvoicesTable({
       <AccountsTable minWidth={1100}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" />
+            <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" valueOptions={dispatchDateOptions} />
             <SortTh label="Dispatch No." colKey="dispatchNo" valueOptions={dispatchNoOptions} />
             <SortTh label="Sales Order No." colKey="sourceNo" valueOptions={sourceNoOptions} />
             <SortTh label="Customer" colKey="partyName" className="accounts-col-party" valueOptions={partyNameOptions} />
-            <SortTh label="Qty" colKey="qty" filterType="amount" align="right" />
-            <SortTh label="Invoice Value" colKey="invoiceValue" filterType="amount" align="right" />
+            <SortTh label="Qty" colKey="qty" align="right" filterable={false} />
+            <SortTh label="Invoice Value" colKey="invoiceValue" align="right" filterable={false} />
             <SortTh label="Branch" colKey="branch" valueOptions={branchOptions} />
             <AccountsColumnHeader
               label="Action"
@@ -593,13 +613,13 @@ function PendingInvoicesTable({
     <AccountsTable minWidth={1180}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" />
+          <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" valueOptions={dispatchDateOptions} />
           <SortTh label="Dispatch No." colKey="dispatchNo" valueOptions={dispatchNoOptions} />
           <SortTh label="Stock Transfer No." colKey="sourceNo" valueOptions={sourceNoOptions} />
           <SortTh label="From Warehouse" colKey="fromWarehouse" valueOptions={branchOptions} />
-          <SortTh label="To Warehouse" colKey="toWarehouse" valueOptions={partyNameOptions} />
-          <SortTh label="Qty" colKey="qty" filterType="amount" align="right" />
-          <SortTh label="Invoice Value" colKey="invoiceValue" filterType="amount" align="right" />
+          <SortTh label="To Warehouse" colKey="toWarehouse" valueOptions={toWarehouseOptions} />
+          <SortTh label="Qty" colKey="qty" align="right" filterable={false} />
+          <SortTh label="Invoice Value" colKey="invoiceValue" align="right" filterable={false} />
           <AccountsColumnHeader
             label="Action"
             colKey="_actions"
@@ -984,6 +1004,34 @@ export default function PendingTaxInvoicesClient() {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: dispatchDateOptionsRaw } = useQuery({
+    queryKey: ["pending-invoices", "filter-options", "dispatchDate", activeTab],
+    queryFn: () => pendingInvoicesService.getFilterDropdown("dispatchDate", sourceType),
+    enabled: mounted,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: qtyOptionsRaw } = useQuery({
+    queryKey: ["pending-invoices", "filter-options", "qty", activeTab],
+    queryFn: () => pendingInvoicesService.getFilterDropdown("qty", sourceType),
+    enabled: mounted,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: invoiceValueOptionsRaw } = useQuery({
+    queryKey: ["pending-invoices", "filter-options", "invoiceValue", activeTab],
+    queryFn: () => pendingInvoicesService.getFilterDropdown("invoiceValue", sourceType),
+    enabled: mounted,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: toWarehouseOptionsRaw } = useQuery({
+    queryKey: ["pending-invoices", "filter-options", "toWarehouse", activeTab],
+    queryFn: () => pendingInvoicesService.getFilterDropdown("toWarehouse", sourceType),
+    enabled: mounted,
+    staleTime: 2 * 60 * 1000,
+  });
+
   const dispatchNoOptions = useMemo(() => {
     return (dispatchNoOptionsRaw || []).map((item: any) => ({
       value: String(item.dispatchNo),
@@ -1011,6 +1059,34 @@ export default function PendingTaxInvoicesClient() {
       count: 0,
     }));
   }, [branchOptionsRaw]);
+
+  const dispatchDateOptions = useMemo(() => {
+    return (dispatchDateOptionsRaw || []).map((item: any) => ({
+      value: String(item.dispatchDate),
+      count: 0,
+    }));
+  }, [dispatchDateOptionsRaw]);
+
+  const qtyOptions = useMemo(() => {
+    return (qtyOptionsRaw || []).map((item: any) => ({
+      value: String(item.qty),
+      count: 0,
+    }));
+  }, [qtyOptionsRaw]);
+
+  const invoiceValueOptions = useMemo(() => {
+    return (invoiceValueOptionsRaw || []).map((item: any) => ({
+      value: String(item.invoiceValue),
+      count: 0,
+    }));
+  }, [invoiceValueOptionsRaw]);
+
+  const toWarehouseOptions = useMemo(() => {
+    return (toWarehouseOptionsRaw || []).map((item: any) => ({
+      value: String(item.toWarehouse),
+      count: 0,
+    }));
+  }, [toWarehouseOptionsRaw]);
 
   const handleFinancialYearChange = useCallback(
     (fyId: string) => {
@@ -1255,6 +1331,10 @@ export default function PendingTaxInvoicesClient() {
             sourceNoOptions={sourceNoOptions}
             partyNameOptions={partyNameOptions}
             branchOptions={branchOptionsFiltered}
+            dispatchDateOptions={dispatchDateOptions}
+            qtyOptions={qtyOptions}
+            invoiceValueOptions={invoiceValueOptions}
+            toWarehouseOptions={toWarehouseOptions}
           />
         </AccountsPageShell>
       </AccountsColumnFilterProvider>
