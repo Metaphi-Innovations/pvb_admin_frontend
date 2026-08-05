@@ -14,6 +14,7 @@ import { Pagination } from "./Pagination";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
 import { ListingTruncateCell } from "./ListingTruncateCell";
+import { listingHeaderCellStyle } from "./headerColumnStyle";
 
 export function MasterListing<T = any>({
   columns,
@@ -186,7 +187,7 @@ export function MasterListing<T = any>({
       {/* Table Container */}
       <div className="master-listing-table-shell">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-full border-collapse table-fixed">
+          <table className="w-full min-w-full border-collapse">
             <thead>
               <tr className="master-listing-thead-row">
                 {columns.map((col) => {
@@ -197,11 +198,13 @@ export function MasterListing<T = any>({
                     <th
                       key={col.key}
                       onClick={() => col.sortable && handleSort(col.key)}
-                      style={
-                        col.width
-                          ? { width: col.width, maxWidth: col.width, minWidth: 0 }
-                          : undefined
-                      }
+                      style={listingHeaderCellStyle({
+                        width: col.width,
+                        header: col.header,
+                        sortable: col.sortable,
+                        filterable: col.filterable,
+                      })}
+                      title={col.header}
                       className={cn(
                         "px-4 py-2.5 text-xs font-semibold text-foreground select-none whitespace-nowrap master-listing-th",
                         col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
@@ -212,7 +215,7 @@ export function MasterListing<T = any>({
                     >
                       <div
                         className={cn(
-                          "flex items-center gap-1.5",
+                          "flex items-center gap-0.5",
                           col.align === "center" && "justify-center",
                           col.align === "right" && "justify-end"
                         )}
@@ -224,19 +227,18 @@ export function MasterListing<T = any>({
                           <span className="flex-shrink-0">
                             {isSorted ? (
                               sortState.direction === "asc" ? (
-                                <ChevronUp className="w-3.5 h-3.5 text-brand-600" />
+                                <ChevronUp className="w-3 h-3 text-brand-600" />
                               ) : (
-                                <ChevronDown className="w-3.5 h-3.5 text-brand-600" />
+                                <ChevronDown className="w-3 h-3 text-brand-600" />
                               )
                             ) : (
-                              <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                              <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                             )}
                           </span>
                         )}
-                        {/* Filter Trigger Button */}
                         {col.filterable && (
                           <span 
-                            className="flex-shrink-0 ml-1" 
+                            className="flex-shrink-0" 
                             onClick={(e) => e.stopPropagation()}
                           >
                             {col.filterType === "date" ? (

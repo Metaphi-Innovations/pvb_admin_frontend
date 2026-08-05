@@ -53,6 +53,20 @@ export function useCreatePricing() {
   });
 }
 
+export function useBulkCreatePricing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (items: PricingCreatePayload[]) =>
+      PricingListService.bulkCreate(items),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: masterKeys.pricing.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.pricing.summary() }),
+      ]);
+    },
+  });
+}
+
 export function useUpdatePricing() {
   const queryClient = useQueryClient();
   return useMutation({

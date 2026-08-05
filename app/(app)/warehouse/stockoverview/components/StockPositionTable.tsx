@@ -81,11 +81,13 @@ function FilterTh({
   className?: string;
 }) {
   return (
-    <th className={cn(STICKY_TH, align === "right" ? "text-right" : "text-left", className)}>
-      <div className={cn("flex items-center gap-0.5", align === "right" && "justify-end")}>
+    <th className={cn(STICKY_TH, align === "right" ? "text-right" : "text-left", className)} title={label}>
+      <div className={cn("inline-flex items-center gap-0.5", align === "right" && "justify-end")}>
         <span>{label}</span>
         {column && onChange && (
-          <FilterPopover column={column} value={value} onChange={onChange} />
+          <span className="flex-shrink-0">
+            <FilterPopover column={column} value={value} onChange={onChange} />
+          </span>
         )}
       </div>
     </th>
@@ -246,7 +248,6 @@ export function StockPositionTable({
                 column={filterColumns.productName}
                 value={colFilters.productName}
                 onChange={(v) => setColFilter("productName", v)}
-                className="min-w-[110px]"
               />
               <FilterTh
                 label="HSN"
@@ -259,7 +260,6 @@ export function StockPositionTable({
                 column={filterColumns.scientificName}
                 value={colFilters.scientificName}
                 onChange={(v) => setColFilter("scientificName", v)}
-                className="min-w-[100px]"
               />
               <FilterTh
                 label="Category"

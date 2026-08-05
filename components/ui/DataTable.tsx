@@ -236,7 +236,7 @@ export function DataTable<T = Record<string, unknown>>({
 
       {/* Table */}
       <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-        <table className="w-full min-w-full border-collapse table-fixed">
+        <table className="w-full min-w-full border-collapse">
           <thead className="sticky top-0 z-10 master-listing-thead-row">
             <tr>
               {bulkActions && (
@@ -261,14 +261,17 @@ export function DataTable<T = Record<string, unknown>>({
                   )}
                   style={
                     col.width
-                      ? { width: col.width, maxWidth: col.width, minWidth: 0 }
-                      : { minWidth: 0 }
+                      ? { width: col.width, minWidth: col.width }
+                      : undefined
                   }
                   onClick={() => col.sortable && handleSort(col.key)}
+                  title={col.header}
                 >
-                  <span className="inline-flex items-center gap-1">
-                    {col.header}
-                    <SortIcon col={col} />
+                  <span className="inline-flex items-center gap-0.5">
+                    <span>{col.header}</span>
+                    <span className="flex-shrink-0">
+                      <SortIcon col={col} />
+                    </span>
                   </span>
                 </th>
               ))}
