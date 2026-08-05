@@ -302,17 +302,21 @@ export function EnterpriseTable<T extends object>({
                     key={col.key}
                     onClick={() => col.sortable !== false && toggleSort(col.key)}
                     className={`px-4 py-3 text-xs font-semibold text-foreground whitespace-nowrap group cursor-pointer select-none bg-white ${alignClass(col.align)}`}
+                    title={col.label}
                   >
-                    <div className={`flex items-center gap-1.5 ${col.align === "right" ? "justify-end" : ""}`}>
-                      {col.label}
-                      {col.sortable !== false &&
-                        (sortKey === col.key ? (
-                          <ChevronDown
-                            className={`w-3 h-3 text-brand-600 transition-transform ${sortDir === "desc" ? "rotate-180" : ""}`}
-                          />
-                        ) : (
-                          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
-                        ))}
+                    <div className={`flex items-center gap-0.5 ${col.align === "right" ? "justify-end" : col.align === "center" ? "justify-center" : ""}`}>
+                      <span>{col.label}</span>
+                      {col.sortable !== false && (
+                        <span className="flex-shrink-0">
+                          {sortKey === col.key ? (
+                            <ChevronDown
+                              className={`w-3 h-3 text-brand-600 transition-transform ${sortDir === "desc" ? "rotate-180" : ""}`}
+                            />
+                          ) : (
+                            <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
+                          )}
+                        </span>
+                      )}
                     </div>
                   </th>
                 ))}

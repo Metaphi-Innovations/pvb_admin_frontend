@@ -40,8 +40,11 @@ import { applyTaxSupplyToPOLines, enrichPOLineItem, recalcPO } from "../po-data"
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { findProductRef } from "@/lib/pricing/resolve-pricing";
 import {
+	billingFromPOAddress,
+	findPOAddressById,
 	getDefaultPOBillShipIds,
-	getPOBillToAddresses,
+	getPOBillToAddressesFromWarehouses,
+	getPOShipToAddressesFromWarehouses,
 } from "../po-address-utils";
 import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import { POLineItemsSection } from "./POLineItemsSection";
@@ -424,6 +427,7 @@ export function PurchaseOrderForm({
 	status,
 	submittedDate,
 	errors = {},
+	showReceiptContext = false,
 }: {
 	form: POFormValues;
 	onChange: (f: POFormValues) => void;
@@ -435,6 +439,8 @@ export function PurchaseOrderForm({
 	status?: string;
 	submittedDate?: string;
 	errors?: POFormErrors;
+	/** Show Received / Invoiced qty per line (3-way match adjustment). */
+	showReceiptContext?: boolean;
 }) {
 	const fileRef = useRef<HTMLInputElement>(null);
 
@@ -560,7 +566,10 @@ export function PurchaseOrderForm({
 		preview.summary.totalIgst;
 
 	const stateOptions = useMemo(() => INDIAN_STATES.map((s) => ({ value: s, label: s })), []);
+	/** State-filtered list for the PO warehouse (Ship To) dropdown. */
 	const { data: dbWarehouses } = useWarehouseDropdown(form.state || undefined);
+	/** All warehouses so Bill To can pick any warehouse address. */
+	const { data: allWarehouses } = useWarehouseDropdown();
 	const warehouseOptions = useMemo(
 		() =>
 			(dbWarehouses || []).map((w) => ({
@@ -570,40 +579,35 @@ export function PurchaseOrderForm({
 		[dbWarehouses],
 	);
 
-	const billToAddresses = useMemo(() => getPOBillToAddresses(), []);
+	const billToAddresses = useMemo(
+		() => getPOBillToAddressesFromWarehouses(allWarehouses || []),
+		[allWarehouses],
+	);
 	const shipToAddresses = useMemo((): SalesOrderCustomerAddress[] => {
-		return (dbWarehouses || []).map((w) => {
-			const primary = w.contacts?.find((c) => c.is_primary) ?? w.contacts?.[0];
-			return {
-				id: `ship-wh-${w.warehouse_id}`,
-				label: `${w.warehouse_name} — Ship To`,
-				companyName: w.registered_legal_name || COMPANY_BILLING.companyName,
-				addressLine1: w.address || "",
-				addressLine2: w.address_1 || "",
-				city: w.city || "",
-				state: w.state || "",
-				pincode: w.pincode || "",
-				gstin: w.gst_number || COMPANY_BILLING.gstNumber,
-				phone: primary?.mobile_number || "—",
-				email: primary?.email_address || "—",
-			};
-		});
-	}, [dbWarehouses]);
+		if (!form.warehouseId) return [];
+		const selected = (dbWarehouses || []).filter(
+			(w) => String(w.warehouse_id) === String(form.warehouseId),
+		);
+		return getPOShipToAddressesFromWarehouses(selected);
+	}, [dbWarehouses, form.warehouseId]);
 
 	const selectedWarehouse = useMemo(
 		() =>
 			form.warehouseId
-				? (dbWarehouses || []).find((w) => String(w.warehouse_id) === String(form.warehouseId)) ?? null
+				? (dbWarehouses || []).find((w) => String(w.warehouse_id) === String(form.warehouseId)) ??
+					(allWarehouses || []).find((w) => String(w.warehouse_id) === String(form.warehouseId)) ??
+					null
 				: null,
-		[form.warehouseId, dbWarehouses],
+		[form.warehouseId, dbWarehouses, allWarehouses],
 	);
 
 	const selectedBillAddress = useMemo(() => {
-		if (!form.warehouseId || !form.billing.billingAddress) return null;
-		const primaryContact = selectedWarehouse?.contacts?.find((c) => c.is_primary) ?? selectedWarehouse?.contacts?.[0];
+		const fromOptions = findPOAddressById(billToAddresses, form.billToAddressId ?? "");
+		if (fromOptions) return fromOptions;
+		if (!form.billing.billingAddress) return null;
 		return {
-			id: `bill-wh-${form.warehouseId}`,
-			label: `${form.warehouseName} — Bill To`,
+			id: form.billToAddressId || "bill-saved",
+			label: "Bill To",
 			companyName: form.billing.companyName || COMPANY_BILLING.companyName,
 			addressLine1: form.billing.billingAddress,
 			addressLine2: "",
@@ -611,28 +615,31 @@ export function PurchaseOrderForm({
 			state: form.billing.state || "",
 			pincode: form.billing.pincode || "",
 			gstin: form.billing.gstNumber || COMPANY_BILLING.gstNumber,
-			phone: primaryContact?.mobile_number || "—",
-			email: primaryContact?.email_address || "—",
+			phone: "—",
+			email: "—",
 		};
-	}, [form.warehouseId, form.warehouseName, form.billing, selectedWarehouse]);
+	}, [billToAddresses, form.billToAddressId, form.billing]);
 
 	const selectedShipAddress = useMemo(() => {
+		const fromOptions = findPOAddressById(shipToAddresses, form.shipToAddressId ?? "");
+		if (fromOptions) return fromOptions;
 		if (!form.warehouseId || !form.shipping.address) return null;
-		const primaryContact = selectedWarehouse?.contacts?.find((c) => c.is_primary) ?? selectedWarehouse?.contacts?.[0];
+		const primaryContact =
+			selectedWarehouse?.contacts?.find((c) => c.is_primary) ?? selectedWarehouse?.contacts?.[0];
 		return {
 			id: `ship-wh-${form.warehouseId}`,
 			label: `${form.warehouseName} — Ship To`,
-			companyName: form.billing.companyName || COMPANY_BILLING.companyName,
+			companyName: selectedWarehouse?.registered_legal_name || COMPANY_BILLING.companyName,
 			addressLine1: form.shipping.address,
 			addressLine2: "",
-			city: form.billing.city || form.shipping.address.split(",").slice(-3, -2)[0]?.trim() || "",
-			state: form.state || "",
-			pincode: form.billing.pincode || form.shipping.address.split(",").slice(-1)[0]?.trim() || "",
-			gstin: form.billing.gstNumber || COMPANY_BILLING.gstNumber,
+			city: selectedWarehouse?.city || "",
+			state: form.state || selectedWarehouse?.state || "",
+			pincode: selectedWarehouse?.pincode || "",
+			gstin: selectedWarehouse?.gst_number || COMPANY_BILLING.gstNumber,
 			phone: form.shipping.contactNumber || primaryContact?.mobile_number || "—",
 			email: primaryContact?.email_address || "—",
 		};
-	}, [form.warehouseId, form.warehouseName, form.shipping, form.state, form.billing, selectedWarehouse]);
+	}, [shipToAddresses, form.shipToAddressId, form.warehouseId, form.warehouseName, form.shipping, form.state, selectedWarehouse]);
 
 	const selectedSupplier = useMemo(() => {
 		if (!form.supplierId) return null;
@@ -749,29 +756,32 @@ export function PurchaseOrderForm({
 	useEffect(() => {
 		if (!form.supplierId) return;
 		if (!form.warehouseId) {
-			if (form.billToAddressId || form.shipToAddressId) {
+			if (form.shipToAddressId) {
 				onChange({
 					...form,
-					billToAddressId: "",
 					shipToAddressId: "",
 				});
 			}
 			return;
 		}
-		const billValid = billToAddresses.some((a) => a.id === form.billToAddressId) || form.billToAddressId?.startsWith("bill-wh-");
-		const shipValid = shipToAddresses.some((a) => a.id === form.shipToAddressId) || form.shipToAddressId?.startsWith("ship-wh-");
+		const billValid = billToAddresses.some((a) => a.id === form.billToAddressId);
+		const shipValid = shipToAddresses.some((a) => a.id === form.shipToAddressId);
 		if (billValid && shipValid) return;
 		const defaults = getDefaultPOBillShipIds(
 			billToAddresses,
 			shipToAddresses,
 			form.warehouseId,
 		);
+		const nextBillId = billValid ? form.billToAddressId : defaults.billToAddressId;
+		const nextShipId = shipValid ? form.shipToAddressId : defaults.shipToAddressId;
+		const billAddr = findPOAddressById(billToAddresses, nextBillId ?? "");
 		onChange({
 			...form,
-			billToAddressId: billValid ? form.billToAddressId : defaults.billToAddressId,
-			shipToAddressId: shipValid ? form.shipToAddressId : defaults.shipToAddressId,
+			billToAddressId: nextBillId,
+			shipToAddressId: nextShipId,
+			...(billValid ? {} : { billing: billingFromPOAddress(billAddr) }),
 		});
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when supplier addresses load
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when addresses load
 	}, [form.supplierId, form.warehouseId, billToAddresses.length, shipToAddresses.length]);
 
 	useEffect(() => {
@@ -812,21 +822,26 @@ export function PurchaseOrderForm({
 	const onStateChange = (state: string) => {
 		const nextTaxSupplyType = resolveTaxSupplyType(state, selectedSupplier?.state ?? "");
 		const updatedLines = getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
+		const billStillValid =
+			!!form.billToAddressId &&
+			billToAddresses.some((a) => a.id === form.billToAddressId);
 		patch({
 			state,
 			warehouseId: null,
 			warehouseName: "",
 			deliveryAddress: "",
-			billToAddressId: "",
+			billToAddressId: billStillValid ? form.billToAddressId : "",
 			shipToAddressId: "",
-			billing: {
-				companyName: COMPANY_BILLING.companyName,
-				billingAddress: "",
-				gstNumber: "",
-				state: "",
-				city: "",
-				pincode: "",
-			},
+			billing: billStillValid
+				? form.billing
+				: {
+						companyName: COMPANY_BILLING.companyName,
+						billingAddress: "",
+						gstNumber: "",
+						state: "",
+						city: "",
+						pincode: "",
+					},
 			shipping: {
 				shipToLocation: "",
 				branch: "",
@@ -847,30 +862,41 @@ export function PurchaseOrderForm({
 		const nextTaxSupplyType = resolveTaxSupplyType(nextState, selectedSupplier?.state ?? "");
 		const updatedLines = getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
 
+		const billStillValid =
+			!!form.billToAddressId &&
+			billToAddresses.some((a) => a.id === form.billToAddressId);
+		const nextBillId = billStillValid
+			? form.billToAddressId
+			: wh
+				? `bill-wh-${wh.warehouse_id}`
+				: "";
+		const billAddr = findPOAddressById(billToAddresses, nextBillId ?? "");
+
 		patch({
 			warehouseId: wh ? wh.warehouse_id : null,
 			warehouseName: wh?.warehouse_name || "",
 			deliveryAddress: addressStr,
 			state: nextState,
-			billToAddressId: wh ? `bill-wh-${wh.warehouse_id}` : "",
+			billToAddressId: nextBillId,
 			shipToAddressId: wh ? `ship-wh-${wh.warehouse_id}` : "",
-			billing: wh
-				? {
-						companyName: wh.registered_legal_name || COMPANY_BILLING.companyName,
-						billingAddress: addressStr,
-						gstNumber: wh.gst_number || COMPANY_BILLING.gstNumber,
-						state: wh.state || "",
-						city: wh.city || "",
-						pincode: wh.pincode || "",
-					}
-				: {
-						companyName: COMPANY_BILLING.companyName,
-						billingAddress: "",
-						gstNumber: "",
-						state: "",
-						city: "",
-						pincode: "",
-					},
+			billing: billingFromPOAddress(
+				billAddr ??
+					(wh
+						? {
+								id: `bill-wh-${wh.warehouse_id}`,
+								label: `${wh.warehouse_name} — Bill To`,
+								companyName: wh.registered_legal_name || COMPANY_BILLING.companyName,
+								addressLine1: wh.address || "",
+								addressLine2: wh.address_1 || "",
+								city: wh.city || "",
+								state: wh.state || "",
+								pincode: wh.pincode || "",
+								gstin: wh.gst_number || COMPANY_BILLING.gstNumber,
+								phone: primaryContact?.mobile_number || "—",
+								email: primaryContact?.email_address || "—",
+							}
+						: null),
+			),
 			shipping: wh
 				? {
 						shipToLocation: wh.warehouse_name || "",
@@ -889,6 +915,14 @@ export function PurchaseOrderForm({
 						sameAsBilling: false,
 					},
 			lines: updatedLines,
+		});
+	};
+
+	const onBillToChange = (id: string) => {
+		const addr = findPOAddressById(billToAddresses, id);
+		patch({
+			billToAddressId: id,
+			billing: billingFromPOAddress(addr),
 		});
 	};
 
@@ -1197,9 +1231,11 @@ export function PurchaseOrderForm({
 							shipToAddressId={form.shipToAddressId ?? ""}
 							billAddress={selectedBillAddress}
 							shipAddress={selectedShipAddress}
-							readOnly={true}
-							onBillToChange={() => {}}
+							readOnly={readOnly}
+							shipLocked
+							onBillToChange={onBillToChange}
 							onShipToChange={() => {}}
+							emptyHint="Select a warehouse to load Ship To. Bill To lists all warehouse addresses."
 						/>
 					</div>
 				)}
@@ -1214,6 +1250,7 @@ export function PurchaseOrderForm({
 					taxSupplyType={taxSupplyType}
 					supplierState={selectedSupplier?.state}
 					linesError={errors.lines}
+					showReceiptContext={showReceiptContext}
 				/>
 
 				<div className="border-t border-border/60 pt-4">

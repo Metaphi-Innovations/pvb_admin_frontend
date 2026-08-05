@@ -80,21 +80,33 @@ export interface PricingFormProps {
   productOptions: { value: string; label: string; sublabel?: string; searchText?: string }[];
   productCatalog?: ProductListRecord[];
   customerTypeOptions?: { value: string; label: string }[];
+  existingConflictCount?: number;
+  scopeConflictMessage?: string;
   mode?: "add" | "edit";
   onClearError?: (key: string) => void;
 }
+
+const EMPTY_CATALOG: ProductListRecord[] = [];
 
 export function PricingForm({
   form,
   onChange,
   errors,
   productOptions,
-  productCatalog = [],
+  productCatalog = EMPTY_CATALOG,
   customerTypeOptions,
+  existingConflictCount = 0,
+  scopeConflictMessage,
   mode = "add",
   onClearError,
 }: PricingFormProps) {
   const combinationCount = countPricingCombinations(form);
+  const conflictMessage =
+    scopeConflictMessage ||
+    (existingConflictCount > 0
+      ? `${existingConflictCount} selected combination${existingConflictCount > 1 ? "s" : ""} already exist for this product. Change state or customer type before saving.`
+      : errors.duplicate);
+  const hasScopeConflict = Boolean(conflictMessage);
   const selectedProductId =
     form.productLines.length > 0
       ? form.productLines[0].productUuid || String(form.productLines[0].id)
@@ -104,13 +116,26 @@ export function PricingForm({
     errors.dealerPrice || getDealerPriceInlineError(form.dealerPrice, form.mrp);
   const editMrpError = errors.mrp || getMrpInlineError(form.mrp);
   const hasSyncedProductMrp = useRef(false);
+  const lastSyncedProductId = useRef("");
   const resolvedCustomerTypeOptions =
     customerTypeOptions ??
     PRICING_CUSTOMER_TYPES.map((type) => ({ value: type, label: type }));
+  const customerTypeValues = resolvedCustomerTypeOptions.map((option) => option.value);
   const stateOptions = PRICING_STATES.map((state) => ({ value: state, label: state }));
 
   useEffect(() => {
-    if (mode !== "add" || hasSyncedProductMrp.current || form.productLines.length === 0) {
+    if (mode !== "add") return;
+
+    if (!selectedProductId) {
+      hasSyncedProductMrp.current = false;
+      lastSyncedProductId.current = "";
+      return;
+    }
+
+    if (
+      hasSyncedProductMrp.current &&
+      lastSyncedProductId.current === selectedProductId
+    ) {
       return;
     }
 
@@ -123,10 +148,11 @@ export function PricingForm({
     );
 
     hasSyncedProductMrp.current = true;
+    lastSyncedProductId.current = selectedProductId;
     if (mrpChanged) {
       onChange(synced);
     }
-  }, [form, mode, onChange]);
+  }, [form, mode, onChange, productCatalog, selectedProductId]);
 
   const updateScope = (
     patch: Partial<
@@ -152,6 +178,9 @@ export function PricingForm({
     next.state = resolvedStates.length === 1 ? resolvedStates[0] : "";
 
     onChange(next);
+    onClearError?.("state");
+    onClearError?.("customerType");
+    onClearError?.("duplicate");
   };
 
   const handleProductSelectionChange = (selectedId: string) => {
@@ -171,6 +200,7 @@ export function PricingForm({
     onClearError?.("customerTypes");
     onClearError?.("state");
     onClearError?.("customerType");
+    onClearError?.("duplicate");
   };
 
   const handleRemoveProductLine = (_productId?: number) => {
@@ -339,14 +369,10 @@ export function PricingForm({
                 options={PRICING_STATES}
                 selected={form.states}
                 onChange={(states) => updateScope({ states })}
-                applyToAll={form.applyToAllStates}
-                onApplyToAllChange={(applyToAllStates) =>
-                  updateScope({ applyToAllStates, states: [] })
-                }
-                applyToAllLabel="Apply to All States"
                 selectAllLabel="Select All States"
                 placeholder="Select state(s)"
-                error={errors.state}
+                invalid={hasScopeConflict}
+                error={hasScopeConflict ? undefined : errors.state}
               />
             </div>
 
@@ -354,25 +380,24 @@ export function PricingForm({
               <PricingScopeMultiSelect
                 label="Customer Type"
                 required
-                options={PRICING_CUSTOMER_TYPES}
+                options={customerTypeValues}
+                optionLabels={Object.fromEntries(
+                  resolvedCustomerTypeOptions.map((option) => [option.value, option.label]),
+                )}
                 selected={form.customerTypes}
                 onChange={(customerTypes) =>
                   updateScope({
                     customerTypes: customerTypes as PricingCustomerType[],
                   })
                 }
-                applyToAll={form.applyToAllCustomerTypes}
-                onApplyToAllChange={(applyToAllCustomerTypes) =>
-                  updateScope({ applyToAllCustomerTypes, customerTypes: [] })
-                }
-                applyToAllLabel="Apply to All Customer Types"
                 selectAllLabel="Select All Customer Types"
                 placeholder="Select customer type(s)"
-                error={errors.customerType}
+                invalid={hasScopeConflict}
+                error={hasScopeConflict ? undefined : errors.customerType}
               />
             </div>
 
-            {combinationCount > 1 && (
+            {combinationCount > 1 && !hasScopeConflict && (
               <div className="col-span-2 rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-2 md:col-span-3 lg:col-span-4">
                 <p className="text-xs text-brand-800">
                   Saving will create{" "}
@@ -381,14 +406,20 @@ export function PricingForm({
                 </p>
               </div>
             )}
+
+            {hasScopeConflict && (
+              <div
+                role="alert"
+                className="col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 md:col-span-3 lg:col-span-4"
+              >
+                <p className="text-xs font-medium text-red-700">{conflictMessage}</p>
+                <p className="mt-0.5 text-[11px] text-red-600/80">
+                  Adjust the selection above to continue.
+                </p>
+              </div>
+            )}
           </PricingFormGrid>
         </PricingFormSection>
-      )}
-
-      {errors.duplicate && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
-          {errors.duplicate}
-        </p>
       )}
     </div>
   );
