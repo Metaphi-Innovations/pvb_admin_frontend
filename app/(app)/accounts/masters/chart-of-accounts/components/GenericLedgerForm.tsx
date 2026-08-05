@@ -21,16 +21,13 @@ import {
   type LedgerFormValues,
 } from "../chart-of-accounts-data";
 import { CoaAddLedgerParentSelect } from "./CoaAddLedgerParentSelect";
-import {
-  getActiveTDSMasters,
-  toTdsSelectOptions,
-} from "@/app/(app)/masters/tds/tds-data";
 import { SearchableSelect } from "@/app/(app)/masters/customers/components/SearchableSelect";
 import {
   GST_REGISTRATION_TYPE_DEFAULT,
   GST_REGISTRATION_TYPE_OPTIONS,
 } from "@/lib/masters/gst-compliance";
 import { cn } from "@/lib/utils";
+import { useTdsDropdown, useTcsDropdown } from "@/hooks/masters";
 
 /** Generic-Ledger-only TCS options until a shared TCS Master exists. */
 const GENERIC_LEDGER_TCS_OPTIONS = [
@@ -120,19 +117,42 @@ export function GenericLedgerForm({
       ? formError
       : null;
 
-  const tdsOptions = useMemo(() => getActiveTDSMasters(), []);
+  const tdsQuery = useTdsDropdown();
+  const tcsQuery = useTcsDropdown();
+
   const tdsSelectOptions = useMemo(() => {
-    const baseOptions = toTdsSelectOptions(tdsOptions);
-    return baseOptions.map((option, index) => ({
-      ...option,
-      label: `${option.label} – ${tdsOptions[index].sectionName}`,
-      sublabel: tdsOptions[index].description,
-    }));
-  }, [tdsOptions]);
-  const tcsSelectOptions = useMemo(
-    () => GENERIC_LEDGER_TCS_OPTIONS.map((o) => ({ ...o })),
-    [],
-  );
+    const records = tdsQuery.data ?? [];
+    return records.map((t) => {
+      const rateNum = parseFloat(t.tdsRate);
+      const rateLabel = isNaN(rateNum) ? t.tdsRate : `${rateNum}%`;
+      let formattedSection = t.sectionName;
+      if (/^\d+[A-Z]?$/i.test(t.sectionName)) {
+        formattedSection = `Section ${t.sectionName.toUpperCase()}`;
+      }
+      return {
+        value: t.tdsUuid,
+        label: `${rateLabel} - ${formattedSection}`,
+        sublabel: t.description || undefined,
+      };
+    });
+  }, [tdsQuery.data]);
+
+  const tcsSelectOptions = useMemo(() => {
+    const records = tcsQuery.data ?? [];
+    return records.map((t) => {
+      const rateNum = parseFloat(t.tcsRate);
+      const rateLabel = isNaN(rateNum) ? t.tcsRate : `${rateNum}%`;
+      let formattedSection = t.sectionName;
+      if (/^\d+[A-Z]?$/i.test(t.sectionName)) {
+        formattedSection = `Section ${t.sectionName.toUpperCase()}`;
+      }
+      return {
+        value: t.tcsUuid,
+        label: `${rateLabel} - ${formattedSection}`,
+        sublabel: t.description || undefined,
+      };
+    });
+  }, [tcsQuery.data]);
 
   const setForm = (patch: Partial<LedgerFormValues>) =>
     onChange({ ...form, ...patch });

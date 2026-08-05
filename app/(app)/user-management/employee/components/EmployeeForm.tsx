@@ -1905,7 +1905,10 @@ export default function EmployeeForm({
         skipPostalMasterCheck: isApiMode,
       });
     }
-    if (form.roleType === "Field User") {
+    // Geography module paused — mapping is optional for Field users.
+    // Re-enable this block when geography master goes live again.
+    const GEOGRAPHY_MAPPING_REQUIRED = false;
+    if (GEOGRAPHY_MAPPING_REQUIRED && form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
         geoFields.forEach((field) => {
           const key = geoKey[field] as keyof GeoMappingRow;
@@ -2361,7 +2364,7 @@ export default function EmployeeForm({
                 <div className="flex items-center justify-between mb-2.5">
                   <SectionHead label={`Geography Mapping — ${form.role}`} />
                   <span className="text-[10px] text-brand-600 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded font-medium">
-                    {geoFields.length > 0 ? geoFields.join(" → ") : "National Level — No mapping required"}
+                    {geoFields.length > 0 ? `${geoFields.join(" → ")} (optional)` : "National Level — No mapping required"}
                   </span>
                 </div>
 
@@ -2372,6 +2375,10 @@ export default function EmployeeForm({
                   </div>
                 ) : (
                   <>
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800 mb-3">
+                      <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                      Geography module is paused — mapping is optional. You can create this field user without assigning geography.
+                    </div>
                     <div className="space-y-3">
                       {geoMappings.map((mapping, index) => {
                         const optionsMap = getGeoOptionsMap(mapping);
@@ -2381,7 +2388,7 @@ export default function EmployeeForm({
                               <div>
                                 <p className="text-xs font-semibold text-foreground">Mapping {index + 1}</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  Complete this geography chain before adding the next one.
+                                  Geography mapping is optional for now. Fill in if available.
                                 </p>
                               </div>
                               {geoMappings.length > 1 && (
@@ -2404,7 +2411,6 @@ export default function EmployeeForm({
                                   <AC
                                     key={`${field}-${index}`}
                                     label={field}
-                                    required
                                     value={mapping[key] || ""}
                                     onChange={(value) => setGeoMappingValue(index, key, value)}
                                     options={optionsMap[field] || []}

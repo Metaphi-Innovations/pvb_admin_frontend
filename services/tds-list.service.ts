@@ -61,6 +61,7 @@ export interface TdsDropdownItem {
   sectionCode: string;
   tdsRate: string;
   sectionName: string;
+  description: string;
 }
 
 export type TdsFilterField =
@@ -316,6 +317,7 @@ export const TdsListService = {
         sectionCode: asString(record.tds_code),
         tdsRate: formatRate(record.tds_rate),
         sectionName: asString(record.tds_section_name),
+        description: asString(record.description),
       };
     });
   },

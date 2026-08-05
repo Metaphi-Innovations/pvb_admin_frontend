@@ -113,18 +113,19 @@ export function AccountsColumnHeader({
           align === "right" && "justify-end",
           align === "center" && "justify-center",
         )}
+        title={label}
       >
         <button
           type="button"
           onClick={handleSortClick}
           className={cn(
-            "inline-flex items-center gap-0.5 min-w-0 text-left",
+            "inline-flex items-center gap-0.5 whitespace-nowrap text-left",
             sortable && "cursor-pointer hover:text-brand-700",
-            align === "right" && "text-right flex-row-reverse",
+            align === "right" && (filterable ? "text-right flex-row-reverse" : "text-right"),
           )}
           title={sortable ? "Click to sort · Double-click to remove sort" : undefined}
         >
-          <span className="truncate">{label}</span>
+          <span className="truncate min-w-0">{label}</span>
           {sortable && (
             <span className="flex-shrink-0 text-muted-foreground/70">
               {sorted ? (
@@ -136,19 +137,21 @@ export function AccountsColumnHeader({
           )}
         </button>
         {filterable && onFilterChange && (
-          <AccountsColumnFilterPopover
-            label={label}
-            filterType={filterType}
-            value={filterValue}
-            onChange={onFilterChange}
-            valueOptions={valueOptions}
-            uniqueValues={uniqueValuesProp}
-            statusOptions={statusOptions}
-            optionLabels={optionLabels}
-            onOpen={onFilterOpen}
-            optionsLoading={optionsLoading}
-            optionsReady={optionsReady}
-          />
+          <span className="flex-shrink-0">
+            <AccountsColumnFilterPopover
+              label={label}
+              filterType={filterType}
+              value={filterValue}
+              onChange={onFilterChange}
+              valueOptions={valueOptions}
+              uniqueValues={uniqueValuesProp}
+              statusOptions={statusOptions}
+              optionLabels={optionLabels}
+              onOpen={onFilterOpen}
+              optionsLoading={optionsLoading}
+              optionsReady={optionsReady}
+            />
+          </span>
         )}
       </div>
     </AccountsTableHeadCell>

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -13,15 +12,14 @@ interface PricingScopeMultiSelectProps {
   label: string;
   required?: boolean;
   options: readonly string[];
+  optionLabels?: Record<string, string>;
   selected: string[];
   onChange: (values: string[]) => void;
-  applyToAll: boolean;
-  onApplyToAllChange: (checked: boolean) => void;
-  applyToAllLabel: string;
   selectAllLabel: string;
   placeholder?: string;
   disabled?: boolean;
   error?: string;
+  invalid?: boolean;
 }
 
 function ScopeChip({
@@ -55,10 +53,12 @@ function ScopeChip({
 
 function CompactChipRow({
   values,
+  labels,
   onRemove,
   disabled,
 }: {
   values: string[];
+  labels?: Record<string, string>;
   onRemove?: (value: string) => void;
   disabled?: boolean;
 }) {
@@ -70,7 +70,7 @@ function CompactChipRow({
       {visible.map((value) => (
         <ScopeChip
           key={value}
-          label={value}
+          label={labels?.[value] ?? value}
           disabled={disabled}
           onRemove={onRemove ? () => onRemove(value) : undefined}
         />
@@ -91,22 +91,24 @@ export function PricingScopeMultiSelect({
   label,
   required,
   options,
+  optionLabels,
   selected,
   onChange,
-  applyToAll,
-  onApplyToAllChange,
-  applyToAllLabel,
   selectAllLabel,
   placeholder = "Select...",
   disabled = false,
   error,
+  invalid = false,
 }: PricingScopeMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>(selected);
 
-  const isDisabled = disabled || applyToAll;
-  const allSelected = selected.length === options.length && options.length > 0;
+  const isDisabled = disabled;
+  const allSelected = draft.length === options.length && options.length > 0;
   const allDraftSelected = draft.length === options.length && options.length > 0;
+  const showSelectAll = options.length > 0;
+  const showInvalid = invalid || Boolean(error?.trim());
+  const errorMessage = error?.trim() || "";
 
   const toggleValue = (value: string) => {
     setDraft(
@@ -135,6 +137,7 @@ export function PricingScopeMultiSelect({
     onChange(draft);
     setOpen(false);
   };
+  const resolveLabel = (value: string) => optionLabels?.[value] ?? value;
 
   return (
     <div className="space-y-1.5">
@@ -146,7 +149,7 @@ export function PricingScopeMultiSelect({
       <div
         className={cn(
           "rounded-lg border bg-white p-2 shadow-sm",
-          error ? "border-red-300 ring-1 ring-red-100" : "border-border",
+          showInvalid ? "border-red-300 ring-1 ring-red-100" : "border-border",
           isDisabled && "bg-muted/25",
         )}
       >
@@ -158,21 +161,21 @@ export function PricingScopeMultiSelect({
               aria-label={`${label} selector`}
               className={cn(
                 triggerBaseClass,
-                error
+                showInvalid
                   ? "border-red-400 hover:border-red-400"
                   : "border-border hover:border-brand-400 hover:bg-brand-50/40",
                 "focus-visible:border-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200",
                 isDisabled && "cursor-not-allowed opacity-60 hover:border-border hover:bg-white",
-                applyToAll && "border-dashed bg-muted/25",
               )}
             >
-              {applyToAll ? (
-                <span className="truncate font-medium text-brand-700">{applyToAllLabel}</span>
-              ) : selected.length === 0 ? (
+              {selected.length === 0 ? (
                 <span className="truncate text-muted-foreground">{placeholder}</span>
               ) : (
                 <CompactChipRow
                   values={selected}
+                  labels={Object.fromEntries(
+                    selected.map((value) => [value, resolveLabel(value)]),
+                  )}
                   onRemove={isDisabled ? undefined : removeChip}
                   disabled={isDisabled}
                 />
@@ -185,13 +188,7 @@ export function PricingScopeMultiSelect({
             className="w-[var(--radix-popover-trigger-width)] border border-border p-0 shadow-lg"
           >
             <div className="flex items-center justify-between border-b border-border bg-muted/25 px-2.5 py-1.5">
-              <button
-                type="button"
-                onClick={selectAll}
-                className="text-[11px] font-semibold text-brand-600 hover:text-brand-700"
-              >
-                {selectAllLabel}
-              </button>
+              <span className="text-[11px] text-muted-foreground">{draft.length} selected</span>
               {draft.length > 0 && (
                 <button
                   type="button"
@@ -203,6 +200,30 @@ export function PricingScopeMultiSelect({
               )}
             </div>
             <div className="max-h-52 overflow-y-auto p-1">
+              {showSelectAll && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => (allSelected ? clearAll() : selectAll())}
+                    className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted"
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
+                        allSelected
+                          ? "border-brand-600 bg-brand-600 text-white"
+                          : "border-border bg-white",
+                      )}
+                    >
+                      {allSelected && <Check className="h-2.5 w-2.5" />}
+                    </span>
+                    <span className="text-xs font-semibold text-brand-700">
+                      {selectAllLabel} ({options.length})
+                    </span>
+                  </button>
+                  <div className="my-1 border-t border-border" />
+                </>
+              )}
               {options.map((option) => {
                 const checked = draft.includes(option);
                 return (
@@ -210,7 +231,7 @@ export function PricingScopeMultiSelect({
                     key={option}
                     type="button"
                     onClick={() => toggleValue(option)}
-                    className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-brand-50"
+                    className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted"
                   >
                     <span
                       className={cn(
@@ -222,7 +243,7 @@ export function PricingScopeMultiSelect({
                     >
                       {checked && <Check className="h-2.5 w-2.5" />}
                     </span>
-                    <span className="text-xs text-foreground">{option}</span>
+                    <span className="text-xs text-foreground">{resolveLabel(option)}</span>
                   </button>
                 );
               })}
@@ -242,32 +263,9 @@ export function PricingScopeMultiSelect({
             </div>
           </PopoverContent>
         </Popover>
-
-        <label
-          className={cn(
-            "mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-xs",
-            applyToAll
-              ? "border-brand-200 bg-brand-50/60 text-brand-800"
-              : "border-border bg-muted/20 text-muted-foreground",
-          )}
-        >
-          <Checkbox
-            checked={applyToAll}
-            disabled={disabled}
-            onCheckedChange={(checked) => {
-              const next = checked === true;
-              onApplyToAllChange(next);
-              if (next) onChange([]);
-            }}
-          />
-          <span className="font-medium">{applyToAllLabel}</span>
-          {allSelected && !applyToAll ? (
-            <span className="text-[10px] font-semibold text-brand-600">(all selected)</span>
-          ) : null}
-        </label>
       </div>
 
-      {error ? <p className="text-[11px] font-medium text-red-500">{error}</p> : null}
+      {errorMessage ? <p className="text-[11px] font-medium text-red-500">{errorMessage}</p> : null}
     </div>
   );
 }

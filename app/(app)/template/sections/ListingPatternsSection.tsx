@@ -68,13 +68,18 @@ function SortTh({
         active && "bg-brand-50/60",
         width,
       )}
+      title={label}
     >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active
-          ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-          : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-        }
+      <div className="flex items-center gap-0.5">
+        <span className={cn(active ? "text-brand-700" : "text-foreground")}>
+          {label}
+        </span>
+        <span className="flex-shrink-0">
+          {active
+            ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
+            : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+          }
+        </span>
       </div>
     </th>
   );

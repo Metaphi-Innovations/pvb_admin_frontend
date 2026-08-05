@@ -32,11 +32,7 @@ import {
 } from "../chart-of-accounts-data";
 import { CoaParentGroupSelector } from "./CoaParentGroupSelector";
 import { CoaAddLedgerParentSelect } from "./CoaAddLedgerParentSelect";
-import {
-  formatTdsSummary,
-  getActiveTDSMasters,
-  getTdsSectionCode,
-} from "@/app/(app)/masters/tds/tds-data";
+import { useTdsDropdown, useTcsDropdown } from "@/hooks/masters";
 
 type SheetMode = "add" | "edit" | "view";
 
@@ -118,7 +114,8 @@ export function LedgerSheet({
       ? formError
       : null;
 
-  const tdsOptions = useMemo(() => getActiveTDSMasters(), [open]);
+  const tdsQuery = useTdsDropdown();
+  const tcsQuery = useTcsDropdown();
 
   const setForm = (patch: Partial<LedgerFormValues>) =>
     onFormChange({ ...form, ...patch });
@@ -380,11 +377,19 @@ export function LedgerSheet({
                     <SelectItem value="__none__" className="text-xs">
                       None
                     </SelectItem>
-                    {tdsOptions.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)} className="text-xs">
-                        {formatTdsSummary(t)} — {getTdsSectionCode(t)}
-                      </SelectItem>
-                    ))}
+                    {(tdsQuery.data ?? []).map((t) => {
+                      const rateNum = parseFloat(t.tdsRate);
+                      const rateLabel = isNaN(rateNum) ? t.tdsRate : `${rateNum}%`;
+                      let formattedSection = t.sectionName;
+                      if (/^\d+[A-Z]?$/i.test(t.sectionName)) {
+                        formattedSection = `Section ${t.sectionName.toUpperCase()}`;
+                      }
+                      return (
+                        <SelectItem key={t.tdsUuid} value={t.tdsUuid} className="text-xs">
+                          {rateLabel} - {formattedSection}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -404,13 +409,35 @@ export function LedgerSheet({
             {form.tcsApplicable && (
               <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-1">
                 <Label className="text-xs">Default TCS Section</Label>
-                <Input
-                  className="h-9 text-sm font-medium"
+                <Select
+                  value={form.defaultTcsSection || "__none__"}
                   disabled={readOnly}
-                  value={form.defaultTcsSection}
-                  onChange={(e) => setForm({ defaultTcsSection: e.target.value })}
-                  placeholder="e.g. Section 206C"
-                />
+                  onValueChange={(v) =>
+                    setForm({ defaultTcsSection: v === "__none__" ? "" : v })
+                  }
+                >
+                  <SelectTrigger className="h-9 text-sm font-medium">
+                    <SelectValue placeholder="Select TCS section…" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[240px]">
+                    <SelectItem value="__none__" className="text-xs">
+                      None
+                    </SelectItem>
+                    {(tcsQuery.data ?? []).map((t) => {
+                      const rateNum = parseFloat(t.tcsRate);
+                      const rateLabel = isNaN(rateNum) ? t.tcsRate : `${rateNum}%`;
+                      let formattedSection = t.sectionName;
+                      if (/^\d+[A-Z]?$/i.test(t.sectionName)) {
+                        formattedSection = `Section ${t.sectionName.toUpperCase()}`;
+                      }
+                      return (
+                        <SelectItem key={t.tcsUuid} value={t.tcsUuid} className="text-xs">
+                          {rateLabel} - {formattedSection}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>

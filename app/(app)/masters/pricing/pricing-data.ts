@@ -1415,11 +1415,13 @@ export function findDuplicateActivePricing(
   }
 
   const formType = form.customerType as PricingScopeCustomerType;
+  const formProductKey = String(form.productId);
 
   return records.find((r) => {
     if (r.id === excludeId) return false;
     if (r.status !== "active") return false;
-    if (r.productId !== Number(form.productId)) return false;
+    const recordProductKey = r.productUuid || String(r.productId);
+    if (recordProductKey !== formProductKey) return false;
     return (
       r.state === form.state &&
       r.customerType === formType
@@ -1658,13 +1660,15 @@ function findScopeDuplicateMessage(
 ): string | undefined {
   const states = resolveFormStates(form);
   const customerTypes = resolveFormCustomerTypes(form);
+  const conflicts: string[] = [];
 
   for (const line of form.productLines) {
+    const productKey = line.productUuid || String(line.id);
     for (const state of states) {
       for (const customerType of customerTypes) {
         const duplicate = findDuplicateActivePricing(
           {
-            productId: String(line.id),
+            productId: productKey,
             customerType,
             state,
             status: "active",
@@ -1672,13 +1676,96 @@ function findScopeDuplicateMessage(
           records,
         );
         if (duplicate) {
-          return `An active pricing rule already exists for ${line.productCode}, ${customerType}, and ${state}.`;
+          conflicts.push(`${customerType} / ${state}`);
         }
       }
     }
   }
 
-  return undefined;
+  if (conflicts.length === 0) return undefined;
+  if (conflicts.length === 1) {
+    return `An active pricing rule already exists for ${conflicts[0]}.`;
+  }
+  return `${conflicts.length} selected combinations already exist (e.g. ${conflicts[0]}).`;
+}
+
+/** Lightweight scope conflict check against existing product pricing combinations. */
+export function normalizePricingScopeToken(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function findExistingScopeConflicts(
+  form: PricingForm,
+  existing: Array<{
+    productUuid: string;
+    state: string;
+    customerType: string;
+    customerTypeId?: string;
+    status?: "active" | "inactive";
+  }>,
+  customerTypeIdByName: Record<string, string> = {},
+): { count: number; message?: string; conflicts: string[] } {
+  const states = resolveFormStates(form);
+  const customerTypes = resolveFormCustomerTypes(form);
+  if (states.length === 0 || customerTypes.length === 0 || form.productLines.length === 0) {
+    return { count: 0, conflicts: [] };
+  }
+
+  const existingKeys = new Set<string>();
+  for (const row of existing) {
+    const productKey = row.productUuid;
+    const stateKey = normalizePricingScopeToken(row.state);
+    if (!productKey || !stateKey) continue;
+
+    if (row.customerTypeId) {
+      existingKeys.add(`${productKey}::${stateKey}::id:${row.customerTypeId}`);
+    }
+    const typeKey = normalizePricingScopeToken(row.customerType);
+    if (typeKey) {
+      existingKeys.add(`${productKey}::${stateKey}::name:${typeKey}`);
+    }
+  }
+
+  const conflicts: string[] = [];
+  for (const line of form.productLines) {
+    const productKey = line.productUuid || String(line.id);
+    for (const state of states) {
+      const stateKey = normalizePricingScopeToken(state);
+      for (const customerType of customerTypes) {
+        const typeKey = normalizePricingScopeToken(customerType);
+        const typeId =
+          customerTypeIdByName[customerType] ||
+          Object.entries(customerTypeIdByName).find(
+            ([name]) => normalizePricingScopeToken(name) === typeKey,
+          )?.[1];
+        const matchedById =
+          Boolean(typeId) &&
+          existingKeys.has(`${productKey}::${stateKey}::id:${typeId}`);
+        const matchedByName =
+          Boolean(typeKey) &&
+          existingKeys.has(`${productKey}::${stateKey}::name:${typeKey}`);
+
+        if (matchedById || matchedByName) {
+          conflicts.push(`${customerType} / ${state}`);
+        }
+      }
+    }
+  }
+
+  if (conflicts.length === 0) return { count: 0, conflicts: [] };
+
+  const preview = conflicts.slice(0, 4).join(", ");
+  const more =
+    conflicts.length > 4 ? ` and ${conflicts.length - 4} more` : "";
+
+  return {
+    count: conflicts.length,
+    conflicts,
+    message:
+      conflicts.length === 1
+        ? `A pricing rule already exists for ${conflicts[0]}.`
+        : `${conflicts.length} selected combinations already exist: ${preview}${more}.`,
+  };
 }
 
 export function buildBulkPricingLineFromApi(product: ProductListRecord): BulkPricingLine {

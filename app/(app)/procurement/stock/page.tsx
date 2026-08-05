@@ -39,10 +39,12 @@ const STOCK_STATUS: Record<string, { bg: string; text: string; label: string }> 
 function SortTh({ label, colKey, sortKey, sortDir, onSort, className }: { label: string; colKey: string; sortKey: string; sortDir: string; onSort: (k: string) => void; className?: string }) {
   const active = sortKey === colKey;
   return (
-    <th onClick={() => onSort(colKey)} className={cn("px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}>
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} /> : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />}
+    <th onClick={() => onSort(colKey)} className={cn("px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap", active && "bg-brand-50/60", className)} title={label}>
+      <div className="flex items-center gap-0.5">
+        <span className={cn(active ? "text-brand-700" : "text-foreground")}>{label}</span>
+        <span className="flex-shrink-0">
+          {active ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} /> : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />}
+        </span>
       </div>
     </th>
   );

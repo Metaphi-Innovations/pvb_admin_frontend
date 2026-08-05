@@ -45,14 +45,17 @@ function SortTh({
         "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer whitespace-nowrap",
         active && "text-brand-700",
       )}
+      title={label}
     >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active ? (
-          <ChevronDown className={cn("w-3 h-3", sortDir === "desc" && "rotate-180")} />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 opacity-40" />
-        )}
+      <span className="inline-flex items-center gap-0.5">
+        <span>{label}</span>
+        <span className="flex-shrink-0">
+          {active ? (
+            <ChevronDown className={cn("w-3 h-3", sortDir === "desc" && "rotate-180")} />
+          ) : (
+            <ChevronsUpDown className="w-3 h-3 opacity-40" />
+          )}
+        </span>
       </span>
     </th>
   );

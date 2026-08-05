@@ -26,7 +26,11 @@ import {
 } from "@/hooks/procurement/use-purchase-orders";
 import type { POLineItem } from "@/app/(app)/procurement/purchase-orders/po-data";
 import { round2 } from "@/lib/procurement/utils";
-import type { CreateGrnPayload, UpdateGrnPayload } from "@/services/grn.service";
+import type {
+  CreateGrnExtractedInvoiceItemPayload,
+  CreateGrnPayload,
+  UpdateGrnPayload,
+} from "@/services/grn.service";
 import type { GrnRecord } from "../shared/types";
 import {
   DEFAULT_NEW_GRN_QUANTITY_TYPE,
@@ -164,6 +168,89 @@ function matchExtractedItemToPoLine(
       return code.length > 0 && code === sku;
     }) ?? null
   );
+}
+
+/**
+ * Snapshot OCR billed lines for PO invoice items (immutable after extract).
+ * Manual Invoice Entry edits must NOT change this snapshot.
+ */
+function buildExtractedInvoiceItemsSnapshot(
+  result: InvoiceExtractionResult,
+  poLines: POLineItem[],
+): CreateGrnExtractedInvoiceItemPayload[] {
+  if (!result.items.length) return [];
+
+  const usedLineIds = new Set<string>();
+  const snapshot: CreateGrnExtractedInvoiceItemPayload[] = [];
+
+  for (const item of result.items) {
+    const availableLines = poLines.filter((line) => {
+      const id = getPoLineId(line);
+      return id ? !usedLineIds.has(id) : true;
+    });
+    const matched = matchExtractedItemToPoLine(item, availableLines);
+    const lineId = matched ? getPoLineId(matched) : "";
+    if (lineId) usedLineIds.add(lineId);
+
+    const qty =
+      item.total_quantity != null && Number.isFinite(item.total_quantity)
+        ? Math.max(0, item.total_quantity)
+        : 0;
+
+    const taxableFromOcr =
+      item.amount != null && Number.isFinite(item.amount)
+        ? Math.max(0, item.amount)
+        : null;
+
+    let rate: number | null =
+      item.price != null && Number.isFinite(item.price) ? item.price : null;
+    if (rate == null && taxableFromOcr != null && qty > 0) {
+      rate = round2(taxableFromOcr / qty);
+    }
+
+    const taxable =
+      taxableFromOcr != null
+        ? taxableFromOcr
+        : rate != null
+          ? round2(qty * rate)
+          : 0;
+
+    const gst =
+      item.gst_percentage != null && Number.isFinite(item.gst_percentage)
+        ? item.gst_percentage
+        : null;
+    const gstAmount =
+      gst != null ? round2((taxable * gst) / 100) : null;
+
+    const productId =
+      matched?.productId != null && String(matched.productId).trim()
+        ? String(matched.productId)
+        : null;
+
+    snapshot.push({
+      purchase_order_product_id: lineId || null,
+      product_id: productId,
+      invoice_qty: qty,
+      invoice_rate: rate,
+      invoice_amount: taxable,
+      gst,
+      gst_amount: gstAmount,
+      extracted_data: {
+        sku: item.sku,
+        product_name: item.product_name,
+        batch_number: item.batch_number,
+        mfg_date: item.mfg_date,
+        exp_date: item.exp_date,
+        total_quantity: item.total_quantity,
+        bag_case_quantity: item.bag_case_quantity,
+        price: item.price,
+        gst_percentage: item.gst_percentage,
+        amount: item.amount,
+      },
+    });
+  }
+
+  return snapshot;
 }
 
 function calcAmounts(qty: number, unitPrice: number, gstPct: number) {
@@ -370,6 +457,10 @@ export function PurchaseCreate({
   const [extractionErrors, setExtractionErrors] = useState<string[]>([]);
   const [supplierMatch, setSupplierMatch] = useState<boolean | null>(null);
   const [unmatchedSupplier, setUnmatchedSupplier] = useState<string | null>(null);
+  /** OCR billed lines for PO invoice items — not updated when user edits Manual Invoice Entry. */
+  const [extractedInvoiceItems, setExtractedInvoiceItems] = useState<
+    CreateGrnExtractedInvoiceItemPayload[]
+  >([]);
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -682,6 +773,7 @@ export function PurchaseCreate({
     setExtractionErrors([]);
     setSupplierMatch(null);
     setUnmatchedSupplier(null);
+    setExtractedInvoiceItems([]);
     setFormError(null);
   };
 
@@ -696,6 +788,7 @@ export function PurchaseCreate({
     setExtractionErrors([]);
     setSupplierMatch(null);
     setUnmatchedSupplier(null);
+    setExtractedInvoiceItems([]);
     setFormError(null);
   };
 
@@ -906,6 +999,7 @@ export function PurchaseCreate({
     setExtractionErrors([]);
     setSupplierMatch(null);
     setUnmatchedSupplier(null);
+    setExtractedInvoiceItems([]);
     setFormError(null);
     // allow re-selecting the same file
     e.target.value = "";
@@ -1035,6 +1129,7 @@ export function PurchaseCreate({
 
       if (blocked) {
         // Do not apply invoice fields / line items when supplier does not match
+        setExtractedInvoiceItems([]);
         setFormError(
           result.errors?.[0] ||
             result.warnings?.[0] ||
@@ -1051,11 +1146,14 @@ export function PurchaseCreate({
         setInvoiceDate(parsedDate);
       }
 
+      // Freeze OCR values for PO invoice items before user edits Manual Invoice Entry
+      setExtractedInvoiceItems(buildExtractedInvoiceItemsSnapshot(result, poLines));
+
       const nextRows = buildRowsFromExtraction(result);
       setManualRows(nextRows.length > 0 ? nextRows : [createEmptyRow()]);
       setFormError(null);
     },
-    [buildRowsFromExtraction],
+    [buildRowsFromExtraction, poLines],
   );
 
   const handleExtractInvoice = async () => {
@@ -1272,6 +1370,7 @@ export function PurchaseCreate({
             {
               invoiceNumber: invoiceNumber.trim(),
               invoiceDate,
+              extractedItems: extractedInvoiceItems,
             },
           ],
         };
@@ -1289,6 +1388,7 @@ export function PurchaseCreate({
             {
               invoiceNumber: invoiceNumber.trim(),
               invoiceDate,
+              extractedItems: extractedInvoiceItems,
             },
           ],
         };
