@@ -36,11 +36,7 @@ export function mapBackendStatusToFrontend(status: string): any {
   if (s === "APPROVED") return "approved";
   if (s === "REJECTED") return "rejected";
   if (s === "CONFIRMED") return "confirmed";
-  if (s === "READY_FOR_PACKING") return "ready_for_packing";
   if (s === "CANCELLED") return "cancelled";
-  if (s === "DISPATCHED") return "dispatched";
-  if (s === "DELIVERED") return "delivered";
-  if (s === "PACKED" || s === "FULLY_PACKED" || s === "PICKING") return "fully_packed";
   return "draft";
 }
 
@@ -51,10 +47,12 @@ export function mapFrontendStatusToBackend(status: string): string {
   if (s === "rejected") return "REJECTED";
   if (s === "confirmed") return "APPROVED";
   if (s === "cancelled") return "CANCELLED";
-  if (s === "dispatched") return "DISPATCHED";
-  if (s === "delivered") return "DELIVERED";
-  if (s === "packed") return "PICKING";
   return "DRAFT";
+}
+
+function mapBackendFulfillmentStatus(status: string): string {
+  const raw = asString(status).trim();
+  return raw || "PENDING";
 }
 
 function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
@@ -114,6 +112,7 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
     orderDate: asDateOnly(raw.order_date),
     deliveryDate: asDateOnly(raw.order_date),
     status: mapBackendStatusToFrontend(raw.status),
+    fulfillmentStatus: mapBackendFulfillmentStatus(raw.fulfillment_status),
     remarks: asString(raw.remarks),
     totalAmount: asNumber(raw.grand_total),
     requiresApproval: raw.status === "SUBMITTED" || raw.status === "PENDING_APPROVAL",

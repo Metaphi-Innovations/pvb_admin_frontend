@@ -41,11 +41,13 @@ import {
   type SalesOrder,
   type OrderStatus,
   formatOrderStatus,
+  formatFulfillmentStatus,
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
   canGeneratePackingList,
   hydrateOrderLineItems,
+  FULFILLMENT_STATUS_OPTIONS,
 } from "./orders-data";
 import { useSalesOrders, useCancelSalesOrder, useSalesOrderFilterOptions } from "@/hooks/sales/use-sales-orders";
 import { SalesOrderService } from "@/services/sales-order.service";
@@ -56,14 +58,13 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
   confirmed: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
-  ready_for_packing: { bg: "bg-cyan-50", text: "text-cyan-700", dot: "bg-cyan-500" },
-  packed: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
-  available_for_dispatch: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500" },
-  ready_for_dispatch: { bg: "bg-fuchsia-50", text: "text-fuchsia-700", dot: "bg-fuchsia-500" },
-  partially_ready_for_dispatch: { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500" },
-  dispatched: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
-  delivered: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
+  pending: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
+  ready_for_packing: { bg: "bg-cyan-50", text: "text-cyan-700", dot: "bg-cyan-500" },
+  partially_packed: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
+  fully_packed: { bg: "bg-sky-50", text: "text-sky-800", dot: "bg-sky-600" },
+  partially_dispatched: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500" },
+  fully_dispatched: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
 };
 
 const STATUS_OPTIONS = [
@@ -71,12 +72,7 @@ const STATUS_OPTIONS = [
   { label: "Pending Approval", value: "PENDING_APPROVAL" },
   { label: "Approved", value: "APPROVED" },
   { label: "Rejected", value: "REJECTED" },
-  { label: "Ready For Packing", value: "READY_FOR_PACKING" },
-  { label: "Packed", value: "PACKED" },
-  { label: "Available for Dispatch", value: "Available for Dispatch" },
-  { label: "Ready for Dispatch", value: "Ready for Dispatch" },
-  { label: "Dispatched", value: "DISPATCHED" },
-  { label: "Delivered", value: "DELIVERED" },
+  { label: "Cancelled", value: "CANCELLED" },
 ];
 
 type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
@@ -88,6 +84,18 @@ function StatusPill({ status }: { status: string }) {
     <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
       {formatOrderStatus(status as OrderStatus)}
+    </span>
+  );
+}
+
+function FulfillmentPill({ status }: { status?: string | null }) {
+  const label = formatFulfillmentStatus(status);
+  const key = label.toLowerCase().replace(/\s+/g, "_");
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.pending;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+      {label}
     </span>
   );
 }
@@ -184,6 +192,12 @@ export default function SalesOrdersPage() {
 
     if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
       backendFilters.status = filters.status[0].toUpperCase();
+    }
+
+    if (filters.fulfillmentStatus && Array.isArray(filters.fulfillmentStatus) && filters.fulfillmentStatus.length > 0) {
+      backendFilters.fulfillment_status = filters.fulfillmentStatus[0];
+    } else if (filters.fulfillmentStatus && typeof filters.fulfillmentStatus === "string") {
+      backendFilters.fulfillment_status = filters.fulfillmentStatus;
     }
 
     if (filters.customerName && Array.isArray(filters.customerName) && filters.customerName.length > 0) {
@@ -328,6 +342,19 @@ export default function SalesOrdersPage() {
       )
     },
     {
+      key: "fulfillmentStatus",
+      header: "Fulfillment",
+      sortable: false,
+      filterable: activeTab === "all",
+      filterType: "dropdown",
+      filterOptions: FULFILLMENT_STATUS_OPTIONS,
+      render: (_val, row) => (
+        <div>
+          <FulfillmentPill status={row.fulfillmentStatus} />
+        </div>
+      )
+    },
+    {
       key: "orderDate",
       header: "Order Date",
       sortable: true,
@@ -456,9 +483,9 @@ export default function SalesOrdersPage() {
         <div className="grid grid-cols-4 gap-3">
           {[
             { label: "Total Orders", value: totalRecords, icon: ShoppingBag, accent: true },
-            { label: "Confirmed", value: orders.filter((o) => o.status === "confirmed").length, icon: CheckCircle2 },
-            { label: "Dispatched", value: orders.filter((o) => o.status === "dispatched").length, icon: TrendingUp },
-            { label: "Delivered", value: orders.filter((o) => o.status === "delivered").length, icon: CheckCircle2 },
+            { label: "Approved", value: orders.filter((o) => o.status === "approved" || o.status === "APPROVED").length, icon: CheckCircle2 },
+            { label: "Partially Dispatched", value: orders.filter((o) => o.fulfillmentStatus === "Partially Dispatched").length, icon: TrendingUp },
+            { label: "Fully Dispatched", value: orders.filter((o) => o.fulfillmentStatus === "Fully Dispatched").length, icon: CheckCircle2 },
           ].map(({ label, value, icon: Icon, accent }) => (
             <div key={label} className="bg-white rounded-xl border border-border p-2 flex items-center gap-3">
               <div
