@@ -1,104 +1,88 @@
-import { BRANCH_OPTIONS, COMPANY_BILLING } from "@/lib/procurement/config";
+import { COMPANY_BILLING } from "@/lib/procurement/config";
 import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
+import type { WarehouseDropdownItem } from "@/services/warehouse.service";
 
-/** Company branch billing addresses (buyer / Bill To). */
-const BRANCH_BILLING_DETAILS: Record<
-  string,
-  Pick<
-    SalesOrderCustomerAddress,
-    "addressLine1" | "addressLine2" | "city" | "state" | "pincode" | "gstin" | "phone" | "email"
-  >
-> = {
-  "hq-pune": {
-    addressLine1: "Plot 12, Agri Park, Hinjawadi Phase 2",
-    city: "Pune",
-    state: "Maharashtra",
-    pincode: "411057",
-    gstin: COMPANY_BILLING.gstNumber,
-    phone: "+91 9876500001",
-    email: "accounts@dharitrisutra.in",
-  },
-  "branch-mumbai": {
-    addressLine1: "Unit 4B, Andheri Industrial Estate",
-    city: "Mumbai",
-    state: "Maharashtra",
-    pincode: "400053",
-    gstin: "27AABCD1234E2Z6",
-    phone: "+91 9876500002",
-    email: "mumbai@dharitrisutra.in",
-  },
-  "branch-nagpur": {
-    addressLine1: "12 MIDC Road, Kamptee",
-    city: "Nagpur",
-    state: "Maharashtra",
-    pincode: "441001",
-    gstin: "27AABCD1234E3Z1",
-    phone: "+91 9876500003",
-    email: "nagpur@dharitrisutra.in",
-  },
-  "warehouse-aurangabad": {
-    addressLine1: "Warehouse Block, Chikalthana MIDC",
-    city: "Aurangabad",
-    state: "Maharashtra",
-    pincode: "431006",
-    gstin: "27AABCD1234E4Z8",
-    phone: "+91 9876500004",
-    email: "aurangabad@dharitrisutra.in",
-  },
-};
-
-export function getPOBillToAddresses(): SalesOrderCustomerAddress[] {
-  return BRANCH_OPTIONS.map((branch) => {
-    const details = BRANCH_BILLING_DETAILS[branch.value] ?? {
-      addressLine1: COMPANY_BILLING.billingAddress,
-      city: COMPANY_BILLING.city,
-      state: COMPANY_BILLING.state,
-      pincode: COMPANY_BILLING.pincode,
-      gstin: COMPANY_BILLING.gstNumber,
-      phone: "—",
-      email: "—",
-    };
-    const branchLabel = branch.label.split("—")[0]?.trim() || branch.label;
-    return {
-      id: `bill-${branch.value}`,
-      label: `${branchLabel} — Bill To`,
-      companyName: COMPANY_BILLING.companyName,
-      addressLine1: details.addressLine1,
-      addressLine2: details.addressLine2,
-      city: details.city,
-      state: details.state,
-      pincode: details.pincode,
-      gstin: details.gstin,
-      phone: details.phone,
-      email: details.email,
-    };
-  });
+/** Map a warehouse master record to a Bill To / Ship To address option. */
+export function warehouseToPOAddress(
+	w: WarehouseDropdownItem,
+	kind: "bill" | "ship",
+): SalesOrderCustomerAddress {
+	const primary = w.contacts?.find((c) => c.is_primary) ?? w.contacts?.[0];
+	const kindLabel = kind === "bill" ? "Bill To" : "Ship To";
+	return {
+		id: `${kind}-wh-${w.warehouse_id}`,
+		label: `${w.warehouse_name} — ${kindLabel}`,
+		companyName: w.registered_legal_name || COMPANY_BILLING.companyName,
+		addressLine1: w.address || "",
+		addressLine2: w.address_1 || "",
+		city: w.city || "",
+		state: w.state || "",
+		pincode: w.pincode || "",
+		gstin: w.gst_number || COMPANY_BILLING.gstNumber,
+		phone: primary?.mobile_number || "—",
+		email: primary?.email_address || "—",
+	};
 }
 
-/** Ship-to addresses come from warehouse API dropdowns in the form — no local mock list. */
-export function getPOShipToAddresses(): SalesOrderCustomerAddress[] {
-  return [];
+/** Bill To options: every warehouse address. */
+export function getPOBillToAddressesFromWarehouses(
+	warehouses: WarehouseDropdownItem[],
+): SalesOrderCustomerAddress[] {
+	return warehouses.map((w) => warehouseToPOAddress(w, "bill"));
+}
+
+/** Ship To options: typically only the selected PO warehouse. */
+export function getPOShipToAddressesFromWarehouses(
+	warehouses: WarehouseDropdownItem[],
+): SalesOrderCustomerAddress[] {
+	return warehouses.map((w) => warehouseToPOAddress(w, "ship"));
 }
 
 export function getDefaultPOBillShipIds(
-  billAddresses: SalesOrderCustomerAddress[],
-  shipAddresses: SalesOrderCustomerAddress[],
-  warehouseId?: number | string | null,
+	billAddresses: SalesOrderCustomerAddress[],
+	shipAddresses: SalesOrderCustomerAddress[],
+	warehouseId?: number | string | null,
 ): { billToAddressId: string; shipToAddressId: string } {
-  const billTo =
-    billAddresses.find((a) => a.id === "bill-hq-pune") ?? billAddresses[0];
-  const shipTo = warehouseId
-    ? shipAddresses.find((a) => a.id === `ship-wh-${warehouseId}`) ?? shipAddresses[0]
-    : shipAddresses[0];
-  return {
-    billToAddressId: billTo?.id ?? "",
-    shipToAddressId: shipTo?.id ?? "",
-  };
+	const billTo = warehouseId
+		? billAddresses.find((a) => a.id === `bill-wh-${warehouseId}`) ?? billAddresses[0]
+		: billAddresses[0];
+	const shipTo = warehouseId
+		? shipAddresses.find((a) => a.id === `ship-wh-${warehouseId}`) ?? shipAddresses[0]
+		: shipAddresses[0];
+	return {
+		billToAddressId: billTo?.id ?? "",
+		shipToAddressId: shipTo?.id ?? "",
+	};
 }
 
 export function findPOAddressById(
-  addresses: SalesOrderCustomerAddress[],
-  id: string,
+	addresses: SalesOrderCustomerAddress[],
+	id: string,
 ): SalesOrderCustomerAddress | null {
-  return addresses.find((a) => a.id === id) ?? null;
+	return addresses.find((a) => a.id === id) ?? null;
+}
+
+/** Billing snapshot fields from a selected Bill To warehouse address. */
+export function billingFromPOAddress(address: SalesOrderCustomerAddress | null) {
+	if (!address) {
+		return {
+			companyName: COMPANY_BILLING.companyName,
+			billingAddress: "",
+			gstNumber: "",
+			state: "",
+			city: "",
+			pincode: "",
+		};
+	}
+	const billingAddress = [address.addressLine1, address.addressLine2]
+		.filter(Boolean)
+		.join(", ");
+	return {
+		companyName: address.companyName || COMPANY_BILLING.companyName,
+		billingAddress,
+		gstNumber: address.gstin || COMPANY_BILLING.gstNumber,
+		state: address.state || "",
+		city: address.city || "",
+		pincode: address.pincode || "",
+	};
 }

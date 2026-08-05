@@ -13,17 +13,11 @@ import {
   type ProcurementAdditionalCharge,
 } from "@/lib/procurement/procurement-line-utils";
 import type { POSummary, PurchaseOrder } from "../purchase-orders/po-data";
-import {
-  findPOAddressById,
-  getPOBillToAddresses,
-} from "../purchase-orders/po-address-utils";
 import type { PurchaseReturn, PurchaseReturnItem } from "./purchase-return-data";
 
 export function resolveTaxSupplyForPO(po: PurchaseOrder): TaxSupplyType {
-  const billToAddresses = getPOBillToAddresses();
-  const billToAddress = findPOAddressById(billToAddresses, po.billToAddressId ?? "");
   const warehouseState = po.state ?? po.shipping?.shipToLocation ?? "";
-  const billToState = billToAddress?.state ?? po.billing?.state ?? "";
+  const billToState = po.billing?.state ?? "";
   return resolveTaxSupplyType(warehouseState, billToState);
 }
 
