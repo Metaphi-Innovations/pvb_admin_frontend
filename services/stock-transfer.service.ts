@@ -33,14 +33,17 @@ export function mapBackendStatusToFrontend(status: string): TransferStatus {
     case "DRAFT": return "draft";
     case "SUBMITTED": return "pending_approval";
     case "APPROVED": return "approved";
-    case "READY_FOR_PACKING": return "ready_for_packing";
-    case "PICKING": return "packing_in_progress";
-    case "FULLY_PACKED": return "packed";
-    case "PACKED": return "packed";
-    case "IN_TRANSIT": return "in_transit";
     case "PARTIALLY_RECEIVED": return "partially_received";
     case "RECEIVED": return "received";
     case "CANCELLED": return "cancelled";
+    case "REJECTED": return "rejected";
+    // Legacy values that used to live on status (warehouse flow) — treat as approved for display
+    case "READY_FOR_PACKING":
+    case "PICKING":
+    case "FULLY_PACKED":
+    case "PACKED":
+    case "IN_TRANSIT":
+      return "approved";
     default: return "draft";
   }
 }
@@ -50,17 +53,19 @@ export function mapFrontendStatusToBackend(status: string): string {
   switch (s) {
     case "draft": return "DRAFT";
     case "pending_approval": return "SUBMITTED";
-    case "approved": return "APPROVED";
+    case "approved":
     case "confirmed": return "APPROVED";
-    case "ready_for_packing": return "READY_FOR_PACKING";
-    case "packing_in_progress": return "PICKING";
-    case "in_transit": return "IN_TRANSIT";
     case "partially_received": return "PARTIALLY_RECEIVED";
     case "received": return "RECEIVED";
     case "rejected": return "REJECTED";
     case "cancelled": return "CANCELLED";
     default: return "DRAFT";
   }
+}
+
+function mapBackendFulfillmentStatus(status: string): string {
+  const raw = asString(status).trim();
+  return raw || "PENDING";
 }
 
 function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
@@ -147,6 +152,7 @@ export function mapBackendStockTransfer(raw: any): StockTransfer {
     targetWarehouseName: asString(toWh.warehouse_name),
     targetWarehouseCode: asString(toWh.warehouse_code),
     status: mapBackendStatusToFrontend(raw.status),
+    fulfillmentStatus: mapBackendFulfillmentStatus(raw.fulfillment_status),
     requestedBy: raw.requested_by || req.user_id || "",
     reasonPurpose: asString(raw.reason),
     remarks: asString(raw.remarks),

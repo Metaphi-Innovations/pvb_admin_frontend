@@ -101,12 +101,15 @@ export function CustomerDistributorCreditSection({
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Final Credit Limit</Label>
             <Input
-              type="number"
-              min={0}
-              step="0.01"
+              type="text"
+              inputMode="numeric"
+              maxLength={10}
               value={form.creditLimit}
-              onChange={(e) => set("creditLimit", e.target.value)}
-              placeholder="0.00"
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                set("creditLimit", digits);
+              }}
+              placeholder="Max 10 digits"
               className={inputCls("creditLimit")}
               disabled={readOnly}
             />

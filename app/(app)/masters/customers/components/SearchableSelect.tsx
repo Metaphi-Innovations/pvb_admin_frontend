@@ -61,7 +61,7 @@ export function SearchableSelect({
             className,
           )}
         >
-          <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+          <span className={cn("block truncate flex-1 text-left mr-2", selected ? "text-foreground" : "text-muted-foreground")}>
             {selected?.label || placeholder}
           </span>
           <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />

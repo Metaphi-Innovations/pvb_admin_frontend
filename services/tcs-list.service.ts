@@ -59,6 +59,9 @@ export interface TcsFilterOption {
 export interface TcsDropdownItem {
   tcsUuid: string;
   sectionCode: string;
+  tcsRate: string;
+  sectionName: string;
+  description: string;
 }
 
 export type TcsFilterField =
@@ -310,6 +313,9 @@ export const TcsListService = {
       return {
         tcsUuid: asString(record.tcs_id),
         sectionCode: asString(record.tcs_code),
+        tcsRate: formatRate(record.tcs_rate),
+        sectionName: asString(record.tcs_section_name),
+        description: asString(record.description),
       };
     });
   },

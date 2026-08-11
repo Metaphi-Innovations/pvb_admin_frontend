@@ -15,8 +15,16 @@ import { POFormFooter } from "../../components/POFormFooter";
 import { POFormPageSkeleton } from "../../components/POSkeletons";
 import { usePurchaseOrder, useUpdatePurchaseOrder } from "@/hooks/procurement";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import type { POListStatus } from "@/lib/procurement/po-status";
 
-const EDITABLE_STATUSES = ["draft", "rejected"] as const;
+const EDITABLE_STATUSES = [
+  "draft",
+  "rejected",
+  "approved",
+  "invoice_uploaded",
+  "partially_received",
+  "received",
+] as const;
 
 export default function EditPOPage() {
   const params = useParams();
@@ -29,6 +37,15 @@ export default function EditPOPage() {
   const [errors, setErrors] = useState<POFormErrors>({});
 
   const po = detailQuery.data;
+
+  const isMatchAdjustmentEdit = useMemo(
+    () =>
+      !!po &&
+      (["approved", "invoice_uploaded", "partially_received", "received"] as const).includes(
+        po.status as "approved" | "invoice_uploaded" | "partially_received" | "received",
+      ),
+    [po],
+  );
 
   useEffect(() => {
     if (!po) return;
@@ -77,6 +94,14 @@ export default function EditPOPage() {
     if (Object.keys(errors).length > 0) setErrors({});
   };
 
+  const resolveSaveStatus = (submit: boolean): POListStatus => {
+    if (submit) return "approved";
+    if (po.status === "rejected") return "draft";
+    // Frontend-only display status — backend still stores Approved / Received / etc.
+    if (po.status === "invoice_uploaded") return "approved";
+    return po.status;
+  };
+
   const save = (submit = false) => {
     setError(null);
     if (submit) {
@@ -95,11 +120,7 @@ export default function EditPOPage() {
         id: po.id,
         form,
         poNumber: po.poNumber,
-        status: submit
-          ? "approved"
-          : po.status === "rejected"
-            ? "draft"
-            : po.status,
+        status: resolveSaveStatus(submit),
       },
       {
         onSuccess: () => {
@@ -127,12 +148,20 @@ export default function EditPOPage() {
           onSaveDraft={() => save(false)}
           onSubmit={() => save(true)}
           showSubmit={["draft", "rejected"].includes(po.status)}
-          saveLabel="Update Purchase Order"
+          saveLabel={
+            isMatchAdjustmentEdit ? "Update Quantities" : "Update Purchase Order"
+          }
           saving={updateMutation.isPending}
         />
       }
     >
       {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
+      {isMatchAdjustmentEdit ? (
+        <p className="mb-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          Edit <span className="font-semibold">Qty</span> for each product to align with
+          Received / Invoiced (SKU). Rate is fixed. Line totals update as you change Qty.
+        </p>
+      ) : null}
       <PurchaseOrderForm
         form={form}
         onChange={handleFormChange}
@@ -140,6 +169,7 @@ export default function EditPOPage() {
         status={po.status}
         submittedDate={po.updatedDate}
         errors={errors}
+        showReceiptContext={isMatchAdjustmentEdit}
       />
     </POFormLayout>
   );

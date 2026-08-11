@@ -243,6 +243,8 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
       receivedBaseQty > 0
         ? round2(receivedBaseQty / conversionQty)
         : asNumber(raw.received_qty),
+    receivedBaseQty: receivedBaseQty > 0 ? receivedBaseQty : undefined,
+    invoicedQty: undefined,
     shortClosedQty:
       shortClosedBaseQty > 0
         ? round2(shortClosedBaseQty / conversionQty)
@@ -289,8 +291,6 @@ function mapInvoices(raw: unknown): PurchaseOrder["activity"] {
 }
 
 export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
-
-  console.log("raw",raw)
   const supplier = asRecord(raw.supplier);
   const snapshot = asRecord(raw.supplier_snapshot);
   const supplierTypeFromSupplier = asString(
@@ -311,6 +311,28 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
   );
   const followups = Array.isArray(raw.followups) ? raw.followups : [];
   const invoices = Array.isArray(raw.invoices) ? raw.invoices : [];
+
+  // Sum OCR/invoice billed qty per PO product line (base units)
+  const invoicedByPoProduct = new Map<string, number>();
+  for (const inv of invoices) {
+    const invRow = asRecord(inv);
+    const items = Array.isArray(invRow.items) ? invRow.items : [];
+    for (const item of items) {
+      const itemRow = asRecord(item);
+      const poProductId = asString(itemRow.purchase_order_product_id);
+      if (!poProductId) continue;
+      const qty = asNumber(itemRow.invoice_qty);
+      invoicedByPoProduct.set(
+        poProductId,
+        round2((invoicedByPoProduct.get(poProductId) ?? 0) + qty),
+      );
+    }
+  }
+  for (const line of lines) {
+    if (!line.purchaseOrderProductId) continue;
+    const invoiced = invoicedByPoProduct.get(line.purchaseOrderProductId);
+    if (invoiced != null) line.invoicedQty = invoiced;
+  }
 
   const supplierName =
     asString(supplier.supplier_name) ||
@@ -534,6 +556,7 @@ function buildWriteBody(
         const { packingQty, baseQty } = resolveLineQtyFields(line);
         return {
           product_id: toUuidOrNull(line.productId),
+          purchase_order_product_id: toUuidOrNull(line.purchaseOrderProductId),
           product_code: line.productCode || null,
           product_name: line.productName || null,
           base_unit: line.baseUnit || null,

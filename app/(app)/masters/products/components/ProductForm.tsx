@@ -335,24 +335,37 @@ export function ProductForm({
 	isNew?: boolean;
 }) {
 
-	const computeProductCode = (netWeight: string, apiCode?: string) => {
-		// console.log("netWeight", netWeight);
-		// console.log("apiCode", apiCode);
-		const weightNum = parseFloat(netWeight) * 1000;
-		if (isNaN(weightNum) || !apiCode) return apiCode ?? "";
+	/** Digits only: {pack size in g/ml}{4-digit serial}. Gms/Ml as-is; Kg/Ltr × 1000. */
+	const computeProductCode = (
+		packSize: string,
+		baseUnit: string,
+		lastProductCode?: string | null,
+	) => {
+		const pack = parseFloat(packSize);
+		if (isNaN(pack) || pack <= 0) return "";
 
-		const match = apiCode.match(/^(.*?)(\d+)$/);
-		if (!match) return apiCode;
+		const unit = normalizeProductUnit(baseUnit);
 
-		const [, prefix, numericPart] = match;
+		let weight: number;
+		if (unit === "Gms" || unit === "Ml") {
+			weight = pack;
+		} else if (unit === "Kg" || unit === "Ltr") {
+			weight = pack * 1000;
+		} else {
+			return "";
+		}
 
-		const lastDigit = Number(numericPart.slice(-1));
-		const nextDigit = lastDigit + 1;
+		let nextSerial = 1;
+		if (lastProductCode) {
+			const digitsOnly = String(lastProductCode).replace(/\D/g, "");
+			if (digitsOnly.length >= 4) {
+				const lastSerial = parseInt(digitsOnly.slice(-4), 10);
+				if (!isNaN(lastSerial)) nextSerial = lastSerial + 1;
+			}
+		}
 
-		const newNumber = `${weightNum}${nextDigit}`;
-
-		// Keep existing generation; only omit the PROD- prefix from the stored code.
-		return `${prefix}${newNumber}`.replace(/^PROD-/i, "");
+		const serial = String(nextSerial).padStart(4, "0");
+		return `${Math.round(weight)}${serial}`;
 	};
 
 	const set = <K extends keyof ProductFormValues>(
@@ -364,12 +377,16 @@ export function ProductForm({
 		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
 			next = applyPackagingCalculations(next);
 
-			if (isNew && previewNumber && next.netWeightPerPackagingUnit) {
-				next.productCode = computeProductCode(
-					next.netWeightPerPackagingUnit,
-					previewNumber
+			if (isNew && (key === "packSize" || key === "baseUnit")) {
+				const generated = computeProductCode(
+					next.packSize,
+					next.baseUnit,
+					previewNumber,
 				);
-				onClearError("productCode");
+				if (generated) {
+					next.productCode = generated;
+					onClearError("productCode");
+				}
 			}
 		}
 
@@ -378,18 +395,19 @@ export function ProductForm({
 	};
 
 	useEffect(() => {
-		if (isNew && previewNumber && form.netWeightPerPackagingUnit) {
-			const generated = computeProductCode(
-				form.netWeightPerPackagingUnit,
-				previewNumber
-			);
+		if (!isNew) return;
 
-			if (generated && generated !== form.productCode) {
-				onChange({ ...form, productCode: generated });
-				onClearError("productCode");
-			}
+		const generated = computeProductCode(
+			form.packSize,
+			form.baseUnit,
+			previewNumber,
+		);
+
+		if (generated && generated !== form.productCode) {
+			onChange({ ...form, productCode: generated });
+			onClearError("productCode");
 		}
-	}, [previewNumber, form.netWeightPerPackagingUnit]);
+	}, [previewNumber, form.packSize, form.baseUnit]);
 
 	const handleSupplierChange = (supplierId: string) => {
 		const supplierItem = suppliersData?.find((s) => s.supplier_id === supplierId);
@@ -880,7 +898,9 @@ export function ProductForm({
 					</div>
 
 					<div className='space-y-1'>
-						<Label className='text-xs font-medium'>MRP</Label>
+						<Label className='text-xs font-medium'>
+							MRP <span className='text-red-500'>*</span>
+						</Label>
 						<IndianRupeeInput
 							value={
 								form.mrp && !isNaN(Number(form.mrp)) ? Number(form.mrp) : 0
@@ -900,7 +920,9 @@ export function ProductForm({
 						<FieldError msg={errors.mrp} />
 					</div>
 					<div className='space-y-1'>
-						<Label className='text-xs font-medium'>Cost Price</Label>
+						<Label className='text-xs font-medium'>
+							Cost Price <span className='text-red-500'>*</span>
+						</Label>
 						<IndianRupeeInput
 							value={
 								form.costPrice && !isNaN(Number(form.costPrice))
@@ -1314,8 +1336,8 @@ export function validateProductForm(
 		UNIT_PER_CASE_MAX,
 	);
 	requirePositiveNumber(form.grossWeight, "grossWeight", "Gross weight", true, DECIMAL_18_4_MAX);
-	requireNonNegativeNumber(form.mrp, "mrp", "MRP", MRP_MAX);
-	requireNonNegativeNumber(form.costPrice, "costPrice", "Cost price", COST_PRICE_MAX);
+	requirePositiveNumber(form.mrp, "mrp", "MRP", true, MRP_MAX);
+	requirePositiveNumber(form.costPrice, "costPrice", "Cost price", true, COST_PRICE_MAX);
 	requireNonNegativeNumber(
 		form.netWeightPerPackagingUnit,
 		"netWeightPerPackagingUnit",

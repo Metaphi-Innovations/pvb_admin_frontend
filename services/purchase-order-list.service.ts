@@ -9,6 +9,8 @@ import {
 } from "@/lib/procurement/po-status";
 import type { FilterState } from "@/components/listing/types";
 
+export type ThreeWayMatchStatus = "PENDING" | "MATCHED" | "NOT_MATCHED";
+
 export interface PurchaseOrderListItem {
   id: string;
   poNumber: string;
@@ -26,6 +28,9 @@ export interface PurchaseOrderListItem {
   warehouseName: string;
   followUpCount: number;
   invoiceCount: number;
+  threeWayMatchStatus: ThreeWayMatchStatus;
+  threeWayMatchReasons: string[];
+  threeWayMatchReasonLabels: string[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -113,6 +118,15 @@ function mapSupplierSecondaryLine(supplier: Record<string, unknown>): string {
   return "";
 }
 
+function mapThreeWayMatchStatus(value: unknown): ThreeWayMatchStatus {
+  const raw = asString(value).toUpperCase();
+  if (raw === "MATCHED") return "MATCHED";
+  if (raw === "NOT_MATCHED" || raw === "MISMATCH" || raw === "UNMATCHED") {
+    return "NOT_MATCHED";
+  }
+  return "PENDING";
+}
+
 function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
   const supplier =
     raw.supplier &&
@@ -131,6 +145,13 @@ function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
       ? (raw._count as Record<string, unknown>)
       : {};
 
+  const reasonLabels = Array.isArray(raw.three_way_match_reason_labels)
+    ? raw.three_way_match_reason_labels.map((v) => asString(v)).filter(Boolean)
+    : [];
+  const reasons = Array.isArray(raw.three_way_match_reasons)
+    ? raw.three_way_match_reasons.map((v) => asString(v)).filter(Boolean)
+    : [];
+
   return {
     id: asString(raw.purchase_order_id ?? raw.id),
     poNumber: asString(raw.po_no),
@@ -148,6 +169,9 @@ function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
     warehouseName: asString(raw.warehouse_name),
     followUpCount: asNumber(counts.followups),
     invoiceCount: asNumber(counts.invoices),
+    threeWayMatchStatus: mapThreeWayMatchStatus(raw.three_way_match_status),
+    threeWayMatchReasons: reasons,
+    threeWayMatchReasonLabels: reasonLabels,
     createdAt: asString(raw.created_at),
     updatedAt: asString(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),

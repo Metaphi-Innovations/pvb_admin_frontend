@@ -33,6 +33,7 @@ import {
   type SalesOrder,
   type OrderStatus,
   formatOrderStatus,
+  formatFulfillmentStatus,
   canEditOrder,
   canCancelOrder,
   canGeneratePackingList,
@@ -217,6 +218,11 @@ export default function ViewSalesOrderPage() {
       value: formatOrderStatus(order.status),
       tone: orderStatusVariant(order.status) === "active" ? "approved" : orderStatusVariant(order.status) === "blocked" ? "rejected" : "neutral",
     },
+    {
+      label: "Fulfillment",
+      value: formatFulfillmentStatus(order.fulfillmentStatus),
+      tone: "neutral",
+    },
   ];
   if (order.approvedBy) {
     approvalItems.push({ label: "Approved By", value: order.approvedBy, tone: "neutral" });
@@ -327,6 +333,7 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Source Warehouse" value={order.warehouseName || "—"} />
               <RecordKvRow label="Remarks" value={order.remarks || "—"} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
+              <RecordKvRow label="Fulfillment Status" value={formatFulfillmentStatus(order.fulfillmentStatus)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
               <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
             </RecordSectionCard>

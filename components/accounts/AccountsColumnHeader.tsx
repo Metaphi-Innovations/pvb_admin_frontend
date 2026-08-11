@@ -121,11 +121,11 @@ export function AccountsColumnHeader({
           className={cn(
             "inline-flex items-center gap-0.5 whitespace-nowrap text-left",
             sortable && "cursor-pointer hover:text-brand-700",
-            align === "right" && "text-right flex-row-reverse",
+            align === "right" && (filterable ? "text-right flex-row-reverse" : "text-right"),
           )}
           title={sortable ? "Click to sort · Double-click to remove sort" : undefined}
         >
-          <span>{label}</span>
+          <span className="truncate min-w-0">{label}</span>
           {sortable && (
             <span className="flex-shrink-0 text-muted-foreground/70">
               {sorted ? (

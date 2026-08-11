@@ -79,8 +79,12 @@ export interface POLineItem {
   deliverySchedule: string;
   remarks: string;
   prLineUid?: string;
-  /** Fallback when GRN not linked by PO number */
+  /** Fallback when GRN not linked by PO number (packing units). */
   receivedQty?: number;
+  /** Received qty in base/SKU units (from GRNs). */
+  receivedBaseQty?: number;
+  /** Invoiced qty in base/SKU units (sum of PO invoice / OCR items). */
+  invoicedQty?: number;
   shortClosedQty?: number;
   cpSource?: PriceSource | "manual";
 }
@@ -285,6 +289,8 @@ function migratePOLine(line: Partial<POLineItem>): POLineItem {
     remarks: line.remarks ?? "",
     prLineUid: line.prLineUid,
     receivedQty: line.receivedQty,
+    receivedBaseQty: line.receivedBaseQty,
+    invoicedQty: line.invoicedQty,
     shortClosedQty: line.shortClosedQty,
     cpSource: line.cpSource,
     category: line.category ?? enriched?.category ?? "",

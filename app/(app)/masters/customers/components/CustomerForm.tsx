@@ -1497,41 +1497,23 @@ export function CustomerForm({
 				form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
 			)}
 		>
-			<div className={ERP.field}>
-				<Label className={ERP.label}>PAN Number</Label>
-				<Input
-					value={form.pan}
-					onChange={(e) => set("pan", e.target.value.toUpperCase())}
-					className={cn("font-mono", inputCls("pan"))}
-					disabled={readOnly}
-					maxLength={10}
-					placeholder="ABCDE1234F"
-				/>
-				<FieldError msg={errors.pan} />
-			</div>
 			<div className="flex flex-wrap items-end gap-3">
-				{/* <div className={ERP.field}>
-					<Label className={ERP.label}>TDS Applicable</Label>
-					<div className="flex h-8 items-center">
-						<ListingStatusToggle
-							active={form.tdsApplicable}
-							onChange={(yes) =>
-								!readOnly &&
-								onChange({
-									...form,
-									tdsApplicable: yes,
-									tdsMasterId: yes ? form.tdsMasterId : "",
-								})
-							}
-							disabled={readOnly}
-						/>
-					</div>
-				</div> */}
-				<div className="flex flex-wrap items-end gap-3">
-					<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
-						<Label className={ERP.label}>
-							TDS Section <span className="text-red-500">*</span>
-						</Label>
+				<div className={cn(ERP.field, "w-full max-w-[180px]")}>
+					<Label className={ERP.label}>PAN Number</Label>
+					<Input
+						value={form.pan}
+						onChange={(e) => set("pan", e.target.value.toUpperCase())}
+						className={cn("font-mono uppercase", inputCls("pan"))}
+						disabled={readOnly}
+						maxLength={10}
+						placeholder="ABCDE1234F"
+					/>
+					<FieldError msg={errors.pan} />
+				</div>
+				<div className={cn(ERP.field, "min-w-[200px] max-w-[280px] flex-1")}>
+					<Label className={ERP.label}>
+						TDS Section <span className="text-red-500">*</span>
+					</Label>
 						<SearchableSelect
 							value={form.tdsMasterId}
 							onChange={(value) => set("tdsMasterId", value)}
@@ -1548,7 +1530,6 @@ export function CustomerForm({
 							error={!!errors.tdsMasterId}
 						/>
 						<FieldError msg={errors.tdsMasterId} />
-					</div>
 				</div>
 			</div>
 		</div>
@@ -1844,12 +1825,15 @@ export function CustomerForm({
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Credit Limit</Label>
 										<Input
-											type='number'
-											min={0}
-											step='0.01'
+											type='text'
+											inputMode='numeric'
+											maxLength={10}
 											value={form.creditLimit}
-											onChange={(e) => set('creditLimit', e.target.value)}
-											placeholder='0.00'
+											onChange={(e) => {
+												const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+												set("creditLimit", digits);
+											}}
+											placeholder='Max 10 digits'
 											className={inputCls('creditLimit')}
 											disabled={readOnly}
 										/>
@@ -1885,7 +1869,7 @@ export function CustomerForm({
 								{/* Account Holder Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Account Holder Name
+										Account Holder Name <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1899,7 +1883,7 @@ export function CustomerForm({
 								{/* Bank Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Bank Name
+										Bank Name <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1913,7 +1897,7 @@ export function CustomerForm({
 								{/* Branch Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Branch Name
+										Branch Name <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1927,7 +1911,7 @@ export function CustomerForm({
 								{/* Account Number */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Account Number
+										Account Number <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1941,7 +1925,7 @@ export function CustomerForm({
 								{/* Confirm Account Number */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Confirm Account Number
+										Confirm Account Number <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1958,7 +1942,7 @@ export function CustomerForm({
 								{/* IFSC Code */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										IFSC Code
+										IFSC Code <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -2336,7 +2320,9 @@ export function CustomerForm({
 																				<th className='px-3 py-2 font-medium'>
 																					Upload File
 																				</th>
-																				<th className='w-10 px-3 py-2' />
+																				<th className='w-12 px-2 py-2 text-center font-medium'>
+																					{!readOnly ? "Remove" : ""}
+																				</th>
 																			</tr>
 																		</thead>
 																		<tbody>
@@ -2449,23 +2435,19 @@ export function CustomerForm({
 																									</div>
 																								)}
 																							</td>
-																							{/* <td className='px-3 py-2'>
-																								{!readOnly && (
+																							<td className='px-2 py-2 text-center'>
+																								{!readOnly && isAttached && (
 																									<Button
 																										type='button'
 																										variant='ghost'
-																										className='w-8 h-8 p-0 text-red-600 rounded-md hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent'
-																										disabled={
-																											!isAttached &&
-																											doc.required
-																										}
+																										className='w-8 h-8 p-0 text-red-600 rounded-md hover:bg-red-50'
+																										title='Remove uploaded document'
 																										onClick={() => {
+																											const updatedBranches = [
+																												...form.branches,
+																											];
 																											if (doc.required) {
-																												const updatedBranches =
-																													[...form.branches];
-																												updatedBranches[
-																													bIdx
-																												].documents[
+																												updatedBranches[bIdx].documents[
 																													originalIdx
 																												] = {
 																													...doc,
@@ -2473,44 +2455,29 @@ export function CustomerForm({
 																													fileUrl: undefined,
 																													file: undefined,
 																												};
-																												onChange({
-																													...form,
-																													branches:
-																														updatedBranches,
-																												});
-																												showToast(
-																													"Document removed.",
-																													"success",
-																												);
 																											} else {
-																												const updatedBranches =
-																													[...form.branches];
-																												updatedBranches[
-																													bIdx
-																												].documents =
+																												updatedBranches[bIdx].documents =
 																													updatedBranches[
 																														bIdx
 																													].documents.filter(
 																														(_, idx) =>
-																															idx !==
-																															originalIdx,
+																															idx !== originalIdx,
 																													);
-																												onChange({
-																													...form,
-																													branches:
-																														updatedBranches,
-																												});
-																												showToast(
-																													"Document row removed.",
-																													"success",
-																												);
 																											}
+																											onChange({
+																												...form,
+																												branches: updatedBranches,
+																											});
+																											showToast(
+																												"Document removed.",
+																												"success",
+																											);
 																										}}
 																									>
 																										<Trash2 className='w-3.5 h-3.5' />
 																									</Button>
 																								)}
-																							</td> */}
+																							</td>
 																						</tr>
 																					);
 																				},
@@ -3030,8 +2997,35 @@ export function validateCustomerForm(
 		});
 	});
 
-	if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit)))
-		e.creditLimit = "Invalid amount";
+	if (form.creditLimit.trim()) {
+		if (!/^\d{1,10}$/.test(form.creditLimit.trim())) {
+			e.creditLimit = "Credit limit must be up to 10 digits only";
+		}
+	}
+
+	if (!form.accountHolderName.trim()) {
+		e.accountHolderName = "Account holder name is required";
+	}
+	if (!form.bankName.trim()) {
+		e.bankName = "Bank name is required";
+	}
+	if (!form.branch.trim()) {
+		e.branch = "Branch name is required";
+	}
+	if (!form.accountNumber.trim()) {
+		e.accountNumber = "Account number is required";
+	}
+	if (!form.confirmAccountNumber.trim()) {
+		e.confirmAccountNumber = "Confirm account number is required";
+	} else if (form.accountNumber !== form.confirmAccountNumber) {
+		e.confirmAccountNumber = "Account number mismatch";
+	}
+	if (!form.ifscCode.trim()) {
+		e.ifscCode = "IFSC code is required";
+	} else if (!validateIFSC(form.ifscCode)) {
+		e.ifscCode = "Invalid IFSC format";
+	}
+
 	Object.assign(e, validateDistributorCreditOverride(form));
 	Object.assign(
 		e,
@@ -3041,11 +3035,6 @@ export function validateCustomerForm(
 			advancePercentage: form.advancePercentage,
 		}),
 	);
-	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
-		e.confirmAccountNumber = "Account number mismatch";
-	}
-	if (form.ifscCode.trim() && !validateIFSC(form.ifscCode))
-		e.ifscCode = "Invalid IFSC format";
 	if (form.status === "blocked" && !form.blockReason.trim())
 		e.blockReason = "Block reason is required when status is Blocked";
 
@@ -3103,6 +3092,10 @@ export function validateCustomerFormStep(
 					"paymentType",
 					"creditDays",
 					"advancePercentage",
+					"accountHolderName",
+					"bankName",
+					"branch",
+					"accountNumber",
 					"confirmAccountNumber",
 					"ifscCode",
 					"blockReason",

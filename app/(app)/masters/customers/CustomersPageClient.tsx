@@ -346,7 +346,12 @@ export default function CustomersPage() {
 			filterType: "dropdown",
 			filterOptions: emailOptions,
 			width: "190px",
-			render: (val, row) => row.email || "—",
+			truncate: true,
+			tooltipText: (_val, row) => row.email || undefined,
+			render: (_val, row) => {
+				const email = (row.email || "").trim() || "—";
+				return email;
+			},
 		},
 		{
 			key: "gstin",
@@ -371,7 +376,12 @@ export default function CustomersPage() {
 				value: type.id,
 			})),
 			width: "130px",
-			render: (_, row) => row.customerType || "—",
+			truncate: true,
+			tooltipText: (_val, row) => row.customerType || undefined,
+			render: (_val, row) => {
+				const customerType = (row.customerType || "").trim() || "—";
+				return customerType;
+			},
 		},
 		{
 			key: "address",
@@ -381,6 +391,8 @@ export default function CustomersPage() {
 			filterType: "dropdown",
 			filterOptions: addressOptions,
 			width: "240px",
+			truncate: true,
+			tooltipText: (_val, row) => (row.address || "").trim() || undefined,
 			render: (_val, row) => {
 				const address = (row.address || "").trim() || "—";
 				return address;

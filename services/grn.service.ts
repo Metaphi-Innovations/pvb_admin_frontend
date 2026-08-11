@@ -102,11 +102,24 @@ export interface CreateGrnItemPayload {
   batches: CreateGrnBatchPayload[];
 }
 
+export interface CreateGrnExtractedInvoiceItemPayload {
+  purchase_order_product_id?: string | null;
+  product_id?: string | null;
+  invoice_qty: number;
+  invoice_rate?: number | null;
+  invoice_amount?: number | null;
+  gst?: number | null;
+  gst_amount?: number | null;
+  extracted_data?: Record<string, unknown> | null;
+}
+
 export interface CreateGrnInvoicePayload {
   invoiceNumber: string;
   invoiceDate: string;
   invoiceFile?: string | null;
   remarks?: string | null;
+  /** OCR-extracted billed lines (not GRN-edited batch values). */
+  extractedItems?: CreateGrnExtractedInvoiceItemPayload[];
 }
 
 export interface CreateGrnPayload {

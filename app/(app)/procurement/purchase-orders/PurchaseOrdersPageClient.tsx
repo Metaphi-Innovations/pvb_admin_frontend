@@ -30,6 +30,7 @@ import { Toast } from "../components/ProcurementUI";
 import { ProcAvatar, HighlightText } from "../design/proc-design";
 import { FollowUpListingCell } from "./components/VendorFollowUpPanel";
 import { InvoiceListingCell } from "./components/POVendorInvoiceSection";
+import { ThreeWayMatchListingCell } from "./components/ThreeWayMatchListingCell";
 import { useFlashToast } from "../hooks/useFlashToast";
 import { formatListingDate } from "../components/listing/ListingCells";
 import {
@@ -535,18 +536,17 @@ export default function PurchaseOrdersPageClient() {
         />
       ),
     },
-    // 3-Way Match module is not implemented yet — temporarily hidden.
-    // {
-    //   key: "threeWayMatch",
-    //   header: "3-Way Match",
-    //   sortable: true,
-    //   render: (val, row) => (
-    //     <ThreeWayMatchListingCell
-    //       po={row}
-    //       onView={() => router.push(`/procurement/purchase-orders/${row.id}#three-way-match`)}
-    //     />
-    //   ),
-    // },
+    {
+      key: "threeWayMatchStatus",
+      header: "3-Way Match",
+      sortable: false,
+      render: (_val, row) => (
+        <ThreeWayMatchListingCell
+          status={row.threeWayMatchStatus}
+          onEdit={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)}
+        />
+      ),
+    },
     {
       key: "status",
       header: "PO Status",
