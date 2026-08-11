@@ -96,9 +96,9 @@ export function RouteGuard({
     );
   }
 
-  // Stale tree does not grant this route — wait for the in-flight fetch before deny.
-  // Same-module navigations usually stay allowed and keep children mounted.
-  if (permsLoading && !allowed) {
+  // Initial load only: never blank mid-switch when a tree already exists.
+  // Soft-refetch keeps children mounted; redirect effect waits for fetch to finish.
+  if (permissions === null && permsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[40vh] text-sm text-muted-foreground">
         Checking access…

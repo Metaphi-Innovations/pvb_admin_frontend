@@ -1,5 +1,5 @@
 "use client";
 
-import PricingPageClient from "./PricingPageClient";
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
 
-export default PricingPageClient;
+export default createLazyClientPage(() => import("./PricingPageClient"));

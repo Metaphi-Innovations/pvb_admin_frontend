@@ -1,13 +1,5 @@
 "use client";
 
-import React from "react";
-import { PackingListingLayout } from "../shared/PackingListingLayout";
-import { PackingListing } from "../shared/PackingListing";
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
 
-export default function SalesPackingPage() {
-  return (
-    <PackingListingLayout>
-      <PackingListing sourceFilter="sales" />
-    </PackingListingLayout>
-  );
-}
+export default createLazyClientPage(() => import("./PackingSalesPageClient"));

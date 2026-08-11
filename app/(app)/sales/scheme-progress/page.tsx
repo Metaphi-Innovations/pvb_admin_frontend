@@ -1,7 +1,5 @@
 "use client";
 
-import SchemeProgressPageClient from "./SchemeProgressPageClient";
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
 
-export default function SchemeProgressPage() {
-  return <SchemeProgressPageClient />;
-}
+export default createLazyClientPage(() => import("./SchemeProgressPageClient"));

@@ -513,7 +513,7 @@ export const CustomerListService = {
         const ordering = encodeURIComponent(params.ordering ?? "");
 
         const response = await axiosInstance.post(
-            `${API_ENDPOINTS.MASTER.CUSTOMER.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+            `${API_ENDPOINTS.MASTER.CUSTOMER.LIST}?page=${params.page}&page_size=${params.pageSize}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
             { filters: mapFilters(params.apiFilters) },
             { signal: params.signal },
         );

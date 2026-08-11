@@ -1,13 +1,5 @@
 "use client";
 
-import React from "react";
-import { PurchaseQcListing } from "./PurchaseQcListing";
-import { QcListingLayout } from "../shared/QcListingLayout";
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
 
-export default function PurchaseQcRoutePage() {
-  return (
-    <QcListingLayout>
-      <PurchaseQcListing />
-    </QcListingLayout>
-  );
-}
+export default createLazyClientPage(() => import("./QcPurchasePageClient"));

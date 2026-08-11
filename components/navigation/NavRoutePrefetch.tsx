@@ -6,8 +6,8 @@ import { collectNavHrefs } from "./nav-config";
 
 const PREFETCH_BATCH_SIZE = 4;
 const PREFETCH_BATCH_DELAY_MS = 250;
-/** In dev, skip background prefetch — each route triggers a webpack/turbo compile and slows first paint. */
-const MAX_DEV_PREFETCH = 0;
+/** In dev, prefetch a small set so common module switches stay warm without compiling every route. */
+const MAX_DEV_PREFETCH = 8;
 
 function prefetchInBatches(
   router: ReturnType<typeof useRouter>,

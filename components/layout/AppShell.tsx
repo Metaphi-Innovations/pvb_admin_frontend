@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * AppShell — persistent client-side chrome for all (app) routes.
+ * AppShell — persistent chrome for all (app) routes.
  *
- * TopNavbar / AppHeader / progress / prefetch are client-only (dynamic ssr:false).
- * Static SSR of those modules was throwing "Element type is invalid … undefined"
- * during App Router RSC/SSR in this Next 14.2.35 setup; CSR still mounts them.
+ * TopNavbar / AppHeader are statically imported so they can SSR.
+ * Progress + nav prefetch stay client-only (dynamic ssr:false).
  */
 
 import React, { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { FYProvider } from "@/lib/fy-store";
 import { NavigationPendingProvider } from "@/components/navigation/NavigationPendingContext";
+import { TopNavbar } from "./TopNavbar";
+import { AppHeader } from "./AppHeader";
 
 const NavRoutePrefetch = dynamic(
   () => import("@/components/navigation/NavRoutePrefetch").then((m) => m.NavRoutePrefetch),
@@ -21,24 +22,6 @@ const NavRoutePrefetch = dynamic(
 const NavigationProgress = dynamic(
   () => import("./NavigationProgress").then((m) => m.NavigationProgress),
   { ssr: false },
-);
-
-const TopNavbar = dynamic(
-  () => import("./TopNavbar").then((m) => m.TopNavbar),
-  {
-    ssr: false,
-    loading: () => (
-      <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0" />
-    ),
-  },
-);
-
-const AppHeader = dynamic(
-  () => import("./AppHeader").then((m) => m.AppHeader),
-  {
-    ssr: false,
-    loading: () => <div className="h-12 border-b border-border/60 bg-white" />,
-  },
 );
 
 interface AppShellProps {

@@ -8,7 +8,6 @@ import React, {
   useMemo,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -45,7 +44,6 @@ function hrefMatchesRoute(href: string, pathname: string, search: string): boole
 export function NavigationPendingProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [, startTransition] = useTransition();
   const [target, setTarget] = useState<{ href: string; label: string | null } | null>(null);
   const inFlightRef = useRef<string | null>(null);
 
@@ -93,9 +91,7 @@ export function NavigationPendingProvider({ children }: { children: React.ReactN
       }
       inFlightRef.current = href;
       setTarget({ href, label: label ?? null });
-      startTransition(() => {
-        router.push(href);
-      });
+      router.push(href);
     },
     [pathname, router],
   );
