@@ -102,12 +102,17 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     schemeDiscountAmount: 0,
     finalRate: costPrice,
     schemeApplied: "No" as const,
-    gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount),
+    gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount) + asNumber(raw.igst_amount),
     lineTotal: asNumber(raw.total_amount),
     batchNumber: asString(batch.batch_code || raw.batch_no),
     batchInventoryId: raw.inventory_batch_id || undefined,
     expiryDate: batch.expiry_date ? asDateOnly(batch.expiry_date) : undefined,
-    gstRate: prod.gst_percent ? `${prod.gst_percent}%` : "0%",
+    gstRate: (() => {
+      const rate = prod.gst_percent ?? raw.gst_percent ?? raw.cgst_percent;
+      if (rate === null || rate === undefined || rate === "") return "0%";
+      const text = String(rate).trim();
+      return text.endsWith("%") ? text : `${text}%`;
+    })(),
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,

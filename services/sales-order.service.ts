@@ -138,7 +138,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
 
 function mapBackendExpense(raw: Record<string, unknown>, idx: number): SalesOrderAdditionalExpense {
   return {
-    id: asString(raw.id || `exp-${idx}`),
+    id: asString(raw.sales_order_expense_id || raw.id || `exp-${idx}`),
     expenseName: asString(raw.charge_name),
     amount: asNumber(raw.amount),
     discountType: "percent",
@@ -539,6 +539,23 @@ export const SalesOrderService = {
       discount_amount: totals.productDiscountTotal + totals.expenseDiscountTotal,
       tax_amount: totals.totalGst,
       grand_total: totals.grandTotal,
+      expenses: (form.additionalExpenses ?? []).map((exp) => {
+        const isInter = (exp.igstAmount || 0) > 0;
+        const gstPct = asNumber(exp.gstRate);
+        return {
+          charge_name: exp.expenseName,
+          amount: exp.amount,
+          gst_percent: gstPct,
+          cgst_percentage: isInter ? 0 : gstPct / 2,
+          cgst_amount: isInter ? 0 : exp.cgstAmount,
+          sgst_percentage: isInter ? 0 : gstPct / 2,
+          sgst_amount: isInter ? 0 : exp.sgstAmount,
+          igst_percentage: isInter ? gstPct : 0,
+          igst_amount: isInter ? exp.igstAmount : 0,
+          total_amount: exp.totalAmount,
+          remarks: exp.remarks || "",
+        };
+      }),
       items: form.lineItems.map((line) => ({
         product_id: line.productId,
         base_qty: line.quantity,

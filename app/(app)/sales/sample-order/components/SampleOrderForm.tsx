@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
+import { axiosInstance } from "@/api/axios";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +39,7 @@ import {
 	SAMPLE_BILLING_DETAILS,
 	EDITABLE_ORDER_STATUSES,
 	ORDER_STATUS_OPTIONS,
+	createEmptyLineItem,
 	calculateOrderTotalsSummary,
 	recalculateSampleOrderLineItem,
 	repriceSampleOrderLineItems,
@@ -265,11 +267,63 @@ export default function SampleOrderForm({
 	onChange,
 	errors,
 	salesmen,
-	products,
+	products: originalProducts,
 	showStatus = false,
 	originalOrder,
 	auditInfo,
 }: SampleOrderFormProps) {
+	const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+
+	useEffect(() => {
+		if (!form.warehouseId) {
+			setWarehouseStock({});
+			return;
+		}
+		const fetchStock = async () => {
+			try {
+				const PAGE_SIZE = 100;
+				const stockMap: Record<string, number> = {};
+				let page = 1;
+				let totalFetched = 0;
+				let totalRecords = Infinity;
+
+				while (totalFetched < totalRecords) {
+					const response = await axiosInstance.post(
+						`/warehouse/stock-overview/inventory/list?warehouse_id=${form.warehouseId}&page=${page}&page_size=${PAGE_SIZE}`,
+						{ warehouse_id: form.warehouseId }
+					);
+					const items: any[] = Array.isArray(response.data?.data) ? response.data.data : [];
+					if (page === 1) totalRecords = Number(response.data?.totalRecords ?? items.length);
+					if (items.length === 0) break;
+					items.forEach((item: any) => {
+						const sku = item.sku;
+						if (sku && sku !== "-") {
+							stockMap[sku] = (stockMap[sku] || 0) + Number(item.available_qty || 0);
+						}
+					});
+					totalFetched += items.length;
+					page++;
+				}
+				setWarehouseStock(stockMap);
+			} catch (err) {
+				console.error("Failed to fetch warehouse stock:", err);
+			}
+		};
+		fetchStock();
+	}, [form.warehouseId]);
+
+	const products = useMemo(() => {
+		if (Object.keys(warehouseStock).length === 0) {
+			if (form.warehouseId) {
+				return originalProducts.map((p) => ({ ...p, stock: 0 }));
+			}
+			return originalProducts;
+		}
+		return originalProducts.map((p) => ({
+			...p,
+			stock: (p.sku ? warehouseStock[p.sku] : 0) || 0,
+		}));
+	}, [originalProducts, warehouseStock, form.warehouseId]);
 	const { data: customerData } = useCustomersDropdown();
 	const { data: customerDetails } = useCustomerDetails(
 		form.customerId ? String(form.customerId) : null,
@@ -448,7 +502,15 @@ export default function SampleOrderForm({
 						label="Source Warehouse"
 						required
 						value={form.warehouseId !== undefined && form.warehouseId !== null ? form.warehouseId : null}
-						onChange={(id) => set("warehouseId", id)}
+						onChange={(id) => {
+						const hadProducts = form.lineItems.some((l) => l.productId);
+						onChange({
+							...form,
+							warehouseId: id,
+							// Clear products when warehouse changes
+							lineItems: hadProducts ? [] : form.lineItems,
+						});
+					}}
 						options={warehouses}
 						placeholder="Select source warehouse…"
 						error={errors.warehouseId}
@@ -466,32 +528,26 @@ export default function SampleOrderForm({
 						required
 						value={form.customerId !== undefined && form.customerId !== null ? form.customerId : null}
 						onChange={(id) => {
-							const c = customers.find((x) => x.id === id) as any;
-							const addressDefaults = c
-								? getDefaultBillShipAddressIds(
-										getCustomerAddressesForSalesOrder(c as any),
-									)
-								: { billToAddressId: "", shipToAddressId: "" };
-							const updatedForm = {
-								...form,
-								customerId: id,
-								billToAddressId: addressDefaults.billToAddressId,
-								shipToAddressId: addressDefaults.shipToAddressId,
-							};
-							if (c?.salesManId) {
-								updatedForm.salesManId = c.salesManId;
-							}
-							if (c?.stateName && c.customerType) {
-								updatedForm.lineItems = repriceSampleOrderLineItems(
-									form.lineItems,
-									{
-										stateName: c.stateName,
-										customerMasterType: c.customerType,
-									}
-								);
-							}
-							onChange(updatedForm);
-						}}
+						const c = customers.find((x) => x.id === id) as any;
+						const addressDefaults = c
+							? getDefaultBillShipAddressIds(
+									getCustomerAddressesForSalesOrder(c as any),
+								)
+							: { billToAddressId: "", shipToAddressId: "" };
+						const hadProducts = form.lineItems.some((l) => l.productId);
+						const updatedForm = {
+							...form,
+							customerId: id,
+							billToAddressId: addressDefaults.billToAddressId,
+							shipToAddressId: addressDefaults.shipToAddressId,
+							// Clear products when customer changes
+							lineItems: hadProducts ? [] : form.lineItems,
+						};
+						if (c?.salesManId) {
+							updatedForm.salesManId = c.salesManId;
+						}
+						onChange(updatedForm);
+					}}
 						options={customers as any}
 						placeholder="Select customer…"
 						error={errors.customerId}
@@ -566,7 +622,7 @@ export default function SampleOrderForm({
 
 				<ProductLinesEditor
 					lines={form.lineItems}
-					products={products}
+					products={form.warehouseId ? products : []}
 					onChange={(lines) => set("lineItems", lines)}
 					error={errors.lineItems}
 					sampleMode

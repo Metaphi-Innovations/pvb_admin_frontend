@@ -161,8 +161,10 @@ export default function SplitSalesOrderPage() {
               maxSplitQty: item.quantity,
             }))
           : [],
-      additionalExpenses: [],
-      remarks: "",
+      additionalExpenses: (baseForm.additionalExpenses ?? []).map((exp) => ({
+        ...exp,
+        id: `exp-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      })),
     });
   }, [loadedOrder, id, router]);
 

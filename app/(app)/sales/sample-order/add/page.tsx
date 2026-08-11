@@ -123,7 +123,7 @@ export default function AddSalesOrderPage() {
 				code: p.product_code,
 				name: p.product_name,
 				sku: p.sku || "",
-				stock: Number(p.stock || p.available_stock || 0),
+				stock: Number(p.pack_size || 1000), // fallback stock
 				sellingPrice: Number(p.mrp || 0),
 				gstRate: String(p.gst_rate?.gstPercentage || 18),
 				category: p.category?.categoryName || "",
