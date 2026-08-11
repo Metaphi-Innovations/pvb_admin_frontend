@@ -76,6 +76,10 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const costPrice = asNumber(raw.cp_price ?? prod.cost_price ?? raw.product?.cost_price ?? 0);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
+  const gstPct =
+    asNumber(raw.cgst_percent) + asNumber(raw.sgst_percent) ||
+    asNumber(prod.gst_percent) ||
+    0;
 
   let quantityType = "Piece";
   if (raw.quantity_type) {
@@ -107,7 +111,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     batchNumber: asString(batch.batch_code || raw.batch_no),
     batchInventoryId: raw.inventory_batch_id || undefined,
     expiryDate: batch.expiry_date ? asDateOnly(batch.expiry_date) : undefined,
-    gstRate: prod.gst_percent ? `${prod.gst_percent}%` : "0%",
+    gstRate: `${gstPct}%`,
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,

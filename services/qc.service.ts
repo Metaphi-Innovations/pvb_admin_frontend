@@ -27,14 +27,41 @@ const mapSourceType = (type: string | null | undefined): GrnSourceFilter => {
   return "purchase";
 };
 
+function asText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function resolveVendorName(payload: any): string {
+  const snap = payload?.grn?.supplierSnapshot || payload?.supplierSnapshot;
+  const snapName =
+    snap && typeof snap === "object" ? asText(snap.supplier_name || snap.warehouse_name) : "";
+  return (
+    asText(payload?.supplierName) ||
+    asText(payload?.fromWarehouse) ||
+    asText(payload?.grn?.supplier?.supplier_name) ||
+    asText(payload?.supplier?.supplier_name) ||
+    snapName ||
+    asText(payload?.customer_name) ||
+    asText(payload?.customerName) ||
+    ""
+  );
+}
+
 export function mapBackendRecordToFrontend(item: any): QcRecord {
+  const vendorName = resolveVendorName(item);
   return {
     id: item.id,
     qcNo: item.qcNumber,
     grnNo: item.grnNumber || "",
-    vendorName: item.supplierName || "",
+    vendorName,
     warehouse: item.warehouseName || "",
+    toWarehouse: item.warehouseName || item.toWarehouse || "",
+    fromWarehouse: item.fromWarehouse || vendorName || "",
     poNumber: item.poNumber || "",
+    stockTransferNo: item.poNumber || item.stockTransferNo || "",
     inspectionDate: item.qcDate ? item.qcDate.split("T")[0] : "",
     totalReceivedQty: item.receivedQty || 0,
     totalAcceptedQty: item.acceptedQty || 0,
@@ -69,6 +96,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
   });
 
   const totalReceived = qcItems.reduce((sum, it) => sum + it.receivedQty, 0) || (grn.receivedQty ?? 0);
+  const vendorName = resolveVendorName(grn);
 
   return {
     id: grn.id,
@@ -76,8 +104,11 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
     grnId: grn.id,
     grnNo: grn.grnNumber,
     poNumber: grn.sales_return_no || grn.sample_return_no || grn.poNumber || grn.po_no || "",
-    vendorName: grn.customer_name || grn.supplier?.supplier_name || "",
+    stockTransferNo: grn.stockTransferNo || grn.poNumber || grn.po_no || "",
+    vendorName,
+    fromWarehouse: grn.fromWarehouse || vendorName || "",
     warehouse: grn.warehouse?.warehouse_name || "",
+    toWarehouse: grn.warehouse?.warehouse_name || grn.toWarehouse || "",
     warehouseId: grn.warehouseId || grn.warehouse_id || grn.warehouse?.warehouse_id || "",
     inspectionDate: "",
     totalReceivedQty: totalReceived,
@@ -113,15 +144,27 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
   const totalReceived = qcItems.reduce((sum: number, it: any) => sum + it.receivedQty, 0);
   const totalAccepted = qcItems.reduce((sum: number, it: any) => sum + it.acceptedQty, 0);
   const totalRejected = qcItems.reduce((sum: number, it: any) => sum + it.rejectedQty, 0);
+  const vendorName = resolveVendorName(qc);
 
   return {
     id: qc.id,
     qcNo: qc.qcNumber,
     grnId: qc.grn?.id || qc.source_id,
     grnNo: qc.grn?.grnNumber || "",
-    poNumber: qc.poNumber || qc.grn?.poNumber || "",
-    vendorName: qc.grn?.supplier?.supplier_name || "",
+    poNumber:
+      qc.poNumber ||
+      qc.grn?.poNumber ||
+      qc.grn?.sales_return_no ||
+      qc.grn?.salesReturnNo ||
+      qc.grn?.sample_return_no ||
+      qc.grn?.sampleReturnNo ||
+      qc.grn?.stockTransferNo ||
+      "",
+    stockTransferNo: qc.poNumber || qc.stockTransferNo || qc.grn?.stockTransferNo || "",
+    vendorName,
+    fromWarehouse: qc.fromWarehouse || vendorName || "",
     warehouse: qc.grn?.warehouse?.warehouse_name || "",
+    toWarehouse: qc.grn?.warehouse?.warehouse_name || qc.toWarehouse || "",
     warehouseId:
       qc.grn?.warehouseId ||
       qc.grn?.warehouse_id ||
@@ -163,15 +206,27 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
   });
 
   const totalReceived = qcItems.reduce((sum, it) => sum + it.receivedQty, 0);
+  const vendorName = resolveVendorName(grn);
 
   return {
     id: grn.id,
     qcNo: "—",
     grnId: grn.id,
     grnNo: grn.grnNumber,
-    poNumber: grn.poNumber || "",
-    vendorName: grn.supplier?.supplier_name || "",
+    poNumber:
+      grn.sales_return_no ||
+      grn.salesReturnNo ||
+      grn.sample_return_no ||
+      grn.sampleReturnNo ||
+      grn.stockTransferNo ||
+      grn.poNumber ||
+      grn.po_no ||
+      "",
+    stockTransferNo: grn.stockTransferNo || grn.poNumber || grn.po_no || "",
+    vendorName,
+    fromWarehouse: grn.fromWarehouse || vendorName || "",
     warehouse: grn.warehouse?.warehouse_name || "",
+    toWarehouse: grn.warehouse?.warehouse_name || grn.toWarehouse || "",
     warehouseId: grn.warehouseId || grn.warehouse_id || grn.warehouse?.warehouse_id || "",
     inspectionDate: "",
     totalReceivedQty: totalReceived,

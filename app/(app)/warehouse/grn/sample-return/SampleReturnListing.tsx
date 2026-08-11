@@ -11,13 +11,9 @@ import { GRN_STATUS_CONFIG } from "@/lib/warehouse/grn-status";
 import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
 import type { GrnListItem } from "@/services/grn-list.service";
 
-interface SampleReturnListingProps {
-  destinationWarehouse: string;
-}
-
 const SAMPLE_RETURN_TAB_CONTEXT = getGrnTabApiContext("sample_return");
 
-export function SampleReturnListing({ destinationWarehouse }: SampleReturnListingProps) {
+export function SampleReturnListing() {
   const router = useRouter();
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
@@ -33,12 +29,11 @@ export function SampleReturnListing({ destinationWarehouse }: SampleReturnListin
     sort,
     page,
     pageSize,
-    destinationWarehouse,
   });
 
   useEffect(() => {
     setPage(1);
-  }, [destinationWarehouse, filters, pageSize]);
+  }, [filters, pageSize]);
 
   useEffect(() => {
     setPage(1);

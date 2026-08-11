@@ -112,6 +112,10 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
   const snapshot = asRecord(raw.product_snapshot);
   const dispatchItem = asRecord(raw.dispatch_item);
   const inventoryBatch = asRecord(dispatchItem.inventory_batch);
+  const batchSnapshot = {
+    ...asRecord(raw.batch_snapshot),
+    ...asRecord(dispatchItem.batch_snapshot),
+  };
   const unitPerPacking =
     asNumber(snapshot.unit_per_packing) ||
     asNumber(product.unit_per_packing) ||
@@ -152,9 +156,27 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
       asString(product.packing_unit) ||
       "",
     unitPerPacking: packingFactor,
-    batchNumber: asString(inventoryBatch.batch_no) || asString(inventoryBatch.batchNumber) || "",
-    mfgDate: asDateOnly(inventoryBatch.manufactureDate) || asDateOnly(inventoryBatch.manufacture_date) || "",
-    expDate: asDateOnly(inventoryBatch.expiryDate) || asDateOnly(inventoryBatch.expiry_date) || "",
+    batchNumber:
+      asString(inventoryBatch.batch_no) ||
+      asString(inventoryBatch.batchNumber) ||
+      asString(batchSnapshot.batch_code) ||
+      asString(batchSnapshot.batchNumber) ||
+      asString(batchSnapshot.batch_no) ||
+      "",
+    mfgDate:
+      asDateOnly(inventoryBatch.manufactureDate) ||
+      asDateOnly(inventoryBatch.manufacture_date) ||
+      asDateOnly(batchSnapshot.manufactureDate) ||
+      asDateOnly(batchSnapshot.mfg_date) ||
+      asDateOnly(batchSnapshot.manufacture_date) ||
+      "",
+    expDate:
+      asDateOnly(inventoryBatch.expiryDate) ||
+      asDateOnly(inventoryBatch.expiry_date) ||
+      asDateOnly(batchSnapshot.expiryDate) ||
+      asDateOnly(batchSnapshot.expiry_date) ||
+      asDateOnly(batchSnapshot.exp_date) ||
+      "",
     returnedBaseQty,
     receivedBaseQty: asNumber(raw.received_base_qty),
     quantityType: normalizeGrnQuantityType(

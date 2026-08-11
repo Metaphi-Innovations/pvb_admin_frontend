@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   getStockTransferGrnDisplayStatus,
   ST_GRN_STATUS_BADGE,
+  ST_RECEIVED_STATUS_FILTER_OPTIONS,
 } from "@/lib/warehouse/grn-source";
 import { getStockTransferReceivedApiContext } from "@/lib/warehouse/grn-list-config";
 import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
@@ -55,11 +56,7 @@ function mapToReceivedRow(item: GrnListItem): ReceivedStockTransferGrnRow {
   };
 }
 
-interface StockTransferListingProps {
-  destinationWarehouse: string;
-}
-
-export function StockTransferListing({ destinationWarehouse }: StockTransferListingProps) {
+export function StockTransferListing() {
   const router = useRouter();
   const [subTab, setSubTab] = useState<"pending" | "received">("pending");
 
@@ -88,8 +85,6 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
   const [grnSort, setGrnSort] = useState<SortState>({ key: "", direction: "none" });
   const [grnPage, setGrnPage] = useState(1);
   const [grnPageSize, setGrnPageSize] = useState(10);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [receivedCount, setReceivedCount] = useState(0);
 
   const receivedTabContext = useMemo(() => getStockTransferReceivedApiContext(), []);
   const { handleOpenFilter: handleOpenReceivedFilter, getFilterOptionsForColumn } =
@@ -106,7 +101,6 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
     sort: grnSort,
     page: grnPage,
     pageSize: grnPageSize,
-    destinationWarehouse,
     enabled: subTab === "received",
   });
 
@@ -139,12 +133,10 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         search: debouncedPendingSearch || undefined,
         ordering,
         filters: debouncedPendingFilters as Record<string, unknown>,
-        destinationWarehouseId: destinationWarehouse,
       });
 
       setPendingRows(result.items);
       setPendingTotal(result.total);
-      setPendingCount(result.total);
     } catch (err) {
       console.error(err);
       setPendingError(err instanceof Error ? err.message : "Failed to load pending dispatches.");
@@ -160,7 +152,6 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
     debouncedPendingSearch,
     pendingSort.key,
     pendingSort.direction,
-    destinationWarehouse,
   ]);
 
   useEffect(() => {
@@ -176,7 +167,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
 
   useEffect(() => {
     setPendingPage(1);
-  }, [destinationWarehouse, pendingFilters, pendingPageSize]);
+  }, [pendingFilters, pendingPageSize]);
 
   useEffect(() => {
     setPendingPage(1);
@@ -184,17 +175,20 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
 
   useEffect(() => {
     setGrnPage(1);
-  }, [destinationWarehouse, grnFilters, grnPageSize]);
+  }, [grnFilters, grnPageSize]);
 
   useEffect(() => {
     setGrnPage(1);
   }, [grnSort.key, grnSort.direction]);
 
-  useEffect(() => {
-    if (subTab === "received") {
-      setReceivedCount(grnTotal);
-    }
-  }, [subTab, grnTotal]);
+  const handleOpenReceivedColumnFilter = useCallback(
+    (columnKey: string) => {
+      // Status uses static display labels — no lazy GRN status dropdown
+      if (columnKey === "displayStatus") return;
+      void handleOpenReceivedFilter(columnKey);
+    },
+    [handleOpenReceivedFilter],
+  );
 
   const handleOpenPendingFilter = useCallback(async (columnKey: string) => {
     const fieldName = PENDING_ST_FILTER_FIELD_MAP[columnKey];
@@ -388,7 +382,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: getFilterOptionsForColumn("displayStatus"),
+        filterOptions: ST_RECEIVED_STATUS_FILTER_OPTIONS,
         width: "140px",
         render: (val: string) => {
           const cfg =
@@ -470,7 +464,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
               : "border-border text-muted-foreground hover:bg-muted bg-white",
           )}
         >
-          Pending ({pendingCount})
+          Pending
         </button>
         <button
           type="button"
@@ -482,7 +476,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
               : "border-border text-muted-foreground hover:bg-muted bg-white",
           )}
         >
-          Received ({receivedCount})
+          Received
         </button>
       </div>
 
@@ -528,7 +522,7 @@ export function StockTransferListing({ destinationWarehouse }: StockTransferList
             onPageSizeChange={setGrnPageSize}
             onFilterChange={setGrnFilters}
             onSortChange={setGrnSort}
-            onOpenFilter={handleOpenReceivedFilter}
+            onOpenFilter={handleOpenReceivedColumnFilter}
             actions={receivedActions}
             emptyMessage="No received stock transfer GRNs found"
             searchPlaceholder="Search stock transfer GRN..."

@@ -17,6 +17,17 @@ import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { showToast } from "@/lib/toast";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
+import {
+  estimateCaseRowCount,
+  exceedsMaxLineQty,
+  MAX_LINE_ENTRY_QTY,
+  maxLineQtyMessage,
+} from "@/lib/quantity-limits";
+import {
+  buildQcListHref,
+  qcListPathForSource,
+  resolveQcReturnTo,
+} from "../shared/qc-list-nav";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -71,6 +82,12 @@ function CreateQcForm() {
   const [items, setItems] = useState<QcItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const goBackToList = () => {
+    const editParam = searchParams.get("edit") === "true";
+    const fallbackStatus = editParam || Boolean(qcIdParam) ? "completed" : "pending";
+    router.push(resolveQcReturnTo(searchParams, sourceType, fallbackStatus));
+  };
+
   useEffect(() => {
     const loadRecord = async () => {
       try {
@@ -88,7 +105,9 @@ function CreateQcForm() {
 
         const editParam = searchParams.get("edit") === "true";
         if (qc.status === "completed" && !editParam) {
-          router.replace(`/warehouse/qc/view/${qc.id}`);
+          const returnTo = searchParams.get("returnTo");
+          const qs = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+          router.replace(`/warehouse/qc/view/${qc.id}${qs}`);
           return;
         }
 
@@ -254,6 +273,18 @@ function CreateQcForm() {
         if (sum > item.receivedQty) {
           return `Batch ${item.batchNumber}: total allocated qty exceeds received qty.`;
         }
+        const qtyType = String(item.quantityType || "PIECE").toUpperCase();
+        const caseSize = item.unitPerPacking || 10;
+        if (qtyType === "CASE") {
+          const caseRows =
+            estimateCaseRowCount(item.acceptedQty, caseSize) +
+            estimateCaseRowCount(item.rejectedQty, caseSize);
+          if (exceedsMaxLineQty(caseRows)) {
+            return `Batch ${item.batchNumber}: CASE QC is limited to ${MAX_LINE_ENTRY_QTY} cases per batch (would create ${caseRows}).`;
+          }
+        } else if (exceedsMaxLineQty(item.receivedQty)) {
+          return `Batch ${item.batchNumber}: ${maxLineQtyMessage("Received quantity")}`;
+        }
         return null;
       })
       .filter(Boolean);
@@ -274,7 +305,8 @@ function CreateQcForm() {
     }
     if (hasErrors || hasEmptyRows) {
       showToast(
-        "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
+        validationErrors[0] ||
+          "Enter accepted qty for each batch. Accepted + Rejected must equal received qty.",
         "error"
       );
       return;
@@ -321,7 +353,17 @@ function CreateQcForm() {
         queryClient.invalidateQueries({ queryKey: grnKeys.summaries() }),
         invalidatePurchaseOrderModuleListingQueries(queryClient),
       ]);
-      router.push("/warehouse/qc");
+      // After create/edit, land on Completed for that source tab.
+      const returnTo = searchParams.get("returnTo");
+      if (returnTo && returnTo.startsWith("/warehouse/qc")) {
+        const url = new URL(returnTo, window.location.origin);
+        url.searchParams.set("qcStatus", "completed");
+        router.push(`${url.pathname}${url.search}`);
+      } else {
+        router.push(
+          buildQcListHref(qcListPathForSource(sourceType), { qcStatus: "completed" }),
+        );
+      }
     } catch (err: any) {
       console.error("Failed to submit QC Record:", err);
       showToast(err.response?.data?.message || "Failed to submit QC Record.", "error");
@@ -330,7 +372,7 @@ function CreateQcForm() {
 
   if (loadError) {
     return (
-      <FormContainer title="QC Inspection" description="Unable to load QC record." onBack={() => router.push("/warehouse/qc")}>
+      <FormContainer title="QC Inspection" description="Unable to load QC record." onBack={goBackToList}>
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700">{loadError}</div>
       </FormContainer>
     );
@@ -344,8 +386,8 @@ function CreateQcForm() {
           ? "Enter accepted, rejected, and hold qty per batch. Only accepted qty is added to destination inventory after QC pass."
           : "Enter accepted qty — rejected qty auto-fills as the balance. You can edit rejected if needed."
       }
-      onBack={() => router.push("/warehouse/qc")}
-      onCancel={() => router.push("/warehouse/qc")}
+      onBack={goBackToList}
+      onCancel={goBackToList}
       actions={
         <Button
           disabled={hasErrors || hasEmptyRows || items.length === 0}
@@ -382,8 +424,28 @@ function CreateQcForm() {
             </>
           ) : (
             <>
-              <TextField label="PO No." value={poNumber} readOnly className="h-8 text-xs font-mono font-semibold bg-muted/30" />
-              <TextField label="Supplier" value={vendor} readOnly className="h-8 text-xs bg-muted/30 font-medium" />
+              <TextField
+                label={
+                  sourceType === "sales_return"
+                    ? "Sales Return No."
+                    : sourceType === "sample_return"
+                      ? "Sample Return No."
+                      : "PO No."
+                }
+                value={poNumber}
+                readOnly
+                className="h-8 text-xs font-mono font-semibold bg-muted/30"
+              />
+              <TextField
+                label={
+                  sourceType === "sales_return" || sourceType === "sample_return"
+                    ? "Customer"
+                    : "Supplier"
+                }
+                value={vendor}
+                readOnly
+                className="h-8 text-xs bg-muted/30 font-medium"
+              />
               <TextField label="Warehouse" value={warehouse} readOnly className="h-8 text-xs bg-muted/30 font-medium" />
             </>
           )}
