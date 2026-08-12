@@ -52,11 +52,17 @@ export interface SalesOrderRecord {
 export interface PackedProduct {
   product: string;
   sku: string;
+  productCode?: string;
   ordered_cases: number;
   packedQty: number;
   orderBaseQty: number;
   packedBaseQty: number;
   packSize: number;
+  batchNumber?: string;
+  grnNo?: string;
+  mfgDate?: string;
+  expDate?: string;
+  quantity_type?: string;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
   lineId?: string;
