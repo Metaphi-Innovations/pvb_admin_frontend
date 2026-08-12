@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { axiosInstance } from "@/api/axios";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -231,6 +232,58 @@ export default function StockTransferForm({
   auditInfo,
 }: StockTransferFormProps) {
   const { data: dropdownData } = useStockTransferDropdowns();
+  const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!form.sourceWarehouseId) {
+      setWarehouseStock({});
+      return;
+    }
+    const fetchStock = async () => {
+      try {
+        const PAGE_SIZE = 100;
+        const stockMap: Record<string, number> = {};
+        let page = 1;
+        let totalFetched = 0;
+        let totalRecords = Infinity;
+
+        while (totalFetched < totalRecords) {
+          const response = await axiosInstance.post(
+            `/warehouse/stock-overview/inventory/list?warehouse_id=${form.sourceWarehouseId}&page=${page}&page_size=${PAGE_SIZE}`,
+            { warehouse_id: form.sourceWarehouseId }
+          );
+          const items: any[] = Array.isArray(response.data?.data) ? response.data.data : [];
+          if (page === 1) totalRecords = Number(response.data?.totalRecords ?? items.length);
+          if (items.length === 0) break;
+          items.forEach((item: any) => {
+            const sku = item.sku;
+            if (sku && sku !== "-") {
+              stockMap[sku] = (stockMap[sku] || 0) + Number(item.available_qty || 0);
+            }
+          });
+          totalFetched += items.length;
+          page++;
+        }
+        setWarehouseStock(stockMap);
+      } catch (err) {
+        console.error("Failed to fetch warehouse stock:", err);
+      }
+    };
+    fetchStock();
+  }, [form.sourceWarehouseId]);
+
+  const dynamicProducts = useMemo(() => {
+    if (Object.keys(warehouseStock).length === 0) {
+      if (form.sourceWarehouseId) {
+        return products.map((p) => ({ ...p, stock: 0 }));
+      }
+      return products;
+    }
+    return products.map((p) => ({
+      ...p,
+      stock: (p.sku ? warehouseStock[p.sku] : 0) || 0,
+    }));
+  }, [products, warehouseStock, form.sourceWarehouseId]);
 
   const warehouses = useMemo(() => {
     if (!dropdownData?.warehouses) return [];
@@ -267,11 +320,14 @@ export default function StockTransferForm({
     const nextTaxSupplyType: TaxSupplyType =
       source && target && source.state === target.state ? "intra" : "inter";
 
-    const updatedLineItems = form.lineItems.map((line) => {
-      const product = products.find((p) => p.id === line.productId);
-      if (!product || !product.gstRate) return line;
-      return applyLineTaxFields(line, product.gstRate, nextTaxSupplyType);
-    });
+    const hadProducts = form.lineItems.some((l) => l.productId);
+    const updatedLineItems = key === "sourceWarehouseId" && hadProducts
+      ? []
+      : form.lineItems.map((line) => {
+          const product = products.find((p) => p.id === line.productId);
+          if (!product || !product.gstRate) return line;
+          return applyLineTaxFields(line, product.gstRate, nextTaxSupplyType);
+        });
 
     const updatedExpenses = (form.additionalExpenses || []).map((exp) => {
       return recalculateExpense(exp, nextTaxSupplyType);
@@ -436,12 +492,9 @@ export default function StockTransferForm({
         ) : null}
       </div>
 
-
-      <SectionDivider title="Products" />
-      
       <TransferProductLinesEditor
         lines={form.lineItems}
-        products={products}
+        products={form.sourceWarehouseId ? dynamicProducts : []}
         sourceWarehouseId={form.sourceWarehouseId}
         targetWarehouseId={form.targetWarehouseId}
         onChange={(lines) => set("lineItems", lines)}
