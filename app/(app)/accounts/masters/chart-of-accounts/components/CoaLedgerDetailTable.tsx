@@ -92,7 +92,10 @@ function CoaLedgerDetailTableBody({
                     className={cn(r.isOpeningRow && "font-medium bg-muted/10")}
                   >
                     <AccountsTableCell className="whitespace-nowrap tabular-nums">
-                      {r.date ? isoToDisplayDate(r.date) : "—"}
+                      {(() => {
+                        const display = r.date ? isoToDisplayDate(r.date) : "";
+                        return display || "—";
+                      })()}
                     </AccountsTableCell>
                     <AccountsTableCell className="whitespace-nowrap">{r.voucherType}</AccountsTableCell>
                     <AccountsTableCell className="whitespace-nowrap font-mono text-xs font-semibold">

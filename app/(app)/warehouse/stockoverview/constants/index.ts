@@ -22,37 +22,36 @@ export const VENDOR_OPTIONS = [
 ];
 
 // QC Passed / Inventory Stock Statuses (matches backend StockOverviewService.getStatus)
+// Reserved qty is a separate column — not a line-level stock status.
 export const QC_PASSED_STATUS_OPTIONS = [
   { label: "Available", value: "Available" },
   { label: "Low Stock", value: "Low Stock" },
-  { label: "Reserved", value: "Reserved" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
   { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
-// Rejected Stock Statuses
+// Rejected Stock Statuses (QC currently only creates Rejected rows)
 export const REJECTED_STATUS_OPTIONS = [
   { label: "Rejected", value: "Rejected" },
-  { label: "Under Review", value: "Under Review" },
-  { label: "Disposed", value: "Disposed" },
-  { label: "Returned To Supplier", value: "Returned To Supplier" },
 ];
 
-// Sales Return Stock Statuses
+// Sales Return Stock Statuses (post GRN+QC — same lifecycle as Inventory)
 export const SALES_RETURN_STOCK_STATUS_OPTIONS = [
-  { label: "QC Pending", value: "QC Pending" },
   { label: "Available", value: "Available" },
+  { label: "Low Stock", value: "Low Stock" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
+  { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
-// Sample Return Stock Statuses
+// Sample Return Stock Statuses (post GRN+QC — same lifecycle as Inventory)
 export const SAMPLE_RETURN_STOCK_STATUS_OPTIONS = [
-  { label: "QC Pending", value: "QC Pending" },
   { label: "Available", value: "Available" },
+  { label: "Low Stock", value: "Low Stock" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
+  { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
 // GRN Pending Stock Statuses
@@ -64,6 +63,20 @@ export const GRN_PENDING_STATUS_OPTIONS = [
 
 // Compatibility
 export const STATUS_OPTIONS = QC_PASSED_STATUS_OPTIONS;
+
+/** Source status = inbound origin after GRN+QC */
+export const SOURCE_STATUS_OPTIONS = [
+  { label: "Purchase", value: "Purchase" },
+  { label: "Stock Transfer", value: "Stock Transfer" },
+  { label: "Sales Return", value: "Sales Return" },
+  { label: "Sample Return", value: "Sample Return" },
+];
+
+/** Inventory tab only mixes Purchase + Stock Transfer */
+export const INVENTORY_SOURCE_STATUS_OPTIONS = [
+  { label: "Purchase", value: "Purchase" },
+  { label: "Stock Transfer", value: "Stock Transfer" },
+];
 
 export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> = {
   Available: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Available" },
@@ -83,4 +96,8 @@ export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> 
   "Awaiting Inspection": { bg: "bg-purple-50 text-purple-700 border-purple-200", label: "Awaiting Inspection" },
   COMPLETED: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Completed" },
   REJECTED: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Rejected" },
+  Purchase: { bg: "bg-sky-50 text-sky-700 border-sky-200", label: "Purchase" },
+  "Stock Transfer": { bg: "bg-violet-50 text-violet-700 border-violet-200", label: "Stock Transfer" },
+  "Sales Return": { bg: "bg-teal-50 text-teal-700 border-teal-200", label: "Sales Return" },
+  "Sample Return": { bg: "bg-cyan-50 text-cyan-700 border-cyan-200", label: "Sample Return" },
 };

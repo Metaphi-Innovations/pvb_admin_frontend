@@ -28,9 +28,10 @@ export const INVOICE_FORM_READONLY_CLASS = cn(
 );
 export const INVOICE_FORM_HELPER_CLASS = ACCOUNTS_HELPER_TEXT_CLASS;
 export const INVOICE_FORM_CARD_CLASS =
-  "bg-white rounded-xl border border-border shadow-sm p-3 h-full";
+  "bg-white rounded-xl border border-border shadow-sm p-3 md:p-4 h-auto";
 export const INVOICE_FORM_CARD_TITLE_CLASS = cn(ACCOUNTS_CARD_TITLE_CLASS, "text-navy-700");
-export const INVOICE_FORM_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2.5";
+export const INVOICE_FORM_GRID_CLASS =
+  "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-3 gap-y-2.5";
 export const INVOICE_FORM_TABLE_TH_CLASS =
   "accounts-table-th px-2.5 py-2 text-[11px] font-semibold text-foreground whitespace-nowrap";
 export const INVOICE_FORM_TABLE_TD_CLASS = "px-2.5 py-2 text-xs text-foreground align-middle";
@@ -67,24 +68,24 @@ export function InvoiceFormLayout({
   return (
     <div
       className={cn(
-        "bg-background flex flex-col -m-3",
-        stickyFooter ? "h-full min-h-0" : "min-h-full",
+        "invoice-form-shell bg-background flex flex-col min-h-0 w-full",
+        stickyFooter ? "h-full" : "min-h-full",
       )}
     >
-      <header className="bg-white border-b border-border px-5 py-2 flex-shrink-0 sticky top-0 z-20 shadow-sm">
-        <div className="w-full flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
+      <header className="invoice-form-header bg-white border-b border-border pl-4 pr-4 sm:pl-5 sm:pr-5 md:pl-6 md:pr-6 py-2.5 sm:py-3 flex-shrink-0 z-30 shadow-sm">
+        <div className="w-full flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="flex items-start sm:items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
             <button
               type="button"
               onClick={handleBack}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-border/70 hover:bg-muted/40 flex-shrink-0"
+              className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-md border border-border/70 hover:bg-muted/40 flex-shrink-0 mt-0.5 sm:mt-0"
               aria-label="Go back"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
-            <div className="min-w-0">
-              <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "truncate")}>{title}</h1>
-              <p className={cn(ACCOUNTS_PAGE_SUBTITLE_CLASS, "truncate")}>
+            <div className="min-w-0 flex-1">
+              <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, "truncate text-base sm:text-lg")}>{title}</h1>
+              <p className={cn(ACCOUNTS_PAGE_SUBTITLE_CLASS, "line-clamp-2 sm:line-clamp-1 mt-0.5")}>
                 {breadcrumb.map((b, i) => (
                   <span key={`${b.label}-${i}`}>
                     {i > 0 && <span className="mx-1">/</span>}
@@ -99,28 +100,29 @@ export function InvoiceFormLayout({
                 ))}
                 {subtitle ? (
                   <>
-                    <span className="mx-1">·</span>
-                    <span>{subtitle}</span>
+                    <span className="mx-1 hidden sm:inline">·</span>
+                    <span className="block sm:inline mt-0.5 sm:mt-0">{subtitle}</span>
                   </>
                 ) : null}
               </p>
             </div>
           </div>
           {!stickyFooter && actions ? (
-            <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>
+            <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">{actions}</div>
           ) : null}
         </div>
       </header>
       <main
         className={cn(
-          "flex-1 min-h-0 overflow-y-auto overscroll-contain",
-          stickyFooter ? "px-5 py-2 pb-3" : "px-5 py-3",
+          "invoice-form-main flex-1 min-h-0 overflow-y-auto overscroll-contain",
+          "pl-4 pr-4 sm:pl-5 sm:pr-5 md:pl-6 md:pr-6",
+          stickyFooter ? "pt-4 pb-4" : "py-4",
         )}
       >
         <div className="w-full max-w-none space-y-3">{children}</div>
       </main>
       {stickyFooter ? (
-        <div className="flex-shrink-0 bg-white border-t border-border px-5 py-1.5 z-20 shadow-[0_-2px_8px_rgba(15,23,42,0.05)]">
+        <div className="invoice-form-footer flex-shrink-0 bg-white border-t border-border pl-4 pr-4 sm:pl-5 sm:pr-5 md:pl-6 md:pr-6 py-2.5 z-30 shadow-[0_-2px_8px_rgba(15,23,42,0.06)]">
           <div className="w-full">{stickyFooter}</div>
         </div>
       ) : null}

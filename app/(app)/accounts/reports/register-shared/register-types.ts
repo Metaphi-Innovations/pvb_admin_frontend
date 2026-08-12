@@ -40,7 +40,7 @@ export interface RegisterReportRow {
   gstType?: RegisterGstType;
   financialYearId: number;
   /** Accounting links — sales invoice → voucher → GL */
-  postedVoucherId?: number | null;
+  postedVoucherId?: number | string | null;
   postedVoucherNo?: string | null;
   customerLedgerId?: number | null;
 }

@@ -28,3 +28,20 @@
   padding-top: 0.875rem;
   padding-bottom: 0.875rem;
 }
+
+@media (max-width: 1024px) {
+  .sales-invoices-compact .accounts-listing-filter-card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sales-invoices-compact .accounts-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sales-invoices-compact .accounts-listing-filter-card > div {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}

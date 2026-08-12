@@ -19,7 +19,6 @@ export type StockLineStatus =
   | "Near Expiry"
   | "Expired"
   | "Low Stock"
-  | "Reserved"
   | "Out Of Stock";
 
 export type StockDateMode = "single" | "range";
@@ -60,6 +59,7 @@ export interface StockPositionLine {
   warehouse: string;
   cp: number;
   status: StockLineStatus;
+  sourceStatus?: string;
   openingQty: number;
   dayIn: number;
   dayOut: number;

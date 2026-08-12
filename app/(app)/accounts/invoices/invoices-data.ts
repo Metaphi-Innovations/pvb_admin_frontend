@@ -109,16 +109,24 @@ export interface InvoiceNearExpirySchemeSettlement {
 export interface InvoiceLineItem {
 	id: string;
 	productId: number | null;
+	/** Backend product UUID when line is prepared from dispatch API. */
+	productUuid?: string | null;
 	productName: string;
 	productCode?: string;
 	description: string;
 	hsn?: string;
+	/** Backend SAC master UUID (service invoices). */
+	sacId?: string | null;
 	qty: number;
 	unit: string;
 	unitPrice: number;
 	discountPct: number;
 	taxPct: number;
 	amount: number;
+	/** Stored GST split from backend (when posted via API). */
+	cgstAmount?: number;
+	sgstAmount?: number;
+	igstAmount?: number;
 	creditedQty?: number;
 	creditedAmount?: number;
 	/** Dispatch batch snapshot (Sales Order generation). */
@@ -180,6 +188,10 @@ export interface InvoiceActivityEntry {
 
 export interface InvoiceRecord {
 	id: number;
+	/** Backend UUID — used for API view/cancel when present. */
+	salesInvoiceId?: string;
+	/** Backend customer UUID when available. */
+	customerUuid?: string;
 	invoiceNo: string;
 	invoiceType?: InvoiceDocumentType;
 	documentType?: InvoiceDocumentKind;
@@ -213,15 +225,15 @@ export interface InvoiceRecord {
 	/** Maker-checker workflow from User Management approver mapping */
 	workflow?: AccountsDocumentWorkflow;
 	/** Linked GL voucher after successful posting */
-	postedVoucherId?: number | null;
+	postedVoucherId?: number | string | null;
 	postedVoucherNo?: string | null;
 	paymentStatus: InvoicePaymentStatus;
 	collections: InvoiceCollectionEntry[];
 	attachments: InvoiceAttachment[];
 	activity: InvoiceActivityEntry[];
 	cancellationReason?: string;
-	/** Future: sales order link */
-	salesOrderId?: number | null;
+	/** Future: sales order link (local numeric id or backend UUID). */
+	salesOrderId?: number | string | null;
 	sourceDispatchId?: string;
 	/** Persisted dispatch date (survives if dispatch record is later removed). */
 	dispatchDate?: string;
@@ -231,6 +243,8 @@ export interface InvoiceRecord {
 	 */
 	sourceType?: SalesInvoiceSourceType;
 	customerLedgerId?: number | null;
+	/** API-backed customer ledger UUID for COA / GL links */
+	customerLedgerUuid?: string;
 	/**
 	 * Service Invoice only — optional selected Income ledger for Cr revenue.
 	 * When omitted, posting resolves the approved default "Service Income" ledger.
@@ -239,12 +253,19 @@ export interface InvoiceRecord {
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
+	/** API warehouse UUID for bank-account resolution */
+	warehouseUuid?: string;
 	/** Bank account for payment instructions / print */
 	bankAccountId?: number | null;
 	paymentTerms?: string;
 	creditDays?: number;
 	placeOfSupply?: string;
 	state?: string;
+	/** Backend POS / GST supply type — prefer over placeOfSupply inference. */
+	interstate?: boolean;
+	cgstTotal?: number;
+	sgstTotal?: number;
+	igstTotal?: number;
 	salesperson?: string;
 	shippingAddress?: string;
 	pan?: string;
@@ -937,7 +958,7 @@ export type InvoiceFormInput = {
 	gstTreatment?: string;
 	receivableLedger?: string;
 	salesOrderNo?: string;
-	salesOrderId?: number | null;
+	salesOrderId?: number | string | null;
 	sourceDispatchId?: string;
 	dispatchDate?: string;
 	sourceType?: SalesInvoiceSourceType;

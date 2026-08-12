@@ -137,6 +137,11 @@ export default function ViewStockDetailsPage() {
         bg: "bg-slate-100 text-slate-700 border-slate-200",
         label: rejectedDetails.status || "—",
       };
+    const sourceCfg =
+      STATUS_BADGE_CONFIG[rejectedDetails.source_status || ""] || {
+        bg: "bg-slate-100 text-slate-700 border-slate-200",
+        label: rejectedDetails.source_status || "—",
+      };
 
     return (
       <RecordDetailPage
@@ -158,7 +163,8 @@ export default function ViewStockDetailsPage() {
               highlight: true,
             },
             { label: "QC No.", value: rejectedDetails.qc_number || "—" },
-            { label: "Status", value: statusCfg.label },
+            { label: "Source", value: sourceCfg.label },
+            { label: "Stock Status", value: statusCfg.label },
             { label: "Batch No.", value: rejectedDetails.batch_no || "—" },
           ],
         }}
@@ -171,7 +177,15 @@ export default function ViewStockDetailsPage() {
                 <RecordKvRow label="Product Code" value={rejectedDetails.product.product_code || "—"} mono />
                 <RecordKvRow label="Batch No." value={rejectedDetails.batch_no || "—"} mono />
                 <RecordKvRow
-                  label="Status"
+                  label="Source"
+                  value={
+                    <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${sourceCfg.bg}`}>
+                      {sourceCfg.label}
+                    </span>
+                  }
+                />
+                <RecordKvRow
+                  label="Stock Status"
                   value={
                     <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${statusCfg.bg}`}>
                       {statusCfg.label}
@@ -211,6 +225,11 @@ export default function ViewStockDetailsPage() {
       bg: "bg-slate-100 text-slate-700 border-slate-200",
       label: details.status || "—",
     };
+  const sourceCfg =
+    STATUS_BADGE_CONFIG[details.source_status || ""] || {
+      bg: "bg-slate-100 text-slate-700 border-slate-200",
+      label: details.source_status || "—",
+    };
 
   return (
     <RecordDetailPage
@@ -235,6 +254,7 @@ export default function ViewStockDetailsPage() {
             label: "Reserved Qty",
             value: details.reserved_qty.toLocaleString("en-IN"),
           },
+          { label: "Source", value: sourceCfg.label },
           { label: "Stock Status", value: statusCfg.label },
           { label: "Batch No.", value: details.batch_no || "—" },
         ],
@@ -252,7 +272,15 @@ export default function ViewStockDetailsPage() {
               <RecordKvRow label="SKU" value={details.product.sku || "—"} mono />
               <RecordKvRow label="Batch No." value={details.batch_no || "—"} mono />
               <RecordKvRow
-                label="Status"
+                label="Source"
+                value={
+                  <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${sourceCfg.bg}`}>
+                    {sourceCfg.label}
+                  </span>
+                }
+              />
+              <RecordKvRow
+                label="Stock Status"
                 value={
                   <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${statusCfg.bg}`}>
                     {statusCfg.label}

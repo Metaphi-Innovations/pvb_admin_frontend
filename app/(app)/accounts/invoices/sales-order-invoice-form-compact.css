@@ -1,23 +1,24 @@
 /* Sales Order Pending → Generate Invoice only (module-scoped). */
 
-/* Prevent double scrollbars when compact layout is rendered by hiding parent panel overflow */
-body:has(.sales-order-invoice-form-compact),
-html:has(.sales-order-invoice-form-compact) {
+/* Prevent double scrollbars on generate/edit invoice only (sticky header + footer shell) */
+body:has(.invoice-form-shell),
+html:has(.invoice-form-shell) {
   overflow: hidden !important;
 }
 
-div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
+div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   overflow: hidden !important;
 }
 
-.accounts-module-main:has(.sales-order-invoice-form-compact) {
+.accounts-module-main:has(.invoice-form-shell) {
   overflow: hidden !important;
 }
 
-.accounts-module-main:has(.sales-order-invoice-form-compact) > div {
+.accounts-module-main:has(.invoice-form-shell) > div {
   overflow: hidden !important;
   height: 100% !important;
   max-height: 100% !important;
+  padding: 0 !important;
 }
 
 .sales-order-invoice-form-compact {
@@ -125,6 +126,19 @@ div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
   opacity: 1;
 }
 
+.sales-order-invoice-form-compact .so-goods-ro--multiline {
+  height: auto !important;
+  min-height: var(--so-ctrl-h) !important;
+  max-height: none !important;
+  align-items: flex-start;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sales-order-invoice-form-compact .so-goods-field:has(.so-goods-ro--multiline) {
+  grid-template-rows: auto auto;
+}
+
 .sales-order-invoice-form-compact .so-goods-ro {
   width: 100%;
   padding: 0 0.625rem;
@@ -164,6 +178,25 @@ div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
   gap: var(--so-label-gap);
   align-items: start;
   min-width: 0;
+}
+
+/* View page — no reserved helper row under read-only fields */
+.sales-order-invoice-form-compact .so-goods-field--view {
+  grid-template-rows: auto minmax(var(--so-ctrl-h), auto);
+  gap: 3px;
+}
+
+.sales-order-invoice-form-compact .so-invoice-view-card {
+  height: auto !important;
+  padding: 0.625rem 0.75rem !important;
+}
+
+.sales-order-invoice-form-compact .so-invoice-view-card > h2 {
+  margin-bottom: 0.5rem !important;
+}
+
+.sales-order-invoice-form-compact .so-invoice-view-page {
+  gap: 0.5rem;
 }
 
 .sales-order-invoice-form-compact .so-goods-field__control {
@@ -376,6 +409,66 @@ div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
   font-family: inherit;
 }
 
+/* Service invoice Summary — label stacked directly above value */
+.svc-invoice-summary-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .svc-invoice-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.svc-invoice-summary-item {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.svc-invoice-summary-label,
+.svc-invoice-summary-value {
+  display: block !important;
+  width: auto !important;
+  max-width: 100%;
+  margin: 0 !important;
+  float: none !important;
+  text-align: left !important;
+}
+
+.svc-invoice-summary-label {
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+
+.svc-invoice-summary-value {
+  margin-top: 0 !important;
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+}
+
+.svc-invoice-summary-value--grand {
+  font-size: 14px;
+  font-weight: 700;
+  color: hsl(var(--brand-700, 24 90% 45%));
+}
+
+.sales-order-invoice-form-compact .svc-invoice-summary-value--grand,
+.svc-invoice-summary-value--grand {
+  color: #c2410c;
+}
+
 .sales-order-invoice-form-compact .so-invoice-summary .so-summary-label {
   font-size: var(--so-fs-summary) !important;
   font-weight: var(--so-fw-regular) !important;
@@ -496,14 +589,22 @@ div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
   padding: 0.5rem 0.75rem;
 }
 
-/* Customer + invoice details: CSS grid with shared baselines */
-.sales-order-invoice-form-compact .so-goods-field-grid {
+/* Generate form only — single-row column-flow grid with width tokens */
+.sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
   gap: var(--so-field-gap);
   align-items: start;
   justify-content: start;
+}
+
+/* View page — always use responsive row grid (Tailwind grid-cols-* on element) */
+.sales-order-invoice-form-compact .so-invoice-view-grid {
+  display: grid;
+  grid-auto-flow: row;
+  grid-auto-columns: unset;
+  width: 100%;
 }
 
 /* Width tokens */
@@ -568,19 +669,60 @@ div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
   width: 100%;
 }
 
+@media (max-width: 1280px) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--so-field-gap);
+    width: 100%;
+  }
+
+  .sales-order-invoice-form-compact .so-w-customer,
+  .sales-order-invoice-form-compact .so-w-gstin,
+  .sales-order-invoice-form-compact .so-w-inv-no,
+  .sales-order-invoice-form-compact .so-w-date,
+  .sales-order-invoice-form-compact .so-w-so,
+  .sales-order-invoice-form-compact .so-w-dispatch,
+  .sales-order-invoice-form-compact .so-w-bank {
+    width: 100%;
+    max-width: none;
+  }
+}
+
 @media (max-width: 1100px) {
   .sales-order-invoice-form-compact .so-transport-grid--5,
   .sales-order-invoice-form-compact .so-transport-grid--docs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sales-order-invoice-form-compact .so-goods-field-grid {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
     grid-auto-flow: row;
     grid-template-columns: repeat(auto-fill, minmax(160px, max-content));
   }
 }
 
+@media (max-width: 768px) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sales-order-invoice-form-compact .so-w-customer,
+  .sales-order-invoice-form-compact .so-w-bank {
+    grid-column: 1 / -1;
+  }
+
+  .sales-order-invoice-form-compact .invoice-form-header,
+  .sales-order-invoice-form-compact .invoice-form-footer {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
 @media (max-width: 640px) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .sales-order-invoice-form-compact .so-transport-grid--5,
   .sales-order-invoice-form-compact .so-transport-grid--docs {
     grid-template-columns: minmax(0, 1fr);
@@ -627,4 +769,28 @@ div:has(> .accounts-module-shell):has(.sales-order-invoice-form-compact) {
   min-height: var(--so-ctrl-h) !important;
   font-size: var(--so-fs-control) !important;
   width: 100%;
+}
+
+/* Product / charges tables — horizontal scroll on tablet */
+.sales-order-invoice-form-compact .overflow-x-auto,
+.sales-order-invoice-form-compact .so-goods-product-table-wrap {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.sales-order-invoice-form-compact .so-goods-product-table-wrap {
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.sales-order-invoice-form-compact .invoice-form-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.sales-order-invoice-form-compact .invoice-form-main {
+  flex: 1;
+  min-height: 0;
 }

@@ -1,31 +1,15 @@
 /**
- * Sales Invoices — tab-scoped data sources.
- * Each source tab maps generated invoices from its own pipeline.
- * "All Invoices" combines goods + service invoices.
+ * Sales Invoices — tab meta + API-backed listing helpers.
  * Used only by Transactions → Sales Invoice.
  */
 
+import { salesInvoiceTypeLabel } from "@/lib/accounts/invoice-type";
 import {
-  getInvoiceRowActions,
-  loadInvoices,
-  type InvoiceRecord,
-} from "@/app/(app)/accounts/invoices/invoices-data";
-import { loadOrders as loadSalesOrders } from "@/app/(app)/sales/orders/orders-data";
-import { loadTransfers } from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
-import { loadOrders as loadSampleOrders } from "@/app/(app)/sales/sample-order/orders-data";
-import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import {
-  getDispatchById,
-  getDispatchByNumber,
-} from "@/lib/accounts/dispatch-invoice-bridge";
-import { getPendingInvoiceSeedDispatch } from "@/lib/accounts/pending-invoice-seed";
-import {
-  resolveInvoiceDocumentType,
-  salesInvoiceTypeLabel,
-  type SalesInvoiceSourceType,
-} from "@/lib/accounts/invoice-type";
-import { resolveWarehouseOrderType } from "@/app/(app)/warehouse/lib/order-document-type";
-import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+  SalesInvoiceService,
+  mapInvoiceTypeToKind,
+  tabToInvoiceType,
+  type SalesInvoiceListDto,
+} from "@/services/sales-invoice.service";
 import {
   buildEInvoiceDetails,
   buildEWayDetails,
@@ -36,6 +20,7 @@ import {
   type SalesInvoiceEInvoiceDetails,
   type SalesInvoiceEWayDetails,
 } from "./sales-invoice-statutory";
+import type { InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
 
 export type SalesInvoiceKind = "sales_order" | "stock_transfer" | "sample_order" | "service";
 
@@ -84,11 +69,13 @@ export const SALES_INVOICE_TAB_META: Record<
 
 /** Display row for a generated sales invoice, retaining source identity. */
 export interface SalesInvoiceListRow {
-  id: number;
+  id: number | string;
+  /** Backend sales invoice UUID (preferred for API calls). */
+  salesInvoiceId?: string;
   /** Tab membership for source-specific tabs; service only appears in All. */
   sourceType: SalesInvoiceKind;
   sourceRecordId: number | string | null;
-  invoiceId: number;
+  invoiceId: number | string;
   invoiceNo: string;
   invoiceDate: string;
   invoiceTypeLabel: string;
@@ -122,275 +109,144 @@ export interface SalesInvoiceListRow {
 
 const LIST_PATH = "/accounts/transactions/invoices";
 
-const DEMO_CUSTOMER_CODES: Record<string, string> = {
-  "reliance agri": "CUST-REL-001",
-  "mahindra farms": "CUST-MH-021",
-  "abc distributor": "CUST-ABC-001",
-  "abc agro distributor": "CUST-ABC-001",
-};
+export function mapApiInvoiceToListRow(
+  dto: SalesInvoiceListDto,
+): SalesInvoiceListRow {
+  const kind = mapInvoiceTypeToKind(dto.invoice_type);
+  const status =
+    String(dto.status).toUpperCase() === "CANCELLED" ||
+    String(dto.status).toUpperCase() === "REVERSED"
+      ? ("cancelled" as const)
+      : String(dto.status).toUpperCase() === "POSTED"
+        ? ("sent" as const)
+        : ("draft" as const);
 
-function findDispatchForInvoice(inv: InvoiceRecord): DispatchRecord | undefined {
-  if (inv.sourceDispatchId) {
-    const byId =
-      getDispatchById(inv.sourceDispatchId) ??
-      getPendingInvoiceSeedDispatch(inv.sourceDispatchId);
-    if (byId) return byId;
-  }
-  if (inv.dispatchNo?.trim()) {
-    return getDispatchByNumber(inv.dispatchNo.trim());
-  }
-  return undefined;
-}
+  const snap = (dto.customer_snapshot || {}) as Record<string, unknown>;
+  const whSnap = (dto.warehouse_snapshot || {}) as Record<string, unknown>;
+  const destSnap = (dto.destination_warehouse_snapshot || {}) as Record<string, unknown>;
 
-/**
- * Resolve listing invoice kind.
- * Prefers persisted sourceType; falls back to invoiceType, dispatch, and doc-no patterns.
- */
-export function resolveSalesInvoiceKind(inv: InvoiceRecord): SalesInvoiceKind {
-  if (inv.sourceType === "service") return "service";
-  if (inv.sourceType === "sales_order") return "sales_order";
-  if (inv.sourceType === "stock_transfer") return "stock_transfer";
-  if (inv.sourceType === "sample_order") return "sample_order";
-  if (inv.sourceType === "direct") return "sales_order";
-
-  if (inv.invoiceNo.startsWith("SVC/")) return "service";
-  if (inv.invoiceNo.startsWith("PVB/SMP/")) return "sample_order";
-  if (inv.invoiceType === "sample_order" || inv.documentType === "proforma_invoice") {
-    return "sample_order";
-  }
-
-  if (resolveInvoiceDocumentType(inv) === "stock_transfer") {
-    return "stock_transfer";
-  }
-
-  const dispatch = findDispatchForInvoice(inv);
-  if (dispatch) {
-    const whType = resolveWarehouseOrderType(dispatch);
-    if (whType === "stock_transfer") return "stock_transfer";
-    if (whType === "sample_order") return "sample_order";
-    if (whType === "sales_order") return "sales_order";
-  }
-
-  const sourceNo = (inv.salesOrderNo || inv.referenceNo || "").trim();
-  if (sourceNo.startsWith("SM-") || sourceNo.startsWith("SMP-")) {
-    return "sample_order";
-  }
-  if (sourceNo.startsWith("ST-") || inv.invoiceNo.startsWith("STI-")) {
-    return "stock_transfer";
-  }
-
-  if (sourceNo && loadSampleOrders().some((o) => o.soNumber === sourceNo)) {
-    return "sample_order";
-  }
-  if (
-    sourceNo &&
-    loadTransfers().some((t) => t.transferNumber === sourceNo || String(t.id) === sourceNo)
-  ) {
-    return "stock_transfer";
-  }
-
-  return "sales_order";
-}
-
-/** @deprecated Use resolveSalesInvoiceKind — kept for callers expecting tab ids without "all"/"service". */
-export function resolveSalesInvoiceSourceType(
-  inv: InvoiceRecord,
-): Exclude<SalesInvoiceKind, "service"> {
-  const kind = resolveSalesInvoiceKind(inv);
-  if (kind === "service") return "sales_order";
-  return kind;
-}
-
-function resolveSourceRecordId(
-  sourceType: SalesInvoiceKind,
-  inv: InvoiceRecord,
-): number | string | null {
-  if (sourceType === "service") return null;
-  const sourceNo = (inv.salesOrderNo || inv.referenceNo || "").trim();
-
-  if (sourceType === "sales_order") {
-    if (inv.salesOrderId != null) return inv.salesOrderId;
-    const order = loadSalesOrders().find((o) => o.soNumber === sourceNo);
-    return order?.id ?? null;
-  }
-  if (sourceType === "stock_transfer") {
-    const transfer = loadTransfers().find(
-      (t) => t.transferNumber === sourceNo || String(t.id) === sourceNo,
-    );
-    return transfer?.id ?? null;
-  }
-  const sample = loadSampleOrders().find((o) => o.soNumber === sourceNo);
-  return sample?.id ?? null;
-}
-
-function resolveCustomerCode(inv: InvoiceRecord): string {
-  if (inv.customerId != null) {
-    const c = loadCustomers().find((x) => x.id === inv.customerId);
-    if (c?.customerCode) return c.customerCode;
-  }
-  const order = inv.salesOrderId
-    ? loadSalesOrders().find((o) => o.id === inv.salesOrderId)
-    : loadSalesOrders().find((o) => o.soNumber === (inv.salesOrderNo || "").trim());
-  if (order?.customerCode) return order.customerCode;
-
-  const sample = loadSampleOrders().find(
-    (o) => o.soNumber === (inv.salesOrderNo || inv.referenceNo || "").trim(),
-  );
-  if (sample?.customerCode) return sample.customerCode;
-
-  return DEMO_CUSTOMER_CODES[inv.customerName.trim().toLowerCase()] ?? "";
-}
-
-function resolveWarehouses(
-  inv: InvoiceRecord,
-  sourceType: SalesInvoiceKind,
-  sourceRecordId: number | string | null,
-): { fromWarehouse: string; toWarehouse: string } {
-  if (sourceType !== "stock_transfer") {
-    return { fromWarehouse: "", toWarehouse: "" };
-  }
-
-  const transfer =
-    (typeof sourceRecordId === "number"
-      ? loadTransfers().find((t) => t.id === sourceRecordId)
-      : undefined) ??
-    loadTransfers().find(
-      (t) => t.transferNumber === (inv.salesOrderNo || inv.referenceNo || "").trim(),
-    );
-
-  const dispatch = findDispatchForInvoice(inv);
-
-  const fromWarehouse =
-    transfer?.sourceWarehouseName?.trim() ||
-    dispatch?.source_warehouse_name?.trim() ||
-    dispatch?.sourceWarehouse?.trim() ||
-    inv.warehouse?.trim() ||
+  const customerName =
+    dto.customer?.customer_name ||
+    String(snap.customer_name || snap.customerName || "").trim() ||
     "—";
-
-  const toWarehouse =
-    transfer?.targetWarehouseName?.trim() ||
-    dispatch?.target_warehouse_name?.trim() ||
-    dispatch?.targetWarehouse?.trim() ||
-    inv.customerName?.trim() ||
+  const customerCode =
+    dto.customer?.customer_code ||
+    String(snap.customer_code || snap.customerCode || "").trim() ||
+    "";
+  const gstin = String(snap.gstin_no || snap.gstin || "").trim();
+  const warehouseName =
+    dto.warehouse?.warehouse_name ||
+    String(whSnap.warehouse_name || whSnap.warehouseName || "").trim() ||
     "—";
-
-  return { fromWarehouse, toWarehouse };
-}
-
-function sumLineQty(inv: InvoiceRecord): number {
-  const lines = inv.lineItems ?? [];
-  if (!lines.length) return 0;
-  return lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
-}
-
-function buildReference(
-  kind: SalesInvoiceKind,
-  inv: InvoiceRecord,
-): { primary: string; secondary: string } {
-  const orderNo = (inv.salesOrderNo || "").trim();
-  const dispatchNo = (inv.dispatchNo || "").trim();
-  const manualRef = (inv.referenceNo || "").trim();
-
-  if (kind === "service") {
-    return {
-      primary: manualRef || "—",
-      secondary: "",
-    };
-  }
-
-  return {
-    primary: orderNo || "—",
-    secondary: dispatchNo || "—",
-  };
-}
-
-function buildPartyOrTransfer(
-  kind: SalesInvoiceKind,
-  inv: InvoiceRecord,
-  fromWarehouse: string,
-  toWarehouse: string,
-): string {
-  if (kind === "stock_transfer") {
-    return `${fromWarehouse || "—"} → ${toWarehouse || "—"}`;
-  }
-  return inv.customerName?.trim() || "—";
-}
-
-function mapInvoiceToListRow(inv: InvoiceRecord): SalesInvoiceListRow {
-  const sourceType = resolveSalesInvoiceKind(inv);
-  const sourceRecordId = resolveSourceRecordId(sourceType, inv);
-  const actions = getInvoiceRowActions(inv);
-  const { fromWarehouse, toWarehouse } = resolveWarehouses(inv, sourceType, sourceRecordId);
-  const itemCount = inv.lineItems?.length ?? 0;
-  const qtySum = sumLineQty(inv);
+  const destWarehouse =
+    String(destSnap.warehouse_name || destSnap.warehouseName || "").trim() || "—";
   const totalAmount =
-    sourceType === "sample_order" ? 0 : Math.round((inv.grandTotal ?? 0) * 100) / 100;
-  const ref = buildReference(sourceType, inv);
-  const eInvoiceStatusLabel = resolveListingEInvoiceStatus(inv, sourceType);
-  const ewayBillStatusLabel = resolveListingEWayStatus(inv, sourceType);
+    Math.round((Number(dto.invoice_amount) || 0) * 100) / 100;
+  const id = dto.sales_invoice_id;
+  const dispatchNo =
+    dto.dispatch?.dispatch_number || dto.dispatch_number || "—";
+  const orderNo = dto.sales_order?.so_number || "—";
+  const totalQty = Math.round((Number(dto.total_quantity) || 0) * 100) / 100;
+
+  const stubRecord = {
+    invoiceNo: dto.invoice_number,
+    sourceType:
+      kind === "service"
+        ? ("service" as const)
+        : kind === "stock_transfer"
+          ? ("stock_transfer" as const)
+          : ("sales_order" as const),
+    irn: dto.irn_number || undefined,
+    eInvoiceNo: dto.einvoice_status || undefined,
+  };
+  const eInvoiceStatusLabel = resolveListingEInvoiceStatus(
+    stubRecord as never,
+    kind,
+  );
+  const ewayBillStatusLabel = resolveListingEWayStatus(stubRecord as never, kind);
 
   return {
-    id: inv.id,
-    sourceType,
-    sourceRecordId,
-    invoiceId: inv.id,
-    invoiceNo: inv.invoiceNo,
-    invoiceDate: inv.invoiceDate,
-    invoiceTypeLabel: salesInvoiceTypeLabel(inv.sourceType as SalesInvoiceSourceType | undefined, sourceType),
-    referencePrimary: ref.primary,
-    referenceSecondary: ref.secondary,
-    partyOrTransfer: buildPartyOrTransfer(sourceType, inv, fromWarehouse, toWarehouse),
-    orderNo: inv.salesOrderNo || inv.referenceNo || "—",
-    dispatchNo: inv.dispatchNo?.trim() || "—",
-    customerName: inv.customerName || "—",
-    customerCode: resolveCustomerCode(inv),
-    gstin: inv.customerGst || "",
-    fromWarehouse,
-    toWarehouse,
-    totalAmount,
-    qtyOrItemCount: qtySum > 0 ? qtySum : itemCount,
-    itemCount,
-    branch: inv.branch?.trim() || "—",
-    invoiceStatus: inv.invoiceStatus,
-    viewHref: `${LIST_PATH}/${inv.id}`,
-    editHref: actions.includes("edit") ? `${LIST_PATH}/${inv.id}/edit` : null,
-    canCancel: actions.includes("cancel"),
-    canEdit: actions.includes("edit"),
-    canPdf: actions.includes("pdf"),
+    id,
+    salesInvoiceId: id,
+    sourceType: kind,
+    sourceRecordId: dto.dispatch_id ?? null,
+    invoiceId: id,
+    invoiceNo: dto.invoice_number,
+    invoiceDate: String(dto.invoice_date || "").slice(0, 10),
+    invoiceTypeLabel: salesInvoiceTypeLabel(
+      kind === "service"
+        ? "service"
+        : kind === "stock_transfer"
+          ? "stock_transfer"
+          : "sales_order",
+      kind,
+    ),
+    referencePrimary: orderNo !== "—" ? orderNo : dispatchNo,
+    referenceSecondary: orderNo !== "—" ? dispatchNo : "—",
+    partyOrTransfer:
+      kind === "stock_transfer"
+        ? `${warehouseName} → ${destWarehouse}`
+        : customerName,
+    orderNo,
+    dispatchNo,
+    customerName,
+    customerCode,
+    gstin,
+    fromWarehouse: kind === "stock_transfer" ? warehouseName : "",
+    toWarehouse: kind === "stock_transfer" ? destWarehouse : "",
+    totalAmount: kind === "sample_order" ? 0 : totalAmount,
+    qtyOrItemCount: totalQty,
+    itemCount: totalQty > 0 ? 1 : 0,
+    branch: warehouseName,
+    invoiceStatus: status,
+    viewHref: `${LIST_PATH}/${id}`,
+    editHref: null,
+    canCancel: status !== "cancelled",
+    canEdit: false,
+    canPdf: true,
     eInvoiceStatusLabel,
     ewayBillStatusLabel,
-    eInvoiceDetails: buildEInvoiceDetails(inv, eInvoiceStatusLabel),
-    ewayBillDetails: buildEWayDetails(inv, ewayBillStatusLabel),
+    eInvoiceDetails: buildEInvoiceDetails(stubRecord as never, eInvoiceStatusLabel),
+    ewayBillDetails: buildEWayDetails(stubRecord as never, ewayBillStatusLabel),
   };
 }
 
-/** Fetch + map generated invoices for one listing tab. */
-export function listSalesInvoicesForTab(tab: SalesInvoiceTabId): SalesInvoiceListRow[] {
-  const all = loadInvoices().map(mapInvoiceToListRow);
-  const filtered =
-    tab === "all"
-      ? all
-      : tab === "service"
-        ? all.filter((r) => r.sourceType === "service")
-        : all.filter((r) => r.sourceType === tab);
+export type FetchSalesInvoicesOptions = {
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  financialYearId?: string;
+  page?: number;
+  pageSize?: number;
+};
 
-  return filtered.sort((a, b) => {
-    const d = b.invoiceDate.localeCompare(a.invoiceDate);
-    if (d !== 0) return d;
-    return b.invoiceNo.localeCompare(a.invoiceNo);
+/** Load sales invoices for a tab from the Accounts Sales Invoice API. */
+export async function fetchSalesInvoicesByTab(
+  tab: SalesInvoiceTabId,
+  opts: FetchSalesInvoicesOptions = {},
+): Promise<{ rows: SalesInvoiceListRow[]; total: number }> {
+  const invoiceType = tabToInvoiceType(tab);
+  const result = await SalesInvoiceService.list({
+    page: opts.page ?? 1,
+    page_size: opts.pageSize ?? 100,
+    search: opts.search?.trim() || undefined,
+    from_date: opts.dateFrom || undefined,
+    to_date: opts.dateTo || undefined,
+    financial_year_id:
+      opts.financialYearId && opts.financialYearId !== "all"
+        ? opts.financialYearId
+        : undefined,
+    invoice_type: invoiceType,
   });
-}
 
-export function listSalesInvoicesByTab(tab: SalesInvoiceTabId): SalesInvoiceListRow[] {
-  return listSalesInvoicesForTab(tab);
-}
-
-export function getSalesInvoiceBranchOptions(tab: SalesInvoiceTabId): string[] {
-  const set = new Set<string>();
-  for (const r of listSalesInvoicesForTab(tab)) {
-    if (r.branch && r.branch !== "—") set.add(r.branch);
+  let rows = (result.results || []).map(mapApiInvoiceToListRow);
+  if (tab === "sample_order") {
+    rows = rows.filter((r) => r.sourceType === "sample_order");
+  } else if (tab === "sales_order") {
+    rows = rows.filter((r) => r.sourceType === "sales_order");
   }
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
+
+  return { rows, total: result.total ?? rows.length };
 }
 
 /** Tabs shown in the Sales Invoice register UI (no dedicated Service tab). */
@@ -398,5 +254,4 @@ export const SALES_INVOICE_VISIBLE_TABS: SalesInvoiceTabId[] = [
   "all",
   "sales_order",
   "stock_transfer",
-  "sample_order",
 ];

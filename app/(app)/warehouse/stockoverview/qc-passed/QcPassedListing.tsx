@@ -6,9 +6,8 @@ import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { QC_PASSED_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { QC_PASSED_STATUS_OPTIONS, INVENTORY_SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
-import { ProductDropdownService } from "@/services/product-dropdown.service";
 import {
   InventoryListRow,
   StockOverviewApi,
@@ -40,48 +39,10 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
-  const [productLookups, setProductLookups] = useState<{
-    sku: Array<{ label: string; value: string }>;
-    uom: Array<{ label: string; value: string }>;
-  }>({ sku: [], uom: [] });
 
   useEffect(() => {
     setPage(1);
   }, [warehouseId, setPage]);
-
-  useEffect(() => {
-    let mounted = true;
-    ProductDropdownService.dropdown()
-      .then((products) => {
-        if (!mounted) return;
-        const skuSeen = new Set<string>();
-        const uomSeen = new Set<string>();
-        const sku: Array<{ label: string; value: string }> = [];
-        const uom: Array<{ label: string; value: string }> = [];
-
-        for (const p of products) {
-          const skuVal = String(p.sku ?? "").trim();
-          if (skuVal && !skuSeen.has(skuVal)) {
-            skuSeen.add(skuVal);
-            sku.push({ label: skuVal, value: skuVal });
-          }
-          const uomVal = String(p.unit ?? "").trim();
-          if (uomVal && !uomSeen.has(uomVal)) {
-            uomSeen.add(uomVal);
-            uom.push({ label: uomVal, value: uomVal });
-          }
-        }
-
-        setProductLookups({
-          sku: sku.sort((a, b) => a.label.localeCompare(b.label)),
-          uom: uom.sort((a, b) => a.label.localeCompare(b.label)),
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,19 +79,13 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
   const handleOpenFilter = (columnKey: string) => {
     if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
 
-    if (columnKey === "sku") {
-      setFilterOptions((prev) => ({ ...prev, sku: productLookups.sku }));
-      return;
-    }
-    if (columnKey === "uom") {
-      setFilterOptions((prev) => ({ ...prev, uom: productLookups.uom }));
-      return;
-    }
-
     const keyMap: Record<string, string> = {
       product_name: "inventory_detail__product__product_name",
+      sku: "inventory_detail__product__sku",
+      uom: "inventory_detail__product__unit",
       warehouse_name: "inventory_detail__warehouse__warehouse_name",
       batch_no: "batch_no",
+      source_status: "source_status",
     };
     const field = keyMap[columnKey];
     if (!field) return;
@@ -167,7 +122,7 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.sku || productLookups.sku,
+      filterOptions: filterOptions.sku || [],
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
     },
@@ -177,7 +132,7 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.uom || productLookups.uom,
+      filterOptions: filterOptions.uom || [],
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
@@ -257,8 +212,27 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       render: (val) => <span className="font-mono text-xs text-foreground">{val}</span>,
     },
     {
+      key: "source_status",
+      header: "Source",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.source_status?.length
+        ? filterOptions.source_status
+        : INVENTORY_SOURCE_STATUS_OPTIONS,
+      width: "130px",
+      render: (val: string) => {
+        const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val || "—" };
+        return (
+          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+            {cfg.label}
+          </span>
+        );
+      },
+    },
+    {
       key: "status",
-      header: "Status",
+      header: "Stock Status",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
