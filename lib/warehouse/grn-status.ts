@@ -40,10 +40,17 @@ export function mapBackendGrnStatus(status: string): GrnStatus {
 export function mapFrontendGrnStatusToBackend(status: string): BackendGrnStatus | "" {
   switch (status) {
     case "qc_completed":
+    case "QC Completed":
       return "QC_COMPLETED";
     case "pending_qc":
     case "qc_in_progress":
+    case "QC Pending":
       return "QC_PENDING";
+    // Display-only ST receipt labels — no dedicated GRN status on API
+    case "Received":
+    case "Partially Received":
+    case "Pending Receipt":
+      return "";
     default:
       return "";
   }

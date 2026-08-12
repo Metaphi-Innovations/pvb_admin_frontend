@@ -272,10 +272,6 @@ export function ProductItemDetailsSection({
               <Label className="text-xs font-medium">Product</Label>
               {customSelectorArea}
             </div>
-            <div className="space-y-1 flex-1 min-w-[200px]">
-              <Label className="text-xs font-medium">Batch No.</Label>
-              {customBatchSelectorArea}
-            </div>
             {customQuantityArea ? customQuantityArea : (
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Transfer Qty</Label>
@@ -430,7 +426,7 @@ export function ProductItemDetailsSection({
               : mode === "sales-order"
               ? "Select a product and click Add Product to add it to this order."
               : mode === "stock-transfer"
-              ? "Select a product, batch, and transfer quantity to add it to this transfer."
+              ? "Select a product and transfer quantity to add it to this transfer."
               : "Add a product to start building this return."}
           </p>
         </div>

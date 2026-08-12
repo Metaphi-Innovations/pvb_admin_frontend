@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { ProductCatalogItem } from "@/app/(app)/sales/orders/orders-data";
@@ -24,7 +25,7 @@ import { getStockStatus } from "@/lib/accounts/inventory-accounting-data";
 import { StockTransferService } from "@/services/stock-transfer.service";
 
 const TAX_HEAD =
-  "px-2 py-1.5 text-left text-[10px] font-semibold text-foreground whitespace-nowrap";
+  "px-2 py-1.5 text-right text-[10px] font-semibold text-foreground whitespace-nowrap";
 const TAX_CELL = "px-2 py-1.5 text-xs tabular-nums text-right";
 const TAX_CELL_AMT = "px-2 py-1.5 text-xs tabular-nums text-right font-medium";
 
@@ -104,7 +105,7 @@ export default function TransferProductLinesEditor({
     );
   };
 
-  const [topSelectedProduct, setTopSelectedProduct] = useState<ProductCatalogItem | null>(null);
+  const [topSelectedProducts, setTopSelectedProducts] = useState<ProductCatalogItem[]>([]);
   const [topSelectedBatch, setTopSelectedBatch] = useState<any | null>(null);
   const [topInputQty, setTopInputQty] = useState<string>("1");
   const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
@@ -152,60 +153,72 @@ export default function TransferProductLinesEditor({
       setLocalError("Please select From Warehouse first.");
       return;
     }
-    if (!topSelectedProduct) {
-      setLocalError("Please select a product.");
+    if (topSelectedProducts.length === 0) {
+      setLocalError("Please select at least one product.");
       return;
     }
 
-    const qty = topQuantityType === "Case"
-      ? (topCaseQuantity * (topSelectedProduct.packSize || 1))
-      : (topCaseQuantity * (topSelectedProduct.packSize || 1)) + topPieceQuantity;
+    const nextLines = [...lines];
+    const errors: string[] = [];
 
-    if (qty <= 0) {
-      setLocalError("Transfer Qty must be greater than zero.");
+    for (const selectedProduct of topSelectedProducts) {
+      const qty = topQuantityType === "Case"
+        ? (topCaseQuantity * (selectedProduct.packSize || 1))
+        : (topCaseQuantity * (selectedProduct.packSize || 1)) + topPieceQuantity;
+
+      if (qty <= 0) {
+        errors.push(`Transfer Qty must be greater than zero for "${selectedProduct.name}".`);
+        continue;
+      }
+
+      const exists = nextLines.some(
+        (l) => l.productId === selectedProduct.id && l.quantityType === topQuantityType
+      );
+      if (exists) {
+        errors.push(`Product "${selectedProduct.name}" with type "${topQuantityType}" is already added.`);
+        continue;
+      }
+
+      let newLine = createEmptyLineItem() as TransferLineItem;
+      newLine.productId = selectedProduct.id;
+      newLine.productCode = selectedProduct.code;
+      newLine.productName = selectedProduct.name;
+      const costPrice = selectedProduct.costPrice ?? 0;
+      newLine.dealerPrice = costPrice;
+      newLine.unitPrice = costPrice;
+      newLine.finalRate = costPrice;
+      newLine.gstRate = selectedProduct.gstRate;
+      newLine.quantityType = topQuantityType;
+      newLine.caseQuantity = topCaseQuantity;
+      newLine.pieceQuantity = topPieceQuantity;
+      newLine.quantity = qty;
+      newLine.availableStock = selectedProduct.stock;
+
+      if (selectedProduct.gstRate) {
+        const breakdown = computeLineTaxBreakdown(newLine, selectedProduct.gstRate, taxSupplyType);
+        newLine = {
+          ...newLine,
+          gstAmount: breakdown.gstAmount,
+          cgstAmount: breakdown.cgstAmount,
+          sgstAmount: breakdown.sgstAmount,
+          igstAmount: breakdown.igstAmount,
+        };
+      }
+
+      newLine = recalculateLineItem(newLine) as TransferLineItem;
+      nextLines.push(newLine);
+    }
+
+    if (errors.length > 0 && nextLines.length === lines.length) {
+      setLocalError(errors[0]);
       return;
     }
 
-    // Check duplicate
-    const exists = lines.some(
-      (l) => l.productId === topSelectedProduct.id && l.quantityType === topQuantityType
-    );
-    if (exists) {
-      setLocalError(`Product "${topSelectedProduct.name}" with type "${topQuantityType}" is already added.`);
-      return;
-    }
-
-    let newLine = createEmptyLineItem() as TransferLineItem;
-    newLine.productId = topSelectedProduct.id;
-    newLine.productCode = topSelectedProduct.code;
-    newLine.productName = topSelectedProduct.name;
-    const costPrice = topSelectedProduct.costPrice ?? 0;
-    newLine.dealerPrice = costPrice;
-    newLine.unitPrice = costPrice;
-    newLine.finalRate = costPrice;
-    newLine.gstRate = topSelectedProduct.gstRate;
-    newLine.quantityType = topQuantityType;
-    newLine.caseQuantity = topCaseQuantity;
-    newLine.pieceQuantity = topPieceQuantity;
-    newLine.quantity = qty;
-
-    if (topSelectedProduct.gstRate) {
-      const breakdown = computeLineTaxBreakdown(newLine, topSelectedProduct.gstRate, taxSupplyType);
-      newLine = {
-        ...newLine,
-        gstAmount: breakdown.gstAmount,
-        cgstAmount: breakdown.cgstAmount,
-        sgstAmount: breakdown.sgstAmount,
-        igstAmount: breakdown.igstAmount,
-      };
-    }
-
-    newLine = recalculateLineItem(newLine) as TransferLineItem;
-    onChange([...lines, newLine]);
-    setTopSelectedProduct(null);
+    onChange(nextLines);
+    setTopSelectedProducts([]);
     setTopCaseQuantity(0);
     setTopPieceQuantity(0);
-    setLocalError(null);
+    setLocalError(errors[0] || null);
   };
 
   const totalQuantity = lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
@@ -225,11 +238,12 @@ export default function TransferProductLinesEditor({
         onQuantityChange={setTopInputQty}
         onAddItem={handleAddProductFromTop}
         customSelectorArea={
-          <ProductSelect
-            value={topSelectedProduct ? topSelectedProduct.id : null}
+          <MultiProductSelect
+            selectedValues={topSelectedProducts.map((p) => p.id)}
+            alreadyAddedProductIds={lines.map((l) => l.productId).filter(Boolean)}
             products={products}
-            onSelect={(p) => {
-              setTopSelectedProduct(p);
+            onSelectMultiple={(selected) => {
+              setTopSelectedProducts(selected);
               setLocalError(null);
             }}
           />
@@ -266,7 +280,10 @@ export default function TransferProductLinesEditor({
                 min={0}
                 disabled={topQuantityType === "Piece"}
                 value={topCaseQuantity || ""}
-                onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
+                onChange={(e) => {
+                  const val = e.target.value.slice(0, 5);
+                  setTopCaseQuantity(Number(val) || 0);
+                }}
                 className="h-8 text-xs w-20 bg-white disabled:opacity-50"
               />
             </div>
@@ -277,35 +294,26 @@ export default function TransferProductLinesEditor({
                 min={0}
                 disabled={topQuantityType === "Case"}
                 value={topPieceQuantity || ""}
-                onChange={(e) => setTopPieceQuantity(Number(e.target.value) || 0)}
+                onChange={(e) => {
+                  const val = e.target.value.slice(0, 5);
+                  setTopPieceQuantity(Number(val) || 0);
+                }}
                 className="h-8 text-xs w-20 bg-white disabled:opacity-50"
               />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Total Unit Qty</Label>
-              <Input
-                type="text"
-                disabled
-                value={
-                  topSelectedProduct
-                    ? (((topCaseQuantity || 0) * (topSelectedProduct.packSize || 1)) + (topPieceQuantity || 0)) || "—"
-                    : "—"
-                }
-                className="h-8 text-xs w-24 font-semibold bg-muted text-muted-foreground"
-              />
-            </div>
+
           </>
         }
         customTableHead={
           <tr className="bg-muted/40 border-b border-border">
             {[
-              { h: "Product", className: "w-[240px]" },
-              { h: "SKU" },
-              { h: "Type", className: "w-[80px]" },
-              { h: "Cases", className: "w-20" },
-              { h: "Pieces", className: "w-20" },
-              { h: "Total Unit Qty", className: "w-20" },
-              { h: "CP" },
+              { h: "Product", className: "w-[240px] text-left" },
+              { h: "SKU", className: "text-left" },
+              { h: "Type", className: "w-[80px] text-left" },
+              { h: "Cases", className: "w-20 text-right" },
+              { h: "Pieces", className: "w-20 text-right" },
+              { h: "Total Unit Qty", className: "w-20 text-right" },
+              { h: "CP", className: "text-right" },
             ].map(({ h, className }) => (
               <th
                 key={h}
@@ -326,12 +334,15 @@ export default function TransferProductLinesEditor({
               </th>
             ))}
             {[
-              { h: "Total" },
-              { h: "" },
-            ].map(({ h }) => (
+              { h: "Total", className: "text-right" },
+              { h: "", className: "text-right" },
+            ].map(({ h, className }) => (
               <th
                 key={h || "actions"}
-                className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground align-middle"
+                className={cn(
+                  "px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground align-middle",
+                  className,
+                )}
               >
                 {h}
               </th>
@@ -410,41 +421,47 @@ export default function TransferProductLinesEditor({
                     <span className="text-xs">{line.quantityType || "Piece"}</span>
                   )}
                 </td>
-                <td className='px-2 py-1.5 w-20'>
+                <td className='px-2 py-1.5 w-20 text-right'>
                   {isEditing ? (
                     <Input
                       type="number"
                       min={0}
                       disabled={draftLine.quantityType === "Piece"}
                       value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
-                      onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
-                      className="h-7 text-xs w-full disabled:opacity-50"
+                      onChange={(e) => {
+                        const val = e.target.value.slice(0, 5);
+                        updateDraft({ caseQuantity: val ? Number(val) : 0 });
+                      }}
+                      className="h-7 text-xs w-full disabled:opacity-50 text-right"
                     />
                   ) : (
-                    <span className="text-xs">{line.caseQuantity || 0}</span>
+                    <span className="text-xs tabular-nums">{line.caseQuantity || 0}</span>
                   )}
                 </td>
-                <td className='px-2 py-1.5 w-20'>
+                <td className='px-2 py-1.5 w-20 text-right'>
                   {isEditing ? (
                     <Input
                       type="number"
                       min={0}
                       disabled={draftLine.quantityType === "Case"}
                       value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
-                      onChange={(e) => updateDraft({ pieceQuantity: e.target.value ? Number(e.target.value) : 0 })}
-                      className="h-7 text-xs w-full disabled:opacity-50"
+                      onChange={(e) => {
+                        const val = e.target.value.slice(0, 5);
+                        updateDraft({ pieceQuantity: val ? Number(val) : 0 });
+                      }}
+                      className="h-7 text-xs w-full disabled:opacity-50 text-right"
                     />
                   ) : (
-                    <span className="text-xs">{line.pieceQuantity || 0}</span>
+                    <span className="text-xs tabular-nums">{line.pieceQuantity || 0}</span>
                   )}
                 </td>
-                <td className='px-2 py-1.5 w-20'>
+                <td className='px-2 py-1.5 w-20 text-right'>
                   {isEditing ? (
                     <Input
                       type="number"
                       disabled
                       value={draftLine.quantity || ""}
-                      className="h-7 text-xs w-full font-semibold bg-muted text-muted-foreground"
+                      className="h-7 text-xs w-full font-semibold bg-muted text-muted-foreground text-right"
                     />
                   ) : (
                     <span className="text-xs font-semibold tabular-nums text-foreground">
@@ -452,7 +469,7 @@ export default function TransferProductLinesEditor({
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
+                <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap text-right">
                   {line.productId ? formatRupee(line.unitPrice ?? 0) : "—"}
                 </td>
                 {line.productId && product && taxBreakdown ? (
@@ -507,7 +524,7 @@ export default function TransferProductLinesEditor({
                     </>
                   )
                 )}
-                <td className="px-3 py-2 text-xs font-semibold tabular-nums whitespace-nowrap">
+                <td className="px-3 py-2 text-xs font-semibold tabular-nums whitespace-nowrap text-right">
                   {line.productId ? formatRupee(line.lineTotal ?? 0) : "—"}
                 </td>
                 <td className="px-3 py-2">
@@ -600,6 +617,125 @@ export default function TransferProductLinesEditor({
   );
 }
 
+function MultiProductSelect({
+  products,
+  selectedValues = [],
+  alreadyAddedProductIds = [],
+  onSelectMultiple,
+}: {
+  products: ProductCatalogItem[];
+  selectedValues?: Array<string | number>;
+  alreadyAddedProductIds?: Array<string | number | null | undefined>;
+  onSelectMultiple: (selectedProducts: ProductCatalogItem[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [checkedIds, setCheckedIds] = useState<Array<string | number>>([]);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      setCheckedIds(selectedValues);
+    } else {
+      setSearch("");
+    }
+  };
+
+  const filtered = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.code.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const toggleProduct = (id: string | number) => {
+    setCheckedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleDone = () => {
+    setOpen(false);
+    setSearch("");
+    const selectedProds = products.filter((p) => checkedIds.includes(p.id));
+    onSelectMultiple(selectedProds);
+  };
+
+  const getTriggerLabel = () => {
+    if (selectedValues.length > 1) return `${selectedValues.length} products selected`;
+    if (selectedValues.length === 1) {
+      const selected = products.find((p) => p.id === selectedValues[0]);
+      return selected ? `${selected.code} — ${selected.name}` : "Select product…";
+    }
+    return "Select product…";
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="w-full h-8 px-2 text-xs text-left border border-border rounded-lg flex items-center justify-between"
+        >
+          <span className={selectedValues.length > 0 ? "text-foreground truncate" : "text-muted-foreground"}>
+            {getTriggerLabel()}
+          </span>
+          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <div className="p-2 border-b border-border">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 pl-8 text-xs"
+              placeholder="Search…"
+            />
+          </div>
+        </div>
+        <div className="max-h-[200px] overflow-y-auto py-1">
+          {filtered.map((product) => {
+            const isChecked = checkedIds.includes(product.id);
+            const isAlreadyAdded = alreadyAddedProductIds.includes(product.id);
+            return (
+              <button
+                key={product.id}
+                type="button"
+                disabled={isAlreadyAdded}
+                onClick={() => toggleProduct(product.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
+                  isChecked && "bg-brand-50",
+                  isAlreadyAdded && "opacity-50 cursor-not-allowed bg-muted/10",
+                )}
+              >
+                <Checkbox
+                  checked={isChecked || isAlreadyAdded}
+                  disabled={isAlreadyAdded}
+                  className="w-3.5 h-3.5 flex-shrink-0 pointer-events-none"
+                />
+                <div className="min-w-0 flex-1">
+                  <span className="font-semibold block truncate">{product.name}</span>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span className="font-mono text-[10px] text-brand-700">{product.code}</span>
+                    <span className="text-[10px] text-muted-foreground">Stock: {product.stock}</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="p-2 border-t border-border flex justify-end">
+          <Button type="button" size="sm" className="h-7 text-xs" onClick={handleDone}>
+            Done
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function ProductSelect({
   value,
   products,
@@ -656,7 +792,10 @@ function ProductSelect({
               )}
             >
               <span className="font-semibold block">{product.name}</span>
-              <span className="font-mono text-[10px] text-brand-700">{product.code}</span>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="font-mono text-[10px] text-brand-700">{product.code}</span>
+                <span className="text-[10px] text-muted-foreground">Stock: {product.stock}</span>
+              </div>
             </button>
           ))}
         </div>

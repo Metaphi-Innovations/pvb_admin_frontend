@@ -3,6 +3,16 @@
 import { Package, Truck, User, Building, Calendar, CheckCircle2 } from "lucide-react";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 
+function formatDateOnly(value?: string | null): string {
+  if (!value) return "—";
+  const raw = String(value).trim();
+  if (!raw) return "—";
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toISOString().slice(0, 10);
+}
+
 export function DispatchDetailsPanel({ dispatch }: { dispatch: DispatchRecord }) {
   return (
     <div className="space-y-4">
@@ -11,7 +21,7 @@ export function DispatchDetailsPanel({ dispatch }: { dispatch: DispatchRecord })
           { label: "Sales Order No", value: dispatch.salesOrderNumber, icon: Package },
           { label: "Customer", value: dispatch.customer || dispatch.customer_name, icon: User },
           { label: "Warehouse", value: dispatch.warehouse || dispatch.source_warehouse_name, icon: Building },
-          { label: "Dispatch Date", value: dispatch.dispatchDate || dispatch.dispatch_date, icon: Calendar },
+          { label: "Dispatch Date", value: formatDateOnly(dispatch.dispatchDate || dispatch.dispatch_date), icon: Calendar },
         ].map((card) => (
           <div key={card.label} className="bg-white border border-border rounded-xl p-3 shadow-sm">
             <div className="flex items-center gap-2 mb-1.5">

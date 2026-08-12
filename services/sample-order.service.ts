@@ -41,12 +41,24 @@ export function mapBackendStatusToFrontend(status: string): any {
 }
 
 export function mapFrontendStatusToBackend(status: string): string {
-  const s = asString(status).toLowerCase();
-  if (s === "pending_approval") return "SUBMITTED";
-  if (s === "approved") return "APPROVED";
+  const s = asString(status).toLowerCase().replace(/[\s-]+/g, "_");
+  if (s === "pending_approval" || s === "submitted") return "PENDING_APPROVAL";
+  if (s === "approved" || s === "confirmed") return "APPROVED";
   if (s === "rejected") return "REJECTED";
-  if (s === "confirmed") return "APPROVED";
   if (s === "cancelled") return "CANCELLED";
+  if (s === "draft") return "DRAFT";
+  // Already a backend enum value (e.g. from filter dropdown)
+  const upper = asString(status).toUpperCase();
+  if (
+    upper === "DRAFT" ||
+    upper === "PENDING_APPROVAL" ||
+    upper === "SUBMITTED" ||
+    upper === "APPROVED" ||
+    upper === "REJECTED" ||
+    upper === "CANCELLED"
+  ) {
+    return upper === "SUBMITTED" ? "PENDING_APPROVAL" : upper;
+  }
   return "DRAFT";
 }
 
@@ -99,7 +111,7 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
   const salesperson = raw.salesperson || {};
   const rawItems = Array.isArray(raw.items) ? raw.items : [];
 
-  return {
+  const result: SalesOrder = {
     id: raw.sample_order_id || raw.id,
     soNumber: asString(raw.order_no),
     customerId: raw.customer_id || cust.customer_id,
@@ -131,7 +143,38 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
     recipientContact: raw.recipient_contact || undefined,
     recipientAddress: raw.recipient_address || undefined,
     billingParty: raw.billing_party || undefined,
+    billTo: raw.bill_to ? {
+      address: raw.bill_to.address || "",
+      city: raw.bill_to.city || "",
+      state: raw.bill_to.state || "",
+      pincode: raw.bill_to.pincode || "",
+    } : undefined,
+    packingListNumber: Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0 
+      ? asString(raw.packing_lists[0].packing_number) 
+      : undefined,
+    packingListId: Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0 
+      ? raw.packing_lists[0].packing_list_id 
+      : undefined,
   };
+
+  // If there's a packing list, copy batch number and expiry from its products onto line items
+  if (Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0 && raw.packing_lists[0].products) {
+    const plProds = raw.packing_lists[0].products;
+    result.lineItems = result.lineItems.map((li) => {
+      const match = plProds.find((p: any) => p.product_id === li.productId);
+      if (match) {
+        const batchSnap = match.batch_snapshot || {};
+        return {
+          ...li,
+          batchNumber: match.batch_code || li.batchNumber,
+          expiryDate: batchSnap.expiry_date ? asDateOnly(batchSnap.expiry_date) : li.expiryDate,
+        };
+      }
+      return li;
+    });
+  }
+
+  return result;
 }
 
 function buildBackendWriteBody(

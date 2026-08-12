@@ -81,6 +81,7 @@ export interface ProductCatalogItem {
   stock: number;
   status: "active" | "inactive" | "archived";
   packSize?: number;
+  sku?: string;
 }
 
 export interface SalesOrderLineItem {
@@ -1441,16 +1442,16 @@ export function canDownloadPI(order: SalesOrder): boolean {
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
+  if (order.packingListId || order.packingListNumber) return false;
 
-  // Approval must be APPROVED; fulfillment still open for packing-list generation.
+  // Approval must be APPROVED; only PENDING fulfillment can generate a packing list.
   const approvalOk =
     order.status === "APPROVED" ||
     order.status === "approved";
   if (!approvalOk) return false;
 
   const fulfillment = order.fulfillmentStatus || "PENDING";
-  const allowedFulfillment = ["PENDING", "Ready For Packing"];
-  if (!allowedFulfillment.includes(fulfillment)) return false;
+  if (fulfillment !== "PENDING") return false;
 
   const hydrated = hydrateOrderLineItems(order);
   return hydrated.lineItems.some(l => l.productId && l.quantity > 0);

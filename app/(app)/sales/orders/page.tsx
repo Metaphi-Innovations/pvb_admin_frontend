@@ -105,7 +105,7 @@ export default function SalesOrdersPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<OrderListTab>("all");
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "orderDate", direction: "desc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -132,10 +132,13 @@ export default function SalesOrdersPage() {
 
   const statusOptions = useMemo(() => {
     if (!statusFilterRaw || statusFilterRaw.length === 0) return STATUS_OPTIONS;
-    return statusFilterRaw.map((item: any) => ({
-      label: formatOrderStatus(item.status as OrderStatus) || item.status,
-      value: item.status,
-    }));
+    const allowed = new Set(STATUS_OPTIONS.map((o) => o.value.toUpperCase()));
+    return statusFilterRaw
+      .filter((item: any) => allowed.has(String(item.status || "").toUpperCase()))
+      .map((item: any) => ({
+        label: formatOrderStatus(item.status as OrderStatus) || item.status,
+        value: item.status,
+      }));
   }, [statusFilterRaw]);
 
   useEffect(() => {
@@ -502,11 +505,11 @@ export default function SalesOrdersPage() {
         </div>
       }
       tabs={[
-        { value: "all", label: `Sales (${allCount})` },
-        { value: "draft", label: `Draft (${draftCount})` },
-        { value: "pending_approval", label: `Approval (${approvalCount})` },
-        { value: "rejected", label: `Rejected (${rejectedCount})` },
-        { value: "sales_return", label: `Sales Return (${salesReturnCount})` },
+        { value: "all", label: "Sales" },
+        { value: "draft", label: "Draft" },
+        { value: "pending_approval", label: "Approval" },
+        { value: "rejected", label: "Rejected" },
+        { value: "sales_return", label: "Sales Return" },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}

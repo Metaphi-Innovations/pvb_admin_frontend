@@ -106,8 +106,12 @@ function mapDropdownOption(raw: Record<string, unknown>): SalesReturnDropdownOpt
 function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
   const product = asRecord(raw.product);
   const snapshot = asRecord(raw.product_snapshot);
-  const batchSnapshot = asRecord(raw.batch_snapshot);
   const dispatchItem = asRecord(raw.dispatch_item);
+  const inventoryBatch = asRecord(dispatchItem.inventory_batch);
+  const batchSnapshot = {
+    ...asRecord(raw.batch_snapshot),
+    ...asRecord(dispatchItem.batch_snapshot),
+  };
   const unitPerPacking =
     asNumber(snapshot.unit_per_packing) ||
     asNumber(product.unit_per_packing) ||
@@ -148,16 +152,22 @@ function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
       asString(batchSnapshot.batch_code) ||
       asString(batchSnapshot.batchNumber) ||
       asString(batchSnapshot.batch_no) ||
+      asString(inventoryBatch.batch_no) ||
+      asString(inventoryBatch.batchNumber) ||
       "",
     mfgDate:
       asDateOnly(batchSnapshot.manufactureDate) ||
       asDateOnly(batchSnapshot.mfg_date) ||
       asDateOnly(batchSnapshot.manufacture_date) ||
+      asDateOnly(inventoryBatch.manufactureDate) ||
+      asDateOnly(inventoryBatch.manufacture_date) ||
       "",
     expDate:
       asDateOnly(batchSnapshot.expiryDate) ||
       asDateOnly(batchSnapshot.expiry_date) ||
       asDateOnly(batchSnapshot.exp_date) ||
+      asDateOnly(inventoryBatch.expiryDate) ||
+      asDateOnly(inventoryBatch.expiry_date) ||
       "",
     returnedBaseQty:
       asNumber(raw.total_return_pieces) ||

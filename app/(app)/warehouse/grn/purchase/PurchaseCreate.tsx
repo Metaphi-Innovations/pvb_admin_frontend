@@ -42,6 +42,10 @@ import {
   toBaseQuantity,
 } from "@/lib/warehouse/grn-quantity";
 import {
+  exceedsMaxLineQty,
+  maxLineQtyMessage,
+} from "@/lib/quantity-limits";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -394,6 +398,9 @@ function validateManualRow(row: ManualInvoiceRow): string | null {
   if (!row.mfgDate.trim()) return "MFG Date is required";
   if (!row.expDate.trim()) return "Expiry Date is required";
   if (row.quantity <= 0) return "Quantity must be greater than 0";
+  if (exceedsMaxLineQty(row.displayQty)) {
+    return maxLineQtyMessage("Invoice quantity");
+  }
   if (row.mfgDate && row.expDate && row.expDate < row.mfgDate) {
     return "Expiry Date cannot be before MFG Date";
   }
@@ -1251,6 +1258,13 @@ export function PurchaseCreate({
       if (it.quantityType === "CASE" && !(it.unitPerPacking && it.unitPerPacking > 0)) {
         setFormError(
           `Packing size is missing or invalid for ${it.productName}. Cannot use CASE quantity type.`,
+        );
+        return;
+      }
+      const entryQty = Number(it.displayQty ?? it.receivedCases ?? 0);
+      if (exceedsMaxLineQty(entryQty)) {
+        setFormError(
+          `${it.productName}: ${maxLineQtyMessage("Received quantity")}`,
         );
         return;
       }

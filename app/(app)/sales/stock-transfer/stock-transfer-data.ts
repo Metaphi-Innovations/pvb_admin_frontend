@@ -639,7 +639,12 @@ export function canGeneratePackingList(transfer: StockTransfer): boolean {
   const status = normalizeTransferStatus(transfer.status);
   if (status === "cancelled" || status === "rejected") return false;
   if (status === "draft" || status === "pending_approval") return false;
-  if (transfer.packingStatus === "Completed" || transfer.packingStatus === "packed") return false;
+  if (transfer.packingListId) return false;
+  if (transfer.packingStatus === "Completed" || transfer.packingStatus === "packed" || transfer.packingStatus === "generated" || transfer.packingStatus === "Pending") {
+    return false;
+  }
+  const fulfillment = transfer.fulfillmentStatus || "PENDING";
+  if (fulfillment !== "PENDING") return false;
   if (!transfer.sourceWarehouseId || !transfer.targetWarehouseId) return false;
   
   const hasItems = (transfer.lineItems && transfer.lineItems.length > 0)

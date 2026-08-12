@@ -443,6 +443,8 @@ export default function ProductLinesEditor({
 									setTopQuantityType(type);
 									if (type === "Case") {
 										setTopPieceQuantity(0);
+									} else {
+										setTopCaseQuantity(0);
 									}
 								}}
 							>
@@ -460,9 +462,13 @@ export default function ProductLinesEditor({
 							<Input
 								type="number"
 								min={0}
+								disabled={topQuantityType === "Piece"}
 								value={topCaseQuantity || ""}
-								onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
-								className="h-8 text-xs w-20 bg-white"
+								onChange={(e) => {
+									const val = e.target.value.slice(0, 5);
+									setTopCaseQuantity(Number(val) || 0);
+								}}
+								className="h-8 text-xs w-20 bg-white disabled:opacity-50"
 							/>
 						</div>
 						<div className="space-y-1">
@@ -472,23 +478,14 @@ export default function ProductLinesEditor({
 								min={0}
 								disabled={topQuantityType === "Case"}
 								value={topPieceQuantity || ""}
-								onChange={(e) => setTopPieceQuantity(Number(e.target.value) || 0)}
+								onChange={(e) => {
+									const val = e.target.value.slice(0, 5);
+									setTopPieceQuantity(Number(val) || 0);
+								}}
 								className="h-8 text-xs w-20 bg-white disabled:opacity-50"
 							/>
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Total Unit Qty</Label>
-							<Input
-								type="text"
-								disabled
-								value={
-									topSelectedProds.length === 1
-										? (((topCaseQuantity || 0) * (topSelectedProds[0].packSize || 1)) + (topPieceQuantity || 0)) || "—"
-										: "—"
-								}
-								className="h-8 text-xs w-24 font-semibold bg-muted text-muted-foreground"
-							/>
-						</div>
+
 					</>
 				}
 				customTableHead={
@@ -555,9 +552,13 @@ export default function ProductLinesEditor({
 										<Input
 											type="number"
 											min={0}
+											disabled={draftLine.quantityType === "Piece"}
 											value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
-											onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
-											className="h-7 text-xs w-full"
+											onChange={(e) => {
+												const val = e.target.value.slice(0, 5);
+												updateDraft({ caseQuantity: val ? Number(val) : 0 });
+											}}
+											className="h-7 text-xs w-full disabled:opacity-50"
 										/>
 									) : (
 										<span className="text-xs">{line.caseQuantity || 0}</span>
@@ -570,7 +571,10 @@ export default function ProductLinesEditor({
 											min={0}
 											disabled={draftLine.quantityType === "Case"}
 											value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
-											onChange={(e) => updateDraft({ pieceQuantity: e.target.value ? Number(e.target.value) : 0 })}
+											onChange={(e) => {
+												const val = e.target.value.slice(0, 5);
+												updateDraft({ pieceQuantity: val ? Number(val) : 0 });
+											}}
 											className="h-7 text-xs w-full disabled:opacity-50"
 										/>
 									) : (

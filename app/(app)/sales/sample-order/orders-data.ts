@@ -201,6 +201,7 @@ export interface SalesOrder {
   recipientContact?: string;
   recipientAddress?: string;
   billingParty?: string;
+  billTo?: { address: string; city: string; state: string; pincode: string };
 }
 
 export interface ProductCatalogItem {
@@ -249,8 +250,8 @@ export function recalculateSampleOrderLineItem(line: SalesOrderLineItem): SalesO
     ...line,
     discount,
     discountValue,
-    gstAmount: 0,
-    lineTotal: 0,
+    gstAmount: line.gstAmount !== undefined ? line.gstAmount : 0,
+    lineTotal: line.lineTotal !== undefined ? line.lineTotal : 0,
   };
 }
 
@@ -443,6 +444,7 @@ export function canCancelOrder(order: SalesOrder): boolean {
 }
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
+  if (order.packingListNumber || order.packingListId) return false;
   return order.status === "approved" || order.status === "confirmed";
 }
 
