@@ -22,7 +22,7 @@ export function SearchableSelect({
   required,
   disabled,
 }: {
-  label: string;
+  label?: string;
   value: string;
   onChange: (value: string) => void;
   options: SearchableOption[];

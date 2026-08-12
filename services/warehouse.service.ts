@@ -24,6 +24,18 @@ export interface WarehouseDropdownItem {
 }
 
 export const WarehouseService = {
+  async getDetails(warehouseId: string): Promise<WarehouseDropdownItem> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.MASTER.WAREHOUSE.VIEW(warehouseId),
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+    if (!data || typeof data !== "object") {
+      throw new Error("Unexpected response shape: warehouse details missing.");
+    }
+    return data as WarehouseDropdownItem;
+  },
+
   async dropdown(state?: string): Promise<WarehouseDropdownItem[]> {
     const url = `${API_ENDPOINTS.MASTER.WAREHOUSE.DROPDOWN}${state ? `?state=${encodeURIComponent(state)}` : ""}`;
     const response = await axiosInstance.get(url);

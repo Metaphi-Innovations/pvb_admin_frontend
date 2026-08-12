@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
@@ -32,11 +33,14 @@ import {
   buildSalesInvoicePrefill,
   type SalesInvoicePrefill,
 } from "@/lib/accounts/sales-invoice-prefill";
-import { buildSalesInvoicePrefillFromDispatch, mapDispatchSchemeToInvoiceSettlement, getDispatchById, resolveWarehouseMaster } from "@/lib/accounts/dispatch-invoice-bridge";
+import {
+  mapDispatchSchemeToInvoiceSettlement,
+  getDispatchById,
+  resolveWarehouseMaster,
+} from "@/lib/accounts/dispatch-invoice-bridge";
 import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
 import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
 import type { DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
-import { InvoiceApplicableSchemesPanel } from "./components/InvoiceApplicableSchemesPanel";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
 import { InvoiceProductLinesReadOnly } from "./components/InvoiceProductLinesReadOnly";
 import { SalesOrderInvoiceLinesEditor } from "./components/SalesOrderInvoiceLinesEditor";
@@ -73,11 +77,16 @@ import {
   type GoodsEwayStatus,
   type GoodsEInvoiceStatus,
 } from "./components/GoodsTransportStatutorySection";
-import { GoodsStatutoryGenerationSection } from "./components/GoodsStatutoryGenerationSection";
+import { getOrderById } from "@/app/(app)/sales/orders/orders-data";
 import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
-import { SalesOrderService } from "@/services/sales-order.service";
-import { pendingInvoicesService } from "@/services/pending-invoices.service";
-import { getDispatchById as getBackendDispatchById } from "@/app/(app)/warehouse/dispatch/services";
+import { WarehouseService } from "@/services/warehouse.service";
+import {
+  SalesInvoiceService,
+  mapPrepareDispatchItemsToLineItems,
+  readTransportDistanceKm,
+  readWarehouseGstin,
+  resolvePreparePlaceOfSupply,
+} from "@/services/sales-invoice.service";
 import {
   calculateInvoiceTotals,
   createEmptyLine,
@@ -95,13 +104,9 @@ import {
   type InvoiceStatus,
 } from "./invoices-data";
 import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
-import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { showToast } from "@/lib/toast";
 import { sampleOrderInventoryImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
-import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
-import { getOrderById } from "@/app/(app)/sales/orders/orders-data";
-import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import {
@@ -130,9 +135,7 @@ import {
   getBankAccountPrintDetails,
 } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import {
-  peekNextPvbSalesOrderInvoiceNo,
   peekNextSampleOrderProformaNo,
-  peekNextStockTransferInvoiceNo,
   type InvoiceDocumentKind,
   type SalesInvoiceSourceType,
 } from "@/lib/accounts/invoice-type";
@@ -141,6 +144,46 @@ import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting"
 import "./sales-order-invoice-form-compact.css";
 import "./stock-transfer-invoice-form-compact.css";
 import "./sample-order-invoice-form-compact.css";
+
+const SalesInvoiceAccountingPanel = dynamic(
+  () =>
+    import("@/components/accounts/SalesInvoiceAccountingPanel").then((m) => ({
+      default: m.SalesInvoiceAccountingPanel,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const AccountingImpactSection = dynamic(
+  () =>
+    import("@/components/accounts/AccountingImpactSection").then((m) => ({
+      default: m.AccountingImpactSection,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const InvoiceApplicableSchemesPanel = dynamic(
+  () =>
+    import("./components/InvoiceApplicableSchemesPanel").then((m) => ({
+      default: m.InvoiceApplicableSchemesPanel,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const GoodsStatutoryGenerationSection = dynamic(
+  () =>
+    import("./components/GoodsStatutoryGenerationSection").then((m) => ({
+      default: m.GoodsStatutoryGenerationSection,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const LedgerImpactPreview = dynamic(
+  () =>
+    import("@/components/accounts/LedgerImpactPreview").then((m) => ({
+      default: m.LedgerImpactPreview,
+    })),
+  { ssr: false, loading: () => null },
+);
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -189,6 +232,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [destinationWarehouseGstin, setDestinationWarehouseGstin] = useState("");
   const [sourceWarehouseState, setSourceWarehouseState] = useState("");
   const [destinationWarehouseState, setDestinationWarehouseState] = useState("");
+  const [sourceWarehouseId, setSourceWarehouseId] = useState<string | null>(null);
+  const [destinationWarehouseId, setDestinationWarehouseId] = useState<string | null>(null);
   const [gstTreatment, setGstTreatment] = useState("");
   const [receivableLedger, setReceivableLedger] = useState("");
   const [customerFields, setCustomerFields] = useState<CustomerTransactionFields | null>(null);
@@ -262,12 +307,30 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const isSampleOrderInvoice = isSampleOrderGeneration || sourceType === "sample_order";
 
   const products = useMemo(
-    () =>
-      isSalesOrderInvoice
-        ? []
-        : getProductsForInvoice(customerId ? Number(customerId) : undefined),
-    [customerId, isSalesOrderInvoice],
+    () => {
+      if (
+        isSalesOrderInvoice ||
+        isStockTransferGeneration ||
+        isSampleOrderGeneration
+      ) {
+        return [];
+      }
+      return getProductsForInvoice(customerId ? Number(customerId) : undefined);
+    },
+    [customerId, isSalesOrderInvoice, isStockTransferGeneration, isSampleOrderGeneration],
   );
+
+  useEffect(() => {
+    if (!error) return;
+    showToast(error, "error");
+    setError(null);
+  }, [error]);
+
+  useEffect(() => {
+    if (!success) return;
+    showToast(success, "success");
+    setSuccess(null);
+  }, [success]);
 
   const invoicesCacheRef = useRef<ReturnType<typeof loadInvoices> | null>(null);
   const prefillKeyRef = useRef<string | null>(null);
@@ -279,33 +342,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
   }, [invoiceDate, creditDays]);
 
-  useEffect(() => {
-    if (!isSalesOrderGeneration || isEdit) return;
-    if (!invoiceDate?.trim()) {
-      setPreviewInvoiceNo("");
-      return;
-    }
-    if (!invoicesCacheRef.current) {
-      invoicesCacheRef.current = loadInvoices();
-    }
-    setPreviewInvoiceNo(
-      peekNextPvbSalesOrderInvoiceNo(invoicesCacheRef.current, invoiceDate),
-    );
-  }, [isSalesOrderGeneration, isEdit, invoiceDate]);
-
-  useEffect(() => {
-    if (!isStockTransferGeneration || isEdit) return;
-    if (!invoiceDate?.trim()) {
-      setPreviewInvoiceNo("");
-      return;
-    }
-    if (!invoicesCacheRef.current) {
-      invoicesCacheRef.current = loadInvoices();
-    }
-    setPreviewInvoiceNo(
-      peekNextStockTransferInvoiceNo(invoicesCacheRef.current, invoiceDate),
-    );
-  }, [isStockTransferGeneration, isEdit, invoiceDate]);
+  // Local seed peek removed — preview number always comes from Sales Invoice API below.
 
   useEffect(() => {
     if (!isStockTransferGeneration || isEdit) return;
@@ -340,6 +377,54 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     placeOfSupply,
     sourceWarehouseState,
     destinationWarehouseState,
+  ]);
+
+  useEffect(() => {
+    if (!isStockTransferGeneration || isEdit) return;
+
+    const hydrateWarehouseGstin = async () => {
+      if (!sourceWarehouseGstin.trim() && sourceWarehouseId) {
+        try {
+          const details = await WarehouseService.getDetails(sourceWarehouseId);
+          const gstin = readWarehouseGstin(details);
+          if (gstin) setSourceWarehouseGstin(gstin);
+          if (!sourceWarehouseState.trim() && details.state) {
+            setSourceWarehouseState(details.state);
+          }
+        } catch {
+          // Ignore — validation will surface missing GSTIN if still absent.
+        }
+      }
+
+      if (!destinationWarehouseGstin.trim() && destinationWarehouseId) {
+        try {
+          const details = await WarehouseService.getDetails(destinationWarehouseId);
+          const gstin = readWarehouseGstin(details);
+          if (gstin) setDestinationWarehouseGstin(gstin);
+          if (!destinationWarehouseState.trim() && details.state) {
+            setDestinationWarehouseState(details.state);
+          }
+          if (!placeOfSupply.trim() && details.state) {
+            setPlaceOfSupply(details.state);
+            setStateName(details.state);
+          }
+        } catch {
+          // Ignore — validation will surface missing GSTIN if still absent.
+        }
+      }
+    };
+
+    void hydrateWarehouseGstin();
+  }, [
+    isStockTransferGeneration,
+    isEdit,
+    sourceWarehouseId,
+    destinationWarehouseId,
+    sourceWarehouseGstin,
+    destinationWarehouseGstin,
+    sourceWarehouseState,
+    destinationWarehouseState,
+    placeOfSupply,
   ]);
 
   useEffect(() => {
@@ -414,13 +499,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setSalesOrderRef(prefill.salesOrderNo);
     setSalesOrderDate(prefill.salesOrderDate || "");
     setDispatchRef(prefill.dispatchNo);
-    const dispatch = prefill.sourceDispatchId ? getDispatchById(prefill.sourceDispatchId) : null;
-    setDispatchDate(
-      prefill.dispatchDate ||
-        dispatch?.dispatchDate ||
-        dispatch?.dispatch_date ||
-        "",
-    );
+    setDispatchDate(prefill.dispatchDate || "");
     setReferenceNo(prefill.referenceNo);
     setBranch(prefill.branch);
     setWarehouse(prefill.warehouse);
@@ -599,17 +678,145 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       }
 
       setDispatchDate(row.dispatchDate);
+      setSourceDispatchId(dispatchId);
+      setDispatchRef(row.dispatchNo);
+      setReferenceNo(row.dispatchNo);
 
-      const prefill = buildSalesInvoicePrefillFromDispatch(
-        dispatchId,
-        row.dispatchNo,
-        row.salesOrderId ?? undefined,
-      );
-      if (prefill) applySalesInvoicePrefill(prefill);
+      void (async () => {
+        try {
+          const prepared = await SalesInvoiceService.prepareDispatch(dispatchId);
+          const customer = prepared.customer || {};
+          const warehouseSnap = prepared.warehouse || {};
+          const billing = prepared.billing_address || {};
+          const shipping = prepared.shipping_address || {};
+          const pos = prepared.place_of_supply || {};
+          const salespersonName =
+            prepared.sales_order?.salesperson_name?.trim() ||
+            (prepared.items || [])
+              .map((item) => item.salesperson_name?.trim())
+              .find(Boolean) ||
+            "";
+          const placeOfSupplyValue = resolvePreparePlaceOfSupply(
+            pos,
+            billing,
+            shipping,
+          );
+          const customerState = String(billing.state || shipping.state || "");
+
+          const lineItems = mapPrepareDispatchItemsToLineItems(
+            prepared.items,
+            prepared.dispatch.dispatch_number,
+            salespersonName,
+          );
+
+          const additionalExpenses = (prepared.suggested_additional_charges || [])
+            .filter((c) => c.mapping_ok && c.matched_additional_charge_id)
+            .map((c) => {
+              const gstPct = Number(c.gst_percent ?? c.default_gst_rate ?? 0);
+              return {
+                id: c.sales_order_expense_id,
+                expenseHead: c.charge_name || "",
+                amount: Number(c.amount || 0),
+                gstApplicable: c.gst_applicable ?? gstPct > 0,
+                gstPct,
+                remarks: "",
+                origin: "sales_order" as const,
+                chargeMasterId: c.matched_additional_charge_id,
+              };
+            });
+
+          const customerName = String(
+            customer.customer_name || customer.customerName || row.customerName || "",
+          );
+          const warehouseName = String(
+            warehouseSnap.warehouse_name ||
+              warehouseSnap.warehouseName ||
+              row.warehouse ||
+              "",
+          );
+
+          applySalesInvoicePrefill({
+            invoiceType: "sales",
+            sourceType: "sales_order",
+            salesOrderId: prepared.sales_order?.sales_order_id ?? null,
+            salesOrderNo: prepared.sales_order?.so_number || row.soNumber || "",
+            salesOrderDate: "",
+            sourceDispatchId: prepared.dispatch.dispatch_id,
+            dispatchNo: prepared.dispatch.dispatch_number,
+            dispatchDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
+            branch: warehouseName || "Head Office",
+            warehouse: warehouseName || "Central Warehouse",
+            salesperson: salespersonName || "—",
+            referenceNo: prepared.dispatch.dispatch_number,
+            paymentTerms: "Net 30",
+            creditDays: 30,
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split("T")[0],
+            invoiceDate: new Date().toISOString().split("T")[0],
+            customerId: (prepared.customer as any)?.customer_id || customer.customer_id || null,
+            customerLedgerId: prepared.customer_ledger_id || null,
+            customerCode: String(customer.customer_code || customer.customerCode || ""),
+            customerName,
+            customerMobile: String(customer.mobile_no || customer.mobile || ""),
+            customerEmail: String(customer.email || ""),
+            customerGst: String(customer.gstin_no || customer.gstin || ""),
+            billingAddress: String(
+              billing.full_address || billing.address || customer.registered_gst_address || "",
+            ),
+            shippingAddress: String(
+              shipping.full_address || shipping.address || customer.registered_gst_address || "",
+            ),
+            pan: String(customer.pan_no || customer.pan || ""),
+            contactPerson: String(customer.contact_person || ""),
+            placeOfSupply: placeOfSupplyValue,
+            state: placeOfSupplyValue || customerState,
+            gstTreatment: String(customer.gst_treatment || "registered"),
+            receivableLedger: customerName,
+            billFrom: warehouseName,
+            billTo: customerName,
+            shipTo: customerName,
+            dispatchQty: lineItems.reduce((acc, l) => acc + (l.qty || 0), 0),
+            transportMode: "",
+            transporterName: prepared.dispatch.transporter || "",
+            transporterId: "",
+            vehicleNo: prepared.dispatch.vehicle_number || "",
+            lrNo: prepared.dispatch.lr_number || "",
+            lrDate: "",
+            transportDocNo: "",
+            transportDocDate: "",
+            distanceKm: null,
+            lineItems,
+            lineErrors: [],
+            additionalExpenses,
+            nearExpirySchemes: [],
+            sourceWarehouseGstin: String(
+              (prepared.warehouse_gst as Record<string, unknown> | null)?.gst_number ||
+                warehouseSnap.gst_number ||
+                "",
+            ),
+            destinationWarehouseGstin: String(customer.gstin_no || customer.gstin || ""),
+            sourceWarehouseState: String(warehouseSnap.state || ""),
+            destinationWarehouseState: customerState || placeOfSupplyValue,
+          } as unknown as SalesInvoicePrefill);
+
+          setTransport((prev) => ({
+            ...prev,
+            transporterName: prepared.dispatch.transporter || prev.transporterName,
+            vehicleNo: prepared.dispatch.vehicle_number || prev.vehicleNo,
+            lrNo: prepared.dispatch.lr_number || prev.lrNo,
+          }));
+        } catch (err) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to prepare dispatch for invoice.",
+          );
+        }
+      })();
     },
-    // applySalesInvoicePrefill closes over customers; customers is stable (memo once).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customers],
+    [],
   );
 
   useEffect(() => {
@@ -629,185 +836,213 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     if (dispatchId) {
       const loadPrefillFromBackend = async (dId: string) => {
         try {
-          const dispatchObj = await getBackendDispatchById(dId);
-          if (!dispatchObj) return;
+          const prepared = await SalesInvoiceService.prepareDispatch(dId);
+          const customer = prepared.customer || {};
+          const warehouse = prepared.warehouse || {};
+          const billing = prepared.billing_address || {};
+          const shipping = prepared.shipping_address || {};
+          const pos = prepared.place_of_supply || {};
+          const salespersonName =
+            prepared.sales_order?.salesperson_name?.trim() ||
+            (prepared.items || [])
+              .map((item) => item.salesperson_name?.trim())
+              .find(Boolean) ||
+            "";
+          const placeOfSupplyValue = resolvePreparePlaceOfSupply(
+            pos,
+            billing,
+            shipping,
+          );
+          const customerState = String(billing.state || shipping.state || "");
 
-          const customer = dispatchObj.customer;
-          const warehouse = dispatchObj.warehouse;
-          
-          let salesOrderObj: any = null;
-          if (dispatchObj.source_id && routeSource === "sales_order") {
-            try {
-              salesOrderObj = await SalesOrderService.getById(dispatchObj.source_id);
-            } catch (soErr) {
-              console.error("Failed to load sales order from backend:", soErr);
-            }
-          }
+          const lineItems = mapPrepareDispatchItemsToLineItems(
+            prepared.items,
+            prepared.dispatch.dispatch_number,
+            salespersonName,
+          );
 
-          const matchedCust = customer
-            ? customers.find(
-                (c: any) =>
-                  c.customerName?.trim().toLowerCase() === customer.customer_name?.trim().toLowerCase(),
+          const additionalExpenses = (prepared.suggested_additional_charges || [])
+            .filter((c) => c.mapping_ok && c.matched_additional_charge_id)
+            .map((c) => {
+              const gstPct = Number(c.gst_percent ?? c.default_gst_rate ?? 0);
+              return {
+                id: c.sales_order_expense_id,
+                expenseHead: c.charge_name || "",
+                amount: Number(c.amount || 0),
+                gstApplicable: c.gst_applicable ?? gstPct > 0,
+                gstPct,
+                remarks: "",
+                origin: "sales_order" as const,
+                chargeMasterId: c.matched_additional_charge_id,
+              };
+            });
+
+          const customerName = String(
+            customer.customer_name || customer.customerName || "",
+          );
+          const warehouseName = String(
+            warehouse.warehouse_name || warehouse.warehouseName || "",
+          );
+          // resolved below after stData is available
+
+          const isSTDispatch = routeSource === "stock_transfer";
+          const stData = prepared.stock_transfer ?? null;
+          const transportDistanceKm =
+            stData?.distance_km ??
+            readTransportDistanceKm(stData?.transport_details) ??
+            null;
+          const sourceWhName = stData?.from_warehouse?.warehouse_name || warehouseName || "Central Warehouse";
+          const destWhName = stData?.to_warehouse?.warehouse_name || customerName || "";
+          const sourceWhGstin = readWarehouseGstin(
+            prepared.source_warehouse_gst as Record<string, unknown> | null,
+            stData?.from_warehouse as Record<string, unknown> | null,
+            prepared.warehouse_gst as Record<string, unknown> | null,
+            warehouse as Record<string, unknown>,
+          );
+          const destWhGstin = readWarehouseGstin(
+            prepared.destination_warehouse_gst as Record<string, unknown> | null,
+            stData?.to_warehouse as Record<string, unknown> | null,
+            customer as Record<string, unknown>,
+          );
+          const sourceWhState = stData?.from_warehouse?.state || String(warehouse.state || "");
+          const destWhState = stData?.to_warehouse?.state || customerState || placeOfSupplyValue;
+          const billingAddressText = isSTDispatch
+            ? String(
+                billing.full_address ||
+                  [
+                    billing.address,
+                    billing.city,
+                    billing.state,
+                    billing.pincode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ") ||
+                  "",
               )
-            : null;
-
-          const productsList = getProductsForInvoice();
-          const masterProductsList = loadProducts();
-          const lineItems = (dispatchObj.items || []).map((item: any, index: number) => {
-            const snapshot = item.product_snapshot || {};
-            const soItem = salesOrderObj?.lineItems?.find(
-              (soi: any) => String(soi.id) === String(item.source_item_id)
-            );
-
-            const rate = soItem ? soItem.unitPrice : (item.unit_rate || item.unit_price || snapshot.pricing?.rate || snapshot.rate || 0);
-            const rawGst = item.gst_percentage || snapshot.gst_percent || snapshot.gst_rate?.gstPercentage || snapshot.gst?.gst_percent || 18;
-            const gstPercent = soItem ? (soItem.gstPercent || soItem.taxPct || rawGst) : rawGst;
-            const discountPct = soItem ? soItem.discount || soItem.schemeDiscountPercent || 0 : 0;
-            const discountAmt = soItem ? soItem.discountValue || soItem.schemeDiscountAmount || 0 : 0;
-            
-            const pName = item.product?.product_name || snapshot.product_name || "";
-            const pCode = item.product?.product_code || snapshot.product_code || "";
-            const matchedProduct = productsList.find(
-              (p: any) =>
-                p.code?.toLowerCase() === pCode.toLowerCase() ||
-                p.name?.toLowerCase() === pName.toLowerCase(),
-            );
-
-            const matchedMasterProduct = masterProductsList.find(
-              (p: any) =>
-                p.sku?.toLowerCase() === pCode.toLowerCase() ||
-                p.productName?.toLowerCase() === pName.toLowerCase(),
-            );
-
-            const unitPerPacking = Number(item.product?.unit_per_packing || snapshot.unit_per_packing || matchedMasterProduct?.unitPerCase || 1);
-            const qtyInCase = unitPerPacking > 0 ? Number(item.dispatched_base_qty || 0) / unitPerPacking : 0;
-
-            const mfg = item.inventory_batch?.manufacture_date || item.inventory_batch?.mfg_date || item.manufacture_date || item.manufacturingDate || null;
-            const exp = item.inventory_batch?.expiry_date || item.expiry_date || null;
-
-            return {
-              id: item.id || `line-${index}`,
-              productId: item.product_id, // REAL DB UUID
-              productCode: pCode,
-              productName: pName || matchedProduct?.name || "—",
-              description: `Dispatch Ref: ${dispatchObj.dispatch_number}`,
-              hsn: item.product?.hsn?.hsnCode || item.product?.hsn?.hsn_code || item.product?.hsn_code || snapshot.hsn?.hsnCode || snapshot.hsn?.hsn_code || snapshot.hsnCode || matchedProduct?.hsn || "—",
-              qty: Number(item.dispatched_base_qty || 0),
-              qtyInCase: qtyInCase > 0 ? Math.round(qtyInCase * 100) / 100 : 0,
-              unit: item.product?.packaging_unit || matchedProduct?.unit || snapshot.pricing?.uom || "PCS",
-              unitPrice: Number(rate),
-              discountPct: Number(discountPct),
-              discountAmt: Number(discountAmt),
-              taxPct: Number(gstPercent),
-              amount: Number(item.dispatched_base_qty || 0) * Number(rate),
-              batchNo: item.inventory_batch?.batch_code || item.inventory_batch?.batch_number || item.batch_snapshot?.batch_code || item.batch_snapshot?.batch_no || "—",
-              expiryDate: exp ? exp.split("T")[0] : undefined,
-              mfgDate: mfg ? mfg.split("T")[0] : undefined,
-              manufacturingDate: mfg ? mfg.split("T")[0] : undefined,
-              dispatchReadyQty: Number(item.dispatched_base_qty || 0),
-              salesperson: salesOrderObj?.salesManName || salesOrderObj?.salesperson || dispatchObj.salesperson || "—",
-            };
-          });
-
-          const destWh = routeSource === "stock_transfer" ? resolveWarehouseMaster(dispatchObj.customer_name) : null;
+            : String(
+                billing.full_address ||
+                  billing.address ||
+                  customer.registered_gst_address ||
+                  "",
+              );
+          const shippingAddressText = isSTDispatch
+            ? String(
+                shipping.full_address ||
+                  [
+                    shipping.address,
+                    shipping.city,
+                    shipping.state,
+                    shipping.pincode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ") ||
+                  billingAddressText ||
+                  "",
+              )
+            : String(
+                shipping.full_address ||
+                  shipping.address ||
+                  customer.registered_gst_address ||
+                  "",
+              );
 
           const prefill: any = {
-            invoiceType: routeSource === "stock_transfer" ? "stock_transfer" : "sales",
+            invoiceType: isSTDispatch ? "stock_transfer" : "sales",
             sourceType: routeSource,
-            salesOrderId: dispatchObj.source_id,
-            salesOrderNo: dispatchObj.source_document_no || "",
-            salesOrderDate: dispatchObj.created_at ? dispatchObj.created_at.split("T")[0] : "",
-            sourceDispatchId: dispatchObj.id,
-            dispatchNo: dispatchObj.dispatch_number,
-            dispatchDate: dispatchObj.dispatch_date ? dispatchObj.dispatch_date.split("T")[0] : "",
-            branch: warehouse?.warehouse_name || "Head Office",
-            warehouse: warehouse?.warehouse_name || "Central Warehouse",
-            salesperson: salesOrderObj?.salesManName || salesOrderObj?.salesperson || dispatchObj.salesperson || "—",
-            referenceNo: dispatchObj.dispatch_number,
+            salesOrderId: prepared.sales_order?.sales_order_id ?? (isSTDispatch ? null : prepared.dispatch.source_id),
+            salesOrderNo: isSTDispatch
+              ? (stData?.transfer_no || "")
+              : (prepared.sales_order?.so_number || ""),
+            salesOrderDate: "",
+            sourceDispatchId: prepared.dispatch.dispatch_id,
+            dispatchNo: prepared.dispatch.dispatch_number,
+            dispatchDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
+            branch: sourceWhName || "Head Office",
+            warehouse: sourceWhName || "Central Warehouse",
+            salesperson: salespersonName || "—",
+            referenceNo: isSTDispatch
+              ? (stData?.transfer_no || prepared.dispatch.dispatch_number)
+              : prepared.dispatch.dispatch_number,
             paymentTerms: "Net 30",
             creditDays: 30,
-            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split("T")[0],
             invoiceDate: new Date().toISOString().split("T")[0],
-            customerId: dispatchObj.customer_id, // REAL DB UUID
-            customerLedgerId: null,
-            customerCode: customer?.customer_code || matchedCust?.customerCode || "",
-            customerName: dispatchObj.customer_name || customer?.customer_name || "",
-            customerMobile: customer?.mobile_no || "",
-            customerEmail: customer?.email || "",
-            customerGst: customer?.gstin_no || matchedCust?.gstin || destWh?.gstNumber || "",
-            customerGstCategory: customer?.gst_category || matchedCust?.gstCategory,
-            billingAddress:
-              customer?.registered_gst_address ||
-              (matchedCust ? customerMasterToTransactionFields(matchedCust).billingAddress : "") ||
-              (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
-            shippingAddress:
-              customer?.registered_gst_address ||
-              (matchedCust ? customerMasterToTransactionFields(matchedCust).shippingAddress : "") ||
-              (destWh ? [destWh.address, destWh.city, destWh.state].filter(Boolean).join(", ") : ""),
-            pan: customer?.pan_no || matchedCust?.pan || "",
-            contactPerson: customer?.contact_person || matchedCust?.salesManName || "",
-            placeOfSupply:
-              customer?.billing_state ||
-              customer?.shipping_state ||
-              (customer?.branches?.find((b: any) => b.is_main_branch) || customer?.branches?.[0])?.billing_state ||
-              matchedCust?.stateName ||
-              destWh?.state ||
-              "",
-            state:
-              customer?.billing_state ||
-              customer?.shipping_state ||
-              (customer?.branches?.find((b: any) => b.is_main_branch) || customer?.branches?.[0])?.billing_state ||
-              matchedCust?.stateName ||
-              destWh?.state ||
-              "",
-            gstTreatment: customer?.gst_treatment || matchedCust?.gstCategory || "registered",
-            receivableLedger: customer?.customer_name || matchedCust?.customerName || "",
-            billFrom: warehouse?.warehouse_name || "",
-            billTo: dispatchObj.customer_name || customer?.customer_name || matchedCust?.customerName || "",
-            shipTo: dispatchObj.customer_name || customer?.customer_name || matchedCust?.customerName || "",
-            dispatchQty: lineItems.reduce((acc: number, l: any) => acc + (l.qty || 0), 0),
-            transportMode: "",
-            transporterName: "",
+            customerId: prepared.customer?.customer_id || customer.customer_id || null,
+            customerLedgerId: prepared.customer_ledger_id || null,
+            customerCode: String(customer.customer_code || customer.customerCode || ""),
+            customerName: isSTDispatch ? destWhName : customerName,
+            customerMobile: String(customer.mobile_no || customer.mobile || ""),
+            customerEmail: String(customer.email || ""),
+            customerGst: isSTDispatch ? destWhGstin : String(customer.gstin_no || customer.gstin || ""),
+            customerGstCategory: customer.gst_category || customer.gstCategory,
+            billingAddress: billingAddressText,
+            shippingAddress: shippingAddressText,
+            pan: String(customer.pan_no || customer.pan || ""),
+            contactPerson: String(customer.contact_person || ""),
+            placeOfSupply: isSTDispatch ? destWhState : placeOfSupplyValue,
+            state: isSTDispatch ? destWhState : (placeOfSupplyValue || customerState),
+            gstTreatment: String(customer.gst_treatment || customer.gstCategory || "registered"),
+            receivableLedger: isSTDispatch ? destWhName : customerName,
+            billFrom: sourceWhName,
+            billTo: isSTDispatch ? destWhName : customerName,
+            shipTo: isSTDispatch ? destWhName : customerName,
+            dispatchQty: lineItems.reduce((acc, l) => acc + (l.qty || 0), 0),
+            transportMode: transportDistanceKm != null ? "Road" : "",
+            transporterName: prepared.dispatch.transporter || "",
             transporterId: "",
-            vehicleNo: "",
-            lrNo: "",
+            vehicleNo: prepared.dispatch.vehicle_number || "",
+            lrNo: prepared.dispatch.lr_number || "",
             lrDate: "",
-            transportDocNo: "",
-            transportDocDate: "",
-            distanceKm: null,
+            transportDocNo: prepared.dispatch.lr_number || "",
+            transportDocDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
+            distanceKm: transportDistanceKm,
             lineItems,
             lineErrors: [],
-            additionalExpenses: salesOrderObj?.additionalExpenses?.map((exp: any) => {
-              const gstPercent = Number(exp.gstRate || 0);
-              return {
-                id: exp.id,
-                expenseHead: exp.expenseName || "",
-                amount: exp.amount || 0,
-                gstApplicable: gstPercent > 0,
-                gstPct: gstPercent,
-                remarks: exp.remarks || "",
-                origin: "sales_order",
-              };
-            }) || [],
+            additionalExpenses,
             nearExpirySchemes: [],
-            sourceWarehouseGstin: warehouse?.gst_number || "",
-            destinationWarehouseGstin: customer?.gstin_no || destWh?.gstNumber || "",
-            sourceWarehouseState: warehouse?.state || "",
-            destinationWarehouseState:
-              customer?.billing_state ||
-              customer?.shipping_state ||
-              (customer?.branches?.find((b: any) => b.is_main_branch) || customer?.branches?.[0])?.billing_state ||
-              matchedCust?.stateName ||
-              destWh?.state ||
-              "",
+            sourceWarehouseGstin: sourceWhGstin,
+            destinationWarehouseGstin: destWhGstin,
+            sourceWarehouseState: sourceWhState,
+            destinationWarehouseState: destWhState,
+            sourceWarehouseId: stData?.from_warehouse?.warehouse_id ?? null,
+            destinationWarehouseId: stData?.to_warehouse?.warehouse_id ?? null,
           };
 
           applySalesInvoicePrefill(prefill);
+          setSourceWarehouseId(stData?.from_warehouse?.warehouse_id ?? null);
+          setDestinationWarehouseId(stData?.to_warehouse?.warehouse_id ?? null);
+          if (
+            prepared.dispatch.transporter ||
+            prepared.dispatch.vehicle_number ||
+            transportDistanceKm != null
+          ) {
+            setTransport((prev) => ({
+              ...prev,
+              transporterName: prepared.dispatch.transporter || prev.transporterName,
+              vehicleNo: prepared.dispatch.vehicle_number || prev.vehicleNo,
+              lrNo: prepared.dispatch.lr_number || prev.lrNo,
+              transportDocNo: prepared.dispatch.lr_number || prev.transportDocNo,
+              transportDocDate:
+                String(prepared.dispatch.dispatch_date || "").slice(0, 10) ||
+                prev.transportDocDate,
+              distanceKm:
+                transportDistanceKm != null && transportDistanceKm > 0
+                  ? String(transportDistanceKm)
+                  : prev.distanceKm,
+            }));
+          }
         } catch (err) {
           console.error("Failed to load prefill from backend:", err);
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to prepare dispatch for invoice.",
+          );
         }
       };
-      loadPrefillFromBackend(dispatchId);
+      void loadPrefillFromBackend(dispatchId);
       return;
     }
 
@@ -1391,7 +1626,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const validateGoodsInvoiceCore = useCallback((): string | null => {
     if (!customerName.trim()) return "Select a customer from Customer Master.";
     if (!invoiceDate?.trim()) return "Invoice Date is required.";
-    if (bankAccountId == null) return "Select a Bank Account for the invoice PDF.";
+    if (bankAccountId == null && !sourceDispatchId) {
+      return "Select a Bank Account for the invoice PDF.";
+    }
     if (!placeOfSupply.trim()) {
       return "Place of Supply is required. Check customer / ship-to state.";
     }
@@ -1408,7 +1645,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return `Invoice quantity must be greater than zero for "${badQty.productName || "line item"}".`;
     }
     const missingProduct = validLines.find((l) => !l.productId);
-    if (missingProduct) {
+    // createFromDispatch rebuilds lines from dispatch — skip local product-id gate
+    if (missingProduct && !sourceDispatchId) {
       return `Product mapping missing for "${missingProduct.productName || "line item"}".`;
     }
     const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
@@ -1424,6 +1662,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     customerGst,
     lines,
     additionalExpenses,
+    sourceDispatchId,
   ]);
 
   const validateStockTransferInvoiceCore = useCallback((): string | null => {
@@ -1446,7 +1685,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return `Invoice quantity must be greater than zero for "${badQty.productName || "line item"}".`;
     }
     const missingProduct = validLines.find((l) => !l.productId);
-    if (missingProduct) {
+    if (missingProduct && !sourceDispatchId) {
       return `Product mapping missing for "${missingProduct.productName || "line item"}".`;
     }
     const cpErr = validateStockTransferCostPrices(lines);
@@ -1463,6 +1702,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     destinationWarehouseGstin,
     lines,
     additionalExpenses,
+    sourceDispatchId,
   ]);
 
   const validateSampleOrderInvoiceCore = useCallback((): string | null => {
@@ -1689,7 +1929,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       }
     }
     const missingProduct = validLines.find((l) => !l.productId);
-    if (missingProduct) {
+    if (
+      missingProduct &&
+      !(
+        sourceDispatchId &&
+        (isSalesOrderGeneration ||
+          isStockTransferGeneration ||
+          sourceType === "sales_order" ||
+          sourceType === "stock_transfer")
+      )
+    ) {
       setError(
         `Product mapping missing for "${missingProduct.productName || "line item"}". Please check Product Master or regenerate from Pending Invoice.`,
       );
@@ -1702,30 +1951,38 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
         const charges = additionalExpenses
-          .filter((e) => e.expenseHead.trim() || e.amount > 0)
+          .filter((e) => (e.expenseHead.trim() || e.amount > 0) && e.chargeMasterId)
           .map((e) => ({
-            additional_charge_id: e.chargeMasterId || e.id || "",
+            additional_charge_id: String(e.chargeMasterId),
             amount: e.amount,
+            charge_source:
+              e.origin === "sales_order" ? ("ORDER" as const) : ("INVOICE" as const),
             gst_applicable: e.gstApplicable,
-            gst_percent: e.gstPct,
-            remarks: e.remarks,
+            gst_rate: e.gstPct,
+            remarks: e.remarks || undefined,
           }));
 
-        await pendingInvoicesService.generateInvoice(sourceDispatchId, {
+        const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
           due_date: dueDate || undefined,
-          bank_account_id: String(bankAccountId),
-          transport_mode: transport.transportMode.trim() || undefined,
-          transporter_name: transport.transporterName.trim() || undefined,
-          transporter_id: transport.transporterId.trim() || undefined,
-          vehicle_no: transport.vehicleNo.trim() || undefined,
-          distance_km: transport.distanceKm.trim() ? Number(transport.distanceKm) : undefined,
-          lr_no: transport.lrNo.trim() || undefined,
-          lr_date: transport.lrDate.trim() || undefined,
-          transport_doc_no: transport.transportDocNo.trim() || undefined,
-          transport_doc_date: transport.transportDocDate.trim() || undefined,
+          narration: remarks.trim() || undefined,
+          remarks: remarks.trim() || undefined,
+          transporter: transport.transporterName.trim() || undefined,
+          vehicle_number: transport.vehicleNo.trim() || undefined,
+          lr_number: transport.lrNo.trim() || undefined,
+          eway_bill_number: transport.ewayBillNo?.trim() || undefined,
           additional_charges: charges,
         });
+
+        dispatchAccountsDataChanged("sales-invoices");
+        setSuccess(
+          isStockTransferGeneration
+            ? "Stock Transfer Invoice generated successfully."
+            : "Sales Invoice generated successfully.",
+        );
+        router.push(`${INVOICES_LIST_PATH}/${created.sales_invoice_id}`);
+        router.refresh();
+        return;
       }
 
       if (isEdit && invoiceId != null) {
@@ -1744,15 +2001,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setSuccess(
           asDraft
             ? "Invoice saved as draft."
-            : isSalesOrderGeneration
-              ? "Sales Invoice generated successfully."
-              : isStockTransferGeneration
-                ? "Stock Transfer Invoice generated successfully."
-                : isSampleOrderGeneration
-                  ? "Sample Order Proforma generated — inventory posted at Cost Price."
-                  : "Invoice saved and posted to ledger successfully.",
+            : isSampleOrderGeneration
+              ? "Sample Order Proforma generated — inventory posted at Cost Price."
+              : "Invoice saved and posted to ledger successfully.",
         );
-        router.push(`${INVOICES_LIST_PATH}/${rec.id}`);
+        router.push(`${INVOICES_LIST_PATH}/${rec.salesInvoiceId || rec.id}`);
         router.refresh();
       }
     } catch (e) {
@@ -1857,18 +2110,18 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         isSalesOrderGeneration ||
         isStockTransferGeneration ||
         isSampleOrderGeneration ? (
-          <div className="flex items-center justify-between gap-2 w-full">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 text-xs gap-1.5 text-muted-foreground"
+              className="h-8 text-xs gap-1.5 text-muted-foreground self-start sm:self-auto"
               onClick={requestCancel}
               disabled={saving}
             >
               Discard Form
             </Button>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
               {stGen ? (
                 <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
                   Stock Transfer
@@ -1908,17 +2161,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         )
       }
     >
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 font-medium">
-          {success}
-        </div>
-      )}
-
       <div className={cn(compactGen ? "space-y-2.5" : "space-y-4")}>
         <InvoiceFormCard title={stGen ? "Warehouse Transfer Details" : isStockTransferInvoice ? "Destination Warehouse" : "Customer"}>
           {stGen ? (
@@ -2100,7 +2342,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               <GoodsTransportStatutorySection
                 value={transport}
                 onChange={patchTransport}
-                hideDistance={stGen}
               />
             </div>
           </InvoiceFormCard>

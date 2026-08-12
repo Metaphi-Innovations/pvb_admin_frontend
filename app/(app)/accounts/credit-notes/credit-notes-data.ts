@@ -104,7 +104,7 @@ export interface CreditReferencePreview {
   documentDate: string;
   sourceInvoiceId: number | null;
   sourceInvoiceNo: string;
-  sourceOrderId: number | null;
+  sourceOrderId: number | string | null;
   sourceOrderNo: string;
   customerId: number | null;
   customerName: string;
@@ -137,7 +137,7 @@ export interface CreditNoteRecord {
   sourceInvoiceNo: string;
   /** One or more posted sales invoices linked to this credit note */
   linkedInvoices?: CreditNoteLinkedInvoice[];
-  sourceOrderId: number | null;
+  sourceOrderId: number | string | null;
   sourceOrderNo: string;
   customerId: number | null;
   customerName: string;
@@ -805,7 +805,7 @@ export type CreditNoteFormInput = {
   sourceInvoiceId: number | null;
   sourceInvoiceNo: string;
   linkedInvoices?: CreditNoteLinkedInvoice[];
-  sourceOrderId: number | null;
+  sourceOrderId: number | string | null;
   sourceOrderNo: string;
   originalAmount: number;
   alreadyAdjustedAmount: number;

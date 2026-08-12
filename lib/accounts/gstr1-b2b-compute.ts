@@ -92,7 +92,7 @@ export interface B2bInvoiceRow {
   branch: string;
   warehouse: string;
   voucherNo: string;
-  voucherId: number | null;
+  voucherId: number | string | null;
   interstate: boolean;
   hasMultipleRates: boolean;
 }

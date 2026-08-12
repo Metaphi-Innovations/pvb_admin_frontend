@@ -39,7 +39,6 @@ import {
   buildStandardReportTableHtml,
   todayExportDateSuffix,
 } from "@/lib/accounts/report-export-presentation";
-import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
 import {
   AccountsEditAction,
   AccountsTableActionCell,
@@ -61,9 +60,16 @@ import {
 } from "@/app/(app)/accounts/components/AccountsUI";
 import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import {
-  cancelInvoice,
-  getInvoiceById,
-} from "@/app/(app)/accounts/invoices/invoices-data";
+  fetchSalesInvoicesByTab,
+  SALES_INVOICE_TAB_META,
+  SALES_INVOICE_VISIBLE_TABS,
+  type SalesInvoiceListRow,
+  type SalesInvoiceTabId,
+} from "./sales-invoice-tab-data";
+import {
+  SalesInvoiceService,
+  mapSalesInvoiceDetailToRecord,
+} from "@/services/sales-invoice.service";
 import { downloadInvoicePdf } from "@/app/(app)/accounts/invoices/invoice-pdf";
 import { InvoiceCancelDialog } from "@/app/(app)/accounts/invoices/components/InvoiceCancelDialog";
 import { InvoiceStatusBadge } from "@/app/(app)/accounts/invoices/components/InvoiceStatusBadge";
@@ -77,14 +83,6 @@ import {
   LISTING_EINVOICE_STATUS_OPTIONS,
   LISTING_EWAY_STATUS_OPTIONS,
 } from "./sales-invoice-statutory";
-import {
-  getSalesInvoiceBranchOptions,
-  listSalesInvoicesByTab,
-  SALES_INVOICE_TAB_META,
-  SALES_INVOICE_VISIBLE_TABS,
-  type SalesInvoiceListRow,
-  type SalesInvoiceTabId,
-} from "./sales-invoice-tab-data";
 import "./sales-invoices-compact.css";
 
 type TabCache = {
@@ -230,7 +228,7 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
   const dataRows = rows.map((r) => toRow(r));
   const filename = meta.exportFileName;
 
-  const excelBlob = await SalesInvoiceNumberService.generateExcel({ headers, rows: dataRows, filename });
+  const excelBlob = await SalesInvoiceService.generateExcel({ headers, rows: dataRows, filename });
   const url = URL.createObjectURL(excelBlob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -352,7 +350,7 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
   });
 
   const filename = `${meta.label.replace(/\s+/g, "_")}_${todayExportDateSuffix()}.pdf`;
-  const pdfBlob = await SalesInvoiceNumberService.generatePdf({ htmlContent, filename });
+  const pdfBlob = await SalesInvoiceService.generatePdf({ htmlContent, filename });
   const url = URL.createObjectURL(pdfBlob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -574,7 +572,8 @@ function SalesInvoicesTable({
   const isAll = tab === "all";
   const isStockTransfer = tab === "stock_transfer";
   const isSampleOrder = tab === "sample_order";
-  const colSpan = isAll ? 11 : isStockTransfer ? 11 : 10;
+  // Source tabs also show Status (Sent / Cancelled) so cancelled invoices are visible.
+  const colSpan = 11;
 
 
   const emptyStates =
@@ -621,7 +620,15 @@ function SalesInvoicesTable({
             pagedRows.map((r) => (
               <AccountsTableRow key={r.id}>
                 <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
-                <AccountsTableCell mono className="font-semibold text-brand-700">
+                <AccountsTableCell
+                  mono
+                  className={cn(
+                    "font-semibold",
+                    r.invoiceStatus === "cancelled"
+                      ? "text-muted-foreground line-through"
+                      : "text-brand-700",
+                  )}
+                >
                   <Link href={r.viewHref} className="hover:underline">
                     {r.invoiceNo}
                   </Link>
@@ -668,6 +675,7 @@ function SalesInvoicesTable({
             <SortTh label="To Warehouse" colKey="toWarehouse" />
             <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
             <SortTh label="Qty" colKey="qtyOrItemCount" filterType="amount" align="right" />
+            <SortTh label="Status" colKey="invoiceStatus" filterType="status" />
             <StatutoryStatusHeaders />
             <AccountsColumnHeader
               label="Actions"
@@ -684,7 +692,15 @@ function SalesInvoicesTable({
             pagedRows.map((r) => (
               <AccountsTableRow key={r.id}>
                 <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
-                <AccountsTableCell mono className="font-semibold text-brand-700">
+                <AccountsTableCell
+                  mono
+                  className={cn(
+                    "font-semibold",
+                    r.invoiceStatus === "cancelled"
+                      ? "text-muted-foreground line-through"
+                      : "text-brand-700",
+                  )}
+                >
                   <Link href={r.viewHref} className="hover:underline">
                     {r.invoiceNo}
                   </Link>
@@ -699,6 +715,9 @@ function SalesInvoicesTable({
                 <AccountsTableCell align="right" className="tabular-nums">
                   {r.qtyOrItemCount}
                 </AccountsTableCell>
+                <AccountsTableCell>
+                  <InvoiceStatusBadge status={r.invoiceStatus} />
+                </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
                 <AccountsTableCell align="right">
                   <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
@@ -711,7 +730,7 @@ function SalesInvoicesTable({
   }
 
   return (
-    <AccountsTable minWidth={1320}>
+    <AccountsTable minWidth={1380}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
           <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
@@ -724,6 +743,7 @@ function SalesInvoicesTable({
           <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
           <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
           <SortTh label="Qty" colKey="qtyOrItemCount" filterType="amount" align="right" />
+          <SortTh label="Status" colKey="invoiceStatus" filterType="status" />
           <StatutoryStatusHeaders />
           <AccountsColumnHeader
             label="Actions"
@@ -740,7 +760,15 @@ function SalesInvoicesTable({
           pagedRows.map((r) => (
             <AccountsTableRow key={r.id}>
               <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
-              <AccountsTableCell mono className="font-semibold text-brand-700">
+              <AccountsTableCell
+                mono
+                className={cn(
+                  "font-semibold",
+                  r.invoiceStatus === "cancelled"
+                    ? "text-muted-foreground line-through"
+                    : "text-brand-700",
+                )}
+              >
                 <Link href={r.viewHref} className="hover:underline">
                   {r.invoiceNo}
                 </Link>
@@ -760,6 +788,9 @@ function SalesInvoicesTable({
               </AccountsTableCell>
               <AccountsTableCell align="right" className="tabular-nums">
                 {r.qtyOrItemCount}
+              </AccountsTableCell>
+              <AccountsTableCell>
+                <InvoiceStatusBadge status={r.invoiceStatus} />
               </AccountsTableCell>
               <StatutoryStatusCells row={r} />
               <AccountsTableCell align="right">
@@ -788,18 +819,27 @@ export default function SalesInvoicesPageClient() {
     sample_order: createEmptyTabCache(),
     service: createEmptyTabCache(),
   });
+  const tabStateRef = useRef(tabState);
+  tabStateRef.current = tabState;
 
   const filterKey = `${financialYearId}|${dateFrom}|${dateTo}|${branches.join(",")}`;
   const prevFilterKey = useRef(filterKey);
 
-  const fetchTab = useCallback((tab: SalesInvoiceTabId) => {
+  const fetchTab = useCallback(async (tab: SalesInvoiceTabId) => {
     setTabState((prev) => ({
       ...prev,
       [tab]: { ...prev[tab], loading: true, error: null },
     }));
     try {
       accountsDataService.invalidate();
-      const rows = listSalesInvoicesByTab(tab);
+      const { rows } = await fetchSalesInvoicesByTab(tab, {
+        search: tabStateRef.current[tab]?.search,
+        dateFrom,
+        dateTo,
+        financialYearId,
+        page: 1,
+        pageSize: 100,
+      });
       setTabState((prev) => ({
         ...prev,
         [tab]: {
@@ -822,16 +862,20 @@ export default function SalesInvoicesPageClient() {
         },
       }));
     }
-  }, []);
+  }, [dateFrom, dateTo, financialYearId]);
+
+  const fetchVisibleTabs = useCallback(async () => {
+    await Promise.all(SALES_INVOICE_VISIBLE_TABS.map((tab) => fetchTab(tab)));
+  }, [fetchTab]);
 
   useEffect(() => {
     if (!mounted) return;
-    fetchTab("all");
-  }, [mounted, fetchTab]);
+    void fetchVisibleTabs();
+  }, [mounted, fetchVisibleTabs]);
 
   useEffect(() => {
     if (!mounted) return;
-    const refresh = () => fetchTab(activeTab);
+    const refresh = () => void fetchVisibleTabs();
     const onVisibility = () => {
       if (document.visibilityState === "visible") refresh();
     };
@@ -841,7 +885,7 @@ export default function SalesInvoicesPageClient() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [mounted, activeTab, fetchTab]);
+  }, [mounted, fetchVisibleTabs]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -859,8 +903,8 @@ export default function SalesInvoicesPageClient() {
       });
       return next;
     });
-    fetchTab(activeTab);
-  }, [filterKey, mounted, activeTab, fetchTab]);
+    void fetchVisibleTabs();
+  }, [filterKey, mounted, fetchVisibleTabs]);
 
   const handleTabChange = (tab: SalesInvoiceTabId) => {
     setActiveTab(tab);
@@ -879,9 +923,8 @@ export default function SalesInvoicesPageClient() {
         for (const r of tabState[tab].rows) if (r.branch && r.branch !== "—") set.add(r.branch);
       }
     });
-    if (set.size === 0) return getSalesInvoiceBranchOptions(activeTab);
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [mounted, tabState, activeTab]);
+  }, [mounted, tabState]);
 
   const handleFinancialYearChange = useCallback(
     (fyId: string) => {
@@ -935,16 +978,7 @@ export default function SalesInvoicesPageClient() {
     SALES_INVOICE_VISIBLE_TABS.forEach((tab) => {
       const cache = tabState[tab];
       if (!cache.loaded) {
-        try {
-          counts[tab] = applyToolbarFilters(listSalesInvoicesByTab(tab), {
-            search: cache.search,
-            dateFrom,
-            dateTo,
-            branches,
-          }).length;
-        } catch {
-          counts[tab] = null;
-        }
+        counts[tab] = null;
         return;
       }
       counts[tab] = applyToolbarFilters(cache.rows, {
@@ -994,19 +1028,33 @@ export default function SalesInvoicesPageClient() {
     }
   };
 
-  const handlePrint = useCallback((row: SalesInvoiceListRow) => {
-    const rec = getInvoiceById(row.invoiceId);
-    if (rec) downloadInvoicePdf(rec);
+  const handlePrint = useCallback(async (row: SalesInvoiceListRow) => {
+    const id = String(row.salesInvoiceId || row.invoiceId);
+    if (!SalesInvoiceService.isUuid(id)) return;
+    try {
+      const dto = await SalesInvoiceService.getById(id);
+      downloadInvoicePdf(mapSalesInvoiceDetailToRecord(dto));
+    } catch {
+      // ignore print failures silently — user can retry from view
+    }
   }, []);
 
   const handleCancelConfirm = useCallback(
-    (reason: string) => {
+    async (reason: string) => {
       if (!cancelTarget) return;
-      cancelInvoice(cancelTarget.invoiceId, reason);
-      setCancelTarget(null);
-      SALES_INVOICE_VISIBLE_TABS.forEach((tab) => fetchTab(tab));
+      const id = String(cancelTarget.salesInvoiceId || cancelTarget.invoiceId);
+      try {
+        if (SalesInvoiceService.isUuid(id)) {
+          await SalesInvoiceService.cancel(id, { reason });
+        }
+        setCancelTarget(null);
+        void fetchVisibleTabs();
+      } catch (e) {
+        setCancelTarget(null);
+        alert(e instanceof Error ? e.message : "Failed to cancel invoice.");
+      }
     },
-    [cancelTarget, fetchTab],
+    [cancelTarget, fetchVisibleTabs],
   );
 
   const getCellValue = useCallback((row: SalesInvoiceListRow, key: string) => {
@@ -1057,6 +1105,11 @@ export default function SalesInvoicesPageClient() {
             toWarehouse: { type: "text" },
             totalAmount: { type: "amount" },
             qtyOrItemCount: { type: "amount" },
+            invoiceStatus: {
+              type: "status" as const,
+              options: ["draft", "sent", "cancelled"],
+              optionLabels: { draft: "Draft", sent: "Sent", cancelled: "Cancelled" },
+            },
             ...statutoryFilterCols,
           }
         : {
@@ -1067,6 +1120,11 @@ export default function SalesInvoicesPageClient() {
             customerName: { type: "text" },
             totalAmount: { type: "amount" },
             qtyOrItemCount: { type: "amount" },
+            invoiceStatus: {
+              type: "status" as const,
+              options: ["draft", "sent", "cancelled"],
+              optionLabels: { draft: "Draft", sent: "Sent", cancelled: "Cancelled" },
+            },
             ...statutoryFilterCols,
           };
 

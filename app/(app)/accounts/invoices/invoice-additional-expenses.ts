@@ -140,12 +140,12 @@ export interface InvoiceAdditionalExpense {
 	gstApplicable: boolean;
 	gstPct: number;
 	remarks: string;
-	/** Demo charge catalogue id (not a backend Charge Master id). Used by Service path. */
+	/** Additional Charge Master id (UUID from backend). */
 	chargeMasterId?: string | null;
 	/** Charge Master code (Goods generate). */
 	chargeCode?: string | null;
 	/** Auto-resolved / Charge-Master COA ledger — not user-selectable. */
-	coaLedgerId?: number | null;
+	coaLedgerId?: number | string | null;
 	coaLedgerName?: string;
 	coaLedgerCode?: string;
 	/** Prefetched from Sales Order — not removable on the invoice screen. */
