@@ -5,5 +5,6 @@ const InvoiceEditPageClient = lazyAccountsPage(() => import("../../../../invoice
 type PageProps = { params: { id: string } };
 
 export default function EditSalesInvoicePage({ params }: PageProps) {
-  return <InvoiceEditPageClient invoiceId={Number(params.id)} />;
+  // Prefer string id so UUID-backed invoices can load from the API.
+  return <InvoiceEditPageClient invoiceId={params.id} />;
 }

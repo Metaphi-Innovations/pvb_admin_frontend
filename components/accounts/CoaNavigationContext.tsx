@@ -79,6 +79,8 @@ function resolveNodeIdParam(
   param: string,
   records: ChartOfAccount[],
 ): CoaNodeId | null {
+  const byApiId = records.find((r) => r.apiNodeId === param);
+  if (byApiId) return byApiId.id;
   const byString = records.find((r) => String(r.id) === param);
   if (byString) return byString.id;
   const asNumber = Number(param);

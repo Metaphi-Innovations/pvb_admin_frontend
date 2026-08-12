@@ -46,6 +46,7 @@ import {
   exportCoaListingToPdf,
 } from "./coa-export";
 import { filterLedgerStatementRows } from "./coa-ledger-utils";
+import { buildApiLedgerDetailSummary } from "./coa-ledger-api-mapper";
 import {
   requestCoaAddLedger,
   requestCoaGlobalAddLedger,
@@ -78,11 +79,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   chartOfAccountsKeys,
 } from "@/hooks/accounts/use-chart-of-accounts";
-import {
-  LedgerService,
-  type LedgerDetailDto,
-  type LedgerOpeningBalanceDto,
-} from "@/services/ledger.service";
+import { useLedgerDetail } from "@/hooks/accounts/use-ledger-detail";
+import { LedgerService } from "@/services/ledger.service";
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
@@ -96,53 +94,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-/** Ledger statement summary from API-backed COA records (no localStorage voucher demo). */
-function resolveLedgerOpeningBalance(
-  detail: LedgerDetailDto,
-  financialYearId?: string,
-): LedgerOpeningBalanceDto | null {
-  if (financialYearId) {
-    const match = detail.openingBalances?.find(
-      (row) => row.financialYearId === financialYearId,
-    );
-    if (match) return match;
-  }
-  return detail.openingBalance ?? detail.openingBalances?.[0] ?? null;
-}
-
-function buildApiLedgerDetailSummary(
-  ledger: ChartOfAccount,
-  detail?: any,
-) {
-  const openingBalance = detail?.openingBalance;
-  const parsedOpeningAmount =
-    openingBalance?.amount != null
-      ? Number(openingBalance.amount)
-      : ledger.openingBalance ?? 0;
-  const openingAmount = Number.isFinite(parsedOpeningAmount) ? parsedOpeningAmount : 0;
-  const openingSide =
-    String(openingBalance?.balanceType ?? ledger.balanceType ?? "DEBIT").toUpperCase() ===
-    "CREDIT"
-      ? ("Credit" as const)
-      : ("Debit" as const);
-
-  const transactions = (detail?.transactions || []).map((t: any) => ({
-    ...t,
-    isOpeningRow: false,
-  }));
-
-  return {
-    ledgerId: ledger.id,
-    openingBalance: openingAmount,
-    openingBalanceType: openingSide,
-    currentBalance: detail?.currentBalance ?? openingAmount,
-    balanceType: detail?.balanceType === "Credit" ? ("Credit" as const) : ("Debit" as const),
-    totalDebit: detail?.totalDebit ?? 0,
-    totalCredit: detail?.totalCredit ?? 0,
-    transactions: transactions as CoaLedgerDetailRow[],
-  };
-}
-
+/** Ledger detail view for posting ledgers only (TDS/TCS statutory nodes excluded). */
 const AccountsSundryDebtorCustomerFormClient = dynamic(
   () => import("./sundry-debtors/new/AccountsSundryDebtorCustomerFormClient"),
   { ssr: false },
@@ -205,34 +157,20 @@ export default function ChartOfAccountsPageClient() {
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
 
-  const { data: selectedLedgerDetail } = useQuery({
-    queryKey: [
-      "accounts",
-      "chart-of-accounts",
-      "selected-ledger-detail",
-      selectedNode?.apiNodeId ?? selectedNode?.id ?? null,
-      dateFrom,
-      dateTo,
-      ledgerDataTick,
-    ],
-    enabled: Boolean(selectedNode && isCoaLedgerDetailView(selectedNode, records) && datesReady),
-    queryFn: async () => {
-      if (!selectedNode) return null;
-      const [detail, currentFy] = await Promise.all([
-        LedgerService.view(
-          selectedNode.apiNodeId ?? String(selectedNode.id),
-          { dateFrom, dateTo }
-        ),
-        LedgerService.getCurrentFinancialYear(),
-      ]);
-      return {
-        detail,
-        openingBalance: resolveLedgerOpeningBalance(
-          detail,
-          currentFy?.financialYearId,
-        ),
-      };
-    },
+  const selectedLedgerApiId = selectedNode?.apiNodeId ?? null;
+
+  const {
+    data: selectedLedgerDetail,
+    isLoading: ledgerDetailLoading,
+    isError: ledgerDetailError,
+  } = useLedgerDetail({
+    ledgerId: selectedLedgerApiId,
+    dateFrom,
+    dateTo,
+    refreshTick: ledgerDataTick,
+    enabled: Boolean(
+      selectedNode && isCoaLedgerDetailView(selectedNode, records) && datesReady,
+    ),
   });
 
   const [showRoot, setShowRoot] = useState(false);
@@ -446,23 +384,28 @@ export default function ChartOfAccountsPageClient() {
   }, [highlightedLedgerId, setHighlightedLedgerId]);
 
   const ledgerAccounting = useMemo(() => {
-    if (!isLedgerStatementView || !selectedNode || !datesReady) return null;
-    // Opening/closing from API COA tree only — do not mix localStorage voucher demos.
+    if (!isLedgerStatementView || !selectedNode || !datesReady || !selectedLedgerDetail) {
+      return null;
+    }
     return buildApiLedgerDetailSummary(
       selectedNode,
-      selectedLedgerDetail?.detail,
+      selectedLedgerDetail.detail,
+      selectedLedgerDetail.openingBalance,
+      dateFrom,
     );
   }, [
     isLedgerStatementView,
     selectedNode,
     datesReady,
     selectedLedgerDetail,
+    dateFrom,
   ]);
 
   const ledgerDataReady =
     Boolean(selectedNode) &&
     Boolean(ledgerAccounting) &&
-    ledgerAccounting!.ledgerId === selectedNode!.id;
+    ledgerAccounting!.ledgerId === selectedNode!.id &&
+    !ledgerDetailLoading;
 
   const filteredTransactions = useMemo(() => {
     if (!ledgerAccounting || !ledgerDataReady || !selectedNode) return [];
@@ -940,7 +883,13 @@ export default function ChartOfAccountsPageClient() {
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {isLedgerStatementView && selectedNode ? (
-              datesReady && ledgerDataReady ? (
+              ledgerDetailError ? (
+                <div className="flex flex-1 items-center justify-center py-12">
+                  <p className="text-sm text-destructive">
+                    Failed to load ledger transactions. Please try again.
+                  </p>
+                </div>
+              ) : datesReady && ledgerDataReady ? (
                 <CoaLedgerDetailTable
                   rows={filteredTransactions}
                   onVoucherClick={handleLedgerStatementVoucherClick}

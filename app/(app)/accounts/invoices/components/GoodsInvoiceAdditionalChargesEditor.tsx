@@ -1,12 +1,20 @@
 /**
  * Goods Sales Invoice Additional Charges editor.
- * Uses Sales Invoice Charge Master (recovery Income ledgers).
- * Not used by Service Invoice — keep Service on InvoiceAdditionalExpensesEditor.
+ * Loads options from Additional Charge Master dropdown API.
+ * Also used by Service Invoice generate form.
  */
 
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { Check, ChevronsUpDown, Plus, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,10 +29,8 @@ import {
   type InvoiceExpenseHead,
 } from "../invoice-additional-expenses";
 import { formatINR } from "../invoice-utils";
-import {
-  loadSalesInvoiceChargeMaster,
-  type ResolvedSalesInvoiceCharge,
-} from "@/lib/accounts/sales-invoice-charge-master";
+import { useAdditionalChargeDropdownResolved } from "@/hooks/masters/use-additional-charge";
+import type { ResolvedAdditionalChargeOption } from "@/services/additional-charge.service";
 
 const NUM_INPUT_CLASS =
   "h-8 text-xs tabular-nums text-right w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
@@ -36,9 +42,9 @@ function ChargeSelect({
   onSelect,
 }: {
   row: InvoiceAdditionalExpense;
-  options: ResolvedSalesInvoiceCharge[];
+  options: ResolvedAdditionalChargeOption[];
   disabled?: boolean;
-  onSelect: (charge: ResolvedSalesInvoiceCharge) => void;
+  onSelect: (charge: ResolvedAdditionalChargeOption) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -136,7 +142,7 @@ const ChargeRow = memo(function ChargeRow({
   onRemove,
 }: {
   row: InvoiceAdditionalExpense;
-  options: ResolvedSalesInvoiceCharge[];
+  options: ResolvedAdditionalChargeOption[];
   disabled?: boolean;
   interstate: boolean;
   onUpdate: (id: string, patch: Partial<InvoiceAdditionalExpense>) => void;
@@ -263,20 +269,29 @@ function GoodsInvoiceAdditionalChargesEditorInner({
   disabled?: boolean;
   interstate?: boolean;
 }) {
-  const [options, setOptions] = useState<ResolvedSalesInvoiceCharge[]>([]);
+  const { data: options = [], isLoading, isError } = useAdditionalChargeDropdownResolved();
+
+  const needsEnrichKey = useMemo(
+    () =>
+      expenses
+        .filter((e) => e.chargeMasterId && (!e.coaLedgerId || !e.coaLedgerCode))
+        .map((e) => e.chargeMasterId)
+        .join("|"),
+    [expenses],
+  );
 
   useEffect(() => {
-    setOptions(
-      loadSalesInvoiceChargeMaster().filter(
-        (c) =>
-          c.status === "active" &&
-          c.isMapped &&
-          Boolean(c.ledgerId) &&
-          Boolean(c.ledgerName?.trim()) &&
-          Boolean(c.ledgerCode?.trim()),
-      ),
-    );
-  }, []);
+    if (!options.length || !needsEnrichKey) return;
+    onChange((prev) => {
+      const next = enrichExpensesFromChargeMaster(prev, options);
+      const changed = next.some(
+        (row, i) =>
+          row.coaLedgerId !== prev[i]?.coaLedgerId ||
+          row.coaLedgerCode !== prev[i]?.coaLedgerCode,
+      );
+      return changed ? next : prev;
+    });
+  }, [options, needsEnrichKey, onChange]);
 
   const headers = interstate
     ? (["Additional Charge", "Amount", "GST", "GST %", "IGST", "Total Amount", "Remarks", ""] as const)
@@ -317,7 +332,12 @@ function GoodsInvoiceAdditionalChargesEditorInner({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
+      {isError ? (
+        <p className="text-xs text-red-600">
+          Failed to load Additional Charge Master. Check API / permissions.
+        </p>
+      ) : null}
+      <div className="so-goods-product-table-wrap">
         <table className="w-full text-xs table-fixed min-w-[860px]">
           <thead className="border-b border-border/60 bg-muted/20">
             <tr>
@@ -340,7 +360,9 @@ function GoodsInvoiceAdditionalChargesEditorInner({
             {expenses.length === 0 ? (
               <tr>
                 <td colSpan={headers.length} className="py-6 text-center text-xs text-muted-foreground">
-                  No additional charges. Click &quot;+ Add Charge&quot; to add.
+                  {isLoading
+                    ? "Loading additional charges…"
+                    : 'No additional charges. Click "+ Add Charge" to add.'}
                 </td>
               </tr>
             ) : (
@@ -349,7 +371,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
                   key={row.id}
                   row={row}
                   options={options}
-                  disabled={disabled}
+                  disabled={disabled || isLoading}
                   interstate={interstate}
                   onUpdate={update}
                   onRemove={removeRow}
@@ -368,6 +390,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
             size="sm"
             className="h-8 text-xs font-medium gap-1.5"
             onClick={addRow}
+            disabled={isLoading || options.length === 0}
           >
             <Plus className="w-3.5 h-3.5" /> Add Charge
           </Button>
@@ -404,11 +427,11 @@ export function validateGoodsAdditionalCharges(
   return null;
 }
 
-/** Enrich SO-prefetched / name-only rows from Charge Master (Goods). */
+/** Enrich SO-prefetched / name-only rows from Charge Master dropdown options. */
 export function enrichExpensesFromChargeMaster(
   expenses: InvoiceAdditionalExpense[],
+  options: ResolvedAdditionalChargeOption[] = [],
 ): InvoiceAdditionalExpense[] {
-  const options = loadSalesInvoiceChargeMaster();
   return expenses.map((row) => {
     if (row.coaLedgerId && row.coaLedgerCode) return row;
     const byId = row.chargeMasterId

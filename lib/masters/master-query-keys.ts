@@ -139,6 +139,11 @@ export const masterKeys = {
     dropdown: () => [...masterKeys.tcs.all(), "dropdown"] as const,
   },
 
+  additionalCharges: {
+    all: () => [...masterKeys.all, "additional-charges"] as const,
+    dropdown: () => [...masterKeys.additionalCharges.all(), "dropdown"] as const,
+  },
+
   documentTypes: {
     all: () => [...masterKeys.all, "document-types"] as const,
     lists: () => [...masterKeys.documentTypes.all(), "list"] as const,

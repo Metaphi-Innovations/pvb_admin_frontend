@@ -1,4 +1,5 @@
-import type { InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
+import type { InvoiceLineItem, InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
+import { calcLineAmounts, calcGstLineSplit } from "@/app/(app)/accounts/invoices/invoices-data";
 import { getInvoiceAmountBreakup } from "@/app/(app)/accounts/invoices/invoices-data";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 
@@ -36,6 +37,29 @@ export function splitInvoiceGst(
   return { cgst, sgst, igst: 0 };
 }
 
+/** Prefer stored line GST from API; fall back to client-side split. */
+export function getLineGstSplit(
+  line: InvoiceLineItem,
+  interstate: boolean,
+): ReturnType<typeof calcGstLineSplit> {
+  const cgst = line.cgstAmount ?? 0;
+  const sgst = line.sgstAmount ?? 0;
+  const igst = line.igstAmount ?? 0;
+  const hasStored = cgst > 0 || sgst > 0 || igst > 0;
+  if (!hasStored) return calcGstLineSplit(line, interstate);
+
+  const { discountAmt, taxable } = calcLineAmounts(line);
+  const taxAmt = Math.round((cgst + sgst + igst) * 100) / 100;
+  return {
+    taxable,
+    taxAmt,
+    cgst,
+    sgst,
+    igst,
+    lineTotal: Math.round((taxable + taxAmt) * 100) / 100,
+  };
+}
+
 export function getInvoiceGstBreakup(
   inv: Pick<
     InvoiceRecord,
@@ -46,12 +70,30 @@ export function getInvoiceGstBreakup(
     | "gstTreatment"
     | "placeOfSupply"
     | "state"
-  > & { interstate?: boolean },
+    | "interstate"
+    | "cgstTotal"
+    | "sgstTotal"
+    | "igstTotal"
+  >,
 ): InvoiceGstBreakup {
   const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
   const interstate =
     inv.interstate ??
     isInterstateGst(inv.gstTreatment, inv.placeOfSupply, inv.state);
+
+  const hasStoredHeader =
+    (inv.cgstTotal ?? 0) > 0 || (inv.sgstTotal ?? 0) > 0 || (inv.igstTotal ?? 0) > 0;
+  if (hasStoredHeader) {
+    return {
+      taxableValue,
+      cgst: inv.cgstTotal ?? 0,
+      sgst: inv.sgstTotal ?? 0,
+      igst: inv.igstTotal ?? 0,
+      invoiceTotal,
+      interstate,
+    };
+  }
+
   const { cgst, sgst, igst } = splitInvoiceGst(gstAmount, interstate);
   return { taxableValue, cgst, sgst, igst, invoiceTotal, interstate };
 }

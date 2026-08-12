@@ -34,8 +34,10 @@ export interface HsnDropdownItem {
   id: string;
   hsnCode: string;
   hsnDescription: string;
+  codeType: "HSN" | "SAC";
   gstRate: string;
   gstId: string;
+  gstPercentage: number;
 }
 
 export interface HsnFilterOption {
@@ -327,12 +329,16 @@ export const HsnListService = {
     return data.map((row) => {
       const item = (row ?? {}) as Record<string, unknown>;
       const gst = item.gst as Record<string, unknown> | undefined;
+      const gstPct = gst ? toGstPercentage(gst.gstPercentage) : 0;
+      const rawCodeType = asString(item.codeType ?? item.code_type).toUpperCase();
       return {
         id: asString(item.id),
         hsnCode: asString(item.hsnCode ?? item.hsn_code),
         hsnDescription: asString(item.hsnDescription ?? item.hsn_description),
+        codeType: rawCodeType === "SAC" ? "SAC" : "HSN",
         gstRate: gst ? `${asString(gst.gstPercentage)}%` : "",
         gstId: asString(item.gstId ?? item.gst_id),
+        gstPercentage: gstPct,
       };
     });
   },

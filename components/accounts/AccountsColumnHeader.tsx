@@ -121,7 +121,7 @@ export function AccountsColumnHeader({
           className={cn(
             "inline-flex items-center gap-0.5 whitespace-nowrap text-left",
             sortable && "cursor-pointer hover:text-brand-700",
-            align === "right" && (filterable ? "text-right flex-row-reverse" : "text-right"),
+            align === "right" && "text-right",
           )}
           title={sortable ? "Click to sort · Double-click to remove sort" : undefined}
         >

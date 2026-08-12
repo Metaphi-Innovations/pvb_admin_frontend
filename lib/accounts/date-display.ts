@@ -1,9 +1,11 @@
 /** Accounts module date display helpers — not for use outside `/accounts`. */
 
-/** ISO date (yyyy-mm-dd) → display (dd-mm-yyyy) */
+/** ISO date (yyyy-mm-dd) or ISO datetime → display (dd-mm-yyyy) */
 export function isoToDisplayDate(iso: string): string {
-  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
-  const [y, m, d] = iso.split("-");
+  if (!iso || iso === "—") return "";
+  const datePart = iso.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return "";
+  const [y, m, d] = datePart.split("-");
   return `${d}-${m}-${y}`;
 }
 

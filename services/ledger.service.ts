@@ -11,6 +11,26 @@ export interface LedgerOpeningBalanceDto {
   narration?: string | null;
 }
 
+export interface LedgerTransactionDto {
+  date: string;
+  voucherNo: string;
+  voucherType: string;
+  debit: number;
+  credit: number;
+  runningBalance: number;
+  runningBalanceType: "Debit" | "Credit";
+  narration: string;
+  voucherId: string;
+}
+
+export interface LedgerDetailWithTransactionsDto extends LedgerDetailDto {
+  transactions?: LedgerTransactionDto[];
+  totalDebit?: number;
+  totalCredit?: number;
+  currentBalance?: number;
+  balanceType?: "Debit" | "Credit" | string;
+}
+
 export interface LedgerDetailDto {
   ledgerId: string;
   ledgerCode: string;
@@ -137,8 +157,8 @@ export const LedgerService = {
     ledgerId: string,
     params?: { dateFrom?: string; dateTo?: string },
     signal?: AbortSignal,
-  ): Promise<LedgerDetailDto & { transactions?: any[]; totalDebit?: number; totalCredit?: number; currentBalance?: number; balanceType?: string }> {
-    const response = await axiosInstance.get<ApiResponse<LedgerDetailDto>>(
+  ): Promise<LedgerDetailWithTransactionsDto> {
+    const response = await axiosInstance.get<ApiResponse<LedgerDetailWithTransactionsDto>>(
       API_ENDPOINTS.ACCOUNTS.LEDGERS.VIEW(ledgerId),
       { params, signal },
     );

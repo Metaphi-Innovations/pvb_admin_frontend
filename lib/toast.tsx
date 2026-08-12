@@ -54,7 +54,7 @@ export function AppToaster() {
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed bottom-4 right-4 z-[200] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 max-w-sm w-[min(100vw-2rem,24rem)] pointer-events-none">
       {toasts.map((toast) => (
         <div
           key={toast.id}

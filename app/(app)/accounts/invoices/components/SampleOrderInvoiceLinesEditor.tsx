@@ -119,7 +119,7 @@ function SampleOrderInvoiceLinesEditorInner({ lines }: { lines: InvoiceLineItem[
   ]);
 
   return (
-    <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
+    <div className="so-goods-product-table-wrap">
       <table className="w-full text-xs min-w-[1100px] so-goods-product-table">
         <thead className="border-b border-border/60 bg-muted/20">
           <tr>

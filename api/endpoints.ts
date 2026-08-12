@@ -141,6 +141,17 @@ export const API_ENDPOINTS = {
       FILTER_DROPDOWN: "/master/tcs/filter-dropdown",
       DROPDOWN: "/master/tcs/dropdown",
     },
+    ADDITIONAL_CHARGE: {
+      LIST: "/master/additional-charge/list",
+      CREATE: "/master/additional-charge/create",
+      UPDATE: (id: string) => `/master/additional-charge/update/${id}`,
+      STATUS_UPDATE: (id: string) =>
+        `/master/additional-charge/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/additional-charge/details/${id}`,
+      EXPORT: "/master/additional-charge/export",
+      FILTER_DROPDOWN: "/master/additional-charge/filter-dropdown",
+      DROPDOWN: "/master/additional-charge/dropdown",
+    },
     UNIT: {
       LIST: "/master/unit/list",
       CREATE: "/master/unit/create",
@@ -468,8 +479,17 @@ export const API_ENDPOINTS = {
   },
   ACCOUNTS: {
     SALES_INVOICE: {
+      LIST: "/accounts/sales-invoice",
+      BY_ID: (id: string) => `/accounts/sales-invoice/${id}`,
+      CANCEL: (id: string) => `/accounts/sales-invoice/${id}/cancel`,
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
+      ELIGIBLE_DISPATCHES: "/accounts/sales-invoice/eligible-dispatches",
+      PREPARE_DISPATCH: (dispatchId: string) =>
+        `/accounts/sales-invoice/dispatch/${dispatchId}/prepare`,
+      CREATE_FROM_DISPATCH: (dispatchId: string) =>
+        `/accounts/sales-invoice/from-dispatch/${dispatchId}`,
+      CREATE_DIRECT_SERVICE: "/accounts/sales-invoice/direct-service",
       PDF: "/accounts/sales-invoice/pdf",
       EXCEL: "/accounts/sales-invoice/excel",
     },
