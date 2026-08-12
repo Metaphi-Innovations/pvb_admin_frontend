@@ -291,6 +291,10 @@ export type StockTransferLineFromDispatch = {
   caseSize: number;
   /** From dispatch / packing; missing → UI defaults to CASE. */
   quantityType?: GrnQuantityType | null;
+  /** Unit / cost price from stock transfer or dispatch. */
+  unitPrice: number;
+  /** Total GST % (CGST+SGST or snapshot gst_percent). */
+  gstPct: number;
   productSnapshot: Record<string, unknown>;
 };
 
@@ -341,6 +345,29 @@ export async function buildStockTransferLinesFromDispatch(
       asNumber(productSnapshot.conversion_rate) ||
       1;
 
+    const cgstPct =
+      asNumber(item.cgst_percentage) ||
+      asNumber(item.cgst_percent) ||
+      asNumber(pdProduct?.cgst_percentage) ||
+      asNumber(pdProduct?.cgst_percent);
+    const sgstPct =
+      asNumber(item.sgst_percentage) ||
+      asNumber(item.sgst_percent) ||
+      asNumber(pdProduct?.sgst_percentage) ||
+      asNumber(pdProduct?.sgst_percent);
+    const igstPct =
+      asNumber(item.igst_percentage) ||
+      asNumber(item.igst_percent) ||
+      asNumber(pdProduct?.igst_percentage) ||
+      asNumber(pdProduct?.igst_percent);
+    const gstPct =
+      asNumber(item.gst_percentage) ||
+      asNumber(item.gst_percent) ||
+      cgstPct + sgstPct + igstPct ||
+      asNumber(productSnapshot.gst_percent) ||
+      asNumber(pdProduct?.gst_percent) ||
+      0;
+
     return {
       sourceItemId:
         asString(item.source_item_id) ||
@@ -371,6 +398,14 @@ export async function buildStockTransferLinesFromDispatch(
           asString(productSnapshot.quantity_type) ||
           asString(productSnapshot.quantityType),
       ),
+      unitPrice:
+        asNumber(item.unit_price) ||
+        asNumber(item.cp_price) ||
+        asNumber(pdProduct?.unit_price) ||
+        asNumber(pdProduct?.cp_price) ||
+        asNumber(productSnapshot.cost_price) ||
+        0,
+      gstPct,
       productSnapshot: {
         ...productSnapshot,
         product_id: asString(item.product_id || product.product_id),

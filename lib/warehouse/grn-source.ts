@@ -51,5 +51,11 @@ export const ST_GRN_STATUS_BADGE: Record<
   "QC Completed": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed" },
 };
 
+/** Status filter options for Stock Transfer → Received GRN list (API-backed display labels). */
+export const ST_RECEIVED_STATUS_FILTER_OPTIONS: { label: string; value: StockTransferGrnDisplayStatus }[] = [
+  { label: "QC Pending", value: "QC Pending" },
+  { label: "QC Completed", value: "QC Completed" },
+];
+
 /** Default destination warehouse filter value for GRN listing tabs. */
 export const DEFAULT_DESTINATION_WAREHOUSE = "All";

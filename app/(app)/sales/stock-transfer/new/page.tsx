@@ -60,6 +60,7 @@ export default function AddStockTransferPage() {
         costPrice: Number(p.cost_price || 0),
         gstRate: String(p.gst_rate?.gstPercentage || 18),
         packSize: Number(p.unit_per_packing || 1),
+        sku: p.sku || "",
       }));
       setProducts(mapped);
     }

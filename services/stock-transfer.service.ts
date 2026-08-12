@@ -76,6 +76,10 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const costPrice = asNumber(raw.cp_price ?? prod.cost_price ?? raw.product?.cost_price ?? 0);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
+  const gstPct =
+    asNumber(raw.cgst_percent) + asNumber(raw.sgst_percent) ||
+    asNumber(prod.gst_percent) ||
+    0;
 
   let quantityType = "Piece";
   if (raw.quantity_type) {
@@ -102,12 +106,17 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     schemeDiscountAmount: 0,
     finalRate: costPrice,
     schemeApplied: "No" as const,
-    gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount),
+    gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount) + asNumber(raw.igst_amount),
     lineTotal: asNumber(raw.total_amount),
     batchNumber: asString(batch.batch_code || raw.batch_no),
     batchInventoryId: raw.inventory_batch_id || undefined,
     expiryDate: batch.expiry_date ? asDateOnly(batch.expiry_date) : undefined,
-    gstRate: prod.gst_percent ? `${prod.gst_percent}%` : "0%",
+    gstRate: (() => {
+      const rate = prod.gst_percent ?? raw.gst_percent ?? raw.cgst_percent;
+      if (rate === null || rate === undefined || rate === "") return "0%";
+      const text = String(rate).trim();
+      return text.endsWith("%") ? text : `${text}%`;
+    })(),
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,

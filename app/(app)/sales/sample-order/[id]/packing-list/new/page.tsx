@@ -339,15 +339,15 @@ export default function NewSampleOrderPackingListPage() {
               <PopoverTrigger asChild>
                 <button
                   type="button"
+                  disabled={true}
                   className={cn(
-                    "w-full h-10 px-3 text-sm text-left border rounded-lg bg-background flex items-center justify-between hover:bg-muted/30",
+                    "w-full h-10 px-3 text-sm text-left border rounded-lg bg-muted flex items-center justify-between cursor-not-allowed opacity-80",
                     !warehouseId && error === "Warehouse is required" ? "border-red-400" : "border-border",
                   )}
                 >
-                  <span className={warehouseId ? "text-foreground" : "text-muted-foreground"}>
+                  <span className={warehouseId ? "text-foreground font-medium" : "text-muted-foreground"}>
                     {warehouseId ? `${warehouseCode} — ${warehouseName}` : "Select warehouse…"}
                   </span>
-                  <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-[--radix-popover-trigger-width] p-1 max-h-[200px] overflow-y-auto">

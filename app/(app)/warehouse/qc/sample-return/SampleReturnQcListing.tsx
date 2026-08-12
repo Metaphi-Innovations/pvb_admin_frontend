@@ -1,17 +1,21 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, ClipboardCheck, Edit3 } from "lucide-react";
-import { getQcRecords } from "../mock-data";
 import { QcRecord, QcStatus } from "../types";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
+import {
+  buildQcCreateHref,
+  buildQcListHref,
+  getQcStatusTab,
+  type QcStatusTab,
+} from "../shared/qc-list-nav";
 
-type QcTab = "pending" | "completed";
 type QcSampleReturnRow = QcRecord;
 
 const QC_STATUS_CONFIG: Record<QcStatus, { bg: string; label: string }> = {
@@ -21,10 +25,9 @@ const QC_STATUS_CONFIG: Record<QcStatus, { bg: string; label: string }> = {
 
 export function SampleReturnQcListing() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
-  const [qcList, setQcList] = useState<QcRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<QcTab>("pending");
+  const activeTab = getQcStatusTab(searchParams);
 
   const [qcFilters, setQcFilters] = useState<FilterState>({});
   const [qcSort, setQcSort] = useState<SortState>({ key: "", direction: "none" });
@@ -35,13 +38,127 @@ export function SampleReturnQcListing() {
   const [apiTotal, setApiTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    setQcList(getQcRecords());
+  const [qcNoOptions, setQcNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [grnNoOptions, setGrnNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [poNoOptions, setPoNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [vendorNameOptions, setVendorNameOptions] = useState<{ label: string; value: string }[]>([]);
+  const [warehouseOptions, setWarehouseOptions] = useState<{ label: string; value: string }[]>([]);
+  const loadedFiltersRef = React.useRef<Set<string>>(new Set());
+
+  const listReturnTo = useMemo(
+    () =>
+      buildQcListHref(pathname, {
+        qcStatus: activeTab,
+        searchParams,
+      }),
+    [pathname, activeTab, searchParams],
+  );
+
+  const setActiveTab = useCallback(
+    (tab: QcStatusTab) => {
+      router.replace(
+        buildQcListHref(pathname, {
+          qcStatus: tab,
+          searchParams,
+        }),
+      );
+    },
+    [router, pathname, searchParams],
+  );
+
+  const handleFilterChange = useCallback((filters: FilterState) => {
+    setQcFilters(filters);
+    setQcPage(1);
   }, []);
+
+  const handleSortChange = useCallback((sort: SortState) => {
+    setQcSort(sort);
+    setQcPage(1);
+  }, []);
+
+  const handleOpenFilter = async (columnKey: string) => {
+    if (loadedFiltersRef.current.has(columnKey)) return;
+    loadedFiltersRef.current.add(columnKey);
+    try {
+      if (columnKey === "qcNo") {
+        const data = await QcService.getFilterDropdown("qcNumber", "SAMPLE_RETURN");
+        setQcNoOptions(data.map((item: any) => ({ label: item.qcNumber, value: item.qcNumber })));
+      } else if (columnKey === "grnNo") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown("grnNumber", "SAMPLE_RETURN", "QC_PENDING");
+          setGrnNoOptions(data.map((item: any) => ({ label: item.grnNumber, value: item.grnNumber })));
+        } else {
+          const data = await QcService.getFilterDropdown("grn__grnNumber", "SAMPLE_RETURN");
+          setGrnNoOptions(data.map((item: any) => ({ label: item.grn__grnNumber, value: item.grn__grnNumber })));
+        }
+      } else if (columnKey === "poNumber") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown("sample_return_no", "SAMPLE_RETURN", "QC_PENDING");
+          setPoNoOptions(
+            data.map((item: any) => ({ label: item.sample_return_no, value: item.sample_return_no })),
+          );
+        } else {
+          const data = await QcService.getFilterDropdown("poNumber", "SAMPLE_RETURN");
+          setPoNoOptions(data.map((item: any) => ({ label: item.poNumber, value: item.poNumber })));
+        }
+      } else if (columnKey === "vendorName") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown("customer_name", "SAMPLE_RETURN", "QC_PENDING");
+          setVendorNameOptions(
+            data.map((item: any) => ({ label: item.customer_name, value: item.customer_name })),
+          );
+        } else {
+          const data = await QcService.getFilterDropdown("vendorName", "SAMPLE_RETURN");
+          setVendorNameOptions(
+            data.map((item: any) => ({
+              label: item.supplierName || item.vendorName,
+              value: item.supplierName || item.vendorName,
+            })),
+          );
+        }
+      } else if (columnKey === "warehouse") {
+        if (activeTab === "pending") {
+          const data = await QcService.getGrnFilterDropdown(
+            "warehouse__warehouse_name",
+            "SAMPLE_RETURN",
+            "QC_PENDING",
+          );
+          setWarehouseOptions(
+            data.map((item: any) => ({
+              label: item.warehouse__warehouse_name,
+              value: item.warehouse__warehouse_name,
+            })),
+          );
+        } else {
+          const data = await QcService.getFilterDropdown(
+            "grn__warehouse__warehouse_name",
+            "SAMPLE_RETURN",
+          );
+          setWarehouseOptions(
+            data.map((item: any) => ({
+              label: item.grn__warehouse__warehouse_name,
+              value: item.grn__warehouse__warehouse_name,
+            })),
+          );
+        }
+      }
+    } catch (err) {
+      console.error(`Error loading filter options for ${columnKey}:`, err);
+      loadedFiltersRef.current.delete(columnKey);
+    }
+  };
 
   useEffect(() => {
     setQcPage(1);
     setApiQcList([]);
+    setQcFilters({});
+    setQcSort({ key: "", direction: "none" });
+    loadedFiltersRef.current.clear();
+    setQcNoOptions([]);
+    setGrnNoOptions([]);
+    setPoNoOptions([]);
+    setVendorNameOptions([]);
+    setWarehouseOptions([]);
   }, [activeTab]);
 
   useEffect(() => {
@@ -52,7 +169,6 @@ export function SampleReturnQcListing() {
         if (qcSort.key && qcSort.direction !== "none") {
           let baseKey = qcSort.key;
           if (activeTab === "pending") {
-            // Pending hits GRN list — fields are on Grn, not nested under grn__
             const mapping: Record<string, string> = {
               grnNo: "grnNumber",
               poNumber: "sample_return_no",
@@ -65,9 +181,11 @@ export function SampleReturnQcListing() {
             const mapping: Record<string, string> = {
               qcNo: "qcNumber",
               grnNo: "grn__grnNumber",
+              poNumber: "poNumber",
               inspectionDate: "qcDate",
-              vendorName: "grn__supplier__supplier_name",
+              vendorName: "vendorName",
               warehouse: "grn__warehouse__warehouse_name",
+              totalReceivedQty: "receivedQty",
             };
             baseKey = mapping[qcSort.key] || qcSort.key;
           }
@@ -76,16 +194,6 @@ export function SampleReturnQcListing() {
 
         const filters: any = {};
         filters.source_type = "SAMPLE_RETURN";
-        if (destinationWarehouse && destinationWarehouse !== "All") {
-          if (activeTab === "pending") {
-            filters.warehouse = filters.warehouse || {};
-            filters.warehouse.warehouse_name = destinationWarehouse;
-          } else {
-            filters.grn = filters.grn || {};
-            filters.grn.warehouse = filters.grn.warehouse || {};
-            filters.grn.warehouse.warehouse_name = destinationWarehouse;
-          }
-        }
         if (qcFilters.qcNo) {
           filters.qcNumber = qcFilters.qcNo;
         }
@@ -97,14 +205,28 @@ export function SampleReturnQcListing() {
             filters.grn.grnNumber = qcFilters.grnNo;
           }
         }
+        if (qcFilters.poNumber) {
+          if (activeTab === "pending") {
+            filters.sample_return_no = qcFilters.poNumber;
+          } else {
+            filters.poNumber = qcFilters.poNumber;
+          }
+        }
         if (qcFilters.vendorName) {
           if (activeTab === "pending") {
-            filters.supplier = filters.supplier || {};
-            filters.supplier.supplier_name = qcFilters.vendorName;
+            filters.customer_name = qcFilters.vendorName;
+          } else {
+            filters.vendorName = qcFilters.vendorName;
+          }
+        }
+        if (qcFilters.warehouse) {
+          if (activeTab === "pending") {
+            filters.warehouse = filters.warehouse || {};
+            filters.warehouse.warehouse_name = qcFilters.warehouse;
           } else {
             filters.grn = filters.grn || {};
-            filters.grn.supplier = filters.grn.supplier || {};
-            filters.grn.supplier.supplier_name = qcFilters.vendorName;
+            filters.grn.warehouse = filters.grn.warehouse || {};
+            filters.grn.warehouse.warehouse_name = qcFilters.warehouse;
           }
         }
         if (qcFilters.inspectionDate) {
@@ -138,69 +260,7 @@ export function SampleReturnQcListing() {
     };
 
     fetchQcs();
-  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort, destinationWarehouse]);
-
-  const sampleReturnQcs = useMemo(
-    () => qcList.filter((q) => getQcSourceType(q) === "sample_return"),
-    [qcList],
-  );
-
-  const processedSampleReturnQcs = useMemo(() => {
-    let result = [...sampleReturnQcs];
-
-    result = result.filter((item) => item.status === activeTab);
-
-    if (destinationWarehouse && destinationWarehouse !== "All") {
-      result = result.filter(
-        (item) => item.warehouse.toLowerCase() === destinationWarehouse.toLowerCase()
-      );
-    }
-
-    Object.keys(qcFilters).forEach((key) => {
-      const val = qcFilters[key];
-      if (!val) return;
-
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(
-          (item) =>
-            item.qcNo.toLowerCase().includes(q) ||
-            item.grnNo.toLowerCase().includes(q) ||
-            (item.poNumber ?? "").toLowerCase().includes(q) ||
-            item.vendorName.toLowerCase().includes(q) ||
-            item.warehouse.toLowerCase().includes(q),
-        );
-      } else if (key === "qcNo" || key === "grnNo" || key === "vendorName") {
-        const q = (val as string).toLowerCase();
-        result = result.filter((item) => String(item[key as keyof QcRecord]).toLowerCase().includes(q));
-      } else if (key === "status") {
-        const selected = val as string[];
-        result = result.filter((item) => selected.includes(String(item.status)));
-      } else if (key === "inspectionDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) {
-          result = result.filter((item) => item.inspectionDate && item.inspectionDate >= range.fromDate);
-        }
-        if (range.toDate) {
-          result = result.filter((item) => item.inspectionDate && item.inspectionDate <= range.toDate);
-        }
-      }
-    });
-
-    if (qcSort.key && qcSort.direction !== "none") {
-      result.sort((a, b) => {
-        const valA = String(a[qcSort.key as keyof QcRecord] || "");
-        const valB = String(b[qcSort.key as keyof QcRecord] || "");
-        return qcSort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      });
-    }
-    return result;
-  }, [sampleReturnQcs, qcFilters, qcSort, activeTab, destinationWarehouse]);
-
-  const paginatedSampleReturn = useMemo(() => {
-    const start = (qcPage - 1) * qcPageSize;
-    return processedSampleReturnQcs.slice(start, start + qcPageSize);
-  }, [processedSampleReturnQcs, qcPage, qcPageSize]);
+  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort]);
 
   const displayedData = apiQcList;
   const displayedTotal = apiTotal;
@@ -211,10 +271,11 @@ export function SampleReturnQcListing() {
       header: "QC No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: qcNoOptions,
       width: "130px",
       render: (_val, row) => (
-        <Link href={`/warehouse/qc/view/${row.id}`} className="block group/name">
+        <Link href={`/warehouse/qc/view/${row.id}?returnTo=${encodeURIComponent(listReturnTo)}`} className="block group/name">
           <span className="font-mono text-xs font-semibold text-brand-700 group-hover/name:text-brand-800">
             {row.qcNo}
           </span>
@@ -226,7 +287,8 @@ export function SampleReturnQcListing() {
       header: "GRN No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: grnNoOptions,
       width: "130px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.grnNo}</span>,
     },
@@ -235,7 +297,8 @@ export function SampleReturnQcListing() {
       header: "Sample Return No.",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: poNoOptions,
       width: "140px",
       render: (_val, row) => <span className="font-mono text-xs text-foreground">{row.poNumber || "—"}</span>,
     },
@@ -244,7 +307,8 @@ export function SampleReturnQcListing() {
       header: "Customer",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: vendorNameOptions,
       width: "150px",
       render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
     },
@@ -252,6 +316,9 @@ export function SampleReturnQcListing() {
       key: "warehouse",
       header: "Warehouse",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: warehouseOptions,
       width: "140px",
       render: (_val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
     },
@@ -281,7 +348,7 @@ export function SampleReturnQcListing() {
     {
       key: "status",
       header: "Status",
-      sortable: true,
+      sortable: false,
       width: "130px",
       render: (val: QcStatus) => {
         const cfg = QC_STATUS_CONFIG[val] ?? {
@@ -302,28 +369,31 @@ export function SampleReturnQcListing() {
       return sampleReturnColumns.filter((col) => col.key !== "qcNo" && col.key !== "inspectionDate");
     }
     return sampleReturnColumns;
-  }, [activeTab]);
+  }, [activeTab, qcNoOptions, grnNoOptions, poNoOptions, vendorNameOptions, warehouseOptions, listReturnTo]);
 
   const sampleReturnActions: ActionItemConfig<QcSampleReturnRow>[] = [
     {
       label: "View Details",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/warehouse/qc/view/${row.id}`),
+      onClick: (row) =>
+        router.push(`/warehouse/qc/view/${row.id}?returnTo=${encodeURIComponent(listReturnTo)}`),
       hide: (row) => row.status === "pending",
     },
     {
       label: "Perform QC",
       action: "inspect",
       icon: ClipboardCheck,
-      onClick: (row) => router.push(`/warehouse/qc/create?grnId=${row.id}`),
+      onClick: (row) =>
+        router.push(buildQcCreateHref({ grnId: row.id, returnTo: listReturnTo })),
       hide: (row) => row.status !== "pending",
     },
     {
       label: "Edit QC",
       action: "edit",
       icon: Edit3,
-      onClick: (row) => router.push(`/warehouse/qc/create?qcId=${row.id}&edit=true`),
+      onClick: (row) =>
+        router.push(buildQcCreateHref({ qcId: row.id, edit: true, returnTo: listReturnTo })),
       hide: (row) => row.status === "pending",
       disabled: (row) => !row.isEditable,
     },
@@ -331,13 +401,12 @@ export function SampleReturnQcListing() {
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs for QC Status */}
       <div className="flex flex-wrap gap-2">
         {[{ id: "pending", label: "Pending QC" }, { id: "completed", label: "Completed" }].map((tab) => (
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id as QcTab)}
+            onClick={() => setActiveTab(tab.id as QcStatusTab)}
             className={`h-8 px-3 text-xs rounded-lg border transition-colors font-medium inline-flex items-center gap-1.5 ${
               activeTab === tab.id
                 ? "bg-brand-600 text-white border-brand-600"
@@ -357,12 +426,17 @@ export function SampleReturnQcListing() {
         page={qcPage}
         pageSize={qcPageSize}
         onPageChange={setQcPage}
-        onPageSizeChange={setQcPageSize}
+        onPageSizeChange={(size) => {
+          setQcPageSize(size);
+          setQcPage(1);
+        }}
         currentFilters={qcFilters}
-        onFilterChange={setQcFilters}
+        onFilterChange={handleFilterChange}
         currentSort={qcSort}
-        onSortChange={setQcSort}
+        onSortChange={handleSortChange}
+        onOpenFilter={handleOpenFilter}
         searchPlaceholder="Search QC or GRN..."
+        loading={isLoading}
       />
     </div>
   );
