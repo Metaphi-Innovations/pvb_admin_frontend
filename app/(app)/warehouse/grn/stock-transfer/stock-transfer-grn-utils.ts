@@ -268,14 +268,10 @@ export const PENDING_ST_FILTER_FIELD_MAP: Record<string, string> = {
 export async function fetchDispatchFilterOptions(
   fieldName: string,
 ): Promise<{ label: string; value: string }[]> {
-  const res = await getDispatchFilterDropdown(fieldName, ST_DISPATCH_SOURCE_TYPE, {
+  return getDispatchFilterDropdown(fieldName, ST_DISPATCH_SOURCE_TYPE, {
     status: ST_DISPATCH_ELIGIBLE_STATUS,
     excludeExistingStGrn: true,
   });
-  return (res || []).map((x: Record<string, unknown>) => {
-    const value = asString(x[fieldName] || x.status || Object.values(x)[0]);
-    return { label: value, value };
-  }).filter((o: { label: string; value: string }) => Boolean(o.value));
 }
 
 export type StockTransferLineFromDispatch = {

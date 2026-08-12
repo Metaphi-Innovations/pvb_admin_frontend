@@ -7,10 +7,11 @@ import {
   Eye, Pencil, RotateCcw, FileText, CheckCircle2,
   Download, Printer, X
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+// TODO: re-enable with delivery confirmation fields
+// import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -22,8 +23,22 @@ import {
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { DispatchRecord, DeliveryDetails } from "./types";
-import { getDispatches, revertDispatch, getDispatchFilterDropdown, updateDispatchStatus, getDispatchById, allocateSalesInvoiceNumber, allocateStockTransferInvoiceNumber } from "./services";
+import { DispatchRecord } from "./types";
+// TODO: re-enable with delivery confirmation fields
+// import { DispatchRecord, DeliveryDetails } from "./types";
+import {
+  getDispatches,
+  revertDispatch,
+  getDispatchFilterDropdown,
+  updateDispatchStatus,
+  getDispatchById,
+  allocateSalesInvoiceNumber,
+  allocateStockTransferInvoiceNumber,
+  buildDispatchApiFilters,
+  buildDispatchOrdering,
+  resolveDispatchApiSourceType,
+  type DispatchSourceTab,
+} from "./services";
 import {
   openDeliveryChallanPreviewForDispatch,
 } from "./dc-pdf/deliveryChallanPdf";
@@ -55,30 +70,121 @@ import {
 import { getSampleOrderByDocumentNo } from "@/app/(app)/sales/sample-order/packing-sync";
 import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
 
-interface DispatchListingProps {
-  selectedWarehouse: string;
+function asText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
 }
 
-export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
+/** Stock transfer party column = target warehouse only (not "Source - Target"). */
+function resolveDispatchPartyLabel(
+  row: DispatchRecord,
+  subTab?: DispatchSourceTab,
+): string {
+  const sourceType = asText(row.source_type).toLowerCase();
+  const isStockTransfer =
+    subTab === "stock_transfer" ||
+    sourceType === "stock_transfer" ||
+    resolveWarehouseOrderType({
+      sourceDocumentType: row.sourceDocumentType,
+      source_type: row.source_type,
+      salesOrderNo: row.salesOrderNumber,
+      source_document_no: row.source_document_no,
+    }) === "stock_transfer";
+
+  if (isStockTransfer) {
+    const snap =
+      row.customer_snapshot && typeof row.customer_snapshot === "object"
+        ? (row.customer_snapshot as Record<string, unknown>)
+        : {};
+    const st =
+      row.stock_transfer && typeof row.stock_transfer === "object"
+        ? (row.stock_transfer as Record<string, unknown>)
+        : {};
+    return (
+      asText(row.to_warehouse) ||
+      asText(row.target_warehouse) ||
+      asText(row.targetWarehouse) ||
+      asText(st.to_warehouse) ||
+      asText(snap.to_warehouse) ||
+      asText(snap.target_warehouse) ||
+      asText(row.customer_name) ||
+      asText((row.customer as any)?.customer_name) ||
+      asText(row.customer) ||
+      ""
+    );
+  }
+
+  return (
+    asText(row.customer_name) ||
+    asText((row.customer as any)?.customer_name) ||
+    asText(row.customer) ||
+    ""
+  );
+}
+
+function resolveDispatchSourceWarehouseLabel(row: DispatchRecord): string {
+  const sourceType = asText(row.source_type).toLowerCase();
+  const isStockTransfer = sourceType === "stock_transfer";
+  if (isStockTransfer) {
+    const snap =
+      row.customer_snapshot && typeof row.customer_snapshot === "object"
+        ? (row.customer_snapshot as Record<string, unknown>)
+        : {};
+    const st =
+      row.stock_transfer && typeof row.stock_transfer === "object"
+        ? (row.stock_transfer as Record<string, unknown>)
+        : {};
+    return (
+      asText(row.from_warehouse) ||
+      asText(row.source_warehouse) ||
+      asText(st.from_warehouse) ||
+      asText(snap.from_warehouse) ||
+      asText(snap.source_warehouse) ||
+      asText(row.source_warehouse_name) ||
+      asText(row.sourceWarehouse) ||
+      asText((row.warehouse as any)?.warehouse_name) ||
+      asText(row.warehouse) ||
+      ""
+    );
+  }
+
+  return (
+    asText(row.source_warehouse_name) ||
+    asText(row.sourceWarehouse) ||
+    asText((row.warehouse as any)?.warehouse_name) ||
+    asText(row.warehouse) ||
+    ""
+  );
+}
+
+interface DispatchListingProps {
+  selectedWarehouse?: string;
+}
+
+export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
   // Table state for Dispatches
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<"sales_order" | "sample" | "stock_transfer" | "purchase_return">("sales_order");
+  const [subTab, setSubTab] = useState<DispatchSourceTab>(() => {
+    const tab = searchParams?.get("tab");
+    if (tab === "sample" || tab === "stock_transfer" || tab === "purchase_return" || tab === "sales_order") {
+      return tab;
+    }
+    return "sales_order";
+  });
 
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
   const [closeTarget, setCloseTarget] = useState<any>(null);
-  const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
-
-  useEffect(() => {
-    setPage(1);
-  }, [subTab]);
+  // TODO: re-enable when delivery confirmation fields are stored
+  // const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
 
   const [data, setData] = useState<DispatchRecord[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -95,14 +201,32 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
 
   const loadedFiltersRef = useRef<Set<string>>(new Set());
 
+  // Reset page / filter caches when tab or warehouse changes
+  useEffect(() => {
+    setPage(1);
+    setFilters({});
+    setSort({ key: "", direction: "none" });
+    setData([]);
+    setTotalRecords(0);
+    setLoading(true);
+    loadedFiltersRef.current.clear();
+    setDispatchNoOptions([]);
+    setSourceDocOptions([]);
+    setCustomerOptions([]);
+    setSourceWarehouseOptions([]);
+    setVehicleOptions([]);
+    setDriverOptions([]);
+    setStatusOptions([]);
+  }, [subTab, selectedWarehouse]);
+
   const FILTER_FIELD_MAP: Record<string, { field: string; setter: (opts: { label: string; value: string }[]) => void }> = useMemo(() => ({
-    "dispatch_number": { field: "dispatch_number", setter: setDispatchNoOptions },
-    "source_document_no": { field: "source_document_no", setter: setSourceDocOptions },
-    "customer.customer_name": { field: "customer__customer_name", setter: setCustomerOptions },
-    "source_warehouse_name": { field: "warehouse__warehouse_name", setter: setSourceWarehouseOptions },
-    "vehicleNumber": { field: "vehicle_number", setter: setVehicleOptions },
-    "driverName": { field: "transporter", setter: setDriverOptions },
-    "status": { field: "status", setter: setStatusOptions },
+    dispatch_number: { field: "dispatch_number", setter: setDispatchNoOptions },
+    source_document_no: { field: "source_document_no", setter: setSourceDocOptions },
+    "customer.customer_name": { field: "customer_name", setter: setCustomerOptions },
+    source_warehouse_name: { field: "warehouse__warehouse_name", setter: setSourceWarehouseOptions },
+    vehicleNumber: { field: "vehicle_number", setter: setVehicleOptions },
+    driverName: { field: "transporter", setter: setDriverOptions },
+    status: { field: "status", setter: setStatusOptions },
   }), []);
 
   const handleOpenFilter = useCallback(async (columnKey: string) => {
@@ -111,65 +235,47 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
     if (!mapping) return;
     loadedFiltersRef.current.add(columnKey);
     try {
-      let apiSourceType;
-      if (subTab === "sales_order") apiSourceType = "normal_sales";
-      else if (subTab === "sample") apiSourceType = "sample";
-      else if (subTab === "stock_transfer") apiSourceType = "stock_transfer";
-      else if (subTab === "purchase_return") apiSourceType = "purchase_return";
-
-      const res = await getDispatchFilterDropdown(mapping.field, apiSourceType);
-      console.log(`Filter dropdown response for ${columnKey} (${mapping.field}):`, res);
-      mapping.setter(res.map((x: any) => ({ label: x[mapping.field] || x.status || x.customer__customer_name, value: x[mapping.field] || x.status || x.customer__customer_name })));
+      const apiSourceType = resolveDispatchApiSourceType(subTab);
+      const fieldName =
+        columnKey === "customer.customer_name" && apiSourceType === "stock_transfer"
+          ? "to_warehouse"
+          : mapping.field;
+      const options = await getDispatchFilterDropdown(fieldName, apiSourceType, {
+        warehouseId: selectedWarehouse === "All" ? undefined : selectedWarehouse,
+      });
+      mapping.setter(options);
     } catch (err) {
       console.error(`Failed to fetch filter options for ${columnKey}`, err);
       loadedFiltersRef.current.delete(columnKey);
     }
-  }, [FILTER_FIELD_MAP, subTab]);
+  }, [FILTER_FIELD_MAP, subTab, selectedWarehouse]);
+
+  const handleFilterChange = useCallback((next: FilterState) => {
+    setFilters(next);
+    setPage(1);
+  }, []);
+
+  const handleSortChange = useCallback((next: SortState) => {
+    setSort(next);
+    setPage(1);
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const apiSourceType = resolveDispatchApiSourceType(subTab);
       const payload: any = {
         page,
         page_size: pageSize,
+        filters: buildDispatchApiFilters(filters, {
+          selectedWarehouse,
+          sourceType: apiSourceType,
+        }),
       };
-      
-      if (sort.key && sort.direction !== "none") {
-        payload.ordering = sort.direction === "desc" ? `-${sort.key}` : sort.key;
-      }
-      
-      if (filters.search) {
-        payload.search = filters.search;
-      }
-      
-      const queryFilters: any = {};
-      if (selectedWarehouse !== "All") {
-        queryFilters.warehouse_id = selectedWarehouse;
-      }
-      
-      if (subTab === "sales_order") queryFilters.source_type = "normal_sales";
-      else if (subTab === "sample") queryFilters.source_type = "sample";
-      else if (subTab === "stock_transfer") queryFilters.source_type = "stock_transfer";
-      else if (subTab === "purchase_return") queryFilters.source_type = "purchase_return";
 
-      Object.entries(filters).forEach(([k, v]) => {
-        if (k === "search") return;
-        if (v !== undefined && v !== "") {
-          if (typeof v === "object" && v !== null && ("fromDate" in v || "toDate" in v)) {
-            queryFilters.range = queryFilters.range || {};
-            queryFilters.range[k] = {
-              from: (v as any).fromDate,
-              to: (v as any).toDate,
-            };
-          } else {
-            queryFilters[k] = v;
-          }
-        }
-      });
-      
-      if (Object.keys(queryFilters).length > 0) {
-        payload.filters = queryFilters;
-      }
+      const ordering = buildDispatchOrdering(sort.key, sort.direction);
+      if (ordering) payload.ordering = ordering;
+      if (filters.search) payload.search = filters.search;
 
       const res = await getDispatches(payload);
       setData(res?.data || []);
@@ -208,15 +314,24 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         filterable: true,
         filterType: "dropdown",
         filterOptions: dispatchNoOptions,
-        width: "135px",
-        render: (_: unknown, row: DispatchRecord) => (
-          <Link
-            href={`/warehouse/dispatch/view/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.dispatch_no || row.dispatchNumber || row.dispatch_number}
-          </Link>
-        ),
+        width: "150px",
+        truncate: true,
+        tooltipText: (_: unknown, row: DispatchRecord) =>
+          String(row.dispatch_no || row.dispatchNumber || row.dispatch_number || "").trim() || null,
+        render: (_: unknown, row: DispatchRecord) => {
+          const value = String(
+            row.dispatch_no || row.dispatchNumber || row.dispatch_number || "",
+          ).trim();
+          return (
+            <Link
+              href={`/warehouse/dispatch/view/${row.id}`}
+              className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+              title={value || undefined}
+            >
+              {value || "—"}
+            </Link>
+          );
+        },
       },
       {
         key: "source_document_no",
@@ -225,12 +340,30 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         filterable: true,
         filterType: "dropdown",
         filterOptions: sourceDocOptions,
-        width: "140px",
-        render: (_: unknown, row: DispatchRecord) => (
-          <span className="font-mono text-xs font-semibold">
-            {row.source_document_no || row.salesOrderNumber || (row.packing_done as any)?.packing_done_no || row.source_id}
-          </span>
-        ),
+        width: "170px",
+        truncate: true,
+        tooltipText: (_: unknown, row: DispatchRecord) => {
+          const value = String(
+            row.source_document_no ||
+              row.salesOrderNumber ||
+              (row.packing_done as any)?.packing_done_no ||
+              "",
+          ).trim();
+          return value || null;
+        },
+        render: (_: unknown, row: DispatchRecord) => {
+          const value = String(
+            row.source_document_no ||
+              row.salesOrderNumber ||
+              (row.packing_done as any)?.packing_done_no ||
+              "",
+          ).trim();
+          return (
+            <span className="font-mono text-xs font-semibold text-foreground" title={value || undefined}>
+              {value || "—"}
+            </span>
+          );
+        },
       },
       {
         key: "customer.customer_name",
@@ -240,6 +373,11 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         filterType: "dropdown",
         filterOptions: customerOptions,
         width: "160px",
+        truncate: true,
+        tooltipText: (_: unknown, row: DispatchRecord) => {
+          const label = resolveDispatchPartyLabel(row, subTab);
+          return label || null;
+        },
         render: (_: unknown, row: DispatchRecord) => {
           const type = resolveWarehouseOrderType({
             sourceDocumentType: row.sourceDocumentType,
@@ -247,10 +385,12 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          const label = row.customer_name || (row.customer as any)?.customer_name || row.customer || "Unknown";
+          const label = resolveDispatchPartyLabel(row, subTab) || "Unknown";
           return (
             <div className="min-w-0">
-              <span className="text-xs font-bold text-foreground block truncate">{label}</span>
+              <span className="text-xs font-bold text-foreground block truncate" title={String(label)}>
+                {label}
+              </span>
               {type === "purchase_return" && row.supplierCode && (
                 <span className="text-[11px] text-muted-foreground font-mono">{row.supplierCode}</span>
               )}
@@ -266,17 +406,27 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         filterType: "dropdown",
         filterOptions: sourceWarehouseOptions,
         width: "150px",
-        render: (_: unknown, row: DispatchRecord) => (
-          <span className="text-xs text-foreground font-medium">
-            {row.source_warehouse_name || row.sourceWarehouse || (row.warehouse as any)?.warehouse_name || row.warehouse}
-          </span>
-        ),
+        truncate: true,
+        tooltipText: (_: unknown, row: DispatchRecord) => {
+          const value = resolveDispatchSourceWarehouseLabel(row);
+          return value || null;
+        },
+        render: (_: unknown, row: DispatchRecord) => {
+          const value = resolveDispatchSourceWarehouseLabel(row);
+          return (
+            <span className="text-xs text-foreground font-medium" title={value || undefined}>
+              {value || "—"}
+            </span>
+          );
+        },
       },
       {
         key: "orderAmount",
         header: "Amount",
+        sortable: true,
         align: "right",
-        width: "90px",
+        width: "130px",
+        truncate: false,
         render: (_: unknown, row: DispatchRecord) => {
           const type = resolveWarehouseOrderType({
             sourceDocumentType: row.sourceDocumentType,
@@ -284,14 +434,17 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
             salesOrderNo: row.salesOrderNumber,
             source_document_no: row.source_document_no,
           });
-          if ((type as any) === "sample_order" || (type as any) === "sample") {
-            return (
-              <span className="font-mono text-xs tabular-nums">
-                {formatWarehouseOrderAmount(type, 0)}
-              </span>
-            );
-          }
-          return <span className="text-xs text-muted-foreground">—</span>;
+          const amount =
+            row.orderAmount != null
+              ? Number(row.orderAmount)
+              : row.order_amount != null
+                ? Number(row.order_amount)
+                : undefined;
+          return (
+            <span className="font-mono text-xs tabular-nums">
+              {formatWarehouseOrderAmount(type, amount)}
+            </span>
+          );
         },
       },
       {
@@ -363,7 +516,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         },
       },
     ] as ColumnConfig<DispatchRecord>[];
-  }, [partyHeader, orderNoHeader, dispatchNoOptions, sourceDocOptions, customerOptions, sourceWarehouseOptions, vehicleOptions, driverOptions, statusOptions]);
+  }, [subTab, partyHeader, orderNoHeader, dispatchNoOptions, sourceDocOptions, customerOptions, sourceWarehouseOptions, vehicleOptions, driverOptions, statusOptions]);
 
   const columns = salesOrderColumns;
 
@@ -550,7 +703,8 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
       icon: CheckCircle2,
       onClick: (row) => {
         setDeliveryTarget(row);
-        setDeliveryForm({ deliveryDate: new Date().toISOString().split("T")[0], receiverName: "", remarks: "" });
+        // TODO: re-enable when delivery confirmation fields are stored
+        // setDeliveryForm({ deliveryDate: new Date().toISOString().split("T")[0], receiverName: "", remarks: "" });
       },
       hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
@@ -602,7 +756,16 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
 
   return (
     <div className="space-y-4">
-      <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
+      <Tabs
+        value={subTab}
+        onValueChange={(val: any) => {
+          setSubTab(val);
+          const params = new URLSearchParams(searchParams?.toString() || "");
+          params.set("tab", val);
+          router.replace(`?${params.toString()}`, { scroll: false });
+        }}
+        className="w-full"
+      >
         <TabsList>
           <TabsTrigger value="sales_order" className="text-xs">Normal Sales</TabsTrigger>
           <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
@@ -620,16 +783,20 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={setFilters}
+        onSortChange={handleSortChange}
+        onFilterChange={handleFilterChange}
         actions={actions}
         onAdd={() => {
-          const query = subTab === "purchase_return" ? "?sourceType=purchase_return" : "";
-          router.push(`/warehouse/dispatch/create${query}`);
+          const sourceType = resolveDispatchApiSourceType(subTab);
+          const params = new URLSearchParams();
+          params.set("sourceType", sourceType);
+          router.push(`/warehouse/dispatch/create?${params.toString()}`);
         }}
         emptyMessage="dispatch records"
         searchPlaceholder="Search dispatches..."
         onOpenFilter={handleOpenFilter}
+        currentFilters={filters}
+        currentSort={sort}
       />
 
       {/* ── REVERT CONFIRMATION DIALOG ── */}
@@ -670,6 +837,12 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               Mark as Delivered
             </DialogTitle>
           </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to mark{" "}
+            <span className="font-semibold text-foreground">{deliveryTarget?.dispatchNumber}</span>{" "}
+            as delivered?
+          </p>
+          {/* TODO: re-enable when delivery confirmation details are stored
           <p className="text-xs text-muted-foreground">
             Mark{" "}
             <span className="font-semibold text-foreground">{deliveryTarget?.dispatchNumber}</span>{" "}
@@ -704,6 +877,7 @@ export function DispatchListing({ selectedWarehouse }: DispatchListingProps) {
               />
             </div>
           </div>
+          */}
           <DialogFooter className="flex gap-2 justify-end pt-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeliveryTarget(null)}>
               Cancel

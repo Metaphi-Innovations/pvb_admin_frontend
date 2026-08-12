@@ -22,6 +22,10 @@ function getLineKey(p: SalesOrderProduct): string {
   return p.lineId || p.sku;
 }
 
+function isPackableLine(p: SalesOrderProduct): boolean {
+  return Number(p.pendingBaseQty) > 0;
+}
+
 export function PackingProductLinesSection({
   order,
   selectedLines,
@@ -31,23 +35,32 @@ export function PackingProductLinesSection({
   onToggleAll,
   onQtyChange,
 }: PackingProductLinesSectionProps) {
-  
+  const packableProducts = useMemo(
+    () => order.products.filter(isPackableLine),
+    [order.products],
+  );
+
   const allSelected =
-    order.products.length > 0 &&
-    order.products.filter((p) => selectedLines[getLineKey(p)]).length === order.products.length;
+    packableProducts.length > 0 &&
+    packableProducts.every((p) => selectedLines[getLineKey(p)]);
 
   const orderedQtyLabel = getPackingQtyLabel(order.sourceDocumentType);
   const isPurchaseReturn = isPurchaseReturnDoc(order);
 
-  // Group products by SKU
+  // Group products by SKU; keep full group for Ordered totals, show only pending lines
   const groupedProducts = useMemo(() => {
     const groups: Record<string, SalesOrderProduct[]> = {};
     order.products.forEach((p) => {
-      const groupKey = `${p.sku}-${p.quantity_type || 'Case'}`;
+      const groupKey = `${p.sku}-${p.quantity_type || "Case"}`;
       if (!groups[groupKey]) groups[groupKey] = [];
       groups[groupKey].push(p);
     });
-    return Object.values(groups);
+    return Object.values(groups)
+      .map((all) => ({
+        all,
+        packable: all.filter(isPackableLine),
+      }))
+      .filter((group) => group.packable.length > 0);
   }, [order.products]);
 
   return (
@@ -59,37 +72,47 @@ export function PackingProductLinesSection({
         </h2>
       </div>
 
-      <div className="flex items-center gap-2 px-1 pb-1">
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded accent-brand-600"
-          checked={allSelected}
-          onChange={(e) => onToggleAll(e.target.checked)}
-          aria-label="Select all products"
-        />
-        <span className="text-xs font-semibold text-muted-foreground">Select All</span>
-      </div>
+      {packableProducts.length === 0 ? (
+        <p className="text-xs text-muted-foreground px-1 py-4">
+          No pending batch lines left to pack.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 px-1 pb-1">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded accent-brand-600"
+              checked={allSelected}
+              onChange={(e) => onToggleAll(e.target.checked)}
+              aria-label="Select all products"
+            />
+            <span className="text-xs font-semibold text-muted-foreground">Select All</span>
+          </div>
 
-      <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-border/60">
-        {groupedProducts.map((group) => (
-          <PackingProductGroup
-            key={`${group[0].sku}-${group[0].quantity_type || 'Case'}`}
-            products={group}
-            orderedQtyLabel={orderedQtyLabel}
-            selectedLines={selectedLines}
-            packingQty={packingQty}
-            validationErrors={validationErrors}
-            onToggleProduct={onToggleProduct}
-            onQtyChange={onQtyChange}
-          />
-        ))}
-      </div>
+          <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-border/60">
+            {groupedProducts.map((group) => (
+              <PackingProductGroup
+                key={`${group.all[0].sku}-${group.all[0].quantity_type || "Case"}`}
+                allProducts={group.all}
+                packableProducts={group.packable}
+                orderedQtyLabel={orderedQtyLabel}
+                selectedLines={selectedLines}
+                packingQty={packingQty}
+                validationErrors={validationErrors}
+                onToggleProduct={onToggleProduct}
+                onQtyChange={onQtyChange}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 interface PackingProductGroupProps {
-  products: SalesOrderProduct[];
+  allProducts: SalesOrderProduct[];
+  packableProducts: SalesOrderProduct[];
   orderedQtyLabel: string;
   selectedLines: Record<string, boolean>;
   packingQty: Record<string, number>;
@@ -99,7 +122,8 @@ interface PackingProductGroupProps {
 }
 
 function PackingProductGroup({
-  products,
+  allProducts,
+  packableProducts,
   orderedQtyLabel,
   selectedLines,
   packingQty,
@@ -109,23 +133,23 @@ function PackingProductGroup({
 }: PackingProductGroupProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  const product = products[0];
+  const product = allProducts[0];
   const quantityType = product.quantity_type?.toLowerCase() || "case";
   const isPiece = quantityType === "piece" || quantityType === "pieces";
-  
+
   const config = product.productId ? getProductPackingConfig(Number(product.productId)) : undefined;
-  const unitsPerCase = isPiece ? 1 : (product.packSize || 1);
-  const baseUnit = config?.baseUnit || "Units";
+  const unitsPerCase = isPiece ? 1 : product.packSize || 1;
   const displayLabel = isPiece ? "Pieces" : "Cases";
 
-  const totalOrderedQty = products.reduce((sum, p) => sum + (p.orderBaseQty || 0), 0);
-  const totalPendingQty = products.reduce((sum, p) => sum + (p.pendingBaseQty || 0), 0);
+  // Ordered from full allocation; Pending only from still-packable lines
+  const totalOrderedQty = allProducts.reduce((sum, p) => sum + (p.orderBaseQty || 0), 0);
+  const totalPendingQty = packableProducts.reduce((sum, p) => sum + (p.pendingBaseQty || 0), 0);
 
-  const allGroupSelected = products.every((p) => selectedLines[getLineKey(p)]);
-  const someGroupSelected = products.some((p) => selectedLines[getLineKey(p)]);
+  const allGroupSelected = packableProducts.every((p) => selectedLines[getLineKey(p)]);
+  const someGroupSelected = packableProducts.some((p) => selectedLines[getLineKey(p)]);
 
   const handleGroupToggle = (checked: boolean) => {
-    products.forEach((p) => {
+    packableProducts.forEach((p) => {
       onToggleProduct(getLineKey(p), checked);
     });
   };
@@ -160,16 +184,22 @@ function PackingProductGroup({
 
         <div className="flex items-center gap-2 text-xs">
           <div className="text-slate-500">
-            Ordered: <span className="font-bold text-slate-700">{isPiece ? totalOrderedQty : Math.floor(totalOrderedQty / unitsPerCase)} {displayLabel}</span>
+            {orderedQtyLabel}:{" "}
+            <span className="font-bold text-slate-700">
+              {isPiece ? totalOrderedQty : Math.floor(totalOrderedQty / unitsPerCase)} {displayLabel}
+            </span>
           </div>
           <div className="h-3.5 w-[1px] bg-border/80" />
           <div className="text-slate-500">
-            Pending: <span className="font-bold text-slate-700">{isPiece ? totalPendingQty : Math.floor(totalPendingQty / unitsPerCase)} {displayLabel}</span>
+            Pending:{" "}
+            <span className="font-bold text-slate-700">
+              {isPiece ? totalPendingQty : Math.floor(totalPendingQty / unitsPerCase)} {displayLabel}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Batch Rows Table */}
+      {/* Batch Rows Table — only pending lines */}
       {isExpanded && (
         <div className="bg-white border-t border-border/40 overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[600px]">
@@ -184,7 +214,7 @@ function PackingProductGroup({
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
-              {products.map((p) => {
+              {packableProducts.map((p) => {
                 const lineKey = getLineKey(p);
                 const isSelected = !!selectedLines[lineKey];
                 const qtyValue = packingQty[lineKey] ?? 0;
@@ -192,18 +222,19 @@ function PackingProductGroup({
 
                 const qtyType = (p.quantity_type || "case").toUpperCase();
                 const isPieceRow = qtyType === "PIECE" || qtyType === "PIECES";
-                const rowUnitsPerCase = isPieceRow ? 1 : (p.packSize || 1);
-                
-                // Display for Pack Qty column
+                const rowUnitsPerCase = isPieceRow ? 1 : p.packSize || 1;
+
                 const packQtyDisplay = isPieceRow ? qtyValue : Math.floor(qtyValue / rowUnitsPerCase);
-                const pendingQtyDisplay = isPieceRow ? p.pendingBaseQty : Math.floor(p.pendingBaseQty / rowUnitsPerCase);
+                const pendingQtyDisplay = isPieceRow
+                  ? p.pendingBaseQty
+                  : Math.floor(p.pendingBaseQty / rowUnitsPerCase);
 
                 return (
                   <tr
                     key={lineKey}
                     className={cn(
                       "hover:bg-muted/5 transition-colors",
-                      !isSelected && "opacity-60"
+                      !isSelected && "opacity-60",
                     )}
                   >
                     <td className="py-3 px-4">
@@ -223,17 +254,25 @@ function PackingProductGroup({
                     <td className="py-3 px-2">
                       <div className="flex flex-col gap-0.5">
                         {p.batchNumber ? (
-                          <span className="font-mono text-xs font-semibold text-orange-600/90">{p.batchNumber}</span>
+                          <span className="font-mono text-xs font-semibold text-orange-600/90">
+                            {p.batchNumber}
+                          </span>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">—</span>
                         )}
                         {p.grnNo && (
-                          <span className="font-mono text-[10px] text-purple-600/80">GRN: {p.grnNo}</span>
+                          <span className="font-mono text-[10px] text-purple-600/80">
+                            GRN: {p.grnNo}
+                          </span>
                         )}
                         {(p.mfgDate || p.expDate) && (
                           <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-                            {p.mfgDate && <span>Mfg: {new Date(p.mfgDate).toLocaleDateString()}</span>}
-                            {p.expDate && <span>Exp: {new Date(p.expDate).toLocaleDateString()}</span>}
+                            {p.mfgDate && (
+                              <span>Mfg: {new Date(p.mfgDate).toLocaleDateString()}</span>
+                            )}
+                            {p.expDate && (
+                              <span>Exp: {new Date(p.expDate).toLocaleDateString()}</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -249,15 +288,18 @@ function PackingProductGroup({
                             min={0}
                             value={packQtyDisplay || ""}
                             onChange={(e) => {
-                              const enteredQty = e.target.value === "" ? 0 : Number(e.target.value);
-                              const newBaseQty = isPieceRow ? enteredQty : (enteredQty * rowUnitsPerCase);
+                              const enteredQty =
+                                e.target.value === "" ? 0 : Number(e.target.value);
+                              const newBaseQty = isPieceRow
+                                ? enteredQty
+                                : enteredQty * rowUnitsPerCase;
                               onQtyChange(lineKey, newBaseQty, p.pendingBaseQty);
                             }}
                             className={cn(
                               "h-8 text-xs font-medium shadow-none border-border/80 focus-visible:ring-brand-500",
-                              error ? "border-red-500 focus-visible:ring-red-500" : ""
+                              error ? "border-red-500 focus-visible:ring-red-500" : "",
                             )}
-                            placeholder={isPieceRow ? "0" : "0"}
+                            placeholder="0"
                           />
                           {error && (
                             <span className="text-[9px] text-red-500 leading-tight absolute mt-9 w-24">

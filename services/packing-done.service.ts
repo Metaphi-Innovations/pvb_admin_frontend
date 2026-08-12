@@ -25,9 +25,10 @@ export interface PackingDoneFilterOption {
 export type PackingDoneFilterField =
   | "packing_done_no"
   | "status"
-  | "customer_name"
+  | "source_document_no"
+  | "po_number"
   | "source_type"
-  | "warehouse__warehouse_name"
+  | "packing_list__warehouse__warehouse_name"
   | "packed_by_user__username"
   | "packing_list__packing_number"
   | "packing_list__customer_name";
@@ -39,16 +40,54 @@ function asString(value: unknown): string {
   return "";
 }
 
+function firstFilterValue(value: unknown): string {
+  if (Array.isArray(value)) return asString(value[0]).trim();
+  return asString(value).trim();
+}
+
+function formatDetailDate(value: unknown): string {
+  const raw = asString(value).trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function resolveStockTransferTargetName(raw: Record<string, any>): string {
+  return (
+    asString(raw.target_warehouse) ||
+    asString(raw.customer_snapshot?.to_warehouse) ||
+    asString(raw.customer_snapshot?.target_warehouse) ||
+    ""
+  );
+}
+
+function resolveStockTransferSourceName(raw: Record<string, any>): string {
+  return (
+    asString(raw.source_warehouse) ||
+    asString(raw.customer_snapshot?.from_warehouse) ||
+    asString(raw.customer_snapshot?.source_warehouse) ||
+    asString(raw.warehouse_name) ||
+    ""
+  );
+}
+
 function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
   const sourceDocType = raw.source_type === "normal_sales" ? "Sales Order" :
                         raw.source_type === "sample" ? "Sample Order" :
                         raw.source_type === "stock_transfer" ? "Stock Transfer" :
                         raw.source_type === "purchase_return" ? "Purchase Return" : raw.source_type;
+  const isStockTransfer = sourceDocType === "Stock Transfer";
+  const targetWarehouse = isStockTransfer ? resolveStockTransferTargetName(raw) : asString(raw.target_warehouse);
+  const sourceWarehouse = isStockTransfer
+    ? resolveStockTransferSourceName(raw)
+    : raw.source_warehouse || raw.warehouse_name || "";
   return {
     id: raw.packing_done_id,
     packingNo: raw.packing_done_no,
     salesOrderNo: raw.customer_snapshot?.source_document_no || raw.packing_list_no || "",
-    customer: raw.customer_name || "",
+    customer: isStockTransfer ? targetWarehouse || raw.customer_name || "" : raw.customer_name || "",
     totalItems: Number(raw.total_items || 0),
     packedQuantity: Number(raw.total_packed_qty || 0),
     packingDate: raw.packing_date ? raw.packing_date.slice(0, 10) : "",
@@ -57,61 +96,198 @@ function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
     warehouse: raw.warehouse_name || "",
     sourceDocumentType: sourceDocType as any,
     sourceDocumentNo: raw.customer_snapshot?.source_document_no || raw.packing_list_no || "",
-    sourceWarehouse: raw.source_warehouse || raw.warehouse_name || "",
-    targetWarehouse: raw.target_warehouse || "",
-    poNumber: raw.po_number || "",
+    sourceWarehouse,
+    targetWarehouse,
+    poNumber:
+      raw.po_number ||
+      asString(raw.customer_snapshot?.po_number) ||
+      asString(raw.customer_snapshot?.poNumber) ||
+      asString(raw.customer_snapshot?.po_no) ||
+      "",
     supplierCode: raw.supplier_code || "",
+    orderAmount:
+      raw.order_amount != null && raw.order_amount !== ""
+        ? Number(raw.order_amount)
+        : undefined,
     products: [],
   };
 }
 
 function mapDetailToPackingRecord(raw: any): PackingRecord {
   const products = Array.isArray(raw.products) ? raw.products : [];
-  const warehouse = raw.warehouse?.warehouse_name || "";
-  const customer = raw.customer_snapshot?.customer_name || raw.packing_list?.customer_name || "";
-  const sourceDocType = raw.source_type === "normal_sales" ? "Sales Order" :
-                        raw.source_type === "sample" ? "Sample Order" :
-                        raw.source_type === "stock_transfer" ? "Stock Transfer" :
-                        raw.source_type === "purchase_return" ? "Purchase Return" : raw.source_type;
+  const snapshot =
+    raw.customer_snapshot && typeof raw.customer_snapshot === "object"
+      ? (raw.customer_snapshot as Record<string, unknown>)
+      : {};
+  const warehouse =
+    raw.warehouse?.warehouse_name ||
+    asString(snapshot.warehouse_name) ||
+    asString((raw.warehouse_snapshot as Record<string, unknown> | undefined)?.warehouse_name) ||
+    "";
+  const sourceDocType =
+    raw.source_type === "normal_sales"
+      ? "Sales Order"
+      : raw.source_type === "sample"
+        ? "Sample Order"
+        : raw.source_type === "stock_transfer"
+          ? "Stock Transfer"
+          : raw.source_type === "purchase_return"
+            ? "Purchase Return"
+            : raw.source_type;
+  const isPurchaseReturn = sourceDocType === "Purchase Return";
+  const isStockTransfer = sourceDocType === "Stock Transfer";
+
+  const sourceDocumentNo =
+    asString(snapshot.source_document_no) ||
+    asString(snapshot.sourceDocumentNo) ||
+    asString(raw.packing_list?.customer_snapshot?.source_document_no) ||
+    asString(raw.packing_list?.packing_number) ||
+    "";
+
+  const sourceWarehouse =
+    asString(snapshot.source_warehouse) ||
+    asString(snapshot.from_warehouse) ||
+    warehouse;
+
+  const targetWarehouse =
+    asString(snapshot.target_warehouse) ||
+    asString(snapshot.to_warehouse) ||
+    asString(snapshot.customer_name) ||
+    "—";
+
+  const customer =
+    (isPurchaseReturn
+      ? asString(snapshot.supplier_name) || asString(snapshot.customer_name)
+      : isStockTransfer
+        ? asString(snapshot.to_warehouse) ||
+          asString(snapshot.target_warehouse) ||
+          asString(snapshot.customer_name)
+        : asString(snapshot.customer_name) || asString(snapshot.supplier_name)) ||
+    asString(raw.packing_list?.customer_name) ||
+    asString(raw.packing_list?.customer_snapshot?.supplier_name) ||
+    asString(raw.packing_list?.customer_snapshot?.customer_name) ||
+    "";
 
   return {
     id: raw.packing_done_id,
     packingListId: raw.packing_list_id || raw.packing_list?.packing_list_id,
     packingNo: raw.packing_done_no,
-    salesOrderNo: raw.customer_snapshot?.source_document_no || raw.packing_list?.packing_number || "",
-    customer: customer,
+    salesOrderNo: sourceDocumentNo,
+    customer,
     totalItems: products.length,
     packedQuantity: products.reduce((sum: number, p: any) => {
-      const packSize = Number(p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
-      return sum + Math.floor(Number(p.base_qty || 0) / packSize);
+      const packSize = Number(
+        p.product_snapshot?.unit_per_packing ||
+          p.product_snapshot?.conversion_rate ||
+          1,
+      ) || 1;
+      const packedBaseQty = Number(p.packed_base_qty ?? p.base_qty ?? 0);
+      if (isPurchaseReturn) return sum + packedBaseQty;
+      return sum + Math.floor(packedBaseQty / packSize);
     }, 0),
-    packingDate: raw.packing_date ? raw.packing_date.slice(0, 10) : "",
-    packedBy: raw.packed_by_user ? `${raw.packed_by_user.first_name} ${raw.packed_by_user.last_name}`.trim() || raw.packed_by_user.username : "System",
+    packingDate: raw.packing_date ? String(raw.packing_date).slice(0, 10) : "",
+    packedBy: raw.packed_by_user
+      ? `${raw.packed_by_user.first_name || ""} ${raw.packed_by_user.last_name || ""}`.trim() ||
+        raw.packed_by_user.username
+      : "System",
     status: raw.status as any,
-    warehouse: warehouse,
+    warehouse,
     sourceDocumentType: sourceDocType as any,
-    sourceDocumentNo: raw.packing_list?.packing_number || "",
-    sourceWarehouse: warehouse,
-    targetWarehouse: "—",
+    sourceDocumentNo,
+    sourceWarehouse,
+    targetWarehouse: isStockTransfer ? targetWarehouse : "—",
+    poNumber:
+      asString(snapshot.po_number) ||
+      asString(snapshot.poNumber) ||
+      asString(snapshot.po_no) ||
+      asString(raw.po_number) ||
+      asString(raw.packing_list?.customer_snapshot?.po_number) ||
+      asString(raw.packing_list?.customer_snapshot?.poNumber) ||
+      "",
+    supplierCode:
+      asString(snapshot.supplier_code) ||
+      asString(snapshot.supplierCode) ||
+      asString(raw.supplier_code) ||
+      asString(raw.packing_list?.customer_snapshot?.supplier_code) ||
+      "",
     products: products.map((p: any) => {
-      const packSize = Number(p.product_snapshot?.unit_per_packing || p.product_snapshot?.conversion_rate || 1);
-      const packedBaseQty = Number(p.base_qty || 0);
-      const orderBaseQty = Number(p.packing_list_product?.order_base_qty || 0);
-      
+      const packSize =
+        Number(
+          p.product_snapshot?.unit_per_packing ||
+            p.product_snapshot?.conversion_rate ||
+            1,
+        ) || 1;
+      const packedBaseQty = Number(p.packed_base_qty ?? p.base_qty ?? 0);
+      const orderBaseQty = Number(
+        p.order_base_qty ?? p.packing_list_product?.order_base_qty ?? 0,
+      );
+      const batchSnapshot =
+        p.batch_snapshot && typeof p.batch_snapshot === "object"
+          ? (p.batch_snapshot as Record<string, unknown>)
+          : {};
+      const batchNumber =
+        asString(p.batch_code) ||
+        asString(batchSnapshot.batch_code) ||
+        asString(batchSnapshot.batch_no) ||
+        asString(batchSnapshot.batchNumber) ||
+        "";
+      const expDate = formatDetailDate(
+        asString(batchSnapshot.expiry_date) ||
+          asString(batchSnapshot.expiryDate) ||
+          asString(batchSnapshot.exp_date),
+      );
+      const mfgDate = formatDetailDate(
+        asString(batchSnapshot.mfg_date) ||
+          asString(batchSnapshot.manufacture_date) ||
+          asString(batchSnapshot.manufactureDate),
+      );
+      const grnNo =
+        asString(batchSnapshot.grn_no) ||
+        asString(batchSnapshot.grnNumber) ||
+        asString(batchSnapshot.grn_number) ||
+        "";
+
+      const orderedDisplay = isPurchaseReturn
+        ? orderBaseQty
+        : Math.floor(orderBaseQty / packSize);
+      const packedDisplay = isPurchaseReturn
+        ? packedBaseQty
+        : Math.floor(packedBaseQty / packSize);
+
       return {
-        product: p.product_name || p.product_snapshot?.product_name || "Unknown",
-        sku: p.product_code || p.product_snapshot?.product_code || "",
-        ordered_cases: Math.floor(orderBaseQty / packSize),
-        packedQty: Math.floor(packedBaseQty / packSize),
+        product:
+          p.product_name || p.product_snapshot?.product_name || "Unknown",
+        sku:
+          asString(p.sku) ||
+          asString(p.product?.sku) ||
+          asString(p.product_snapshot?.sku) ||
+          asString(p.product_snapshot?.SKU) ||
+          "",
+        productCode:
+          asString(p.product_code) ||
+          asString(p.product?.product_code) ||
+          asString(p.product_snapshot?.product_code) ||
+          "",
+        ordered_cases: orderedDisplay,
+        packedQty: packedDisplay,
         orderBaseQty,
         packedBaseQty,
         packSize,
         lineId: p.packing_list_product_id,
-        batchAllocations: p.batch_code ? [{
-          batchNumber: p.batch_code,
-          allocatedQty: Math.floor(packedBaseQty / packSize),
-          expiryDate: "—",
-        }] : undefined,
+        batchNumber: batchNumber || undefined,
+        expDate: expDate || undefined,
+        mfgDate: mfgDate || undefined,
+        grnNo: grnNo || undefined,
+        quantity_type: asString(p.quantity_type) || undefined,
+        batchAllocations: batchNumber
+          ? [
+              {
+                batchNumber,
+                allocatedQty: packedDisplay,
+                expiryDate: expDate || "—",
+              },
+            ]
+          : undefined,
       };
     }),
   };
@@ -131,45 +307,49 @@ export function buildPackingDoneApiFilters(
   selectedWarehouse?: string | null,
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
+  const packingListFilters: Record<string, unknown> = {};
 
-  const warehouse = filters.warehouse;
-  if (warehouse) {
-    if (Array.isArray(warehouse)) {
-      if (warehouse.length > 0) apiFilters.warehouse = { warehouse_name: asString(warehouse[0]) };
-    } else {
-      apiFilters.warehouse = { warehouse_name: asString(warehouse) };
-    }
-  }
-  
   if (selectedWarehouse && selectedWarehouse !== "All") {
     apiFilters.warehouse_id = selectedWarehouse;
   }
 
-  const customerName = filters.customer;
+  const warehouseName = firstFilterValue(filters.warehouse);
+  if (warehouseName) {
+    packingListFilters.warehouse = { warehouse_name: warehouseName };
+  }
+
+  const customerName = firstFilterValue(filters.customer);
   if (customerName) {
-    if (Array.isArray(customerName)) {
-      if (customerName.length > 0) apiFilters.customer_name = customerName[0];
-    } else {
-      apiFilters.customer_name = asString(customerName);
-    }
+    packingListFilters.customer_name = customerName;
   }
 
-  const status = filters.status;
+  if (Object.keys(packingListFilters).length > 0) {
+    apiFilters.packing_list = packingListFilters;
+  }
+
+  const status = firstFilterValue(filters.status);
   if (status) {
-    if (Array.isArray(status)) {
-      if (status.length > 0) apiFilters.status = status[0];
-    } else {
-      apiFilters.status = asString(status);
-    }
+    apiFilters.status = status;
   }
 
-  const packingDoneNo = filters.packingNo || filters.salesOrderNo || filters.packingListNo;
+  const packingDoneNo = firstFilterValue(filters.packingNo);
   if (packingDoneNo) {
-    if (Array.isArray(packingDoneNo)) {
-      if (packingDoneNo.length > 0) apiFilters.packing_done_no = asString(packingDoneNo[0]);
-    } else {
-      apiFilters.packing_done_no = asString(packingDoneNo);
-    }
+    apiFilters.packing_done_no = packingDoneNo;
+  }
+
+  const orderNo = firstFilterValue(filters.salesOrderNo);
+  if (orderNo) {
+    apiFilters.source_document_no = orderNo;
+  }
+
+  const packedBy = firstFilterValue(filters.packedBy);
+  if (packedBy) {
+    apiFilters.packed_by_user = { username: packedBy };
+  }
+
+  const poNumber = firstFilterValue(filters.poNumber);
+  if (poNumber) {
+    apiFilters.po_number = poNumber;
   }
 
   return apiFilters;
@@ -183,11 +363,15 @@ export function buildPackingDoneOrdering(
 
   const fieldMap: Record<string, string> = {
     packingNo: "packing_done_no",
-    salesOrderNo: "packing_list__packing_number",
+    salesOrderNo: "source_document_no",
+    poNumber: "po_number",
     customer: "packing_list__customer_name",
     warehouse: "packing_list__warehouse__warehouse_name",
+    packedBy: "packed_by_user__username",
     packingDate: "packing_date",
     status: "status",
+    totalItems: "item_count",
+    packedQuantity: "packed_qty",
   };
 
   const backendKey = fieldMap[sortKey];
